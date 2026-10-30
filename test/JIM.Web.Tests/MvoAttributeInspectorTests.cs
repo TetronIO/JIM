@@ -118,6 +118,56 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// #2472: a value read from a sign-in token states that source, and the claim, in the Source row; its history
+    /// entry names the claim where a synchronised value's names its rule.
+    /// </summary>
+    [Test]
+    public void Inspector_SignInClaimOrigin_StatesTheClaimInTheSourceRowAndTheHistory()
+    {
+        var history = new List<AttributeHistoryEntry>
+        {
+            new()
+            {
+                Kind = AttributeHistoryChangeKind.Added,
+                Value = "Engineer",
+                ContributedByKind = ValueContributorKind.SignInClaim,
+                ClaimType = "job_title",
+                Change = new ProvenanceChange { ChangeTime = DateTime.UtcNow }
+            }
+        };
+        var provenance = BuildProvenance(history: history);
+        provenance.CurrentValues[0].Origin = new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "job_title" };
+        provenance.ContributingConnectedSystemObject = null;
+        provenance.LastSet = null;
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Origin.ClaimType, Is.EqualTo("job_title"));
+            Assert.That(cut.Find(".jim-inspector-meta").TextContent, Does.Contain("job_title"));
+        }
+    }
+
+    [Test]
+    public void Inspector_SystemOrigin_StatesJimAsTheSource()
+    {
+        var provenance = BuildProvenance();
+        provenance.CurrentValues[0].Origin = new ValueOrigin { Kind = ValueOriginKind.System };
+        provenance.ContributingConnectedSystemObject = null;
+        provenance.LastSet = null;
+
+        var cut = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+            Assert.That(cut.FindComponent<ValueOriginChip>().Instance.Origin.Kind, Is.EqualTo(ValueOriginKind.System));
+        }
+    }
+
     [Test]
     public void Inspector_NotRecordedOrigin_RendersSourceNotRecordedInsteadOfTheSentence()
     {
@@ -253,5 +303,26 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
         link.Click();
 
         Assert.That(opened, Is.True);
+    }
+
+    /// <summary>
+    /// "Explore causality" sits beside "Open in Timeline" when the host offers the explorer, and is absent otherwise.
+    /// </summary>
+    [Test]
+    public void Inspector_ExploreCausality_ShownOnlyWhenTheHostOffersTheExplorer()
+    {
+        var provenance = BuildProvenance();
+        var href = $"/causality/metaverse-objects/{provenance.MetaverseObjectId}";
+
+        var offered = Render<MvoAttributeInspector>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.CausalityExplorerHref, href));
+        var notOffered = Render<MvoAttributeInspector>(p => p.Add(c => c.Provenance, provenance));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(offered.Find("[data-testid='jim-mvo-inspector-explore-causality']").GetAttribute("href"), Is.EqualTo(href));
+            Assert.That(notOffered.FindAll("[data-testid='jim-mvo-inspector-explore-causality']"), Is.Empty);
+        }
     }
 }

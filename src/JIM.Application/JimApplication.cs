@@ -11,7 +11,6 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 namespace JIM.Application;
 
@@ -40,13 +39,6 @@ public class JimApplication : IDisposable
     /// Set by the hosting application (JIM.Web) after construction.
     /// </summary>
     public ICredentialProtectionService? CredentialProtection { get; set; }
-
-    /// <summary>
-    /// Optional service-lifetime memory cache shared across JimApplication instances.
-    /// Used by the Worker for CSO lookup indexing to eliminate N+1 import queries.
-    /// Null when running in JIM.Web (which does not need CSO caching).
-    /// </summary>
-    public IMemoryCache? Cache { get; }
 
     /// <summary>
     /// The sync repository used by ExportEvaluationServer and ExportExecutionServer.
@@ -132,7 +124,7 @@ public class JimApplication : IDisposable
     /// Connected System's Connector Definition. Supplied by tests that need to drive a server method which talks
     /// to a Connected System (setting a password, for example) without one in front of it.
     /// </param>
-    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null,
+    public JimApplication(IRepository dataRepository, ISyncRepository? syncRepository = null,
         ConfigurationChangePreviewAdapterRegistry? previewAdapters = null, IConnectorFactory? connectorFactory = null)
     {
         Activities = new ActivityServer(this);
@@ -222,7 +214,6 @@ public class JimApplication : IDisposable
         ObjectMatching = new ObjectMatchingServer(this);
         ConfigurationTests = new ConfigurationTestServer(this);
         Repository = dataRepository;
-        Cache = cache;
         Scheduler = new SchedulerServer(this);
         Search = new SearchServer(this);
         Security = new SecurityServer(this);
@@ -296,6 +287,12 @@ public class JimApplication : IDisposable
 
         var uniqueIdentifierMetaverseAttribute = await Repository.Metaverse.GetMetaverseAttributeAsync(uniqueIdentifierMetaverseAttributeName) ??
                                                  throw new Exception("Unsupported SSO unique identifier Metaverse Attribute Name. Please specify one that exists.");
+
+        // Refuse to start with an identifier sign-in could never match, naming the setting to change (#2438).
+        var identifierProblem = AuthServer.DescribeSsoIdentifierProblem(uniqueIdentifierMetaverseAttribute,
+            Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin));
+        if (identifierProblem != null)
+            throw new InvalidOperationException(identifierProblem);
 
         var serviceSettings = await ServiceSettings.GetServiceSettingsAsync() ??
                               throw new Exception("ServiceSettings do not exist. Application is not properly initialised. Are you sure the application is ready?");

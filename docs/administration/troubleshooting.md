@@ -3,14 +3,39 @@ title: Troubleshooting
 description: Fix a JIM installation that will not start, serve HTTPS or let you sign in, by the message it shows.
 type: troubleshooting
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Troubleshooting
 
 This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
 
-## Start-up
+```jim-diagram
+archetype: decision
+title: A service that waits for the database, diagnosed
+desc: "When a service logs The database is not reachable yet, first see whether it connects in the end: if it logs Connected to the database, the wait was normal at start-up and nothing was lost. If it keeps waiting, check that PostgreSQL is running; if it is not, start it, or for an external server ask whoever runs it. If it is running, read the reason the line gives. Name or service not known means the name does not resolve: check JIM_DB_HOSTNAME. Connection refused means nothing is listening at that address and port: check the host name and its port. No route to host means nothing answered or something refused the connection on the way: check the firewall or, on Podman, JIM's network."
+start: {label: Database not reachable yet}
+questions:
+- {id: connects, label: 'Connects in the end?', sub: '`Connected to the database` logged'}
+- {id: running, label: 'Is PostgreSQL running?'}
+- {id: reason, label: 'What reason does the line give?'}
+outcomes:
+- {id: normal, label: Normal at start-up, sub: nothing lost while it waited, good: true}
+- {id: start, label: Start PostgreSQL, sub: 'external: ask whoever runs it'}
+- {id: name, label: Name does not resolve, sub: 'check `JIM_DB_HOSTNAME`'}
+- {id: port, label: Nothing listening there, sub: 'check the host and `:port`'}
+- {id: route, label: Nothing answered, sub: 'firewall, or Podman''s network'}
+answers:
+- {from: connects, to: normal, label: 'yes'}
+- {from: connects, to: running, label: 'no, it keeps waiting'}
+- {from: running, to: start, label: 'no'}
+- {from: running, to: reason, label: 'yes'}
+- {from: reason, to: name, label: '`Name or service not known`'}
+- {from: reason, to: port, label: '`Connection refused`'}
+- {from: reason, to: route, label: '`No route to host`'}
+```
+
+## :material-rocket-launch-outline: Start-up
 
 ### A service logs `The database is not reachable yet`
 
@@ -29,7 +54,7 @@ Where the name resolves, the line also gives the address it led to on that attem
 1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `sudo podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
 2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port. For the bundled database, compare the address in the line with the database's own (`sudo podman inspect jim-database-postgres --format '{{.NetworkSettings.Networks.jim.IPAddress}}'` on Podman): a different address means the name still points at a database that has since moved.
 3. `No route to host` means nothing answered for the address, or something on the way refused the connection. For an external server, check that a firewall allows the JIM host to reach it. For the bundled database on rootful Podman, check that the database is still plugged into JIM's network: `sudo bridge link` lists one interface per pod on the network's bridge (`sudo podman network inspect jim` names the bridge, such as `podman1`), so a JIM and its database show two. With one missing, and `nmcli device` showing NetworkManager connecting an interface named `veth…`, NetworkManager unplugged the database: tell it to leave Podman's interfaces alone (see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor)), then restart JIM and its database, as step 4 shows.
-4. On a rootful Podman host running firewalld, a firewalld reload also removes the rules Podman adds for JIM's network, unless `netavark-firewalld-reload.service` is enabled to put them back; JIM's services then log `No route to host` or, where they can no longer resolve names on their network, `Resource temporarily unavailable`. Restart JIM and its database to bring them back: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`.
+4. On a rootful Podman host running firewalld, a firewalld reload also removes the rules Podman adds for JIM's network, unless `netavark-firewalld-reload.service` is enabled to put them back; JIM's services then log `No route to host` or, where they can no longer resolve names on their network, `Resource temporarily unavailable`. Restart JIM and its database to bring them back: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`. To stop it happening again, enable the service, which the installer does: `sudo systemctl enable --now netavark-firewalld-reload.service`.
 
 A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait. On Podman the restarted service keeps its pod's network, so a fault in that network outlasts the restart: restart JIM and its database, as step 4 shows.
 
@@ -63,11 +88,11 @@ On its first start against your own PostgreSQL server, JIM never becomes ready. 
 ALTER DATABASE jim OWNER TO jim;
 ```
 
-## Podman
+## :material-package-variant-closed: Podman
 
 Problems particular to running JIM on Podman, such as a rootless JIM that will not start, or Ubuntu's AppArmor profiles stopping JIM's containers, are on [Troubleshooting Podman](troubleshooting-podman.md).
 
-## HTTPS
+## :material-certificate-outline: HTTPS
 
 ### The browser cannot connect at `http://<server>`
 
@@ -114,7 +139,7 @@ proxy_buffer_size 16k;
 proxy_buffers 8 16k;
 ```
 
-## Authentication
+## :material-shield-key-outline: Authentication
 
 ### Sign-in loops between JIM and the identity provider
 
@@ -136,6 +161,45 @@ and the [security audit log](security-audit-events.md) records a failed sign-in 
 
 If JIM is already served over HTTPS and trusts its proxy but you still see the page, the browser is blocking cookies for JIM's address, or something between the browser and JIM is removing the `Set-Cookie` or `Cookie` headers. Allow cookies for the JIM site, and make sure any proxy or security appliance passes them through unchanged.
 
+### A setting stopped sign-in
+
+You sign in at your identity provider and land on a page titled **A setting stopped sign-in**, which names a setting such as `JIM_SSO_CLIENT_ID`, the value JIM expected and the value it received. Or the PowerShell module, or another client of JIM's API, is refused with `401 Unauthorized` although your identity provider signed it in. Either way, the `jim.web` log records a warning beginning `Sign-in problem` with the same details.
+
+**What it means.** A value JIM is configured with does not match what your identity provider sends. JIM recognises these:
+
+| Setting | What did not match |
+|---------|--------------------|
+| `JIM_SSO_CLIENT_ID` | The ID token is for another client, or the identity provider does not let the portal's client sign people in with an authorisation code (`unauthorized_client`). |
+| `JIM_SSO_SECRET` | The identity provider refused the portal's client ID or secret (`invalid_client`). |
+| `JIM_SSO_API_SCOPE` | The identity provider refused the scopes JIM asked for (`invalid_scope`, or `invalid_resource` from AD FS), or an access token is not for JIM's API: its audience is not the one JIM expects. |
+| `JIM_SSO_VALID_ISSUERS` | The token came from an issuer JIM does not accept. |
+| `JIM_SSO_CLAIM_TYPE` | The sign-in carried no claim of the type JIM identifies people by. JIM lists the claim types it did carry, never their values. |
+
+JIM reports an access token only once its signature shows your identity provider issued it, so nobody else can make JIM report a problem. JIM still refuses the token: an API caller sees only `401`, and the details go to the log and to administrators.
+
+**How to fix.** Change the setting JIM names, or your identity provider's configuration, so the two values match. Restart JIM after changing a setting. To list every problem JIM has met since it started, connect as an administrator, or with the infrastructure API key when nobody can sign in, and run `Get-JIMSignInDiagnostic`:
+
+```powershell
+Connect-JIM -Url https://jim.example.com -ApiKey $env:JIM_INFRASTRUCTURE_API_KEY
+(Get-JIMSignInDiagnostic).Problems | Format-Table Source, Setting, Expected, Received, Count
+```
+
+`Get-JIMSignInDiagnostic` also shows the redirect URIs JIM sends your identity provider when reached at the address you connected to. When sign-in stops on the identity provider's own error page about a redirect URI, compare them with the ones registered for the portal's client: JIM never sees that error, because the identity provider does not send the browser back.
+
+### Opening JIM shows **Sign-in is unavailable**
+
+The page says why, with the fix filled in, and the `jim.web` log records a warning beginning `Sign-in is unavailable`.
+
+**What it means.** JIM cannot sign anyone in: it does not trust your identity provider's HTTPS certificate, usually because your organisation's own certificate authority issued it, or it cannot reach the identity provider at all. JIM keeps running: synchronisation, Schedules and API keys carry on.
+
+**How to fix.** For a certificate JIM does not trust, trust it for sign-in, as [Trust Your Identity Provider's Certificate](sso-setup/trusting-your-identity-provider.md) shows; before anyone can sign in, that needs the [infrastructure API key](configuration.md#infrastructure-api-key). For an identity provider JIM cannot reach, check `JIM_SSO_AUTHORITY`, and that the JIM host can reach it over HTTPS.
+
+### A script's API key is refused with `401 Unauthorized`
+
+**What it means.** JIM reads an API key only from the `Authorization` header, as `Bearer jim_ak_...`, so a key sent anywhere else, such as in the `X-API-Key` header the PowerShell module of v0.16.0 or earlier sends, is refused. So is a key JIM has no record of, or one that is disabled or has expired; `Connect-JIM -ApiKey` then stops with `JIM rejected the API key`. A refused request changes nothing.
+
+**How to fix.** Send the key as a bearer token ([API Keys](../api/authentication.md#api-keys)), and keep the PowerShell module at JIM's own version. Check the key under **Admin > API Keys**; an expired infrastructure key is renewed when JIM restarts with `JIM_INFRASTRUCTURE_API_KEY` still set.
+
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 
 You clicked **Login** (or let `Connect-JIM` open your browser) and the identity provider returned an error page saying `Invalid parameter: redirect_uri` (Keycloak), `AADSTS50011` (Entra ID), or a similar redirect-mismatch message.
@@ -144,9 +208,9 @@ You clicked **Login** (or let `Connect-JIM` open your browser) and the identity 
 
 **How to fix.**
 
-1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 7](sso-setup/ad-fs.md#step-7-configure-powershell-module-authentication-optional-but-recommended), [Keycloak Step 6](sso-setup/keycloak.md#step-6-configure-powershell-module-authentication-recommended).
-2. If the public client is a **separate registration** from the web application (always the case for Keycloak), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
-3. If the public client **shares a registration** with the web application (Entra ID or AD FS with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
+1. Confirm your identity provider has a public client registered with at least the redirect URI `http://localhost:8400/callback/`. The per-provider guides cover this: [Entra ID Step 5b](sso-setup/microsoft-entra-id.md#step-5b-configure-powershell-module-authentication-optional-but-recommended), [AD FS Step 1](sso-setup/ad-fs.md#step-1-register-jim-with-ad-fs), [Keycloak Step 1](sso-setup/keycloak.md#step-1-register-jim-with-keycloak).
+2. If the public client is a **separate registration** from the web application (always the case for Keycloak and AD FS), set `JIM_SSO_PUBLIC_CLIENT_ID` on the JIM server to the public client's client ID and restart JIM.
+3. If the public client **shares a registration** with the web application (Entra ID with both platforms added to one app), you do not need to set `JIM_SSO_PUBLIC_CLIENT_ID`; make sure the web app registration has the loopback redirect URI added under its native/mobile platform.
 
 Verify the config the server is advertising:
 
@@ -156,7 +220,7 @@ curl https://your-jim-url/api/v1/auth/config
 
 The `clientId` in the response must be the client that has the loopback redirect URI registered at your identity provider.
 
-## Known noisy log lines
+## :material-bell-off-outline: Known noisy log lines
 
 Some messages in the container logs look alarming but are expected and harmless. They are documented here so operators can confirm at a glance that nothing is actually wrong.
 
@@ -169,7 +233,7 @@ jim.scheduler  | Cannot load library libgssapi_krb5.so.2
 jim.scheduler  | Error: libgssapi_krb5.so.2: cannot open shared object file: No such file or directory
 ```
 
-**What it means.** The PostgreSQL client library (Npgsql) probes for the GSS/Kerberos authentication library on startup to advertise that capability to the server. The scheduler image deliberately does not include it.
+**What it means.** JIM's PostgreSQL client library probes for the GSS/Kerberos authentication library on startup to advertise that capability to the server. The scheduler image deliberately does not include it.
 
 **Why it is safe.** The scheduler authenticates to PostgreSQL using password credentials and does not talk to any LDAP or Kerberos-backed service. The missing library is never used.
 
@@ -184,13 +248,13 @@ jim.scheduler  |       Application started. Press Ctrl+C to shut down.
 
 The container should also transition to `healthy` in `docker ps`.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 
 - **The JIM version,** shown at the foot of every portal page and by `Connect-JIM`, or the release you installed.
 - **How JIM is installed:** Docker or Podman, with the bundled database or your own, and behind a reverse proxy or not.
 - **The services' logs from the time of the problem:** `docker logs jim.web`, and likewise `jim.worker`, `jim.scheduler` and `jim.database`; on Podman, `sudo podman logs jim-web` and the rest (see [Troubleshooting Podman](troubleshooting-podman.md#still-stuck)).
-- **For a sign-in problem,** the `jim.web` warning beginning `Sign-in stopped`, and the failed sign-in in the [security audit log](security-audit-events.md).
+- **For a sign-in problem,** the `jim.web` warning beginning `Sign-in stopped` or `Sign-in problem`, what `Get-JIMSignInDiagnostic` shows, and the failed sign-in in the [security audit log](security-audit-events.md).
 
 Then ask in the [Q&A](https://github.com/TetronIO/JIM/discussions/categories/q-a) category of GitHub Discussions, or open a [GitHub Issue](https://github.com/TetronIO/JIM/issues) for a bug. Leave secrets out of anything you share: `.env` and `jim-config.yaml` hold them.

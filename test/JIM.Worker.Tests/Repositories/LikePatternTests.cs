@@ -35,6 +35,15 @@ public class LikePatternTests
         }
     }
 
+    [TestCase("Fin*", "Fin%")]
+    [TestCase("*_ops*", @"%\_ops%")]
+    [TestCase("100%", @"100\%")]
+    [TestCase("Disabled", "Disabled")]
+    public void Wildcard_TurnsAsterisksIntoPercentAndEscapesTheRest(string text, string expected)
+    {
+        Assert.That(LikePattern.Wildcard(text), Is.EqualTo(expected));
+    }
+
     /// <summary>
     /// A pattern built by interpolating text between <c>%</c> signs (<c>$"%{search}%"</c>) is a pattern whose
     /// <c>%</c> and <c>_</c> are wildcards; there were about twenty in JIM.PostgresData before this sweep.

@@ -37,8 +37,9 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost, configurationChangeIdsEligibleToClaim)
     {
     }
 
@@ -70,6 +71,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         syncSpan.SetTag("connectorType", _connectedSystem.ConnectorDefinition.Name);
 
         Log.Verbose("PerformFullSyncAsync: Starting");
+
+        // Claim the configuration changes awaiting synchronisation before anything else: before the count and before any
+        // Synchronisation Rule is loaded, which is what makes the claim race-free (#2615). A Full Synchronisation
+        // processes every object of every type anyway, so there is nothing further to select; the claim is what lets it
+        // mark the changes applied on completion. A change saved after this point is not claimed and waits for the next
+        // run.
+        await ClaimConfigurationChangesAwaitingSynchronisationAsync("Full Synchronisation");
+        syncSpan.SetTag("typesWithConfigurationChangesClaimed", _objectTypeIdsToProcessInFull.Count);
 
         // what needs to happen:
         // - confirm Pending Exports
@@ -119,10 +128,6 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // This enables efficient drift detection during CSO processing
         BuildDriftDetectionCache(allSyncRules, activeSyncRules, derivedFlowGraph);
 
-        // Build reference object type cache for selective attribute loading optimisation.
-        // Object types with reference attribute rules need full attribute loading even when unchanged.
-        BuildReferenceObjectTypeCache(activeSyncRules);
-
         // Use object types already loaded on the Connected System (with matching rules and attributes)
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
@@ -149,33 +154,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
-        // A Full Synchronisation is the documented way to apply configuration changes (attribute priority
-        // reordering, "Null is a value", rule enable/disable, scoping) to every object. The unchanged-object
-        // optimisation skips Attribute Flow for objects whose SOURCE DATA has not changed since the last
-        // completed sync, which is only safe while the CONFIGURATION has not changed either; otherwise a pure
-        // configuration change would never re-resolve anything until the object's data happened to change.
-        // The comparison baseline is ConfigurationLastFullyAppliedAt (the start of the last completed Full
-        // Synchronisation), NOT LastSyncCompletedAt: a no-change Delta Synchronisation advances the latter
-        // without applying configuration, and must not hide a configuration change from the next full run.
-        // When any Synchronisation Rule or mapping changed after that baseline (across all Connected Systems,
-        // because another system's priority affects this system's resolution), disable the optimisation for
-        // this run by loading without a watermark, so every object is fully evaluated against the new
-        // configuration.
-        // The rule lives on the model, shared with the Full Synchronisation preview (#1530).
+        // A Full Synchronisation evaluates every object, every run, with no regard to when it last changed (#891). It is
+        // the administrator's remediation tool: it applies configuration and fixed engine logic to existing data, and
+        // repairs whatever a Delta Synchronisation missed, so it must not trust the timestamps and marks a Delta
+        // Synchronisation relies on to pick its objects. Delta Synchronisation is the fast path.
         var fullSyncStartedAt = DateTime.UtcNow;
-        DateTime? csoLoadWatermark = null;
-        if (_connectedSystem.LastSyncCompletedAt.HasValue)
-        {
-            var configChangedAt = await _syncRepo.GetLatestSyncRuleConfigurationChangeAsync();
-            csoLoadWatermark = _connectedSystem.GetUnchangedObjectWatermark(configChangedAt);
-            if (csoLoadWatermark == null)
-            {
-                Log.Information("PerformFullSyncAsync: Synchronisation Rule configuration changed at {ConfigChangedAt:O}, " +
-                    "after it was last fully applied at {Baseline:O}. Disabling the unchanged-object optimisation for " +
-                    "this run so the new configuration is applied to every object.",
-                    configChangedAt, _connectedSystem.ConfigurationLastFullyAppliedAt);
-            }
-        }
 
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
@@ -191,227 +174,248 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var throughput = new ThroughputTracker();
         var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // Keyset cursor for CSO page loads. Starting at Guid.Empty (below every generated uuid in
-        // both PostgreSQL's bytewise and .NET's component-wise ordering) keeps every page on the
-        // keyset path, so per-page cost stays O(pageSize) instead of degrading with OFFSET depth
-        // (measured at Scale500k25kGroups: 977s across 1,050 page loads). The cursor must advance
-        // to the last row of each page exactly as the repository returned it; a client-side max
-        // would diverge from PostgreSQL's uuid ordering and skip rows.
-        var csoPageCursor = Guid.Empty;
+        // Page through the Object Types in dependency order (#2492), referenced types first, so a group's members have
+        // been projected by the time its page is processed and its member references resolve in this loop rather than
+        // being deferred to the cross-page reference step, which would reload the group and redo its work. Each type
+        // is walked with its own keyset cursor starting at Guid.Empty (below every generated uuid in both PostgreSQL's
+        // bytewise and .NET's component-wise ordering), which keeps every page O(pageSize) instead of degrading with
+        // OFFSET depth (measured at Scale500k25kGroups: 977s across 1,050 page loads); the cursor advances to the last
+        // row of each page exactly as the repository returned it, since a client-side max would diverge from
+        // PostgreSQL's uuid ordering and skip rows.
+        //
+        // Each type pages until a page comes back empty, not to the count taken at the start (#2092): objects created
+        // while the run is in flight would otherwise push the original tail past a page budget fixed before they
+        // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked.
+        // The count is the progress estimate only, and ObjectsProcessed may exceed it.
+        var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
+            (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsAsync(
+                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+            "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
-        // Page until a page comes back empty, not to the count taken at the start (#2092): objects created while the
-        // run is in flight would otherwise push the original tail past a page budget fixed before they arrived. The
-        // count is the progress estimate only, and ObjectsProcessed may exceed it.
-        for (var i = 1; ; i++)
+        try
         {
-
-            PagedResultSet<ConnectedSystemObject> csoPagedResult;
-            using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
+            for (var i = 1; ; i++)
             {
-                csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(
-                    _connectedSystem.Id, i, pageSize, totalCsosToProcess,
-                    csoLoadWatermark, csoPageCursor);
-            }
+                // Change detection stays off from the page's load to its tracker clear (#2598). The page's Metaverse
+                // Objects are loaded untracked and hung off its tracked Connected System Objects, so a detection pass
+                // anywhere in the page would discover them through cso.MetaverseObject and attach them, every value
+                // included, as Modified: a later EF save would then issue xmin-guarded updates that match no rows. With
+                // detection off, an EF save writes only what is explicitly marked (AddRange for creates,
+                // Entry().State = Modified for updates). The flush relies on that too: detection would otherwise discover
+                // the tracked Activity's RunProfileExecutionItems and insert them ahead of the raw RPEI bulk insert.
+                _syncRepo.SetAutoDetectChangesEnabled(false);
 
-            if (csoPagedResult.Results.Count == 0)
-                break;
-
-            csoPageCursor = csoPagedResult.Results[^1].Id;
-
-            // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
-            // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
-            // onto the same canonical instance as this navigation, rather than two distinct loads of the
-            // same row.
-            _mvoIdentityMap.Seed(csoPagedResult.Results);
-
-            // The row version of every marked object (derived-input, #1750; synchronisation-pending, #2092) as this load
-            // read it, before this run writes anything; it guards the marks' clear at page flush (see the method for why).
-            CaptureMarkedRowVersions(csoPagedResult.Results);
-
-            // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
-            // run has no generated mappings.
-            await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
-
-            // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
-            // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
-
-            int processedInPage = 0;
-            using (Diagnostics.Sync.StartSpan("ProcessCsoLoop")
-                .SetTag("connectedSystemId", _connectedSystem.Id)
-                .SetTag("csoCount", csoPagedResult.Results.Count)
-                .SetTag("cumulativeObjectCount", _activity.ObjectsProcessed + csoPagedResult.Results.Count)
-                .SetTag("wallClockOffsetMs", csoPhaseStopwatch.Elapsed.TotalMilliseconds))
-            {
-                // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
-                // Without this, GUID-based page ordering could cause a new CSO to be processed before an
-                // obsolete CSO, seeing a stale join count and incorrectly throwing CouldNotJoinDueToExistingJoin.
-
-                // Pass 1: Process Pending Export confirmations and obsolete CSO teardown.
-                // This populates _pendingDisconnectedMvoIds so Pass 2 join checks account for disconnections.
-                foreach (var connectedSystemObject in csoPagedResult.Results)
+                PagedResultSet<ConnectedSystemObject>? csoPagedResult;
+                using (Diagnostics.Sync.StartSpan("LoadCsoPage"))
                 {
-                    if (_cancellationTokenSource.IsCancellationRequested)
-                    {
-                        Log.Information("PerformFullSyncAsync: Cancellation requested during Pass 1. Will flush already-processed objects before exiting.");
-                        break;
-                    }
-
-                    await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
+                    csoPagedResult = await csoPager.NextPageAsync();
                 }
 
-                // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
-                // joined/projected yet, so Pass 2 batch collections are empty.
-                if (!_cancellationTokenSource.IsCancellationRequested)
+                if (csoPagedResult == null)
+                    break;
+
+                // Seed the page identity map (#1612) with every already-joined MVO this page's CSO load
+                // brought in, so Pass 1's obsoletion handling and Pass 2's matching-rule join both resolve
+                // onto the same canonical instance as this navigation, rather than two distinct loads of the
+                // same row.
+                _mvoIdentityMap.Seed(csoPagedResult.Results);
+
+                // The row version of every marked object (derived-input, #1750; synchronisation-pending, #2092) as this load
+                // read it, before this run writes anything; it guards the marks' clear at page flush (see the method for why).
+                CaptureMarkedRowVersions(csoPagedResult.Results);
+
+                // Unique Value Generation (#242, Phase 2 work package G) page-start prefetch: a no-op when this
+                // run has no generated mappings.
+                await PrefetchGeneratedValueAssignmentsForPageAsync(csoPagedResult.Results);
+
+                // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
+                // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
+
+                int processedInPage = 0;
+                using (Diagnostics.Sync.StartSpan("ProcessCsoLoop")
+                    .SetTag("connectedSystemId", _connectedSystem.Id)
+                    .SetTag("csoCount", csoPagedResult.Results.Count)
+                    .SetTag("cumulativeObjectCount", _activity.ObjectsProcessed + csoPagedResult.Results.Count)
+                    .SetTag("wallClockOffsetMs", csoPhaseStopwatch.Elapsed.TotalMilliseconds))
                 {
-                    // Pass 2: Process joins, projections, and Attribute Flow for non-obsolete CSOs.
-                    // All disconnections from Pass 1 are now visible via _pendingDisconnectedMvoIds.
+                    // Two-pass processing ensures all CSO disconnections are recorded before any join attempts.
+                    // Without this, GUID-based page ordering could cause a new CSO to be processed before an
+                    // obsolete CSO, seeing a stale join count and incorrectly throwing CouldNotJoinDueToExistingJoin.
+
+                    // Pass 1: Process Pending Export confirmations and obsolete CSO teardown.
+                    // This populates _pendingDisconnectedMvoIds so Pass 2 join checks account for disconnections.
                     foreach (var connectedSystemObject in csoPagedResult.Results)
                     {
                         if (_cancellationTokenSource.IsCancellationRequested)
                         {
-                            Log.Information("PerformFullSyncAsync: Cancellation requested during Pass 2. Will flush already-processed objects before exiting.");
+                            Log.Information("PerformFullSyncAsync: Cancellation requested during Pass 1. Will flush already-processed objects before exiting.");
                             break;
                         }
 
-                        await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+                        using (Diagnostics.Sync.StartSpan("ProcessObsoleteCsoTeardown"))
+                            await ProcessObsoleteConnectedSystemObjectTeardownAsync(activeSyncRules, connectedSystemObject);
+                    }
 
-                        _activity.ObjectsProcessed++;
-                        processedInPage++;
-                        OnCsoProcessedInPass2?.Invoke();
-                        OnConnectedSystemObjectProcessedInPass2?.Invoke(connectedSystemObject);
+                    // If cancelled during Pass 1, skip Pass 2 entirely — no objects have been
+                    // joined/projected yet, so Pass 2 batch collections are empty.
+                    if (!_cancellationTokenSource.IsCancellationRequested)
+                    {
+                        // Pass 2: Process joins, projections, and Attribute Flow for non-obsolete CSOs.
+                        // All disconnections from Pass 1 are now visible via _pendingDisconnectedMvoIds.
+                        foreach (var connectedSystemObject in csoPagedResult.Results)
+                        {
+                            if (_cancellationTokenSource.IsCancellationRequested)
+                            {
+                                Log.Information("PerformFullSyncAsync: Cancellation requested during Pass 2. Will flush already-processed objects before exiting.");
+                                break;
+                            }
+
+                            using (Diagnostics.Sync.StartSpan("ProcessActiveCso"))
+                                await ProcessActiveConnectedSystemObjectAsync(activeSyncRules, connectedSystemObject);
+
+                            _activity.ObjectsProcessed++;
+                            processedInPage++;
+                            OnCsoProcessedInPass2?.Invoke();
+                            OnConnectedSystemObjectProcessedInPass2?.Invoke(connectedSystemObject);
+                        }
                     }
                 }
-            }
 
-            Log.Information("MetricsCheckpoint: FullSync processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
-                _activity.ObjectsProcessed, (long)csoPhaseStopwatch.Elapsed.TotalMilliseconds, totalCsosToProcess, _connectedSystem.Name);
+                Log.Information("MetricsCheckpoint: FullSync processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                    _activity.ObjectsProcessed, (long)csoPhaseStopwatch.Elapsed.TotalMilliseconds, totalCsosToProcess, _connectedSystem.Name);
 
-            // Process deferred reference attributes after all CSOs in this page have been processed.
-            // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
-            // By deferring reference attributes, we ensure all MVOs exist before resolving references.
-            // This enables a single sync run to fully reconcile all objects including references.
-            ProcessDeferredReferenceAttributes();
+                // Process deferred reference attributes after all CSOs in this page have been processed.
+                // Reference attributes (e.g., group members) may point to CSOs that are processed later in the same page.
+                // By deferring reference attributes, we ensure all MVOs exist before resolving references.
+                // This enables a single sync run to fully reconcile all objects including references.
+                using (Diagnostics.Sync.StartSpan("ProcessDeferredReferenceAttributes"))
+                    ProcessDeferredReferenceAttributes();
 
-            // Disable AutoDetectChangesEnabled for the page flush sequence.
-            // Without this, every SaveChangesAsync call below triggers DetectChanges() which
-            // scans ALL tracked entities' navigation properties. The tracked Activity entity's
-            // RunProfileExecutionItems collection contains RPEIs accumulated during CSO processing.
-            // DetectChanges() discovers these as new items, marks them as Added, and inserts them
-            // during SaveChangesAsync. Later, FlushRpeisAsync attempts raw SQL bulk insert of the
-            // same RPEIs, causing duplicate key violations.
-            //
-            // With AutoDetectChanges disabled, SaveChangesAsync only persists entities we explicitly
-            // mark (AddRange for creates, Entry().State = Modified for updates) without scanning
-            // navigation property collections.
-            _syncRepo.SetAutoDetectChangesEnabled(false);
-            try
-            {
-                // Batch persist all MVOs collected during this page.
-                //
-                // IMPORTANT DESIGN NOTE (Jan 2026):
-                // We previously attempted to decouple progress updates from batch size by calling
-                // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
-                //
-                // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
-                //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
-                //
-                // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
-                //    which traverses all navigation properties to discover changes.
-                //
-                // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
-                //    try to attach them when it discovers them via the MVO navigation, causing
-                //    "another instance with same key is already tracked" errors.
-                //
-                // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
-                //    deferring FK updates) all failed because EF's relationship fixup is automatic
-                //    and cannot be prevented without breaking the navigation property assignments.
-                //
-                // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
-                // are properly tracked, and only persist at page boundaries to batch database writes.
-                // Progress updates at finer granularity would require a separate DbContext instance.
-                await PersistPendingMetaverseObjectsAsync();
-
-                // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
-                // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
-                // THEN commit this page's generated assignments now the objects have real ids - deletion
-                // must run first because a stale assignment being removed can share its (object, attribute) key
-                // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
-                // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
-                // commit/delete.
-                await FlushGeneratedValueAssignmentDeletionsAsync();
-                await CommitGeneratedValueAssignmentsAsync();
-
-                // create MVO change objects for change tracking (after MVOs persisted so IDs available)
-                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-
-                // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
-                // capture real Metaverse Object ids, before the export flush persists them)
-                await EvaluateQueuedDriftAsync();
-
-                // batch evaluate exports for all MVOs that changed during this page
-                await EvaluatePendingExportsAsync();
-
-                // batch process Pending Export confirmations (deletes and updates)
-                await FlushPendingExportOperationsAsync();
-
-                // Resolve any Pending Export reference snapshots that couldn't be resolved during
-                // per-object processing (e.g. groups processed before their member users on this page).
-                // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
-                // FlushRpeisAsync (RPEIs with snapshots persisted).
-                await ResolvePendingExportReferenceSnapshotsAsync();
-
-                // batch delete obsolete CSOs
-                await FlushObsoleteCsoOperationsAsync();
-
-                // batch delete MVOs marked for immediate deletion (0-grace-period)
-                await FlushPendingMvoDeletionsAsync();
-
-                // Flush this page's RPEIs via bulk insert before updating progress
-                await FlushRpeisAsync();
-
-                // Persist MVO change records via raw SQL before clearing the change tracker
-                await FlushPendingMvoChangesAsync();
-
-                // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
-                // boundary to prevent memory accumulation from tracked entities across pages. Without this,
-                // the tracker grows linearly with total object count (500K+ entries at 100K objects),
-                // causing OOM. All page data has been flushed to the database above. The Activity entity
-                // becomes detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync
-                // call. Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
-                // held in CLR fields — detaching does not null their populated navigation properties.
-                ClearPageTrackingState();
-
-                // Update progress with page completion. The call persists the Activity's counters,
-                // which is what the portal renders the count, rate and time remaining from; the
-                // message carries no numbers of its own, and the running step's name already says
-                // what is happening, so there is nothing left for it to add here.
-                using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+                // Change detection has been off since the page loaded (see the top of the loop); it is restored once the
+                // page's tracker is cleared, below.
+                try
                 {
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
+                    // Batch persist all MVOs collected during this page.
+                    //
+                    // IMPORTANT DESIGN NOTE (Jan 2026):
+                    // We previously attempted to decouple progress updates from batch size by calling
+                    // UpdateActivityAsync mid-loop (every N objects). This DOES NOT WORK because:
+                    //
+                    // 1. When we set cso.MetaverseObject = mvo, EF's "relationship fixup" automatically
+                    //    adds the CSO to mvo.ConnectedSystemObjects (bidirectional nav property sync).
+                    //
+                    // 2. During SaveChangesAsync (triggered by activity updates), EF calls DetectChanges()
+                    //    which traverses all navigation properties to discover changes.
+                    //
+                    // 3. If CSOs were loaded with AsNoTracking() to improve query performance, EF will
+                    //    try to attach them when it discovers them via the MVO navigation, causing
+                    //    "another instance with same key is already tracked" errors.
+                    //
+                    // 4. Attempts to work around this (clearing collections, removing CSOs from collections,
+                    //    deferring FK updates) all failed because EF's relationship fixup is automatic
+                    //    and cannot be prevented without breaking the navigation property assignments.
+                    //
+                    // The solution is to use AsSplitQuery() instead of AsNoTracking() so all entities
+                    // are properly tracked, and only persist at page boundaries to batch database writes.
+                    // Progress updates at finer granularity would require a separate DbContext instance.
+                    await PersistPendingMetaverseObjectsAsync();
+
+                    // Unique Value Generation (#242, Phase 2 work package G): delete whatever the page's lifecycle
+                    // reconciliation (or a stale Sticky match, #242 Scenario 023 bug fix) decided no longer belongs,
+                    // THEN commit this page's generated assignments now the objects have real ids - deletion
+                    // must run first because a stale assignment being removed can share its (object, attribute) key
+                    // with the fresh one about to be inserted for the same request; see FlushGeneratedValueAssignmentDeletionsAsync's
+                    // doc comment. Both are no-ops for a run with no generated mappings, or a page with nothing to
+                    // commit/delete.
+                    using (Diagnostics.Sync.StartSpan("FlushGeneratedValueAssignmentDeletions"))
+                        await FlushGeneratedValueAssignmentDeletionsAsync();
+                    using (Diagnostics.Sync.StartSpan("CommitGeneratedValueAssignments"))
+                        await CommitGeneratedValueAssignmentsAsync();
+
+                    // create MVO change objects for change tracking (after MVOs persisted so IDs available)
+                    await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
+
+                    // evaluate queued drift detection (after MVOs persisted so corrective Pending Exports
+                    // capture real Metaverse Object ids, before the export flush persists them)
+                    await EvaluateQueuedDriftAsync();
+
+                    // batch evaluate exports for all MVOs that changed during this page
+                    await EvaluatePendingExportsAsync();
+
+                    // batch process Pending Export confirmations (deletes and updates)
+                    await FlushPendingExportOperationsAsync();
+
+                    // Resolve any Pending Export reference snapshots that couldn't be resolved during
+                    // per-object processing (e.g. groups processed before their member users on this page).
+                    // Must run after FlushPendingExportOperationsAsync (CSOs now in DB) and before
+                    // FlushRpeisAsync (RPEIs with snapshots persisted).
+                    using (Diagnostics.Sync.StartSpan("ResolvePendingExportReferenceSnapshots"))
+                        await ResolvePendingExportReferenceSnapshotsAsync();
+
+                    // batch delete obsolete CSOs
+                    using (Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations"))
+                        await FlushObsoleteCsoOperationsAsync();
+
+                    // batch delete MVOs marked for immediate deletion (0-grace-period)
+                    await FlushPendingMvoDeletionsAsync();
+
+                    // Flush this page's RPEIs via bulk insert before updating progress
+                    using (Diagnostics.Sync.StartSpan("FlushRpeis"))
+                        await FlushRpeisAsync();
+
+                    // Persist MVO change records via raw SQL before clearing the change tracker
+                    using (Diagnostics.Sync.StartSpan("FlushPendingMvoChanges"))
+                        await FlushPendingMvoChangesAsync();
+
+                    // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
+                    // boundary to prevent memory accumulation from tracked entities across pages. Without this,
+                    // the tracker grows linearly with total object count (500K+ entries at 100K objects),
+                    // causing OOM. All page data has been flushed to the database above. The Activity entity
+                    // becomes detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync
+                    // call. Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
+                    // held in CLR fields — detaching does not null their populated navigation properties.
+                    ClearPageTrackingState();
+
+                    // Update progress with page completion. The call persists the Activity's counters,
+                    // which is what the portal renders the count, rate and time remaining from; the
+                    // message carries no numbers of its own, and the running step's name already says
+                    // what is happening, so there is nothing left for it to add here.
+                    using (Diagnostics.Sync.StartSpan("UpdateActivityProgress"))
+                    {
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
+                    }
+
+                    LogPageMemoryDiagnostics(i, totalCsoPages);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
+                {
+                    // Attribute the persistence failure (page, Connected System, affected object ids) before it
+                    // propagates to the worker's activity-failure handler, which otherwise records only a generic
+                    // "unhandled exception". This is a hard failure: we rethrow so the run stops rather than
+                    // continuing with a page that did not fully persist (Synchronisation Integrity).
+                    throw CreatePagePersistenceException(i, totalCsoPages, ex);
+                }
+                finally
+                {
+                    _syncRepo.SetAutoDetectChangesEnabled(true);
                 }
 
-                LogPageMemoryDiagnostics(i, totalCsoPages);
+                // After flushing the current page, exit the page loop if cancellation was requested.
+                // The flush has completed for all objects processed so far — no data is orphaned.
+                if (_cancellationTokenSource.IsCancellationRequested)
+                {
+                    Log.Information("PerformFullSyncAsync: Cancellation completed. Page {Page} flushed, exiting page loop.", i);
+                    break;
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
-            {
-                // Attribute the persistence failure (page, Connected System, affected object ids) before it
-                // propagates to the worker's activity-failure handler, which otherwise records only a generic
-                // "unhandled exception". This is a hard failure: we rethrow so the run stops rather than
-                // continuing with a page that did not fully persist (Synchronisation Integrity).
-                throw CreatePagePersistenceException(i, totalCsoPages, ex);
-            }
-            finally
-            {
-                _syncRepo.SetAutoDetectChangesEnabled(true);
-            }
-
-            // After flushing the current page, exit the page loop if cancellation was requested.
-            // The flush has completed for all objects processed so far — no data is orphaned.
-            if (_cancellationTokenSource.IsCancellationRequested)
-            {
-                Log.Information("PerformFullSyncAsync: Cancellation completed. Page {Page} flushed, exiting page loop.", i);
-                break;
-            }
+        }
+        finally
+        {
+            // Not every load reaches a page's own tracker clear (#2598): the pager's closing sweep can load pages it hands
+            // nothing out of, and an exception in Pass 1 or 2 leaves the page before its flush. What they loaded holds
+            // Connected System Objects tracked over untracked Metaverse Objects, so it goes before detection is restored.
+            ClearPageTrackingState();
+            _syncRepo.SetAutoDetectChangesEnabled(true);
         }
 
         // Skip post-processing on cancellation: cross-page references target unprocessed pages,
@@ -425,7 +429,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             await ResolveCrossPageReferencesAsync(activeSyncRules);
 
             // Flush any RPEIs from cross-page resolution
-            await FlushRpeisAsync();
+            using (Diagnostics.Sync.StartSpan("FlushRpeis"))
+                await FlushRpeisAsync();
 
             // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
             // deletions (one per referencing group CSO, not one per page-flush that touched it).
@@ -448,12 +453,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
 
-            // Record that this run applied the configuration as of its start to every object; a configuration
-            // change made mid-run carries a later timestamp and is picked up by the next Full Synchronisation.
-            _connectedSystem.ConfigurationLastFullyAppliedAt = fullSyncStartedAt;
-
             // Update the delta sync watermark to establish baseline for future delta syncs
             await UpdateDeltaSyncWatermarkAsync();
+
+            // The configuration changes this run claimed are applied: every object of every type has been processed.
+            // Reached only on completion, never on cancellation or failure, so those leave the changes awaiting
+            // synchronisation for the next run to claim again.
+            await ApplyClaimedConfigurationChangesAsync("Full Synchronisation");
 
             // Update activity message with throughput summary
             var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +

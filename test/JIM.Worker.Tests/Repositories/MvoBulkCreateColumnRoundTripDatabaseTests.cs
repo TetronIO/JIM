@@ -129,6 +129,8 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
         var referencedMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = s.MvoType, Created = DateTime.UtcNow };
 
         var schedulingItemId = Guid.NewGuid();
+        var unsynchronisedChanges = new MetaverseObjectUnsynchronisedChanges { AttributeIds = [s.TextAttrId, s.ReferenceAttrId] };
+        unsynchronisedChanges.Record(null, [new MetaverseObjectAttributeValue { AttributeId = s.TextAttrId, StringValue = "Jo Bloggs (old)" }]);
         var mvo = new MetaverseObject
         {
             Id = Guid.NewGuid(),
@@ -147,9 +149,11 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             DeletionScheduledByRunProfileExecutionItemId = schedulingItemId,
             CachedDisplayName = "Jo Bloggs",
             ScopeReviewPending = true,
-            LastScopeEvaluatedAt = lastScopeEvaluatedAt
+            LastScopeEvaluatedAt = lastScopeEvaluatedAt,
+            UnsynchronisedChangesJson = unsynchronisedChanges.ToJson()
         };
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ContributedBySystemId = s.ContributingSystemId, ContributedBySyncRuleId = s.ContributingSyncRuleId });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs", ContributedBySystemId = s.ContributingSystemId, ContributedBySyncRuleId = s.ContributingSyncRuleId, ContributedByKind = ValueContributorKind.SynchronisationRule });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo", ContributedByKind = ValueContributorKind.SignInClaim, ContributedByClaimType = "given_name" });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.NumberAttrId, IntValue = 42 });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.LongNumberAttrId, LongValue = 9999999999L });
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.DecimalAttrId, DecimalValue = 3.14159m });
@@ -189,20 +193,29 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedMvo.CachedDisplayName, Is.EqualTo("Jo Bloggs"));
             Assert.That(storedMvo.ScopeReviewPending, Is.True);
             Assert.That(storedMvo.LastScopeEvaluatedAt, Is.EqualTo(lastScopeEvaluatedAt));
+
+            // The jsonb document is normalised by the database (key order, whitespace), so it is compared as the record it holds.
+            var storedChanges = MetaverseObjectUnsynchronisedChanges.FromJson(storedMvo.UnsynchronisedChangesJson);
+            Assert.That(storedChanges?.AttributeIds, Is.EqualTo(unsynchronisedChanges.AttributeIds));
+            Assert.That(storedChanges?.Removals, Is.EqualTo(unsynchronisedChanges.Removals));
         }
 
         var storedValues = await readContext.MetaverseObjectAttributeValues
             .AsNoTracking()
             .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == mvo.Id)
             .ToListAsync();
-        Assert.That(storedValues, Has.Count.EqualTo(11));
+        Assert.That(storedValues, Has.Count.EqualTo(12));
 
         using (Assert.EnterMultipleScope())
         {
-            var textValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && !v.NullValue);
-            Assert.That(textValue.StringValue, Is.EqualTo("Jo Bloggs"));
+            var textValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && v.StringValue == "Jo Bloggs");
             Assert.That(textValue.ContributedBySystemId, Is.EqualTo(s.ContributingSystemId));
             Assert.That(textValue.ContributedBySyncRuleId, Is.EqualTo(s.ContributingSyncRuleId));
+            Assert.That(textValue.ContributedByKind, Is.EqualTo(ValueContributorKind.SynchronisationRule));
+            Assert.That(textValue.ContributedByClaimType, Is.Null);
+            var claimValue = storedValues.Single(v => v.AttributeId == s.TextAttrId && v.StringValue == "Jo");
+            Assert.That(claimValue.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(claimValue.ContributedByClaimType, Is.EqualTo("given_name"));
             Assert.That(storedValues.Single(v => v.AttributeId == s.NumberAttrId).IntValue, Is.EqualTo(42));
             Assert.That(storedValues.Single(v => v.AttributeId == s.LongNumberAttrId).LongValue, Is.EqualTo(9999999999L));
             Assert.That(storedValues.Single(v => v.AttributeId == s.DecimalAttrId).DecimalValue, Is.EqualTo(3.14159m));
@@ -257,37 +270,34 @@ public class MvoBulkCreateColumnRoundTripDatabaseTests
     /// value built from <see cref="DateTime.UtcNow"/> round-trips byte-for-byte through the database.
     /// </summary>
     /// <summary>
-    /// Regression (Pre-Release Scenario-023-UniqueValueGeneration at Medium, page 2 of 2): the worker clears its
-    /// change tracker between sync pages, so on every page after the first the Metaverse Object Type the new
-    /// objects point at is no longer tracked. The bulk create path attached each new object as Unchanged and only
-    /// then set its shadow <c>TypeId</c>; with the Type untracked that shadow value was still empty at attach
-    /// time, so setting it marked every new object Modified. The next EF <c>SaveChangesAsync</c> on the same
-    /// context (Unique Value Generation's assignment insert) then issued
-    /// <c>UPDATE "MetaverseObjects" SET "TypeId" = ... WHERE "Id" = ... AND xmin = 0</c>, matched no rows (the
-    /// COPY-assigned xmin is unknown to EF) and aborted the run with a DbUpdateConcurrencyException.
+    /// The bulk create leaves the objects it writes untracked (#2598). It used to attach every new object and
+    /// attribute value to the change tracker as Unchanged, so that later EF-based code could hang children off them;
+    /// nothing on the synchronisation path does that any more, and the attach cost grew with the square of a group's
+    /// membership (211 s for one page at Scale750k40kGroups). Created on a context that has never tracked the
+    /// Metaverse Object Type, as on every sync page after the first: that is the state in which the attach once left
+    /// objects Modified, so a later unrelated EF save on the same context (Unique Value Generation's assignment
+    /// insert) issued an xmin-guarded UPDATE that matched no rows (Pre-Release Scenario-023-UniqueValueGeneration at
+    /// Medium, page 2 of 2). Untracked objects cannot be re-saved at all, so that save must succeed.
     /// </summary>
     [Test]
-    public async Task CreateMetaverseObjectsAsync_TypeNotTrackedByWriteContext_LeavesObjectsUnchangedSoLaterSaveSucceedsAsync()
+    public async Task CreateMetaverseObjectsAsync_TypeNotTrackedByWriteContext_LeavesNothingTrackedSoLaterSaveSucceedsAsync()
     {
         var s = await SeedGraphAsync();
 
         var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = s.MvoType, Created = DateTime.UtcNow };
         mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = s.TextAttrId, StringValue = "Jo Bloggs" });
 
-        // s.MvoType was saved by the seed context, so this write context has never tracked it: the same state a
-        // sync page after the first is in once the page boundary has cleared the tracker.
         await using var writeContext = NewContext();
         var repository = new PostgresDataRepository(writeContext);
         await repository.Sync.CreateMetaverseObjectsAsync([mvo]);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(writeContext.Entry(mvo).State, Is.EqualTo(EntityState.Unchanged));
-            Assert.That(writeContext.Entry(mvo).Property("TypeId").CurrentValue, Is.EqualTo(s.MvoType.Id));
-            Assert.That(writeContext.Entry(mvo.AttributeValues.Single()).State, Is.EqualTo(EntityState.Unchanged));
+            Assert.That(writeContext.ChangeTracker.Entries<MetaverseObject>(), Is.Empty);
+            Assert.That(writeContext.ChangeTracker.Entries<MetaverseObjectAttributeValue>(), Is.Empty);
         }
 
-        // A later unrelated EF save on the same context must not try to re-update the bulk-created row.
+        // A later unrelated EF save on the same context must not try to re-save the bulk-created row.
         Assert.That(async () => await writeContext.SaveChangesAsync(), Throws.Nothing);
     }
 

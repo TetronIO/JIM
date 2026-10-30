@@ -11,6 +11,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
 using JIM.Web.Pages;
 using JIM.Web.Services;
@@ -45,6 +46,13 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
 
     private List<ActivityRunProfileExecutionItemHeader> _items = [];
 
+    // The configuration changes the Activity claimed or saved (#2615), read on every load and when the run ends.
+    private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
+    private List<ConfigurationChangeSynchronisationSummary> _synchronisationChanges = [];
+
+    // Read on every load of the Activity, so a test can move the run on between the page's refreshes.
+    private ActivityStatus _status = ActivityStatus.Complete;
+
     protected override void ConfigureAdditionalServices()
     {
         Services.AddSingleton<IUserPreferenceService>(new FakeUserPreferenceService());
@@ -69,24 +77,25 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
 
         _activityRepository = new Mock<IActivityRepository>();
 
-        _activityRepository.Setup(r => r.GetActivityAsync(ActivityId)).ReturnsAsync(new Activity
+        _activityRepository.Setup(r => r.GetActivityAsync(ActivityId)).ReturnsAsync(() => new Activity
         {
             Id = ActivityId,
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Execute,
             TargetName = "Full Import",
             ConnectedSystemRunType = ConnectedSystemRunType.FullImport,
-            Status = ActivityStatus.Complete,
+            Status = _status,
             InitiatedByType = ActivityInitiatorType.System
         });
 
         _activityRepository.Setup(r => r.GetActivityRunProfileExecutionStatsAsync(ActivityId))
-            .ReturnsAsync(new ActivityRunProfileExecutionStats
+            .ReturnsAsync(() => new ActivityRunProfileExecutionStats
             {
                 ActivityId = ActivityId,
-                TotalCsoAdds = 1,
+                TotalCsoAdds = _items.Count,
+                TotalObjectChangeCount = _items.Count,
                 TotalObjectTypes = 1,
-                ObjectTypeCounts = new Dictionary<string, int> { { "user", 1 } }
+                ObjectTypeCounts = new Dictionary<string, int> { { "user", _items.Count } }
             });
 
         _activityRepository.Setup(r => r.GetActivityPhasesAsync(ActivityId))
@@ -129,43 +138,45 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
                 };
             });
 
+        _synchronisationChanges = [];
+        _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
+        _connectedSystemRepository.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(ActivityId, It.IsAny<int>()))
+            .ReturnsAsync(() => _synchronisationChanges.ToList());
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemObjectCountAsync(3, 7, null)).ReturnsAsync(12_500);
+
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
+        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
 
     [Test]
-    public void ActivityDetail_ExecutionItems_CountsTheMatchSetOnceRatherThanOnEveryWindow()
+    public void ActivityDetail_ExecutionItemsUnfiltered_TakeTheirTotalFromTheStatsRatherThanCounting()
     {
-        // Counting is a full scan of the match set, so the grid asks for it on the first window and the page must
-        // pass that through rather than counting unconditionally. A reload that changes nothing about which items
-        // match must not re-count: at customer scale that is one scan per scroll window.
+        // Counting is a full scan of the match set. Unfiltered, the stats the page has already read hold the same
+        // number, so the range read must never be asked to count: at customer scale that scan is the expensive half
+        // of every window, and the live refresh would otherwise pay for it every few seconds.
         var cut = RenderActivityDetail();
         var grid = WaitForGrid(cut);
 
-        cut.WaitForAssertion(() => Assert.That(_windowRequests.Any(r => r.IncludeTotalCount), Is.True,
-            "the first window must ask for the total; nothing else knows how big the list is"));
-        var countedBefore = _windowRequests.Count(r => r.IncludeTotalCount);
+        cut.WaitForAssertion(() => Assert.That(grid.TotalItems, Is.EqualTo(1), "the toolbar count must come from the stats"));
+        cut.InvokeAsync(() => grid.RefreshAsync(invalidateTotals: true)).GetAwaiter().GetResult();
 
-        cut.InvokeAsync(() => grid.RefreshAsync()).GetAwaiter().GetResult();
-
-        cut.WaitForAssertion(() => Assert.That(_windowRequests.Count, Is.GreaterThan(0)));
-        Assert.That(_windowRequests.Count(r => r.IncludeTotalCount), Is.EqualTo(countedBefore),
-            "a reload that leaves the match set alone must not pay for the count again");
+        cut.WaitForAssertion(() => Assert.That(_windowRequests, Has.Count.GreaterThan(1)));
+        Assert.That(_windowRequests.Any(r => r.IncludeTotalCount), Is.False,
+            "an unfiltered window must not count in the database; the stats already answer it");
     }
 
     [Test]
     public void ActivityDetail_OutcomeTypeFilterChanged_ReCountsTheMatchSet()
     {
-        // A chip filter changes which items match, so the total the toolbar count states and the scroll area is
-        // sized from describes a set that no longer exists. Reloading without invalidating it leaves both wrong,
-        // and nothing on screen says so.
+        // A chip filter changes which items match, and the stats cannot say how many match a filter, so the range
+        // read must count. Reloading without it leaves the toolbar count and the scroll area sized for a match set
+        // that no longer exists, and nothing on screen says so.
         var cut = RenderActivityDetail();
         WaitForGrid(cut);
-
-        cut.WaitForAssertion(() => Assert.That(_windowRequests.Any(r => r.IncludeTotalCount), Is.True));
-        var countedBefore = _windowRequests.Count(r => r.IncludeTotalCount);
+        cut.WaitForAssertion(() => Assert.That(_windowRequests, Is.Not.Empty));
 
         InvokeOutcomeTypeFilterChanged(cut, [ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded]);
 
@@ -173,13 +184,47 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(_windowRequests.Count(r => r.IncludeTotalCount), Is.GreaterThan(countedBefore),
+                Assert.That(_windowRequests.Any(r => r.IncludeTotalCount), Is.True,
                     "a chip filter change must re-count: the match set, and so the total, has changed");
                 Assert.That(_windowRequests.Last().OutcomeTypeFilter,
                     Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded),
                     "the chosen outcome type must reach the range read, or the chips filter nothing");
             }
         });
+    }
+
+    [Test]
+    public void ActivityDetail_RunFinishesWhileOpen_ReloadsTheItemsItHadNotShown()
+    {
+        // The table holds the rows it last fetched. Opened while an import was still running it was empty, and it
+        // stayed empty however many items the run then saved, while the stats above it counted them.
+        _status = ActivityStatus.InProgress;
+        var saved = _items;
+        _items = [];
+
+        var cut = RenderActivityDetail();
+        var grid = WaitForGrid(cut);
+        cut.WaitForAssertion(() => Assert.That(grid.TotalItems, Is.EqualTo(0)));
+
+        _items = saved;
+        _status = ActivityStatus.Complete;
+        InvokeRefreshActivity(cut);
+
+        cut.WaitForAssertion(() => Assert.That(grid.TotalItems, Is.EqualTo(1),
+            "the run finishing must reload the table, whatever the interval since the last reload"));
+    }
+
+    [Test]
+    public void ActivityDetail_RunningWithNoItemsYet_SaysTheyAreStillToCome()
+    {
+        // "Recorded no items" reads as final; while the run is going, items are still being saved.
+        _status = ActivityStatus.InProgress;
+        _items = [];
+
+        var cut = RenderActivityDetail();
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<TableEmptyState>().Instance.PrimaryText,
+            Does.Contain("yet").And.Not.Contain("recorded no")));
     }
 
     [Test]
@@ -230,6 +275,66 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
         });
     }
 
+    [Test]
+    public void ActivityDetail_RunThatClaimedChanges_SaysWhichObjectTypesItProcessedInFull()
+    {
+        _synchronisationChanges = [ClaimedChange(applied: true)];
+
+        var cut = RenderActivityDetail();
+
+        cut.WaitForAssertion(() =>
+        {
+            var sections = cut.FindAll("[data-testid='jim-processed-in-full-section']");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(sections, Has.Count.EqualTo(1));
+                Assert.That(sections[0].TextContent, Does.Contain("12,500"));
+            }
+        });
+    }
+
+    [Test]
+    public void ActivityDetail_RunThatClaimedNothing_ShowsNoSection()
+    {
+        var cut = RenderActivityDetail();
+        WaitForGrid(cut);
+
+        Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-section']"), Is.Empty);
+    }
+
+    [Test]
+    public void ActivityDetail_RunFinishesWhileOpen_ReadsAgainWhetherItAppliedTheChanges()
+    {
+        // A run applies what it claimed as it completes, so a page opened mid-run shows neither outcome and must read
+        // the changes again once the run has ended.
+        _status = ActivityStatus.InProgress;
+        _synchronisationChanges = [ClaimedChange(applied: false)];
+        var cut = RenderActivityDetail();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-section']"), Has.Count.EqualTo(1)));
+        Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-applied']"), Is.Empty);
+
+        _synchronisationChanges = [ClaimedChange(applied: true)];
+        _status = ActivityStatus.Complete;
+        InvokeRefreshActivity(cut);
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-applied']"), Has.Count.EqualTo(1)));
+    }
+
+    private static ConfigurationChangeSynchronisationSummary ClaimedChange(bool applied) => new()
+    {
+        Id = 1,
+        ConnectedSystemId = 3,
+        ConnectedSystemName = "HR Import",
+        ConnectedSystemObjectTypeId = 7,
+        ObjectTypeName = "user",
+        Reason = "HR Inbound: Scope changed",
+        RequestedAt = DateTime.UtcNow.AddHours(-1),
+        ClaimedByActivityId = ActivityId,
+        AppliedAt = applied ? DateTime.UtcNow : null,
+        InitiatedByType = ActivityInitiatorType.System,
+        InitiatedByName = "System"
+    };
+
     private IRenderedComponent<ActivityDetail> RenderActivityDetail()
         => Render<ActivityDetail>(parameters => parameters.Add(c => c.Id, ActivityId));
 
@@ -255,6 +360,17 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
         Assert.That(handler, Is.Not.Null, "Expected private method 'OnOutcomeTypeFilterChanged' to exist on the page.");
 
         cut.InvokeAsync(() => (Task)handler!.Invoke(cut.Instance, [selected])!).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Runs one tick of the page's live refresh, as a notification or the polling fallback would.
+    /// </summary>
+    private static void InvokeRefreshActivity(IRenderedComponent<ActivityDetail> cut)
+    {
+        var refresh = typeof(ActivityDetail).GetMethod("RefreshActivityAsync", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.That(refresh, Is.Not.Null, "Expected private method 'RefreshActivityAsync' to exist on the page.");
+
+        cut.InvokeAsync(() => (Task)refresh!.Invoke(cut.Instance, [])!).GetAwaiter().GetResult();
     }
 
     private sealed record ExecutionItemWindowRequest(

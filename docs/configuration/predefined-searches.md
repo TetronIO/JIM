@@ -9,9 +9,27 @@ audience: administrator
 
 A **predefined search** is a named, reusable search over [Metaverse Objects](metaverse-objects.md). Predefined searches drive the portal's list views and back the fast named-search endpoint that end-user search consumers call.
 
+```jim-diagram
+archetype: anatomy
+title: What a predefined search defines
+desc: "A predefined search ties together a target Metaverse Object Type, whose objects it returns; a set of attributes, shown as the result list's columns in display order; criteria in groups, each group All or Any, with an object matching when it matches any one top-level group; and a stable URI slug such as people, which consumers call it by. Each Metaverse Object Type may have one default search; disabling a search hides it from end users; and a built-in search cannot be deleted."
+subject:
+  kind: object
+  label: Predefined search
+  parts:
+    - { label: Metaverse Object Type, detail: whose objects it returns }
+    - { label: Attributes, detail: "the columns, in display order" }
+    - { label: Criteria, detail: "All or Any groups; any top-level one matches" }
+    - { label: URI slug, detail: "such as `people`: what consumers call" }
+properties:
+  - { name: Default, value: one per Metaverse Object Type }
+  - { name: Enabled, value: off hides it from end users }
+  - { name: Built-in, value: cannot be deleted }
+```
+
 Predefined searches are administrator-managed: end users do not author new searches, they consume the ones that already exist.
 
-## What a predefined search defines
+## :material-magnify: What a predefined search defines
 
 A predefined search ties together:
 
@@ -20,25 +38,25 @@ A predefined search ties together:
 - **Criteria**<br /> Conditions on attribute values that control which objects match (see [Filtering with criteria](#filtering-with-criteria) below).
 - **A stable URI slug**<br /> The human-readable identifier (e.g. `people`, `security-groups`) that consuming code uses to invoke the search.
 
-## Stable URI slug
+## :material-tag-outline: Stable URI slug
 
 Each search has a URI that is what consumers refer to. Treat the URI as a stable identifier; even though the underlying integer ID is the canonical key for write operations, the URI is what end-user code, the portal, and integrations will call by name. Picking a sensible URI when you create a search matters more than picking a name.
 
-## Built-in vs administrator-defined
+## :material-account-group-outline: Built-in vs administrator-defined
 
 Searches that ship with JIM are marked **built-in** and cannot be deleted; they can however be enabled, disabled, and customised in some cases. Administrator-defined searches are first-class and can be created, edited, and removed.
 
-## Default for object type
+## :material-bookmark-outline: Default for object type
 
 Each Metaverse Object Type may have one default predefined search. The default is what the portal uses when navigating to that object type without a specific search selection.
 
-## Enabled flag
+## :material-toggle-switch-outline: Enabled flag
 
 Disabling a search hides it from end users in the portal, the end-user search API, and the sidebar navigation. It remains discoverable through the admin surfaces (this configuration view, the admin UI, and PowerShell) so it can be re-enabled at any time.
 
 **Disable rather than delete** when you want to suppress a search temporarily, or when you want to keep its definition around for future re-enablement.
 
-## Running vs administering
+## :material-play-circle-outline: Running vs administering
 
 There are two distinct surfaces:
 
@@ -47,7 +65,7 @@ There are two distinct surfaces:
 
 The administrative surface is what this page describes. The running surface is part of the [Metaverse](metaverse.md) endpoints.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Hiding a built-in search from end users:**
 
@@ -60,7 +78,7 @@ The administrative surface is what this page describes. The running surface is p
 1. Browse the catalogue (which still includes disabled searches)
 2. Update the relevant search with the enabled flag set to true
 
-## Filtering with criteria
+## :material-filter-outline: Filtering with criteria
 
 A predefined search can filter its results with **criteria**: conditions tested against a Metaverse Object's attribute values. Criteria live in **criteria groups**; a search can have one or more groups, and each group holds one or more criteria.
 
@@ -110,18 +128,18 @@ Each group has a **logic type**:
 
 On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within any group, at any depth, you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
 
-## Change history
+## :material-history: Change history
 
 Changes to a Predefined Search, including its criteria groups and criteria, are tracked as versioned [Configuration Change History](activities.md#configuration-change-history): who changed what, and when. A **Changes** tab on the Predefined Search detail page shows each change as an audit-style field history, and lets you compare any two versions.
 
 Retrieve the same history with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch` or the equivalent `change-history` endpoint in the [interactive API reference](../../api/reference/). Enabling or disabling a search from the admin portal offers an optional "Reason for change" prompt; automation can pass the same reason with `-ChangeReason` on `Set-JIMPredefinedSearch` or the corresponding REST request field. Adding, editing, or removing a criteria group or criterion is captured as its own version rolled up into the owning search's history, without prompting for a reason on each edit.
 
-## Manage Predefined Searches
+## :material-cog-outline: Manage Predefined Searches
 
 - **JIM portal**<br /> Predefined Searches area of the admin UI
 - **PowerShell**<br /> [Predefined Searches cmdlets](../powershell/predefined-searches.md) (`Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, and the criteria cmdlets such as `New-JIMPredefinedSearchCriterion`)
 - **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../../api/reference/), including the criteria-group and criteria endpoints
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Metaverse](metaverse.md): predefined searches return Metaverse Objects; the running endpoint lives with the Metaverse Object endpoints

@@ -5,7 +5,7 @@ namespace JIM.Models.Transactional;
 
 /// <summary>
 /// One item of a streamed whole-system preview (#1530), in the order the synchronisation would meet it: the population
-/// first, then each Connected System Object, then each Metaverse Object the export scope review would reach. What an
+/// first, then each Connected System Object, then each Metaverse Object the Export Review would reach. What an
 /// item carries depends on its <see cref="Kind"/>.
 /// </summary>
 public class FullSyncPreviewItem
@@ -21,17 +21,17 @@ public class FullSyncPreviewItem
     public int? TotalObjectCount { get; init; }
 
     /// <summary>
-    /// The Connected System Object this item is about; null for the population, a refusal and the export scope review.
+    /// The Connected System Object this item is about; null for the population, a refusal and the Export Review.
     /// </summary>
     public Guid? ConnectedSystemObjectId { get; init; }
 
     /// <summary>
-    /// The Metaverse Object an export scope review item is about.
+    /// The Metaverse Object an Export Review item is about.
     /// </summary>
     public Guid? MetaverseObjectId { get; init; }
 
     /// <summary>
-    /// The Metaverse Object Type of an export scope review item's object.
+    /// The Metaverse Object Type of an Export Review item's object.
     /// </summary>
     public int? MetaverseObjectTypeId { get; init; }
 
@@ -51,7 +51,7 @@ public class FullSyncPreviewItem
     public FullSyncPreviewCategory? Category { get; init; }
 
     /// <summary>
-    /// For an evaluated object or an export scope review, what the synchronisation would do to it; for a refusal, the
+    /// For an evaluated object or an Export Review, what the synchronisation would do to it; for a refusal, the
     /// errors that refuse the whole synchronisation.
     /// </summary>
     public SyncPreviewResult? Preview { get; init; }

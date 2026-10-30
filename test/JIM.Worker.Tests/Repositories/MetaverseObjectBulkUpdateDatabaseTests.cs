@@ -274,6 +274,46 @@ public class MetaverseObjectBulkUpdateDatabaseTests
     }
 
     /// <summary>
+    /// A write outside synchronisation (a sign-in, a portal edit) flags the object and records what it changed (#2615),
+    /// from its own context, while a synchronisation may already hold the object as it loaded it, without the record.
+    /// That synchronisation's update must leave the record as the write left it: the record is the only thing that
+    /// carries the changed values to the target systems, and a bulk update of the loaded copy would erase it.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_UnsynchronisedChangesRecordedAfterLoad_KeepsTheRecordAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var syncCtx = NewContext();
+        var syncRepo = new PostgresDataRepository(syncCtx);
+        var personType = await syncCtx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { TextValue(ids.DepartmentId, "Sales") } };
+        await syncRepo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        var recorded = new MetaverseObjectUnsynchronisedChanges();
+        recorded.Record(null, [new MetaverseObjectAttributeValue { AttributeId = ids.DepartmentId, StringValue = "Sales" }]);
+        await using (var signInCtx = NewContext())
+        {
+            var tracked = await signInCtx.MetaverseObjects.AsTracking().SingleAsync(o => o.Id == mvo.Id);
+            tracked.ScopeReviewPending = true;
+            tracked.UnsynchronisedChangesJson = recorded.ToJson();
+            await new PostgresDataRepository(signInCtx).Metaverse.UpdateMetaverseObjectAsync(tracked);
+        }
+
+        mvo.AttributeValues.Add(TextValue(ids.JobTitleId, "Engineer"));
+        await syncRepo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ScopeReviewPending, Is.True);
+            Assert.That(MetaverseObjectUnsynchronisedChanges.FromJson(persisted.UnsynchronisedChangesJson)?.Removals, Is.EqualTo(recorded.Removals),
+                "the synchronisation wrote back the null it loaded, erasing the change the write recorded");
+        }
+    }
+
+    /// <summary>
     /// The Temporal Scope Reconciler (#892) flags an object and advances its LastScopeEvaluatedAt from its own context,
     /// on its own schedule, so it can do so while a synchronisation holds the object as it loaded it. The
     /// synchronisation's update must leave both columns as the reconciler wrote them.
@@ -470,6 +510,78 @@ public class MetaverseObjectBulkUpdateDatabaseTests
             Assert.That(department.StringValue, Is.EqualTo("Sales"), "the value itself is untouched by a provenance takeover");
             Assert.That(department.Id, Is.EqualTo(departmentValue.Id), "the row is updated in place, not churned");
             Assert.That(displayName.ContributedBySyncRuleId, Is.Null, "a value nobody took over keeps its provenance");
+        }
+    }
+
+    /// <summary>
+    /// #2472: when a Synchronisation Rule takes over a value a sign-in claim set, the row's source kind and claim
+    /// type change with its contributing system and rule. Otherwise a value synchronisation now owns would still read
+    /// as the token's, which is what a refresh of token-owned values (#2383) would wrongly act on.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_RuleTakesOverSignInClaimValue_PersistsKindAndClearsClaimTypeAsync()
+    {
+        var ids = await SeedTypeAsync();
+        var rules = await SeedSystemAndRulesAsync(ids.PersonTypeId);
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        var displayNameValue = TextValue(ids.DisplayNameId, "Alice Example");
+        displayNameValue.ContributedByKind = ValueContributorKind.SignInClaim;
+        displayNameValue.ContributedByClaimType = "name";
+
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { displayNameValue } };
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        displayNameValue.ContributedBySystemId = rules.SystemId;
+        displayNameValue.ContributedBySyncRuleId = rules.FirstRuleId;
+        displayNameValue.ContributedByKind = ValueContributorKind.SynchronisationRule;
+        displayNameValue.ContributedByClaimType = null;
+
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjectAttributeValues.AsNoTracking().SingleAsync(av => av.Id == displayNameValue.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ContributedBySyncRuleId, Is.EqualTo(rules.FirstRuleId));
+            Assert.That(persisted.ContributedByKind, Is.EqualTo(ValueContributorKind.SynchronisationRule));
+            Assert.That(persisted.ContributedByClaimType, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// #2472: a value added through the update path's reconciliation insert keeps its source kind and claim type.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_AddedValueWithContributorKind_PersistsKindAndClaimTypeAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var ctx = NewContext();
+        var repo = new PostgresDataRepository(ctx);
+        var personType = await ctx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { TextValue(ids.DepartmentId, "Sales") } };
+        await repo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        var added = TextValue(ids.DisplayNameId, "Alice Example");
+        added.ContributedByKind = ValueContributorKind.SignInClaim;
+        added.ContributedByClaimType = "name";
+        mvo.AttributeValues.Add(added);
+
+        await repo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjectAttributeValues.AsNoTracking().SingleAsync(av => av.Id == added.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(persisted.ContributedByClaimType, Is.EqualTo("name"));
         }
     }
 }

@@ -127,7 +127,6 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<int, HashSet<Guid>> _pendingExportsByCs = new();
     private readonly Dictionary<Guid, Guid> _pendingExportsByCsoId = new();
     private readonly Dictionary<Guid, HashSet<Guid>> _csosByMvo = new();
-    private readonly Dictionary<(int ConnectedSystemId, int ExternalIdAttributeId, string ExternalIdValue), Guid> _csoCache = new();
 
     // Configurable settings
     private int _syncPageSize = 100;
@@ -375,19 +374,21 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Delta sync's "modified since" test, exactly the production query's: a CSO counts when it is marked pending
-    /// synchronisation (#2092) or for derived-input re-evaluation (#1750), or was created OR last updated after the
-    /// watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark records was processed
-    /// by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
+    /// synchronisation (#2092), for derived-input re-evaluation (#1750) or for scope review (#892), or was created OR
+    /// last updated after the watermark. Strict, as PostgreSQL's is: an object last written at the instant the watermark
+    /// records was processed by the run that wrote the watermark. A newly imported CSO has no LastUpdated until something changes it, so
     /// testing LastUpdated alone hid every joiner from delta sync in tests (the production query never did).
     /// </summary>
     private static bool IsModifiedSince(ConnectedSystemObject cso, DateTime modifiedSince) =>
         cso.SynchronisationPending ||
         cso.DerivedInputChangePending ||
+        cso.ScopeReviewPending ||
         cso.Created > modifiedSince ||
         (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
         if (afterId.HasValue)
         {
@@ -396,39 +397,40 @@ public class SyncRepository : ISyncRepository
             // used for both the ordering and the filter, so the cursor chain is self-consistent
             // within this provider, mirroring the production contract.
             var afterIdValue = afterId.Value;
-            var remaining = GetCsosForSystem(connectedSystemId)
+            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
                 .OrderBy(c => c.Id)
                 .Where(c => c.Id.CompareTo(afterIdValue) > 0)
                 .ToList();
             var keysetResult = BuildPagedResult(remaining, 1, pageSize);
             keysetResult.CurrentPage = page;
-            FlagUnchangedObjects(keysetResult.Results, lastSyncTimestamp);
             return Task.FromResult(keysetResult);
         }
 
-        var all = GetCsosForSystem(connectedSystemId)
+        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
-        var result = BuildPagedResult(all, page, pageSize);
-        FlagUnchangedObjects(result.Results, lastSyncTimestamp);
-        return Task.FromResult(result);
+        return Task.FromResult(BuildPagedResult(all, page, pageSize));
     }
 
     /// <summary>
-    /// The Full Synchronisation loader's partition, as the production loader applies it: with a watermark, an object
-    /// <see cref="ConnectedSystemObject.IsUnchangedSince"/> treats as unchanged is flagged, and Pass 2 skips it; without
-    /// one, nothing is. Set on every load, since this provider hands out its stored instances.
+    /// The page loaders' optional Object Type and creation-floor filters (#2492), as the production loaders apply them.
     /// </summary>
-    private static void FlagUnchangedObjects(IEnumerable<ConnectedSystemObject> page, DateTime? lastSyncTimestamp)
+    private static IEnumerable<ConnectedSystemObject> ApplySyncPageFilters(
+        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter)
     {
-        foreach (var cso in page)
-            cso.IsUnchangedSinceLastSync = lastSyncTimestamp.HasValue && cso.IsUnchangedSince(lastSyncTimestamp.Value);
+        // Tests often build objects with only the Type navigation set, so match on either.
+        if (objectTypeId.HasValue)
+            csos = csos.Where(c => c.TypeId == objectTypeId.Value || c.Type?.Id == objectTypeId.Value);
+        if (createdOnOrAfter.HasValue)
+            csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
+        return csos;
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null)
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
     {
-        var modified = GetCsosForSystem(connectedSystemId)
+        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .Where(c => IsModifiedSince(c, modifiedSince));
 
         if (afterId.HasValue)
@@ -451,6 +453,29 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
 
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+    {
+        // Tests often build objects with only the Type navigation set, so read either.
+        IReadOnlySet<int> inUse = GetCsosForSystem(connectedSystemId)
+            .Select(c => c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0)
+            .Where(id => id != 0)
+            .ToHashSet();
+        return Task.FromResult(inUse);
+    }
+
+    public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+    {
+        var wanted = attributeIds.ToHashSet();
+        var result = wanted.ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());
+        foreach (var av in _csos.Values.SelectMany(c => c.AttributeValues)
+                     .Where(av => wanted.Contains(av.AttributeId) && av.ReferenceValueId.HasValue))
+        {
+            if (_csos.TryGetValue(av.ReferenceValueId!.Value, out var target))
+                ((HashSet<int>)result[av.AttributeId]).Add(target.TypeId != 0 ? target.TypeId : target.Type?.Id ?? 0);
+        }
+        return Task.FromResult(result);
+    }
+
     /// <summary>
     /// The Connected System Objects <see cref="GetConnectedSystemObjectAsync"/> has been asked for, in call order.
     /// Lets a test prove which objects an evaluation actually put to the engine, rather than only what it reported
@@ -471,6 +496,11 @@ public class SyncRepository : ISyncRepository
         // update-path working set and later release its AttributeValues.
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
+
+    /// <inheritdoc />
+    /// <remarks>The store holds one instance per object, so this is <see cref="GetConnectedSystemObjectAsync"/>.</remarks>
+    public Task<ConnectedSystemObject?> GetConnectedSystemObjectWithAttributeValuesAsync(int connectedSystemId, Guid csoId)
+        => GetConnectedSystemObjectAsync(connectedSystemId, csoId);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
         int connectedSystemId, int attributeId, int attributeValue)
@@ -598,42 +628,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
-    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
-    {
-        var result = new Dictionary<string, Guid>(CsoLookupKey.Comparer);
-        foreach (var cso in GetCsosForSystem(connectedSystemId))
-        {
-            // Try primary external ID first
-            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
-            var primaryValue = GetExternalIdValueString(cso, primaryAv);
-
-            if (primaryValue != null)
-            {
-                var cacheKey = CsoLookupKey.For(connectedSystemId, cso.ExternalIdAttributeId, primaryValue);
-                result.TryAdd(cacheKey, cso.Id);
-                continue;
-            }
-
-            // Fall back to secondary external ID (PendingProvisioning CSOs)
-            if (cso.SecondaryExternalIdAttributeId.HasValue)
-            {
-                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                var secondaryValue = GetExternalIdValueString(cso, secondaryAv);
-
-                if (secondaryValue != null)
-                {
-                    var cacheKey = CsoLookupKey.For(connectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryValue);
-                    result.TryAdd(cacheKey, cso.Id);
-                }
-            }
-        }
-        return Task.FromResult(result);
-    }
-
     /// <summary>
-    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres widened projection - reuses the
-    /// same external-id resolution as <see cref="GetAllCsoExternalIdMappingsAsync"/> but carries the
-    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres projection - keys each CSO by its
+    /// primary external ID, or its secondary when it has no primary yet, and carries the stored
+    /// hash/fingerprint/status/partition alongside the CSO ID.
     /// </summary>
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
@@ -1759,18 +1757,45 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    // The in-memory store does not model a Metaverse Object's row version (xmin), so, unlike the PostgreSQL statement, this
+    // clears every object it is given whatever version the run read. It has no concurrent writers either, so a rule cannot
+    // be saved between the check and the clear, and there is no second look at the export rules afterwards (the
+    // PostgreSQL clear re-flags what it cleared when one was). Both guards are proved against PostgreSQL
+    // (ScopeReviewFlagDatabaseTests). It clears the record of unsynchronised changes (#2615) with the flag.
+    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
     {
         // Mirrors the PostgreSQL statement: nothing is cleared once an export rule has been created or updated since
         // the run read its rules (#1925).
-        var exportRulesChanged = _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
-            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
-        if (exportRulesChanged)
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
             return Task.FromResult(false);
 
-        foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
-            stored!.ScopeReviewPending = false;
+        foreach (var stored in seenRowVersions.Keys.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
+            ClearScopeReview(stored!);
         return Task.FromResult(true);
+    }
+
+    public virtual Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+    {
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
+            return Task.FromResult(0);
+
+        // An object with no type loaded is left alone: nothing says no rule covers it.
+        var toClear = _mvos.Values
+            .Where(mvo => mvo.ScopeReviewPending && mvo.Type != null && !coveredMetaverseObjectTypeIds.Contains(mvo.Type.Id))
+            .ToList();
+        foreach (var mvo in toClear)
+            ClearScopeReview(mvo);
+        return Task.FromResult(toClear.Count);
+    }
+
+    private bool ExportRulesChangedSince(DateTime? exportRulesReadWatermark)
+        => _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
+            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
+
+    private static void ClearScopeReview(MetaverseObject mvo)
+    {
+        mvo.ScopeReviewPending = false;
+        mvo.UnsynchronisedChangesJson = null;
     }
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
@@ -1781,11 +1806,13 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toFlag.Count);
     }
 
+    // Like the PostgreSQL statement, counts every given object that exists, flagged already or not (which there rewrites the
+    // row to move its row version; the in-memory store has no row versions to move).
     public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
     {
         var toFlag = ids.Distinct()
             .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
-            .Where(mvo => mvo is { ScopeReviewPending: false })
+            .Where(mvo => mvo != null)
             .ToList();
         foreach (var mvo in toFlag)
             mvo!.ScopeReviewPending = true;
@@ -1916,13 +1943,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    // Virtual so tests can spy on the single-entity update path (the grace-deletion-marker page-flush
-    // regression coverage), matching the batch-update spy precedent above: production code must never
-    // reach this method mid-page for a grace-period deletion (see SyncTaskProcessorBase.MarkMvoForDeletionAsync).
-    public virtual Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    public Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
     {
-        FixupMvoAttributeValues(metaverseObject);
-        _mvos[metaverseObject.Id] = metaverseObject;
+        if (_mvos.TryGetValue(metaverseObjectId, out var mvo))
+            mvo.LastConnectorDisconnectedDate = lastConnectorDisconnectedDate;
         return Task.CompletedTask;
     }
 
@@ -2122,6 +2146,16 @@ public class SyncRepository : ISyncRepository
         }
 
         OnPendingExportsUpdated?.Invoke(written);
+        return Task.CompletedTask;
+    }
+
+    // The changes and exports handed over are the stored instances, so they already hold what resolution wrote. Virtual
+    // for test-support subclasses that snapshot persisted state (see GetPendingExportsByIdsAsync).
+    public virtual Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
+    {
+        foreach (var pe in pendingExports)
+            _pendingExports[pe.Id] = pe;
         return Task.CompletedTask;
     }
 
@@ -2557,26 +2591,9 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(names);
     }
 
-    public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
-    {
-        var timestamps = _syncRules.Values
-            .Select(r => r.LastUpdated ?? r.Created)
-            .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
-            .ToList();
-        return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
-    }
-
     public Task<ObjectMatchingRuleMode?> GetObjectMatchingRuleModeAsync(int connectedSystemId)
     {
         return Task.FromResult(_connectedSystems.TryGetValue(connectedSystemId, out var cs) ? cs.ObjectMatchingRuleMode : (ObjectMatchingRuleMode?)null);
-    }
-
-    public Task<(DateTime? LastSyncCompletedAt, DateTime? ConfigurationLastFullyAppliedAt)?> GetConnectedSystemSynchronisationWatermarksAsync(int connectedSystemId)
-    {
-        (DateTime?, DateTime?)? watermarks = _connectedSystems.TryGetValue(connectedSystemId, out var cs)
-            ? (cs.LastSyncCompletedAt, cs.ConfigurationLastFullyAppliedAt)
-            : null;
-        return Task.FromResult(watermarks);
     }
 
     /// <summary>
@@ -2741,6 +2758,11 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+    {
+        // No-op: no EF change tracker in memory
+    }
+
     public int GetChangeTrackerEntityCount() => 0; // No EF change tracker in memory
 
     public void DetachSchemaEntitiesFromTracker()
@@ -2751,20 +2773,6 @@ public class SyncRepository : ISyncRepository
     public virtual void SetAutoDetectChangesEnabled(bool enabled)
     {
         // No-op — no EF change tracker in memory
-    }
-
-    #endregion
-
-    #region CSO Lookup Cache
-
-    public void AddCsoToCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue, Guid csoId)
-    {
-        _csoCache[(connectedSystemId, externalIdAttributeId, externalIdValue)] = csoId;
-    }
-
-    public void EvictCsoFromCache(int connectedSystemId, int externalIdAttributeId, string externalIdValue)
-    {
-        _csoCache.Remove((connectedSystemId, externalIdAttributeId, externalIdValue));
     }
 
     #endregion
@@ -2861,6 +2869,38 @@ public class SyncRepository : ISyncRepository
 
     public Task DeletePendingExportAsync(PendingExport pendingExport)
         => DeletePendingExportsAsync(new[] { pendingExport });
+
+    private bool _pendingExportBatchOpen;
+
+    /// <summary>
+    /// This fake store enforces no unique index and has no change tracker, so a merge's delete is executed at once
+    /// whether or not a batch is open: from a caller's side that is indistinguishable from the production queue, which
+    /// hides a queued row from every read. Opening, flushing and abandoning still police the single open batch.
+    /// </summary>
+    public void BeginPendingExportBatch()
+    {
+        if (_pendingExportBatchOpen)
+            throw new InvalidOperationException("A Pending Export batch is already open.");
+        _pendingExportBatchOpen = true;
+    }
+
+    public Task DeletePendingExportForMergeAsync(PendingExport pendingExport)
+        => DeletePendingExportAsync(pendingExport);
+
+    public Task PrefetchPendingExportsForBatchAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (!_pendingExportBatchOpen)
+            throw new InvalidOperationException("No Pending Export batch is open.");
+        return Task.CompletedTask;
+    }
+
+    public Task FlushPendingExportBatchAsync()
+    {
+        _pendingExportBatchOpen = false;
+        return Task.CompletedTask;
+    }
+
+    public void AbandonPendingExportBatch() => _pendingExportBatchOpen = false;
 
     public Task UpdatePendingExportAsync(PendingExport pendingExport)
         => UpdatePendingExportsAsync(new[] { pendingExport });
@@ -3075,6 +3115,12 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> has been
+    /// asked for, in call order, so a test can prove a lookup is not repeated (#2492).
+    /// </summary>
+    public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
+
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
     {
@@ -3082,6 +3128,7 @@ public class SyncRepository : ISyncRepository
 
         foreach (var mvoId in metaverseObjectIds)
         {
+            ConnectedSystemObjectLookupsByMetaverseObjectId.Add((mvoId, connectedSystemId));
             if (_csosByMvo.TryGetValue(mvoId, out var csoIds))
             {
                 foreach (var csoId in csoIds)
@@ -3093,6 +3140,25 @@ public class SyncRepository : ISyncRepository
                     }
                 }
             }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        var result = new Dictionary<Guid, ReferenceAnchorSummary>();
+        foreach (var mvoId in metaverseObjectIds)
+        {
+            if (!_csosByMvo.TryGetValue(mvoId, out var csoIds))
+                continue;
+
+            var cso = csoIds
+                .Select(csoId => _csos.TryGetValue(csoId, out var candidate) ? candidate : null)
+                .FirstOrDefault(candidate => candidate != null && candidate.ConnectedSystemId == connectedSystemId);
+            if (cso != null)
+                result[mvoId] = ReferenceAnchorSummary.Of(cso);
         }
 
         return Task.FromResult(result);
@@ -3190,12 +3256,12 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
-    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
-    /// up entirely of deferred exports (issue #985).
+    /// Collects the ids of all remaining executable exports with unresolved references (deferred)
+    /// strictly after the given keyset cursor, mirroring the Postgres implementation. Used to
+    /// fast-path the export batch-collection loop once a batch is discovered to be made up entirely
+    /// of deferred exports (issue #985).
     /// </summary>
-    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    public virtual Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
     {
         var query = GetExecutableExportsForSystem(connectedSystemId)
             .Where(pe => pe.HasUnresolvedReferences);
@@ -3209,6 +3275,22 @@ public class SyncRepository : ISyncRepository
         }
 
         var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .Select(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass by id, in (CreatedAt, Id) order. Virtual so a test can see the chunks
+    /// the pass takes.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        var result = pendingExportIds
+            .Where(_pendingExports.ContainsKey)
+            .Select(id => _pendingExports[id])
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .ToList();
@@ -3522,6 +3604,11 @@ public class SyncRepository : ISyncRepository
 
     public Task<IAsyncDisposable?> BeginRollbackOnlyTransactionAsync()
         => Task.FromResult<IAsyncDisposable?>(null);
+
+    /// <inheritdoc />
+    /// <remarks>The store has no change tracker or transaction to keep a walk away from, so the scope is over this
+    /// repository and owns nothing.</remarks>
+    public ISyncRepositoryScope OpenIsolatedScope() => new SyncRepositoryScope(this);
 
     #region Password Synchronisation queue (#1119)
 
@@ -5259,6 +5346,90 @@ public class SyncRepository : ISyncRepository
             SyncRuleName = rule?.Name,
             SyncRuleMappingId = mapping?.Id ?? 0
         };
+    }
+
+    #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    private readonly List<ConfigurationChangeSynchronisation> _configurationChangeSynchronisations = [];
+    private long _nextConfigurationChangeSynchronisationId = 1;
+
+    /// <summary>
+    /// Every configuration change recorded as awaiting synchronisation, claimed and applied ones included, in the order
+    /// they were seeded.
+    /// </summary>
+    public IReadOnlyList<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations => _configurationChangeSynchronisations;
+
+    /// <summary>
+    /// Records a configuration change awaiting synchronisation, as the saving side does in production (there the row is
+    /// written through <c>IConnectedSystemRepository</c> to the same database; here the two sides are separate stores, so
+    /// a test seeds it). A missing <see cref="ConfigurationChangeSynchronisation.Id"/> is numbered. A test simulates a
+    /// change saved while a run is in flight by seeding from a per-object hook: the claim below sees only the rows that
+    /// existed when it ran, exactly as a READ COMMITTED statement does.
+    /// </summary>
+    public ConfigurationChangeSynchronisation SeedConfigurationChangeSynchronisation(ConfigurationChangeSynchronisation change)
+    {
+        if (change.Id == 0)
+            change.Id = _nextConfigurationChangeSynchronisationId++;
+        else if (change.Id >= _nextConfigurationChangeSynchronisationId)
+            _nextConfigurationChangeSynchronisationId = change.Id + 1;
+
+        _configurationChangeSynchronisations.Add(change);
+        return change;
+    }
+
+    public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
+    {
+        IReadOnlyList<long> ids = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.Id)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
+    {
+        // Every eligible row still awaiting synchronisation, including one an earlier run claimed and never applied: that
+        // claim is overwritten, as the production statement does. A row seeded after the caller read the eligible ids is
+        // not among them and is left alone.
+        var claimed = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null && eligibleIds.Contains(c.Id))
+            .ToList();
+        foreach (var change in claimed)
+            change.ClaimedByActivityId = runActivityId;
+
+        return Task.FromResult<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>>(
+            claimed.Select(c => new ClaimedConfigurationChangeSynchronisation(c.Id, c.ConnectedSystemObjectTypeId)).ToList());
+    }
+
+    public Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId)
+    {
+        var applied = _configurationChangeSynchronisations
+            .Where(c => c.ClaimedByActivityId == runActivityId && c.AppliedAt == null)
+            .ToList();
+        var appliedAt = DateTime.UtcNow;
+        foreach (var change in applied)
+            change.AppliedAt = appliedAt;
+
+        return Task.FromResult(applied.Count);
+    }
+
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)
+    {
+        IReadOnlySet<int> awaiting = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.ConnectedSystemObjectTypeId)
+            .ToHashSet();
+        return Task.FromResult(awaiting);
+    }
+
+    public Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds)
+    {
+        // Tests often build objects with only the Type navigation set, so read either (as the type filters do).
+        var count = GetCsosForSystem(connectedSystemId)
+            .Count(c => IsModifiedSince(c, modifiedSince) || objectTypeIds.Contains(c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0));
+        return Task.FromResult(count);
     }
 
     #endregion

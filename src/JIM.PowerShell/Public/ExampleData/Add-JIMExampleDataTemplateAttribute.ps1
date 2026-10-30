@@ -43,10 +43,9 @@ function Add-JIMExampleDataTemplateAttribute {
         What percentage of generated objects receive a value for this attribute.
 
     .PARAMETER BoolTrueDistribution
-        For boolean attributes, what percentage of values are true.
-
-    .PARAMETER BoolShouldBeRandom
-        For boolean attributes, whether values are generated randomly.
+        For boolean attributes, the percentage of the objects given a value that are given true.
+        The share is exact, rounded to the nearest object with halves rounded up; when omitted,
+        each object is given true or false at random.
 
     .PARAMETER MinDate
         For date attributes, the earliest value to generate.
@@ -152,9 +151,6 @@ function Add-JIMExampleDataTemplateAttribute {
         [Parameter()]
         [ValidateRange(0, 100)]
         [int]$BoolTrueDistribution,
-
-        [Parameter()]
-        [bool]$BoolShouldBeRandom,
 
         [Parameter()]
         [datetime]$MinDate,
@@ -265,7 +261,7 @@ function Add-JIMExampleDataTemplateAttribute {
                 # so names resolve to ids identically to New/Set-JIMExampleDataTemplate's hashtable path.
                 $attributeSpec = @{ MetaverseAttribute = $MetaverseAttribute }
 
-                foreach ($scalarParameter in 'Pattern', 'Expression', 'PopulatedValuesPercentage', 'BoolTrueDistribution', 'BoolShouldBeRandom',
+                foreach ($scalarParameter in 'Pattern', 'Expression', 'PopulatedValuesPercentage', 'BoolTrueDistribution',
                     'MinDate', 'MaxDate', 'MinNumber', 'MaxNumber', 'SequentialNumbers', 'RandomNumbers',
                     'ManagerDepthPercentage', 'MvaRefMinAssignments', 'MvaRefMaxAssignments') {
                     if ($PSBoundParameters.ContainsKey($scalarParameter)) {

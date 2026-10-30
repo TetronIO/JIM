@@ -49,6 +49,7 @@ public class MetaverseControllerObjectTypeTests
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        _mockMetaverseRepo.StubExportReviewReads();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
@@ -883,6 +884,34 @@ public class MetaverseControllerObjectTypeTests
     }
 
     #endregion
+
+    [Test]
+    public async Task GetObjectTypeAsync_ObjectsFlaggedForExportReview_ReportsHowManyAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType
+        {
+            Id = 1, Name = "User", PluralName = "Users", Attributes = new List<MetaverseAttribute>()
+        });
+        _mockMetaverseRepo.Setup(r => r.GetExportReviewPendingCountsAsync(It.Is<IReadOnlyCollection<int>>(ids => ids.SequenceEqual(new[] { 1 }))))
+            .ReturnsAsync(new Dictionary<int, int> { [1] = 1_250 });
+
+        var dto = (MetaverseObjectTypeDetailDto)((OkObjectResult)await _controller.GetObjectTypeAsync(1)).Value!;
+
+        Assert.That(dto.ExportReviewPendingCount, Is.EqualTo(1_250));
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_NothingFlaggedForExportReview_ReportsZeroAsync()
+    {
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType
+        {
+            Id = 1, Name = "User", PluralName = "Users", Attributes = new List<MetaverseAttribute>()
+        });
+
+        var dto = (MetaverseObjectTypeDetailDto)((OkObjectResult)await _controller.GetObjectTypeAsync(1)).Value!;
+
+        Assert.That(dto.ExportReviewPendingCount, Is.Zero);
+    }
 
     #region Icon mapping tests
 

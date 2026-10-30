@@ -98,7 +98,7 @@ public class GeneratedValuePreviewHelpersTests
     }
 
     [TestCase(false, false, "")]
-    [TestCase(true, true, "using placeholder sample values; enter your own above, in \"Test this Expression\", to see this reflect them")]
+    [TestCase(true, true, "an example, with each input standing in as its own name; enter values to see yours")]
     [TestCase(true, false, "using the sample values entered above")]
     public void DescribeSampleSource_ReturnsExpected(bool hasInputs, bool usedNeutralSample, string expected)
     {
@@ -136,7 +136,7 @@ public class GeneratedValuePreviewHelpersTests
     {
         var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1, "Account Name");
 
-        Assert.That(result, Is.EqualTo("1 existing Metaverse Object has no Account Name and would receive one on the next full synchronisation."));
+        Assert.That(result, Is.EqualTo("1 existing Metaverse Object has no Account Name and would receive one at the next synchronisation."));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class GeneratedValuePreviewHelpersTests
     {
         var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1245, "Account Name");
 
-        Assert.That(result, Is.EqualTo("1,245 existing Metaverse Objects have no Account Name and would receive one on the next full synchronisation."));
+        Assert.That(result, Is.EqualTo("1,245 existing Metaverse Objects have no Account Name and would receive one at the next synchronisation."));
     }
 
     [TestCase(SyncRuleDirection.Import, 1, 5, true)]

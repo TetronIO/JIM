@@ -40,31 +40,16 @@
 
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Target:</MudText>
-                <MudText>
+                @* Anything with an object chip wears it; the switch is the fallback for settings and the like. *@
+                @* mt-1: a chip's edge is its pill, not a line of text with leading above it, so it needs the extra 4px to sit as far from its label as the Status chip does. *@
+                <MudText Class="mt-1">
+                    <ActivityTargetChip Activity="@_activity" ConnectedSystemName="@_connectedSystemHeader?.Name" MetaverseObject="@_metaverseObjectHeader">
                     @switch (_activity.TargetType)
                     {
                         case ActivityTargetType.ExampleDataTemplate:
                         case ActivityTargetType.DataGeneration:
                             @* Both template config-changes and data-generation runs carry ExampleDataTemplateId; deep-link to the template. *@
                             <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
-                            break;
-                        case ActivityTargetType.ConnectedSystem when Helpers.GetConnectedSystemActivityHref(_activity.ConnectedSystemId, _activity.TargetOperationType) is { } connectedSystemHref:
-                            @* Schema and hierarchy imports deep-link to the tab that shows their subject. *@
-                            <MudLink Href="@connectedSystemHref">@_activity.TargetName</MudLink>
-                            break;
-                        case ActivityTargetType.ConnectedSystemObject when Helpers.GetConnectedSystemObjectActivityHref(_activity.ConnectedSystemId, _activity.ConnectedSystemObjectId) is { } csoHref:
-                            @* An operation performed on the account itself (a password set); link to the object in the connector space. *@
-                            <MudLink Href="@csoHref">@_activity.TargetName</MudLink>
-                            break;
-                        case ActivityTargetType.ConnectedSystemRunProfile when _connectedSystemHeader != null:
-                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=run-profiles")">@_connectedSystemHeader.Name / @_activity.TargetName</MudLink>
-                            break;
-                        case ActivityTargetType.MetaverseObject when _metaverseObjectHeader != null:
-                            <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
-                            break;
-                        case ActivityTargetType.SynchronisationRule when Helpers.GetSyncRuleActivityHref(_activity.SyncRuleId, _activity.TargetName) is { } syncRuleHref:
-                            @* Attribute Flow mapping activities deep-link to the rule's Attribute Flow tab. *@
-                            <MudLink Href="@syncRuleHref">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.TrustedCertificate:
                             <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>
@@ -78,9 +63,6 @@
                         case ActivityTargetType.ServiceSetting when Helpers.GetServiceSettingActivityHref(_activity.TargetName) is { } serviceSettingHref:
                             @* Service Settings have no page of their own; deep-link with the name pre-filled into the search box. *@
                             <MudLink Href="@serviceSettingHref">@_activity.TargetName</MudLink>
-                            break;
-                        case ActivityTargetType.Schedule:
-                            <MudLink Href="/admin/operations?t=schedules">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.HistoryRetentionCleanup:
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
@@ -103,6 +85,7 @@
                             @(_activity.TargetName ?? "-")
                             break;
                     }
+                    </ActivityTargetChip>
                 </MudText>
             </MudItem>
 
@@ -112,8 +95,8 @@
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Initiated By:</MudText>
-                <MudText>
-                    <ActivityInitiator InitiatedByType="@_activity.InitiatedByType"
+                <MudText Class="mt-1">
+                    <InitiatorChip InitiatedByType="@_activity.InitiatedByType"
                                        InitiatedById="@_activity.InitiatedById"
                                        InitiatedByName="@_activity.InitiatedByName"
                                        UserHref="@(_initiatorMetaverseObjectHeader != null ? Utilities.GetMetaverseObjectHref(_initiatorMetaverseObjectHeader) : null)"
@@ -127,11 +110,21 @@
                 <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetActivityMudBlazorColorForStatus(_activity.Status)" Class="ml-0">@_activity.Status.ToString().SplitOnCapitalLetters()</MudChip>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent><TooltipText Text="How long the Worker spent running this Activity. It starts when the Worker picks the Activity up." /></TooltipContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Execution Time:</MudText>
+                    </ChildContent>
+                </MudTooltip>
                 <MudText>@(_activity.ExecutionTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
             <MudItem xs="12" sm="6" md="4">
-                <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent><TooltipText Text="How long this Activity took from creation to completion. It includes any time spent queued before the Worker picked it up." /></TooltipContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Total Activity Time:</MudText>
+                    </ChildContent>
+                </MudTooltip>
                 <MudText>@(_activity.TotalActivityTime?.ToAbbreviatedString() ?? "-")</MudText>
             </MudItem>
 
@@ -142,47 +135,23 @@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Parent Activity:</MudText>
                     <MudText>
-                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-1" Style="vertical-align: middle;" />
                         @if (_parentActivity != null)
                         {
                             var parentTargetName = !string.IsNullOrEmpty(_parentActivity.TargetName) ? _parentActivity.TargetName : "(no name)";
-                            <MudChip T="string" Variant="Variant.Text" Class="mr-2">@Helpers.GetActivityTargetTypeName(_parentActivity.TargetType)</MudChip>
-                            <MudLink Href="@parentActivityHref">@parentTargetName</MudLink>
+                            <ObjectChip Kind="ObjectChipKind.Activity" TypeName="@Helpers.GetActivityTargetTypeName(_parentActivity.TargetType)"
+                                        Name="@parentTargetName" Href="@parentActivityHref" Class="ma-0" />
                         }
                         else
                         {
-                            <MudLink Href="@parentActivityHref">View parent activity</MudLink>
+                            <ObjectChip Kind="ObjectChipKind.Activity" Name="Parent Activity" Href="@parentActivityHref" Class="ma-0" />
                         }
                     </MudText>
                 </MudItem>
             }
 
-            @* An import's read range: where it started reading from and the point the next import starts from. *@
-            @if (_activity.ImportWatermarkFrom != null || _activity.ImportWatermarkTo != null)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read From:</MudText>
-                    @if (_activity.ImportWatermarkFrom != null)
-                    {
-                        <MudText Class="jim-text-code">@_activity.ImportWatermarkFrom</MudText>
-                    }
-                    else
-                    {
-                        <MudText>The start</MudText>
-                    }
-                </MudItem>
-                <MudItem xs="12" sm="6" md="4">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">Read Up To:</MudText>
-                    @if (_activity.ImportWatermarkTo != null)
-                    {
-                        <MudText Class="jim-text-code">@_activity.ImportWatermarkTo</MudText>
-                    }
-                    else
-                    {
-                        <MudText><EmptyValue /></MudText>
-                    }
-                </MudItem>
-            }
+            @* An import's watermarks: what range a Delta Import read, or where the next Delta Import starts. *@
+            <ImportReadRangeField RunType="@_activity.ConnectedSystemRunType" WatermarkFrom="@_activity.ImportWatermarkFrom"
+                                  WatermarkTo="@_activity.ImportWatermarkTo" ReadRange="@_importReadRange" />
 
             @* ─── The preview behind this change (#134) ─── *@
             @switch (ActivityPreviewProvenance.For(_activity))
@@ -273,6 +242,7 @@
                        within it. *@
                     <RunProgressMetrics ObjectsProcessed="@_activity.ObjectsProcessed"
                                         ObjectsToProcess="@_activity.ObjectsToProcess"
+                                        CountUnit="@RunProfilePhaseCatalogue.GetCountUnit(_activity.ConnectedSystemRunType, RunPhaseReading.ActiveTopLevel(_phases)?.Key)"
                                         ObjectsPerSecond="@_etaEstimate.ObjectsPerSecond"
                                         EstimatedSecondsRemaining="@_etaEstimate.EstimatedSecondsRemaining"
                                         Phases="_phases"
@@ -326,6 +296,22 @@
                                    ConnectedSystemId="@_activity.ConnectedSystemId"
                                    ConnectedSystemName="@_connectedSystemHeader?.Name"
                                    OnTrusted="ReloadAfterTrustingCertificateAsync" />
+        }
+    }
+
+    @* ─── Configuration changes a synchronisation applies (#2615) ─── *@
+    @* A synchronisation run that processed Object Types in full says why and whether it applied the changes; the
+       configuration change Activity that saved them says whether a synchronisation has applied them yet. *@
+    @if (_configurationChangeSynchronisations.Count > 0)
+    {
+        @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile)
+        {
+            <ActivityProcessedInFullSections Groups="_configurationChangeSynchronisations" RunStatus="_activity.Status"
+                                             RunType="_activity.ConnectedSystemRunType" />
+        }
+        else
+        {
+            <ActivityConfigurationChangeApplication Groups="_configurationChangeSynchronisations" />
         }
     }
 
@@ -764,8 +750,8 @@
                     }
 
                     <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid var(--mud-palette-warning); min-width: 120px;")">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary" title="Connected System Objects Disconnected">CSOs Disconnected</MudText>
-                        <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnections.ToString("N0")</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary" title="@GetDisconnectedTileTitle(_activityRunProfileExecutionStats)">CSOs Disconnected</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@_activityRunProfileExecutionStats.TotalDisconnectionsIncludingOutOfScope.ToString("N0")</MudText>
                     </MudPaper>
 
                     @* CSOs Deleted - CSOs finalised as deleted during sync *@
@@ -1077,9 +1063,18 @@
                 }
                 else
                 {
-                    <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
-                                     PrimaryText="This Activity recorded no Run Profile Execution Items"
-                                     SecondaryText="Items appear here for every object the run added, updated, joined, projected, exported or failed on." />
+                    @if (_activity.Status == ActivityStatus.InProgress)
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                         PrimaryText="No Run Profile Execution Items yet"
+                                         SecondaryText="Items appear here as the run saves them." />
+                    }
+                    else
+                    {
+                        <TableEmptyState Icon="@Icons.Material.Filled.ReceiptLong"
+                                         PrimaryText="This Activity recorded no Run Profile Execution Items"
+                                         SecondaryText="Items appear here for every object the run added, updated, joined, projected, exported or failed on." />
+                    }
                 }
             </EmptyContent>
         </VirtualisedDataGrid>
@@ -1217,6 +1212,7 @@
 
     private Guid _loadedId;
     private VirtualisedDataGrid<ActivityRunProfileExecutionItemHeader>? _executionItemsGrid;
+    private readonly ExecutionItemsRefreshGate _executionItemsRefreshGate = new();
     private Activity? _activity;
 
     /// <summary>
@@ -1230,6 +1226,11 @@
     private Activity? _informingPreviewActivity;
     private IReadOnlyList<PreviewVerdictLine> _informingPreviewLines = [];
     private ConfigurationChangeDetail? _configChangeDetail;
+
+    // The Object Types a synchronisation processes in full because of saved configuration changes (#2615): for a run, the
+    // ones it claimed; for a configuration change Activity, the ones it saved changes to.
+    private IReadOnlyList<ActivityObjectTypeSynchronisation> _configurationChangeSynchronisations = [];
+    private ImportReadRange? _importReadRange;
     private bool _isAdministrator;
     private VirtualisedDataGrid<Activity>? _childActivitiesGrid;
     private int _childActivityCount;
@@ -1364,6 +1365,8 @@
         _parentActivity = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
+        _configurationChangeSynchronisations = [];
+        _importReadRange = null;
         _childActivityCount = 0;
         _selectedObjectTypes = new List<string>();
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
@@ -1396,7 +1399,7 @@
             ? new List<BreadcrumbItem>
             {
                 new("Home", href: "/", icon: Icons.Material.Filled.Home),
-                new("Operations", href: "/admin/operations?t=history"),
+                new("Operations", href: "/admin/operations?t=activity"),
                 new("Activity Detail", href: null, disabled: true)
             }
             : new List<BreadcrumbItem>
@@ -1410,6 +1413,11 @@
         // The main performance win comes from the optimised GROUP BY query in GetActivityRunProfileExecutionStatsAsync.
         if (_activity.ConnectedSystemId.HasValue)
             _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(_activity.ConnectedSystemId.Value);
+
+        _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(_activity);
+
+        // Nothing is read for an Activity of a kind that can have none.
+        _configurationChangeSynchronisations = await jim.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(_activity);
 
         if (_activity.TargetType is ActivityTargetType.MetaverseObject or ActivityTargetType.ConnectedSystemRunProfile && _activity.MetaverseObjectId != null)
             _metaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.MetaverseObjectId.Value);
@@ -1437,6 +1445,7 @@
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
             _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
             await LoadExcludedContainerNamesAsync(jim);
+            _executionItemsRefreshGate.Seed(_activityRunProfileExecutionStats.TotalObjectChangeCount, DateTime.UtcNow);
         }
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
@@ -1536,6 +1545,14 @@
         IEnumerable<ActivityRunProfileExecutionItemErrorType>? errorTypeFilter = _selectedErrorTypes.Count > 0 ? _selectedErrorTypes : null;
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter = _selectedOutcomeTypes.Count > 0 ? _selectedOutcomeTypes : null;
 
+        // Unfiltered, the stats already hold the total (exact once the run has finished, and kept in step with the
+        // items as they are written while it runs), so the count, the expensive half of a window read over hundreds of
+        // thousands of items, is only made for a filtered or searched set the stats cannot answer for.
+        var statsTotal = objectTypeFilter == null && errorTypeFilter == null && outcomeTypeFilter == null
+                         && string.IsNullOrWhiteSpace(request.SearchText)
+            ? _activityRunProfileExecutionStats?.TotalObjectChangeCount
+            : null;
+
         using var jim = JimFactory.Create();
         var result = await jim.Activities.GetActivityRunProfileExecutionItemHeadersRangeAsync(
             Id,
@@ -1547,11 +1564,12 @@
             objectTypeFilter,
             errorTypeFilter,
             outcomeTypeFilter,
-            includeTotalCount: request.IncludeTotalCount);
+            includeTotalCount: request.IncludeTotalCount && statsTotal == null);
 
         // A null total means the count was not asked for, never that nothing matched; it is passed through as
         // null so the grid keeps the total it already holds.
-        return new VirtualisedWindow<ActivityRunProfileExecutionItemHeader>(result.Results, result.TotalResults);
+        var total = request.IncludeTotalCount && statsTotal != null ? statsTotal : result.TotalResults;
+        return new VirtualisedWindow<ActivityRunProfileExecutionItemHeader>(result.Results, total);
     }
 
     /// <summary>
@@ -1662,6 +1680,18 @@
     }
 
     /// <summary>
+    /// The hover text for the "CSOs Disconnected" tile. The tile counts disconnections caused by an object leaving an
+    /// import Synchronisation Rule's scope as well as those caused by its removal from the source system, so when
+    /// scope exits contribute, the text says how many.
+    /// </summary>
+    private static string GetDisconnectedTileTitle(ActivityRunProfileExecutionStats stats)
+    {
+        return stats.TotalDisconnectedOutOfScope > 0
+            ? $"Connected System Objects Disconnected, including {stats.TotalDisconnectedOutOfScope:N0} that left an import Synchronisation Rule's scope"
+            : "Connected System Objects Disconnected";
+    }
+
+    /// <summary>
     /// Returns the outcome types that have at least one occurrence in this activity, with their counts.
     /// Derived from the stats model. Ordered logically: Import → Sync → Export.
     /// </summary>
@@ -1690,7 +1720,7 @@
         // Generated Value Forms (#2023): values held back for an input a value built from them needs, so the run's
         // warning has a chip listing the objects it means.
         if (s.TotalGeneratedValuesWaiting > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting, s.TotalGeneratedValuesWaiting);
-        if (s.TotalDisconnections > 0 || s.TotalDisconnectedOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnections + s.TotalDisconnectedOutOfScope);
+        if (s.TotalDisconnectionsIncludingOutOfScope > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, s.TotalDisconnectionsIncludingOutOfScope);
         // Retained joins (#1649): counted from the items' change type, which the filter also matches, so the chip
         // finds items recorded before the outcome type existed as well as those recorded since.
         if (s.TotalOutOfScopeRetainJoin > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin, s.TotalOutOfScopeRetainJoin);
@@ -1768,7 +1798,7 @@
                 (_activityRunProfileExecutionStats.TotalProjections > 0 ||
                  _activityRunProfileExecutionStats.TotalJoins > 0 ||
                  _activityRunProfileExecutionStats.TotalAttributeFlows > 0 ||
-                 _activityRunProfileExecutionStats.TotalDisconnections > 0 ||
+                 _activityRunProfileExecutionStats.TotalDisconnectionsIncludingOutOfScope > 0 ||
                  _activityRunProfileExecutionStats.TotalGeneratedValues > 0))
                 return true;
         }
@@ -1908,8 +1938,17 @@
             if (updated == null)
                 return;
 
+            // The watermark the run reached is recorded only as it finishes, so describe it once it arrives.
+            var watermarksChanged = updated.ImportWatermarkFrom != _activity?.ImportWatermarkFrom || updated.ImportWatermarkTo != _activity?.ImportWatermarkTo;
+            var runEnded = _activity?.Status == ActivityStatus.InProgress && updated.Status != ActivityStatus.InProgress;
             _activity = updated;
             _lastRefreshUtc = DateTime.UtcNow;
+            if (watermarksChanged)
+                _importReadRange = await jim.ConnectedSystems.GetImportReadRangeAsync(updated);
+
+            // A run applies the changes it claimed as it completes, so how they stand is read again once it has ended.
+            if (runEnded)
+                _configurationChangeSynchronisations = await jim.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(updated);
             UpdateEtaEstimate(updated);
 
             // Refresh child activities and stats alongside the activity itself
@@ -1922,6 +1961,13 @@
             }
 
             await InvokeAsync(StateHasChanged);
+
+            // The items grid holds the rows it last fetched, so follow the item total the stats just reported: a
+            // running import writes its items as it saves them, and the table would otherwise stay as it was when the
+            // page opened. Gated, because a large run moves the total thousands of times a second.
+            if (_executionItemsGrid != null && ShowsExecutionItems
+                && _executionItemsRefreshGate.ShouldReload(_activityRunProfileExecutionStats?.TotalObjectChangeCount, runEnded, DateTime.UtcNow))
+                await InvokeAsync(() => _executionItemsGrid.RefreshAsync(invalidateTotals: true));
 
             // The Child Activities grid streams its rows from the data layer; ask it to re-fetch the windows in
             // view, re-counting as it goes because a running Activity can spawn further children.

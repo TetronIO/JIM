@@ -3,16 +3,35 @@ title: Connected Systems
 description: What a Connected System is and holds, and where to configure its Connector Space, scope, schema, passwords and removal.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Connected Systems
 
 A **Connected System** is any external directory, database, or file that JIM synchronises identity data with. Connected Systems are the endpoints of JIM's hub-and-spoke architecture: they provide source data (e.g. an HR system) and receive provisioned data (e.g. an LDAP directory).
 
+```jim-diagram
+archetype: anatomy
+title: What a Connected System holds
+desc: "A Connected System holds its connection details, its discovered schema of Object Types and attributes, its Connector Space of imported objects, partitions and containers where its Connector has them, the Run Profiles executed against it, the Synchronisation Rules that govern how data flows between it and the Metaverse, and its Pending Exports: changes computed by synchronisation but not yet written back. Each is associated with a Connector, which knows how to talk to its kind of external store."
+subject:
+  kind: object
+  label: Connected System
+  parts:
+    - { label: Connection details, detail: how to reach the external system }
+    - { label: Discovered schema, detail: Object Types and attributes }
+    - { label: Connector Space, detail: JIM's local copy of its data }
+    - { label: Partitions and containers, detail: where its Connector has them }
+    - { label: Run Profiles, detail: "import, sync and export" }
+    - { label: Synchronisation Rules, detail: how data flows with the Metaverse }
+    - { label: Pending Exports, detail: changes not yet written back }
+properties:
+  - { name: Connector, value: knows how to talk to it }
+```
+
 Every Connected System is associated with a [connector](../connectors/index.md) that knows how to talk to its kind of external store, and holds a Connector Space of imported objects, a discovered schema, and (where applicable) a partition and container hierarchy.
 
-## What a Connected System contains
+## :material-server-network-outline: What a Connected System contains
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 
@@ -22,37 +41,37 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
 - **Synchronisation Rules**<br /> The rules that govern how data flows between this system and the Metaverse.
 
-## The Connector Space
+## :material-database-outline: The Connector Space
 
 Each Connected System has a **Connector Space**: a staging area between the external system and the Metaverse, holding a Connected System Object for each object JIM has imported. [Connector Space](connector-space.md) covers what it holds, opening it, objects awaiting deprovisioning, and clearing it.
 
-## Partitions and containers
+## :material-folder-network-outline: Partitions and containers
 
 Where a Connector has partitions and containers, such as the LDAP Connector, the **Scope** tab is where you choose which of them JIM manages. [Partitions and Containers](partitions-and-containers.md) covers the choices, stating them as text, and previewing a change before you make it.
 
-## Unresolved reference handling
+## :material-link-lock: Unresolved reference handling
 
 A reference to an object JIM does not hold, such as a group member outside the Container Scope, stays unresolved, and the Connected System's **Unresolved Reference Handling** decides how a run reports it. [Unresolved References](unresolved-references.md) covers the setting, finding out why a reference is unresolved, and the export side.
 
-## Schema and attributes
+## :material-table-column: Schema and attributes
 
 The **Schema** tab's selections decide what JIM reads from the system. [Connected System Schema](connected-system-schema.md) covers what deselecting means, refreshing the schema, and an object that changes Object Type; [Connected System Attributes](connected-system-attributes.md) covers each attribute's writability and data type, and why credential attributes are never managed.
 
-## Passwords
+## :material-form-textbox-password: Passwords
 
 Where the system accepts passwords, its **Passwords** tab shows the password policy JIM read from it, checks the password channel, and sets Password Synchronisation. [Connected System Passwords](connected-system-passwords.md) covers each.
 
-## Detected facts
+## :material-eye-check-outline: Detected facts
 
 At the top of the Details tab, above the form, a **Detected** strip lists read-only facts the Connector has detected about the target system, shown for reference. These are read from data JIM already captured during a previous connection, so viewing them never opens a new connection. Before the first successful connection, the strip says nothing has been detected yet.
 
 Of the built-in Connectors, only the [LDAP Connector](../connectors/jim-ldap-connector.md#detected-facts) detects and surfaces facts (directory type, vendor, DNS host name, paging support, and, where a domain controller has been pinned, the pinned server and its invocation ID); for Connectors that cannot detect facts, the strip is not shown at all.
 
-## Pending Exports
+## :material-tray-full: Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
-Each Pending Export has a status, which the list shows and filters by:
+The list filters by change type (**Create**, **Update** or **Delete**) and by status. Each Pending Export has a status:
 
 | Status | What it means |
 |---|---|
@@ -70,29 +89,38 @@ Each Pending Export has a status, which the list shows and filters by:
 
 A Pending Export's detail page names two distinct things about each attribute change, side by side: **Attribute Flow** is the outbound Synchronisation Rule that staged the change, and **Value from** is where the underlying Metaverse value came from (a Connected System through an import Attribute Flow, a computed expression, or a Generated Value), linking into that attribute's inspector on the source Metaverse Object. Troubleshooting a wrong exported value usually needs both: which rule sent it, and which source put it on the Metaverse Object in the first place.
 
-## Configuration changes pending a Full Synchronisation
+## :material-database-clock-outline: Changes awaiting synchronisation
 
-Most configuration changes do not take effect the moment you save them. Scoping criteria, Attribute Flow, Object
-Matching Rules and schema selection all describe what synchronisation *should* do; the change reaches your data only
-when synchronisation next runs over the objects it affects. Until then the portal and the configuration are ahead of
-reality.
+A saved configuration change reaches existing objects only when a synchronisation next runs over them, so for a while the portal and the configuration are ahead of your data. A Connected System shows that wait in two ways, because they ask different things of you: a change the next synchronisation applies, and a change that is pending a Full Synchronisation. [When a change takes effect](configuration-changes.md#when-a-change-takes-effect) says which change is which.
 
-JIM tracks this for you. A Connected System whose configuration has changed in a way that affects synchronisation
-outcomes shows an indicator in the Connected Systems list, and a notice on the Connected System page saying how many
-changes are waiting and when the last Full Synchronisation ran.
+### Changes the next synchronisation applies
 
-**Only consequential changes count.** Renaming a Connected System or editing a description changes nothing about what
-synchronisation does, so it never raises the indicator. Changes are classified as they are recorded, and only the two
-classes that alter outcomes are counted:
+Saving an import Synchronisation Rule or an Object Matching Rule records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing each change (linked to its Activity, with when it was saved and by whom). **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip showing how many changes are waiting, and the rule shows an **Awaiting synchronisation** chip.
+
+The Connected System's next synchronisation, Delta or Full, processes every object of that Object Type and only the changed objects of the others, then marks the changes applied:
+
+- **Several changes, one run**<br /> Every change saved before a run starts is applied by that run.
+- **A change saved during a run waits for the next one**<br /> The running synchronisation carries on with the rules it started with.
+- **A failed or cancelled run applies nothing**<br /> The next run processes the Object Type again, and the notice stays until a run completes.
+- **The cost is the whole Object Type**<br /> On a large Object Type, the next Delta Synchronisation takes as long as processing every object of that type. The notice gives the object count: run it in a quiet period, or choose **Run now** to start it straight away.
+- **Export follows on its own**<br /> Every Metaverse Object the Object Type joins or projects is processed too, so export evaluation runs on them as usual.
+
+The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
+
+### Changes pending a Full Synchronisation
+
+Some changes no ordinary synchronisation applies by itself. A Connected System with such a change since its last Full Synchronisation shows an indicator in the Connected Systems list, and a notice on its page saying how many changes are waiting and when the last Full Synchronisation ran.
+
+**Only consequential changes count.** Renaming a Connected System or editing a description changes nothing about what synchronisation does, so it never raises the indicator. Changes are classified as they are recorded, and only the two classes that alter outcomes are counted:
 
 | Class | Examples | How it shows |
 |-------|----------|--------------|
-| Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
-| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+| Sync-affecting | An export Attribute Flow, a Metaverse Attribute, schema selection | Amber, with the number of changes |
+| Destructive | Deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
 
-**Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
-Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises
-it on the system that rule belonged to.
+A change to an import Synchronisation Rule or an Object Matching Rule is not counted: the next synchronisation applies it. Nor is a change to an export rule's scope or Deprovisioning Action: the next synchronisation of any Connected System reviews every Metaverse Object against the rule as it now stands. Only what no synchronisation applies by itself counts, so a save that changes an export rule's scope and its Attribute Flow raises the indicator for the Attribute Flow edit alone.
+
+**Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises it on the system that rule belonged to.
 
 **Two states mean "JIM cannot tell", not "up to date":**
 
@@ -102,20 +130,18 @@ it on the system that rule belonged to.
   [Configuration Change History](activities.md#configuration-change-history)), so JIM holds no record of what changed.
 
 Both are shown distinctly rather than as a clean result, because reporting a settled configuration JIM cannot vouch
-for would be worse than reporting nothing.
+for would be worse than reporting nothing. Changes awaiting synchronisation are reported in both states.
 
 !!! note "The reference point is when the run started"
     A change made while a long Full Synchronisation was still running may not have been picked up by it, so it is
     counted as still pending. You may occasionally be prompted for a re-run you did not strictly need; the alternative
     would be hiding a change that really was missed.
 
-Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift`, or from the
-`configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
-treating `HasPendingChanges` as `false`.
+Read both from automation with `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift`, or the `configurationDrift` object on the REST Connected System response. `AwaitingSynchronisation` lists the Object Types waiting, each with its changes and object count. Check `IsDeterminable` before treating `HasPendingChanges` as `false`.
 
-## Previewing a Full Synchronisation
+## :material-eye-outline: Previewing a Full Synchronisation
 
-A Full Synchronisation is when configuration reaches your data: accounts provisioned, updated, disconnected or deleted
+A Full Synchronisation processes every object in the Connected System, and can provision, update, disconnect or delete accounts
 across every Connected System the run reaches. A **Full Synchronisation preview** works out what a Full Synchronisation
 of this Connected System would do, against the objects as they stand, changing nothing, so you can read the
 consequences before you run it.
@@ -130,8 +156,7 @@ Synchronisation of the system has run since it.
 
 **Large systems.** Above the size at which JIM asks how much detail a preview should keep, the same question also says
 roughly how long the preview will take, so you decide before it starts. The estimate is never faster than a
-conservative reference rate, and slower where this system's last Full Synchronisation was: a routine run skips objects
-unchanged since the one before, so its own speed would understate a run that has to look at everything.
+conservative reference rate, and slower where this system's last Full Synchronisation was.
 
 **Reading it.** The preview leads with the worst consequence, then lists each change by Connected System and attribute
 under **What would change**, including updates, provisioning and deprovisioning in the target systems the run reaches,
@@ -153,7 +178,7 @@ and its Activity says the preview was out of date and what overtook it.
 
 **Automating it.** Scripts get the same evaluation:
 [`New-JIMConfigurationChangePreview -ConnectedSystemId <id> -FullSynchronisation`](../powershell/previews.md#new-jimconfigurationchangepreview)
-in PowerShell, or `POST connected-systems/{id}/full-synchronisation/preview` in the [REST API](../../api/reference/).
+in PowerShell, or `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/full-synchronisation/preview` in the [REST API](../../api/reference/).
 The start result's estimated duration says roughly how long to wait, and `-Wait` waits that long by default. Pass the
 finished preview's Activity id to
 [`Start-JIMRunProfile -PreviewActivityId`](../powershell/run-profiles.md#start-jimrunprofile), or as `previewActivityId`
@@ -162,11 +187,11 @@ than a completed Full Synchronisation preview of that same system, and queues no
 something has overtaken still queues: its Activity records that the preview was out of date, and PowerShell writes a
 warning saying what overtook it (the REST response carries it in `warnings`).
 
-## Confirming a configuration change
+## :material-pencil-lock-outline: Confirming a configuration change
 
 Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Setting up a new Connected System:**
 
@@ -181,13 +206,13 @@ Changing a Connected System's settings, schema, or partition selection is confir
 
 **Removing a Connected System:** deleting one asks what should happen to everything it managed, with the impact counted before you choose. [Removing a Connected System](removing-a-connected-system.md) explains both choices, and how to preview the impact on every other system first.
 
-## Manage Connected Systems
+## :material-cog-outline: Manage Connected Systems
 
 - **JIM portal**<br /> Connected Systems area of the admin UI
 - **PowerShell**<br /> [Connected Systems cmdlets](../powershell/connected-systems.md) (`Get-JIMConnectedSystem`, `New-JIMConnectedSystem`, `Set-JIMConnectedSystem`, etc.)
 - **REST API**<br /> Connected Systems endpoints in the [interactive API reference](../../api/reference/)
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connectors](../connectors/index.md): the connector types JIM ships with, and what each one does
 - [Concepts: Architecture](../concepts/architecture.md): how Connected Systems fit into JIM's hub-and-spoke model

@@ -20,4 +20,13 @@ namespace JIM.Models.Activities;
 /// run came back round to it, which reads as the run going backwards. A nested phase does not
 /// count towards the run's step total, and is declared after the phase it belongs to.
 /// </param>
-public record RunProfilePhase(string Key, string Name, bool HostsConnectorPhases = false, string? ParentKey = null);
+/// <param name="CountUnit">
+/// What the Activity's counters count while this phase runs. Objects for almost every phase; a phase whose work grows
+/// with something else says so, so its progress figures and their labels are honest (#2492).
+/// </param>
+public record RunProfilePhase(
+    string Key,
+    string Name,
+    bool HostsConnectorPhases = false,
+    string? ParentKey = null,
+    RunPhaseCountUnit CountUnit = RunPhaseCountUnit.Objects);

@@ -12,13 +12,40 @@ Deleting a Connected System asks what should happen to everything it managed, wi
 - **Deprovision through synchronisation** (the default on every surface): each of the system's objects is processed as though it had disconnected through a normal synchronisation. Contributed values are recalled or handed to surviving contributors per [Attribute Priority](../concepts/attribute-priority.md), except for an Object Type with [Remove Contributed Attributes On Obsoletion](connected-system-schema.md#obsoletion-and-contributed-values) switched off, whose values stay on the Metaverse Object exactly as a normal disconnection would leave them. Each Metaverse Object's Deletion Rule is evaluated as after any disconnection, so an object is scheduled for deletion when this system was its last connector, or an authoritative source its Object Type's rule names (see [Authoritative source trigger modes](metaverse.md#authoritative-source-trigger-modes)); downstream systems receive corrective exports; an object whose recalled values take it out of an export Synchronisation Rule's scope has its account in that system deprovisioned according to the rule's [Deprovisioning Action](deprovisioning.md). The run is queued and Activity-tracked; monitor it from the Operations page via the link the dialog surfaces, and the system is deleted as the run's final step. While it runs, the system is fenced: excluded from scheduled runs and read-only.
 - **Delete immediately and keep contributed data**: the system is removed at once. Values it contributed remain in place with no record of where they came from and nothing will ever recall them; Deletion Rules are evaluated in bulk, on the same terms, but no per-object synchronisation processing occurs and downstream systems are not corrected. The dialog's warning states this before you confirm. Small systems are removed synchronously; larger systems, or a system with a running sync, are queued as a background activity.
 
+```jim-diagram
+archetype: comparison
+title: The two ways to delete a Connected System
+desc: "Deprovision through synchronisation, the default, processes each of the system's objects as a normal disconnection: contributed values are recalled or handed to surviving contributors, each Metaverse Object's Deletion Rule is evaluated per object, downstream systems receive corrective exports, and the system is fenced while the run goes and deleted as its final step. Delete immediately and keep contributed data leaves the values in place with no record of where they came from, evaluates Deletion Rules in bulk, does not correct downstream systems, and removes the system at once, or as a background activity for a large system. The deletion impact preview describes the first choice only."
+columns:
+  - { label: Deprovision through synchronisation, sub: the default }
+  - { label: Delete immediately, sub: and keep contributed data }
+rows:
+  - label: Contributed values
+    cells:
+      - { text: recalled, sub: or handed to surviving contributors }
+      - { text: stay in place, sub: with no record of where they came from }
+  - label: Deletion Rules
+    cells:
+      - { text: evaluated per object, sub: as after any disconnection }
+      - { text: evaluated in bulk, sub: on the same terms }
+  - label: Downstream systems
+    cells:
+      - { text: receive corrective exports }
+      - { text: not corrected }
+  - label: The system
+    cells:
+      - { text: fenced while the run goes, sub: deleted as its final step }
+      - { text: removed at once, sub: "queued when large, or a sync is running" }
+footer: "Preview deletion impact, on the Danger Zone tab, describes the first choice only"
+```
+
 If a deprovisioning run stops before completing, the system stays fenced and consistent: deleting it again with deprovisioning resumes from where the run stopped, and deleting immediately finishes the removal at once (keeping whatever contributed data remained). A half-deprovisioned system never returns to service.
 
 Before deleting a system that other systems depend on, [preview the deletion](#previewing-a-deletion): the counts in the delete dialog say how much the system holds, while the preview says what deleting it would do to everything else.
 
 Deleting a Connected System records a final snapshot of its configuration in the [Configuration Change History](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
 
-## Previewing a deletion
+## :material-eye-outline: Previewing a deletion
 
 Deprovisioning through synchronisation reaches well beyond the system being deleted: another system takes over the values it also contributes, values nothing else contributes are cleared, people whose Deletion Rule it triggers become eligible for deletion, and every downstream system is corrected to match. A **deletion impact preview** works all of that out against the objects as they stand, changing nothing, so you can read it before you commit.
 

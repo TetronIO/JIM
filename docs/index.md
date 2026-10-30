@@ -3,7 +3,7 @@ title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
 type: landing
 audience: evaluator
-validated: v0.16.0
+validated: v0.17.0
 template: home.html
 hide:
   - navigation
@@ -14,7 +14,7 @@ hide:
 
 <p class="jim-diagram-caption">JIM in context: administrators and automation work through its UI and API while it synchronises identity data with your systems.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
-## ✨ Key Features
+## :material-star-four-points-outline: Key Features
 
 <div class="grid cards" markdown>
 
@@ -24,7 +24,7 @@ hide:
 
     A central Metaverse correlates each person and group across every Connected System. Users, Groups and your own Metaverse Object Types synchronise in both directions.
 
--   :material-server-network:{ .lg .middle } **[Multi-Directory LDAP](connectors/jim-ldap-connector.md)**
+-   :material-server-network-outline:{ .lg .middle } **[Multi-Directory LDAP](connectors/jim-ldap-connector.md)**
 
     ---
 
@@ -36,7 +36,7 @@ hide:
 
     Deploys as a single container stack on Docker or Podman, served over HTTPS out of the box, with no legacy infrastructure requirements. Bundled or external PostgreSQL.
 
--   :material-shield-lock:{ .lg .middle } **[Single Sign-On (SSO)](administration/sso-setup.md)**
+-   :material-shield-lock-outline:{ .lg .middle } **[Single Sign-On (SSO)](administration/sso-setup.md)**
 
     ---
 
@@ -60,11 +60,11 @@ hide:
 
     Fully functional without internet connectivity. No cloud dependencies; designed for sensitive and high-assurance environments.
 
--   :material-puzzle:{ .lg .middle } **[Extensible Connectors](connectors/index.md)**
+-   :material-puzzle-outline:{ .lg .middle } **[Built-in Connectors](connectors/index.md)**
 
     ---
 
-    Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, with a framework for developing custom connectors for bespoke scenarios.
+    LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors ship with JIM, with nothing extra to install, and every one synchronises through the same Metaverse.
 
 -   :material-sort:{ .lg .middle } **[Attribute Priority](concepts/attribute-priority.md)**
 
@@ -78,13 +78,13 @@ hide:
 
     Versioned who/what/when audit across every configuration type, with secret redaction and a reason-for-change prompt.
 
--   :material-shape-plus:{ .lg .middle } **[Extensible Metaverse Schema](configuration/metaverse.md)**
+-   :material-shape-plus-outline:{ .lg .middle } **[Extensible Metaverse Schema](configuration/metaverse.md)**
 
     ---
 
     Create your own Metaverse Object Types and Attributes from the portal, REST API or PowerShell, with safe deletion and full audit. Built-in attributes carry SCIM 2.0 and LDAP Standard Mappings.
 
--   :material-lightning-bolt:{ .lg .middle } **[Real-Time Operations](configuration/activities.md)**
+-   :material-lightning-bolt-outline:{ .lg .middle } **[Real-Time Operations](configuration/activities.md)**
 
     ---
 
@@ -96,13 +96,13 @@ hide:
 
     Initial passwords for newly provisioned objects, on-demand password setting, and Password Synchronisation to every configured Connected System, queued, encrypted and retried, with a queue you can watch, retry and cancel.
 
--   :material-eye-check:{ .lg .middle } **[Preview Before You Commit](configuration/configuration-changes.md#previewing-a-change-before-you-make-it)**
+-   :material-eye-check-outline:{ .lg .middle } **[Preview Before You Commit](configuration/configuration-changes.md#previewing-a-change-before-you-make-it)**
 
     ---
 
     A Configuration Change Preview shows which objects a proposed edit would affect; [Sync Preview](configuration/sync-preview.md) shows what synchronising one object would do. Neither changes anything.
 
--   :material-shield-check:{ .lg .middle } **[Run Profile Safeguards](configuration/run-profiles.md#safeguards)**
+-   :material-shield-check-outline:{ .lg .middle } **[Run Profile Safeguards](configuration/run-profiles.md#safeguards)**
 
     ---
 
@@ -110,7 +110,7 @@ hide:
 
 </div>
 
-## 🎯 Scenarios
+## :material-bullseye-arrow: Scenarios
 
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
@@ -120,7 +120,7 @@ JIM supports common Identity Governance & Administration (IGA) scenarios:
 - **Domain Migration:** Support divestitures and system decommissioning
 - **Identity Correlation:** Bring together user and entitlement data from disparate business applications
 
-## 🚀 What Makes JIM Different
+## :material-rocket-launch-outline: What Makes JIM Different
 
 Enterprise identity synchronisation typically requires cloud connectivity, complex infrastructure, or expensive licensing. JIM takes a different approach: it deploys as a single container stack on Docker or Podman, runs entirely on-premises, and works in air-gapped networks with no external dependencies. Source-available code means you can inspect, audit, and verify everything JIM does with your identity data.
 
@@ -134,29 +134,29 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 - :material-check-circle: PowerShell automation
 </div>
 
-## 🗺️ Quick Links
+## :material-map-outline: Quick Links
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch:{ .lg .middle } **[Getting Started](getting-started/index.md)**
+-   :material-rocket-launch-outline:{ .lg .middle } **[Getting Started](getting-started/index.md)**
 
     ---
 
     Deploy JIM and run your first synchronisation.
 
--   :material-book-open-variant:{ .lg .middle } **[Concepts](concepts/index.md)**
+-   :material-book-open-variant-outline:{ .lg .middle } **[Concepts](concepts/index.md)**
 
     ---
 
     Understand the Metaverse, Connected Systems, Synchronisation Rules, and more.
 
--   :material-cog:{ .lg .middle } **[Administration](administration/index.md)**
+-   :material-cog-outline:{ .lg .middle } **[Administration](administration/index.md)**
 
     ---
 
     Configure, monitor, and manage your JIM deployment.
 
--   :material-power-plug:{ .lg .middle } **[Connectors](connectors/index.md)**
+-   :material-power-plug-outline:{ .lg .middle } **[Connectors](connectors/index.md)**
 
     ---
 
@@ -164,7 +164,7 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 </div>
 
-## Scale and Assurance
+## :material-chart-line-variant: Scale and Assurance
 
 JIM covers the whole identity lifecycle:
 
@@ -175,7 +175,7 @@ JIM covers the whole identity lifecycle:
 
 Its pipelines run in bounded memory, and are validated at 500,000 users synchronised across two directories, with groups of up to 495,000 members. Its security is assessed against the OWASP Top 10:2025, and its supply chain is hardened. The [Product Roadmap](reference/roadmap.md) sets out the milestones to v1.0, Identity Lifecycle Complete, and after it.
 
-## 💬 Community & Support
+## :material-forum-outline: Community & Support
 
 JIM is built in the open. [GitHub Discussions](https://github.com/TetronIO/JIM/discussions) is the place to engage with the maintainers and other users.
 
@@ -184,10 +184,10 @@ JIM is built in the open. [GitHub Discussions](https://github.com/TetronIO/JIM/d
 - **Bug reports**<br /> Open a [GitHub Issue](https://github.com/TetronIO/JIM/issues).
 - **Security vulnerabilities**<br /> Follow the [Security Policy](https://github.com/TetronIO/JIM/security/policy); please do not report security issues in public Issues or Discussions.
 
-## Licensing
+## :material-scale-balance: Licensing
 
 JIM is source-available: it is free to use outside production, and production use needs a commercial licence. The [licence terms](https://junctional.io/license) give the details.
 
-## More Information
+## :material-information-outline: More Information
 
 For more about JIM, visit [junctional.io](https://junctional.io).

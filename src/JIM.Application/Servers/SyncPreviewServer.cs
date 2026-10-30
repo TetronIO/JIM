@@ -387,10 +387,6 @@ public class SyncPreviewServer
                     AddOutboundToCounts(result.Counts, item.Preview!);
                     break;
 
-                case FullSyncPreviewItemKind.Unchanged:
-                    result.UnchangedObjectCount++;
-                    break;
-
                 case FullSyncPreviewItemKind.Evaluated:
                     result.EvaluatedObjectCount++;
                     var category = item.Category!.Value;
@@ -420,11 +416,11 @@ public class SyncPreviewServer
             }
         }
 
-        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Obsolete} obsolete, {Unchanged} unchanged), " +
+        Log.Information("PreviewFullSyncAsync: Previewed Connected System {SystemId}: {Evaluated}/{Total} object(s) evaluated ({Obsolete} obsolete), " +
             "{Project} would project, {Join} would join, {Flow} attribute flow, {OutOfScope} out of scope, {NotConnected} not connected, {Blocked} blocked; " +
             "{Reviewed} Metaverse Object(s) export scope reviewed; " +
             "{Creates} creates, {Updates} updates, {Deletes} deletes proposed; truncated: {Truncated} ({Reason}); {Elapsed:0.0}s.",
-            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.ObsoleteObjectCount, result.UnchangedObjectCount,
+            connectedSystemId, result.EvaluatedObjectCount, result.TotalObjectCount, result.ObsoleteObjectCount,
             result.Counts.WouldProject, result.Counts.WouldJoin, result.Counts.AttributeFlow, result.Counts.OutOfScope,
             result.Counts.NotConnected, result.Counts.BlockedByErrors, result.Counts.ExportScopeReviewed,
             result.Counts.ObjectsToCreate, result.Counts.ObjectsToUpdate, result.Counts.ObjectsToDelete,
@@ -448,7 +444,8 @@ public class SyncPreviewServer
     /// <param name="connectedSystemId">The Connected System to preview.</param>
     /// <param name="options">Optional bounds; by default none, and the whole population is evaluated.</param>
     /// <param name="repositoryFactory">Optional factory for a preview-owned repository scope; see
-    /// <see cref="PreviewSyncForMvoAsync"/>.</param>
+    /// <see cref="PreviewSyncForMvoAsync"/>. When omitted, the walk opens an isolated scope over the ambient repository
+    /// rather than using it directly.</param>
     /// <param name="cancellationToken">Stops the walk between objects.</param>
     public async IAsyncEnumerable<FullSyncPreviewItem> StreamFullSyncPreviewAsync(
         int connectedSystemId,
@@ -459,8 +456,11 @@ public class SyncPreviewServer
         options ??= new FullSyncPreviewStreamOptions();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        using var scope = repositoryFactory?.Invoke();
-        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope?.Repository ?? SyncRepo);
+        // On its own context unless the caller supplies one (#2598): the walk's pages hold their Metaverse Objects untracked
+        // under tracked Connected System Objects, and a caller saving progress on the shared context between the items
+        // it is handed would have EF attach them and write them back.
+        using var scope = repositoryFactory?.Invoke() ?? SyncRepo.OpenIsolatedScope();
+        var guardedRepository = new ReadOnlySyncRepositoryGuard(scope.Repository);
         var previewServer = new ExportEvaluationServer(Application, guardedRepository);
         await using var rollbackScope = await guardedRepository.BeginRollbackOnlyTransactionAsync();
 
@@ -480,17 +480,6 @@ public class SyncPreviewServer
                 connectedSystemId);
             yield return new FullSyncPreviewItem { Kind = FullSyncPreviewItemKind.Refused, Preview = refusal };
             yield break;
-        }
-
-        // The unchanged-object optimisation, decided as the run decides it (SyncFullSyncTaskProcessor): while no
-        // configuration has changed since it was last fully applied, the run skips every object unchanged since the
-        // system's last synchronisation, drift and all, so the preview proposes nothing for one either (#1530).
-        DateTime? unchangedWatermark = null;
-        var watermarks = await guardedRepository.GetConnectedSystemSynchronisationWatermarksAsync(connectedSystemId);
-        if (watermarks?.LastSyncCompletedAt != null)
-        {
-            unchangedWatermark = ConnectedSystem.GetUnchangedObjectWatermark(watermarks.Value.LastSyncCompletedAt,
-                watermarks.Value.ConfigurationLastFullyAppliedAt, await guardedRepository.GetLatestSyncRuleConfigurationChangeAsync());
         }
 
         // Keyset pagination from the zero GUID, matching the sync processors' population walk.
@@ -558,12 +547,6 @@ public class SyncPreviewServer
                     };
                     continue;
                 }
-                if (unchangedWatermark.HasValue && cso.IsUnchangedSince(unchangedWatermark.Value))
-                {
-                    yield return Skipped(FullSyncPreviewItemKind.Unchanged, cso);
-                    continue;
-                }
-
                 var preview = await PreviewCsoCoreAsync(cso, context, refreshCacheForWorkingMvo: false, asTheRunWould: true);
                 evaluated++;
                 yield return new FullSyncPreviewItem
@@ -589,14 +572,6 @@ public class SyncPreviewServer
     private static FullSyncPreviewItem Truncation(FullSyncPreviewTruncationReason reason) =>
         new() { Kind = FullSyncPreviewItemKind.Truncated, TruncationReason = reason };
 
-    private static FullSyncPreviewItem Skipped(FullSyncPreviewItemKind kind, ConnectedSystemObject cso) => new()
-    {
-        Kind = kind,
-        ConnectedSystemObjectId = cso.Id,
-        DisplayName = cso.NameOrId,
-        ObjectTypeName = cso.Type?.Name
-    };
-
     #endregion
 
     #region private methods
@@ -604,7 +579,8 @@ public class SyncPreviewServer
     /// <summary>
     /// The export scope review (#892, #1925), previewed as the run drains it (<c>SyncTaskProcessorBase.
     /// ProcessScopeReviewPendingMetaverseObjectsAsync</c>): every Metaverse Object flagged <c>ScopeReviewPending</c>,
-    /// whatever its type and wherever it is joined, evaluated for export scope alone against every target. An object the
+    /// whatever its type and wherever it is joined, evaluated for export scope against every target, with the attribute
+    /// values a write outside synchronisation changed when it records any (#2615). An object the
     /// walk already reviewed is skipped, so its exports are proposed once; the run's second evaluation of it finds the
     /// first one's exports already staged and adds nothing.
     /// </summary>
@@ -622,6 +598,9 @@ public class SyncPreviewServer
             .Where(id => !context.ScopeReviewedMetaverseObjectIds.Contains(id))
             .ToList();
 
+        // The attributes that exist, to read what each object records as changed outside synchronisation (#2615) as the run does.
+        var existingAttributeIds = (await guardedRepository.GetMetaverseAttributeNamesAsync()).Keys;
+
         foreach (var batch in flaggedIds.Chunk(options.PageSize))
         {
             await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, batch.ToList());
@@ -635,8 +614,9 @@ public class SyncPreviewServer
                 }
 
                 var reviewed = new SyncPreviewResult();
+                var unsynchronisedChanges = UnsynchronisedChangeEvaluation.Read(mvo, existingAttributeIds);
                 ComposeOutbound(reviewed, await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], context.Cache,
-                    synchronisationChanges: ([], null)));
+                    synchronisationChanges: (unsynchronisedChanges.ChangedAttributes, unsynchronisedChanges.RemovedAttributes)));
                 yield return new FullSyncPreviewItem
                 {
                     Kind = FullSyncPreviewItemKind.ExportScopeReview,
@@ -993,8 +973,10 @@ public class SyncPreviewServer
             {
                 try
                 {
+                    // isFinalReferencePass: nothing joins another object during a preview, so a reference to an unjoined
+                    // object is final here, exactly as the run treats one it cannot resolve; it must not hold back removals.
                     foreach (var flowError in _syncEngine.FlowInboundAttributes(cso, rule, objectTypes, ExpressionEvaluator,
-                        priorityContext: context.PriorityContext))
+                        isFinalReferencePass: true, priorityContext: context.PriorityContext))
                         flowErrors.Add((rule.Id, rule.Name, flowError));
                 }
                 catch (SyncExpressionEvaluationException expressionEx)
@@ -1331,11 +1313,11 @@ public class SyncPreviewServer
     /// Proposes the corrections the run's drift detection would stage for <paramref name="cso"/> (#1530), through the
     /// run's own detection (<see cref="DriftDetectionService.EvaluateDrift"/>, which stages nothing itself). A
     /// correction for an object the export evaluation already proposes an update for is folded into that update, as
-    /// the run merges the two Pending Exports for one object. An object holding a change until its Initial Password is
-    /// delivered is skipped, as the run skips it (#2039; <c>SyncTaskProcessorBase.EvaluateQueuedDriftAsync</c>).
+    /// the run merges the two Pending Exports for one object. For an object holding a change until its Initial Password
+    /// is delivered, no correction restating the held change is proposed, as the run stages none (#2039, #2501;
+    /// <see cref="DriftDetectionService.DropCorrectionsRestatingHeldChanges"/>).
     /// </summary>
-    /// <returns>How many attributes have drifted; zero when nothing enforces state in this Connected System, or the
-    /// run would skip the object.</returns>
+    /// <returns>How many attributes the run would correct; zero when nothing enforces state in this Connected System.</returns>
     private async Task<int> ProposeDriftCorrectionsAsync(SyncPreviewResult result, ConnectedSystemObject cso, MetaverseObject workingMvo,
         CsoPreviewContext context)
     {
@@ -1391,16 +1373,16 @@ public class SyncPreviewServer
         if (!drift.HasDrift)
             return 0;
 
-        // The run leaves an object holding a change until its Initial Password is delivered out of Drift Detection
-        // entirely, since a correction for any attribute would replace the Pending Export holding the change. Asked only
-        // once drift is found, so an object with nothing to correct costs no lookup; the run's own per-page lookup reads
-        // the same partial index.
+        // For an object holding a change until its Initial Password is delivered, the run stages no correction restating
+        // the held change, and corrects everything else (#2501). Asked only once drift is found, so an object with nothing
+        // to correct costs no lookup; the run's own per-page lookup reads the same partial index.
         if (cso.Id != Guid.Empty &&
-            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0)
+            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0 &&
+            await context.GuardedRepository.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id) is { } heldPendingExport)
         {
-            Log.Debug("ProposeDriftCorrectionsAsync: CSO {CsoId} holds a change until its Initial Password is delivered; " +
-                "the run skips Drift Detection for it, so no correction is proposed", cso.Id);
-            return 0;
+            DriftDetectionService.DropCorrectionsRestatingHeldChanges(drift, heldPendingExport);
+            if (!drift.HasDrift)
+                return 0;
         }
 
         // Detection stages each change by attribute id alone, which is all the run persists; the preview names the
@@ -1559,7 +1541,7 @@ public class SyncPreviewServer
     /// <remarks>
     /// The recall is made only as the run would. The configuration change previews ask the other question of a baseline
     /// and a proposal, and a proposal removing a mapping would recall its values on one side only, which those previews
-    /// deliberately leave to the next Full Synchronisation rather than count against the save; nor can a proposal carry
+    /// deliberately leave to the synchronisation that recalls them rather than count against the save; nor can a proposal carry
     /// the keep-the-values choice that severs the provenance the recall reads (<c>SyncRuleAttributeFlowPreviewAdapter</c>).
     /// The re-election follows whatever the ordinary pass withdrew on either path, because it is the same
     /// synchronisation's answer to the same change. Survivors are re-flowed against the working copy and left as they

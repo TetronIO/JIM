@@ -58,6 +58,17 @@ public class ActivityRunProfileExecutionStats
     public int TotalDisconnectedOutOfScope { get; set; }
 
     /// <summary>
+    /// Count of every Connected System Object disconnected from its Metaverse Object, whether it was removed from
+    /// its source system (<see cref="TotalDisconnections"/>) or left an import Synchronisation Rule's scope
+    /// (<see cref="TotalDisconnectedOutOfScope"/>). Derived, not stored.
+    /// </summary>
+    /// <remarks>
+    /// The two counters are kept apart because they have different causes, but every surface that answers "how many
+    /// were disconnected?" wants both. Read this rather than adding the counters up at the call site.
+    /// </remarks>
+    public int TotalDisconnectionsIncludingOutOfScope => TotalDisconnections + TotalDisconnectedOutOfScope;
+
+    /// <summary>
     /// Count of CSOs that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined).
     /// Attribute Flow stopped but join preserved ("once managed, always managed" pattern).
     /// </summary>
@@ -176,12 +187,6 @@ public class ActivityRunProfileExecutionStats
     /// Calculated as TotalObjectsProcessed - TotalObjectChangeCount, but never negative.
     /// </summary>
     public int TotalUnchanged => Math.Max(0, TotalObjectsProcessed - TotalObjectChangeCount);
-
-    /// <summary>
-    /// Count of objects where no changes were needed.
-    /// </summary>
-    [Obsolete("Use TotalUnchanged instead")]
-    public int TotalNoChanges { get; set; }
 
     /// <summary>
     /// Count of objects that encountered errors during processing.

@@ -40,6 +40,23 @@ BeforeAll {
         }
     }
 
+    function Get-TestFederationConfig {
+        return @{
+            DirectoryType      = 'ActiveDirectoryFederation'
+            Instance           = 'AdfsPrimary'
+            ContainerName      = $null
+            Host               = 'adfs.panoply.local'
+            Address            = '10.20.30.41'
+            VmName             = 'adfs-primary'
+            Port               = 443
+            Authority          = 'https://adfs.panoply.local/adfs'
+            DiscoveryPath      = '/adfs/.well-known/openid-configuration'
+            Issuer             = 'https://adfs.panoply.local/adfs'
+            AccessTokenIssuer  = 'http://adfs.panoply.local/adfs/services/trust'
+            CheckpointBaseline = 'baseline'
+        }
+    }
+
     function Get-StateJson {
         param([string]$Name, [string[]]$Checkpoint = @('baseline'), [string]$Build = '26100.1742', [switch]$NoGuest)
         $guest = if ($NoGuest) { $null } else {
@@ -80,12 +97,30 @@ Describe 'Get-JimComposeArgument' {
     }
 
     It 'names a file that exists' {
-        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory'
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 30
         $repoRoot = Join-Path $PSScriptRoot '..' '..' '..'
 
         foreach ($file in $composeArgs | Where-Object { $_ -ne '-f' }) {
             Join-Path $repoRoot $file | Should -Exist
         }
+    }
+
+    It 'adds the AD FS overlay after the lab overlay for a scenario that signs in through AD FS, so JIM''s identity provider is adfs-primary' {
+        $composeArgs = Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber 30
+
+        $composeArgs | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml',
+            '-f', 'test/integration/docker/docker-compose.ad-lab.yml', '-f', 'test/integration/docker/docker-compose.ad-lab-adfs.yml')
+    }
+
+    It 'leaves JIM''s identity provider alone for every other scenario, and for no scenario number' {
+        foreach ($number in 1, 8, 25, $null) {
+            Get-JimComposeArgument -DirectoryType 'ActiveDirectory' -ScenarioNumber $number |
+                Should -Not -Contain 'test/integration/docker/docker-compose.ad-lab-adfs.yml'
+        }
+    }
+
+    It 'never adds the AD FS overlay outside the Active Directory lab' {
+        Get-JimComposeArgument -DirectoryType 'SambaAD' -ScenarioNumber 30 | Should -Be @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
     }
 }
 
@@ -107,6 +142,26 @@ Describe 'Get-ActiveDirectoryLabInstance' {
 
     It 'is Primary alone when there is no scenario number' {
         @(Get-ActiveDirectoryLabInstance -ScenarioNumber $null) | Should -Be @('Primary')
+    }
+
+    It 'is Primary then the AD FS server for Scenario 30, so the pair is reverted domain controller first' {
+        @(Get-ActiveDirectoryLabInstance -ScenarioNumber 30) | Should -Be @('Primary', 'AdfsPrimary')
+    }
+
+    It 'reverts the AD FS server for no other scenario: it takes minutes, and its baseline pairs with dc-primary''s' {
+        foreach ($number in 1, 2, 8, 24, 25, 28, $null) {
+            @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'AdfsPrimary'
+        }
+    }
+}
+
+Describe 'Test-ActiveDirectoryLabFederationScenario' {
+    It 'is true for Scenarios 30 and 31 only' {
+        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 30 | Should -BeTrue
+        Test-ActiveDirectoryLabFederationScenario -ScenarioNumber 31 | Should -BeTrue
+        foreach ($number in 1, 8, 25, 28, $null) {
+            Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $number | Should -BeFalse
+        }
     }
 }
 
@@ -267,6 +322,14 @@ Describe 'Select-ActiveDirectoryLabCheckpoint' {
         }
     }
 
+    It 'reverts the AD FS server to baseline and never asks for population' {
+        $pick = Select-ActiveDirectoryLabCheckpoint -Instance 'AdfsPrimary' -ScenarioNumber 30 -Template 'Nano' -Hash $script:hash `
+            -AvailableCheckpoint @('baseline')
+
+        $pick.Checkpoint | Should -Be 'baseline'
+        $pick.NeedsPopulation | Should -BeFalse
+    }
+
     It 'reverts Scenario 25 Source to baseline and never asks for population, even when a populated checkpoint exists' {
         foreach ($instance in 'Primary', 'Source') {
             $pick = Select-ActiveDirectoryLabCheckpoint -Instance $instance -ScenarioNumber 25 -Template 'Nano' -Hash $script:hash `
@@ -344,6 +407,156 @@ Describe 'Get-ActiveDirectoryLabState' {
         Mock Invoke-LabControl { throw 'ssh: connect to host lab port 22: Connection refused' }
 
         { Get-ActiveDirectoryLabState -DirectoryConfig @{ Primary = (Get-TestConfig 'Primary') } } | Should -Throw '*Connection refused*'
+    }
+
+    It 'asks about the AD FS server after the domain controller it pairs with' {
+        $configs = @{ AdfsPrimary = (Get-TestFederationConfig); Primary = (Get-TestConfig 'Primary') }
+
+        $states = @(Get-ActiveDirectoryLabState -DirectoryConfig $configs)
+
+        ($states | ForEach-Object { $_.Instance }) | Should -Be @('Primary', 'AdfsPrimary')
+        ($states | ForEach-Object { $_.VmName }) | Should -Be @('dc-primary', 'adfs-primary')
+    }
+
+    It 'names the AD FS server''s own build script when its baseline checkpoint is missing' {
+        Mock Invoke-LabControl { return (Get-StateJson -Name 'adfs-primary' -Checkpoint @()) }
+
+        { Get-ActiveDirectoryLabState -DirectoryConfig @{ AdfsPrimary = (Get-TestFederationConfig) } } |
+            Should -Throw "*adfs-primary*'baseline'*New-LabFederationServer.ps1*"
+    }
+}
+
+Describe 'Get-ActiveDirectoryLabFederationRequest' {
+    It 'asks for the discovery document by the service name, closing the connection after one response, in printf''s escapes' {
+        $request = Get-ActiveDirectoryLabFederationRequest -FederationConfig (Get-TestFederationConfig)
+
+        $request | Should -Be "GET /adfs/.well-known/openid-configuration HTTP/1.1\r\nHost: adfs.panoply.local\r\nConnection: close\r\n\r\n"
+    }
+}
+
+Describe 'Test-ActiveDirectoryLabFederationDiscovery' {
+    BeforeAll {
+        function Get-TestResponse {
+            param([string]$Status = 'HTTP/1.1 200 OK', [string]$Issuer = 'https://adfs.panoply.local/adfs',
+                [string]$Authorize = 'https://adfs.panoply.local/adfs/oauth2/authorize/')
+            # The shape adfs-primary publishes (checked against it): the issuer is the authority, and access tokens
+            # name the federation service identifier instead.
+            $body = [ordered]@{
+                issuer = $Issuer; authorization_endpoint = $Authorize; jwks_uri = 'https://adfs.panoply.local/adfs/discovery/keys'
+                access_token_issuer = 'http://adfs.panoply.local/adfs/services/trust'
+            } |
+                ConvertTo-Json -Compress
+            return @($Status, 'Content-Type: application/json;charset=UTF-8', 'Connection: close', '', $body)
+        }
+    }
+
+    It 'is ready when AD FS answers 200 with its own issuer and endpoints on the service' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse) -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeTrue
+    }
+
+    It 'is not ready, saying so, while AD FS is still starting and answers 503' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @('HTTP/1.1 503 Service Unavailable', '', 'Service Unavailable') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match '503'
+    }
+
+    It 'is not ready when nothing came back' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @() -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'no response'
+    }
+
+    It 'is not ready, naming both, when the issuer is not the one JIM will be told to expect' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse -Issuer 'https://other.example/adfs') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'other\.example'
+        $result.Reason | Should -Match 'https://adfs\.panoply\.local/adfs'
+    }
+
+    It 'is not ready when the endpoints are not on the service name, as a server built for another name would publish' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response (Get-TestResponse -Authorize 'https://adfs1.panoply.local/adfs/oauth2/authorize/') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'authorization_endpoint'
+    }
+
+    It 'is not ready when the body is not JSON' {
+        $result = Test-ActiveDirectoryLabFederationDiscovery -Response @('HTTP/1.1 200 OK', '', '<html>sign in</html>') `
+            -FederationConfig (Get-TestFederationConfig)
+
+        $result.Ready | Should -BeFalse
+        $result.Reason | Should -Match 'JSON'
+    }
+}
+
+Describe 'Wait-ActiveDirectoryLabFederationReady' {
+    BeforeAll {
+        function docker { }
+        # A stand-in with the real one's parameters (it lives in Test-Helpers.ps1), so Mock can replace it.
+        function Save-ActiveDirectoryCertificate { param($DirectoryConfig, $CertificateDirectory) $null = $DirectoryConfig, $CertificateDirectory }
+        $script:ok = @('HTTP/1.1 200 OK', '', ([ordered]@{
+            issuer = 'https://adfs.panoply.local/adfs'
+            authorization_endpoint = 'https://adfs.panoply.local/adfs/oauth2/authorize/'
+        } | ConvertTo-Json -Compress))
+    }
+
+    BeforeEach {
+        $script:dockerCalls = [System.Collections.Generic.List[object]]::new()
+        $script:responses = [System.Collections.Generic.Queue[object]]::new()
+        Mock Start-Sleep { }
+        Mock Save-ActiveDirectoryCertificate { }
+        Mock docker {
+            $script:dockerCalls.Add(@($args))
+            $global:LASTEXITCODE = 0
+            if ($script:responses.Count -gt 0) { return $script:responses.Dequeue() }
+            return $script:ok
+        }
+    }
+
+    It 'saves the certificate first, then asks for discovery over TLS verified against that certificate and the service name' {
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 | Should -BeTrue
+
+        Should -Invoke Save-ActiveDirectoryCertificate -Times 1 -Exactly
+        $text = @($script:dockerCalls[0]) -join ' '
+        $text | Should -Match 'exec jim-ldap-toolbox sh -c'
+        $text | Should -Match 'openssl s_client -quiet -connect 10\.20\.30\.41:443 -servername adfs\.panoply\.local'
+        $text | Should -Match '-verify_return_error -verify_hostname adfs\.panoply\.local -CAfile /certs/adfs-primary\.pem'
+    }
+
+    It 'keeps asking while AD FS is starting, and is ready once discovery answers' {
+        $script:responses.Enqueue(@('HTTP/1.1 503 Service Unavailable', ''))
+        $script:responses.Enqueue(@())
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 -PollSeconds 5 | Should -BeTrue
+
+        $script:dockerCalls.Count | Should -Be 3
+    }
+
+    It 'keeps trying to save the certificate until the server answers on 443 at all' {
+        $script:saveAttempts = 0
+        Mock Save-ActiveDirectoryCertificate {
+            $script:saveAttempts++
+            if ($script:saveAttempts -lt 3) { throw 'No certificate was found in the openssl s_client output.' }
+        }
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 60 -PollSeconds 5 | Should -BeTrue
+
+        $script:saveAttempts | Should -Be 3
+    }
+
+    It 'gives up after the timeout, returning false with the last reason written' {
+        Mock docker { $global:LASTEXITCODE = 0; return @('HTTP/1.1 503 Service Unavailable', '') }
+
+        Wait-ActiveDirectoryLabFederationReady -FederationConfig (Get-TestFederationConfig) -TimeoutSeconds 10 -PollSeconds 5 |
+            Should -BeFalse
     }
 }
 
@@ -752,5 +965,233 @@ Describe 'Get-ActiveDirectoryFixturePassword' {
 
     It 'refuses a length too short to be a policy-compliant password' {
         { Get-ActiveDirectoryFixturePassword -Length 8 } | Should -Throw
+    }
+}
+
+Describe 'Get-ActiveDirectoryLabJimUrl' {
+    It 'is jim.web''s HTTPS address on the Docker network, where the sign-in checks run (the toolbox) and its certificate names' {
+        Get-ActiveDirectoryLabJimUrl | Should -Be 'https://jim.web:8443'
+    }
+}
+
+Describe 'Get-ActiveDirectoryLabModuleDigest' {
+    It 'is the digest of the checkout''s PowerShell module, as the host computes it over its copy' {
+        Import-Module (Join-Path $PSScriptRoot '..' 'ad-lab' 'guest' 'LabFederationServer.psm1') -Force
+        $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' '..'))
+        $expected = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $root 'src' 'JIM.PowerShell'))
+        Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $root | Should -Be $expected
+    }
+}
+
+Describe 'ConvertFrom-LabIdentityProviderRegistrationOutput' {
+    BeforeAll {
+        $script:Json = ([ordered]@{
+                authority = 'https://adfs.panoply.local/adfs'; clientId = '11111111-1111-1111-1111-111111111111'
+                clientSecret = 'placeholder-client-secret'; publicClientId = '22222222-2222-2222-2222-222222222222'
+                apiScope = 'api://11111111-1111-1111-1111-111111111111'; claimType = 'oid'; mvAttribute = 'Object GUID'
+                changes = @('Create the Application Group'); moduleDigest = ('a' * 64)
+            } | ConvertTo-Json -Compress)
+    }
+
+    It 'reads the JSON the host printed last, past any line before it' {
+        $registration = ConvertFrom-LabIdentityProviderRegistrationOutput -Text "WARNING: something`n$($script:Json)`n"
+        $registration.ClientId | Should -Be '11111111-1111-1111-1111-111111111111'
+        $registration.ClientSecret | Should -Be 'placeholder-client-secret'
+        $registration.PublicClientId | Should -Be '22222222-2222-2222-2222-222222222222'
+        $registration.ApiScope | Should -Be 'api://11111111-1111-1111-1111-111111111111'
+        $registration.ClaimType | Should -Be 'oid'
+        $registration.MvAttribute | Should -Be 'Object GUID'
+    }
+
+    It 'refuses output with no JSON, naming none of it' {
+        { ConvertFrom-LabIdentityProviderRegistrationOutput -Text 'not json at all' } | Should -Throw '*not the JSON*'
+    }
+
+    It 'refuses JSON without a client secret' {
+        $json = $script:Json | ConvertFrom-Json
+        $json.clientSecret = ''
+        { ConvertFrom-LabIdentityProviderRegistrationOutput -Text ($json | ConvertTo-Json -Compress) } | Should -Throw '*clientSecret*'
+    }
+}
+
+Describe 'Register-ActiveDirectoryLabIdentityProvider' {
+    BeforeEach {
+        $script:Previous = @{ Actions = $env:GITHUB_ACTIONS; Env = $env:GITHUB_ENV }
+        $script:EnvFile = Join-Path ([System.IO.Path]::GetTempPath()) "jim-github-env-$([guid]::NewGuid().ToString('N'))"
+        $env:GITHUB_ACTIONS = $null
+        $env:GITHUB_ENV = $null
+        Mock Invoke-LabControl {
+            return ([ordered]@{
+                    authority = 'https://adfs.panoply.local/adfs'; clientId = 'c1'; clientSecret = 'placeholder-client-secret'
+                    publicClientId = 'p1'; apiScope = 'api://c1'; claimType = 'oid'; mvAttribute = 'Object GUID'
+                    changes = @(); moduleDigest = ('b' * 64)
+                } | ConvertTo-Json -Compress)
+        }
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $script:Previous.Actions
+        $env:GITHUB_ENV = $script:Previous.Env
+        Remove-Item -LiteralPath $script:EnvFile -ErrorAction SilentlyContinue
+    }
+
+    It 'runs Register-LabIdentityProvider.ps1 on the host for the AD FS server, the URL and the digest' {
+        $null = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64)
+        Should -Invoke Invoke-LabControl -Times 1 -ParameterFilter {
+            $Script -eq 'Register-LabIdentityProvider.ps1' -and
+            (($Arguments -join ' ') -eq "-Name adfs-primary -Url https://localhost:5243 -ModuleDigest $('b' * 64)")
+        }
+    }
+
+    It 'returns the registration' {
+        $registration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64)
+        $registration.ClientId | Should -Be 'c1'
+        $registration.ClientSecret | Should -Be 'placeholder-client-secret'
+    }
+
+    It 'in Actions, masks the client secret in the log and hands it to the scrub step, but writes it nowhere else' {
+        $env:GITHUB_ACTIONS = 'true'
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Register-ActiveDirectoryLabIdentityProvider -FederationConfig (Get-TestFederationConfig) -Url 'https://localhost:5243' -ModuleDigest ('b' * 64) 6>&1 | Out-String
+        $output | Should -Match '::add-mask::placeholder-client-secret'
+        (Get-Content -LiteralPath $script:EnvFile -Raw) | Should -Match '(?m)^JIM_AD_LAB_SCRUB_[0-9a-f]{32}=placeholder-client-secret\r?$'
+    }
+}
+
+Describe 'Set-ActiveDirectoryLabSsoEnvironment' {
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
+            [Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'puts the registration where docker-compose.ad-lab-adfs.yml reads it, in the process environment' {
+        Set-ActiveDirectoryLabSsoEnvironment -Registration ([pscustomobject]@{ ClientId = 'c1'; ClientSecret = 'placeholder-client-secret'; ApiScope = 'api://c1'; PublicClientId = 'p1' })
+        $env:JIM_AD_LAB_ADFS_CLIENT_ID | Should -Be 'c1'
+        $env:JIM_AD_LAB_ADFS_CLIENT_SECRET | Should -Be 'placeholder-client-secret'
+        $env:JIM_AD_LAB_ADFS_API_SCOPE | Should -Be 'api://c1'
+        $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID | Should -Be 'p1'
+    }
+
+    It 'is what the overlay names' {
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLIENT_ID', 'JIM_AD_LAB_ADFS_CLIENT_SECRET', 'JIM_AD_LAB_ADFS_API_SCOPE', 'JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID') {
+            $overlay | Should -Match ([regex]::Escape("`${$name"))
+        }
+    }
+}
+
+Describe 'ConvertFrom-LdapObjectGuidOutput' {
+    It 'reads objectGUID in the byte order Windows and JIM use' {
+        # 550e8400-e29b-41d4-a716-446655440000 as Active Directory stores it (Microsoft order: the first three groups
+        # little-endian), base64 as ldapsearch prints a binary value.
+        $guid = ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=jim-sso-admin,CN=Users,DC=panoply,DC=local', 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==')
+        $guid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+    }
+
+    It 'reads ldapsearch''s output as it comes, blank lines included' {
+        $guid = ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=jim-sso-admin,CN=Users,DC=panoply,DC=local', 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==', '')
+        $guid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+    }
+
+    It 'refuses output with no objectGUID' {
+        { ConvertFrom-LdapObjectGuidOutput -Line @('dn: CN=x,DC=panoply,DC=local') } | Should -Throw '*objectGUID*'
+    }
+
+    It 'refuses a value that is not 16 bytes' {
+        { ConvertFrom-LdapObjectGuidOutput -Line @('objectGUID:: AAEC') } | Should -Throw '*16 bytes*'
+    }
+}
+
+Describe 'Protect-ActiveDirectoryLabSecret' {
+    BeforeEach {
+        $script:Previous = @{ Actions = $env:GITHUB_ACTIONS; Env = $env:GITHUB_ENV }
+        $script:EnvFile = Join-Path ([System.IO.Path]::GetTempPath()) "jim-github-env-$([guid]::NewGuid().ToString('N'))"
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $script:Previous.Actions
+        $env:GITHUB_ENV = $script:Previous.Env
+        Remove-Item -LiteralPath $script:EnvFile -ErrorAction SilentlyContinue
+    }
+
+    It 'in Actions, masks the secret and hands it to the scrub step' {
+        $env:GITHUB_ACTIONS = 'true'
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Protect-ActiveDirectoryLabSecret -Secret 'placeholder-secret' 6>&1 | Out-String
+        $output | Should -Match '::add-mask::placeholder-secret'
+        (Get-Content -LiteralPath $script:EnvFile -Raw) | Should -Match '(?m)^JIM_AD_LAB_SCRUB_[0-9a-f]{32}=placeholder-secret\r?$'
+    }
+
+    It 'outside Actions, prints and writes nothing' {
+        $env:GITHUB_ACTIONS = $null
+        $env:GITHUB_ENV = $script:EnvFile
+        $output = Protect-ActiveDirectoryLabSecret -Secret 'placeholder-secret' 6>&1 | Out-String
+        $output | Should -Not -Match 'placeholder-secret'
+        (Test-Path -LiteralPath $script:EnvFile) | Should -BeFalse
+    }
+}
+
+Describe 'New-ActiveDirectoryLabSignInAdministrator' {
+    BeforeAll {
+        . "$PSScriptRoot/Directory-Helpers.ps1"
+        $script:PrimaryConfig = (Get-TestConfig -Instance Primary) + @{ Domain = 'panoply.local' }
+    }
+
+    BeforeEach {
+        $previousActions = $env:GITHUB_ACTIONS
+        $env:GITHUB_ACTIONS = $null
+        Mock New-DirectoryUser { return @{ Outcome = 'Created'; Success = $true; ExitCode = 0; Output = '' } }
+        Mock Invoke-LDAPSearch { return @("dn: $BaseDN", 'objectGUID:: AIQOVZvi1EGnFkRmVUQAAA==') }
+    }
+
+    AfterEach {
+        $env:GITHUB_ACTIONS = $previousActions
+    }
+
+    It 'creates jim-sso-admin in CN=Users with a fresh password, and returns its sign-in name and objectGUID' {
+        $admin = New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig
+        $admin.UserPrincipalName | Should -Be 'jim-sso-admin@panoply.local'
+        $admin.ObjectGuid | Should -Be ([guid]'550e8400-e29b-41d4-a716-446655440000')
+        $admin.Password.Length | Should -BeGreaterOrEqual 20
+        Should -Invoke New-DirectoryUser -Times 1 -ParameterFilter {
+            $Dn -eq 'CN=jim-sso-admin,CN=Users,DC=panoply,DC=local' -and $SamAccountName -eq 'jim-sso-admin' -and $Password -eq $admin.Password
+        }
+    }
+
+    It 'draws a different password each time' {
+        (New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig).Password |
+            Should -Not -Be (New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig).Password
+    }
+
+    It 'fails, without the password in the message, when the account cannot be created' {
+        Mock New-DirectoryUser { return @{ Outcome = 'AlreadyExists'; Success = $true; ExitCode = 68; Output = 'Already exists' } }
+        { New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:PrimaryConfig } | Should -Throw '*AlreadyExists*'
+    }
+}
+
+Describe 'Set-ActiveDirectoryLabSignInEnvironment' {
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_CLAIM_TYPE', 'JIM_AD_LAB_ADFS_MV_ATTRIBUTE', 'JIM_AD_LAB_ADFS_INITIAL_ADMIN', 'JIM_AD_LAB_ADFS_ADMIN_UPN', 'JIM_AD_LAB_ADFS_ADMIN_PASSWORD') {
+            [Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'switches JIM to the registration''s identifier, with the administrator as the initial admin, in the process environment' {
+        $registration = [pscustomobject]@{ ClaimType = 'oid'; MvAttribute = 'Object GUID' }
+        $admin = [pscustomobject]@{ UserPrincipalName = 'jim-sso-admin@panoply.local'; Password = 'placeholder-password'; ObjectGuid = [guid]'550e8400-e29b-41d4-a716-446655440000' }
+        Set-ActiveDirectoryLabSignInEnvironment -Registration $registration -Administrator $admin
+        $env:JIM_AD_LAB_ADFS_CLAIM_TYPE | Should -Be 'oid'
+        $env:JIM_AD_LAB_ADFS_MV_ATTRIBUTE | Should -Be 'Object GUID'
+        $env:JIM_AD_LAB_ADFS_INITIAL_ADMIN | Should -Be '550e8400-e29b-41d4-a716-446655440000'
+        $env:JIM_AD_LAB_ADFS_ADMIN_UPN | Should -Be 'jim-sso-admin@panoply.local'
+        $env:JIM_AD_LAB_ADFS_ADMIN_PASSWORD | Should -Be 'placeholder-password'
+    }
+
+    It 'is what the overlay reads, with defaults a fresh JIM can start with' {
+        $overlay = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..' 'docker' 'docker-compose.ad-lab-adfs.yml') -Raw
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_CLAIM_TYPE=${JIM_AD_LAB_ADFS_CLAIM_TYPE:-sub}'))
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_MV_ATTRIBUTE=${JIM_AD_LAB_ADFS_MV_ATTRIBUTE:-Subject Identifier}'))
+        $overlay | Should -Match ([regex]::Escape('JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ADFS_INITIAL_ADMIN:-'))
     }
 }

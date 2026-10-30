@@ -246,6 +246,75 @@ public class MetaverseMatchValueLookupDatabaseTests
         }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FindMetaverseObjectIdsByMatchValuesAsync_TypeAnalysedAsRare_DoesNotReadEveryObjectOfTheTypeAsync(bool caseSensitive)
+    {
+        // A first Full Synchronisation projects every person, then every group (#2492). The statistics were last
+        // gathered while only people existed, so the planner believes the group type almost empty and filtered the
+        // type by hashing every group the run had created so far, once per lookup: the join cost grew with each group
+        // page, from 4 to 85 seconds a page at Scale750k40kGroups. The type must be checked against each matched
+        // value's own object instead, which costs the same however many objects of the type exist.
+        var seeded = await SeedAsync();
+        var group = await AddMvoAsync(seeded.Group, seeded.EmployeeId, av => av.StringValue = "G100");
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        try
+        {
+            await using (var populate = new NpgsqlCommand("""
+                ALTER TABLE "MetaverseObjects" SET (autovacuum_enabled = false);
+                ALTER TABLE "MetaverseObjectAttributeValues" SET (autovacuum_enabled = false);
+                INSERT INTO "MetaverseObjects" ("Id", "Created", "TypeId", "Status", "DeletionInitiatedByType", "Origin")
+                SELECT md5('person' || n)::uuid, now(), @personTypeId, 0, 0, 0 FROM generate_series(1, 20000) AS n;
+                INSERT INTO "MetaverseObjectAttributeValues" ("Id", "AttributeId", "MetaverseObjectId", "StringValue")
+                SELECT md5('personav' || n)::uuid, @attributeId, md5('person' || n)::uuid, 'P' || n FROM generate_series(1, 20000) AS n;
+                ANALYZE "MetaverseObjects";
+                ANALYZE "MetaverseObjectAttributeValues";
+                INSERT INTO "MetaverseObjects" ("Id", "Created", "TypeId", "Status", "DeletionInitiatedByType", "Origin")
+                SELECT md5('group' || n)::uuid, now(), @groupTypeId, 0, 0, 0 FROM generate_series(1, 5000) AS n;
+                INSERT INTO "MetaverseObjectAttributeValues" ("Id", "AttributeId", "MetaverseObjectId", "StringValue")
+                SELECT md5('groupav' || n)::uuid, @attributeId, md5('group' || n)::uuid, 'G' || (1000 + n) FROM generate_series(1, 5000) AS n;
+                """, connection))
+            {
+                populate.Parameters.AddWithValue("personTypeId", seeded.Person.Id);
+                populate.Parameters.AddWithValue("groupTypeId", seeded.Group.Id);
+                populate.Parameters.AddWithValue("attributeId", seeded.EmployeeId.Id);
+                await populate.ExecuteNonQueryAsync();
+            }
+
+            await using var explain = new NpgsqlCommand(
+                "EXPLAIN " + MetaverseRepository.BuildMatchValueLookupSql(AttributeDataType.Text, caseSensitive), connection);
+            MetaverseRepository.AddMatchValueLookupParameters(explain, seeded.Group.Id, seeded.EmployeeId.Id, AttributeDataType.Text, ["G100"], take: 2);
+
+            var plan = new List<string>();
+            await using (var reader = await explain.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                    plan.Add(reader.GetString(0));
+            }
+
+            var planText = string.Join("\n", plan);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(plan.Any(line => line.Contains("IX_MetaverseObjects_TypeId")), Is.False,
+                    "The lookup reads every object of the type through the type index.\n" + planText);
+                Assert.That(plan.Any(line => line.Contains("Seq Scan on \"MetaverseObjects\"")), Is.False,
+                    "The lookup scans every Metaverse Object.\n" + planText);
+                Assert.That(await FindAsync(seeded.Group, seeded.EmployeeId, AttributeDataType.Text, ["G100"], caseSensitive),
+                    Is.EqualTo(new[] { group.Id }), "The rewritten lookup must still find the group.");
+            }
+        }
+        finally
+        {
+            await using var restore = new NpgsqlCommand("""
+                ALTER TABLE "MetaverseObjects" RESET (autovacuum_enabled);
+                ALTER TABLE "MetaverseObjectAttributeValues" RESET (autovacuum_enabled);
+                """, connection);
+            await restore.ExecuteNonQueryAsync();
+        }
+    }
+
     private async Task<IReadOnlyList<Guid>> FindAsync(MetaverseObjectType type, MetaverseAttribute attribute, AttributeDataType valueType,
         IReadOnlyList<object> values, bool caseSensitive, int take = 11)
     {

@@ -25,7 +25,20 @@
     else if (Provenance != null)
     {
         <MvoContributionBar Provenance="Provenance" ObjectTypeName="@ObjectTypeName"
-                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged" />
+                             ActiveFilterKey="@ContributionFilterKey" OnFilterChanged="OnContributionFilterChanged">
+            <Actions>
+                @* The Causality Explorer (#2100) opens from the Inspect view, beside the tabs no longer: it answers
+                   "why is this object the way it is?", which is the question this view asks. It sits in the
+                   contribution panel's heading, about the whole object, rather than the table's toolbar, which the
+                   open inspector already crowds. The host offers it to Administrators only. *@
+                @if (CausalityExplorerHref != null)
+                {
+                    <MudButton Variant="Variant.Filled" DropShadow="false" Size="Size.Small" StartIcon="@Icons.Material.Filled.Hub"
+                               Href="@CausalityExplorerHref" Class="jim-nowrap"
+                               data-testid="jim-mvo-explore-causality">Explore causality</MudButton>
+                }
+            </Actions>
+        </MvoContributionBar>
     }
 
     <div class="jim-inspect-layout">
@@ -91,9 +104,10 @@
                     @{ var group = context; var isSelected = SelectedAttributeId == group.AttributeId; }
                     @* The row's click (AttributeTable's OnRowClick) is a mouse convenience only; the real,
                        keyboard-accessible affordance is the attribute-name button (a row containing links cannot
-                       itself be a button). The Value cell can carry its own link (an email address, a reference
-                       value), so its content stops the click reaching the row. The Source cell is linkless (its
-                       compact chip leaves the links to the inspector), so a click there opens the inspector too. *@
+                       itself be a button). A click anywhere else opens the inspector too, except on something that
+                       does a thing of its own: a value's link (an email address, a reference) and the nested table
+                       of a large multi-valued attribute each stop the click reaching the row, so the link still
+                       navigates and the table still scrolls and searches. The Source cell is linkless. *@
                     <MudTd Class="jim-attr-name">
                         <button type="button" class="jim-attr-name-button mud-text-secondary"
                                 aria-expanded="@(isSelected ? "true" : "false")"
@@ -101,29 +115,29 @@
                                 @onclick:stopPropagation="true">@group.AttributeName</button>
                     </MudTd>
                     <MudTd Class="jim-attr-value">
-                        <div @onclick:stopPropagation="true">
-                            <AttributeValuesCell TValue="MetaverseObjectAttributeValue" Values="@group.Values" TotalCount="@group.TotalCount">
-                                <ValueTemplate Context="attributeValue">
-                                    @if (group.TotalCount == 1)
-                                    {
-                                        <div class="jim-inspect-value" title="@ValueTitle(group)">
-                                            @RenderValue(attributeValue)
-                                        </div>
-                                    }
-                                    else
-                                    {
+                        <AttributeValuesCell TValue="MetaverseObjectAttributeValue" Values="@group.Values" TotalCount="@group.TotalCount">
+                            <ValueTemplate Context="attributeValue">
+                                @if (group.TotalCount == 1)
+                                {
+                                    <div class="jim-inspect-value" title="@ValueTitle(group)">
                                         @RenderValue(attributeValue)
-                                    }
-                                </ValueTemplate>
-                                <OverflowContent>
+                                    </div>
+                                }
+                                else
+                                {
+                                    @RenderValue(attributeValue)
+                                }
+                            </ValueTemplate>
+                            <OverflowContent>
+                                <div @onclick:stopPropagation="true">
                                     <MvoMvaTable @key="group.AttributeName"
                                                  ValueCount="@group.TotalCount"
                                                  AttributeName="@group.AttributeName"
                                                  MetaverseObjectId="@MetaverseObject.Id"
                                                  IsReferenceAttribute="@group.IsReference" />
-                                </OverflowContent>
-                            </AttributeValuesCell>
-                        </div>
+                                </div>
+                            </OverflowContent>
+                        </AttributeValuesCell>
                     </MudTd>
                     @if (GroupBy != "source")
                     {
@@ -159,7 +173,8 @@
                 }
                 else if (SelectedAttributeProvenance != null)
                 {
-                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline" />
+                    <MvoAttributeInspector Provenance="SelectedAttributeProvenance" OnClose="OnCloseInspector" OnOpenInTimeline="OnOpenInTimeline"
+                                           CausalityExplorerHref="@CausalityExplorerHref" />
                 }
             </div>
         }
@@ -177,7 +192,7 @@
         {
             if (attributeValue.Attribute.Name == Constants.BuiltInAttributes.Email && !string.IsNullOrEmpty(attributeValue.StringValue))
             {
-                <MudLink Href="@($"mailto:{attributeValue.StringValue}")" Class="jim-text-code">@attributeValue.StringValue</MudLink>
+                <span @onclick:stopPropagation="true"><MudLink Href="@($"mailto:{attributeValue.StringValue}")" Class="jim-text-code">@attributeValue.StringValue</MudLink></span>
             }
             else
             {
@@ -223,9 +238,11 @@
         else if (attributeValue.Attribute.Type == AttributeDataType.Reference && attributeValue.ReferenceValue != null)
         {
             <MudChip T="string" Color="Color.Default">@attributeValue.ReferenceValue.Type?.Name</MudChip>
-            <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
-                @(attributeValue.ReferenceValue.NameOrId ?? attributeValue.ReferenceValue.Id.ToString())
-            </MudLink>
+            <span @onclick:stopPropagation="true">
+                <MudLink Href="@Utilities.GetMetaverseObjectHref(attributeValue.ReferenceValue)">
+                    @(attributeValue.ReferenceValue.NameOrId ?? attributeValue.ReferenceValue.Id.ToString())
+                </MudLink>
+            </span>
         }
         else
         {
@@ -286,6 +303,13 @@
 
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for this object, offered from the toolbar and the attribute inspector; null
+    /// when the reader may not open it (they are not an Administrator), which leaves no way in.
+    /// </summary>
+    [Parameter]
+    public string? CausalityExplorerHref { get; set; }
 
     private bool ShowInspector => SelectedAttributeId.HasValue;
 
@@ -520,6 +544,10 @@
     /// <summary>The source group an attribute belongs to (see <see cref="BuildSourceGroups"/>).</summary>
     private ValueOriginGrouping.Group SourceGroupFor(int attributeId) => _sourceGroupByAttributeId[attributeId];
 
+    /// <summary>The sign-in claim an attribute's value was read from, when it has the one origin and that is a claim.</summary>
+    private string? ClaimTypeFor(int attributeId) =>
+        OriginFor(attributeId) is { HasSeveralOrigins: false } summary ? summary.Origins[0].ClaimType : null;
+
     private RenderFragment RenderSourceCell(int attributeId) => __builder =>
     {
         if (ProvenanceLoading && Provenance == null)
@@ -530,7 +558,7 @@
         {
             @* A dot in the source's bar colour and its legend label: many rows name sources at once, so a column
                of pills would compete with the values. The rule reads beside it only while there is room. *@
-            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" />
+            <SourceDot Group="@SourceGroupFor(attributeId)" ShowRule="@(!ShowInspector)" ClaimType="@ClaimTypeFor(attributeId)" />
         }
     };
 }

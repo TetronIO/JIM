@@ -9,7 +9,33 @@ audience: administrator
 
 Each entry is titled by what you see on a run or in the log. For a run that ends with a warning or an error whatever the Connector, see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md).
 
-## Connection failures
+```jim-diagram
+archetype: decision
+title: Where an LDAP Connected System stops, and the first fix
+desc: "First, does JIM reach the directory server? If not, check the Host, the port (389 for LDAP, 636 for LDAPS) and the firewall, from inside the JIM container. If an LDAPS connection fails and JIM shows the certificate, read it: JIM names the check it failed and what to do. Second, does the sign-in succeed? On invalid credentials, check the username format for the authentication type, and the password. If the directory requires LDAP signing or encryption, turn on Use Secure Connection (LDAPS)? with port 636, trusting a private certificate authority under Admin > Certificates first. Third, if an import stops at the directory's search limit, exempt the JIM group from the limits rather than raising them for every client; if a Delta Import fails with a domain controller mismatch, run a Full Import."
+questions:
+  - { id: reach, label: "Does JIM reach the server?" }
+  - { id: bind, label: "Does the sign-in succeed?" }
+  - { id: run, label: "What does the run report?" }
+outcomes:
+  - { id: network, label: "Check Host, port and firewall", sub: from inside the JIM container }
+  - { id: cert, label: Read the certificate JIM shows, sub: the check it failed and the fix }
+  - { id: creds, label: Check the username and password, sub: its format must suit the authentication type }
+  - { id: ldaps, label: Turn on LDAPS, sub: "port 636; trust a private CA first" }
+  - { id: limits, label: Exempt the JIM group from the limits, sub: not the limit for every client }
+  - { id: full, label: Run a Full Import, sub: it records a new watermark }
+answers:
+  - { from: reach, to: network, label: "no" }
+  - { from: reach, to: cert, label: "no, over LDAPS" }
+  - { from: reach, to: bind, label: "yes" }
+  - { from: bind, to: creds, label: invalid credentials }
+  - { from: bind, to: ldaps, label: signing or encryption required }
+  - { from: bind, to: run, label: "yes" }
+  - { from: run, to: limits, label: stopped at a search limit }
+  - { from: run, to: full, label: domain controller mismatch }
+```
+
+## :material-lan-disconnect: Connection failures
 
 If JIM cannot connect to the directory server:
 
@@ -23,7 +49,7 @@ If JIM cannot connect to the directory server:
 
     You will see it in two places: on the Connected System's settings when you test the connection, and on the failed Activity when a Run Profile could not connect. The same detail is available to automation on the Activity's `errorDetail` field in the REST API. If the connection failed for a reason that is nothing to do with the certificate, the original error stands unchanged.
 
-## Authentication failures
+## :material-account-lock-outline: Authentication failures
 
 If authentication fails with "invalid credentials":
 
@@ -31,13 +57,13 @@ If authentication fails with "invalid credentials":
 - Check that the service account password is correct and has not expired.
 - Ensure the service account is not locked out or disabled.
 
-## Sign-in refused because the directory requires LDAP signing or encryption
+## :material-shield-alert-outline: Sign-in refused because the directory requires LDAP signing or encryption
 
 A domain controller that enforces LDAP signing refuses a simple bind over plain LDAP, and Windows Server 2025 domain controllers enforce it by default. JIM reports the refusal with the remedy rather than the directory's bare "Strong authentication is required for this operation": turn on "Use Secure Connection (LDAPS)?" on the Connected System and set the port to 636 (or wherever the directory listens for LDAPS), adding the directory's certificate authority under Admin > Certificates first if it is a private one. Do not relax the domain controller's signing policy to suit JIM; LDAPS protects the service account's credentials, which a plain LDAP bind sends unencrypted.
 
 If the same refusal arrives over LDAPS, encryption is not the problem: the domain controller wants more than a simple bind provides, most often because it enforces LDAP channel binding. JIM's message says so; check the directory's signing and channel binding policy for the account JIM connects as.
 
-## Import fails with "The directory stopped the import ... at its search limit"
+## :material-alert-octagon-outline: Import fails with "The directory stopped the import ... at its search limit"
 
 The account JIM binds as is subject to the directory's search limits, and the container being imported holds more objects than they allow. The run ends as **Failed with error** before importing anything from that container, because continuing would import a truncated container and a Full Import would then treat every object past the limit as gone. The message names the container, the object type and the account, for example:
 
@@ -47,7 +73,11 @@ On OpenLDAP the limit is `olcSizeLimit` (default 500) and it is enforced across 
 
 On 389 Directory Server the limits are `nsslapd-sizelimit` (default 2000) and `nsslapd-lookthroughlimit` (default 5000), applied across a paged search in the same way for every account but the Directory Manager. Set `nsSizeLimit`, `nsLookThroughLimit` and `nsPagedSizeLimit` to `-1` on the service account's own entry, as the recipe under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) does, rather than raising the server-wide limits.
 
-## Delta import not detecting changes
+## :material-database-alert-outline: Delta Import fails with "the directory stopped reading cn=accesslog at its size limit"
+
+On OpenLDAP, the account JIM binds as is subject to `olcSizeLimit` on the `cn=accesslog` database, and more changes were logged since the last import than the limit allows one search to return. The run ends as **Failed with error** before staging anything: carrying on from the newest change it had read could miss a change that started earlier and was logged later. Exempt the JIM group from the size limit on the accesslog database, as on each suffix (see [Service Account Permissions](jim-ldap-connector-permissions.md)), then run the Delta Import again; a Full Import works meanwhile and detects deletions by absence.
+
+## :material-history: Delta import not detecting changes
 
 If delta imports return no changes when changes are expected:
 
@@ -58,11 +88,11 @@ If delta imports return no changes when changes are expected:
 - **389 Directory Server, deletions in particular**: a Delta Import that refuses to run naming `nsslapd-log-deleted` has found the Retro Changelog plug-in not recording deleted entries; set it to `on` on `cn=Retro Changelog Plugin,cn=plugins,cn=config` and restart the directory. A run that completes with a warning that JIM could not confirm the plug-in records deleted entries needs the plug-in rule under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server), which grants the service account read on that entry. A run that warns that a particular deletion could not be identified read a deletion recorded before the setting was turned on; a Full Import detects it by absence.
 - Run a full import to re-baseline, then test delta import again.
 
-## Password Modify refused with "Confidentiality required"
+## :material-form-textbox-password: Password Modify refused with "Confidentiality required"
 
 389 Directory Server accepts the Password Modify operation only over a secure connection, and there is no setting on the directory that relaxes this. Turn on "Use Secure Connection (LDAPS)?" on the Connected System, switching the port to the directory's LDAPS port (636 by default), and if the directory's certificate is issued by a private certificate authority, add that authority under Admin > Certificates first. See [Setting Passwords](jim-ldap-connector-passwords.md#setting-passwords). Nothing is lost in the meantime: a password change the directory refused is parked, with the directory's own words, rather than retried into the same refusal, and an account owed its first password stays owed it; [Passwords](../concepts/passwords.md) says how parked work is released.
 
-## Delta import fails with a domain controller mismatch error
+## :material-server-minus-outline: Delta import fails with a domain controller mismatch error
 
 Active Directory and Samba AD Delta Imports check that they are still talking to the same domain controller that produced the persisted USN watermark, and fail fast with an error naming the previous and current domain controller (or their invocationId) if not. This is expected, protective behaviour, not a bug: a USN watermark from one domain controller is meaningless against another, and continuing regardless risks silently skipping or re-importing changes.
 
@@ -79,7 +109,7 @@ What to do:
 - If you need consistent affinity to one specific domain controller regardless of availability, set Preferred Domain Controller rather than relying on auto-discovery.
 - If the account JIM connects as cannot read the domain controller's NTDS Settings object, the invocationId cannot be read. JIM then compares hostnames only, which catches a different domain controller but catches a restore of the same one only through the USN check above, and logs a warning that identity could not be verified. Grant the account read access to that object to restore the stronger check.
 
-## Export failures
+## :material-export: Export failures
 
 If exports fail with LDAP errors:
 
@@ -101,9 +131,9 @@ Any of these remedies works:
 
 If the Synchronisation Rule already has an Initial Password, the account's password will not now be delivered: it expired or was cancelled before it could be set, and **Operations > Passwords** shows which. At the next import of the Connected System, Full or Delta, JIM stops waiting for a password, since none is owed any more, and the export after it writes your Attribute Flow's enabled value, which Active Directory refuses for the same reason. Set a password on the account with the set-password action, enabling it there. A password that is merely queued, retrying or parked does not cause this error, on a Create or an Update: the account waits, disabled, until the password is delivered.
 
-Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is retried on later export runs with a growing delay between attempts, up to the ordinary retry limit, and the Metaverse Object is untouched.
+Nothing is lost while you fix it. The account stays disabled, the Pending Export stays queued and is attempted again at every export run, and the Metaverse Object is untouched.
 
-## Still stuck?
+## :material-lifebuoy: Still stuck?
 
 Collect these before asking for help:
 

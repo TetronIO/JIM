@@ -782,7 +782,7 @@ public class SqlConnectorDeltaImportTests
     public void ValidateSettingValues_TheDocumentedDeltaExample_IsAccepted()
     {
         var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
-        var settingValues = DeltaSettingValues(connector, SqlConnectorConstants.DeltaConfigurationExample, SqlConnectorConstants.DeltaImportModeChangeLogTable);
+        var settingValues = DeltaSettingValues(connector, SqlObjectTypesDocumentExamples.DeltaConfiguration, SqlConnectorConstants.DeltaImportModeChangeLogTable);
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
             "The example in the setting's own description is the first thing an administrator will paste in, so it has to be one the Connector accepts.");
@@ -792,7 +792,7 @@ public class SqlConnectorDeltaImportTests
     public void ValidateSettingValues_TheDocumentedDeltaExampleInWatermarkColumnMode_IsAccepted()
     {
         var connector = new SqlConnector { ProviderFactory = _ => new FakeSqlProvider() };
-        var settingValues = DeltaSettingValues(connector, SqlConnectorConstants.DeltaConfigurationExample, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
+        var settingValues = DeltaSettingValues(connector, SqlObjectTypesDocumentExamples.DeltaConfiguration, SqlConnectorConstants.DeltaImportModeWatermarkColumn);
 
         Assert.That(connector.ValidateSettingValues(settingValues, _logger), Is.Empty,
             "The example shows both modes, so it has to be complete under either one, related tables included.");

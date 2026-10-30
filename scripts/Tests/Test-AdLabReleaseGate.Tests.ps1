@@ -127,6 +127,7 @@ Describe 'Test-AdLabStatus' {
         $statuses = @(
             (Get-FakeStatus -Context 'ci/build' -State 'success'),
             (Get-FakeStatus -Context 'jim-ad-lab-rebuild' -State 'success'),
+            (Get-FakeStatus -Context 'jim-ad-lab-adfs' -State 'success'),
             (Get-FakeStatus -Context 'jim-ad-lab-old' -State 'success')
         )
         $result = Test-AdLabStatus -Statuses $statuses -Sha $script:Sha

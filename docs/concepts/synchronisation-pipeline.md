@@ -3,7 +3,7 @@ title: Synchronisation Pipeline
 description: How JIM moves identity data through three phases, Import, Synchronisation and Export, and what each one does and protects.
 type: concept
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Synchronisation Pipeline
@@ -14,7 +14,7 @@ JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and
 
 <p class="jim-diagram-caption">Data is staged either side of the Metaverse, in the Connector Space belonging to each Connected System: imports land there as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export. The systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
-## 📥 Phase 1: Import
+## :material-import: Phase 1: Import
 
 Import pulls data from a Connected System into its **Connector Space**. The result is a set of Connected System Objects that represent the current state of the external system.
 
@@ -24,15 +24,15 @@ A **Full Import** reads every object from the Connected System and compares it a
 
 Full Imports are used for:
 
-- **Initial setup of a Connected System**<br /> Bringing in all data from a new external system for the first time.
-- **Periodic reconciliation to ensure the Connector Space is accurate**<br /> Regular checks to verify imported data matches the source system.
-- **Recovery after errors or data issues**<br /> Reloading all data to restore consistency after problems.
+- **Initial setup**<br /> Bringing in all data from a new Connected System for the first time.
+- **Periodic reconciliation**<br /> Checking that the Connector Space still matches the source system.
+- **Recovery**<br /> Reloading all data to restore consistency after errors or data issues.
 
 A Full Import Run Profile can limit how many objects one run may newly mark as deleted, so a broken filter or base DN cannot turn a Full Import into a mass deprovisioning; [Run Profiles > Safeguards](../configuration/run-profiles.md#full-import) covers the limits and what a run that exceeds one does.
 
 ### Delta Import
 
-A **Delta Import** reads only the objects that have changed since the last import. It is much faster than a Full Import for a large directory, and needs the Connected System to track its changes: the [LDAP Connector](../connectors/jim-ldap-connector.md) reads Active Directory's update sequence numbers, OpenLDAP's accesslog overlay, or a changelog such as 389 Directory Server's.
+A **Delta Import** reads only the objects that have changed since the last import. It is much faster than a Full Import for a large directory, and needs the Connected System to track its changes: the [LDAP Connector](../connectors/jim-ldap-connector.md) reads Active Directory's update sequence numbers, OpenLDAP's accesslog overlay, or a changelog such as 389 Directory Server's. A Delta Import Run Profile can take [deletion limits](../configuration/run-profiles.md#delta-import) too.
 
 ### What Happens During Import
 
@@ -56,8 +56,9 @@ The figures in brackets describe the objects the run read, and count each one on
 | **updated** | JIM held, and at least one of its values changed. A provisioned object that its first import confirms exists counts here too, because confirming it changes its state. |
 | **unchanged** | JIM held, and matches what JIM holds. An object whose export the import confirms counts here when the Connected System holds the exported values as JIM sent them, because JIM applied those values when the export succeeded; if the Connected System stored something different, the object counts as updated. A delete for an object JIM no longer holds, or already holds as obsolete, also counts here. |
 | **deleted** | the Connector reported deleted, so JIM obsoleted it. |
+| **deletions withheld** | the Connector reported deleted, but the Delta Import's deletion limits held back; JIM left it as it was. |
 
-Unchanged, deleted and errors appear only when there are any.
+Unchanged, deleted, deletions withheld and errors appear only when there are any.
 
 **Errors** counts the problems the run recorded, one per [execution item](../configuration/activity-execution-items.md). An object JIM could not import at all appears only among the errors. An object with a value JIM could not import is imported without that value, and JIM keeps any value it already held for the attribute, so the object counts in the brackets as well as among the errors.
 
@@ -73,9 +74,9 @@ At scale, most objects in a Full Import have not changed since the previous run.
 
 On the next Full Import, JIM computes the same hash for each incoming object *before* loading its existing attribute values. If the freshly computed hash matches the stored one (and the object's schema has not changed since it was last stamped), JIM skips loading and comparing that object's attributes entirely; only genuinely new or changed objects pay the full comparison cost. The hash is always computed from the incoming data, never from what is already stored, so any doubt falls back to the full comparison: a mismatch never causes a change to be missed, only an unnecessary (but harmless) re-comparison.
 
-This optimisation is transparent and requires no configuration. To validate it, or to investigate a suspected discrepancy, enable **Verification Mode** on a Full Import Run Profile (see [Run Profiles](../configuration/run-profiles.md)): with Verification Mode on, JIM performs the full comparison on every object regardless of the stored hash, and reports an error if a stored hash matched but the comparison still found a change. Verification Mode is slower (it forgoes the optimisation) and is intended for occasional validation, not everyday use.
+This optimisation needs no configuration. To validate it, or to investigate a suspected discrepancy, turn on [Verification Mode](../configuration/run-profiles.md#verification-mode-full-import) on a Full Import Run Profile, which compares every object and reports any disagreement with its stored hash.
 
-## 🔀 Phase 2: Sync (Synchronisation)
+## :material-sync: Phase 2: Sync (Synchronisation)
 
 Sync is the core phase, where JIM reconciles each Connector Space with the Metaverse. It applies **Synchronisation Rules** to decide how Connected System Objects relate to Metaverse Objects, and how attributes flow between them.
 
@@ -83,7 +84,7 @@ Sync is the core phase, where JIM reconciles each Connector Space with the Metav
 
 Inbound sync processes Connected System Objects from source systems and updates the Metaverse. For each one in scope:
 
-1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object.
+1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object, unless the rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps the join.
 
 2. **Matching**<br /> JIM looks for the Metaverse Object the object belongs to, using the [Object Matching Rules](../configuration/object-matching-rules.md), which correlate it with an existing Metaverse Object on, say, an employee ID, an email address, or a combination of attributes.
 
@@ -99,7 +100,7 @@ Outbound sync evaluates Metaverse Objects against export Synchronisation Rules, 
 
 1. **Scoping**<br /> JIM evaluates whether the Metaverse Object is in scope for the export rule.
 
-2. **Provisioning**<br /> If it is in scope but has no Connected System Object in the target Connected System, JIM provisions (creates) one.
+2. **Provisioning**<br /> If it is in scope but has no Connected System Object in the target Connected System, and the rule provisions, JIM creates one.
 
 3. **Attribute Flow**<br /> The rule's Attribute Flows copy values from the Metaverse Object to the Connected System Object, optionally transforming them with expressions.
 
@@ -113,12 +114,12 @@ What prevents this from looping is value-level change detection, not a special c
 
 ### Full Sync vs Delta Sync
 
-- **Full Synchronisation** re-evaluates every Connected System Object against the Synchronisation Rules, except a joined one unchanged since the last synchronisation, which it skips unless Synchronisation Rule configuration has changed since the last Full Synchronisation. Use it after changing Synchronisation Rule configuration, or for periodic reconciliation.
-- **Delta Synchronisation** processes only the Connected System Objects that have changed since they were last synchronised. It is faster, and is the normal operational mode. A change an import commits while a synchronisation of the same Connected System is running, for example in the same Schedule parallel group, is never lost: if the running synchronisation does not process it, the next one does.
+- **Full Synchronisation** processes every Connected System Object, changed or not. Use it for a new Connected System, after upgrading JIM, after a change only a Full Synchronisation applies, and to correct anything a Delta Synchronisation missed. It is slower, so schedule Delta Synchronisation for routine runs.
+- **Delta Synchronisation** processes the Connected System Objects that have changed since they were last synchronised, and every object of an Object Type awaiting synchronisation. It is faster, and is the normal operational mode. A change an import commits while a synchronisation of the same Connected System is running, for example in the same Schedule parallel group, is never lost: if the running synchronisation does not process it, the next one does.
 
-One kind of configuration change does not wait for a Full Sync: an export rule change that moves objects into or out of its scope (a new or re-enabled rule, provisioning switched on, changed Scoping Criteria). JIM marks the affected Metaverse Objects, and the next synchronisation of any Connected System, Delta included, provisions and deprovisions them; see [When a change to an export rule takes effect](../configuration/deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
+Most saved configuration changes do not wait for a Full Synchronisation: the next synchronisation of the Connected System, Delta included, applies an import rule change, and the next synchronisation of any Connected System applies an export scope change. [When a change takes effect](../configuration/configuration-changes.md#when-a-change-takes-effect) says which waits for what.
 
-## 📤 Phase 3: Export
+## :material-export: Phase 3: Export
 
 Export sends Pending Exports from the Connector Space to the target Connected System. Each one is a create, update, or delete.
 
@@ -127,12 +128,12 @@ Export sends Pending Exports from the Connector Space to the target Connected Sy
 1. JIM reads the Pending Exports for the Connected System.
 2. For each one, the Connector sends the change to the external system.
 3. A successful export is confirmed, usually by the next import, and its Pending Export is cleared.
-4. A failed export stays a Pending Export, with its error recorded on the run's Activity; [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#operation-failed-export-failed) explains the retries.
+4. A failed export stays a Pending Export, with its error recorded on the run's Activity, and is attempted again at every export run until the cause is fixed; [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#operation-failed-export-failed) explains each error.
 5. The run's Activity records how many changes were exported.
 
 ### Batching and Parallelism
 
-Exports are processed in batches, and a Connector that supports it exports several batches at once: the LDAP Connector's export concurrency is a setting on the Connected System.
+Exports are sent in batches, several at once where the Connector supports it; [Export Performance](../configuration/export-performance.md) explains how many, and how to raise or limit it.
 
 ### References That Cannot Resolve Yet
 
@@ -152,7 +153,7 @@ An Export Run Profile can limit how many creates, updates and deletes one run ma
 
 When an export to a Connected System succeeds, JIM applies the exported attribute values to its own record of that Connected System Object immediately, rather than waiting for the next import to bring them back. The confirming import still runs as usual, comparing what the Connected System reports against what JIM expects, but for a successfully exported object it typically finds nothing left to do, which keeps it fast at large scale.
 
-## Putting It Together
+## :material-sitemap-outline: Putting It Together
 
 A typical synchronisation cycle follows this pattern:
 
@@ -169,9 +170,9 @@ A typical synchronisation cycle follows this pattern:
 
 Before running the real cycle for one object, [Sync Preview](../configuration/sync-preview.md) answers what steps 2 to 4 would do with it: whether it would join or project, what would flow, and what would export, without staging or changing anything.
 
-## Initialising JIM
+## :material-rocket-launch-outline: Initialising JIM
 
-Initialise JIM once in a new deployment, and again after any significant change to Synchronisation Rules, [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
+Initialise JIM once in a new deployment, and again after a significant change to apply in order across Connected Systems, such as new [Object Matching Rules](../configuration/object-matching-rules.md) or [Attribute Priority](attribute-priority.md). Initialising means running every Connected System through the pipeline in a fixed order before returning to delta cycles.
 
 **The order:**
 
@@ -186,6 +187,6 @@ Initialise JIM once in a new deployment, and again after any significant change 
 
 **After initialisation,** return to normal delta cycles (see [Schedules](../configuration/schedules.md#common-workflows)).
 
-## Run Profiles
+## :material-play-circle-outline: Run Profiles
 
 Each phase runs as a **Run Profile**, an operation configured on a Connected System, started from the portal, the REST API or PowerShell, or by a Schedule. [Run Profiles](../configuration/run-profiles.md#run-types) lists the run types.

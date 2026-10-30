@@ -10,13 +10,17 @@ using JIM.Web.Models;
 using JIM.Web.Models.Api;
 using JIM.Web.Services;
 using JIM.Application;
+using JIM.Connectors;
 using JIM.Data;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -30,6 +34,7 @@ public class ActivitiesControllerTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<ILogger<ActivitiesController>> _mockLogger = null!;
     private Mock<IActivityEtaTracker> _mockEtaTracker = null!;
     private JimApplication _application = null!;
@@ -41,6 +46,8 @@ public class ActivitiesControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>().StubConfigurationChangeSynchronisationReads();
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockActivityRepo.Setup(r => r.GetChildActivityCountsAsync(It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new Dictionary<Guid, int>());
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
@@ -689,6 +696,133 @@ public class ActivitiesControllerTests
         Assert.That(detail.ExecutionStats!.TotalObjectChangeCount, Is.EqualTo(100));
     }
 
+    [Test]
+    public async Task GetActivityAsync_ConfigurationChangeActivity_ReportsItsChangesAsAwaitingUntilARunAppliesThemAsync()
+    {
+        var activityId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var appliedAt = DateTime.UtcNow.AddMinutes(-3);
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId, TargetType = ActivityTargetType.SynchronisationRule, Status = ActivityStatus.Complete
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(activityId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+                    Reason = "HR Inbound: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ConfigurationChangeActivityId = activityId,
+                    InitiatedByType = ActivityInitiatorType.User, InitiatedByName = "Alice Adams",
+                    ClaimedByActivityId = runId, AppliedAt = appliedAt
+                },
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 2, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 8, ObjectTypeName = "group",
+                    Reason = "HR Groups: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ConfigurationChangeActivityId = activityId
+                }
+            ]);
+
+        var detail = (await _controller.GetActivityAsync(activityId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        var types = detail!.ConfigurationChangeSynchronisations.ToDictionary(type => type.ObjectTypeName);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(types.Keys, Is.EquivalentTo(new[] { "user", "group" }));
+            Assert.That(types["user"].IsApplied, Is.True);
+            Assert.That(types["user"].AppliedAt, Is.EqualTo(appliedAt));
+            Assert.That(types["user"].AppliedByActivityId, Is.EqualTo(runId));
+            Assert.That(types["user"].Changes.Single().InitiatedByName, Is.EqualTo("Alice Adams"));
+            Assert.That(types["user"].ObjectCount, Is.Null, "a configuration change Activity processes no objects");
+            Assert.That(types["group"].IsApplied, Is.False);
+            Assert.That(types["group"].AppliedAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_SynchronisationRunThatClaimedChanges_ReportsTheObjectsItProcessedInFullAsync()
+    {
+        var runId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(runId)).ReturnsAsync(new Activity
+        {
+            Id = runId, TargetType = ActivityTargetType.ConnectedSystemRunProfile, ConnectedSystemId = 3,
+            ConnectedSystemRunType = ConnectedSystemRunType.DeltaSynchronisation, Status = ActivityStatus.Complete
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(runId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+                    Reason = "HR Inbound: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ClaimedByActivityId = runId
+                }
+            ]);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(3, 7, null)).ReturnsAsync(12_500);
+
+        var detail = (await _controller.GetActivityAsync(runId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        var type = detail!.ConfigurationChangeSynchronisations.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(type.ObjectCount, Is.EqualTo(12_500));
+            Assert.That(type.IsApplied, Is.False, "claimed but not applied: the run has not completed its application");
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityThatCannotHaveSynchronisationChanges_ReadsNoneAsync()
+    {
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId, TargetType = ActivityTargetType.HistoryRetentionCleanup, Status = ActivityStatus.Complete
+        });
+
+        var detail = (await _controller.GetActivityAsync(activityId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ConfigurationChangeSynchronisations, Is.Empty);
+            _mockConnectedSystemRepo.Verify(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ImportWithWatermarks_DescribesThemThroughItsConnectorAsync()
+    {
+        // Read parity with the portal, which says in words what range a Delta Import read rather than printing the
+        // Connector's persisted data.
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            ConnectedSystemId = 7,
+            ConnectedSystemRunType = ConnectedSystemRunType.DeltaImport,
+            ImportWatermarkFrom = "{\"changeSequence\":8}",
+            ImportWatermarkTo = "{\"changeSequence\":10}"
+        });
+        var connectedSystems = new Mock<IConnectedSystemRepository>().StubConfigurationChangeSynchronisationReads();
+        connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(7, It.IsAny<bool>())).ReturnsAsync(new ConnectedSystem
+        {
+            Id = 7,
+            Name = "SCIM clients",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.ScimServiceProviderConnectorName }
+        });
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail?.ImportReadRange, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ImportReadRange!.From?.Kind, Is.EqualTo("change sequence"));
+            Assert.That(detail!.ImportReadRange!.From?.Points.Single().Number, Is.EqualTo(8));
+            Assert.That(detail!.ImportReadRange!.To?.Points.Single().Number, Is.EqualTo(10));
+        }
+    }
+
     #endregion
 
     #region GetActivityStatsAsync tests
@@ -1143,7 +1277,7 @@ public class ActivitiesControllerTests
 
         await _controller.GetActivityExecutionItemAsync(item.Id);
 
-        _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+        _mockActivityRepo.Verify(r => r.GetActivityRunProfileExecutionItemDetailAsync(It.IsAny<Guid>()), Times.Never);
     }
 
     [Test]
@@ -1261,6 +1395,154 @@ public class ActivitiesControllerTests
         Assert.That(dto?.JoinMatchedValue, Is.Null);
         _mockActivityRepo.Verify(r => r.GetJoinedOutcomeAsync(It.IsAny<Guid>()), Times.Never);
     }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithoutInclude_LeavesOutcomesOutAndDoesNotReadThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Outcomes, Is.Null);
+        _mockActivityRepo.Verify(r => r.GetSyncOutcomesAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomes_ReturnsTheTreeNestedAndInOrdinalOrderAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var projected = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, ordinal: 0);
+        var flow = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, ordinal: 0, parent: projected);
+        flow.DetailCount = 12;
+        flow.SyncRuleName = "HR Inbound";
+        var provisioned = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, ordinal: 1, parent: projected);
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0, parent: provisioned);
+        staged.StagedChangeType = PendingExportChangeType.Create;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        // Read flat and in no particular order, as the query returns them.
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged, provisioned, flow, projected]);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "outcomes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes, Is.Not.Null);
+        var root = dto!.Outcomes!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(root.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Projected));
+            Assert.That(root.Children.Select(c => c.OutcomeType), Is.EqualTo(new[]
+            {
+                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+            }));
+            Assert.That(root.Children[0].DetailCount, Is.EqualTo(12));
+            Assert.That(root.Children[0].SyncRuleName, Is.EqualTo("HR Inbound"));
+            Assert.That(root.Children[1].Children.Single().StagedChangeType, Is.EqualTo(PendingExportChangeType.Create));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomes_ItemWithNoOutcomes_ReturnsAnEmptyListAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([]);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "Outcomes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes, Is.Not.Null.And.Empty, "asked for and none recorded reads as empty, not as left out");
+    }
+
+    [TestCase("bogus")]
+    [TestCase("outcomes,bogus")]
+    public async Task GetActivityExecutionItemAsync_IncludeNamesSomethingUnknown_ReturnsBadRequestAsync(string include)
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id, include);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithoutInclude_LeavesChangesOutAndDoesNotReadThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        var metaverse = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Changes, Is.Null);
+        metaverse.Verify(r => r.GetMvoChangeForExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+        connectedSystems.Verify(r => r.GetCsoChangeForExecutionItemAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeChanges_ReturnsTheItemsChangesAndEachStagedExportAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var mvoChange = new MvoChangeHistoryDto { Id = Guid.NewGuid(), ActivityRunProfileExecutionItemId = item.Id };
+        var stagedChange = new CsoChangeHistoryDto { Id = Guid.NewGuid() };
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0);
+        staged.ConnectedSystemObjectChangeId = stagedChange.Id;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        metaverse.Setup(r => r.GetMvoChangeForExecutionItemAsync(item.Id)).ReturnsAsync(mvoChange);
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetCsoChangeForExecutionItemAsync(item.Id)).ReturnsAsync((CsoChangeHistoryDto?)null);
+        connectedSystems.Setup(r => r.GetCsoChangesAsync(It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { stagedChange.Id }))))
+            .ReturnsAsync([stagedChange]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "changes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Changes, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.Changes!.MetaverseObjectChange?.Id, Is.EqualTo(mvoChange.Id));
+            Assert.That(dto!.Changes!.ConnectedSystemObjectChange, Is.Null);
+            Assert.That(dto!.Changes!.StagedExportChanges.Select(c => c.Id), Is.EqualTo(new[] { stagedChange.Id }));
+            Assert.That(dto!.Outcomes, Is.Null, "changes alone does not bring the outcome tree");
+        }
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeOutcomesAndChanges_LinksTheStagedExportToItsChangeAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var stagedChange = new CsoChangeHistoryDto { Id = Guid.NewGuid() };
+        var staged = Outcome(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, ordinal: 0);
+        staged.ConnectedSystemObjectChangeId = stagedChange.Id;
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomesAsync(item.Id)).ReturnsAsync([staged]);
+        var metaverse = new Mock<IMetaverseRepository>();
+        _mockRepository.Setup(r => r.Metaverse).Returns(metaverse.Object);
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetCsoChangesAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([stagedChange]);
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "outcomes, changes") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.Outcomes?.Single().ConnectedSystemObjectChangeId, Is.EqualTo(stagedChange.Id));
+        Assert.That(dto?.Changes?.StagedExportChanges.Single().Id, Is.EqualTo(stagedChange.Id));
+    }
+
+    private static ActivityRunProfileExecutionItemSyncOutcome Outcome(
+        ActivityRunProfileExecutionItemSyncOutcomeType type, int ordinal, ActivityRunProfileExecutionItemSyncOutcome? parent = null) => new()
+    {
+        Id = Guid.NewGuid(),
+        OutcomeType = type,
+        Ordinal = ordinal,
+        ParentSyncOutcomeId = parent?.Id
+    };
 
     private static ActivityRunProfileExecutionItemMatchCandidate Candidate(Guid id, string name, int ordinal) => new()
     {

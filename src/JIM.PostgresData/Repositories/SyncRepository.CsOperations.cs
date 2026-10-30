@@ -16,6 +16,76 @@ namespace JIM.PostgresData.Repositories;
 
 public partial class SyncRepository
 {
+    #region Connected System Object — Reference Targets
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
+    {
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        // A loose index scan: each step asks the (ConnectedSystemId, TypeId, Id) index for the next type id above the
+        // last, so the cost is one probe per type in use rather than a pass over every object.
+        await using var command = new NpgsqlCommand(
+            """
+            WITH RECURSIVE types AS (
+                (SELECT "TypeId" FROM "ConnectedSystemObjects"
+                 WHERE "ConnectedSystemId" = @connectedSystemId
+                 ORDER BY "TypeId" LIMIT 1)
+                UNION ALL
+                SELECT (SELECT cso."TypeId" FROM "ConnectedSystemObjects" cso
+                        WHERE cso."ConnectedSystemId" = @connectedSystemId AND cso."TypeId" > types."TypeId"
+                        ORDER BY cso."TypeId" LIMIT 1)
+                FROM types
+                WHERE types."TypeId" IS NOT NULL
+            )
+            SELECT "TypeId" FROM types WHERE "TypeId" IS NOT NULL
+            """, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+
+        var inUse = new HashSet<int>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            inUse.Add(reader.GetInt32(0));
+        return inUse;
+    }
+
+    /// <inheritdoc />
+    public async Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
+    {
+        var result = attributeIds.Distinct().ToDictionary(id => id, _ => (IReadOnlySet<int>)new HashSet<int>());
+        if (result.Count == 0)
+            return result;
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        // One pass over the attributes' values (measured ~2 s for 7.25M reference values across 790,000 objects). The
+        // referenced row is reached by its primary key, so the referencing system needs no filter of its own: an
+        // attribute id belongs to exactly one Connected System's schema.
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT DISTINCT av."AttributeId", target."TypeId"
+            FROM "ConnectedSystemObjectAttributeValues" av
+            INNER JOIN "ConnectedSystemObjects" target ON target."Id" = av."ReferenceValueId"
+            WHERE av."AttributeId" = ANY(@attributeIds)
+            """, npgsqlConn, npgsqlTx);
+        command.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+        {
+            Value = result.Keys.ToArray()
+        });
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            ((HashSet<int>)result[reader.GetInt32(0)]).Add(reader.GetInt32(1));
+
+        return result;
+    }
+
+    #endregion
+
     #region Connected System Object — Parallel Bulk Create
 
     /// <summary>
@@ -388,8 +458,8 @@ public partial class SyncRepository
     /// Persists an optimistic export apply delta: bulk-inserts new attribute value rows via COPY
     /// binary import and bulk-deletes superseded ones. Touches NO parent CSO row - see the remark
     /// on <see cref="JIM.Data.Repositories.ISyncRepository.ApplyExportedAttributeValuesAsync"/> for
-    /// why <c>LastUpdated</c> must stay untouched here (it is what re-arms the Full Synchronisation
-    /// unchanged-object watermark for a no-op confirming import).
+    /// why <c>LastUpdated</c> must stay untouched here (it is what keeps a no-op confirming import
+    /// out of the next Delta Synchronisation).
     /// </summary>
     public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
@@ -653,6 +723,9 @@ public partial class SyncRepository
         if (pendingExportsList.Count == 0)
             return;
 
+        // Inserted after any queued delete for the same objects (the Pending Export batch scope, #2492).
+        await ExecuteQueuedDeletesForAsync(pendingExportsList.Select(pe => pe.ConnectedSystemObjectId));
+
         // Pre-generate IDs for all Pending Exports and their attribute value changes
         foreach (var pe in pendingExportsList)
         {
@@ -691,6 +764,8 @@ public partial class SyncRepository
         var csoIds = connectedSystemObjectIds.ToArray();
         if (csoIds.Length == 0)
             return 0;
+
+        ForgetQueuedForCsoIds(csoIds);
 
         // Instances of the rows this method is about to delete may be tracked on the worker's
         // long-lived context (reconciliation and navigation fix-up both track Pending Exports).
@@ -799,6 +874,7 @@ public partial class SyncRepository
         if (exportList.Count == 0)
             return;
 
+        ForgetQueued(exportList);
         var pendingExportIds = exportList.Select(pe => pe.Id).ToList();
 
         // Delete children first, then parents. Must delete ALL children from the database,
@@ -847,6 +923,8 @@ public partial class SyncRepository
         var exportList = untrackedPendingExports.ToList();
         if (exportList.Count == 0)
             return;
+
+        ThrowIfAnyQueued(exportList.Select(pe => pe.Id), nameof(UpdateUntrackedPendingExportsAsync));
 
         if (!_context.Database.IsRelational())
         {
@@ -1035,6 +1113,9 @@ public partial class SyncRepository
         if (changeList.Count == 0)
             return;
 
+        ThrowIfAnyQueued(changeList.Where(c => c.PendingExportId.HasValue).Select(c => c.PendingExportId!.Value),
+            nameof(DeleteUntrackedPendingExportAttributeValueChangesAsync));
+
         var changeIds = changeList.Select(c => c.Id).ToList();
 
         // Detach any tracked instances to prevent change tracker conflicts
@@ -1073,6 +1154,7 @@ public partial class SyncRepository
         if (stamps.Count == 0)
             return;
 
+        ThrowIfAnyQueued(stamps.Select(stamp => stamp.PendingExportId), nameof(SetPendingExportQueueingItemsAsync));
         var pendingExportIds = stamps.Select(stamp => stamp.PendingExportId).ToArray();
         var queueingItemIds = stamps.Select(stamp => stamp.QueuedByRunProfileExecutionItemId).ToArray();
 

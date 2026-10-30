@@ -92,6 +92,13 @@ public class MetaverseObject
     public Guid? DeletionScheduledByRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Run Profile execution item deleting this object now, recorded between the decision and the deletion flush
+    /// so the Deleted change record can name it (#2460). In memory only: the object is gone once it is used.
+    /// </summary>
+    [NotMapped]
+    public Guid? DeletingRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// How this MVO was created - determines deletion rule applicability.
     /// Projected MVOs are subject to automatic deletion rules.
     /// Internal MVOs (admin, service accounts) are protected from automatic deletion.
@@ -114,6 +121,31 @@ public class MetaverseObject
     /// they were last evaluated. Null until first reconciled.
     /// </summary>
     public DateTime? LastScopeEvaluatedAt { get; set; }
+
+    /// <summary>
+    /// What a write outside synchronisation (a sign-in, or an edit through the portal, REST API or PowerShell) changed
+    /// on this object, awaiting delivery to the Connected Systems that hold it. Null when nothing is awaiting delivery.
+    /// </summary>
+    /// <remarks>
+    /// A document (<see cref="MetaverseObjectUnsynchronisedChanges"/>) stored in a <c>jsonb</c> column, set beside
+    /// <see cref="ScopeReviewPending"/> by the writers that change attribute values outside any synchronisation (#2615)
+    /// and cleared with it by the synchronisation's guarded clear. Null when the flag was raised for another reason (an
+    /// export Synchronisation Rule's configuration change, the Temporal Scope Reconciler), in which case the review
+    /// only decides scope, as it always has.
+    /// <para>
+    /// Why the changes are recorded instead of derived at review time by comparing what each target object holds with
+    /// what the Metaverse Object says (the way drift detection works): for a multi-valued attribute the comparison would
+    /// also remove values the target holds that JIM never managed (a member added directly in the directory under a rule
+    /// with Enforce State off), and for any attribute it would bypass Enforce State. Recording the removals keeps exact
+    /// parity with a synchronisation-driven change, which only ever removes what JIM itself removed.
+    /// </para>
+    /// <para>
+    /// Written only by targeted statements, never by a synchronisation page's bulk update (the same reasoning as
+    /// <see cref="ScopeReviewPending"/>): a page holds the object as it loaded it, and writing the column back from
+    /// that copy would erase a change recorded since.
+    /// </para>
+    /// </remarks>
+    public string? UnsynchronisedChangesJson { get; set; }
 
     /// <summary>
     /// Concurrency token using PostgreSQL's xmin system column.

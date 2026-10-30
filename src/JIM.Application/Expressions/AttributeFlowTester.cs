@@ -457,7 +457,7 @@ public static class AttributeFlowTester
         {
             GeneratedBaseOutcome.Base when generation.TokenKind == GeneratedValueTokenKind.OnlyIfTaken =>
                 $"{target} would be generated from the base '{generated.BaseValue}': the base itself if no other object holds it, otherwise " +
-                $"with {token} added. Which is free is decided when a Synchronisation runs.",
+                $"with {token} added. Whether the base is still free is checked when a Synchronisation runs.",
 
             GeneratedBaseOutcome.Base =>
                 $"{target} would be generated from the base '{generated.BaseValue}' with {token} added when a Synchronisation runs.",

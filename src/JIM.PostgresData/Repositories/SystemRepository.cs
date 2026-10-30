@@ -310,7 +310,10 @@ internal sealed class SystemRepository : ISystemRepository
             BulkSqlHelpers.NullableParam(heartbeat.CurrentWork, NpgsqlDbType.Text),
             BulkSqlHelpers.NullableParam(heartbeat.CurrentWorkStartedAt, NpgsqlDbType.TimestampTz),
             BulkSqlHelpers.NullableParam(heartbeat.LastProgressAt, NpgsqlDbType.TimestampTz),
-            BulkSqlHelpers.NullableParam(heartbeat.Detail, NpgsqlDbType.Text));
+            BulkSqlHelpers.NullableParam(heartbeat.Detail, NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(heartbeat.ProcessMemoryBytes, NpgsqlDbType.Bigint),
+            BulkSqlHelpers.NullableParam(heartbeat.MemoryTotalBytes, NpgsqlDbType.Bigint),
+            BulkSqlHelpers.NullableParam(heartbeat.MemoryAvailableBytes, NpgsqlDbType.Bigint));
     }
 
     /// <inheritdoc />

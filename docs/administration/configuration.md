@@ -9,12 +9,39 @@ audience: administrator
 
 JIM is configured through environment variables set in the `.env` file alongside your Docker Compose files, or on Podman in `jim-config.yaml` (see [Podman](#podman)). The installer sets them for you; to change one later, edit the file. The settings and their names are the same on both runtimes.
 
+```jim-diagram
+archetype: comparison
+title: Environment variables and Service Settings compared
+desc: "Environment variables are kept in a file on the server, .env, or jim-config.yaml on Podman; you change one by editing the file, and it takes effect when JIM restarts. They suit infrastructure: the database connection, the OIDC authority, log paths. Service Settings are kept in the database; an Administrator changes them in the portal at Admin > Service Settings, which records who changed each and when, and most take effect at once, without a restart. They suit day-to-day operation, such as history retention, API rate limits and the synchronisation page size. A read-only Service Setting that mirrors a variable shows the value JIM started with."
+columns:
+- {label: Environment variables, sub: '`.env`, or `jim-config.yaml` on Podman'}
+- {label: Service Settings, sub: Admin > Service Settings}
+rows:
+- label: Kept in
+  cells:
+  - {text: a file on the server}
+  - {text: the database}
+- label: Changed by
+  cells:
+  - {text: editing the file}
+  - {text: an Administrator, sub: 'audited: who and when'}
+- label: Takes effect
+  cells:
+  - {text: when JIM restarts}
+  - {text: 'most at once', sub: no restart}
+- label: Suits
+  cells:
+  - {text: infrastructure, sub: 'database, OIDC authority, log paths'}
+  - {text: day-to-day operation, sub: 'retention, rate limits, page size'}
+footer: 'A read-only Service Setting that mirrors a variable shows the value JIM started with'
+```
+
 !!! tip
     A fully commented `.env.example` template is included with every release and is available in the [GitHub repository](https://github.com/TetronIO/JIM/releases).
 
 ---
 
-## Podman
+## :material-package-variant-closed: Podman
 
 On Podman, JIM reads its settings from `/opt/jim/jim-config.yaml`, a Kubernetes-style ConfigMap holding the same settings, with the same names, as `.env`; each one is on this page. Write each as `NAME: value`, indented under `data:`, and quote a value that is a number, `true` or `false`, or contains `: ` or ` #`:
 
@@ -37,7 +64,7 @@ These settings differ on Podman:
 
 ---
 
-## Locale
+## :material-translate: Locale
 
 | Variable | Description                                                                                   | Default            |
 |----------|-----------------------------------------------------------------------------------------------|--------------------|
@@ -47,7 +74,7 @@ The bundled PostgreSQL container ignores `LANG` and always initialises its datab
 
 ---
 
-## Docker
+## :material-docker: Docker
 
 These variables control how Docker Compose resolves and pulls JIM container images, and where it publishes the web UI.
 
@@ -59,7 +86,7 @@ These variables control how Docker Compose resolves and pulls JIM container imag
 
 ---
 
-## HTTPS Certificate
+## :material-certificate-outline: HTTPS Certificate
 
 JIM's certificate is not set in `.env`. The production compose file reads it from two PEM files in the `tls` folder next to the compose files, which `setup.sh` creates:
 
@@ -72,7 +99,7 @@ To point `jim.web` at them, `docker-compose.production.yml` sets `ASPNETCORE_URL
 
 ---
 
-## Database
+## :material-database-outline: Database
 
 | Variable                   | Description                                                                                                         | Default     | Example                    |
 |----------------------------|---------------------------------------------------------------------------------------------------------------------|-------------|----------------------------|
@@ -126,7 +153,7 @@ Without these settings, PostgreSQL holds such a connection open for about two ho
 
 ---
 
-## SSO / Authentication
+## :material-shield-key-outline: SSO / Authentication
 
 These variables configure JIM's OIDC-based single sign-on. For provider-specific setup instructions, see the [SSO Setup Guide](sso-setup.md).
 
@@ -136,9 +163,9 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 | `JIM_SSO_CLIENT_ID`   | OAuth client/application ID.                                                                     | `12345678-1234-1234-1234-123456789abc`                       |
 | `JIM_SSO_SECRET`      | OAuth client secret. **Keep this value secure.**                                                 | *(from your IdP)*                                            |
 | `JIM_SSO_API_SCOPE`   | API scope for JWT bearer authentication (API endpoints).                                         | `api://{client-id}/access_as_user`                           |
-| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed; JIM auto-detects the issuer from the authority URL. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
-| `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (e.g. a dev devcontainer where the JIM container reaches Keycloak via Docker DNS while the host reaches it via `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
-| `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
+| `JIM_SSO_VALID_ISSUERS` | Comma-separated list of trusted token issuers. Usually not needed: JIM accepts the issuers the provider's discovery document names, `issuer` and, where it publishes one, `access_token_issuer` (so AD FS needs no setting), and detects both Entra ID issuer formats. Issuers set here are accepted as well as those. Only set this if your provider's issuer URL differs from its authority URL, or you need to trust multiple issuers (e.g. during a provider migration). | `https://login.microsoftonline.com/{tenant}/v2.0` |
+| `JIM_SSO_PUBLIC_AUTHORITY` | Client-facing OIDC authority URL, advertised to interactive clients (browsers, the PowerShell module) via the `/api/v1/auth/config` discovery endpoint. Optional. Only set this when the backend reaches the identity provider at a different URL than clients do (for example where the JIM containers reach the identity provider by its name on the container network while browsers reach it at `localhost`, or a reverse-proxy topology where the internal and external URLs differ). When unset, clients are given `JIM_SSO_AUTHORITY`. Backend token validation and JWKS lookups always use `JIM_SSO_AUTHORITY` and are unaffected by this setting. | `http://localhost:8181/realms/jim` |
+| `JIM_SSO_PUBLIC_CLIENT_ID` | Client ID advertised to interactive public clients (PowerShell module, etc.) via the `/api/v1/auth/config` discovery endpoint, and the client the API reference's **Try It** signs in with. Optional. Required when the identity provider needs a separate registration for PKCE/loopback clients (Keycloak mandates this; Entra ID and AD FS allow a shared registration with multiple platforms). When unset, clients receive `JIM_SSO_CLIENT_ID`. Backend token validation is unaffected; tokens from either client must still carry the `JIM_SSO_API_SCOPE` audience. | `jim-powershell` |
 
 **Authority URL examples by provider:**
 
@@ -150,24 +177,33 @@ These variables configure JIM's OIDC-based single sign-on. For provider-specific
 
 ---
 
-## User Identity Mapping
+## :material-account-arrow-right-outline: User Identity Mapping
 
 These variables control how JIM maps authenticated users to Metaverse Objects, enabling role-based access control.
 
 | Variable                | Description                                                                                                                                  | Default               | Example                   |
 |-------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|---------------------------|
 | `JIM_SSO_CLAIM_TYPE`    | The JWT claim type containing the user's unique identifier. Use `sub` (standard OIDC subject identifier) for most providers.                | `sub`                 | `sub`                     |
-| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. | `Subject Identifier`  | `Subject Identifier`      |
-| `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
+| `JIM_SSO_MV_ATTRIBUTE`  | The Metaverse Attribute to match the claim value against. This should be an attribute on the User object type that stores the unique identifier from your identity provider. It must be a Text or Guid attribute; see [Matching on a GUID](#matching-on-a-guid). | `Subject Identifier`  | `Subject Identifier`, `Object GUID` |
+| `JIM_SSO_INITIAL_ADMIN` | The claim value for the initial admin user (used during first-time setup). When `JIM_SSO_MV_ATTRIBUTE` is a Guid attribute, the admin's GUID. See the [SSO Setup Guide](sso-setup.md) for instructions on finding this value. | *(none)*              | *(your admin's sub claim)* |
 
 !!! tip "Finding your admin's claim value"
     1. Log into JIM with your admin account
     2. Navigate to `/claims`
     3. Find the value of the claim type specified in `JIM_SSO_CLAIM_TYPE`
 
+### Matching on a GUID
+
+When `JIM_SSO_MV_ATTRIBUTE` names a Guid attribute, such as `Object GUID`, JIM reads the claim as a GUID and matches the person whose attribute holds the same GUID. This is how AD FS identifies people by their Active Directory `objectGUID`, which is always set, survives renames and is never reused. The person then signs in as the Metaverse Object that synchronisation from Active Directory created or joined.
+
+- The claim may carry GUID text (`550e8400-e29b-41d4-a716-446655440000`), or the GUID's 16 bytes base64-encoded, as AD FS issues `objectGUID`.
+- `JIM_SSO_INITIAL_ADMIN` is the admin's GUID as text, in any case, as the Metaverse Object shows it.
+- JIM refuses to start, naming the setting, when `JIM_SSO_MV_ATTRIBUTE` is neither a Text nor a Guid attribute, or is a Guid attribute and `JIM_SSO_INITIAL_ADMIN` is not a GUID.
+- A sign-in whose claim is not a GUID is refused, and the log says which claim and attribute to check.
+
 ---
 
-## Service Settings
+## :material-tune-variant: Service Settings
 
 Service settings are stored in the database and managed through the admin UI at **Admin > Service Settings** (`/admin/settings`). They can be changed at runtime by users with the Administrator role; most take effect immediately, without restarting the JIM containers.
 
@@ -214,7 +250,7 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 
 ---
 
-## Logging
+## :material-text-box-search-outline: Logging
 
 | Variable           | Description                                                                        | Default         | Example          |
 |--------------------|------------------------------------------------------------------------------------|-----------------|------------------|
@@ -224,7 +260,7 @@ Every Service Setting that changes how JIM behaves is listed below. The Preview 
 
 ---
 
-## Encryption Keys
+## :material-key-outline: Encryption Keys
 
 JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) with keys stored on the filesystem. All three services (`jim.web`, `jim.worker`, `jim.scheduler`) must resolve to the same key location so they can decrypt each other's data.
 
@@ -237,7 +273,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## UI Theme
+## :material-palette-outline: UI Theme
 
 | Variable    | Description                                                                                                    | Default    |
 |-------------|----------------------------------------------------------------------------------------------------------------|------------|
@@ -245,7 +281,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## Reverse Proxy
+## :material-swap-horizontal: Reverse Proxy
 
 | Variable              | Description                                                                                                                                                                                                                     | Default              |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
@@ -256,7 +292,7 @@ JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Sche
 
 ---
 
-## Infrastructure API Key
+## :material-key-chain: Infrastructure API Key
 
 | Variable                    | Description                                                                                                                                                                                      | Default  |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
@@ -272,7 +308,7 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
-## Installer
+## :material-download-outline: Installer
 
 `setup.sh` asks a question only when its answer is not already in its environment, so an installation can run unattended. Set the variables below, the identity provider's settings under [SSO / Authentication](#sso-authentication), and any database, port, proxy or API key settings from the sections above, and the installer asks nothing it already knows. Where a description names a flag, the flag does the same as the variable.
 
@@ -294,12 +330,11 @@ To have the installer set it, give it in the installer's environment: it writes 
 
 ---
 
-## Performance Tuning
+## :material-speedometer: Performance Tuning
 
 | Variable               | Description                                                                                                                                                              | Default         |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------|
 | `JIM_WRITE_PARALLELISM` | Maximum concurrent PostgreSQL connections used by the parallel batch writer during bulk write operations. Higher values speed up large imports but consume more database connections. | CPU core count  |
-| `JIM_CACHE_WARM_PARALLELISM` | How many Connected Systems the Worker loads into its lookup cache at once when it starts, before it takes any work. Higher values shorten start-up when there are many Connected Systems, at the cost of more database queries at once. A Connected System whose cache fails to load fills it as work needs it. | `3` |
 
 !!! info
     The worker uses a 300-second command timeout for bulk database operations (PostgreSQL default is 30 seconds). This accommodates large imports where individual batch writes may take longer than the default timeout. No configuration is required; it is set automatically.

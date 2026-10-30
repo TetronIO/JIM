@@ -75,6 +75,46 @@ jobs:
           Write-Output "::warning title=Active Directory lab gate not enforced::$message"
           "### Active Directory lab gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+  # Job 0a: The Active Directory lab's AD FS gate. The commit being tagged must have a `success` commit status named
+  # `jim-ad-lab-adfs`, which the same ad-lab.yml run that posts `jim-ad-lab` posts for its AD FS sign-in checks (portal
+  # sign-in, the initial administrator, /api, Connect-JIM, and a renamed account, against the lab's real AD FS; #2441).
+  # It has a status, and a gate, of its own, so a sign-in failure never turns the LDAP result red or the reverse. One
+  # dispatched lab run on the commit answers both gates. scripts/Test-AdLabFederationReleaseGate.ps1 holds the
+  # decision (sharing scripts/ReleaseGate.ps1) and is tested in scripts/Tests.
+  #
+  # Enforced only while the repository variable JIM_AD_LAB_ADFS_GATE_ENFORCED is `true`, switched on once the checks
+  # have had their first green run (gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true); until then the job
+  # passes with a warning on the run summary. From then on there is no override, as for the other gates.
+  jim-ad-lab-adfs-gate:
+    name: Active Directory Lab AD FS Gate
+    runs-on: self-hosted
+    # Reads commit statuses only. Job-level permissions replace the workflow's, which grant no statuses access.
+    permissions:
+      contents: read
+      statuses: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # The SHA and repository reach the script through env, never interpolated into it.
+      - name: Require a green jim-ad-lab-adfs status on this commit
+        if: vars.JIM_AD_LAB_ADFS_GATE_ENFORCED == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$env:RELEASE_SHA" -Repository "$env:RELEASE_REPOSITORY"
+
+      - name: Report that the gate is not yet enforced
+        if: vars.JIM_AD_LAB_ADFS_GATE_ENFORCED != 'true'
+        shell: pwsh
+        run: |
+          $message = 'The Active Directory lab AD FS gate is not enforced yet (JIM_AD_LAB_ADFS_GATE_ENFORCED is not true), so this release has not been proven to sign people in through a real AD FS.'
+          Write-Output "::warning title=Active Directory lab AD FS gate not enforced::$message"
+          "### Active Directory lab AD FS gate not enforced`n`n$message" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # Job 0b: The pre-release integration gate. The commit being tagged must have a `success` commit status named
   # `jim-pre-release`, which .github/workflows/pre-release.yml posts on the SHA it tested: it runs the full
   # pre-release integration suite (every scenario against Samba AD, OpenLDAP and 389 Directory Server) by itself when
@@ -161,7 +201,7 @@ jobs:
   validate:
     name: Validate Build & Tests
     runs-on: self-hosted
-    needs: [jim-ad-lab-gate, jim-pre-release-gate, jim-deploy-lab-gate]
+    needs: [jim-ad-lab-gate, jim-ad-lab-adfs-gate, jim-pre-release-gate, jim-deploy-lab-gate]
 
     steps:
       - name: Checkout
@@ -213,6 +253,9 @@ jobs:
       - name: Run Pester tests
         shell: pwsh
         run: |
+          # Register the default repository when the runner image has none (see the same step in ci.yml).
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
           $config.Run.Path = @('./src/JIM.PowerShell/Tests', './scripts/Tests', './test/integration/utils', './test/integration/ad-lab')
@@ -550,7 +593,7 @@ jobs:
           python-version: 3.x
 
       - name: Install MkDocs
-        run: pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1"
+        run: pip install -r docs/requirements.txt
 
       - name: Build site
         # --strict: see the comment on the equivalent step in docs.yml. Safe to fail a release on,
@@ -905,8 +948,9 @@ jobs:
   # The release's screenshots on junctional.io and tetron.io (#582). pre-release.yml's jim-screenshots job captured them
   # and opened a pull request on each site; merging them here means the sites change the moment the release is
   # published, and never before. That job may still be capturing: a site with no pull request yet is left to it, since
-  # it merges its own pull requests when it finds the release already out. Non-fatal, like notify-site: the release
-  # is published by now, so a pull request that cannot be merged is a warning naming why, not a failed release.
+  # it merges its own pull requests when it finds the release already out. A pull request that cannot be merged fails
+  # this job, naming why: the release is published by now, so a red job holds nothing back, and a green one with a
+  # warning is how v0.17.0's screenshots went unnoticed.
   publish-screenshots:
     name: Publish screenshots
     runs-on: self-hosted
@@ -937,12 +981,13 @@ jobs:
             tetron.io
 
       - name: Merge the screenshot pull requests
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION_TAG: ${{ github.ref_name }}
           OWNER: ${{ github.repository_owner }}
+        # Called in this PowerShell, not through pwsh -File: -File hands every argument over as a plain string, so
+        # the two sites never become a list and the script stops before merging anything (as v0.17.0's did).
         run: |
-          pwsh -File ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
+          ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
             -Repository "$env:OWNER/junctional.io", "$env:OWNER/tetron.io"
           exit $LASTEXITCODE

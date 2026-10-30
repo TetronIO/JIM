@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Diagnostics;
 using System.Text;
 using JIM.Models.Core;
 using JIM.Models.Transactional;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Serilog;
@@ -18,6 +20,12 @@ public partial class SyncRepository
     #region Metaverse Object — Parallel Bulk Create
 
     /// <summary>
+    /// Spans for the sync write path's Metaverse Object stages, picked up by the Worker's diagnostic listener, which
+    /// listens to every source named "JIM.*" (#2492).
+    /// </summary>
+    private static readonly ActivitySource MvoActivitySource = new("JIM.PostgresData.Sync");
+
+    /// <summary>
     /// Bulk creates MVOs with their attribute values using parallel multi-connection writes.
     /// Each partition of MVOs is written on its own <see cref="NpgsqlConnection"/>, allowing
     /// PostgreSQL to utilise multiple CPU cores during the INSERT phase.
@@ -26,15 +34,18 @@ public partial class SyncRepository
     /// </para>
     /// </summary>
     /// <remarks>
-    /// Unlike CSO creates (which happen during import), MVO creates happen during sync where
-    /// downstream code (change tracking, export evaluation) still relies on EF's change tracker
-    /// to persist MVO-related entities (e.g., MetaverseObjectChange via mvo.Changes collection).
-    /// After raw SQL persistence, MVOs are attached to the change tracker as Unchanged so that
-    /// EF can discover child entities added to their navigation collections. This bridge will
-    /// be removed when MVO change tracking is also converted to raw SQL.
+    /// The objects are left untracked (#2598). Everything the synchronisation page does with them afterwards is
+    /// raw SQL (attribute value updates, change records, Pending Exports, join states, deletion), and the page runs
+    /// with change detection off, so no EF save discovers them through a tracked object's navigation. Attaching them
+    /// instead cost roughly the square of a group's membership in EF's change tracker: 211 s for one page at
+    /// Scale750k40kGroups. Code that does save through EF on this context must not walk a graph that can reach a
+    /// new object (<c>DbSet.Update</c>, <c>Remove</c> on a detached root), or it inserts or updates it a second time.
     /// </remarks>
     public async Task CreateMetaverseObjectsBulkAsync(List<MetaverseObject> metaverseObjects)
     {
+        using var span = MvoActivitySource.StartActivity("Mvo.Create");
+        span?.SetTag("attributeValueCount", metaverseObjects.Sum(mvo => mvo.AttributeValues.Count));
+
         if (metaverseObjects.Count == 0)
             return;
 
@@ -66,123 +77,68 @@ public partial class SyncRepository
             }
         }
 
-        var parallelism = ParallelBatchWriter.GetWriteParallelism();
-        var connectionString = _connectionStringForParallelWrites;
-
-        // For small batches (under parallelism threshold), use the main EF connection directly.
-        // The parallel overhead (opening N connections, partitioning) isn't worthwhile for small writes.
-        if (metaverseObjects.Count < parallelism * 50 || connectionString == null)
+        using (MvoActivitySource.StartActivity("Mvo.Create.BulkWrite"))
         {
-            await CreateMvosOnSingleConnectionAsync(metaverseObjects);
-        }
-        else
-        {
-            Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs across {Parallelism} parallel connections",
-                metaverseObjects.Count, parallelism);
+            var parallelism = ParallelBatchWriter.GetWriteParallelism();
+            var connectionString = _connectionStringForParallelWrites;
 
-            // Two-phase write: MVO rows first, then attribute value rows.
-            //
-            // MVO attribute values can contain ReferenceValueId FKs pointing to other MVOs
-            // in the same batch (e.g., a group MVO referencing a user MVO via a member attribute).
-            // When partitioned across parallel connections, a group in partition A may reference
-            // a user in partition B. If both are inserted in a single transaction per partition,
-            // partition A's FK check fails because partition B hasn't committed yet.
-            //
-            // Phase 1 commits all MVO rows across all partitions, guaranteeing every MVO exists
-            // in the database. Phase 2 then inserts attribute values — all ReferenceValueId FKs
-            // are satisfied regardless of which partition the referenced MVO was in.
-
-            // Phase 1: Insert all MVO rows across parallel connections.
-            await ParallelBatchWriter.ExecuteAsync(
-                metaverseObjects,
-                parallelism,
-                connectionString,
-                async (connection, partition) =>
-                {
-                    await using var transaction = await connection!.BeginTransactionAsync();
-                    await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
-                    await transaction.CommitAsync();
-                });
-
-            // Phase 2: Insert all attribute value rows across parallel connections.
-            // Re-partition by attribute values (not by MVO) for balanced distribution,
-            // especially when one MVO has disproportionately many values (e.g., large groups).
-            var allAttributeValues = metaverseObjects
-                .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
-                .ToList();
-
-            if (allAttributeValues.Count > 0)
+            // For small batches (under parallelism threshold), use the main EF connection directly.
+            // The parallel overhead (opening N connections, partitioning) isn't worthwhile for small writes.
+            if (metaverseObjects.Count < parallelism * 50 || connectionString == null)
             {
+                await CreateMvosOnSingleConnectionAsync(metaverseObjects);
+            }
+            else
+            {
+                Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs across {Parallelism} parallel connections",
+                    metaverseObjects.Count, parallelism);
+
+                // Two-phase write: MVO rows first, then attribute value rows.
+                //
+                // MVO attribute values can contain ReferenceValueId FKs pointing to other MVOs
+                // in the same batch (e.g., a group MVO referencing a user MVO via a member attribute).
+                // When partitioned across parallel connections, a group in partition A may reference
+                // a user in partition B. If both are inserted in a single transaction per partition,
+                // partition A's FK check fails because partition B hasn't committed yet.
+                //
+                // Phase 1 commits all MVO rows across all partitions, guaranteeing every MVO exists
+                // in the database. Phase 2 then inserts attribute values — all ReferenceValueId FKs
+                // are satisfied regardless of which partition the referenced MVO was in.
+
+                // Phase 1: Insert all MVO rows across parallel connections.
                 await ParallelBatchWriter.ExecuteAsync(
-                    allAttributeValues,
+                    metaverseObjects,
                     parallelism,
                     connectionString,
                     async (connection, partition) =>
                     {
                         await using var transaction = await connection!.BeginTransactionAsync();
-                        await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, partition.ToList());
+                        await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
                         await transaction.CommitAsync();
                     });
-            }
-        }
 
-        // Bridge: attach persisted MVOs to the EF change tracker as Unchanged.
-        //
-        // Downstream sync code (CreatePendingMvoChangeObjectsAsync, EvaluatePendingExportsAsync)
-        // still relies on EF to persist child entities added to MVO navigation collections
-        // (e.g., mvo.Changes.Add(change)). Without tracking, these child entities are orphaned
-        // and SaveChangesAsync either misses them or hits concurrency errors when it discovers
-        // untracked MVOs through navigation property traversal.
-        //
-        // We set the shadow FK "TypeId" explicitly since MetaverseObject has no TypeId property
-        // (it's inferred by EF from the Type navigation). The xmin concurrency token is not set:
-        // PostgreSQL assigned a real xmin during COPY, but we do not know its value, so the tracked
-        // OriginalValue stays 0. This used to be a latent hazard: if a just-created MVO were then
-        // updated via EF SaveChangesAsync in the same page flush, the update issued "... WHERE xmin = 0",
-        // matched no rows, and threw an unhandled DbUpdateConcurrencyException that aborted the run (the
-        // pre-release Full Regression Scenario-014-AttributePriority failure). That hazard is now closed:
-        // the MVO update path is raw SQL too (see UpdateMetaverseObjectsBulkAsync), keyed by Id with no
-        // xmin predicate, and it detaches the graph afterwards so no later EF SaveChangesAsync re-runs the
-        // xmin-guarded update. The bogus tracked xmin is therefore harmless: nothing on the sync write path
-        // reads it. EF-tracked writes elsewhere (UI / API edits) still enforce xmin against their own reads.
-        foreach (var mvo in metaverseObjects)
-        {
-            var entry = _context.Entry(mvo);
-            if (entry.State == EntityState.Detached)
-            {
-                entry.State = EntityState.Unchanged;
-                // Set shadow FK for the Type relationship
-                SetShadowForeignKeyAsPersisted(entry.Property("TypeId"), mvo.Type.Id);
-            }
+                // Phase 2: Insert all attribute value rows across parallel connections.
+                // Re-partition by attribute values (not by MVO) for balanced distribution,
+                // especially when one MVO has disproportionately many values (e.g., large groups).
+                var allAttributeValues = metaverseObjects
+                    .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
+                    .ToList();
 
-            foreach (var av in mvo.AttributeValues)
-            {
-                var avEntry = _context.Entry(av);
-                if (avEntry.State == EntityState.Detached)
+                if (allAttributeValues.Count > 0)
                 {
-                    avEntry.State = EntityState.Unchanged;
-                    // Set shadow FK for the MetaverseObject relationship
-                    SetShadowForeignKeyAsPersisted(avEntry.Property("MetaverseObjectId"), mvo.Id);
+                    await ParallelBatchWriter.ExecuteAsync(
+                        allAttributeValues,
+                        parallelism,
+                        connectionString,
+                        async (connection, partition) =>
+                        {
+                            await using var transaction = await connection!.BeginTransactionAsync();
+                            await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, partition.ToList());
+                            await transaction.CommitAsync();
+                        });
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// Sets a shadow foreign key on an entry just attached as Unchanged to the value the bulk write already
-    /// persisted, without leaving the property (and so the entity) Modified. Setting only
-    /// <c>CurrentValue</c> is not enough: when the principal is not tracked by this context (every sync page
-    /// after the first, because the page boundary clears the tracker), relationship fix-up has not filled the
-    /// shadow value in, so the attach snapshot holds an empty original value and the assignment registers as a
-    /// change. For a Metaverse Object that means the next EF <c>SaveChangesAsync</c> on the context issues an
-    /// xmin-guarded UPDATE with the unknown COPY-assigned xmin (tracked as 0), which matches no rows and throws
-    /// DbUpdateConcurrencyException (Pre-Release Scenario-023-UniqueValueGeneration, page 2 of 2).
-    /// </summary>
-    private static void SetShadowForeignKeyAsPersisted(PropertyEntry property, object value)
-    {
-        property.CurrentValue = value;
-        property.OriginalValue = value;
-        property.IsModified = false;
     }
 
     /// <summary>
@@ -288,6 +244,10 @@ public partial class SyncRepository
                 await writer.WriteAsync(mvo.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            if (mvo.UnsynchronisedChangesJson is not null)
+                await writer.WriteAsync(mvo.UnsynchronisedChangesJson, NpgsqlTypes.NpgsqlDbType.Jsonb);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -362,6 +322,14 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             await writer.WriteAsync(av.NullValue, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (av.ContributedByKind.HasValue)
+                await writer.WriteAsync((int)av.ContributedByKind.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (av.ContributedByClaimType is not null)
+                await writer.WriteAsync(av.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -409,6 +377,8 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(av.NullValue);
+                parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedByKind.HasValue ? (int?)av.ContributedByKind.Value : null, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -490,11 +460,11 @@ public partial class SyncRepository
             var existingAvsByMvo = await LoadExistingAttributeValuesAsync(mvoIds);
             var attributeValuesToInsert = new List<(Guid MvoId, MetaverseObjectAttributeValue Value)>();
             var attributeValueIdsToDelete = new List<Guid>();
-            var provenanceUpdates = new List<(Guid Id, int? SystemId, int? SyncRuleId)>();
+            var provenanceUpdates = new List<(Guid Id, int? SystemId, int? SyncRuleId, ValueContributorKind? Kind, string? ClaimType)>();
 
             foreach (var mvo in metaverseObjects)
             {
-                var existing = existingAvsByMvo.GetValueOrDefault(mvo.Id) ?? new Dictionary<Guid, (int?, int?)>();
+                var existing = existingAvsByMvo.GetValueOrDefault(mvo.Id) ?? new Dictionary<Guid, (int?, int?, ValueContributorKind?, string?)>();
                 var currentIds = new HashSet<Guid>();
 
                 foreach (var av in mvo.AttributeValues)
@@ -502,8 +472,11 @@ public partial class SyncRepository
                     currentIds.Add(av.Id);
                     if (!existing.TryGetValue(av.Id, out var storedProvenance))
                         attributeValuesToInsert.Add((mvo.Id, av));
-                    else if (storedProvenance.SystemId != av.ContributedBySystemId || storedProvenance.SyncRuleId != av.ContributedBySyncRuleId)
-                        provenanceUpdates.Add((av.Id, av.ContributedBySystemId, av.ContributedBySyncRuleId));
+                    else if (storedProvenance.SystemId != av.ContributedBySystemId ||
+                             storedProvenance.SyncRuleId != av.ContributedBySyncRuleId ||
+                             storedProvenance.Kind != av.ContributedByKind ||
+                             !string.Equals(storedProvenance.ClaimType, av.ContributedByClaimType, StringComparison.Ordinal))
+                        provenanceUpdates.Add((av.Id, av.ContributedBySystemId, av.ContributedBySyncRuleId, av.ContributedByKind, av.ContributedByClaimType));
                 }
 
                 foreach (var existingId in existing.Keys.Where(existingId => !currentIds.Contains(existingId)))
@@ -546,8 +519,8 @@ public partial class SyncRepository
         //    marked Modified, and any attribute values added during processing may be tracked as Added; leaving them
         //    would let a later EF SaveChangesAsync in the same page flush (e.g. the CSO join-state update) re-run the
         //    xmin-guarded MVO update that this method exists to avoid, or re-insert attribute values already written
-        //    here as raw SQL (a duplicate-key violation). Detaching is the definitive guard against recurrence: unlike
-        //    re-attaching as Unchanged (the create path's bridge), a detached entity cannot be re-persisted by EF at all.
+        //    here as raw SQL (a duplicate-key violation). Detaching is the definitive guard against recurrence: a detached
+        //    entity cannot be re-persisted by EF at all, which is also why the create path leaves its objects untracked.
         DetachPersistedMvoGraphs(metaverseObjects);
     }
 
@@ -702,13 +675,14 @@ public partial class SyncRepository
     /// <summary>
     /// Loads the current database attribute-value ids for the given Metaverse Objects, grouped by Metaverse Object id,
     /// each carrying its stored provenance. Used to compute the insert/delete delta for the update path, and the
-    /// provenance delta beside it (#1292): a surviving value's contributing rule and system are the only columns the
-    /// synchronisation engine can change on a row it does not replace, so they are the only ones diffed here. Runs on
+    /// provenance delta beside it (#1292): a surviving value's provenance (contributing rule and system, and source kind
+    /// and claim type, #2472) is the only
+    /// thing the synchronisation engine can change on a row it does not replace, so it is all that is diffed here. Runs on
     /// the EF connection and ambient transaction.
     /// </summary>
-    private async Task<Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId)>>> LoadExistingAttributeValuesAsync(List<Guid> mvoIds)
+    private async Task<Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId, ValueContributorKind? Kind, string? ClaimType)>>> LoadExistingAttributeValuesAsync(List<Guid> mvoIds)
     {
-        var result = new Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId)>>();
+        var result = new Dictionary<Guid, Dictionary<Guid, (int? SystemId, int? SyncRuleId, ValueContributorKind? Kind, string? ClaimType)>>();
         if (mvoIds.Count == 0)
             return result;
 
@@ -718,7 +692,8 @@ public partial class SyncRepository
         var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
         await using var command = new NpgsqlCommand(
-            @"SELECT ""Id"", ""MetaverseObjectId"", ""ContributedBySystemId"", ""ContributedBySyncRuleId""
+            @"SELECT ""Id"", ""MetaverseObjectId"", ""ContributedBySystemId"", ""ContributedBySyncRuleId"",
+                     ""ContributedByKind"", ""ContributedByClaimType""
               FROM ""MetaverseObjectAttributeValues"" WHERE ""MetaverseObjectId"" = ANY(@ids)",
             connection, transaction);
         command.Parameters.AddWithValue("ids", mvoIds.ToArray());
@@ -736,7 +711,9 @@ public partial class SyncRepository
 
             values[attributeValueId] = (
                 reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetInt32(3));
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : (ValueContributorKind)reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5));
         }
 
         return result;
@@ -744,14 +721,15 @@ public partial class SyncRepository
 
     /// <summary>
     /// Writes the taken-over provenance of surviving Metaverse Object attribute values (#1292) as a single batched,
-    /// VALUES-list UPDATE. A deliberately narrow two-column fix-up on rows that already exist, in the shape of
+    /// VALUES-list UPDATE. A deliberately narrow provenance fix-up (the contributing system and rule, and the source kind
+    /// and claim type beside them, #2472) on rows that already exist, in the shape of
     /// <see cref="FixupMvoReferenceValueIdsAsync"/>: the value columns of a surviving row never change (the attribute
     /// flow writers replace a row rather than edit it), so this is not the entity's write path and takes no bulk
     /// column list. Runs on the EF connection so it joins the ambient transaction.
     /// </summary>
-    private async Task BulkUpdateMvoAttributeValueProvenanceViaEfAsync(List<(Guid Id, int? SystemId, int? SyncRuleId)> provenanceUpdates)
+    private async Task BulkUpdateMvoAttributeValueProvenanceViaEfAsync(List<(Guid Id, int? SystemId, int? SyncRuleId, ValueContributorKind? Kind, string? ClaimType)> provenanceUpdates)
     {
-        const int columnsPerRow = 3;
+        const int columnsPerRow = 5;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
@@ -762,7 +740,9 @@ public partial class SyncRepository
             sql.Append("""
                 UPDATE "MetaverseObjectAttributeValues" AS mav SET
                     "ContributedBySystemId" = v."ContributedBySystemId",
-                    "ContributedBySyncRuleId" = v."ContributedBySyncRuleId"
+                    "ContributedBySyncRuleId" = v."ContributedBySyncRuleId",
+                    "ContributedByKind" = v."ContributedByKind",
+                    "ContributedByClaimType" = v."ContributedByClaimType"
                 FROM (VALUES
                 """);
 
@@ -772,15 +752,17 @@ public partial class SyncRepository
                 if (i > 0) sql.Append(',');
                 var o = i * columnsPerRow;
                 // Explicit casts give the VALUES columns a definite type even when a whole chunk is null for a column.
-                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::int,{{{o + 2}}}::int)");
+                sql.Append($"({{{o}}}::uuid,{{{o + 1}}}::int,{{{o + 2}}}::int,{{{o + 3}}}::int,{{{o + 4}}}::text)");
 
                 parameters.Add(chunk[i].Id);
                 parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].SystemId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].Kind.HasValue ? (int?)chunk[i].Kind!.Value : null, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(chunk[i].ClaimType, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
             sql.Append("""
-                ) AS v("Id","ContributedBySystemId","ContributedBySyncRuleId")
+                ) AS v("Id","ContributedBySystemId","ContributedBySyncRuleId","ContributedByKind","ContributedByClaimType")
                 WHERE mav."Id" = v."Id"
                 """);
 
@@ -884,8 +866,18 @@ public partial class SyncRepository
     /// Deletes multiple MVOs in one set-based pass (issue #993). Each FK cleanup statement from
     /// the singular <see cref="SyncRepository.DeleteMetaverseObjectAsync"/> runs once for the whole
     /// batch via <c>= ANY</c> instead of once per object, and the MVO rows themselves are removed
-    /// in a single SaveChanges. Semantics per object are identical to the singular method.
+    /// by one raw <c>DELETE</c>. Semantics per object are identical to the singular method.
     /// </summary>
+    /// <remarks>
+    /// The rows are deleted by raw SQL, not EF's <c>RemoveRange</c>, because a deletion candidate arrives detached
+    /// (the bulk update that wrote its marker detaches what it writes) and <c>RemoveRange</c> on a detached object
+    /// attaches its whole graph: through its reference values that reaches objects created on the same page, which
+    /// the bulk create leaves untracked (#2598), and the save then wrote their references to the deleted object, rows
+    /// the cleanup above had already removed, and threw DbUpdateConcurrencyException. Every foreign key into the
+    /// table either cascades or sets null in the database, or is cleared by a statement above, so the database does
+    /// what EF's cascade did; <see cref="ReflectDeletedMetaverseObjectsInTracker"/> then does the same to anything the
+    /// context still tracks.
+    /// </remarks>
     public async Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
     {
         if (metaverseObjects.Count == 0)
@@ -944,8 +936,8 @@ public partial class SyncRepository
             @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
             mvoIds);
 
-        _context.MetaverseObjects.RemoveRange(metaverseObjects);
-        await _context.SaveChangesAsync();
+        await _context.Database.ExecuteSqlRawAsync(@"DELETE FROM ""MetaverseObjects"" WHERE ""Id"" = ANY({0})", mvoIds);
+        ReflectDeletedMetaverseObjectsInTracker(mvoIdSet);
 
         if (ownTransaction != null)
             await ownTransaction.CommitAsync();
@@ -954,6 +946,64 @@ public partial class SyncRepository
             metaverseObjects.Count, retirements.Count);
         return retirements;
     }
+
+    /// <summary>
+    /// Brings the change tracker into line with a raw delete of Metaverse Objects: the deleted objects are detached,
+    /// a tracked entity whose foreign key to one of them cascades in the database is detached too (its row is gone),
+    /// and one whose foreign key sets null has the null recorded as already persisted, so no later EF save writes the
+    /// stale value back or acts on a row that no longer exists. Driven by the model's foreign keys, so a child table
+    /// added later is covered without being named here. Change detection is suppressed while enumerating, for the
+    /// reason given on <see cref="DetachTrackedEntities{T}"/>.
+    /// </summary>
+    private void ReflectDeletedMetaverseObjectsInTracker(HashSet<Guid> deletedIds)
+    {
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = _context.ChangeTracker.Entries().ToList();
+
+            foreach (var entry in entries.Where(e => e.Entity is MetaverseObject mvo && deletedIds.Contains(mvo.Id)))
+                entry.State = EntityState.Detached;
+
+            foreach (var (entry, references) in entries
+                .Where(e => e.Entity is not MetaverseObject)
+                .Select(e => (Entry: e, References: ReferencesToDeletedMetaverseObjects(e, deletedIds)))
+                .Where(x => x.References.Count > 0))
+            {
+                if (references.Any(r => r.ForeignKey.DeleteBehavior is DeleteBehavior.Cascade or DeleteBehavior.ClientCascade))
+                {
+                    entry.State = EntityState.Detached;
+                }
+                else
+                {
+                    foreach (var (foreignKey, keyProperty) in references)
+                    {
+                        keyProperty.CurrentValue = null;
+                        keyProperty.OriginalValue = null;
+                        keyProperty.IsModified = false;
+                        foreignKey.DependentToPrincipal?.PropertyInfo?.SetValue(entry.Entity, null);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+    }
+
+    /// <summary>
+    /// The single-column foreign keys from <paramref name="entry"/> to Metaverse Objects whose current value is one of
+    /// <paramref name="deletedIds"/>.
+    /// </summary>
+    private static List<(IForeignKey ForeignKey, PropertyEntry KeyProperty)> ReferencesToDeletedMetaverseObjects(
+        EntityEntry entry, HashSet<Guid> deletedIds)
+        => entry.Metadata.GetForeignKeys()
+            .Where(fk => fk.PrincipalEntityType.ClrType == typeof(MetaverseObject) && fk.Properties.Count == 1)
+            .Select(fk => (ForeignKey: fk, KeyProperty: entry.Property(fk.Properties[0].Name)))
+            .Where(r => r.KeyProperty.CurrentValue is Guid id && deletedIds.Contains(id))
+            .ToList();
 
     #endregion
 }

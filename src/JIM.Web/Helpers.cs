@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Models.Activities;
@@ -198,6 +199,13 @@ public static class Helpers
     /// </summary>
     public static bool IsFeatureFlagVisible(FeatureFlagDefinition? definition, bool includeInDevelopment) =>
         definition != null && (definition.Tier == FeatureFlagTier.Preview || includeInDevelopment);
+
+    /// <summary>
+    /// Whether a built-in Connector is behind a Preview-tier feature flag, so the portal marks it with a Preview chip
+    /// wherever it is named or chosen.
+    /// </summary>
+    public static bool IsPreviewConnector(string connectorName) =>
+        JIM.Application.Servers.ConnectedSystemServer.FeatureFlagFor(connectorName)?.Tier == FeatureFlagTier.Preview;
 
     /// <summary>
     /// Extension method that converts a DateTime into the site-wide human-friendly full date/time string
@@ -641,9 +649,9 @@ public static class Helpers
             ObjectChangeType.Created =>
                 "The Metaverse Object was created directly (e.g. via data generation or the admin interface) rather than through synchronisation.",
 
-            // Export scope review
+            // Export Review
             ObjectChangeType.ExportScopeReview =>
-                "A change to an export Synchronisation Rule had this Metaverse Object reviewed against the rule's scope, so it was provisioned or deprovisioned as the rule now requires.",
+                "This Metaverse Object was reviewed against the export Synchronisation Rules, because an export rule changed or the object was created or changed outside synchronisation. It was provisioned or deprovisioned as the rules now require, or had values changed outside synchronisation delivered to its accounts.",
 
             // Other
             ObjectChangeType.NoChange =>
@@ -685,7 +693,7 @@ public static class Helpers
             // Direct creation
             ObjectChangeType.Created => Icons.Material.Filled.AddCircleOutline,
 
-            // Export scope review
+            // Export Review
             ObjectChangeType.ExportScopeReview => Icons.Material.Filled.ManageSearch,
 
             // Other
@@ -876,23 +884,6 @@ public static class Helpers
 
     #region Initiator Icon Helpers
     /// <summary>
-    /// Gets the MudBlazor icon for an activity initiator type: the one icon each kind of principal wears wherever it
-    /// appears (<see cref="Shared.ActivityInitiator"/>, change history). System has its own rather than the Schedule's
-    /// clock, which reads as "scheduled" although System also covers seeding and housekeeping (#2066).
-    /// </summary>
-    public static string GetInitiatorIcon(ActivityInitiatorType initiatorType)
-    {
-        return initiatorType switch
-        {
-            ActivityInitiatorType.User => Icons.Material.Filled.Person,
-            ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
-            ActivityInitiatorType.System => Icons.Material.Filled.Dns,
-            ActivityInitiatorType.Anonymous => Icons.Material.Filled.QuestionMark,
-            _ => Icons.Material.Filled.HelpOutline
-        };
-    }
-
-    /// <summary>
     /// Gets the in-app link to a security principal that initiated an activity, or null when the principal cannot be
     /// linked (no id, or a System / unattributed initiator). Used to make initiator names clickable in change history.
     /// A person is linked under the built-in User type without being looked up, so the link is dead if their Metaverse
@@ -990,22 +981,6 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Gets the MudBlazor icon for an initiator type string.
-    /// Accepts "User", "ApiKey", "Import", "System", or other values.
-    /// </summary>
-    public static string GetInitiatorIcon(string? initiatorType)
-    {
-        return initiatorType switch
-        {
-            "User" => Icons.Material.Filled.Person,
-            "ApiKey" => Icons.Material.Filled.Key,
-            "Import" => Icons.Material.Filled.Input,
-            "System" => Icons.Material.Filled.Dns,
-            _ => Icons.Material.Filled.HelpOutline
-        };
-    }
-
-    /// <summary>
     /// Resolves a MudBlazor icon field name (e.g., "Person", "Groups") stored on a MetaverseObjectType
     /// to the actual MudBlazor icon SVG path string. Returns a fallback icon if the name is null or unrecognised.
     /// </summary>
@@ -1029,6 +1004,119 @@ public static class Helpers
         }
         return lookup;
     }
+    #endregion
+
+    #region JSON Syntax Highlighting
+
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new()
+    {
+        WriteIndented = true,
+        NewLine = "\n",
+        // The text is shown, not embedded in a script, and HighlightJson encodes it for HTML; the default encoder would
+        // instead rewrite characters such as < and & as \u escapes, changing what the reader sees.
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    /// <summary>
+    /// Indents a JSON document for reading, or returns the text unchanged when it is not JSON.
+    /// </summary>
+    public static string FormatJson(string json)
+    {
+        try
+        {
+            return System.Text.Json.Nodes.JsonNode.Parse(json)?.ToJsonString(IndentedJsonOptions) ?? json;
+        }
+        catch (JsonException)
+        {
+            return json;
+        }
+    }
+
+    /// <summary>
+    /// Highlights JSON with HTML span elements for syntax colouring (the <c>jim-json-*</c> classes, coloured per theme),
+    /// for use with <c>@((MarkupString)...)</c> inside a <c>jim-json-syntax</c> block. Every character is HTML-encoded and
+    /// the text content always equals the input, so text that is not valid JSON is still shown faithfully.
+    /// </summary>
+    public static string HighlightJson(string json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return string.Empty;
+
+        var result = new StringBuilder(json.Length * 2);
+        var i = 0;
+        while (i < json.Length)
+        {
+            var c = json[i];
+            if (c == '"')
+            {
+                var end = EndOfJsonString(json, i);
+                var cssClass = IsFollowedByColon(json, end) ? "jim-json-key" : "jim-json-string";
+                AppendJsonSpan(result, cssClass, json[i..end]);
+                i = end;
+            }
+            else if (c is '{' or '}' or '[' or ']' or ':' or ',')
+            {
+                AppendJsonSpan(result, "jim-json-punctuation", c.ToString());
+                i++;
+            }
+            else if (char.IsDigit(c) || (c == '-' && i + 1 < json.Length && char.IsDigit(json[i + 1])))
+            {
+                var start = i++;
+                while (i < json.Length && (char.IsDigit(json[i]) || json[i] is '.' or 'e' or 'E' or '+' or '-'))
+                    i++;
+                AppendJsonSpan(result, "jim-json-number", json[start..i]);
+            }
+            else if (TryMatchJsonLiteral(json, i, "true") || TryMatchJsonLiteral(json, i, "false"))
+            {
+                var length = json[i] == 't' ? 4 : 5;
+                AppendJsonSpan(result, "jim-json-boolean", json.Substring(i, length));
+                i += length;
+            }
+            else if (TryMatchJsonLiteral(json, i, "null"))
+            {
+                AppendJsonSpan(result, "jim-json-null", "null");
+                i += 4;
+            }
+            else
+            {
+                result.Append(WebUtility.HtmlEncode(c.ToString()));
+                i++;
+            }
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// The index just past the string opening at <paramref name="openingQuote"/>, stepping over escaped characters so an
+    /// escaped backslash before the closing quote does not read as an escaped quote. An unterminated string runs to the end.
+    /// </summary>
+    private static int EndOfJsonString(string json, int openingQuote)
+    {
+        for (var i = openingQuote + 1; i < json.Length; i++)
+        {
+            if (json[i] == '\\')
+                i++;
+            else if (json[i] == '"')
+                return i + 1;
+        }
+
+        return json.Length;
+    }
+
+    private static bool IsFollowedByColon(string json, int index)
+    {
+        while (index < json.Length && char.IsWhiteSpace(json[index]))
+            index++;
+        return index < json.Length && json[index] == ':';
+    }
+
+    private static bool TryMatchJsonLiteral(string json, int index, string literal) =>
+        string.CompareOrdinal(json, index, literal, 0, literal.Length) == 0;
+
+    private static void AppendJsonSpan(StringBuilder result, string cssClass, string text) =>
+        result.Append("<span class=\"").Append(cssClass).Append("\">").Append(WebUtility.HtmlEncode(text)).Append("</span>");
+
     #endregion
 
     #region Expression Syntax Highlighting

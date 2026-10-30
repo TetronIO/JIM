@@ -71,10 +71,6 @@ public abstract class SyncTaskProcessorBase
     // disconnecting Metaverse Object's type. Created lazily at first disconnection; caches the rule map for the run.
     protected RemainingImportSourceEvaluator? _remainingImportSourceEvaluator;
 
-    // Object type IDs that have inbound import rules with reference attribute mappings.
-    // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
-    protected HashSet<int>? _objectTypesWithReferenceRules;
-
     // Aggregate no-net-change counts for the entire sync run
     // Note: Target CSO attribute values for no-net-change detection are now pre-loaded in ExportEvaluationCache
     // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -116,10 +112,12 @@ public abstract class SyncTaskProcessorBase
     // export rule still has the Metaverse Object in scope, keeps its Delete (#1018).
     private readonly HashSet<Guid> _deprovisionedCsoIdsThisPage = [];
 
-    // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    // Batch collection for deferred CSO join-state updates (MetaverseObjectId, JoinType, DateJoined and the join
+    // record): a projection, a join, and a join released by an out-of-scope Disconnect all queue the CSO here.
     // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
     // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
-    // and DateJoined stays null in the database after projection or join.
+    // and DateJoined stays null in the database after projection or join, and a released join keeps its
+    // Metaverse Object and join record.
     protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
 
     // Batch collection of CSO ids that carried the Temporal Scope Reconciler flag (ScopeReviewPending, #892) and
@@ -264,7 +262,52 @@ public abstract class SyncTaskProcessorBase
     // been joined/projected yet), the CSO ID and applicable Synchronisation Rule IDs are recorded here.
     // After all pages, these CSOs are reloaded from the DB (where all MVOs now exist)
     // and reference attributes are re-processed in ResolveCrossPageReferencesAsync.
-    protected readonly List<(Guid CsoId, List<int> SyncRuleIds)> _unresolvedCrossPageReferences = [];
+    // ReferenceValueCount is the object's mapped reference values, all of which the step re-flows: it is what the
+    // step's progress counts and its batches are budgeted by (#2492), since one object can hold 750,000 of them.
+    protected readonly List<(Guid CsoId, List<int> SyncRuleIds, int ReferenceValueCount)> _unresolvedCrossPageReferences = [];
+
+    /// <summary>
+    /// How many objects this run sent to the cross-page reference step: those with a reference that could still resolve
+    /// later in the run.
+    /// </summary>
+    internal int CrossPageReferenceObjectCount { get; private set; }
+
+    /// <summary>
+    /// How many reference values this run could not flow because the object they reference is not joined to a Metaverse
+    /// Object and nothing later in the run could join it: out of scope, or of a type no Synchronisation Rule projects or
+    /// joins. Reported once at the end of the run rather than per value.
+    /// </summary>
+    internal int UnresolvableReferenceValueCount { get; private set; }
+
+    /// <summary>The objects holding <see cref="UnresolvableReferenceValueCount"/>'s values, for the run's summary.</summary>
+    private readonly HashSet<Guid> _unresolvableReferenceObjectIds = [];
+
+    /// <summary>
+    /// The run's page source, once created: it knows which Object Types have been walked, which decides whether an
+    /// unjoined referenced object could still be joined later in the run.
+    /// </summary>
+    protected TypeOrderedCsoPager? _csoPager;
+
+    /// <summary>
+    /// The configuration changes awaiting synchronisation that this run claimed as it started (#2615): saved changes to
+    /// an import Synchronisation Rule or an Object Matching Rule that this run must apply by processing every object of
+    /// the Object Type each names. Empty until <see cref="ClaimConfigurationChangesAwaitingSynchronisationAsync"/> runs,
+    /// and when nothing was awaiting synchronisation.
+    /// </summary>
+    private IReadOnlyList<ClaimedConfigurationChangeSynchronisation> _claimedConfigurationChanges = [];
+
+    /// <summary>
+    /// The only configuration changes awaiting synchronisation this run may claim: the ids the worker read before it
+    /// loaded anything the run uses (#2615). Empty for a processor constructed without them, which claims nothing.
+    /// </summary>
+    private readonly IReadOnlyCollection<long> _configurationChangeIdsEligibleToClaim;
+
+    /// <summary>
+    /// The Object Types whose every object this run processes because configuration changes awaiting synchronisation
+    /// were claimed for them (#2615). A Full Synchronisation processes everything anyway; a Delta Synchronisation uses
+    /// this to page these types in full and the others by modification.
+    /// </summary>
+    protected IReadOnlySet<int> _objectTypeIdsToProcessInFull = new HashSet<int>();
 
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
@@ -501,7 +544,8 @@ public abstract class SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -519,6 +563,7 @@ public abstract class SyncTaskProcessorBase
         // run-scoped set of its own, which is exactly as safe: nothing else shares it.
         _uniqueValueReservations = uniqueValueReservations ?? new UniqueValueReservationSet();
         _uniquenessProbeSessionHost = uniquenessProbeSessionHost;
+        _configurationChangeIdsEligibleToClaim = configurationChangeIdsEligibleToClaim ?? [];
     }
 
     /// <summary>
@@ -1061,6 +1106,64 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Claims the configuration changes awaiting synchronisation that the worker offered this run (#2615), and records
+    /// which Object Types the run must therefore process in full. Call it first, as the run starts: before the progress
+    /// count and before any Synchronisation Rule is loaded.
+    /// <para>
+    /// The guarantee: the worker read the ids it offers before it loaded the Connected System with its Object Types and
+    /// their Simple Mode Object Matching Rules, and this run loads the Synchronisation Rules after the claim. A change's
+    /// row is written only after the change is saved, so every change claimed here is already in all of those. A change
+    /// saved after the worker's read is not offered, however soon after it commits, and waits for the next run (see
+    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ClaimConfigurationChangesAwaitingSynchronisationAsync(string runKind)
+    {
+        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _configurationChangeIdsEligibleToClaim, _activity.Id);
+        _objectTypeIdsToProcessInFull = _claimedConfigurationChanges.Select(c => c.ConnectedSystemObjectTypeId).ToHashSet();
+
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        // Which types, and how many changes are behind each, so the run's log explains why it processed a type in full.
+        var summary = string.Join(", ", _claimedConfigurationChanges
+            .GroupBy(c => c.ConnectedSystemObjectTypeId)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{LogSanitiser.Sanitise(_connectedSystem.ObjectTypes?.FirstOrDefault(t => t.Id == g.Key)?.Name ?? g.Key.ToString(CultureInfo.InvariantCulture))} ({g.Count()})"));
+        Log.Information("{RunKind}: {Count} configuration change(s) awaiting synchronisation claimed; processing every object of {ObjectTypeCount} Object Type(s) in full, with the changes behind each in brackets: {ObjectTypes}",
+            runKind, _claimedConfigurationChanges.Count, _objectTypeIdsToProcessInFull.Count, summary);
+    }
+
+    /// <summary>
+    /// Marks the configuration changes this run claimed as applied (#2615). Call it only where the run has completed and
+    /// advanced the Delta Synchronisation watermark: a cancelled run, or one that failed, never gets here and so applies
+    /// nothing, leaving the changes for the next run to claim again.
+    /// <para>
+    /// A run that completes with errors on individual objects still applies them, consistently with the watermark
+    /// advancing: both record that the run completed, and the errors are reported on the objects' own execution items.
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ApplyClaimedConfigurationChangesAsync(string runKind)
+    {
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        var applied = await _syncRepo.ApplyClaimedConfigurationChangeSynchronisationsAsync(_activity.Id);
+        if (applied == _claimedConfigurationChanges.Count)
+        {
+            Log.Information("{RunKind}: applied {Count} configuration change(s) that were awaiting synchronisation", runKind, applied);
+            return;
+        }
+
+        // Only reachable when another synchronisation of this Connected System claimed some of them after this run did,
+        // which overwrote this run's claim. That run applies them. Safe, since this run processed the types in full too.
+        Log.Warning("{RunKind}: applied {Applied} of the {Claimed} configuration change(s) it claimed; a synchronisation of the same Connected System that overlapped this one holds the claim on the rest and applies them",
+            runKind, applied, _claimedConfigurationChanges.Count);
+    }
+
+    /// <summary>
     /// Updates the Connected System's LastSyncCompletedAt timestamp to mark the sync as complete.
     /// This becomes the watermark for the next delta sync.
     /// Full sync also sets this to establish a baseline for subsequent delta syncs.
@@ -1146,18 +1249,6 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return;
 
-        // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
-        // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
-        // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
-        // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
-        // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
-        // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
-        // Likewise a CSO marked because another system changed a Metaverse attribute that a derived flow on this
-        // system's rules reads (DerivedInputChangePending, #1750): its own data is unchanged, but its derived flows
-        // must be re-evaluated. (The loader already treats a marked CSO as changed and loads its attribute values.)
-        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending && !connectedSystemObject.DerivedInputChangePending)
-            return;
-
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
         // In simple mode, matching rules on the object type can drive joining even without Synchronisation Rules.
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
@@ -1200,6 +1291,10 @@ public abstract class SyncTaskProcessorBase
                     // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, existingRpei);
+
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, existingRpei);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -1292,6 +1387,10 @@ public abstract class SyncTaskProcessorBase
                     // This item scheduled the deletion; the housekeeping deletion that follows names it (#1811).
                     if (changeResult.MvoScheduledForDeletion != null)
                         MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(changeResult.MvoScheduledForDeletion, runProfileExecutionItem);
+
+                    // This item deleted the object; its Deleted change record names it (#2460).
+                    if (changeResult.MvoDeletedImmediately != null)
+                        MetaverseObjectDeletionRuleApplier.RecordDeletingItem(changeResult.MvoDeletedImmediately, runProfileExecutionItem);
 
                     // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
                     // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
@@ -1965,8 +2064,8 @@ public abstract class SyncTaskProcessorBase
 
             // Queue the LastConnectorDisconnectedDate, initiator info, triggering system and snapshot for
             // the page-flush batch update rather than persisting immediately here. This method runs during
-            // Pass 1, before the flush sets AutoDetectChangesEnabled=false, so an immediate SaveChangesAsync
-            // on the shared sync DbContext would still walk every tracked entity's navigation properties -
+            // Pass 1; were change detection on for it (it once was, until the flush), an immediate SaveChangesAsync
+            // on the shared sync DbContext would walk every tracked entity's navigation properties -
             // including the tracked Activity's RunProfileExecutionItems collection, which holds this page's
             // RPEIs (created moments earlier for this CSO's disconnection). DetectChanges finds them as new
             // and inserts them early; the page flush's own raw-SQL RPEI insert then collides on the same Id
@@ -2018,7 +2117,17 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
+        _snapshotReferenceCsos.Clear();
     }
+
+    /// <summary>
+    /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
+    /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
+    /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
+    /// evaluation on Scenario 032). Cleared with the change tracker, because the objects it holds are tracked ones, and
+    /// once the page's provisioning objects are written, so a lookup that found none is asked again.
+    /// </summary>
+    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -2285,8 +2394,11 @@ public abstract class SyncTaskProcessorBase
             // attribute changes" (immediately below), since both stage their results the same way an ordinary
             // Attribute Flow writer does. Any outcome already resolved above, by a re-elected survivor's own
             // generated mapping (work package H fix), is merged in rather than lost.
-            generatedValueOutcomesForRpei = await ResolveGenerationsAndDerivedLevelsAsync(
-                connectedSystemObject, inboundSyncRules, generatedValueOutcomesForRpei);
+            using (Diagnostics.Sync.StartSpan("ResolveGenerationsAndDerivedLevels"))
+            {
+                generatedValueOutcomesForRpei = await ResolveGenerationsAndDerivedLevelsAsync(
+                    connectedSystemObject, inboundSyncRules, generatedValueOutcomesForRpei);
+            }
 
             // Count actual attribute changes that were queued
             var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
@@ -2306,136 +2418,142 @@ public abstract class SyncTaskProcessorBase
             // other systems whose rules host a derived flow reading it, applied in bulk at page flush.
             CollectDerivedInputMarks(connectedSystemObject.MetaverseObject, changedAttributes);
 
-            // Capture MVO changes for change tracking (before applying, so we have the pending lists)
-            // Change objects will be created in batch at page boundary for performance
-            // Create RPEI here so MVO changes can link to it for initiator context (User, ApiKey)
-            if (attributesAdded > 0 || attributesRemoved > 0)
+            using (Diagnostics.Sync.StartSpan("CaptureMvoChanges"))
             {
-                var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
-                var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
-                // Determine the correct ObjectChangeType based on how the MVO was created/modified
-                var changeType = wasProjected ? ObjectChangeType.Projected
-                    : wasJoined ? ObjectChangeType.Joined
-                    : ObjectChangeType.AttributeFlow;
-                // Create RPEI for this CSO change - will be used to link MVO change to Activity for initiator context
-                var rpei = _activity.PrepareRunProfileExecutionItem();
-                rpei.ConnectedSystemObject = connectedSystemObject;
-                rpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                _activity.RunProfileExecutionItems.Add(rpei);
-
-                // Track Attribute Flow count when the primary change type is Join or Projection
-                // This prevents Attribute Flows from being "absorbed" into joins/projections
-                if (changeType is ObjectChangeType.Joined or ObjectChangeType.Projected)
+                // Capture MVO changes for change tracking (before applying, so we have the pending lists)
+                // Change objects will be created in batch at page boundary for performance
+                // Create RPEI here so MVO changes can link to it for initiator context (User, ApiKey)
+                if (attributesAdded > 0 || attributesRemoved > 0)
                 {
-                    rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
-                }
+                    var additions = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.ToList();
+                    var removals = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.ToList();
+                    // Determine the correct ObjectChangeType based on how the MVO was created/modified
+                    var changeType = wasProjected ? ObjectChangeType.Projected
+                        : wasJoined ? ObjectChangeType.Joined
+                        : ObjectChangeType.AttributeFlow;
+                    // Create RPEI for this CSO change - will be used to link MVO change to Activity for initiator context
+                    var rpei = _activity.PrepareRunProfileExecutionItem();
+                    rpei.ConnectedSystemObject = connectedSystemObject;
+                    rpei.ConnectedSystemObjectId = connectedSystemObject.Id;
+                    _activity.RunProfileExecutionItems.Add(rpei);
 
-                // Record the projecting Synchronisation Rule (#399) on a Projected change only; every
-                // other change type has no single attributable rule at this point.
-                var projectingSyncRuleId = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null;
-                var projectingSyncRuleName = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null;
-                _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei, null,
-                    projectingSyncRuleId, projectingSyncRuleName));
-
-                // Build sync outcome tree on the RPEI
-                if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                {
-                    var outcomeType = changeType switch
+                    // Track Attribute Flow count when the primary change type is Join or Projection
+                    // This prevents Attribute Flows from being "absorbed" into joins/projections
+                    if (changeType is ObjectChangeType.Joined or ObjectChangeType.Projected)
                     {
-                        ObjectChangeType.Projected => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
-                        ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
-                        _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                    };
-                    var mvo = connectedSystemObject.MetaverseObject;
-                    // Only store the MVO ID if it's already persisted (non-empty).
-                    // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
-                    var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
-                    // Name, not NameOrId. NameOrId falls back to the id, and for a newly projected MVO
-                    // that id is still Guid.Empty here, so the fallback bakes an all-zero GUID into the
-                    // description. Leaving it null lets the retroactive pass above fill it once the name
-                    // has flowed and the real id exists; that pass only fills blanks, so a zero GUID
-                    // written here would survive it and reach the causality view as the Identity's name.
-                    var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
-
-                    // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
-                    // Joined/AttributeFlow roots have no single attributable rule here.
-                    var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
-                        targetEntityId: mvoId,
-                        targetEntityDescription: mvoDescription,
-                        syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
-                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
-                        joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
-
-                    // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
-                    // child per resolved attribute. Not gated to Detailed mode: a
-                    // generated value is as much an audit signal as the MvoDeletionCancelled case below.
-                    if (generatedValueOutcomesForRpei is { Count: > 0 })
-                    {
-                        foreach (var (generatedOutcomeType, attributeName, value) in generatedValueOutcomesForRpei)
-                        {
-                            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome, generatedOutcomeType,
-                                targetEntityId: mvoId,
-                                targetEntityDescription: mvoDescription,
-                                detailMessage: $"{attributeName}: {value}");
-                        }
+                        rpei.AttributeFlowCount = attributesAdded + attributesRemoved;
                     }
 
-                    // Not gated to Detailed mode: like the MvoDeletionScheduled outcome it counterparts, this
-                    // is an audit signal in its own right, not incidental detail (#1620).
-                    if (changeType == ObjectChangeType.Joined && cancelledMvoDeletionDetailMessage != null)
+                    // Record the projecting Synchronisation Rule (#399) on a Projected change only; every
+                    // other change type has no single attributable rule at this point.
+                    var projectingSyncRuleId = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null;
+                    var projectingSyncRuleName = changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null;
+                    _pendingMvoChanges.Add((connectedSystemObject.MetaverseObject, additions, removals, changeType, rpei, null,
+                        projectingSyncRuleId, projectingSyncRuleName));
+
+                    // Build sync outcome tree on the RPEI
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
-                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+                        var outcomeType = changeType switch
+                        {
+                            ObjectChangeType.Projected => ActivityRunProfileExecutionItemSyncOutcomeType.Projected,
+                            ObjectChangeType.Joined => ActivityRunProfileExecutionItemSyncOutcomeType.Joined,
+                            _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                        };
+                        var mvo = connectedSystemObject.MetaverseObject;
+                        // Only store the MVO ID if it's already persisted (non-empty).
+                        // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
+                        var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
+                        // Name, not NameOrId. NameOrId falls back to the id, and for a newly projected MVO
+                        // that id is still Guid.Empty here, so the fallback bakes an all-zero GUID into the
+                        // description. Leaving it null lets the retroactive pass above fill it once the name
+                        // has flowed and the real id exists; that pass only fills blanks, so a zero GUID
+                        // written here would survive it and reach the causality view as the Identity's name.
+                        var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
+
+                        // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
+                        // Joined/AttributeFlow roots have no single attributable rule here.
+                        var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
                             targetEntityId: mvoId,
                             targetEntityDescription: mvoDescription,
-                            detailMessage: cancelledMvoDeletionDetailMessage);
-                    }
+                            syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
+                            syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
+                            joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
 
-                    // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
-                    if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
-                        && changeType is ObjectChangeType.Projected or ObjectChangeType.Joined
-                        && (attributesAdded + attributesRemoved) > 0)
-                    {
-                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                            targetEntityDescription: mvoDescription,
-                            detailCount: attributesAdded + attributesRemoved);
-                    }
+                        // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
+                        // child per resolved attribute. Not gated to Detailed mode: a
+                        // generated value is as much an audit signal as the MvoDeletionCancelled case below.
+                        if (generatedValueOutcomesForRpei is { Count: > 0 })
+                        {
+                            foreach (var (generatedOutcomeType, attributeName, value) in generatedValueOutcomesForRpei)
+                            {
+                                SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome, generatedOutcomeType,
+                                    targetEntityId: mvoId,
+                                    targetEntityDescription: mvoDescription,
+                                    detailMessage: $"{attributeName}: {value}");
+                            }
+                        }
 
-                    // In Detailed mode, surface asserted-null contributions (#91) as a distinct outcome so an admin can
-                    // see which blanks were positively asserted by a "Null is a value" contributor, rather than merely
-                    // uncontributed. Asserted nulls are the NullValue marker rows written into the additions this run.
-                    if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)
-                    {
-                        var assertedNullCount = additions.Count(av => av.NullValue);
-                        if (assertedNullCount > 0)
+                        // Not gated to Detailed mode: like the MvoDeletionScheduled outcome it counterparts, this
+                        // is an audit signal in its own right, not incidental detail (#1620).
+                        if (changeType == ObjectChangeType.Joined && cancelledMvoDeletionDetailMessage != null)
+                        {
                             SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                                ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionCancelled,
+                                targetEntityId: mvoId,
                                 targetEntityDescription: mvoDescription,
-                                detailCount: assertedNullCount);
+                                detailMessage: cancelledMvoDeletionDetailMessage);
+                        }
 
-                        // Also surface attributes cleared with no contributor (#91): a value was removed and no rule
-                        // supplied a replacement (nor asserted the blank), so the attribute became blank by absence.
-                        var clearedAttributeCount = CountClearedAttributes(mvo, additions, removals);
-                        if (clearedAttributeCount > 0)
+                        // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
+                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                            && changeType is ObjectChangeType.Projected or ObjectChangeType.Joined
+                            && (attributesAdded + attributesRemoved) > 0)
+                        {
                             SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                                ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                                 targetEntityDescription: mvoDescription,
-                                detailCount: clearedAttributeCount);
-                    }
+                                detailCount: attributesAdded + attributesRemoved);
+                        }
 
-                    // Register MVO→RPEI mapping for export evaluation outcome linking.
-                    // Newly projected MVOs have Guid.Empty as their ID until PersistPendingMetaverseObjectsAsync
-                    // assigns real IDs. Defer these mappings and re-key after persistence.
-                    if (connectedSystemObject.MetaverseObject.Id != Guid.Empty)
-                        _mvoIdToRpei[connectedSystemObject.MetaverseObject.Id] = rpei;
-                    else
-                        _deferredMvoRpeiMappings.Add((connectedSystemObject.MetaverseObject, rpei));
+                        // In Detailed mode, surface asserted-null contributions (#91) as a distinct outcome so an admin can
+                        // see which blanks were positively asserted by a "Null is a value" contributor, rather than merely
+                        // uncontributed. Asserted nulls are the NullValue marker rows written into the additions this run.
+                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)
+                        {
+                            var assertedNullCount = additions.Count(av => av.NullValue);
+                            if (assertedNullCount > 0)
+                                SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                    ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull,
+                                    targetEntityDescription: mvoDescription,
+                                    detailCount: assertedNullCount);
+
+                            // Also surface attributes cleared with no contributor (#91): a value was removed and no rule
+                            // supplied a replacement (nor asserted the blank), so the attribute became blank by absence.
+                            var clearedAttributeCount = CountClearedAttributes(mvo, additions, removals);
+                            if (clearedAttributeCount > 0)
+                                SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                    ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                                    targetEntityDescription: mvoDescription,
+                                    detailCount: clearedAttributeCount);
+                        }
+
+                        // Register MVO→RPEI mapping for export evaluation outcome linking.
+                        // Newly projected MVOs have Guid.Empty as their ID until PersistPendingMetaverseObjectsAsync
+                        // assigns real IDs. Defer these mappings and re-key after persistence.
+                        if (connectedSystemObject.MetaverseObject.Id != Guid.Empty)
+                            _mvoIdToRpei[connectedSystemObject.MetaverseObject.Id] = rpei;
+                        else
+                            _deferredMvoRpeiMappings.Add((connectedSystemObject.MetaverseObject, rpei));
+                    }
                 }
             }
 
             // Apply pending attribute value changes to the MVO
-            ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
+            using (Diagnostics.Sync.StartSpan("ApplyPendingMvoAttributeChanges"))
+            {
+                ApplyPendingMetaverseObjectAttributeChanges(connectedSystemObject.MetaverseObject);
+            }
 
             // Unique Value Generation (#242, Phase 2 work package G): once this pass's changes are staged on
             // the object, reconcile the lifecycle of any generated attribute it holds a live assignment for
@@ -2460,9 +2578,12 @@ public abstract class SyncTaskProcessorBase
             // Queue for export evaluation after MVOs are persisted (need valid IDs for Pending Export FKs)
             // Merge with existing entry if the same MVO is already queued (e.g., multiple CSOs joined
             // to the same MVO, or scalar + reference changes processed in separate passes).
-            if (changedAttributes.Count > 0)
+            using (Diagnostics.Sync.StartSpan("QueuePendingExportEvaluation"))
             {
-                MergeOrAddPendingExportEvaluation(connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes);
+                if (changedAttributes.Count > 0)
+                {
+                    MergeOrAddPendingExportEvaluation(connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes);
+                }
             }
 
             // Queue drift detection for the page flush, AFTER Metaverse Objects are persisted.
@@ -3057,9 +3178,8 @@ public abstract class SyncTaskProcessorBase
             _activity.RunProfileExecutionItems.Add(errorRpei);
         }
 
-        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark neither
-        // Delta Synchronisation nor Full Synchronisation's unchanged-object skip would process it again, and two objects
-        // would keep the same value. This page's join-state write and guarded clears have already run (inside
+        // Keep the message's promise (#2309): nothing about the loser's own data changed, so without a mark no Delta
+        // Synchronisation would process it again, and two objects would keep the same value until a Full Synchronisation. This page's join-state write and guarded clears have already run (inside
         // PersistPendingMetaverseObjectsAsync), so the mark survives to the next run.
         var loserMarks = losers
             .Select(loser => new SynchronisationPendingMark(((MetaverseObject)loser.Request.CallerState!).Id, _connectedSystem.Id))
@@ -3477,7 +3597,8 @@ public abstract class SyncTaskProcessorBase
             // (ProcessScopeReviewPendingMetaverseObjectsAsync) and cross-page reference resolution
             // (ResolveCrossPageReferences) all reach Pending Exports through EvaluatePendingExportsAsync, which
             // calls this method once per changed Metaverse Object.
-            await ResolveExportGeneratedValuesAsync(mvo, result);
+            using (Diagnostics.Sync.StartSpan("ResolveExportGeneratedValues"))
+                await ResolveExportGeneratedValuesAsync(mvo, result);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -4031,7 +4152,10 @@ public abstract class SyncTaskProcessorBase
         // Batch create new MVOs
         if (_pendingMvoCreates.Count > 0)
         {
-            await _syncRepo.CreateMetaverseObjectsAsync(_pendingMvoCreates);
+            using (Diagnostics.Sync.StartSpan("CreateMetaverseObjects").SetTag("count", _pendingMvoCreates.Count))
+            {
+                await _syncRepo.CreateMetaverseObjectsAsync(_pendingMvoCreates);
+            }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Created {Count} MVOs in batch", _pendingMvoCreates.Count);
 
             // Register each newly-Id'd MVO with the page identity map (#1612) so a later same-page load of
@@ -4063,19 +4187,27 @@ public abstract class SyncTaskProcessorBase
                 }
             }
 
-            await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
+            using (Diagnostics.Sync.StartSpan("UpdateMetaverseObjects").SetTag("count", _pendingMvoUpdates.Count))
+            {
+                await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
+            }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
 
             if (refFixups.Count > 0)
-                await _syncRepo.FixupMvoReferenceValueIdsAsync(refFixups);
+                using (Diagnostics.Sync.StartSpan("FixupMvoReferenceValueIds"))
+                {
+                    await _syncRepo.FixupMvoReferenceValueIdsAsync(refFixups);
+                }
 
             _pendingMvoUpdates.Clear();
             _pendingMvoUpdateIds.Clear();
         }
 
-        // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
-        // projection or join. This must run AFTER MVO creates so that projected CSOs can
-        // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
+        // Batch update CSOs whose join state (JoinType/DateJoined/MetaverseObjectId and the join record) changed
+        // during projection, join or an out-of-scope Disconnect. This must run AFTER MVO creates so that projected
+        // CSOs can pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange), and it runs
+        // BEFORE FlushPendingMvoDeletionsAsync, so a CSO released from a Metaverse Object that is deleted in the
+        // same flush no longer references it when the delete runs.
         if (_pendingCsoJoinUpdates.Count > 0)
         {
             // Release-before-claim: obsolete CSOs that were disconnected in-memory this page (their
@@ -4099,17 +4231,19 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
             }
 
-            // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
-            // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
-            // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
-            // Ensure the FK is populated for any CSO where it's still null.
+            // For projected CSOs, MetaverseObjectId was not set at projection time, only the navigation.
+            // CreateMetaverseObjectsAsync leaves the new objects untracked (#2598), so no relationship
+            // fix-up fills the FK in: set it from the navigation for any CSO where it is still null.
             foreach (var cso in _pendingCsoJoinUpdates)
             {
                 if (cso.MetaverseObjectId == null && cso.MetaverseObject != null)
                     cso.MetaverseObjectId = cso.MetaverseObject.Id;
             }
 
-            await UpdateJoinStatesClearingSynchronisationPendingAsync(_pendingCsoJoinUpdates);
+            using (Diagnostics.Sync.StartSpan("UpdateCsoJoinStates").SetTag("count", _pendingCsoJoinUpdates.Count))
+            {
+                await UpdateJoinStatesClearingSynchronisationPendingAsync(_pendingCsoJoinUpdates);
+            }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
         }
@@ -4119,7 +4253,10 @@ public abstract class SyncTaskProcessorBase
         // objects re-evaluated without error and the synchronisation-pending mark (#2092) on the rest of what the page
         // processed. After the substantive MVO/CSO writes, so a mark is only cleared once its object's outcome is safely
         // stored; after the creates, so an object projected on this page has the id its marks need.
-        await FlushMarksAsync();
+        using (Diagnostics.Sync.StartSpan("FlushMarks"))
+        {
+            await FlushMarksAsync();
+        }
 
         // Clear the Temporal Scope Reconciler flag for CSOs re-evaluated this page (#892). Done last, after the
         // page's substantive MVO/CSO writes have persisted, so a flag is only cleared once its object's outcome
@@ -4223,7 +4360,8 @@ public abstract class SyncTaskProcessorBase
             foreach (var syncRule in syncRules)
             {
                 // Errors already captured in the first pass; reference-only pass does not repeat them
-                ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
+                ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true,
+                    cannotResolveThisRun: CannotResolveThisRun);
             }
 
             // Check for unresolved cross-page references after processing this CSO.
@@ -4231,28 +4369,25 @@ public abstract class SyncTaskProcessorBase
             // rule mappings. Checking ALL CSO attributes would incorrectly flag users with
             // unmapped reference attributes (e.g. managedBy), causing thousands of unnecessary
             // CSOs to be re-processed in the cross-page resolution pass.
-            var mappedRefAttributeIds = syncRules
-                .SelectMany(sr => sr.AttributeFlowRules)
-                .Where(afr => afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
-                .SelectMany(afr => afr.Sources)
-                .Where(s => s.ConnectedSystemAttributeId.HasValue)
-                .Select(s => s.ConnectedSystemAttributeId!.Value)
-                .ToHashSet();
+            var mappedRefAttributeIds = GetMappedReferenceAttributeIds(syncRules);
+            var unresolvedReferences = mappedRefAttributeIds.Count == 0
+                ? []
+                : cso.AttributeValues.Where(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av)).ToList();
 
-            // A cross-page reference is unresolved if the referenced CSO has no MetaverseObjectId
-            // (it hasn't been joined/projected yet). ResolvedReferenceMetaverseObjectId (direct SQL)
-            // is the primary source; fall back to navigation for in-memory test compatibility.
-            var hasUnresolvedCrossPageRefs = mappedRefAttributeIds.Count > 0 &&
-                cso.AttributeValues.Any(av =>
-                    mappedRefAttributeIds.Contains(av.AttributeId) &&
-                    av.ReferenceValueId.HasValue &&
-                    !av.ResolvedReferenceMetaverseObjectId.HasValue &&
-                    (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null));
-
-            if (hasUnresolvedCrossPageRefs)
+            // Only a reference that could still resolve later in the run sends the object to the cross-page step. One to
+            // an object this run has already processed and left unjoined (out of scope, or of a type nothing projects or
+            // joins) is final: the cross-page step would redo every reference the object holds and still not resolve it.
+            if (unresolvedReferences.Exists(av => !CannotResolveThisRun(av)))
             {
                 var syncRuleIds = syncRules.Select(sr => sr.Id).ToList();
-                _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds));
+                var referenceValueCount = cso.AttributeValues.Count(av =>
+                    mappedRefAttributeIds.Contains(av.AttributeId) && av.ReferenceValueId.HasValue);
+                _unresolvedCrossPageReferences.Add((cso.Id, syncRuleIds, referenceValueCount));
+            }
+            else if (unresolvedReferences.Count > 0)
+            {
+                // Counted here only when the object is not deferred; the cross-page step counts those it handles.
+                RecordUnresolvableReferences(cso.Id, unresolvedReferences.Count);
             }
 
             // Count changes from reference attribute processing
@@ -4415,14 +4550,25 @@ public abstract class SyncTaskProcessorBase
     protected async Task ResolveCrossPageReferencesAsync(List<SyncRule> activeSyncRules)
     {
         if (_unresolvedCrossPageReferences.Count == 0)
+        {
+            LogUnresolvableReferenceSummary();
             return;
+        }
 
         using var span = Diagnostics.Sync.StartSpan("ResolveCrossPageReferences");
         span.SetTag("csoCount", _unresolvedCrossPageReferences.Count);
 
         var totalCrossPagesToResolve = _unresolvedCrossPageReferences.Count;
-        Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs",
-            totalCrossPagesToResolve);
+        CrossPageReferenceObjectCount = totalCrossPagesToResolve;
+
+        // The step counts its own work in reference values while it runs (below); the run's figures are objects, so they
+        // are put back when it finishes and the run's completion message counts objects, not reference values.
+        var runObjectsToProcess = _activity.ObjectsToProcess;
+        var runObjectsProcessed = _activity.ObjectsProcessed;
+        var totalReferenceValuesToResolve = _unresolvedCrossPageReferences.Sum(x => (long)x.ReferenceValueCount);
+        span.SetTag("referenceValueCount", totalReferenceValuesToResolve);
+        Log.Information("ResolveCrossPageReferences: Resolving cross-page references for {Count} CSOs holding {ReferenceValueCount} reference values",
+            totalCrossPagesToResolve, totalReferenceValuesToResolve);
 
         // Memory snapshot at phase entry — cross-page resolution reloads CSO graphs with deep
         // includes, rebuilds outcome trees, and re-evaluates exports, so its memory footprint
@@ -4438,7 +4584,13 @@ public abstract class SyncTaskProcessorBase
         // The counting window moves to this step's own work. It follows the page loop, whose totals
         // would otherwise still be showing: the step would report itself complete the moment it
         // started, for however long it actually took.
-        _activity.ObjectsToProcess = totalCrossPagesToResolve;
+        //
+        // The step's work is its reference values, not its objects (#2492): it re-flows every mapped reference value
+        // of each object, so a 750,000-member group is 750,000 units and a 3-member group is 3. Counting objects
+        // made each count as one, and the time remaining read a fraction of the truth. An object whose references
+        // were all withdrawn since it was deferred still costs a reload, so it counts as one.
+        var progressUnits = _unresolvedCrossPageReferences.Select(x => Math.Max(x.ReferenceValueCount, 1)).ToList();
+        _activity.ObjectsToProcess = (int)Math.Min(progressUnits.Sum(u => (long)u), int.MaxValue);
         _activity.ObjectsProcessed = 0;
 
         await _phases.EnterAsync(RunPhaseKeys.SyncResolveCrossPageReferences);
@@ -4479,250 +4631,251 @@ public abstract class SyncTaskProcessorBase
         Log.Debug("ResolveCrossPageReferences: Cleared change tracker, page identity map and {RpeiCount} in-memory RPEIs from activity",
             rpeiCountBeforeClear);
 
-        // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
-        var requiredSyncRuleIds = _unresolvedCrossPageReferences
-            .SelectMany(x => x.SyncRuleIds)
-            .Distinct()
-            .ToHashSet();
-        var syncRulesById = activeSyncRules
-            .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
-            .ToDictionary(sr => sr.Id);
+        // Change detection stays off for the whole resolution, restored after its final tracker clear (#2598). Each
+        // batch reloads Connected System Objects tracked with their Metaverse Objects untracked, so a detection pass
+        // would attach those objects as Modified through cso.MetaverseObject; and with detection on, a save walks every
+        // tracked navigation and collides on the shared Metaverse Attribute and Type instances the reload brings in.
+        // An EF save in the resolution therefore writes only what is explicitly marked (Entry().State).
+        _syncRepo.SetAutoDetectChangesEnabled(false);
 
-        // Process in batches to avoid loading too many CSOs at once
-        var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var totalItems = _unresolvedCrossPageReferences.Count;
-        var totalBatches = (int)Math.Ceiling((double)totalItems / pageSize);
-
-        var resolvedCount = 0;
-        var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
-
-        // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
-        // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
-        // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
-        // the removed rows persist in the database and member removals are never exported.
-        var removedMvoAttributeValueIds = new List<Guid>();
-
-        for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+        try
         {
-            var batch = _unresolvedCrossPageReferences
-                .Skip(batchIndex * pageSize)
-                .Take(pageSize)
-                .ToList();
+            // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
+            var requiredSyncRuleIds = _unresolvedCrossPageReferences
+                .SelectMany(x => x.SyncRuleIds)
+                .Distinct()
+                .ToHashSet();
+            var syncRulesById = activeSyncRules
+                .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
+                .ToDictionary(sr => sr.Id);
 
-            _activity.ObjectsProcessed = resolvedCount;
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Loading batch {batchIndex + 1} of {totalBatches}");
+            // Process in batches to avoid loading too many CSOs at once: at most a page of objects, and at most the value
+            // budget's worth of reference values (#2492), so a batch holding several very large groups does not hold all
+            // of them in memory together. A group larger than the budget gets a batch of its own.
+            var pageSize = await _syncServer.GetSyncPageSizeAsync();
+            var batchPlan = CrossPageReferenceBatchPlanner.Plan(
+                _unresolvedCrossPageReferences.Select(x => x.ReferenceValueCount).ToList(),
+                pageSize, CrossPageReferenceBatchPlanner.DefaultValueBudget);
+            var totalBatches = batchPlan.Count;
 
-            // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
-            var csoIds = batch.Select(x => x.CsoId).ToList();
-            List<ConnectedSystemObject> reloadedCsos;
-            using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
+            var resolvedCount = 0;
+            var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
+
+            // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
+            // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
+            // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
+            // the removed rows persist in the database and member removals are never exported.
+            var removedMvoAttributeValueIds = new List<Guid>();
+
+            for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
             {
-                reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
-            }
+                var (batchStart, batchCount) = batchPlan[batchIndex];
+                var batch = _unresolvedCrossPageReferences.GetRange(batchStart, batchCount);
 
-            // Resolve every reloaded CSO's MetaverseObject navigation through the page identity map (#1612):
-            // this batch's own reload is itself a fresh database round trip, so a CSO whose MVO this batch
-            // also touches elsewhere (or a later batch after ClearChangeTracker) must land on one canonical
-            // instance, not a distinct one per reload.
-            _mvoIdentityMap.Seed(reloadedCsos);
+                // The counters carry the reference values; the message names the objects, which the counters no longer do.
+                _activity.ObjectsProcessed = resolvedCount;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
 
-            // Index reloaded CSOs by ID for O(1) lookup
-            var csosById = reloadedCsos.ToDictionary(c => c.Id);
-
-            foreach (var (csoId, syncRuleIds) in batch)
-            {
-                if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
+                // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
+                var csoIds = batch.Select(x => x.CsoId).ToList();
+                List<ConnectedSystemObject> reloadedCsos;
+                using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
                 {
-                    Log.Warning("ResolveCrossPageReferences: CSO {CsoId} not found or not joined after reload, skipping",
-                        csoId);
-                    continue;
+                    reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
                 }
 
-                var mvo = cso.MetaverseObject;
+                // Resolve every reloaded CSO's MetaverseObject navigation through the page identity map (#1612):
+                // this batch's own reload is itself a fresh database round trip, so a CSO whose MVO this batch
+                // also touches elsewhere (or a later batch after ClearChangeTracker) must land on one canonical
+                // instance, not a distinct one per reload.
+                _mvoIdentityMap.Seed(reloadedCsos);
 
-                // Resolve the Synchronisation Rules for this CSO
-                var applicableSyncRules = syncRuleIds
-                    .Where(id => syncRulesById.ContainsKey(id))
-                    .Select(id => syncRulesById[id])
-                    .ToList();
+                // Index reloaded CSOs by ID for O(1) lookup
+                var csosById = reloadedCsos.ToDictionary(c => c.Id);
 
-                var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
-                var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
-
-                // Process ONLY reference attributes — now all references should resolve.
-                // isFinalReferencePass: true so any still-unresolved references are logged as warnings.
-                foreach (var syncRule in applicableSyncRules)
+                foreach (var (csoId, syncRuleIds, _) in batch)
                 {
-                    ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
-                }
-
-                var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
-                var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
-
-                if (additionsCount > 0 || removalsCount > 0)
-                {
-                    Log.Debug("ResolveCrossPageReferences: CSO {CsoId} resolved {Adds} reference additions, {Removes} removals",
-                        csoId, additionsCount, removalsCount);
-
-                    // Capture changes before applying (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
-                    var refAddedAttributes = mvo.PendingAttributeValueAdditions.ToList();
-                    var refRemovedAttributesList = mvo.PendingAttributeValueRemovals.ToList();
-                    var refRemovedAttributes = refRemovedAttributesList.Count > 0
-                        ? refRemovedAttributesList.ToHashSet()
-                        : (HashSet<MetaverseObjectAttributeValue>?)null;
-
-                    // Collect IDs of removed attribute values for explicit deletion after
-                    // ClearChangeTracker (which loses EF's collection-removal knowledge).
-                    foreach (var removed in refRemovedAttributesList)
+                    if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
                     {
-                        if (removed.Id != Guid.Empty)
-                            removedMvoAttributeValueIds.Add(removed.Id);
+                        Log.Warning("ResolveCrossPageReferences: CSO {CsoId} not found or not joined after reload, skipping",
+                            csoId);
+                        continue;
                     }
 
-                    // Merge into existing RPEI if one was created during initial page processing
-                    // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
-                    // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
-                    // existingMvoChangeId is set only on the merge branch — it's the id of the
-                    // already-persisted MetaverseObjectChange for this RPEI, needed so the cross-page
-                    // attribute additions are written as children of that row rather than a new one.
-                    ActivityRunProfileExecutionItem rpei;
-                    Guid? existingMvoChangeId = null;
-                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
-                    {
-                        rpei = existingMergeRpei.Rpei;
-                        existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
-                        rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
+                    var mvo = cso.MetaverseObject;
 
-                        // Update outcome tree: add or update the AttributeFlow child node
-                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
-                            && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
+                    // Resolve the Synchronisation Rules for this CSO
+                    var applicableSyncRules = syncRuleIds
+                        .Where(id => syncRulesById.ContainsKey(id))
+                        .Select(id => syncRulesById[id])
+                        .ToList();
+
+                    var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
+                    var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
+
+                    // Process ONLY reference attributes. Nothing later in the run can resolve a reference still unresolved here,
+                    // so isFinalReferencePass: true lets the object's removals and provenance proceed without it.
+                    foreach (var syncRule in applicableSyncRules)
+                    {
+                        ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
+                    }
+
+                    var mappedRefAttributeIds = GetMappedReferenceAttributeIds(applicableSyncRules);
+                    var stillUnresolvedCount = cso.AttributeValues.Count(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av));
+                    if (stillUnresolvedCount > 0)
+                        RecordUnresolvableReferences(cso.Id, stillUnresolvedCount);
+
+                    var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
+                    var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
+
+                    if (additionsCount > 0 || removalsCount > 0)
+                    {
+                        Log.Debug("ResolveCrossPageReferences: CSO {CsoId} resolved {Adds} reference additions, {Removes} removals",
+                            csoId, additionsCount, removalsCount);
+
+                        // Capture changes before applying (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                        var refAddedAttributes = mvo.PendingAttributeValueAdditions.ToList();
+                        var refRemovedAttributesList = mvo.PendingAttributeValueRemovals.ToList();
+                        var refRemovedAttributes = refRemovedAttributesList.Count > 0
+                            ? refRemovedAttributesList.ToHashSet()
+                            : (HashSet<MetaverseObjectAttributeValue>?)null;
+
+                        // Collect IDs of removed attribute values for explicit deletion after
+                        // ClearChangeTracker (which loses EF's collection-removal knowledge).
+                        foreach (var removed in refRemovedAttributesList)
                         {
-                            // This RPEI was read back from the database, so its outcomes carry the FK and
-                            // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
-                            // list but not the per-node parent navigation). IsChildOutcome reads whichever
-                            // link is populated, so the same lookup is correct on either shape.
-                            var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
-                                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.IsChildOutcome);
-                            if (attrFlowChild != null)
-                                attrFlowChild.DetailCount = rpei.AttributeFlowCount;
-                            else
+                            if (removed.Id != Guid.Empty)
+                                removedMvoAttributeValueIds.Add(removed.Id);
+                        }
+
+                        // Merge into existing RPEI if one was created during initial page processing
+                        // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
+                        // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
+                        // existingMvoChangeId is set only on the merge branch — it's the id of the
+                        // already-persisted MetaverseObjectChange for this RPEI, needed so the cross-page
+                        // attribute additions are written as children of that row rather than a new one.
+                        ActivityRunProfileExecutionItem rpei;
+                        Guid? existingMvoChangeId = null;
+                        if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
+                        {
+                            rpei = existingMergeRpei.Rpei;
+                            existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
+                            rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
+
+                            // Update outcome tree: add or update the AttributeFlow child node
+                            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                                && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                             {
-                                // No child yet (e.g., initial projection had no scalar attribute changes).
-                                // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
-                                if (rootOutcome != null)
+                                // This RPEI was read back from the database, so its outcomes carry the FK and
+                                // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
+                                // list but not the per-node parent navigation). IsChildOutcome reads whichever
+                                // link is populated, so the same lookup is correct on either shape.
+                                var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
+                                    o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                                    && o.IsChildOutcome);
+                                if (attrFlowChild != null)
+                                    attrFlowChild.DetailCount = rpei.AttributeFlowCount;
+                                else
                                 {
-                                    SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                                        ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                        targetEntityDescription: mvo.NameOrId,
-                                        detailCount: rpei.AttributeFlowCount);
+                                    // No child yet (e.g., initial projection had no scalar attribute changes).
+                                    // Add an AttributeFlow child under the root Projected/Joined outcome.
+                                    var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
+                                    if (rootOutcome != null)
+                                    {
+                                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                            targetEntityDescription: mvo.NameOrId,
+                                            detailCount: rpei.AttributeFlowCount);
+                                    }
                                 }
+                            }
+
+                            // Rebuild OutcomeSummary to reflect the updated Attribute Flow count
+                            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            {
+                                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+                                _mvoIdToRpei[mvo.Id] = rpei;
+                            }
+
+                            // Track for batch database update (already persisted, needs AttributeFlowCount
+                            // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
+                            // as that would cause FlushRpeisAsync to INSERT a duplicate row.
+                            updatedExistingRpeis.Add(rpei);
+
+                            // Re-add to the activity's in-memory collection for test environments where
+                            // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
+                            // in memory for assertions). In production, FlushRpeisAsync will skip these
+                            // because they are handled by the separate bulk update below.
+                            if (!_hasRawSqlSupport)
+                                _activity.RunProfileExecutionItems.Add(rpei);
+
+                            Log.Debug("ResolveCrossPageReferences: Merged reference Attribute Flow into existing {ChangeType} RPEI for CSO {CsoId}",
+                                rpei.ObjectChangeType, csoId);
+                        }
+                        else
+                        {
+                            // No existing RPEI (uncommon — only if the CSO had no scalar attribute changes
+                            // during initial page processing). Create a new reference-only RPEI.
+                            rpei = _activity.PrepareRunProfileExecutionItem();
+                            rpei.ConnectedSystemObject = cso;
+                            rpei.ConnectedSystemObjectId = cso.Id;
+                            rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                            rpei.AttributeFlowCount = additionsCount + removalsCount;
+                            _activity.RunProfileExecutionItems.Add(rpei);
+
+                            // Build outcome for the new reference-only RPEI
+                            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            {
+                                SyncOutcomeBuilder.AddRootOutcome(rpei,
+                                    ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                    detailCount: additionsCount + removalsCount);
+
+                                _mvoIdToRpei[mvo.Id] = rpei;
                             }
                         }
 
-                        // Rebuild OutcomeSummary to reflect the updated Attribute Flow count
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        // Track MVO changes for change tracking. When merging into an existing
+                        // RPEI, carry the existing MvoChange id so the flush writes attribute
+                        // children under the existing parent rather than attempting to create a
+                        // new parent row (which would violate the unique-per-RPEI constraint).
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
+                            ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId, null, null));
+
+                        // Apply changes to MVO
+                        ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                        // Queue for persistence and export evaluation
+                        QueueMvoForUpdate(mvo);
+
+                        var changedRefAttributes = mvo.AttributeValues
+                            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+                            .Cast<MetaverseObjectAttributeValue>()
+                            .ToList();
+
+                        if (refRemovedAttributes != null)
                         {
-                            SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
-                            _mvoIdToRpei[mvo.Id] = rpei;
+                            changedRefAttributes.AddRange(refRemovedAttributes);
                         }
 
-                        // Track for batch database update (already persisted, needs AttributeFlowCount
-                        // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
-                        // as that would cause FlushRpeisAsync to INSERT a duplicate row.
-                        updatedExistingRpeis.Add(rpei);
-
-                        // Re-add to the activity's in-memory collection for test environments where
-                        // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
-                        // in memory for assertions). In production, FlushRpeisAsync will skip these
-                        // because they are handled by the separate bulk update below.
-                        if (!_hasRawSqlSupport)
-                            _activity.RunProfileExecutionItems.Add(rpei);
-
-                        Log.Debug("ResolveCrossPageReferences: Merged reference Attribute Flow into existing {ChangeType} RPEI for CSO {CsoId}",
-                            rpei.ObjectChangeType, csoId);
-                    }
-                    else
-                    {
-                        // No existing RPEI (uncommon — only if the CSO had no scalar attribute changes
-                        // during initial page processing). Create a new reference-only RPEI.
-                        rpei = _activity.PrepareRunProfileExecutionItem();
-                        rpei.ConnectedSystemObject = cso;
-                        rpei.ConnectedSystemObjectId = cso.Id;
-                        rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                        rpei.AttributeFlowCount = additionsCount + removalsCount;
-                        _activity.RunProfileExecutionItems.Add(rpei);
-
-                        // Build outcome for the new reference-only RPEI
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        if (changedRefAttributes.Count > 0)
                         {
-                            SyncOutcomeBuilder.AddRootOutcome(rpei,
-                                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                detailCount: additionsCount + removalsCount);
-
-                            _mvoIdToRpei[mvo.Id] = rpei;
+                            MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                         }
-                    }
-
-                    // Track MVO changes for change tracking. When merging into an existing
-                    // RPEI, carry the existing MvoChange id so the flush writes attribute
-                    // children under the existing parent rather than attempting to create a
-                    // new parent row (which would violate the unique-per-RPEI constraint).
-                    _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
-                        ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId, null, null));
-
-                    // Apply changes to MVO
-                    ApplyPendingMetaverseObjectAttributeChanges(mvo);
-
-                    // Queue for persistence and export evaluation
-                    QueueMvoForUpdate(mvo);
-
-                    var changedRefAttributes = mvo.AttributeValues
-                        .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                        .Cast<MetaverseObjectAttributeValue>()
-                        .ToList();
-
-                    if (refRemovedAttributes != null)
-                    {
-                        changedRefAttributes.AddRange(refRemovedAttributes);
-                    }
-
-                    if (changedRefAttributes.Count > 0)
-                    {
-                        MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                     }
                 }
-            }
 
-            // The target objects' existing Pending Exports are deliberately left in place for the
-            // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
-            // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
-            // the resolved references, an exported one has the changes appended, a pending Update is
-            // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
-            // Pending Provisioning object look like one whose Create had already been sent: the
-            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
+                // The target objects' existing Pending Exports are deliberately left in place for the
+                // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
+                // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
+                // the resolved references, an exported one has the changes appended, a pending Update is
+                // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
+                // Pending Provisioning object look like one whose Create had already been sent: the
+                // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
 
-            resolvedCount += batch.Count;
+                for (var unitIndex = batchStart; unitIndex < batchStart + batchCount; unitIndex++)
+                    resolvedCount += progressUnits[unitIndex];
 
-            // Disable AutoDetectChangesEnabled for the flush sequence (including the status update).
-            // After ClearChangeTracker(), the change tracker contains entities loaded by the cross-page
-            // CSO query (with Include chains that bring in MetaverseAttribute, MetaverseObjectType, etc.).
-            // Multiple MVOs sharing the same Type/Attributes create separate in-memory instances of these
-            // shared entities. When SaveChangesAsync calls DetectChanges(), it walks ALL tracked entities'
-            // navigation properties and discovers these conflicting instances, causing identity conflicts.
-            //
-            // By disabling auto-detect, SaveChangesAsync only persists entities we explicitly mark via
-            // Entry().State (in UpdateMetaverseObjectsAsync and UpdateActivityAsync), without scanning
-            // navigation properties that lead to shared MetaverseAttribute/MetaverseObjectType entities.
-            //
-            // IMPORTANT: Must be set BEFORE any SaveChangesAsync call — including the activity message
-            // update — because by this point the tracker already contains conflicting instances from
-            // the batch processing above.
-            _syncRepo.SetAutoDetectChangesEnabled(false);
-            try
-            {
                 _activity.ObjectsProcessed = resolvedCount;
                 await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
 
@@ -4778,7 +4931,26 @@ public abstract class SyncTaskProcessorBase
 
                 await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
                 await EvaluateQueuedDriftAsync();
-                await EvaluatePendingExportsAsync();
+
+                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+                var pendingExportBatchFlushed = false;
+                _syncRepo.BeginPendingExportBatch();
+                try
+                {
+                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                    await _syncRepo.FlushPendingExportBatchAsync();
+                    pendingExportBatchFlushed = true;
+                }
+                finally
+                {
+                    if (!pendingExportBatchFlushed)
+                        _syncRepo.AbandonPendingExportBatch();
+                }
+
                 await FlushPendingExportOperationsAsync();
 
                 // Flush any RPEIs generated during the flush sequence
@@ -4789,58 +4961,122 @@ public abstract class SyncTaskProcessorBase
 
                 // Update activity progress
                 await _syncRepo.UpdateActivityAsync(_activity);
+
+                // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
+                // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
+                // other entities into the tracker. Without clearing, subsequent batches encounter identity
+                // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
+                // All batch data has been fully persisted above, so clearing is safe.
+                // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
+                if (batchIndex < totalBatches - 1)
+                    ClearPageTrackingState();
             }
-            finally
+
+            // Explicitly delete removed MVO attribute values via raw SQL.
+            // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
+            // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
+            // explicit deletion, the removed rows persist in the database — member removals would
+            // never be exported to target systems.
+            if (removedMvoAttributeValueIds.Count > 0)
             {
-                _syncRepo.SetAutoDetectChangesEnabled(true);
+                await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
+                Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
+                    removedMvoAttributeValueIds.Count);
             }
 
-            // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
-            // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
-            // other entities into the tracker. Without clearing, subsequent batches encounter identity
-            // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
-            // All batch data has been fully persisted above, so clearing is safe.
-            // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
-            if (batchIndex < totalBatches - 1)
-                ClearPageTrackingState();
-        }
+            Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
+                totalCrossPagesToResolve);
 
-        // Explicitly delete removed MVO attribute values via raw SQL.
-        // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
-        // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
-        // explicit deletion, the removed rows persist in the database — member removals would
-        // never be exported to target systems.
-        if (removedMvoAttributeValueIds.Count > 0)
+            // Memory snapshot at phase exit, with deltas against the entry snapshot.
+            var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
+            var workingSetBytesAtEnd = Environment.WorkingSet;
+            Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
+                managedBytesAtEnd / (1024.0 * 1024.0),
+                (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
+                workingSetBytesAtEnd / (1024.0 * 1024.0),
+                (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
+
+            _unresolvedCrossPageReferences.Clear();
+            _activity.ObjectsToProcess = runObjectsToProcess;
+            _activity.ObjectsProcessed = runObjectsProcessed;
+        }
+        finally
         {
-            await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
-            Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
-                removedMvoAttributeValueIds.Count);
+            // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
+            // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
+            // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
+            // the same type/attributes create separate in-memory instances that conflict when any
+            // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
+            // so the caller's next SaveChangesAsync starts with a clean tracker.
+            // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling. In a finally
+            // (#2598): a failed batch also leaves Connected System Objects tracked over untracked Metaverse Objects, which
+            // must be gone before change detection comes back on.
+            ClearPageTrackingState();
+            _syncRepo.SetAutoDetectChangesEnabled(true);
         }
 
-        Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
-            totalCrossPagesToResolve);
-
-        // Memory snapshot at phase exit, with deltas against the entry snapshot.
-        var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
-        var workingSetBytesAtEnd = Environment.WorkingSet;
-        Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
-            managedBytesAtEnd / (1024.0 * 1024.0),
-            (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
-            workingSetBytesAtEnd / (1024.0 * 1024.0),
-            (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
-
-        _unresolvedCrossPageReferences.Clear();
-
-        // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
-        // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
-        // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
-        // the same type/attributes create separate in-memory instances that conflict when any
-        // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
-        // so the caller's next SaveChangesAsync starts with a clean tracker.
-        // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
-        ClearPageTrackingState();
+        LogUnresolvableReferenceSummary();
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// The Connected System attributes the Synchronisation Rules map to a reference-type Metaverse attribute: the only
+    /// reference values whose resolution matters to the run.
+    /// </summary>
+    private static HashSet<int> GetMappedReferenceAttributeIds(IEnumerable<SyncRule> syncRules) => syncRules
+        .SelectMany(sr => sr.AttributeFlowRules)
+        .Where(afr => afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference)
+        .SelectMany(afr => afr.Sources)
+        .Where(s => s.ConnectedSystemAttributeId.HasValue)
+        .Select(s => s.ConnectedSystemAttributeId!.Value)
+        .ToHashSet();
+
+    /// <summary>
+    /// Whether a reference value points at an object not joined to a Metaverse Object. The referenced object's join state
+    /// comes from <see cref="ConnectedSystemObjectAttributeValue.ResolvedReferenceMetaverseObjectId"/> (direct SQL), falling
+    /// back to the navigation for in-memory tests.
+    /// </summary>
+    private static bool IsUnresolvedReference(ConnectedSystemObjectAttributeValue av) =>
+        av.ReferenceValueId.HasValue &&
+        !av.ResolvedReferenceMetaverseObjectId.HasValue &&
+        (av.ReferenceValue == null || av.ReferenceValue.MetaverseObject == null);
+
+    /// <summary>
+    /// Whether an unresolved reference is final for this run: the referenced object's type has been walked to the end and
+    /// the object existed before the run began, so it has already been processed (or was not due) and nothing later in
+    /// the run can join it. Such a reference flows nothing, and must neither hold back the referencing object's removals
+    /// nor send it to the cross-page reference step. An object created around the run's start could still be handed out
+    /// by the closing sweep, so it is not final.
+    /// </summary>
+    private bool CannotResolveThisRun(ConnectedSystemObjectAttributeValue av)
+    {
+        if (_csoPager == null)
+            return false;
+
+        var typeId = av.ResolvedReferenceTypeId ?? av.ReferenceValue?.TypeId;
+        var created = av.ResolvedReferenceCreated ?? av.ReferenceValue?.Created;
+        return typeId.HasValue && created.HasValue && created.Value < _csoPager.CreatedFloor && _csoPager.HasFinishedWalking(typeId.Value);
+    }
+
+    private void RecordUnresolvableReferences(Guid csoId, int referenceValueCount)
+    {
+        UnresolvableReferenceValueCount += referenceValueCount;
+        _unresolvableReferenceObjectIds.Add(csoId);
+    }
+
+    /// <summary>
+    /// One line per run for the references that could not flow, in place of a warning per reference: in a directory they
+    /// are routine (a group's member out of every Synchronisation Rule's scope, or a contact no rule projects or joins).
+    /// </summary>
+    private void LogUnresolvableReferenceSummary()
+    {
+        if (UnresolvableReferenceValueCount == 0)
+            return;
+
+        Log.Information("Synchronisation: {ReferenceValueCount} reference values on {ObjectCount} objects point at objects not " +
+            "joined to a Metaverse Object (out of scope, or of a type no Synchronisation Rule projects or joins), so they did not flow",
+            UnresolvableReferenceValueCount, _unresolvableReferenceObjectIds.Count);
     }
 
     /// <summary>
@@ -4851,7 +5087,10 @@ public abstract class SyncTaskProcessorBase
     /// Creating Update exports for recalled attributes on a doomed MVO is spurious and can produce
     /// invalid attribute values (e.g., empty DN from expression evaluation against recalled attributes).
     /// </summary>
-    protected async Task EvaluatePendingExportsAsync()
+    /// <param name="prefetchPendingExports">The caller has opened a Pending Export batch (the cross-page reference step,
+    /// #2492): load the Pending Exports of every target object this evaluation will look up in one query, rather than
+    /// one round trip per object (twice for an object still being provisioned).</param>
+    protected async Task EvaluatePendingExportsAsync(bool prefetchPendingExports = false)
     {
         if (_pendingExportEvaluations.Count == 0)
             return;
@@ -4870,6 +5109,23 @@ public abstract class SyncTaskProcessorBase
                 .Where(id => id != Guid.Empty)
                 .Distinct();
             await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+
+            if (prefetchPendingExports)
+            {
+                var targetCsoIds = _pendingExportEvaluations
+                    .Select(x => x.Mvo.Id)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .SelectMany(mvoId => _exportEvaluationCache.TargetSystemIds
+                        .Select(systemId => _exportEvaluationCache.CsoLookup.GetValueOrDefault((mvoId, systemId))))
+                    .Where(cso => cso != null && cso.Id != Guid.Empty)
+                    .Select(cso => cso!.Id)
+                    .ToList();
+                using (Diagnostics.Sync.StartSpan("PrefetchPendingExportsForBatch").SetTag("csoCount", targetCsoIds.Count))
+                {
+                    await _syncRepo.PrefetchPendingExportsForBatchAsync(targetCsoIds);
+                }
+            }
         }
 
         // Build a set of MVO IDs pending immediate deletion.
@@ -5022,25 +5278,16 @@ public abstract class SyncTaskProcessorBase
         {
             await _syncRepo.CreateConnectedSystemObjectsAsync(_provisioningCsosToCreate);
 
-            // Add provisioned CSOs to the lookup cache so confirming imports can find them.
-            // Provisioned CSOs don't have a primary external ID yet (it's system-assigned during export),
-            // so we cache by secondary external ID (e.g., distinguishedName) instead.
-            foreach (var cso in _provisioningCsosToCreate)
-            {
-                if (cso.SecondaryExternalIdAttributeId.HasValue)
-                {
-                    var secondaryIdValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                    if (secondaryIdValue?.StringValue != null)
-                        _syncServer.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdValue.StringValue, cso.Id);
-                }
-            }
-
             // Create "Added" change records for provisioned CSOs.
             // Provisioning CSOs don't have dedicated RPEIs; resolve via MVO ID lookup.
             await _syncServer.CreateProvisioningCsoChangeRecordsAsync(_provisioningCsosToCreate, _mvoIdToRpei);
 
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
+
+            // A snapshot lookup that found no target object may have been for one just written here; the snapshots
+            // the rest of the page flush takes (deletion cascades, reference recall) must see it.
+            _snapshotReferenceCsos.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -5125,14 +5372,19 @@ public abstract class SyncTaskProcessorBase
     /// per-page flow uses: provision when newly in scope, deprovision when out. Only meaningful in a sync run (the
     /// export evaluation cache is present); a no-op otherwise.
     ///
-    /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
-    /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
-    /// and deprovision is scope-driven. The export evaluation cache holds every export rule, whatever its target, so
-    /// whichever system's synchronisation runs next reviews the objects for every target.
+    /// An object flagged by a configuration change or the reconciler is evaluated with no changed attributes, which is
+    /// intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's current values for a provision (Create)
+    /// and produces no Pending Export for an unchanged in-scope object, and deprovision is scope-driven. An object
+    /// flagged by a write outside synchronisation (#2615) also carries a record of the attribute values that write
+    /// changed, and is evaluated with exactly those, so a changed value reaches the accounts the object already has,
+    /// and a removed one is removed from them, as a synchronisation-driven change would. The export evaluation cache holds
+    /// every export rule, whatever its target, so whichever system's synchronisation runs next reviews the objects for
+    /// every target.
     ///
     /// The run evaluates against the rules it read at its start. When an export rule has been created or updated
     /// since, the clear keeps the batch's flags and the drain stops: the change flagged the objects for review
-    /// against the configuration as it now stands, which the next run applies.
+    /// against the configuration as it now stands, which the next run applies. It likewise keeps the flag and the record
+    /// of any object written since the run loaded it, so the next run reviews that write too.
     /// </summary>
     protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
     {
@@ -5140,15 +5392,42 @@ public abstract class SyncTaskProcessorBase
         if (_exportEvaluationCache == null)
             return;
 
+        // A review of an object no enabled export rule covers can neither provision nor deprovision anything, so the
+        // flags (and the records of what changed outside synchronisation) of such objects are cleared in one statement
+        // rather than by loading and evaluating each one (#2615). The cache holds enabled export rules only, which is
+        // the right test: a disabled rule provisions and deprovisions nothing, and re-enabling it flags its whole type
+        // again (#1925), so its type is not covered while it is off. Guarded like the clear below: kept whole when an
+        // export rule has changed since this run read its rules.
+        var coveredTypeIds = _exportEvaluationCache.ExportRulesByMvoTypeId.Where(covered => covered.Value.Count > 0).Select(covered => covered.Key).ToList();
+        var clearedWithoutReview = await _syncRepo.ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(
+            coveredTypeIds, _exportEvaluationCache.ExportRulesReadWatermark);
+        if (clearedWithoutReview > 0)
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: cleared the export scope review flag on {Count} Metaverse Object(s) " +
+                "of types no enabled export Synchronisation Rule covers, without reviewing them (#2615)", clearedWithoutReview);
+
         const int batchSize = 500;
         var totalProcessed = 0;
         var totalChanged = 0;
+        var totalValuesDelivered = 0;
+        var unreadableRecords = 0;
+        List<Guid>? previousBatchIds = null;
 
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
             var flaggedIds = await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(batchSize);
             if (flaggedIds.Count == 0)
                 break;
+
+            // The clear keeps the flag of an object written since this drain loaded it (#2615), so the same batch coming
+            // back means the clear kept every flag in it: the rows are being written as fast as they are reviewed, or
+            // the review itself is writing the Metaverse Object, which it must never do. Either way, reviewing them
+            // again would never finish; they stay flagged for the next synchronisation.
+            if (previousBatchIds != null && flaggedIds.SequenceEqual(previousBatchIds))
+            {
+                Log.Warning("ProcessScopeReviewPendingMetaverseObjectsAsync: the {Count} Metaverse Object(s) just reviewed are still flagged, " +
+                    "having been written since they were loaded, so they are left for the next synchronisation to review", flaggedIds.Count);
+                break;
+            }
 
             // Entered here rather than above the loop so a run with nothing flagged records the step
             // skipped instead of entered-and-instantly-finished. The flagged set drains rather than
@@ -5181,7 +5460,13 @@ public abstract class SyncTaskProcessorBase
                 _mvoIdToRpei[mvo.Id] = rpei;
                 reviewItems.Add((mvo.Id, rpei));
 
-                _pendingExportEvaluations.Add((mvo, [], null));
+                // What changed outside synchronisation, when something did (#2615); otherwise only scope is reviewed.
+                var (changedAttributes, removedAttributes, recordUnreadable) = await ReadUnsynchronisedChangesAsync(mvo);
+                if (recordUnreadable)
+                    unreadableRecords++;
+                if (changedAttributes.Count > 0)
+                    totalValuesDelivered++;
+                _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
 
             // Reuse the per-page export flush sequence. EvaluatePendingExportsAsync refreshes the export cache for
@@ -5222,13 +5507,18 @@ public abstract class SyncTaskProcessorBase
             // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
             // the batch's writes have persisted; if a write throws, the flag stays set and the object is
             // reconsidered next sweep (fail-safe). Kept, too, when an export rule changed since this run read its
-            // rules (#1925); see the summary.
+            // rules (#1925), and for any object written since it was loaded (#2615): each is cleared only while its row
+            // version is the one read here, which is why the version is taken from the object as the drain loaded it.
+            // Reviewing an object writes nothing to its Metaverse Object row (provisioning writes Connected System
+            // Objects, deprovisioning Pending Exports and Connected System Objects), or the version would always have
+            // moved and no flag would ever clear.
             var cleared = await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(
-                flaggedIds, _exportEvaluationCache.ExportRulesReadWatermark);
+                mvos.ToDictionary(mvo => mvo.Id, mvo => mvo.xmin), _exportEvaluationCache.ExportRulesReadWatermark);
 
             ClearPageTrackingState();
             totalProcessed += mvos.Count;
             _activity.ObjectsProcessed = totalProcessed;
+            previousBatchIds = flaggedIds;
 
             if (!cleared)
             {
@@ -5243,9 +5533,60 @@ public abstract class SyncTaskProcessorBase
                 break;
         }
 
+        // An unreadable record means changes made outside synchronisation that this run could not deliver, and the record
+        // is cleared with the flag, so nothing would ever say so: one warning on the Activity, which completes with it,
+        // beside the per-object warning in the log that names each object (#2615). A record naming an attribute that no
+        // longer exists is not counted: there is no value left to deliver.
+        if (unreadableRecords > 0)
+        {
+            var warning = unreadableRecords == 1
+                ? "1 Metaverse Object recorded changes made outside synchronisation that could not be read; it was reviewed for export scope only, " +
+                  "and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values."
+                : string.Create(CultureInfo.InvariantCulture,
+                    $"{unreadableRecords} Metaverse Objects recorded changes made outside synchronisation that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.");
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            Log.Warning("ProcessScopeReviewPendingMetaverseObjectsAsync: {Count} Metaverse Object(s) had recorded changes made outside " +
+                "synchronisation that could not be read, so they were reviewed for export scope only (Activity {ActivityId})", unreadableRecords, _activity.Id);
+        }
+
         if (totalProcessed > 0)
             Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} flagged Metaverse Object(s), " +
-                "{Changed} of which were provisioned, deprovisioned or had an export staged (#892, #1925)", totalProcessed, totalChanged);
+                "{Changed} of which were provisioned, deprovisioned or had an export staged, and {Values} of which carried attribute value " +
+                "changes made outside synchronisation to deliver (#892, #1925, #2615)", totalProcessed, totalChanged, totalValuesDelivered);
+    }
+
+    /// <summary>
+    /// The attribute values a write outside synchronisation changed on a Metaverse Object (#2615), as the changed and
+    /// removed values export evaluation takes; empty and null for an object that carries no record (flagged by an
+    /// export Synchronisation Rule's configuration change or by the Temporal Scope Reconciler), which is reviewed for
+    /// scope alone. A record that cannot be read, or that names an attribute which no longer exists, never fails the
+    /// run: the unreadable record is reviewed for scope alone and the missing attribute is left out, each with a
+    /// warning in the log naming the object. The caller counts the unreadable records, which it reports on the Activity.
+    /// </summary>
+    private async Task<(List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes, bool RecordUnreadable)> ReadUnsynchronisedChangesAsync(MetaverseObject mvo)
+    {
+        if (string.IsNullOrWhiteSpace(mvo.UnsynchronisedChangesJson))
+            return ([], null, false);
+
+        _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
+        var input = UnsynchronisedChangeEvaluation.Read(mvo, _metaverseAttributeNamesById.Keys);
+        if (input.SkippedAttributeIds.Count > 0)
+        {
+            // The names were read earlier in the run, and an attribute created and edited since would look deleted: ask
+            // again before skipping anything (a rare path, so one more read of a tiny table).
+            _metaverseAttributeNamesById = await _syncRepo.GetMetaverseAttributeNamesAsync();
+            input = UnsynchronisedChangeEvaluation.Read(mvo, _metaverseAttributeNamesById.Keys);
+        }
+
+        if (input.RecordUnreadable)
+            Log.Warning("ReadUnsynchronisedChangesAsync: the changes recorded on Metaverse Object {MvoId} cannot be read, so it is reviewed " +
+                "for export scope alone and the changed values are not delivered to Connected Systems", mvo.Id);
+
+        foreach (var attributeId in input.SkippedAttributeIds)
+            Log.Warning("ReadUnsynchronisedChangesAsync: Metaverse Object {MvoId} records a change to Metaverse Attribute {AttributeId}, which no " +
+                "longer exists, so that change is not delivered to Connected Systems", mvo.Id, attributeId);
+
+        return (input.ChangedAttributes, input.RemovedAttributes, input.RecordUnreadable);
     }
 
     /// <summary>
@@ -5490,9 +5831,10 @@ public abstract class SyncTaskProcessorBase
         if (_pendingReProvisioningReviewMvoIds.Count > 0)
         {
             var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
-            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Count} Metaverse Object(s) for an export scope review, " +
-                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); {Newly} newly flagged",
-                _pendingReProvisioningReviewMvoIds.Count, flagged);
+            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Flagged} of {Requested} Metaverse Object(s) for an export scope review, " +
+                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); an object flagged " +
+                "already is flagged again, so a review in progress cannot clear it",
+                flagged, _pendingReProvisioningReviewMvoIds.Count);
             _pendingReProvisioningReviewMvoIds.Clear();
         }
 
@@ -5629,11 +5971,7 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("MvoDeletionDeleteBulk")
                     .SetTag("mvoCount", deletionsToProcess.Count))
                 {
-                    retirements.AddRange(await _syncServer.DeleteMetaverseObjectsAsync(
-                        deletionsToProcess,
-                        _activity.InitiatedByType,
-                        _activity.InitiatedById,
-                        _activity.InitiatedByName));
+                    retirements.AddRange(await _syncServer.DeleteMetaverseObjectsAsync(deletionsToProcess, _activity));
                 }
 
                 deletedMvoIds.AddRange(deletionsToProcess.Select(d => d.Mvo.Id));
@@ -5685,8 +6023,8 @@ public abstract class SyncTaskProcessorBase
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
-        // change, the unchanged-skip means no sync re-evaluates them, and a target without
-        // referential integrity keeps the deleted object as a member forever.
+        // change, so no Delta Synchronisation re-evaluates them, and a target without referential
+        // integrity keeps the deleted object as a member until a Full Synchronisation.
         if (deletedMvoIds.Count > 0)
         {
             using (Diagnostics.Sync.StartSpan("MvoDeletionStageRecallExports")
@@ -6331,12 +6669,7 @@ public abstract class SyncTaskProcessorBase
 
                 // Delete the MVO, passing initiator info and the snapshotted final attribute values
                 // (captured before attribute recall removed them from the MVO)
-                retirements.AddRange(await _syncServer.DeleteMetaverseObjectAsync(
-                    mvo,
-                    _activity.InitiatedByType,
-                    _activity.InitiatedById,
-                    _activity.InitiatedByName,
-                    finalAttributeValues));
+                retirements.AddRange(await _syncServer.DeleteMetaverseObjectAsync(mvo, _activity, finalAttributeValues));
                 deletedMvoIds.Add(mvo.Id);
                 Log.Information(
                     "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId}",
@@ -6350,7 +6683,7 @@ public abstract class SyncTaskProcessorBase
                     "ProcessMvoDeletionsIndividuallyAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                await _syncRepo.SetMetaverseObjectLastConnectorDisconnectedDateAsync(mvo.Id, mvo.LastConnectorDisconnectedDate.Value);
             }
         }
 
@@ -6411,6 +6744,7 @@ public abstract class SyncTaskProcessorBase
                 InitiatedByName = _activity.InitiatedByName,
                 // Link to RPEI for additional context (optional - RPEI may be cleaned up)
                 ActivityRunProfileExecutionItem = rpei,
+                ActivityId = _activity.Id,
                 // The projecting Synchronisation Rule (#399), scalar id/name only: never the SyncRule
                 // navigation, so this tracking context does not attach a rule graph. Null for every
                 // change type other than Projected.
@@ -6589,8 +6923,9 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
-        var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
-            _connectedSystem.Id, mvo.Id);
+        int existingCsoJoinCount;
+        using (Diagnostics.Sync.StartSpan("Join.ExistingJoinCount"))
+            existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(_connectedSystem.Id, mvo.Id);
 
         // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
         if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
@@ -6762,6 +7097,9 @@ public abstract class SyncTaskProcessorBase
         if (!_csoChangeTrackingEnabled || pendingExport.AttributeValueChanges.Count == 0)
             return;
 
+        using var snapshotSpan = Diagnostics.Sync.StartSpan("SnapshotPendingExportChanges")
+            .SetTag("changeCount", pendingExport.AttributeValueChanges.Count);
+
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
         // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
@@ -6769,6 +7107,7 @@ public abstract class SyncTaskProcessorBase
 
         if (mvoGuids.Count > 0)
         {
+            using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
             // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
             // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
             // and won't be in the database when this snapshot runs.
@@ -6805,12 +7144,28 @@ public abstract class SyncTaskProcessorBase
                 .Where(g => !resolvedReferences.ContainsKey(g))
                 .ToList();
 
-            if (unresolvedMvoGuids.Count > 0)
+            // Answered from this page's earlier lookups first; only Metaverse Objects not looked up yet reach the database.
+            var connectedSystemId = pendingExport.ConnectedSystemId;
+            var notYetLookedUp = new List<Guid>();
+            foreach (var mvoGuid in unresolvedMvoGuids)
             {
-                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(unresolvedMvoGuids, pendingExport.ConnectedSystemId);
-                foreach (var kvp in dbResolved)
+                if (!_snapshotReferenceCsos.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                    notYetLookedUp.Add(mvoGuid);
+                else if (known != null)
+                    resolvedReferences.TryAdd(mvoGuid, known);
+            }
+
+            if (notYetLookedUp.Count > 0)
+            {
+                Dictionary<Guid, ConnectedSystemObject> dbResolved;
+                using (Diagnostics.Sync.StartSpan("Snapshot.LoadReferencedObjects").SetTag("count", notYetLookedUp.Count))
+                    dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                foreach (var mvoGuid in notYetLookedUp)
                 {
-                    resolvedReferences.TryAdd(kvp.Key, kvp.Value);
+                    var found = dbResolved.GetValueOrDefault(mvoGuid);
+                    _snapshotReferenceCsos[(mvoGuid, connectedSystemId)] = found;
+                    if (found != null)
+                        resolvedReferences.TryAdd(mvoGuid, found);
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been
@@ -6821,6 +7176,7 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
+        using var buildSpan = Diagnostics.Sync.StartSpan("Snapshot.Build");
         var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
             pendingExport,
             _activity.InitiatedByType,
@@ -7030,12 +7386,14 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
-    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
+    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null)
     {
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext);
+        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext,
+            cannotResolveThisRun);
     }
 
     /// <summary>
@@ -7150,7 +7508,7 @@ public abstract class SyncTaskProcessorBase
             // Need to load CSO attributes for scoping evaluation if not already loaded
             if (csoWithAttributes.AttributeValues.Count == 0)
             {
-                var fullCso = await _syncRepo.GetConnectedSystemObjectAsync(_connectedSystem.Id, connectedSystemObject.Id);
+                var fullCso = await _syncRepo.GetConnectedSystemObjectWithAttributeValuesAsync(_connectedSystem.Id, connectedSystemObject.Id);
                 if (fullCso != null)
                 {
                     csoWithAttributes = fullCso;
@@ -7356,6 +7714,16 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.ClearJoinRecord();
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
 
+                // The break above is in memory only: EF does not detect CSO scalar changes at page boundaries, and
+                // the join-state batch is the only thing that writes them. Queue the CSO for it, whatever becomes of
+                // the Metaverse Object, or the Activity reports the disconnection while the row keeps its Metaverse
+                // Object and join record. An immediate deletion of the Metaverse Object does not stand in for this:
+                // it happens to clear the row of a CSO still joined to it, but only after the page's export
+                // evaluation has treated the departed CSO as a deprovisioning target of the object it just left.
+                // The flush writes the batch before the Metaverse Object is deleted, so the row is already released
+                // when the delete runs.
+                _pendingCsoJoinUpdates.Add(connectedSystemObject);
+
                 // Apply pending attribute changes and queue the MVO onto the page-flush batch update
                 // (skip when MVO is about to be deleted immediately - the update would be a wasted
                 // database round trip). QueueMvoForUpdate defers persistence to
@@ -7390,6 +7758,7 @@ public abstract class SyncTaskProcessorBase
                     // decision-time value the outcome node should state (#119).
                     mvoDeletionEligibleDate: mvo.DeletionEligibleDate,
                     mvoScheduledForDeletion: mvoDeletionFate == MvoDeletionFate.DeletionScheduled ? mvo : null,
+                    mvoDeletedImmediately: mvoDeletionFate == MvoDeletionFate.DeletedImmediately ? mvo : null,
                     preservedNoSourceAttributeCount: preservedNoSourceAttributeCount,
                     generatedValueOutcomes: generatedValueOutcomes);
         }
@@ -7459,20 +7828,75 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Builds a set of object type IDs that have inbound import rules with reference attribute mappings.
-    /// Used to determine whether unchanged CSOs need reference attribute processing.
+    /// How far before the run's start the closing sweep of <see cref="TypeOrderedCsoPager"/> reaches, so an object a
+    /// writer stamped with a clock a little behind this run's is still swept. Objects inside the margin that a type walk
+    /// already handed out are not handed out again, so a generous margin costs only a slightly larger sweep query.
     /// </summary>
-    protected void BuildReferenceObjectTypeCache(List<SyncRule> activeSyncRules)
-    {
-        _objectTypesWithReferenceRules = activeSyncRules
-            .Where(sr => sr.Direction == SyncRuleDirection.Import)
-            .Where(sr => sr.AttributeFlowRules.Any(afr =>
-                afr.TargetMetaverseAttribute?.Type == AttributeDataType.Reference))
-            .Select(sr => sr.ConnectedSystemObjectTypeId)
-            .ToHashSet();
+    private static readonly TimeSpan TypeOrderedSweepClockSkewMargin = TimeSpan.FromMinutes(5);
 
-        Log.Debug("BuildReferenceObjectTypeCache: {Count} object types have reference attribute rules",
-            _objectTypesWithReferenceRules.Count);
+    /// <summary>
+    /// Creates the page source for a synchronisation's main loop (#2492): the Connected System's Object Types in
+    /// dependency order (referenced types first, from the run's mapped reference attributes), each walked with its own
+    /// keyset cursor, then a sweep for objects created while the run was in flight. Logs the order, so a run's
+    /// behaviour can be explained from its log.
+    /// </summary>
+    /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
+    /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
+    /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
+    /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
+    /// 7 million values), rather than assume each reaches every type. Worth it for a Full Synchronisation: without it
+    /// LDAP's <c>member</c> and <c>manager</c> collapse people and groups into one id-ordered group. A Delta
+    /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
+    protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
+        bool observeUndeclaredReferenceTargets)
+    {
+        // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
+        // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
+        // reference mappings. A type that gains its first object mid-run is reached by the closing sweep.
+        var typeIdsInUse = await _syncRepo.GetConnectedSystemObjectTypeIdsInUseAsync(_connectedSystem.Id);
+        var loadedTypes = (_connectedSystem.ObjectTypes ?? []).Where(t => typeIdsInUse.Contains(t.Id)).ToList();
+        var objectTypes = loadedTypes
+            .Concat(typeIdsInUse
+                .Where(id => loadedTypes.TrueForAll(t => t.Id != id))
+                .Select(id => new ConnectedSystemObjectType { Id = id, Name = id.ToString(CultureInfo.InvariantCulture) }))
+            .ToList();
+
+        Dictionary<int, IReadOnlySet<int>>? observedTargetTypeIds = null;
+        if (observeUndeclaredReferenceTargets)
+        {
+            var undeclaredAttributeIds = SyncObjectTypeOrdering.GetUndeclaredMappedReferenceAttributeIds(objectTypes, activeSyncRules);
+            if (undeclaredAttributeIds.Count > 0)
+            {
+                using var observeSpan = Diagnostics.Sync.StartSpan("ObserveReferenceTargetTypes")
+                    .SetTag("attributeCount", undeclaredAttributeIds.Count);
+                observedTargetTypeIds = await _syncRepo.GetReferencedObjectTypeIdsAsync(undeclaredAttributeIds.ToList());
+                observeSpan.SetSuccess();
+            }
+        }
+
+        var order = SyncObjectTypeOrdering.Compute(objectTypes, activeSyncRules, observedTargetTypeIds);
+        var namesById = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        if (order.TypeIds.Count == 0)
+        {
+            Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
+            _csoPager = new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            return _csoPager;
+        }
+
+        string NameOf(int id) => LogSanitiser.Sanitise(namesById.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
+
+        Log.Information("{RunKind} type order: {TypeOrder}", runKind, order.Describe(NameOf));
+        if (order.SelfReferencingTypeIds.Count > 0)
+        {
+            Log.Information("{RunKind} type order: references within {Types} can still need the cross-page reference step",
+                runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
+        }
+
+        _csoPager = new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+        return _csoPager;
     }
 
     /// <summary>
@@ -7496,33 +7920,28 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
-            var heldConnectedSystemObjectIds = await GetConnectedSystemObjectIdsHeldForInitialPasswordAsync();
+            var heldPendingExports = await GetPendingExportsHeldForInitialPasswordAsync();
 
-            foreach (var (cso, mvo) in _pendingDriftEvaluations.Where(pending => !heldConnectedSystemObjectIds.Contains(pending.Cso.Id)))
-                EvaluateDriftAndEnforceState(cso, mvo);
-
-            if (heldConnectedSystemObjectIds.Count > 0)
-            {
-                Log.Information("EvaluateQueuedDriftAsync: Skipped Drift Detection for {Count} Connected System Object(s) holding a change until its " +
-                    "Initial Password is delivered", heldConnectedSystemObjectIds.Count);
-            }
+            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
         }
 
         _pendingDriftEvaluations.Clear();
     }
 
     /// <summary>
-    /// The page's queued Connected System Objects whose Pending Export holds a change written with an interim value
-    /// until an Initial Password is delivered (#2039). Drift Detection skips them entirely, not just the held attribute:
-    /// a correction staged for any attribute makes the page flush delete every existing Pending Export for the object
-    /// (<see cref="FlushPendingExportOperationsAsync"/>), the held change with it, and the enabled value would then be
-    /// re-sent to an account the target will not enable until it has a password. One query per page, answered from a
-    /// partial index on the flag, and none at all when this run detects no drift.
+    /// The Pending Exports of the page's queued Connected System Objects that hold a change written with an interim
+    /// value until an Initial Password is delivered (#2039), keyed by object. Drift Detection still corrects such an
+    /// object's other attributes at once (#2501), but its correction must neither restate the held change nor drop it:
+    /// the page flush replaces the object's Pending Export with the correction (<see cref="FlushPendingExportOperationsAsync"/>),
+    /// so the held change has to travel with it. The first query reads the partial index on the flag, so a page with
+    /// nothing held costs one cheap query, and none at all when this run detects no drift; the Pending Exports are read
+    /// only for the objects it names.
     /// </summary>
-    private async Task<IReadOnlySet<Guid>> GetConnectedSystemObjectIdsHeldForInitialPasswordAsync()
+    private async Task<IReadOnlyDictionary<Guid, PendingExport>> GetPendingExportsHeldForInitialPasswordAsync()
     {
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
         var connectedSystemObjectIds = _pendingDriftEvaluations
             .Select(pending => pending.Cso.Id)
@@ -7530,9 +7949,13 @@ public abstract class SyncTaskProcessorBase
             .Distinct()
             .ToList();
         if (connectedSystemObjectIds.Count == 0)
-            return new HashSet<Guid>();
+            return new Dictionary<Guid, PendingExport>();
 
-        return await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        var heldConnectedSystemObjectIds = await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        if (heldConnectedSystemObjectIds.Count == 0)
+            return new Dictionary<Guid, PendingExport>();
+
+        return await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(heldConnectedSystemObjectIds);
     }
 
     /// <summary>
@@ -7581,7 +8004,14 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     private const string DriftNotCheckedPrefix = "Drift Detection could not check this object, so no correction was staged. ";
 
-    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
+    /// <summary>
+    /// Evaluates one object's drift and stages its corrections for the page flush.
+    /// </summary>
+    /// <param name="cso">The Connected System Object that was just processed.</param>
+    /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
+    /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
+    /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -7659,6 +8089,12 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ErrorType = errorType;
             errorRpei.ErrorMessage = errorMessage;
             _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        if (heldPendingExport != null)
+        {
+            DriftDetectionService.DropCorrectionsRestatingHeldChanges(result, heldPendingExport);
+            DriftDetectionService.CarryOverReplacedPendingExport(result, heldPendingExport);
         }
 
         // A Drift Correction item is raised only where a correction was staged (#2180), never for a difference that

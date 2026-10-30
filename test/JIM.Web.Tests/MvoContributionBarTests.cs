@@ -147,6 +147,40 @@ public class MvoContributionBarTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// #2472: the token is one source, as a Connected System is, whichever claim each value came from; JIM itself is
+    /// another. Neither reads as "not recorded", and each takes its own colour.
+    /// </summary>
+    [Test]
+    public void ContributionBar_SignInClaimsAndSystemValues_FormOneSignInGroupAndOneSystemGroup()
+    {
+        var provenance = new MetaverseObjectProvenance
+        {
+            Attributes =
+            [
+                Attribute(1, new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "name" }),
+                Attribute(2, new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "given_name" }),
+                Attribute(3, new ValueOrigin { Kind = ValueOriginKind.SignInClaim, ClaimType = "family_name" }),
+                Attribute(4, new ValueOrigin { Kind = ValueOriginKind.System })
+            ]
+        };
+
+        var groups = ValueOriginGrouping.BuildGroups(provenance.Attributes);
+        var cut = Render<MvoContributionBar>(p => p
+            .Add(c => c.Provenance, provenance)
+            .Add(c => c.ObjectTypeName, "User"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(groups, Has.Count.EqualTo(2));
+            Assert.That(groups[0].Count, Is.EqualTo(3), "every claim is the one sign-in source");
+            Assert.That(groups.Select(g => g.Group.Kind), Is.EquivalentTo(new ValueOriginKind?[] { ValueOriginKind.SignInClaim, ValueOriginKind.System }));
+            Assert.That(groups.Select(g => ValueOriginGrouping.ColourTokenFor(g.Group)).Distinct().Count(), Is.EqualTo(2));
+            Assert.That(cut.Markup, Does.Not.Contain("Source not recorded"));
+            Assert.That(cut.FindAll(".jim-contribution-legend-item"), Has.Count.EqualTo(2));
+        }
+    }
+
     [Test]
     public void ContributionBar_SeveralSources_RendersASegmentAndLegendItemPerGroupWithCounts()
     {

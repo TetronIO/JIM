@@ -244,6 +244,20 @@ Describe 'Test-DocsCoverage: LNK-3 links from the product into the docs' {
     }
 }
 
+Describe 'Test-DocsCoverage: headings that open with an icon (STY-3)' {
+    It 'reads a heading''s anchor and cmdlet name without its icon, as MkDocs does' {
+        $page = Get-Page 'Things' "## :material-console: Get-JIMThing`n`nGets a thing.`n`n## :material-tune-variant: Set-JIMThing`n`nSets.`n`n## :material-delete-outline: Remove-JIMThing`n`nRemoves.`n"
+        $files = @{
+            'docs/powershell/things.md' = $page
+            'src/JIM.PowerShell/JIM.psd1' = "@{`n    FunctionsToExport = @(`n        'Get-JIMThing',`n        'Set-JIMThing',`n        'Remove-JIMThing'`n    )`n}`n"
+            'src/JIM.Web/Hint.cs' = "var a = `"https://docs.junctional.io/powershell/things/#get-jimthing`";`n"
+        }
+        $r = Invoke-Coverage -Root (New-Repository -Files $files)
+        $r.Output | Should -Not -Match 'LNK-3|COV-1'
+        $r.ExitCode | Should -Be 0
+    }
+}
+
 Describe 'Test-DocsCoverage: LNK-3 links followed by a shell variable' {
     It 'checks a link with a colour reset straight after it, rather than skipping it as templated' {
         $files = @{ 'deploy/setup.sh' = "#!/usr/bin/env bash`n#     JIM_SETUP_AUTO_START  - start`nset -euo pipefail`nDOCS_BASE=`"https://docs.junctional.io`"`necho `"`${DOCS_BASE}/administration/missing/`${RESET}`"`n" }
@@ -323,6 +337,42 @@ Describe 'Test-DocsCoverage: COV-5 portal pages name their docs page' {
         $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Empty.razor' gives no reason"
         $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Gone.razor' names a page that no longer exists"
         $r.Output | Should -Match "COV-5\s+.*'src/JIM.Web/Pages/Things.razor' is no longer needed"
+    }
+}
+
+Describe 'Test-DocsCoverage: LANG-10 the API reference names nothing JIM is built with' {
+    BeforeAll {
+        # The term list is the conformance check's own, so the API reference and the pages hold to one list.
+        $script:ShippedTerms = (Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' '..' 'docs' '.conformance' 'config.psd1')).InternalTermPatterns
+        function New-OpenApiRepository {
+            param([string]$Description)
+            $root = New-Repository -Files @{ 'docs/.conformance/config.psd1' = (ConvertTo-Psd1 -Value @{ InternalTermPatterns = $script:ShippedTerms }) }
+            $document = @{
+                openapi    = '3.1.1'
+                paths      = @{ '/api/v1/metaverse/object-types' = @{ get = @{ tags = @('Metaverse'); summary = 'Lists the Object Types.' } } }
+                components = @{ schemas = @{ ObjectTypeDto = @{ properties = @{
+                                icon        = @{ type = 'string'; description = $Description }
+                                description = @{ type = 'string'; description = 'What the Object Type is for.' } } } } }
+            }
+            Set-Content -Path (Join-Path $root 'openapi.json') -Value ($document | ConvertTo-Json -Depth 20) -Encoding utf8
+            $root
+        }
+        function Invoke-ApiText {
+            param([string]$Root)
+            Invoke-Coverage -Root $Root -ExtraArgs @('-OpenApiPath', (Join-Path $Root 'openapi.json'), '-Rule', 'LANG-10')
+        }
+    }
+
+    It 'fails a framework name in a description, naming where it is' {
+        $r = Invoke-ApiText -Root (New-OpenApiRepository -Description 'The name of the MudBlazor icon the portal shows.')
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match "LANG-10.*components/schemas/ObjectTypeDto/properties/icon/description.*'MudBlazor'"
+    }
+
+    It 'passes descriptions that name only what the reader works with, and a name in code' {
+        $r = Invoke-ApiText -Root (New-OpenApiRepository -Description 'The Material Design icon the portal shows, such as `Devices`.')
+        $r.ExitCode | Should -Be 0
+        $r.Output | Should -Match 'Docs coverage passed'
     }
 }
 
@@ -420,6 +470,6 @@ Describe 'Test-DocsCoverage: ACC-3 REST routes and COV-4 resource groups' {
     It 'skips the API rules, and says so, when no OpenAPI document is given' {
         $r = Invoke-Coverage -Root (New-ApiRepository -Page "Call ``GET /api/v1/synchronisation/systems``.`n")
         $r.ExitCode | Should -Be 0
-        $r.Output | Should -Match 'ACC-3 and COV-4 skipped'
+        $r.Output | Should -Match 'ACC-3, COV-4 and LANG-10 skipped'
     }
 }

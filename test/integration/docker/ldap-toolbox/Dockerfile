@@ -7,7 +7,8 @@
 # harness runs ldapsearch, ldapmodify and friends inside it. The Active Directory lab is real Windows
 # Server domain controllers running as Hyper-V virtual machines, so there is no container to run the
 # tools in. This image is that container: the OpenLDAP client tools, openssl to read a domain
-# controller's certificate, and kpasswd, on the Docker network the rest of the lab uses. The harness runs
+# controller's certificate, kpasswd, and PowerShell for the AD FS sign-in checks, on the Docker network the
+# rest of the lab uses. The harness runs
 # "docker exec jim-ldap-toolbox ldapsearch -H ldaps://<dc fqdn>:636 ..." (see Invoke-LdapTool in
 # test/integration/utils/LDAP-Helpers.ps1).
 #
@@ -43,7 +44,24 @@ RUN apt-get update \
         openssl \
         ca-certificates \
         krb5-user \
+        curl \
     && rm -rf /var/lib/apt/lists/*
+
+# PowerShell, for the AD FS sign-in checks (#2441). They run here because this container is the lab's stand-in for
+# an administrator's workstation: it resolves the domain controllers' and the AD FS server's names (extra_hosts) and
+# reaches jim.web on the Docker network, which the runner itself cannot. Connect-JIM and the portal sign-in run in it
+# with JIM's own PowerShell module. Pinned to a release and its SHA-256 (the digest GitHub publishes for the asset),
+# unlike the apt packages above, because it is downloaded rather than taken from the distribution.
+ARG POWERSHELL_VERSION=7.6.7
+ARG POWERSHELL_SHA256=6896f9e3a6b0a354bf470835a96da76d2f801cd50dcf047ad7c4563bf93bf431
+RUN curl -fsSL -o /tmp/powershell.tar.gz \
+        "https://github.com/PowerShell/PowerShell/releases/download/v${POWERSHELL_VERSION}/powershell-${POWERSHELL_VERSION}-linux-x64.tar.gz" \
+    && echo "${POWERSHELL_SHA256}  /tmp/powershell.tar.gz" | sha256sum -c - \
+    && mkdir -p /opt/microsoft/powershell/7 \
+    && tar -xzf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7 \
+    && chmod +x /opt/microsoft/powershell/7/pwsh \
+    && ln -s /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh \
+    && rm /tmp/powershell.tar.gz
 
 # The base image's built-in unprivileged user (UID 1654), as the JIM images run as. The tools only read
 # the mounted certificates.

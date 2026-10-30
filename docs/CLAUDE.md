@@ -9,6 +9,7 @@ The standard is the authority; this is the short version of what trips people up
 
 - **Every page declares its type and audience** in front matter, alongside its `title` and `description` (STR-1, STR-2), and takes the shape its type requires (TYP-1). Quote any front matter value containing `: `; MkDocs silently drops a block it cannot parse.
 - **When behaviour changes, rewrite what is now wrong; never append release history** ("previously", "now", "this release"). Search `docs/` for the sentence your change made false before you look for where to describe the new thing (MNT-1, MNT-2).
+- **Name what the reader works with, never what JIM is built with** (VOI-6, LANG-10): no UI framework, web server, database driver or object mapper, no project name (`JIM.Web`), and no development infrastructure (the devcontainer, the integration lab). Say the portal, the REST API, the web container (`jim.web`). PostgreSQL, Docker, Podman and names the reader types stay. `changelog-lint` checks running text, diagram specs and included SVGs; `build-and-test` checks the API reference text.
 - **Product nouns come from the glossary.** Write them in Title Case (LANG-3); a new one needs a glossary entry and an entry in `docs/.conformance/vocabulary.psd1` in the same change (TERM-1).
 - **What the product has, the docs document** (COV-1 to COV-4, COV-6): a new cmdlet needs a heading on its `docs/powershell/` page, a new environment variable a row in a settings table, a new Service Setting a row in the Service Settings table of `docs/administration/configuration.md`, a new Connector setting a row in a Setting table on its Connector's page (named exactly as the form shows it), a new expression function a row in the function reference, a new API controller a row in the Resource groups table on `docs/api/index.md`, and a removed one comes out of the docs. `Test-DocsCoverage.ps1` checks most of them, every link from the product into the docs (LNK-3), and the docs page every portal page names from its `PageInfo` (COV-5), on every pull request, so renaming a heading a portal page links to fails until the page is updated; the NUnit tests in `test/JIM.Worker.Tests/Docs/` check the settings. A deliberate exception goes in `docs/.conformance/coverage.psd1` with its reason.
 - **A tutorial is executed every release, from the page** (TUT-1, TUT-2): its PowerShell tabs run in order, and its `<!-- checkpoint: ... -->` markers are asserted. Changing a tutorial's steps or what it says the reader sees is changing a test: keep each marker beside the sentence it checks, and name portal controls in bold exactly as the portal labels them. The standard's "Writing a tutorial" has the markers.
@@ -87,6 +88,132 @@ flowchart TD
 
 Nothing else is needed. They are clickable automatically (see "Diagram lightbox" below).
 
+## Generated diagrams (`jim-diagram`)
+
+A diagram can be written as a short spec in the page, where it belongs, and `docs/hooks/diagrams.py` renders it to inline SVG at build time (#2564; the archetypes still to come are in `engineering/plans/done/DOCS_DIAGRAM_ON_EVERY_PAGE.md`). The spec says what the diagram shows; the archetype owns the layout, the theming, the phone layout and the text alternative. Six archetypes are available: **flow**, **lifecycle**, **anatomy**, **decision**, **comparison** and **map**. Pick the one that matches what the page explains, and draw from the page's own words. A flow is something that processes, with steps and branches:
+
+````markdown
+```jim-diagram
+archetype: flow
+title: What a Synchronisation Rule does to an object on its way in   # the <title>
+desc: An inbound Synchronisation Rule takes a Connected System Object ...   # the <desc>: all the picture says, in words
+in: { label: Connected System Object, note: Connector Space }         # optional box before the steps
+out: { label: Metaverse Object, note: the Metaverse }                 # optional box after them
+container: { label: Synchronisation Rule, tag: "Direction: inbound", badge: 1 }   # optional frame round the steps
+steps:                                                                # two or more, left to right
+  - { id: scope, label: Scoping criteria, badge: 2, note: "out of scope: skipped" }
+  - { id: match, label: Object Matching Rules, badge: 3, next: match }   # next: a label on the edge to the next step
+  - { id: map, label: Attribute mappings, badge: 5 }
+detours:                                                              # optional: a path round, through a step of its own
+  - { from: match, to: map, label: no match, step: { label: Projection, sub: creates one, badge: 4 } }
+```
+````
+
+- **`title` and `desc` are required** (A11Y-2). Write `desc` so it carries everything the picture says.
+- **Badges echo the page.** Where the page has a numbered list the diagram depicts, give each box the same number, so the diagram indexes the text below it.
+- **Every key is checked.** An unknown or misspelt key, a missing label, or a detour between steps that do not exist fails the build with the page and line. So does a label that cannot fit its box on two lines, or a flow too wide for the 800-unit layout: shorten the label or split the diagram; there is no setting to squeeze it. A step a detour leaves or rejoins cannot carry a `note`, because the detour's line would cross it. A `note` sits under its box and wraps onto a second line within the room up to its neighbours (or the container's edge); one that still does not fit fails the build, so shorten it.
+- **Quote any value with a colon, a comma or a question mark in it.** In a `{ ... }` mapping, `note: input missing: see below` is read as a nested key and `label: Free?` or `sub: trim, collapse` can split; the error then names a key that is not in the spec. Write `note: "input missing: see below"`, or single quotes when the value holds double quotes.
+- **Two layouts are drawn,** wide and narrow, and `custom.css` ("Generated diagrams") shows the narrow one below 600px. The lightbox wraps each, and hides the trigger of the one not showing.
+- **Labels are sized from committed font metrics** (`docs/hooks/diagram_metrics.json`). If the site's fonts change, regenerate them with `pwsh -File ./scripts/Update-DiagramFontMetrics.ps1`.
+- **Code in a label:** wrap a cmdlet, attribute or value in backticks (`` `Get-JIMConnectedSystem` ``) and it is set, and measured, in Plex Mono. A code span is never split across lines.
+
+A **lifecycle** is something that moves between states, with what moves it:
+
+````markdown
+```jim-diagram
+archetype: lifecycle
+title: The Connected System lifecycle, one cmdlet per step
+desc: ...
+start: { label: "`New-JIMConnectedSystem`" }          # optional: a dot and the arrow that creates it
+container: { label: Connected System, note: "`Get-JIMConnectedSystem` reads it ..." }   # optional frame
+states:                                                # two to four, in order
+  - { id: configured, label: Configured, sub: no objects yet }
+  - { id: holding, label: Holding objects, sub: Connector Space filled }
+transitions:                                           # only between neighbouring states, one each way
+  - { from: configured, to: holding, label: imported by a Run Profile }
+  - { from: holding, to: configured, label: "`Clear-JIMConnectedSystem`", note: "keeps configuration, schema and rules" }
+end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `Get-...DeletionPreview`",
+       state: { label: Deleted, sub: with all its data } }   # optional: from the last state's id, or the container
+```
+````
+
+An **anatomy** takes something apart. Its subject is either a `value` (a string, drawn as a token, as an API key is) or an `object` (a card listing its parts):
+
+````markdown
+```jim-diagram
+archetype: anatomy
+title: What an API key is made of
+desc: ...
+subject:
+  kind: value                                          # or: kind: object, label: ..., parts: [{ label, detail }]
+  parts:                                               # one to four, left to right
+    - { text: jim_ak_, strong: true, callout: "Prefix: always visible" }
+    - { id: secret, text: "••••••••••••••••••", callout: "Secret: shown once, at creation" }
+derived: { from: secret, label: stored as, box: SHA-256 hash, note: all JIM keeps }   # optional, a value's part only
+properties:                                            # optional, up to four chips
+  - { name: Roles, value: what it may do }
+```
+````
+
+A **decision** is a branching diagnosis or outcome. Questions stack down the left; each answer goes to an outcome on the right, to the next question, or back to an earlier one:
+
+````markdown
+```jim-diagram
+archetype: decision
+title: How an Object Matching Rule decides a join
+desc: ...
+start: { label: Connected System Object }              # optional
+questions:                                             # one to four, top to bottom
+  - { id: rule, label: Next Object Matching Rule, sub: "how many Metaverse Objects match?" }
+  - { id: more, label: "More rules?" }
+outcomes:                                              # two to six; good: true draws the outcome you want solid
+  - { id: joined, label: Joined, sub: the rule and value recorded, good: true }
+  - { id: none, label: No match, sub: projection or provisioning may create one }
+answers:                                               # each outcome reached by exactly one answer; every later question reached
+  - { from: rule, to: joined, label: exactly one }
+  - { from: rule, to: more, label: "none, or no value" }   # to the next question only
+  - { from: more, to: rule, label: "yes: try it" }         # back to an earlier one: a loop
+  - { from: more, to: none, label: "no" }
+```
+````
+
+A **comparison** sets two or three options side by side against the same rows. A `meter` (0 to 12) draws a row of dots, filled in proportion: "every object" against "only what changed":
+
+````markdown
+```jim-diagram
+archetype: comparison
+title: Full and Delta runs compared
+desc: ...
+columns: [{ label: Full, sub: "every object, every time" }, { label: Delta, sub: "only what changed, faster" }]
+rows:                                                  # one to four, each with one cell per column
+  - label: Import
+    cells:
+      - { text: reads every object, sub: one no longer returned is deleted, meter: 12 }
+      - { text: reads changes since the last import, meter: 3 }
+footer: "Export flushes the Pending Exports either way: it has no Full or Delta form"   # optional
+```
+````
+
+A **map** shows how three to fourteen things connect, on a grid of up to four rows and four columns. An edge runs along a row or a column and may not pass through another node. A `link` (a page anchor, or a relative path) makes the node a link, so a map can index the page it sits on:
+
+````markdown
+```jim-diagram
+archetype: map
+title: How JIM's core terms connect
+desc: ...
+nodes:
+  - { id: connector, label: Connector, link: "#connector", row: 0, col: 0 }
+  - { id: cs, label: Connected System, link: "#connected-system", row: 0, col: 1 }
+edges:
+  - { from: connector, to: cs, label: reaches }
+```
+````
+
+On a phone, a decision stacks each question over its outcomes, a comparison becomes one block per column, and a map becomes a list of its nodes, each followed by the connections leaving it. A map with links is not wrapped by the lightbox (`diagram-zoom.js` skips any diagram containing a link), because a link inside the trigger button cannot be reached by keyboard; every other generated diagram keeps its Enlarge chip in a strip above it, clear of its content.
+
+- **Checks:** `python3 -m unittest discover -s docs/hooks/tests` (the renderer) and `pwsh -File ./scripts/Test-Diagrams.ps1`, which renders the fixtures in `docs/hooks/tests/fixtures/` in a browser and fails on a label outside its box, overlapping labels, a line through a label, a label hidden under another shape, text under 10px on screen, or the wrong layout showing. Both run in `changelog-lint`. Add a fixture for any new layout case the renderer gains. Before committing a page's diagram, check the page itself and look at the result: `pwsh -File ./scripts/Test-Diagrams.ps1 -Path docs/<section>/<page>.md -ScreenshotDir <folder>` runs the same checks on the page's diagrams and saves a picture of each.
+- **Review a batch from its contact sheet.** `pwsh -File ./scripts/New-DiagramContactSheet.ps1 -Section configuration` (or `-Path` with one or more pages) writes one self-contained HTML page showing every diagram in the section, page by page, each in the light and dark themes at the 720px reading column and on a 390px phone, and lists each page with no diagram yet. It renders the specs with `diagrams.py` itself, so no MkDocs build is needed, only PyYAML and the browser the checks above use; it prints where it wrote the sheet (the system temporary folder unless `-OutFile` says otherwise). Concept SVGs are drawn too; Mermaid diagrams are listed, not drawn. A spec that fails shows its error in place, and the script exits 1.
+
 ## Diagram lightbox
 
 `docs/assets/javascripts/diagram-zoom.js` makes **both** diagram families click-to-enlarge in one overlay with zoom and pan; styling lives in the "Diagram lightbox" section of `custom.css`. No per-diagram markup is needed. No external dependencies: it uses only the Mermaid instance MkDocs Material already loads.
@@ -112,6 +239,15 @@ The script wraps each diagram in a `<button class="jim-dgz-trigger">` so it is k
 
 **Verifying changes:** Material loads Mermaid from `unpkg.com`, so Mermaid diagrams silently never render in an offline sandbox (the `<pre class="mermaid">` is consumed and nothing replaces it). To test that path, download the bundle once and intercept the CDN request in Playwright; otherwise you are only testing the concept-SVG half.
 
+## Reader layout controls
+
+`docs/assets/javascripts/docs-layout.js` adds two controls readers can use on every page; styling lives in the "Reader layout controls" section of `custom.css`. No external dependencies.
+
+- **Width toggle.** A header button beside the light/dark toggle switches between the reading width and the full window width. At full width everything fills the window, text included. The choice is kept in `localStorage` (`jim-docs-width`), and an inline script in `docs/overrides/main.html` (`extrahead`) applies it before the page draws. Below 76.25em Material's layout is already full width, so the button is hidden.
+- **Resizable table columns.** Every header cell but the last gets a handle on its right edge. It can be dragged, moved with the arrow keys (Shift for bigger steps), or double-clicked to reset the table. A resize moves the boundary and keeps the table's width, so it never starts to scroll. The column left of the handle grows or shrinks, and every column to its right gives or takes the difference in proportion (giving in proportion to its width above the 64px minimum, so none goes below it); columns to the left never move, so the edge stays under the pointer. Each move is worked out from the widths at the start of the drag, so dragging back restores them. The first resize fixes the table at its drawn width and each column at its share of the space inside the border, then switches to a fixed layout. That needs two overrides on resized tables in `custom.css`: `display: table`, because Material draws content tables as `inline-block` on screen and `table-layout` only applies to a table box, and `min-width: 0` on header cells, because the browser would otherwise draw a column at Material's 5rem minimum whatever it was set to and take the difference from its neighbour. Widths are not remembered. **Never put a class on a content table**: Material styles tables as `table:not([class])`, and even an emptied `class` attribute opts one out of every rule. The drag state is a data attribute for that reason.
+
+`scripts/Test-DocsLayout.ps1` drives both in a real browser against `custom.css` and the script, and runs in `changelog-lint` whenever either changes, alongside the diagram checks. Run it after changing either, and after a Material upgrade.
+
 ## GLightbox (image files)
 
 GLightbox is configured as a plugin in `mkdocs.yml` and wraps all `<img>` tags automatically. No per-image markup is needed. It handles raster images and any `<img>`-referenced SVG; vector diagrams inlined in the page are handled by `diagram-zoom.js` instead.
@@ -120,14 +256,10 @@ The lightbox background is themed via `docs/assets/stylesheets/custom.css` (`.gs
 
 ## Dependencies
 
-MkDocs dependencies are pinned in two places - keep them in sync:
+The docs toolchain is pinned to exact versions in **`docs/requirements.txt`**, the only place its versions are set. Every install reads it with `pip install -r docs/requirements.txt`: `.devcontainer/setup.sh`, and the `changelog-lint`, `docs`, `publish-api-reference` and `release` workflows. Never add a version to an install line; change the file.
 
-| File | Purpose |
-|------|---------|
-| `.devcontainer/setup.sh` | Installed in the dev container |
-| `.github/workflows/docs.yml` | Installed in CI for GitHub Pages deployment |
-| `.github/workflows/changelog-lint.yml` | Installed in CI for the pull request docs site check |
+Dependabot (`pip`, directory `/docs`) raises the bumps. A bump pull request changes a path under `docs/`, so `changelog-lint` runs the strict build and link check on it before it can merge. Majors are ignored: MkDocs 2.0 is incompatible with Material for MkDocs.
 
-Current pinned versions: `mkdocs>=1.6,<2`, `mkdocs-material>=9.7,<10`, `mkdocs-glightbox>=0.4,<1`.
+**Why exact pins, and why this is temporary (#2058).** Material for MkDocs is in maintenance mode, with critical fixes committed until 5 May 2027; MkDocs 1.6.1 (August 2024) is the last 1.x release. The planned move is to Zensical, from the same team, once its 0.1 release line ships (scheduled for 5 November 2026), and before Material's window closes. A trial build on Zensical 0.0.71 read `mkdocs.yml` unchanged, but showed two gaps to close first: it does not enforce the `absolute_links` or `omitted_files` validation, and it silently drops the GLightbox plugin unless its own lightbox is configured. **Review by 1 February 2027.**
 
 The pull request link check also runs lychee, from its official container image pinned by digest in `scripts/Test-DocsSite.ps1` (row 10 of `engineering/DEPENDENCY_PINNING.md`).

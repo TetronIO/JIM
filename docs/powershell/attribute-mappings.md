@@ -9,9 +9,32 @@ audience: automation-author
 
 The Attribute Mapping cmdlets list, create, change and delete the Attribute Flows on a Synchronisation Rule: what each Connected System or Metaverse attribute, expression or generated value flows to. How Attribute Flows work, and how the value that wins is chosen, is covered in [Attribute Mappings](../configuration/attribute-mappings.md).
 
+```jim-diagram
+archetype: decision
+title: Which cmdlet changes an Attribute Flow
+desc: 'To change what an Attribute Flow targets, or whether its source is an attribute or an expression, remove it with Remove-JIMSyncRuleMapping and create it again with New-JIMSyncRuleMapping, because those changes revalidate it and reopen its place in the Attribute Priority order. To change its place in that order, use Set-JIMMetaverseAttributePriority or Move-JIMMetaverseAttributePriority. To change any other setting, use Set-JIMSyncRuleMapping, which changes only what you give; a setting that does not apply to the mapping, such as -NullIsValue on an export mapping, is refused rather than ignored, and so is a call that names no setting.'
+start: {label: Changing a mapping}
+questions:
+- {id: target, label: 'Change its target or kind of source?', sub: 'attribute or expression'}
+- {id: priority, label: 'Change its Attribute Priority place?'}
+- {id: applies, label: 'Does the setting apply to it?', sub: 'the mapping''s direction and kind'}
+outcomes:
+- {id: recreate, label: 'Remove it, then create it', sub: '`Remove-` then `New-JIMSyncRuleMapping`'}
+- {id: reorder, label: Reorder the priority, sub: with the Metaverse Attribute priority cmdlets}
+- {id: set, label: '`Set-JIMSyncRuleMapping`', sub: 'only what you give changes', good: true}
+- {id: refused, label: Refused, sub: 'such as `-NullIsValue` on an export mapping'}
+answers:
+- {from: target, to: recreate, label: 'yes'}
+- {from: target, to: priority, label: 'no'}
+- {from: priority, to: reorder, label: 'yes'}
+- {from: priority, to: applies, label: 'no'}
+- {from: applies, to: set, label: 'yes'}
+- {from: applies, to: refused, label: 'no'}
+```
+
 ---
 
-## Get-JIMSyncRuleMapping
+## :material-swap-vertical: Get-JIMSyncRuleMapping
 
 Retrieves Attribute Flow mappings for a Synchronisation Rule. Returns all mappings for the rule, or a specific mapping by ID.
 
@@ -60,6 +83,7 @@ The rule's mappings, or the one mapping. On a generated mapping, Generation.Part
 | `Warnings` | `string[]` | Warnings the create or update raised about the mapping without stopping it, such as a derived Attribute Flow calling a function that returns a different value each time. Empty on a read. |
 | `Derived` | `object` | On a Metaverse-Derived Attribute Flow (an import expression reading mv["..."]): the Metaverse attributes it reads and its step in the evaluation order. Empty on every other mapping. It has `Step`, `StepCount` and `MetaverseInputs`. |
 | `DependentDerivedFlows` | `object[]` | On the response to an update that disabled the mapping, rewrote its expression or changed what it writes: the Metaverse-Derived Attribute Flows the change left with a missing input. The update went ahead; each flow's Missing Input Behaviour decides what it contributes. Empty on a read. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a create or update of an Attribute Flow on an import rule: the Connected System Object Types the save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the save recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 <!-- END GENERATED: Get-JIMSyncRuleMapping -->
 
 ### Examples
@@ -88,7 +112,7 @@ Get-JIMSyncRule -Id 5 | Get-JIMSyncRuleMapping
 
 ---
 
-## New-JIMSyncRuleMapping
+## :material-plus-circle-outline: New-JIMSyncRuleMapping
 
 Creates a new Attribute Flow mapping on a Synchronisation Rule. Mappings can be direct Attribute Flows (one or more source attributes to a target) or expression-based transformations.
 
@@ -152,7 +176,7 @@ New-JIMSyncRuleMapping -SyncRuleId <int> [-TargetMetaverseAttributeId <int>] [-S
 
 ### Output
 
-The mapping created. Any warnings the save raised are written to the warning stream as well.
+The mapping created. Any warnings the save raised are written to the warning stream as well. AwaitingSynchronisation names the Connected System Object Type an import mapping makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes (empty for an export mapping), and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping).
 <!-- END GENERATED: New-JIMSyncRuleMapping -->
@@ -213,7 +237,7 @@ New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 40 `
 
 ---
 
-## Set-JIMSyncRuleMapping
+## :material-pencil-outline: Set-JIMSyncRuleMapping
 
 Changes the settings on an existing Attribute Flow, leaving what it reads and writes alone. Only the parameters you supply are changed.
 
@@ -266,7 +290,7 @@ Set-JIMSyncRuleMapping -SyncRuleId <int> -InputObject <PSCustomObject> [-Express
 
 ### Output
 
-With `-PassThru`, the mapping as changed; otherwise nothing. Its warnings, and any derived Attribute Flows the change left with a missing input, are written to the warning stream either way.
+With `-PassThru`, the mapping as changed; otherwise nothing. Its warnings, and any derived Attribute Flows the change left with a missing input, are written to the warning stream either way. AwaitingSynchronisation names the Connected System Object Type an import mapping's change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes (empty for an export mapping), and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMapping](#get-jimsyncrulemapping).
 <!-- END GENERATED: Set-JIMSyncRuleMapping -->
@@ -324,7 +348,7 @@ Set-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 14 -KeepUnique $false
 
 ---
 
-## Remove-JIMSyncRuleMapping
+## :material-delete-outline: Remove-JIMSyncRuleMapping
 
 Deletes an Attribute Flow mapping from a Synchronisation Rule.
 
@@ -348,12 +372,12 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | `SyncRuleId` | `int` | Yes |  | The ID of the Synchronisation Rule the mapping belongs to. |
 | `MappingId` | `int` | Yes (ById) |  | The ID of the mapping to delete. Accepts pipeline input by property name, `MappingId` or `Id`. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A mapping from `Get-JIMSyncRuleMapping`, through the pipeline. Accepts pipeline input. |
-| `KeepContributedValues` | `switch` | No |  | Keeps the Metaverse attribute values the mapping contributed, instead of leaving them to be recalled at the next Full Synchronisation of the contributing Connected System. The kept values have no provenance, so nothing can ever recall them, and the other contributors to those attributes are not re-elected. |
+| `KeepContributedValues` | `switch` | No |  | Keeps the Metaverse attribute values the mapping contributed, instead of leaving them to be recalled at the next synchronisation of the contributing Connected System, Delta or Full. The kept values have no provenance, so nothing can ever recall them, and the other contributors to those attributes are not re-elected. |
 | `Force` | `switch` | No |  | Suppresses the confirmation prompt, and the count of contributed values it states. |
 
 ### Output
 
-None. Derived Attribute Flows the deletion left with a missing input are written to the warning stream.
+None. Derived Attribute Flows the deletion left with a missing input are written to the warning stream. When the mapping was on an import rule, a warning saying that its Connected System's next synchronisation, Delta or Full, processes every object of the rule's Connected System Object Type, with how many objects that is and about how long it takes, is written to the warning stream.
 <!-- END GENERATED: Remove-JIMSyncRuleMapping -->
 
 ### Examples
@@ -379,7 +403,7 @@ This deletes every mapping on the rule. Run it with `-WhatIf` in place of `-Forc
 
 ---
 
-## Derived Attribute Flow warnings
+## :material-alert-octagon-outline: Derived Attribute Flow warnings
 
 Deleting or disabling a mapping or a Synchronisation Rule can take away the last enabled contributor of a Metaverse attribute that a [derived Attribute Flow](../configuration/derived-attributes.md) reads. The change still goes ahead; the response's `DependentDerivedFlows` names each derived flow it left with a missing input, and `Remove-JIMSyncRuleMapping`, `Set-JIMSyncRuleMapping`, `Set-JIMSyncRule`, `Remove-JIMSyncRule` and `Import-JIMConnectedSystemSchema` write them with `Write-Warning`: a summary line, then one line per flow. They never prompt and never stop.
 
@@ -393,7 +417,7 @@ Each `DependentDerivedFlows` entry has `MappingId`, `TargetMetaverseAttributeNam
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Attribute Mappings](../configuration/attribute-mappings.md): sources, expressions, value processing and Attribute Priority
 - [Deriving Metaverse Attributes](../configuration/derived-attributes.md): Attribute Flows that build a Metaverse attribute from others

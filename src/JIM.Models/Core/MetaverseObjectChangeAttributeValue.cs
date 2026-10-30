@@ -66,6 +66,20 @@ public class MetaverseObjectChangeAttributeValue
     /// survives deletion of the rule, matching <see cref="MetaverseObjectChange.SyncRuleName"/>'s pattern.
     /// </summary>
     public string? ContributedBySyncRuleName { get; set; }
+
+    /// <summary>
+    /// What kind of source set the value at the time of the change (#2472). Copied from
+    /// <see cref="MetaverseObjectAttributeValue.ContributedByKind"/> by <see cref="MetaverseObjectChange.AddAttributeValueChange"/>.
+    /// Null when no source was recorded.
+    /// </summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>
+    /// The type of the sign-in claim that supplied the value, when <see cref="ContributedByKind"/> is
+    /// <see cref="ValueContributorKind.SignInClaim"/>; otherwise null. Copied from
+    /// <see cref="MetaverseObjectAttributeValue.ContributedByClaimType"/>.
+    /// </summary>
+    public string? ContributedByClaimType { get; set; }
     #endregion
 
     public override string ToString()

@@ -1,0 +1,78 @@
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One Connected System Object Type whose objects the Connected System's next synchronisation will all process, because
+   Synchronisation Rule or Object Matching Rule changes saved since it last did so can change what they produce (#2615).
+   An Info notice, not a warning: nothing is wrong, an ordinary Delta or Full Synchronisation applies it, and this says
+   what that run will do and why it may take longer than a Delta Synchronisation usually does. Run now is offered
+   because the run is the only thing the administrator is waiting for. Which Run Profile it queues is
+   AwaitingSynchronisationRunProfile's choice, which the caption names and the dialog preselects. *@
+<MudAlert Severity="Severity.Info" Class="@Class" data-testid="jim-awaiting-synchronisation-notice">
+    <MudText Typo="Typo.body1" Style="font-weight: 500;">Changes awaiting synchronisation: @Entry.ObjectTypeName</MudText>
+    <MudText Typo="Typo.body2" Class="mt-1">
+        The next synchronisation of this Connected System, Delta or Full, applies them by processing every @Entry.ObjectTypeName object@(ObjectCountText).
+        Other Object Types are processed as usual.
+    </MudText>
+
+    <AwaitingSynchronisationChangesTable Changes="@Entry.Changes" Class="mt-3" />
+
+    @if (Entry.ChangeCount > Entry.Changes.Count)
+    {
+        @* The list is capped so a system saved to a great many times stays light; the count is the true number. *@
+        <MudText Typo="Typo.caption" Class="mt-1" data-testid="jim-awaiting-synchronisation-truncated">
+            Showing the newest @Entry.Changes.Count.ToString("N0") of @Entry.ChangeCount.ToString("N0") changes.
+        </MudText>
+    }
+
+    <div class="d-flex align-center flex-wrap gap-3 mt-3">
+        @if (RunProfile != null)
+        {
+            <AlertButton Severity="Severity.Info" StartIcon="@Icons.Material.Filled.PlayArrow" OnClick="@(() => OnRunNow.InvokeAsync())"
+                         data-testid="jim-awaiting-synchronisation-run-now">
+                Run now
+            </AlertButton>
+            <MudText Typo="Typo.caption" data-testid="jim-awaiting-synchronisation-caption">
+                Queues the @AwaitingSynchronisationRunProfile.RunTypeName(RunProfile.RunType) Run Profile; you can pick another.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" data-testid="jim-awaiting-synchronisation-no-run-profile">
+                This Connected System has no Delta Synchronisation or Full Synchronisation Run Profile to queue.
+            </MudText>
+        }
+    </div>
+</MudAlert>
+
+@code {
+    /// <summary>
+    /// The Object Type and the changes waiting behind it.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ObjectTypeAwaitingSynchronisation Entry { get; set; } = null!;
+
+    /// <summary>
+    /// The Run Profile Run now queues, from <see cref="AwaitingSynchronisationRunProfile.Preferred"/>. Null when the
+    /// Connected System has none that applies the changes, which hides the action.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemRunProfile? RunProfile { get; set; }
+
+    /// <summary>
+    /// Raised when Run now is chosen. The host opens the queue dialog for the Connected System.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnRunNow { get; set; }
+
+    /// <summary>
+    /// Classes for the surrounding geometry (margins).
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    // The count is absent when it was not read (a status read for a list); the sentence is complete without it.
+    private string ObjectCountText => Entry.ObjectCount is { } objectCount ? $" ({objectCount:N0})" : string.Empty;
+}

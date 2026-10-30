@@ -327,6 +327,29 @@ public class CausalTimelineReadDatabaseTests
     }
 
     [Test]
+    public async Task GetCausalTimelinePageAsync_DeletedMetaverseObject_ListsTheItemThatDeletedItAsync()
+    {
+        // An object deleted at once by a disconnection: the disconnection's item is about the Connected System Object,
+        // whose join is gone, and it carries no change record of its own. Only the deletion record names it (#2460).
+        var hr = await SeedConnectedSystemAsync("Yellowstone APAC");
+        var tina = Guid.NewGuid();
+        var projected = await SeedItemAsync(await SeedActivityAsync(hr.SystemId, ConnectedSystemRunType.FullSynchronisation, T0),
+            ObjectChangeType.Projected, "Tina Adams", "person");
+        await SeedMvoChangeAsync(projected, deletedMetaverseObjectId: tina, changeTime: T0);
+        var disconnected = await SeedItemAsync(await SeedActivityAsync(hr.SystemId, ConnectedSystemRunType.DeltaSynchronisation, T0.AddDays(3)),
+            ObjectChangeType.Disconnected, "Tina Adams", "person");
+        await SeedMvoChangeAsync(null, deletedMetaverseObjectId: tina, changeTime: T0.AddDays(3), deletedByItemId: disconnected);
+
+        var (entries, total) = await ReadTimelineAsync(MvoSubject(tina));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(entries.Select(e => e.RunProfileExecutionItemId), Is.EqualTo(new[] { disconnected, projected }));
+            Assert.That(total, Is.EqualTo(2));
+        }
+    }
+
+    [Test]
     public async Task GetCausalTimelinePageAsync_SourcesNamingAPurgedItem_AreNotCountedAsync()
     {
         // History retention deletes old items. A change record's link to one is nulled with it; the deletion schedule
@@ -871,15 +894,16 @@ public class CausalTimelineReadDatabaseTests
     /// deleted id once its deletion has re-keyed it. Raw SQL because the object's own key is a shadow column.
     /// </summary>
     private async Task SeedMvoChangeAsync(Guid? itemId, DateTime changeTime, Guid? metaverseObjectId = null,
-        Guid? deletedMetaverseObjectId = null)
+        Guid? deletedMetaverseObjectId = null, Guid? deletedByItemId = null)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand("""
             INSERT INTO "MetaverseObjectChanges"
                 ("Id", "ChangeTime", "InitiatedByType", "ChangeInitiatorType", "ChangeType",
-                 "MetaverseObjectId", "DeletedMetaverseObjectId", "ActivityRunProfileExecutionItemId")
-            VALUES (@id, @time, @initiated_by, @initiator, @change_type, @mvo, @deleted_mvo, @item)
+                 "MetaverseObjectId", "DeletedMetaverseObjectId", "ActivityRunProfileExecutionItemId",
+                 "DeletedByRunProfileExecutionItemId")
+            VALUES (@id, @time, @initiated_by, @initiator, @change_type, @mvo, @deleted_mvo, @item, @deleted_by)
             """, connection);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
         command.Parameters.AddWithValue("time", changeTime);
@@ -889,6 +913,7 @@ public class CausalTimelineReadDatabaseTests
         command.Parameters.Add(new NpgsqlParameter("mvo", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)metaverseObjectId ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("deleted_mvo", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)deletedMetaverseObjectId ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("item", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)itemId ?? DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("deleted_by", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)deletedByItemId ?? DBNull.Value });
         await command.ExecuteNonQueryAsync();
     }
 

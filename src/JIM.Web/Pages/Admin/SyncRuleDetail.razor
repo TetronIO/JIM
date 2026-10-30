@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Logic
+@using JIM.Models.Logic.DTOs
 @using JIM.Models.Preview
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Utility
@@ -57,7 +58,9 @@ else if (_syncRule != null)
                                    MetaverseObjectTypeName="@_syncRule.MetaverseObjectType?.Name"
                                    ConnectedSystemObjectTypeName="@_syncRule.ConnectedSystemObjectType?.Name"
                                    ConnectedSystemId="@_syncRule.ConnectedSystemId"
-                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name" />
+                                   ConnectedSystemName="@_syncRule.ConnectedSystem.Name"
+                                   AwaitingSynchronisationChangeCount="@(_reviewState?.AwaitingSynchronisationChangeCount ?? 0)"
+                                   ExportReviewPendingCount="@(_reviewState?.ExportReviewPendingCount ?? 0)" />
         </div>
     }
 
@@ -67,11 +70,11 @@ else if (_syncRule != null)
        rebuilds the component, so registration order becomes markup order again. *@
     @* mt-6 after the identity strip, which is a plain block with no padding of its own; mt-2 when the tabs follow
        the breadcrumbs directly (a new rule), whose own 16px padding makes up the rest of the 24px. *@
-    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-5" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
+    <NavigableMudTabs @key="TabSetKey" TabPanelsClass="pt-6" Class="@(ShowIdentityStrip ? "mt-6" : "mt-2")" @bind-ActivePanelIndex="_activeTabIndex">
 
         <MudTabPanel Text="Details">
             <SyncRuleDetailsTab SyncRule="_syncRule"
-                                ConnectedSystemHeaders="_connectedSystemHeaders"
+                                ConnectedSystemNames="_connectedSystemNames"
                                 MetaverseObjectTypes="_metaverseObjectTypes"
                                 OnChanged="OnChildChanged" />
         </MudTabPanel>
@@ -175,7 +178,7 @@ else if (_syncRule != null)
             {
                 @if (previewBaseline.DestructiveTogglesEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Outlined"
+                    <MudButton data-testid="jim-preview-destructive-toggles" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewDestructiveTogglesAsync"
                         Disabled="@_startingPreview">
                         Preview Deprovisioning Impact
@@ -186,7 +189,7 @@ else if (_syncRule != null)
                 @* separately and answer different questions.                                                     *@
                 @if (previewBaseline.ScopeEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Outlined"
+                    <MudButton data-testid="jim-preview-scoping-criteria" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.FilterAlt" OnClick="PreviewScopingCriteriaAsync"
                         Disabled="@_startingPreview">
                         Preview Scope Impact
@@ -197,7 +200,7 @@ else if (_syncRule != null)
                 @* leaving costs them, and this decides what the ones staying end up holding.                     *@
                 @if (previewBaseline.AttributeFlowEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Outlined"
+                    <MudButton data-testid="jim-preview-attribute-flow" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.SyncAlt" OnClick="PreviewAttributeFlowAsync"
                         Disabled="@_startingPreview">
                         Preview Attribute Flow Impact
@@ -208,7 +211,7 @@ else if (_syncRule != null)
                 @* staying hold, and these decide whether the rule runs at all and what it may create.            *@
                 @if (previewBaseline.BehaviourEdited(_syncRule))
                 {
-                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Outlined"
+                    <MudButton data-testid="jim-preview-behaviour" Variant="Variant.Filled"
                         StartIcon="@Icons.Material.Filled.ToggleOn" OnClick="PreviewBehaviourAsync"
                         Disabled="@_startingPreview">
                         Preview Behaviour Impact
@@ -311,7 +314,7 @@ else if (_syncRule != null)
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private SyncRule? _syncRule;
     private bool _isLoading = true;
-    private List<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private Dictionary<int, string>? _connectedSystemNames;
     private List<MetaverseObjectType>? _metaverseObjectTypes;
     private bool _loaded;
     private int? _loadedId;
@@ -446,6 +449,8 @@ else if (_syncRule != null)
             // Counts only; the reasons behind them are the Passwords tab's own load.
             var attention = await _jim.InitialPasswords.GetAttentionBySyncRuleAsync([_syncRule.Id]);
             _parkedInitialPasswordCount = attention.TryGetValue(_syncRule.Id, out var parked) ? parked.ParkedCount : 0;
+
+            await LoadReviewStateAsync();
         }
         else
         {
@@ -454,9 +459,30 @@ else if (_syncRule != null)
             _syncRuleNameOrCreate = "New";
             _previewBaseline = null;
             _breadcrumbs.Add(new BreadcrumbItem("New", href: null, disabled: true));
-            _connectedSystemHeaders = await _jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+            _connectedSystemNames = await _jim.ConnectedSystems.GetConnectedSystemNamesAsync();
             _metaverseObjectTypes = await _jim.Metaverse.GetMetaverseObjectTypesAsync(true);
         }
+    }
+
+    /// <summary>
+    /// What the rule is waiting on (#2615), for the identity strip: for an import rule, the saved changes awaiting its
+    /// Connected System's next synchronisation; for an export rule, the Metaverse Objects flagged for export review. Read
+    /// when the rule is loaded and again after a save, which is what can make an import rule's type await synchronisation.
+    /// Null for a rule not yet saved.
+    /// </summary>
+    private SyncRuleHeader? _reviewState;
+
+    private async Task LoadReviewStateAsync()
+    {
+        if (_jim == null || _syncRule is not { Id: > 0 })
+        {
+            _reviewState = null;
+            return;
+        }
+
+        var header = SyncRuleHeader.FromEntity(_syncRule);
+        await _jim.ConnectedSystems.PopulateSyncRuleReviewStateAsync([header]);
+        _reviewState = header;
     }
 
     /// <summary>
@@ -920,6 +946,7 @@ else if (_syncRule != null)
                 _previewBaseline = SyncRulePreviewBaseline.Capture(_syncRule);
                 _persistedEnabled = _syncRule.Enabled;
                 _persistedProjectedTypeId = DeletionSourceAdvisor.GetProjectedMetaverseObjectTypeId(_syncRule);
+                await LoadReviewStateAsync();
                 Snackbar.Add("Changes saved.", Severity.Success);
                 ReportSequenceSkips();
                 ReportSaveWarnings();

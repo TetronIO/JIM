@@ -458,21 +458,8 @@ internal sealed class SqlConnectorSchema
 
     #region Catalogue reads
 
-    private async Task<List<SqlCatalogueObject>> ReadCatalogueObjectsAsync(string commandText)
-    {
-        var catalogueObjects = new List<SqlCatalogueObject>();
-
-        using var command = _provider.CreateCommand(_connection, commandText);
-        using var reader = await command.ExecuteReaderAsync();
-
-        var schemaNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.SchemaName);
-        var objectNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ObjectName);
-
-        while (await reader.ReadAsync())
-            catalogueObjects.Add(new SqlCatalogueObject(GetNullableString(reader, schemaNameOrdinal), reader.GetString(objectNameOrdinal)));
-
-        return catalogueObjects;
-    }
+    private Task<List<SqlCatalogueObject>> ReadCatalogueObjectsAsync(string commandText) =>
+        SqlCatalogueReader.ReadCatalogueObjectsAsync(_provider, _connection, commandText);
 
     /// <summary>
     /// The columns of one table or view. Shared with export, which asks the same catalogue the same
@@ -510,37 +497,8 @@ internal sealed class SqlConnectorSchema
         }
     }
 
-    private async Task<List<SqlDiscoveredForeignKey>> ReadForeignKeysAsync(string? schemaName, string objectName)
-    {
-        var foreignKeys = new List<SqlDiscoveredForeignKey>();
-
-        using var command = _provider.CreateCommand(_connection, _provider.ForeignKeyColumnsCommandText);
-        command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.SchemaName, schemaName));
-        command.Parameters.Add(_provider.CreateParameter(SqlCatalogueParameters.ObjectName, objectName));
-
-        using var reader = await command.ExecuteReaderAsync();
-
-        var constraintNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ConstraintName);
-        var columnNameOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ColumnName);
-        var referencedSchemaOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedSchema);
-        var referencedTableOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedTable);
-        var referencedColumnOrdinal = reader.GetOrdinal(SqlCatalogueColumns.ReferencedColumn);
-
-        while (await reader.ReadAsync())
-        {
-            foreignKeys.Add(new SqlDiscoveredForeignKey(
-                reader.GetString(constraintNameOrdinal),
-                reader.GetString(columnNameOrdinal),
-                GetNullableString(reader, referencedSchemaOrdinal),
-                reader.GetString(referencedTableOrdinal),
-                reader.GetString(referencedColumnOrdinal)));
-        }
-
-        return foreignKeys;
-    }
-
-    private static string? GetNullableString(DbDataReader reader, int ordinal) =>
-        SqlCatalogueReader.GetNullableString(reader, ordinal);
+    private Task<List<SqlDiscoveredForeignKey>> ReadForeignKeysAsync(string? schemaName, string objectName) =>
+        SqlCatalogueReader.ReadForeignKeysAsync(_provider, _connection, schemaName, objectName);
 
     #endregion
 }

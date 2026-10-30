@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -21,7 +22,7 @@ using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
 
-public class MetaverseRepository : IMetaverseRepository
+public partial class MetaverseRepository : IMetaverseRepository
 {
     // Picked up by the JIM diagnostic listener via the "JIM." prefix; named distinctly
     // from the Application-layer "JIM.Database" source to keep tooling traces unambiguous.
@@ -1279,8 +1280,12 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
     {
         // One statement over the type's objects (#1925), on a configuration change rather than on any synchronisation
-        // path. Rows already flagged are left untouched: the flag is a boolean and nothing reads its row version, so
-        // rewriting them would cost a tuple each and say nothing new.
+        // path. Rows already flagged are left untouched: the flag is a boolean, so rewriting them would cost a tuple each
+        // and say nothing new. That is safe against a drain that holds some of these rows flagged and goes on to clear
+        // them, because the drain's clear looks at the export rules again once it has cleared (see
+        // FlagClearedAgainIfExportRulesChangedAsync): the rule this save follows is committed before this statement
+        // runs, so a clear that looks after the rule committed re-flags what it cleared, and a clear that looked before
+        // it has committed its clear before the rule did, so this statement finds those rows unflagged and flags them.
         var newlyFlagged = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = true
               WHERE ""TypeId"" = {0} AND NOT ""ScopeReviewPending""",
@@ -1320,12 +1325,16 @@ public class MetaverseRepository : IMetaverseRepository
             return 0;
 
         // One narrow statement per synchronisation page (#2318), over the objects the page disconnected from a system
-        // an export rule provisions to. Rows already flagged are left untouched, as for the type-wide flag above. The
-        // rows written report their new row version: unlike the type-wide flag, this runs on the worker's context,
-        // which may hold these objects tracked, and the xmin concurrency token must move with the row (below).
+        // an export rule provisions to. Unlike the type-wide flag above, a row already flagged is rewritten rather than
+        // skipped (#2615): this runs on a synchronisation page, where the drain at the end of the run, or another run's
+        // drain, may already hold the object flagged at some row version and be about to clear it. The flag would not
+        // change, so a skipped row keeps its version, and the drain's guarded clear (which decides by version) would
+        // clear a flag whose new reason the review it ran never saw. Rewriting moves the version, so that clear keeps
+        // the flag. The rows written report their new row version: this runs on the worker's context, which may hold
+        // these objects tracked, and the xmin concurrency token must move with the row (below).
         const string sql = """
             UPDATE "MetaverseObjects" SET "ScopeReviewPending" = true
-            WHERE "Id" = ANY(@ids) AND NOT "ScopeReviewPending"
+            WHERE "Id" = ANY(@ids)
             RETURNING "Id", xmin
             """;
 
@@ -1379,44 +1388,297 @@ public class MetaverseRepository : IMetaverseRepository
         return newRowVersions.Count;
     }
 
-    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    /// <summary>
+    /// The CTE every export-rule watermark check shares: whether any export Synchronisation Rule was created or updated
+    /// after the instant the run read its rules (<c>@watermark</c>; null when the run read none, in which case any
+    /// export rule at all counts). Needs the <c>export</c> and <c>watermark</c> parameters
+    /// (<see cref="AddExportRulesChangedParameters"/>).
+    /// </summary>
+    private const string ExportRulesChangedCte = """
+        changed AS (
+            SELECT EXISTS (
+                SELECT 1 FROM "SyncRules"
+                WHERE "Direction" = @export
+                  AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
+            ) AS "Changed"
+        )
+        """;
+
+    private static void AddExportRulesChangedParameters(NpgsqlCommand command, DateTime? exportRulesReadWatermark)
     {
-        if (ids.Count == 0)
+        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
+        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
+        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
+            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
+    }
+
+    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
+    {
+        if (seenRowVersions.Count == 0)
             return true;
 
         // Clear once the sync engine has re-evaluated these objects' export scope (#892), unless an export rule was
         // created or updated after the run read its rules (#1925): the run evaluated against rules that no longer
         // stand, and the save that replaced them flagged these objects for review against the new ones. The check and
         // the clear are one statement, so a rule saved at any moment is either seen here (nothing is cleared) or
-        // commits after it, and its own flagging then sets the flags again. A data-modifying CTE always runs, whether
-        // or not the outer query reads it.
-        const string sql = """
-            WITH changed AS (
-                SELECT EXISTS (
-                    SELECT 1 FROM "SyncRules"
-                    WHERE "Direction" = @export
-                      AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
-                ) AS "Changed"
+        // commits after it. A data-modifying CTE always runs, whether or not the outer query reads it.
+        //
+        // "Commits after it" is not enough on its own, because the statement checks on the snapshot it took when it
+        // started: a rule can commit after that snapshot and before this statement commits, and the rule's own flagging
+        // statement skips an object that is still flagged. The clear would then take the flag the rule meant to leave.
+        // So a clear that cleared anything looks again once it has committed (FlagClearedAgainIfExportRulesChangedAsync).
+        //
+        // Each object is cleared only where its xmin still equals the version the run read when it loaded it (#2615). A
+        // row whose xmin has moved was written since: a sign-in refreshing a person's profile, say, which flags the
+        // object again and records what it changed, none of which this run's evaluation saw. Leaving that row flagged
+        // is fail-safe; the next run reviews it. The flag and the record of what changed outside synchronisation are
+        // cleared together, because the review has delivered both. The clear never waits for a row lock (SKIP LOCKED):
+        // a row another transaction holds is being written, which will move its row version, so skipping it is the
+        // guard's own outcome, and waiting could deadlock against a concurrent synchronisation's bulk update. Locking in
+        // Id order keeps the statement's own lock order deterministic.
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            c AS (
+                SELECT * FROM unnest(@ids, @seenRowVersions) AS c("Id", "SeenRowVersion")
+            ),
+            locked AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                JOIN c ON mvo."Id" = c."Id"
+                WHERE mvo.xmin = c."SeenRowVersion"
+                  AND NOT (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo SKIP LOCKED
             ),
             cleared AS (
-                UPDATE "MetaverseObjects" SET "ScopeReviewPending" = false
-                WHERE "Id" = ANY(@ids) AND NOT (SELECT "Changed" FROM changed)
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = false, "UnsynchronisedChangesJson" = NULL
+                FROM locked
+                WHERE mvo."Id" = locked."Id"
+                RETURNING mvo."Id", mvo.xmin
             )
-            SELECT "Changed" FROM changed
+            SELECT changed."Changed", cleared."Id", cleared.xmin
+            FROM changed LEFT JOIN cleared ON true
             """;
 
         var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
-        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var changed = false;
+        var clearedRowVersions = new Dictionary<Guid, uint>();
+        var reflaggedRowVersions = new Dictionary<Guid, uint>();
+        await using (var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection))
+        {
+            await using (var command = new NpgsqlCommand(sql, connection,
+                (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction()))
+            {
+                AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = seenRowVersions.Keys.ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("seenRowVersions", NpgsqlDbType.Array | NpgsqlDbType.Xid) { Value = seenRowVersions.Values.ToArray() });
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    changed = reader.GetBoolean(0);
+                    if (!reader.IsDBNull(1))
+                        clearedRowVersions[reader.GetGuid(1)] = reader.GetFieldValue<uint>(2);
+                }
+            }
+
+            if (!changed && clearedRowVersions.Count > 0)
+                (changed, reflaggedRowVersions) = await FlagClearedAgainIfExportRulesChangedAsync(
+                    connection, clearedRowVersions.Keys.ToArray(), exportRulesReadWatermark);
+        }
+
+        AlignTrackedMetaverseObjectsWithScopeReviewClear(clearedRowVersions, reflaggedRowVersions);
+        return !changed;
+    }
+
+    public async Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+    {
+        // One statement over every flagged object whose type no enabled export rule covers (#2615), guarded as the
+        // batch clear above is: nothing is cleared once an export rule has been created or updated since the run read
+        // its rules, because that change flagged the objects for review against the rules as they now stand and may be
+        // the rule that covers their type; and a clear that cleared anything looks again once it has committed, for the
+        // reason given there (FlagClearedAgainIfExportRulesChangedAsync). The partial index on ScopeReviewPending keeps
+        // the scan O(flagged). The record of what changed outside synchronisation goes with the flag: with no enabled
+        // export rule covering the object, there is nothing to deliver it to.
+        //
+        // Locks are taken in Id order and never waited for (SKIP LOCKED), as in the batch clear: a row another
+        // transaction holds is being written, and a skipped flag is simply cleared by a later run. The cleared rows are
+        // returned with their new row versions, for the second look and for any tracked instance.
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            locked AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                WHERE mvo."ScopeReviewPending"
+                  AND NOT (mvo."TypeId" = ANY(@coveredTypeIds))
+                  AND NOT (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo SKIP LOCKED
+            ),
+            cleared AS (
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = false, "UnsynchronisedChangesJson" = NULL
+                FROM locked
+                WHERE mvo."Id" = locked."Id"
+                RETURNING mvo."Id", mvo.xmin
+            )
+            SELECT "Id", xmin FROM cleared
+            """;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        var clearedRowVersions = new Dictionary<Guid, uint>();
+        var reflaggedRowVersions = new Dictionary<Guid, uint>();
+        var changed = false;
+        await using (var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection))
+        {
+            await using (var command = new NpgsqlCommand(sql, connection,
+                (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction()))
+            {
+                AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+                command.Parameters.Add(new NpgsqlParameter("coveredTypeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer)
+                    { Value = coveredMetaverseObjectTypeIds.ToArray() });
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    clearedRowVersions[reader.GetGuid(0)] = reader.GetFieldValue<uint>(1);
+            }
+
+            if (clearedRowVersions.Count > 0)
+                (changed, reflaggedRowVersions) = await FlagClearedAgainIfExportRulesChangedAsync(
+                    connection, clearedRowVersions.Keys.ToArray(), exportRulesReadWatermark);
+        }
+
+        AlignTrackedMetaverseObjectsWithScopeReviewClear(clearedRowVersions, reflaggedRowVersions);
+
+        // What is left cleared: everything the clear cleared, unless the second look found an export rule saved under
+        // it, in which case every one of those objects was flagged again.
+        return changed ? 0 : clearedRowVersions.Count;
+    }
+
+    /// <summary>
+    /// The second look both clears take once their clearing statement has committed (#2615): checks the export rules
+    /// against the same watermark again and, if a rule has been created or updated since the run read its rules,
+    /// flags exactly the objects just cleared again. The clearing statement checked on the snapshot it took when it
+    /// started, so a rule committed after that snapshot and before the statement committed was invisible to it, and
+    /// that rule's own flagging statement (which skips an object still flagged) cannot have flagged these objects
+    /// either. Without this look the clear would lose the flag the rule meant to leave.
+    /// <para>
+    /// Complete because the rule's save commits the rule first and flags second. If the rule committed before this
+    /// statement's snapshot, this look sees it and flags the objects again. If it committed after, its own flagging
+    /// statement runs later still, so it runs after the clear committed and finds these objects unflagged, so it flags
+    /// them. Either way the objects end flagged, whichever side of this look the rule lands on.
+    /// </para>
+    /// <para>
+    /// Only the flag is restored; the record of what changed outside synchronisation stays cleared, because the review
+    /// that ran delivered it (the clear is exactly the claim that the review is done). The next run reviews the
+    /// objects against the rule as it now stands. Unlike the clears, this statement waits for any row lock rather than
+    /// skipping the row: a re-flag that skipped an object would silently lose its review. Locks are taken in Id order,
+    /// as the clears take them, to keep the wait short of a deadlock; a deadlock, if one still came, fails the run
+    /// loudly rather than losing a flag.
+    /// </para>
+    /// </summary>
+    /// <param name="connection">The open connection the clear ran on.</param>
+    /// <param name="clearedIds">The objects the clear cleared; the statement never touches any other.</param>
+    /// <param name="exportRulesReadWatermark">The same watermark the clear checked.</param>
+    /// <returns>
+    /// Whether an export rule has changed since the watermark, and, when it has, each object flagged again with the
+    /// row version it now has.
+    /// </returns>
+    private async Task<(bool Changed, Dictionary<Guid, uint> RowVersions)> FlagClearedAgainIfExportRulesChangedAsync(
+        NpgsqlConnection connection, IReadOnlyCollection<Guid> clearedIds, DateTime? exportRulesReadWatermark)
+    {
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            targets AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                WHERE mvo."Id" = ANY(@clearedIds)
+                  AND (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo
+            ),
+            reflagged AS (
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = true
+                FROM targets
+                WHERE mvo."Id" = targets."Id"
+                RETURNING mvo."Id", mvo.xmin
+            )
+            SELECT changed."Changed", reflagged."Id", reflagged.xmin
+            FROM changed LEFT JOIN reflagged ON true
+            """;
+
+        var changed = false;
+        var rowVersions = new Dictionary<Guid, uint>();
         await using var command = new NpgsqlCommand(sql, connection,
             (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
-        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
-        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
-        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
-            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
-        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
+        AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+        command.Parameters.Add(new NpgsqlParameter("clearedIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = clearedIds.ToArray() });
 
-        var changed = (bool)(await command.ExecuteScalarAsync() ?? false);
-        return !changed;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            changed = reader.GetBoolean(0);
+            if (!reader.IsDBNull(1))
+                rowVersions[reader.GetGuid(1)] = reader.GetFieldValue<uint>(2);
+        }
+
+        return (changed, rowVersions);
+    }
+
+    /// <summary>
+    /// Brings tracked Metaverse Objects into line with a raw clear (src/CLAUDE.md, "Raw SQL Writes Must Fix Up or Detach
+    /// Tracked Instances"), as persisted rather than as pending changes: the flag and the record of unsynchronised
+    /// changes, so a later whole-entity save cannot write them back, and the row version, so that save's xmin check
+    /// still matches the row the clear (or the second look that flagged it again) just wrote. Change detection is
+    /// suppressed while enumerating: it would attach any untracked graph hanging off a tracked navigation (see
+    /// src/CLAUDE.md, "Tracker surgery").
+    /// </summary>
+    /// <param name="clearedRowVersions">Each Metaverse Object the clear wrote, with the row version it then had.</param>
+    /// <param name="reflaggedRowVersions">
+    /// Each of those the second look then flagged again, with the row version it now has; such an object is flagged and
+    /// its record of changes stays cleared.
+    /// </param>
+    private void AlignTrackedMetaverseObjectsWithScopeReviewClear(
+        IReadOnlyDictionary<Guid, uint> clearedRowVersions, IReadOnlyDictionary<Guid, uint> reflaggedRowVersions)
+    {
+        if (clearedRowVersions.Count == 0)
+            return;
+
+        var context = Repository.Database;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = context.ChangeTracker.Entries<MetaverseObject>()
+                .Where(e => e.State is EntityState.Unchanged or EntityState.Modified && clearedRowVersions.ContainsKey(e.Entity.Id))
+                .ToList();
+            foreach (var entry in entries)
+            {
+                var flaggedAgain = reflaggedRowVersions.TryGetValue(entry.Entity.Id, out var reflaggedRowVersion);
+
+                var flag = entry.Property(mvo => mvo.ScopeReviewPending);
+                flag.CurrentValue = flaggedAgain;
+                flag.OriginalValue = flaggedAgain;
+                flag.IsModified = false;
+
+                var changes = entry.Property(mvo => mvo.UnsynchronisedChangesJson);
+                changes.CurrentValue = null;
+                changes.OriginalValue = null;
+                changes.IsModified = false;
+
+                var rowVersion = flaggedAgain ? reflaggedRowVersion : clearedRowVersions[entry.Entity.Id];
+                var xmin = entry.Property(mvo => mvo.xmin);
+                xmin.CurrentValue = rowVersion;
+                xmin.OriginalValue = rowVersion;
+                xmin.IsModified = false;
+            }
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
@@ -1513,42 +1775,6 @@ public class MetaverseRepository : IMetaverseRepository
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
-    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
-    {
-        return await Repository.Database.MetaverseObjects.
-            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
-            Include(mo => mo.Type).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.Attribute).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.ReferenceValue).
-            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(rvav => rvav.Attribute).
-            Include(mo => mo.AttributeValues).
-            ThenInclude(av => av.ReferenceValue).
-            ThenInclude(rv => rv!.Type).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.Attribute).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.ValueChanges).
-            ThenInclude(vc => vc.ReferenceValue).
-            ThenInclude(rv => rv!.Type).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.AttributeChanges).
-            ThenInclude(ac => ac.ValueChanges).
-            ThenInclude(vc => vc.ReferenceValue).
-            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
-            ThenInclude(rvav => rvav.Attribute).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.SyncRule).
-            Include(mo => mo.Changes).
-            ThenInclude(c => c.ActivityRunProfileExecutionItem).
-            ThenInclude(rpei => rpei!.Activity).
-            SingleOrDefaultAsync(mo => mo.Id == id);
-    }
-
     private const int CappedMvaLimit = 10;
 
     /// <inheritdoc />
@@ -1595,12 +1821,6 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MvoDetailResult?> GetMetaverseObjectDetailAsync(Guid id, MvoAttributeLoadStrategy loadStrategy)
     {
-        if (loadStrategy == MvoAttributeLoadStrategy.All)
-        {
-            var mvo = await GetMetaverseObjectWithChangeHistoryAsync(id);
-            return mvo == null ? null : new MvoDetailResult { MetaverseObject = mvo };
-        }
-
         // CappedMva strategy: load the MVO shell only. Change history is intentionally NOT
         // eager-loaded here; the original Include chain dominated the page load (~1.5s on
         // chatty groups). Change rows are paged separately via GetMvoChangeHistoryAsync.
@@ -1641,55 +1861,44 @@ public class MetaverseRepository : IMetaverseRepository
                 .CountAsync(cso => cso.MetaverseObjectId == id);
         }
 
-        // Step 2: Get per-attribute value counts for this MVO
+        // Step 2: Get per-attribute value counts and pluralities for this MVO, in one pass over its values
         Dictionary<string, int> totalCounts;
+        List<int> singleValuedAttributeIds;
+        List<int> multiValuedAttributeIds;
         using (ActivitySource.StartActivity("Mvo.LoadAttributeCounts"))
         {
             var attributeValueCounts = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .Where(av => av.MetaverseObject.Id == id)
-                .GroupBy(av => av.Attribute.Name)
-                .Select(g => new { AttributeName = g.Key, Count = g.Count() })
+                .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id)
+                .GroupBy(av => new { av.AttributeId, av.Attribute.Name, av.Attribute.AttributePlurality })
+                .Select(g => new { g.Key.AttributeId, g.Key.Name, g.Key.AttributePlurality, Count = g.Count() })
                 .ToListAsync();
 
-            totalCounts = attributeValueCounts.ToDictionary(x => x.AttributeName, x => x.Count);
-        }
-
-        // Step 3: Load SVA values (all of them) and MVA values (capped)
-        HashSet<int> multiValuedAttributeIds;
-        using (ActivitySource.StartActivity("Mvo.LoadAttributePluralities"))
-        {
-            var mvaAttributeIds = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .Where(av => av.MetaverseObject.Id == id)
-                .Select(av => new { av.AttributeId, av.Attribute.AttributePlurality })
-                .Distinct()
-                .ToListAsync();
-
-            multiValuedAttributeIds = mvaAttributeIds
+            totalCounts = attributeValueCounts
+                .GroupBy(x => x.Name)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Count));
+            singleValuedAttributeIds = attributeValueCounts
+                .Where(a => a.AttributePlurality != AttributePlurality.MultiValued)
+                .Select(a => a.AttributeId)
+                .ToList();
+            multiValuedAttributeIds = attributeValueCounts
                 .Where(a => a.AttributePlurality == AttributePlurality.MultiValued)
                 .Select(a => a.AttributeId)
-                .ToHashSet();
+                .ToList();
         }
 
-        // Load all SVA values
+        // Step 3: Load SVA values (all of them) and MVA values (capped). Named by attribute id rather than by excluding
+        // the multi-valued ones, so the (object, attribute) index serves the read without visiting a large group's members.
         List<MetaverseObjectAttributeValue> svaValues;
         using (var svaSpan = ActivitySource.StartActivity("Mvo.LoadSvaValues"))
         {
-            // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
             svaValues = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                .AsTracking()
-                .AsSplitQuery()
-                .Where(av => av.MetaverseObject.Id == id && !multiValuedAttributeIds.Contains(av.AttributeId))
+                .AsNoTracking()
+                .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id && singleValuedAttributeIds.Contains(av.AttributeId))
                 .Include(av => av.Attribute)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.Type)
-                .Include(av => av.ReferenceValue)
-                .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                .ThenInclude(rvav => rvav.Attribute)
                 .ToListAsync();
             svaSpan?.SetTag("count", svaValues.Count);
         }
 
-        // Load capped MVA values per attribute
         var cappedMvaValues = new List<MetaverseObjectAttributeValue>();
         using (var mvaSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues"))
         {
@@ -1699,19 +1908,12 @@ public class MetaverseRepository : IMetaverseRepository
             {
                 using var iterSpan = ActivitySource.StartActivity("Mvo.LoadCappedMvaValues.Attribute");
                 iterSpan?.SetTag("attributeId", attrId);
-                // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
                 var values = await Repository.Database.Set<MetaverseObjectAttributeValue>()
-                    .AsTracking()
-                    .AsSplitQuery()
-                    .Where(av => av.MetaverseObject.Id == id && av.AttributeId == attrId)
+                    .AsNoTracking()
+                    .Where(av => EF.Property<Guid>(av, "MetaverseObjectId") == id && av.AttributeId == attrId)
                     .OrderBy(av => av.Id)
                     .Take(CappedMvaLimit)
                     .Include(av => av.Attribute)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.Type)
-                    .Include(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                    .ThenInclude(rvav => rvav.Attribute)
                     .ToListAsync();
                 iterSpan?.SetTag("returned", values.Count);
 
@@ -1721,6 +1923,8 @@ public class MetaverseRepository : IMetaverseRepository
 
         // Combine and attach to entity
         entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        using (ActivitySource.StartActivity("Mvo.LoadReferencedObjects"))
+            await AttachReferencedMetaverseObjectsAsync(entity.AttributeValues);
 
         return new MvoDetailResult
         {
@@ -1732,6 +1936,85 @@ public class MetaverseRepository : IMetaverseRepository
             LatestChangeInitiator = latestInitiator
         };
     }
+
+    /// <summary>
+    /// The one projection from a Metaverse Object change row to the change-history shape, shared by object change history
+    /// and an Activity item's changes (#2033) so the two can never describe a change differently. Flat: no Includes; EF
+    /// generates the joins from the Select. Reference target display names come from
+    /// <see cref="MetaverseObject.CachedDisplayName"/>. The contributing Connected System is resolved afterwards by
+    /// <see cref="ResolveChangeValueContributingSystemsAsync"/>.
+    /// </summary>
+    private static readonly Expression<Func<MetaverseObjectChange, MvoChangeHistoryDto>> MvoChangeHistoryProjection =
+        c => new MvoChangeHistoryDto
+        {
+            Id = c.Id,
+            ChangeType = c.ChangeType,
+            ChangeTime = c.ChangeTime,
+            InitiatedByType = c.InitiatedByType,
+            InitiatedById = c.InitiatedById,
+            InitiatedByName = c.InitiatedByName,
+            ChangeInitiatorType = c.ChangeInitiatorType,
+            SyncRuleId = c.SyncRuleId,
+            SyncRuleName = c.SyncRuleName,
+            ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
+            ActivityId = c.ActivityId,
+            CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
+            CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
+            ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
+                : null,
+            ConnectedSystemName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.TargetContext
+                : null,
+            RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.TargetName
+                : null,
+            ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
+                ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
+                : (ConnectedSystemRunType?)null,
+            AttributeChanges = c.AttributeChanges
+                .OrderBy(ac => ac.AttributeName)
+                .Select(ac => new MvoAttributeChangeDto
+                {
+                    AttributeName = ac.AttributeName,
+                    AttributeType = ac.AttributeType,
+                    AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
+                    AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
+                    // Capped as the detail loads cap an object's values (#2498): a large group's change carries one
+                    // value change per member, and the rest are read a window at a time.
+                    ValueChangeTotal = ac.ValueChanges.Count(),
+                    ValueChanges = ac.ValueChanges
+                        .OrderBy(vc => vc.Id)
+                        .Take(CappedMvaLimit)
+                        .Select(vc => new MvoValueChangeDto
+                        {
+                            ValueChangeType = vc.ValueChangeType,
+                            StringValue = vc.StringValue,
+                            DateTimeValue = vc.DateTimeValue,
+                            IntValue = vc.IntValue,
+                            LongValue = vc.LongValue,
+                            DecimalValue = vc.DecimalValue,
+                            ByteValueLength = vc.ByteValueLength,
+                            GuidValue = vc.GuidValue,
+                            BoolValue = vc.BoolValue,
+                            ReferenceValue = vc.ReferenceValue == null
+                                ? null
+                                : new MvoChangeReferenceDto
+                                {
+                                    Id = vc.ReferenceValue.Id,
+                                    DisplayName = vc.ReferenceValue.CachedDisplayName,
+                                    TypeName = vc.ReferenceValue.Type.Name,
+                                    TypePluralName = vc.ReferenceValue.Type.PluralName
+                                },
+                            ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
+                            ContributedBySyncRuleName = vc.ContributedBySyncRuleName,
+                            ContributedByKind = vc.ContributedByKind,
+                            ContributedByClaimType = vc.ContributedByClaimType
+                        })
+                        .ToList()
+                })
+                .ToList()
+        };
 
     public async Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize)
     {
@@ -1754,75 +2037,11 @@ public class MetaverseRepository : IMetaverseRepository
         if (totalCount == 0)
             return (new List<MvoChangeHistoryDto>(), 0);
 
-        // Flat projection. No Includes; EF generates the joins from the Select.
-        // Reference target display names come from MetaverseObject.CachedDisplayName,
-        // which avoids the AttributeValues filter-Include trick that the old query used.
         var items = await baseQuery
             .OrderByDescending(c => c.ChangeTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(c => new MvoChangeHistoryDto
-            {
-                Id = c.Id,
-                ChangeType = c.ChangeType,
-                ChangeTime = c.ChangeTime,
-                InitiatedByType = c.InitiatedByType,
-                InitiatedById = c.InitiatedById,
-                InitiatedByName = c.InitiatedByName,
-                ChangeInitiatorType = c.ChangeInitiatorType,
-                SyncRuleId = c.SyncRuleId,
-                SyncRuleName = c.SyncRuleName,
-                ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
-                CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
-                CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
-                ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
-                    : null,
-                ConnectedSystemName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.TargetContext
-                    : null,
-                RunProfileName = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.TargetName
-                    : null,
-                ConnectedSystemRunType = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
-                    ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemRunType
-                    : (ConnectedSystemRunType?)null,
-                AttributeChanges = c.AttributeChanges
-                    .OrderBy(ac => ac.AttributeName)
-                    .Select(ac => new MvoAttributeChangeDto
-                    {
-                        AttributeName = ac.AttributeName,
-                        AttributeType = ac.AttributeType,
-                        AttributePlurality = ac.Attribute != null ? ac.Attribute.AttributePlurality : AttributePlurality.SingleValued,
-                        AttributeId = ac.Attribute != null ? ac.Attribute.Id : (int?)null,
-                        ValueChanges = ac.ValueChanges
-                            .Select(vc => new MvoValueChangeDto
-                            {
-                                ValueChangeType = vc.ValueChangeType,
-                                StringValue = vc.StringValue,
-                                DateTimeValue = vc.DateTimeValue,
-                                IntValue = vc.IntValue,
-                                LongValue = vc.LongValue,
-                                DecimalValue = vc.DecimalValue,
-                                ByteValueLength = vc.ByteValueLength,
-                                GuidValue = vc.GuidValue,
-                                BoolValue = vc.BoolValue,
-                                ReferenceValue = vc.ReferenceValue == null
-                                    ? null
-                                    : new MvoChangeReferenceDto
-                                    {
-                                        Id = vc.ReferenceValue.Id,
-                                        DisplayName = vc.ReferenceValue.CachedDisplayName,
-                                        TypeName = vc.ReferenceValue.Type.Name,
-                                        TypePluralName = vc.ReferenceValue.Type.PluralName
-                                    },
-                                ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
-                                ContributedBySyncRuleName = vc.ContributedBySyncRuleName
-                            })
-                            .ToList()
-                    })
-                    .ToList()
-            })
+            .Select(MvoChangeHistoryProjection)
             .ToListAsync();
 
         await ResolveChangeValueContributingSystemsAsync(items);
@@ -1830,6 +2049,22 @@ public class MetaverseRepository : IMetaverseRepository
         span?.SetTag("returned", items.Count);
         span?.SetTag("totalCount", totalCount);
         return (items, totalCount);
+    }
+
+    /// <inheritdoc />
+    public async Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId)
+    {
+        // At most one: the change's Run Profile Execution Item foreign key is unique.
+        var change = await Repository.Database.Set<MetaverseObjectChange>()
+            .AsNoTracking()
+            .Where(c => c.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .Select(MvoChangeHistoryProjection)
+            .SingleOrDefaultAsync();
+        if (change == null)
+            return null;
+
+        await ResolveChangeValueContributingSystemsAsync([change]);
+        return change;
     }
 
     /// <summary>
@@ -1840,11 +2075,16 @@ public class MetaverseRepository : IMetaverseRepository
     /// <see cref="Core.DTOs.ProvenanceLogic.ResolveChangeValueOrigin"/> reads as "rule deleted" rather than "no
     /// contributor". One lookup for the whole page, not one per value.
     /// </summary>
-    private async Task ResolveChangeValueContributingSystemsAsync(List<MvoChangeHistoryDto> items)
+    private Task ResolveChangeValueContributingSystemsAsync(List<MvoChangeHistoryDto> items) =>
+        ResolveChangeValueContributingSystemsAsync(items.SelectMany(i => i.AttributeChanges).SelectMany(ac => ac.ValueChanges));
+
+    /// <summary>
+    /// Resolves the contributing Connected System for each of the given value changes; see the overload above. Shared
+    /// with the window reads over a change's values (#2498), so a value names its source the same way in both.
+    /// </summary>
+    private async Task ResolveChangeValueContributingSystemsAsync(IEnumerable<MvoValueChangeDto> values)
     {
-        var valueChanges = items
-            .SelectMany(i => i.AttributeChanges)
-            .SelectMany(ac => ac.ValueChanges)
+        var valueChanges = values
             .Where(vc => vc.ContributedBySyncRuleId.HasValue)
             .ToList();
 
@@ -1924,33 +2164,24 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
     {
-        // Materialise the full entity so Include chains are honoured (Include is ignored
-        // when projecting via .Select(), leaving navigation properties null).
-        var entity = await Repository.Database.MetaverseObjects
-            .AsSplitQuery()
-            .Include(mo => mo.Type)
-            .Include(mo => mo.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Include(mo => mo.AttributeValues)
-                .ThenInclude(av => av.ReferenceValue)
-                    .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-                        .ThenInclude(rvav => rvav.Attribute)
-            .SingleOrDefaultAsync(mo => mo.Id == id);
-
-        if (entity == null)
-            return null;
-
-        return new MetaverseObjectHeader
-        {
-            Id = entity.Id,
-            Created = entity.Created,
-            Status = entity.Status,
-            ScopeReviewPending = entity.ScopeReviewPending,
-            TypeId = entity.Type.Id,
-            TypeName = entity.Type.Name,
-            TypePluralName = entity.Type.PluralName,
-            AttributeValues = entity.AttributeValues.ToList()
-        };
+        // A header projects the object's own row and its type, and nothing it holds (#2498). It is named from
+        // CachedDisplayName, which the same naming policy keeps as its attribute values would give: reading those values
+        // instead meant reading every member of a large group, and each member's Display Name, to name one object.
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mo => mo.Id == id)
+            .Select(mo => new MetaverseObjectHeader
+            {
+                Id = mo.Id,
+                Created = mo.Created,
+                Status = mo.Status,
+                ScopeReviewPending = mo.ScopeReviewPending,
+                TypeId = mo.Type.Id,
+                TypeName = mo.Type.Name,
+                TypePluralName = mo.Type.PluralName,
+                CachedDisplayName = mo.CachedDisplayName
+            })
+            .SingleOrDefaultAsync();
     }
 
     /// <inheritdoc />
@@ -1992,6 +2223,8 @@ public class MetaverseRepository : IMetaverseRepository
                 AttributeName = av.Attribute.Name,
                 av.ContributedBySystemId,
                 av.ContributedBySyncRuleId,
+                av.ContributedByKind,
+                av.ContributedByClaimType,
                 av.NullValue
             })
             .Select(g => new
@@ -2000,6 +2233,8 @@ public class MetaverseRepository : IMetaverseRepository
                 g.Key.AttributeName,
                 g.Key.ContributedBySystemId,
                 g.Key.ContributedBySyncRuleId,
+                g.Key.ContributedByKind,
+                g.Key.ContributedByClaimType,
                 g.Key.NullValue,
                 Count = g.Count()
             })
@@ -2036,7 +2271,9 @@ public class MetaverseRepository : IMetaverseRepository
                         g.ContributedBySyncRuleId,
                         g.NullValue,
                         g.ContributedBySystemId.HasValue ? systemNames.GetValueOrDefault(g.ContributedBySystemId.Value) : null,
-                        g.ContributedBySyncRuleId.HasValue ? ruleNames.GetValueOrDefault(g.ContributedBySyncRuleId.Value) : null),
+                        g.ContributedBySyncRuleId.HasValue ? ruleNames.GetValueOrDefault(g.ContributedBySyncRuleId.Value) : null,
+                        g.ContributedByKind,
+                        g.ContributedByClaimType),
                     g.Count
                 })
                 .OrderByDescending(x => x.Count)
@@ -2091,6 +2328,8 @@ public class MetaverseRepository : IMetaverseRepository
                 ContributedBySystemName = av.ContributedBySystem != null ? av.ContributedBySystem.Name : null,
                 av.ContributedBySyncRuleId,
                 ContributedBySyncRuleName = av.ContributedBySyncRule != null ? av.ContributedBySyncRule.Name : null,
+                av.ContributedByKind,
+                av.ContributedByClaimType,
                 av.NullValue,
                 av.ReferenceValueId,
                 ReferenceTypeName = av.ReferenceValue != null ? av.ReferenceValue.Type.Name : null,
@@ -2107,7 +2346,8 @@ public class MetaverseRepository : IMetaverseRepository
             ReferenceMetaverseObjectId = r.ReferenceValueId,
             ReferenceTypeName = r.ReferenceTypeName,
             ReferenceTypePluralName = r.ReferenceTypePluralName,
-            Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName, r.ContributedBySyncRuleName)
+            Origin = ProvenanceLogic.ResolveOrigin(r.ContributedBySystemId, r.ContributedBySyncRuleId, r.NullValue, r.ContributedBySystemName,
+                r.ContributedBySyncRuleName, r.ContributedByKind, r.ContributedByClaimType)
         }).ToList();
 
         return (values, totalCount);
@@ -2261,6 +2501,8 @@ public class MetaverseRepository : IMetaverseRepository
                 ReferenceDisplayName = vc.ReferenceValue != null ? vc.ReferenceValue.CachedDisplayName : null,
                 vc.ContributedBySyncRuleId,
                 vc.ContributedBySyncRuleName,
+                vc.ContributedByKind,
+                vc.ContributedByClaimType,
                 ChangeTime = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime,
                 ActivityId = vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem != null
                     ? vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ActivityRunProfileExecutionItem.Activity!.Id
@@ -2283,6 +2525,8 @@ public class MetaverseRepository : IMetaverseRepository
                 r.ByteValueLength, r.ReferenceDisplayName, r.ReferenceValueId),
             SyncRuleId = r.ContributedBySyncRuleId,
             SyncRuleName = r.ContributedBySyncRuleName,
+            ContributedByKind = r.ContributedByKind,
+            ClaimType = r.ContributedByClaimType,
             Change = new ProvenanceChange
             {
                 ChangeTime = r.ChangeTime,
@@ -2496,6 +2740,22 @@ public class MetaverseRepository : IMetaverseRepository
         return av?.MetaverseObject;
     }
 
+    public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue)
+    {
+        // AsTracking for the same reason as the text lookup above.
+        var av = await Repository.Database.MetaverseObjectAttributeValues
+            .AsTracking()
+            .Include(q => q.MetaverseObject)
+            .ThenInclude(mo => mo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .SingleOrDefaultAsync(av =>
+                av.Attribute.Id == metaverseAttribute.Id &&
+                av.GuidValue == attributeValue &&
+                av.MetaverseObject.Type.Id == metaverseObjectType.Id);
+
+        return av?.MetaverseObject;
+    }
+
     public async Task<int> GetMetaverseObjectCountAsync()
     {
         return await Repository.Database.MetaverseObjects.CountAsync();
@@ -2504,6 +2764,22 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId)
     {
         return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
+    }
+
+    public async Task<Dictionary<int, int>> GetExportReviewPendingCountsAsync(IReadOnlyCollection<int> metaverseObjectTypeIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectTypeIds);
+        if (metaverseObjectTypeIds.Count == 0)
+            return [];
+
+        // The flag is rare and its partial index (IX_MetaverseObjects_ScopeReviewPending) holds only the flagged rows, so
+        // the planner starts from that index and groups what it finds; the type filter is applied to those few rows.
+        var typeIds = metaverseObjectTypeIds.ToArray();
+        return await Repository.Database.MetaverseObjects
+            .Where(mvo => mvo.ScopeReviewPending && typeIds.Contains(mvo.Type.Id))
+            .GroupBy(mvo => mvo.Type.Id)
+            .Select(group => new { TypeId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.TypeId, row => row.Count);
     }
 
     /// <summary>
@@ -3239,13 +3515,16 @@ public class MetaverseRepository : IMetaverseRepository
             _ => throw new ArgumentOutOfRangeException(nameof(valueType), valueType, "Object Matching cannot compare this data type.")
         };
 
+        // The type is checked against each matched value's own object, by primary key, in a correlated subquery the
+        // planner cannot turn into a join (#2492). As a join, a type the statistics believe rare (every group of a
+        // first Full Synchronisation, projected after the analyse that counted the people) led the plan: it walked
+        // every object of the type and probed each one's values, so each lookup cost more than the last.
         return $"""
             FROM "MetaverseObjectAttributeValues" AS av
-            JOIN "MetaverseObjects" AS mo ON mo."Id" = av."MetaverseObjectId"
             {soughtJoin}
             WHERE av."AttributeId" = @attributeId
-              AND mo."TypeId" = @typeId
               AND {comparison}
+              AND (SELECT mo."TypeId" FROM "MetaverseObjects" AS mo WHERE mo."Id" = av."MetaverseObjectId") = @typeId
             """;
     }
 
@@ -3961,13 +4240,13 @@ public class MetaverseRepository : IMetaverseRepository
         // The interpolated fragments are compile-time constant column lists, never user data.
         var insertChangeSql =
             $@"INSERT INTO ""MetaverseObjectChanges"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
         var insertAttributeSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
               VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
         var insertValueSql =
             $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
-              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}}, {{14}}, {{15}})";
 
         // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -3985,7 +4264,9 @@ public class MetaverseRepository : IMetaverseRepository
             BulkSqlHelpers.NullableParam(change.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
             BulkSqlHelpers.NullableParam(change.DeletedObjectType?.Id ?? change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-            BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
+            BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(change.ActivityId, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.DeletedByRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid));
 
         // Insert attribute changes and their values
         foreach (var attrChange in change.AttributeChanges)
@@ -4021,7 +4302,9 @@ public class MetaverseRepository : IMetaverseRepository
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
                     BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRule?.Id ?? valueChange.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
-                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text));
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedByKind.HasValue ? (int?)valueChange.ContributedByKind.Value : null, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.ContributedByClaimType, NpgsqlTypes.NpgsqlDbType.Text));
             }
         }
     }
@@ -4293,7 +4576,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    public async Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         // First, get the Delete change record
         var targetChange = await Repository.Database.MetaverseObjectChanges
@@ -4301,7 +4584,7 @@ public class MetaverseRepository : IMetaverseRepository
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
-            return new List<MetaverseObjectChange>();
+            return [];
 
         // Resolve the original MVO ID from the deletion change record.
         // DeletedMetaverseObjectId is explicitly set via raw SQL on prior change records,
@@ -4324,32 +4607,26 @@ public class MetaverseRepository : IMetaverseRepository
         // /t/{plural}/v/{id} link and its type chip from it (#2146).
         if (mvoId.HasValue && mvoId.Value != Guid.Empty)
         {
-            return await Repository.Database.MetaverseObjectChanges
-                .AsSplitQuery()
+            // Projected as change history projects a live object's changes, so each attribute brings its first values
+            // and its total rather than every value of a large group (#2498).
+            var history = await Repository.Database.MetaverseObjectChanges
+                .AsNoTracking()
                 .Where(c => c.DeletedMetaverseObjectId == mvoId || c.Id == changeId)
                 .OrderByDescending(c => c.ChangeTime)
-                .Include(c => c.ActivityRunProfileExecutionItem)
-                .ThenInclude(rpei => rpei!.Activity)
-                .Include(c => c.AttributeChanges)
-                .ThenInclude(ac => ac.Attribute)
-                .Include(c => c.AttributeChanges)
-                .ThenInclude(ac => ac.ValueChanges)
-                .ThenInclude(vc => vc.ReferenceValue)
-                .ThenInclude(rv => rv!.Type)
+                .Select(MvoChangeHistoryProjection)
                 .ToListAsync();
+            await ResolveChangeValueContributingSystemsAsync(history);
+            return history;
         }
 
-        // Fallback: return only the Delete change with its attribute changes loaded
-        return await Repository.Database.MetaverseObjectChanges
-            .AsSplitQuery()
+        // Fallback: return only the Delete change
+        var deletionOnly = await Repository.Database.MetaverseObjectChanges
+            .AsNoTracking()
             .Where(c => c.Id == changeId)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(c => c.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
+            .Select(MvoChangeHistoryProjection)
             .ToListAsync();
+        await ResolveChangeValueContributingSystemsAsync(deletionOnly);
+        return deletionOnly;
     }
 
     public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(
@@ -4456,24 +4733,45 @@ public class MetaverseRepository : IMetaverseRepository
         if (includeTotalCount)
             totalCount = await query.CountAsync();
 
-        // AsTracking required: Include path AttributeValue -> ReferenceValue(MVO) -> AttributeValues creates a cycle.
         var values = await query
-            .AsTracking()
-            .AsSplitQuery()
+            .AsNoTracking()
             // The id is the whole sort key, so it is already the total order Skip/Take windows need; there is no
             // second key that could tie.
             .OrderBy(av => av.Id)
             .Skip(offset)
             .Take(count)
             .Include(av => av.Attribute)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName))
-            .ThenInclude(rvav => rvav.Attribute)
             .ToListAsync();
+        await AttachReferencedMetaverseObjectsAsync(values);
 
         return (values, totalCount);
+    }
+
+    /// <summary>
+    /// Sets the referenced object on every value that references one, read by id with its Object Type and no values:
+    /// a referenced object is named from <see cref="MetaverseObject.CachedDisplayName"/>, which
+    /// <see cref="MetaverseObject.Name"/> falls back to. Never an Include from the values themselves: the planner
+    /// cannot tell that a large group's few non-member values reference few objects, so it drove that read from every
+    /// Display Name value in the metaverse and a group of 594,000 members took 18 seconds to open.
+    /// </summary>
+    private async Task AttachReferencedMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObjectAttributeValue> values)
+    {
+        var referencedIds = values
+            .Where(v => v.ReferenceValueId.HasValue)
+            .Select(v => v.ReferenceValueId!.Value)
+            .Distinct()
+            .ToList();
+        if (referencedIds.Count == 0)
+            return;
+
+        var referencedObjects = await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mo => mo.Type)
+            .Where(mo => referencedIds.Contains(mo.Id))
+            .ToDictionaryAsync(mo => mo.Id);
+
+        foreach (var value in values.Where(v => v.ReferenceValueId.HasValue))
+            value.ReferenceValue = referencedObjects.GetValueOrDefault(value.ReferenceValueId!.Value);
     }
 
     public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
@@ -8,6 +9,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Serilog;
 namespace JIM.Application.Servers;
@@ -350,7 +352,9 @@ public partial class ActivityServer
     public async Task FailActivityWithErrorAsync(Activity activity, Exception exception)
     {
         var now = DateTime.UtcNow;
-        activity.ErrorMessage = GetFullExceptionMessage(exception);
+        activity.ErrorMessage = RanOutOfMemory(exception)
+            ? MemoryPressure.OutOfMemoryText(new HostMemoryProbe().Read())
+            : GetFullExceptionMessage(exception);
         activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
@@ -364,6 +368,20 @@ public partial class ActivityServer
         await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Whether the run failed because the runtime could not allocate memory, anywhere in the exception's chain: a task's
+    /// failure arrives wrapped (an AggregateException from a parallel step), and the wrapper's own message says nothing.
+    /// In a container with a memory limit .NET caps its heap below the limit and throws this before the Worker's memory
+    /// guard would act.
+    /// </summary>
+    private static bool RanOutOfMemory(Exception exception) => exception switch
+    {
+        OutOfMemoryException => true,
+        AggregateException aggregate => aggregate.InnerExceptions.Any(RanOutOfMemory),
+        { InnerException: { } inner } => RanOutOfMemory(inner),
+        _ => false
+    };
 
     /// <summary>
     /// Builds a complete error message by unwrapping inner exceptions.
@@ -608,6 +626,29 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// The typical duration of each requested Run Profile: the median of its most recent successful runs (at most
+    /// <paramref name="sampleSize"/>), so one unusually slow or fast run does not skew it. A Run Profile that has
+    /// never completed successfully is absent. Used to estimate when queued work will start (#2549).
+    /// </summary>
+    public async Task<Dictionary<int, TimeSpan>> GetMedianRecentRunDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int sampleSize = 5)
+    {
+        var recent = await Application.Repository.Activity.GetRecentSuccessfulRunProfileDurationsAsync(runProfileIds, sampleSize);
+        return recent
+            .Where(r => r.Value.Count > 0)
+            .ToDictionary(r => r.Key, r => Median(r.Value));
+    }
+
+    private static TimeSpan Median(List<TimeSpan> durations)
+    {
+        var sorted = durations.OrderBy(d => d).ToList();
+        var middle = sorted.Count / 2;
+        return sorted.Count % 2 == 1
+            ? sorted[middle]
+            : TimeSpan.FromTicks((sorted[middle - 1].Ticks + sorted[middle].Ticks) / 2);
+    }
+
+    /// <summary>
     /// Whether any Run Profile has ever been executed, in any state. Backs the home page's "Run your first
     /// synchronisation" setup step: an administrator who ran a Run Profile by hand has run their first
     /// synchronisation, whether or not a Schedule has ever fired.
@@ -716,14 +757,35 @@ public partial class ActivityServer
         return await Application.Repository.Activity.GetActivityRpeiErrorCountsAsync(activityId);
     }
 
-    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+    /// <summary>
+    /// A Run Profile Execution Item as its portal page shows it (#2498): the item bounded however large the group it
+    /// changed, and a summary of each change record it carries in place of the change's values. Null when no item has
+    /// the id.
+    /// </summary>
+    public async Task<ExecutionItemDetail?> GetActivityRunProfileExecutionItemDetailAsync(Guid id)
     {
-        return await Application.Repository.Activity.GetActivityRunProfileExecutionItemAsync(id);
+        var item = await Application.Repository.Activity.GetActivityRunProfileExecutionItemDetailAsync(id);
+        if (item == null)
+            return null;
+
+        var connectedSystemObjectChangeIds = item.SyncOutcomes
+            .Select(o => o.ConnectedSystemObjectChangeId)
+            .Append(item.ConnectedSystemObjectChange?.Id)
+            .OfType<Guid>()
+            .Distinct()
+            .ToList();
+        var summaries = connectedSystemObjectChangeIds.Count > 0
+            ? await Application.ConnectedSystems.GetCsoChangeValueSummariesAsync(connectedSystemObjectChangeIds)
+            : [];
+        if (item.MetaverseObjectChange is { } metaverseObjectChange)
+            summaries.AddRange(await Application.Metaverse.GetMvoChangeValueSummariesAsync([metaverseObjectChange.Id]));
+
+        return new ExecutionItemDetail { Item = item, ChangeValueSummaries = summaries.ToDictionary(s => s.ChangeId) };
     }
 
     /// <summary>
     /// One Run Profile Execution Item's own fields (error type, message and stack trace, snapshots and the ids of what
-    /// it is about) without the graph <see cref="GetActivityRunProfileExecutionItemAsync"/> loads for the portal. Null
+    /// it is about) without what <see cref="GetActivityRunProfileExecutionItemDetailAsync"/> loads for the portal. Null
     /// when no item has the id.
     /// </summary>
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)
@@ -738,6 +800,52 @@ public partial class ActivityServer
     public async Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId)
     {
         return await Application.Repository.Activity.GetJoinedOutcomeAsync(runProfileExecutionItemId);
+    }
+
+    /// <summary>
+    /// A Run Profile Execution Item's outcome tree (#2033): its root outcomes in ordinal order, each with its children
+    /// nested, in the shape a Sync Preview's tree takes. One flat read; the tree is built here rather than by EF
+    /// relationship fix-up, which a context that does not track never performs. Empty when the item recorded none.
+    /// </summary>
+    public async Task<List<SyncOutcomeNode>> GetSyncOutcomeTreeAsync(Guid runProfileExecutionItemId)
+    {
+        var outcomes = await Application.Repository.Activity.GetSyncOutcomesAsync(runProfileExecutionItemId);
+        var childrenByParent = outcomes
+            .Where(o => o.ParentSyncOutcomeId.HasValue)
+            .ToLookup(o => o.ParentSyncOutcomeId!.Value);
+        foreach (var outcome in outcomes)
+            outcome.Children = [.. childrenByParent[outcome.Id]];
+
+        return outcomes
+            .Where(o => !o.ParentSyncOutcomeId.HasValue)
+            .OrderBy(o => o.Ordinal)
+            .Select(SyncOutcomeNode.FromSyncOutcome)
+            .ToList();
+    }
+
+    /// <summary>
+    /// The attribute changes a Run Profile Execution Item recorded (#2033): its Metaverse Object change, its Connected
+    /// System Object change, and the snapshot of what each Pending Export it staged would write, in the shapes object
+    /// change history uses. Read by item, so changes on since-deleted objects are found.
+    /// </summary>
+    /// <param name="item">The item, as its core retrieval returns it.</param>
+    public async Task<ExecutionItemChanges> GetExecutionItemChangesAsync(ActivityRunProfileExecutionItem item)
+    {
+        var stagedChangeIds = (await Application.Repository.Activity.GetSyncOutcomesAsync(item.Id))
+            .Where(o => o.ConnectedSystemObjectChangeId.HasValue)
+            .OrderBy(o => o.Ordinal)
+            .Select(o => o.ConnectedSystemObjectChangeId!.Value)
+            .ToList();
+        var stagedChanges = await Application.ConnectedSystems.GetCsoChangesAsync(stagedChangeIds);
+        var stagedById = stagedChanges.ToDictionary(c => c.Id);
+
+        return new ExecutionItemChanges
+        {
+            MetaverseObjectChange = await Application.Metaverse.GetMvoChangeForExecutionItemAsync(item.Id, item.MetaverseObjectId),
+            ConnectedSystemObjectChange = await Application.ConnectedSystems.GetCsoChangeForExecutionItemAsync(item.Id),
+            // In the order the outcomes recorded them.
+            StagedExportChanges = [.. stagedChangeIds.Where(stagedById.ContainsKey).Select(id => stagedById[id])]
+        };
     }
 
     /// <summary>

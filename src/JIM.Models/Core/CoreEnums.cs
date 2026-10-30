@@ -93,6 +93,26 @@ public enum MetaverseObjectStatus
 }
 
 
+/// <summary>
+/// What kind of source set a Metaverse Object attribute value (#2472). Recorded on the value itself, and copied to
+/// its change history, so the value's origin can be shown whether or not a Synchronisation Rule contributed it.
+/// Null on a value means no source was recorded (it pre-dates this, or a writer does not record one).
+/// </summary>
+public enum ValueContributorKind
+{
+    /// <summary>A Connected System contributed the value through an import Synchronisation Rule.</summary>
+    SynchronisationRule = 1,
+
+    /// <summary>A claim in a sign-in token supplied the value; the claim's type is recorded beside it.</summary>
+    SignInClaim = 2,
+
+    /// <summary>JIM set the value itself, as a fixed value rather than one read from anywhere.</summary>
+    System = 3,
+
+    /// <summary>A person set the value directly (internal Metaverse Object management, #614). Not produced until #614 lands.</summary>
+    Person = 4
+}
+
 public enum MetaverseObjectChangeInitiatorType
 {
     NotSet = 0,
@@ -392,11 +412,6 @@ public enum PartitionValidationMode
 /// </summary>
 public enum MvoAttributeLoadStrategy
 {
-    /// <summary>
-    /// Loads all attribute values with references.
-    /// Used by the worker for sync processing.
-    /// </summary>
-    All = 0,
     /// <summary>
     /// Loads all SVA values normally. For MVA attributes, loads first N values (capped)
     /// and returns total count per attribute. Used by the web detail page and API.

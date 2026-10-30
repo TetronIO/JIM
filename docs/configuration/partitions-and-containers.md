@@ -9,6 +9,22 @@ audience: administrator
 
 Partitions and containers are chosen on the Connected System's **Scope** tab, which appears only where the Connector has them: the tab is where you choose what JIM manages in the system, whatever shape that takes.
 
+```jim-diagram
+archetype: anatomy
+title: A partition and a container in one Distinguished Name
+desc: "In OU=Users,DC=company,DC=local, DC=company,DC=local is the partition, a naming context the directory defines, and OU=Users is a container within it, an organisational unit; containers can be nested arbitrarily deep. Partitions exist on LDAP-style Connectors only; containers on most Connectors that expose hierarchy. What you select is what JIM manages, for import and export alike, and deselecting a partition or container makes its objects obsolete at the next Full Import."
+subject:
+  kind: value
+  parts:
+    - { text: "OU=Users,", callout: "Container: an OU within it" }
+    - { text: "DC=company,DC=local", strong: true, callout: "Partition: a naming context" }
+properties:
+  - { name: Partitions, value: LDAP-style Connectors only }
+  - { name: Containers, value: nested arbitrarily deep }
+  - { name: Selected, value: managed for import and export }
+  - { name: Deselected, value: its objects obsoleted by a Full Import }
+```
+
 A **partition** is a top-level logical division of a Connector Space that mirrors a boundary defined by the external system. Partitions exist in JIM primarily to service LDAP-style directories and their naming contexts (NCs): the discrete directory trees that an LDAP server hosts. The separate domain partitions within an Active Directory forest, or the distinct naming contexts exposed by an OpenLDAP server, each surface as a partition in JIM.
 
 Most Connected Systems do not support partitions. A flat file, a SQL table, or a SCIM endpoint has no concept of multiple naming contexts, so its Connector Space has no partitions.
@@ -25,7 +41,7 @@ Inside a partition, or directly inside the Connector Space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the Connector Space for connectors that have no partitions).
 
-## How many objects each container holds
+## :material-chart-box-outline: How many objects each container holds
 
 Each container row shows how many objects it holds, so you can tell a container worth managing from an empty one before you tick anything.
 
@@ -41,7 +57,7 @@ Counts are gathered as part of **Retrieve Hierarchy**, so refreshing the hierarc
 !!! note "This reads your directory"
     Counting means retrieving the matching entries, because LDAP has no count operation. JIM asks for names only, which is far lighter than an import, and runs one search per partition rather than one per container. It is still a read against your production directory, so it happens when you retrieve the hierarchy and at no other time.
 
-## What your selections mean
+## :material-gesture-tap-hold: What your selections mean
 
 Selection is how you tell JIM which parts of a system it manages, and it binds everywhere:
 
@@ -49,7 +65,7 @@ Selection is how you tell JIM which parts of a system it manages, and it binds e
 - Exports are refused outside the selected containers, honouring each container's [Container Scope](../connectors/jim-ldap-connector-topology.md#container-scope). Selection means the scope JIM manages, not merely the scope it reads: writing an object where JIM cannot import it back leaves the change unconfirmed and the object treated as deleted on the next Full Import, so JIM would end up churning an object it had just exported. A container set to One Level is not a licence to write anywhere beneath it, only directly within it, because that is exactly what the next import will return. The export fails for that object, naming the Distinguished Name, and the rest of the run continues. A container created by the Connector during the run is in scope, because JIM selects it as soon as the run ends.
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
 
-## Stating Container Scope as text (Advanced Mode)
+## :material-text-box-edit-outline: Stating Container Scope as text (Advanced Mode)
 
 The Scope tab offers two ways to edit the same Container Scope, switched with **Simple** and **Advanced**:
 
@@ -85,7 +101,7 @@ Nothing is applied by halves. Each of these is refused, naming the line at fault
 
 Automation has the same surface: [`Get-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/connected-systems.md) in PowerShell, or `GET`/`PUT connected-systems/{id}/container-scope-text` in the [REST API](../../api/reference/).
 
-## Previewing a partition or container change
+## :material-eye-outline: Previewing a partition or container change
 
 Because narrowing scope is silently destructive, the Scope tab offers a **Preview Changes** button beside **Save Changes**. It answers what your edited selection would do, without saving it.
 
@@ -111,7 +127,7 @@ The same evaluation is available to automation: [`New-JIMConfigurationChangePrev
 
 See [Configuration changes](configuration-changes.md#previewing-a-change-before-you-make-it) for how previews work generally.
 
-## Renames and moves in the source system
+## :material-swap-horizontal: Renames and moves in the source system
 
 JIM identifies partitions and containers by the system's own immutable identifier where one exists (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP), not by their Distinguished Name. Renaming an organisational unit, or moving one to a different parent, therefore keeps your selection intact: the next hierarchy refresh reports it as a rename or a move rather than as one container disappearing and another appearing.
 

@@ -32,7 +32,10 @@
                 <VirtualisedSortHeader Title="Name" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
-                <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink></span>
+                <span class="jim-nowrap"><MudLink Href="@("/admin/connected-systems/connectors/"+context.Item.Id)">@context.Item.Name</MudLink>@if (Helpers.IsPreviewConnector(context.Item.Name))
+                {
+                    <PreviewChip Class="ml-1" />
+                }</span>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Title="Description" Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
@@ -96,6 +99,7 @@
 </VirtualisedDataGrid>
 
 @code {
+    private Task? _loading;
     private IList<ConnectorDefinitionHeader>? _headers;
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
@@ -113,13 +117,13 @@
 
     /// <summary>
     /// Loads the Connector list once. The grid's window loader also calls this because the grid can request its
-    /// first window before this page's initialisation has completed.
+    /// first window before this page's initialisation has completed, so a caller arriving mid-load waits on the load
+    /// already running rather than starting another.
     /// </summary>
-    private async Task EnsureLoadedAsync()
-    {
-        if (_headers != null)
-            return;
+    private Task EnsureLoadedAsync() => _loading ??= LoadAsync();
 
+    private async Task LoadAsync()
+    {
         using var jim = JimFactory.Create();
         _headers = await jim.ConnectedSystems.GetConnectorDefinitionHeadersAsync();
     }

@@ -42,7 +42,9 @@ function New-JIMSyncRuleMatchingRule {
         Returns the rule created.
 
     .OUTPUTS
-        With -PassThru, the rule created; otherwise nothing.
+        With -PassThru, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type
+        the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many
+        objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
     .EXAMPLE
         New-JIMSyncRuleMatchingRule -SyncRuleId 5 -SourceAttributeId 25 -TargetMetaverseAttributeId 5
@@ -123,6 +125,9 @@ function New-JIMSyncRuleMatchingRule {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules" -Method 'POST' -Body $body
 
                 Write-Verbose "Created Matching Rule ID: $($result.id)"
+
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force

@@ -27,7 +27,13 @@
             {
                 foreach (var header in _connectorDefinitionHeaders)
                 {
-                    <MudSelectItem Value="@header.Id.ToString()">@header.Name</MudSelectItem>
+                    <MudSelectItem Value="@header.Id.ToString()">
+                        @header.Name
+                        @if (Helpers.IsPreviewConnector(header.Name))
+                        {
+                            <PreviewChip Class="ml-1" />
+                        }
+                    </MudSelectItem>
                 }
             }
         </MudSelect>

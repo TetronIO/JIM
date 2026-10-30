@@ -9,45 +9,62 @@ audience: administrator
 
 **API keys** provide non-interactive authentication for scripts, automation, and service-to-service integrations. Each key is associated with one or more [roles](roles.md) that determine what it can do.
 
-## One-time disclosure
+```jim-diagram
+archetype: anatomy
+title: What an API key is made of
+desc: "An API key is the prefix jim_ak_, which stays visible so you can tell keys apart, followed by a random secret that is shown once, when the key is created. JIM stores only a SHA-256 hash of the secret, so a lost secret means a new key. Each key also carries its Roles, which decide what it may do; an expiry date or none; an enabled flag; and the time and source IP of its last use."
+subject:
+  kind: value
+  parts:
+  - {text: jim_ak_, strong: true, callout: 'Prefix: always visible'}
+  - {id: secret, text: ••••••••••••••••••, callout: 'Secret: shown once, at creation'}
+derived: {from: secret, label: stored as, box: SHA-256 hash, note: all JIM keeps; a lost secret means a new key}
+properties:
+- {name: Roles, value: what it may do}
+- {name: Expiry, value: 'a date, or none'}
+- {name: Enabled, value: on or off}
+- {name: Last used, value: time and source IP}
+```
+
+## :material-eye-outline: One-time disclosure
 
 The full secret value of an API key is returned **only once**, at the moment the key is created. After that, only the key prefix is visible. JIM stores only a SHA-256 hash of the key; the plaintext is never persisted, and there is no way to recover it.
 
 If you lose the secret, you must delete the key and create a new one.
 
-## Prefix
+## :material-tag-outline: Prefix
 
 Every key begins with `jim_ak_` for easy identification in logs and configuration files, followed by a random secret. Only the prefix is shown after creation, so you can identify which key is in use without exposing its secret.
 
-## Name and description
+## :material-text-box-edit-outline: Name and description
 
 Unlike the prefix and secret, which are fixed at creation, the Name and Description can be edited at any time from the key's Details tab in the admin portal.
 
-## Expiry
+## :material-timer-outline: Expiry
 
 Keys can be created with an absolute expiry date or with no expiry. Expired keys are rejected automatically and need to be replaced.
 
 For production integrations, prefer keys with an expiry that aligns with your rotation policy (e.g. 90 or 180 days), so rotation is forced rather than relying on operational discipline.
 
-## Enabled flag
+## :material-toggle-switch-outline: Enabled flag
 
 A key can be temporarily disabled without deleting it. Disabling revokes its access immediately while preserving its history (creation, last use, source IP). Re-enabling restores access. Use this when you want to suspend a key while you investigate, without losing the audit trail.
 
-## Roles
+## :material-account-lock-outline: Roles
 
 A key carries the permissions of its assigned roles. Almost all endpoints currently require the Administrator role; future role granularity will let you mint narrower keys for specific integrations.
 
-## Last-used tracking
+## :material-clock-outline: Last-used tracking
 
 JIM records the timestamp and source IP of each successful authentication. This is useful for spotting unused keys (good rotation candidates) and unexpected callers (potential compromise indicators).
 
-## Change history
+## :material-history: Change history
 
 Every change to an API key is recorded in [Configuration Change History](activities.md#configuration-change-history): creating, editing, enabling, disabling, or deleting a key captures a versioned snapshot of its metadata (name, description, key prefix, expiry, enabled state, infrastructure flag, and Role assignments) alongside who made the change, when, and an optional reason. The key secret is never captured in any form, not even a hash: JIM stores only the SHA-256 hash used for authentication on the key itself, and that hash is not part of the change history payload. Last-used tracking (timestamp and source IP) is operational state, not configuration, so it is not part of the history either.
 
 Open a key's history from the Changes tab on its detail page, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ApiKey` or the REST API. The optional "Reason for change" prompt appears when creating, editing, or deleting a key in the admin portal; automation can pass the same reason via `-ChangeReason` on the API key write cmdlets.
 
-## Common workflows
+## :material-playlist-check: Common workflows
 
 **Issuing a key for a CI/CD integration:**
 
@@ -67,13 +84,13 @@ Open a key's history from the Changes tab on its detail page, or retrieve it wit
 2. Investigate
 3. Either re-enable, or delete and rotate
 
-## Manage API Keys
+## :material-cog-outline: Manage API Keys
 
 - **JIM portal**<br /> API Keys area of the admin UI
 - **PowerShell**<br /> [API Keys cmdlets](../powershell/api-keys.md) (`Get-JIMApiKey`, `New-JIMApiKey`, `Set-JIMApiKey`, etc.)
 - **REST API**<br /> API Keys endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [API Authentication](../api/authentication.md): how keys are presented on requests, plus the alternative JWT Bearer flow
 - [Roles](roles.md): the permission grants assigned to a key

@@ -49,7 +49,11 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         connectedSystems.Setup(r => r.GetConnectedSystemsWithConnectorDefinitionsAsync()).ReturnsAsync(() => []);
         repo.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
         repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
-        _jim = new JimApplication(repo.Object);
+        // The tab reads the retired values register's counts once the rule has a generated row (#242, Phase 6).
+        var syncRepo = new Mock<ISyncRepository>();
+        syncRepo.Setup(r => r.GetRetiredGeneratedValueCountsAsync(It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new List<JIM.Models.Transactional.RetiredGeneratedValueCount>());
+        _jim = new JimApplication(repo.Object, syncRepository: syncRepo.Object);
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(_jim));
         Services.AddSingleton<IExpressionEvaluator, DynamicExpressoEvaluator>();
     }
@@ -208,6 +212,29 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
 #pragma warning restore MUD0012
 
     [Test]
+    public async Task TryingAValue_KeepsItAndWorksTheCandidatesOutFromItAsync()
+    {
+        // The tester renders into the dialog's Try it pane (#2471); a value tried there must survive the re-render the
+        // form does on every change, and the result must follow it.
+        var (provider, tab, _) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
+        await provider.InvokeAsync(() => baseExpression.Instance.ValueChanged.InvokeAsync("Lower(cs[\"firstName\"])"));
+        tab.Render();
+
+        var field = provider.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"firstName\"]");
+        await provider.InvokeAsync(() => field.Instance.ValueChanged.InvokeAsync("James"));
+        tab.Render();
+
+        provider.WaitForState(() => provider.Markup.Contains("james1"), TimeSpan.FromSeconds(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindComponents<TestInputValueEditor>().Single().Instance.State.Values, Is.EqualTo(new[] { "James" }),
+                "the value tried is kept");
+            Assert.That(provider.Markup, Does.Contain("james1"), "the candidates are worked out from the base tried");
+        }
+    }
+
+    [Test]
     public async Task TypingABaseExpression_ShowsSeparatorAndMissingInputBehaviour()
     {
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
@@ -220,7 +247,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         {
             Assert.That(provider.FindComponents<MudSelect<string>>().Any(s => s.Instance.Label == "Separator"), Is.True,
                 "a separator is only offered alongside a base expression on a Text target");
-            Assert.That(provider.FindComponents<MudRadioGroup<MissingInputBehaviour>>().Any(), Is.True,
+            Assert.That(provider.FindComponents<SettingsSection>().Any(section => section.Instance.Title == "If an input has no value"), Is.True,
                 "Missing Input Behaviour is only offered once a base expression is present");
         }
 
@@ -236,7 +263,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.FindComponents<MudSelect<string>>().Any(s => s.Instance.Label == "Separator"), Is.False);
-            Assert.That(provider.FindComponents<MudRadioGroup<MissingInputBehaviour>>().Any(), Is.False);
+            Assert.That(provider.FindComponents<SettingsSection>().Any(section => section.Instance.Title == "If an input has no value"), Is.False);
         }
     }
 
@@ -261,7 +288,8 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     [Test]
     public async Task OnlyIfTakenToken_OffersTheNeverReuseSwitch_OnByDefault()
     {
-        var (provider, _, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
 
         var neverReuse = provider.FindComponents<MudSwitch<bool>>().SingleOrDefault(s => s.Instance.Label == NeverReuseLabel);
 
@@ -301,6 +329,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     public async Task TurningNeverReuseOff_IsWrittenToTheMapping()
     {
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
 
         var neverReuse = provider.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == NeverReuseLabel);
         await provider.InvokeAsync(() => neverReuse.Instance.ValueChanged.InvokeAsync(false));
@@ -315,6 +344,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         // The stored flag should say what the engine does: a Sequence never reuses, so leaving it false would make
         // the REST and PowerShell surfaces report something the flow does not do.
         var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
 
         var neverReuse = provider.FindComponents<MudSwitch<bool>>().Single(s => s.Instance.Label == NeverReuseLabel);
         await provider.InvokeAsync(() => neverReuse.Instance.ValueChanged.InvokeAsync(false));
@@ -325,7 +355,88 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         Assert.That(mapping().Generation!.NeverReuse, Is.True);
     }
 
+    // ─── The token a new Generated Value starts with ───
+
+    [Test]
+    public async Task NewGeneratedValue_NoBaseExpression_StartsOnASequenceNumber()
+    {
+        // "Only if taken" needs a base expression, so a new Generated Value left on it opened with that radio selected
+        // and disabled, and a save error showing before anything had been typed.
+        var (_, _, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        Assert.That(mapping().Generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence));
+    }
+
+    [Test]
+    public async Task NewGeneratedValue_TypingABaseExpression_MovesToOnlyIfTaken()
+    {
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
+
+        Assert.That(mapping().Generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.OnlyIfTaken));
+    }
+
+    [Test]
+    public async Task NewGeneratedValue_ClearingTheBaseExpression_MovesBackToASequenceNumber()
+    {
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
+        await TypeBaseExpressionAsync(provider, tab, "");
+
+        Assert.That(mapping().Generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence));
+    }
+
+    [TestCase(GeneratedValueTokenKind.Sequence)]
+    [TestCase(GeneratedValueTokenKind.Random)]
+    public async Task NewGeneratedValue_TokenChosenByTheAdministrator_IsKeptWhenABaseExpressionIsTyped(GeneratedValueTokenKind chosen)
+    {
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType.Text);
+
+        var tokenRadios = provider.FindComponents<MudRadioGroup<GeneratedValueTokenKind>>().Single();
+        await provider.InvokeAsync(() => tokenRadios.Instance.ValueChanged.InvokeAsync(chosen));
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
+
+        Assert.That(mapping().Generation!.TokenKind, Is.EqualTo(chosen));
+    }
+
+    [Test]
+    public async Task ExistingGeneratedValue_TypingABaseExpression_KeepsItsToken()
+    {
+        var rule = BuildRule();
+        var target = rule.MetaverseObjectType!.Attributes.Single(a => a.Type == AttributeDataType.Text);
+        var existing = new SyncRuleMapping
+        {
+            Id = 101,
+            SyncRule = rule,
+            SyncRuleId = rule.Id,
+            TargetMetaverseAttribute = target,
+            TargetMetaverseAttributeId = target.Id,
+            Generation = new SyncRuleMappingGeneration { Id = 900, TokenKind = GeneratedValueTokenKind.Sequence }
+        };
+        rule.AttributeFlowRules.Add(existing);
+        var provider = Render<MudDialogProvider>();
+        var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, rule));
+        var edit = typeof(SyncRuleAttributeFlowTab).GetMethod("HandleEditAttributeFlowRuleAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        await tab.InvokeAsync(() => (Task)edit.Invoke(tab.Instance, [existing])!);
+        tab.Render();
+        provider.WaitForAssertion(() => Assert.That(provider.HasComponent<MudRadioGroup<GeneratedValueTokenKind>>(), Is.True));
+
+        await TypeBaseExpressionAsync(provider, tab, "Lower(cs[\"firstName\"])");
+
+        Assert.That(existing.Generation!.TokenKind, Is.EqualTo(GeneratedValueTokenKind.Sequence),
+            "a saved choice is the administrator's, whatever the base expression does");
+    }
+
     // ─── Test scaffolding ───
+
+    private static async Task TypeBaseExpressionAsync(IRenderedComponent<MudDialogProvider> provider, IRenderedComponent<SyncRuleAttributeFlowTab> tab, string expression)
+    {
+        var baseExpression = provider.FindComponents<ExpressionEditor>().Single(f => f.Instance.Label == "Base expression");
+        await provider.InvokeAsync(() => baseExpression.Instance.ValueChanged.InvokeAsync(expression));
+        tab.Render();
+    }
 
     private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)
         OpenAddDialogWithGeneratedSourceType()

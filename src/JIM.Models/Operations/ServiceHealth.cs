@@ -77,4 +77,16 @@ public class ServiceHealth
     /// Free text the service left beside its state (queue counts, why it is waiting), or null.
     /// </summary>
     public string? Detail { get; set; }
+
+    /// <summary>The memory the service's process held at its last heartbeat, in bytes; null when not reported.</summary>
+    public long? ProcessMemoryBytes { get; set; }
+
+    /// <summary>
+    /// The memory the service's process can draw on in all at its last heartbeat, in bytes: its container's limit,
+    /// or the host's memory without one. Null when not reported.
+    /// </summary>
+    public long? MemoryTotalBytes { get; set; }
+
+    /// <summary>How much of <see cref="MemoryTotalBytes"/> was still available at the last heartbeat, in bytes; null when not reported.</summary>
+    public long? MemoryAvailableBytes { get; set; }
 }

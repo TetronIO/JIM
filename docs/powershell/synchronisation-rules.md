@@ -9,8 +9,31 @@ audience: automation-author
 
 Synchronisation Rules decide how values flow between a Connected System and the Metaverse. The cmdlets on this page list, create, change and delete them. A rule's [Attribute Flows](attribute-mappings.md), [scoping criteria](scoping-criteria.md), [Object Matching Rules](object-matching-rules.md) and [initial password](initial-password.md) have pages of their own. What each setting does is covered in [Synchronisation Rules](../configuration/synchronisation-rules.md).
 
+```jim-diagram
+archetype: decision
+title: What Remove-JIMSyncRule does with the values a rule contributed
+desc: 'When you delete a Synchronisation Rule with Remove-JIMSyncRule, a rule that contributes no Metaverse attribute values is deleted at once. A rule that does contribute values, and is deleted with -KeepContributedValues, is also deleted at once, and its values stay with no provenance, so nothing can ever recall them. Otherwise the deletion recalls them: the rule is disabled at once and a queued task withdraws its values, re-elects the other contributors and deletes the rule as its last step. Without -Wait the command returns once the recall is queued, with the RecallActivityId of the Activity doing it, and the rule can still be read, disabled, until the recall finishes. With -Wait it returns once the recall has finished and the rule has gone.'
+start: {label: Deleting a rule}
+questions:
+- {id: contrib, label: 'Does it contribute values?', sub: the confirmation says how many}
+- {id: keep, label: '`-KeepContributedValues`?'}
+- {id: wait, label: '`-Wait`?', sub: the recall is queued; the rule is disabled}
+outcomes:
+- {id: none, label: Deleted at once, sub: nothing to recall}
+- {id: kept, label: 'Deleted at once, values kept', sub: 'no provenance: nothing can recall them'}
+- {id: queued, label: Returns once queued, sub: '`RecallActivityId` to follow; the rule is still readable'}
+- {id: gone, label: Returns when the rule has gone, sub: 'values recalled, other contributors re-elected'}
+answers:
+- {from: contrib, to: none, label: 'no'}
+- {from: contrib, to: keep, label: 'yes'}
+- {from: keep, to: kept, label: 'yes'}
+- {from: keep, to: wait, label: 'no: recall them'}
+- {from: wait, to: queued, label: 'no'}
+- {from: wait, to: gone, label: 'yes'}
+```
+
 ---
-## Get-JIMSyncRule
+## :material-link-variant: Get-JIMSyncRule
 
 Gets Synchronisation Rules: every rule by default, one by ID, or those matching the filters. The filters are the ones on the portal's Synchronisation Rules page: they combine with AND, and the values given to one filter combine with OR.
 
@@ -46,7 +69,7 @@ Get-JIMSyncRule [-ConnectedSystemName <string>] [-Name <string>] [-Direction <st
 
 ### Output
 
-The matching rules, or with `-Id`, the one rule.
+The matching rules, or with `-Id`, the one rule. Each carries what it is waiting on: an import rule's AwaitingSynchronisationChangeCount is the saved changes waiting for its Connected System's next synchronisation to process every object of the rule's Object Type, and an export rule's ExportReviewPendingCount is the Metaverse Objects of its type flagged for review against every export rule at the next synchronisation of any Connected System. Each is zero for the other direction.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -67,6 +90,8 @@ The matching rules, or with `-Id`, the one rule.
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
 | `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+| `AwaitingSynchronisationChangeCount` | `int` | For an import rule, how many saved changes (to this rule or to others on the same Connected System Object Type) are waiting for the Connected System's next synchronisation, which will then process every object of the rule's Connected System Object Type. Zero when none are, and for an export rule. |
+| `ExportReviewPendingCount` | `int` | For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against every export rule at the next synchronisation of any Connected System. Zero when none are, and for an import rule. |
 <!-- END GENERATED: Get-JIMSyncRule -->
 
 ### Examples
@@ -108,9 +133,15 @@ Get-JIMSyncRule -ConnectedSystemId $cs.Id
 Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status Enabled
 ```
 
+```powershell title="Find the rules waiting on a synchronisation"
+Get-JIMSyncRule |
+    Where-Object { $_.AwaitingSynchronisationChangeCount -gt 0 -or $_.ExportReviewPendingCount -gt 0 } |
+    Select-Object Name, Direction, AwaitingSynchronisationChangeCount, ExportReviewPendingCount
+```
+
 ---
 
-## New-JIMSyncRule
+## :material-plus-circle-outline: New-JIMSyncRule
 
 Creates a Synchronisation Rule between a Connected System Object Type and a Metaverse Object Type. Add its [Attribute Flows](attribute-mappings.md#new-jimsyncrulemapping), [scoping criteria](scoping-criteria.md) and [Object Matching Rules](object-matching-rules.md) afterwards.
 
@@ -145,13 +176,14 @@ New-JIMSyncRule [-Name] <string> -ConnectedSystemName <string> -ConnectedSystemO
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing. A deletion source warning is written to the warning stream either way.
+With `-PassThru`, the rule created; otherwise nothing. A deletion source warning is written to the warning stream either way. AwaitingSynchronisation lists the Connected System Object Type an enabled import rule makes its Connected System's next synchronisation process in full, with how many objects that is and about how long it takes; it is empty for an export rule and for a rule created disabled, and a warning saying the same is written to the warning stream.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `Warnings` | `string[]` | Non-blocking warnings the save raised about the rule's Attribute Flows and Scoping Criteria, for example that an Attribute Flow deriving a Metaverse attribute calls a function returning a different value each time it is evaluated, or that a Scoping Criterion the save left as it was is no longer valid. The save went ahead regardless. Always present; empty when there are none. |
 | `DependentDerivedFlows` | `object[]` | The Metaverse-Derived Attribute Flows the save left with a missing input (for example by disabling the rule holding the last enabled contributor of an attribute they read). The save went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
 | `DeletionSourceWarning` | `string` | Set when the save took the rule into projecting into a Metaverse Object Type deleted When Authoritative Source Disconnected, from a Connected System that is not one of its authoritative sources: objects only this system holds will never be deleted, and those it shares with an authoritative source are deleted when that source disconnects. Empty when there is nothing to warn about, including for a rule that already projected. |
+| `AwaitingSynchronisation` | `object[]` | The Connected System Object Types this save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives the Connected System and Object Type, how many objects that is, and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Always present; empty when the save recorded nothing: a change that needs no synchronisation, a rule that is switched off, and an export rule, whose change reaches existing objects through the review it flags instead. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 | `Id` | `int` | The ID of the Synchronisation Rule. |
 | `Name` | `string` | The name of the Synchronisation Rule. |
 | `Description` | `string` | What the Synchronisation Rule is for, for administrators; empty when none is set. |
@@ -169,6 +201,8 @@ With `-PassThru`, the rule created; otherwise nothing. A deletion source warning
 | `EnforceState` | `bool` | For an export rule, whether a change imported from the Connected System re-evaluates the rule, so the value JIM exported is put back when the target drifts from it. Only meaningful on an export rule. |
 | `OutboundDeprovisionAction` | `string` | For an export rule, what happens to a Connected System Object when its Metaverse Object leaves the rule's scope or is deleted: Disconnect breaks the join and leaves the object in the Connected System, and Delete removes it from there. Only meaningful on an export rule. One of `Disconnect` or `Delete`. |
 | `InboundOutOfScopeAction` | `string` | For an import rule, what happens when a Connected System Object leaves the rule's scope: Disconnect breaks the join, and RemainJoined keeps the join and stops the values flowing. Only meaningful on an import rule. One of `RemainJoined` or `Disconnect`. |
+| `AwaitingSynchronisationChangeCount` | `int` | For an import rule, how many saved changes (to this rule or to others on the same Connected System Object Type) are waiting for the Connected System's next synchronisation, which will then process every object of the rule's Connected System Object Type. Zero when none are, and for an export rule. |
+| `ExportReviewPendingCount` | `int` | For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against every export rule at the next synchronisation of any Connected System. Zero when none are, and for an import rule. |
 <!-- END GENERATED: New-JIMSyncRule -->
 
 ### Examples
@@ -214,7 +248,7 @@ New-JIMSyncRule -Name "HR Import (Draft)" `
 
 ---
 
-## Set-JIMSyncRule
+## :material-pencil-outline: Set-JIMSyncRule
 
 Changes a Synchronisation Rule: its name and description, whether it is enabled, and how it projects, provisions and deprovisions. What you leave out stays as it is. Changes that leave a [Metaverse-Derived Attribute Flow](attribute-mappings.md#derived-attribute-flow-warnings) with a missing input, or that leave objects a Metaverse Object Type's deletion rule will never delete, go ahead with a warning rather than being refused.
 
@@ -258,7 +292,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing. Its warnings are written to the warning stream either way.
+With `-PassThru`, the rule as changed; otherwise nothing. Its warnings are written to the warning stream either way. AwaitingSynchronisation lists each Connected System Object Type an import rule's change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes; it is empty for an export rule and for a change that needs none, and a line for each type saying the same is written to the warning stream.
 
 Properties as under [New-JIMSyncRule](#new-jimsyncrule).
 <!-- END GENERATED: Set-JIMSyncRule -->
@@ -304,7 +338,7 @@ Set-JIMSyncRule -Id 12 -Disable -ChangeReason "Pausing during HR cutover (CHG009
 
 ---
 
-## Remove-JIMSyncRule
+## :material-trash-can-outline: Remove-JIMSyncRule
 
 Deletes a Synchronisation Rule, with its Attribute Flows, scoping criteria and Object Matching Rules.
 
@@ -396,7 +430,7 @@ Deleting a rule can leave a Metaverse-Derived Attribute Flow on another rule wit
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Synchronisation Rules](../configuration/synchronisation-rules.md): direction, scoping, object matching, projection, and attribute mappings
 - [Attribute Mappings](attribute-mappings.md): the Attribute Flows on a Synchronisation Rule

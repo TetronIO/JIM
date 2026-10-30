@@ -9,9 +9,32 @@ audience: automation-author
 
 Cmdlets for generating sample identity data for testing and evaluation purposes. Example data sets and templates allow you to populate the Metaverse with realistic test identities without requiring a live Connected System.
 
+```jim-diagram
+archetype: comparison
+title: Two ways to change a template's attributes
+desc: "Set-JIMExampleDataTemplate with -ObjectType replaces the template's whole Object Type graph: every Object Type and attribute configuration you do not supply is removed, so use it to restructure a template. Add-JIMExampleDataTemplateAttribute adds one attribute's configuration to an Object Type the template already has, and keeps every other setting as it was, so use it to add one attribute without restating the rest. A built-in template refuses both; Copy-JIMExampleDataTemplate makes a copy, which is never built in and can be changed."
+columns:
+  - { label: "`Set-JIMExampleDataTemplate`", sub: "with `-ObjectType`" }
+  - { label: "`Add-JIMExampleDataTemplateAttribute`", sub: "one attribute at a time" }
+rows:
+  - label: Changes
+    cells:
+      - { text: "the whole Object Type graph", sub: "every Object Type and attribute" }
+      - { text: one attribute's configuration, sub: "on an Object Type the template already has" }
+  - label: The rest
+    cells:
+      - { text: "removed, unless you supply it again" }
+      - { text: "kept, every setting as it was" }
+  - label: Use it to
+    cells:
+      - { text: restructure a template }
+      - { text: "add one attribute without restating the rest" }
+footer: "Built-in templates refuse both; change a `Copy-JIMExampleDataTemplate` copy"
+```
+
 ---
 
-## Get-JIMExampleDataSet
+## :material-database-outline: Get-JIMExampleDataSet
 
 Retrieves available example data sets. Each data set is a named pool of string values (e.g. a list of cities, or first names) that Data Generation Templates can draw from.
 
@@ -46,7 +69,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created, in UTC. |
-| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
+| `Culture` | `string` | The culture code the values are in, for example "en-GB". |
 | `ValueCount` | `int` | How many values the Example Data Set holds. |
 
 **With `-Id`**:
@@ -55,7 +78,7 @@ A list returns each Example Data Set's header, and `-Id` the Example Data Set wi
 |----------|------|-------------|
 | `Id` | `int` | The unique identifier of the Example Data Set. |
 | `Name` | `string` | The name of the Example Data Set, for example "Firstnames Female". |
-| `Culture` | `string` | The .NET culture code the values are in, for example "en-GB". |
+| `Culture` | `string` | The culture code the values are in, for example "en-GB". |
 | `BuiltIn` | `bool` | Whether the Example Data Set ships with JIM, rather than being created by an administrator. |
 | `Created` | `datetime` | When the Example Data Set was created (UTC). |
 | `CreatedByName` | `string` | The display name of the principal that created the Example Data Set. |
@@ -84,7 +107,7 @@ Get-JIMExampleDataSet | Select-Object Name, Culture, ValueCount
 
 ---
 
-## New-JIMExampleDataSet
+## :material-database-plus-outline: New-JIMExampleDataSet
 
 Creates a new Example Data Set.
 
@@ -100,7 +123,7 @@ New-JIMExampleDataSet [-Name] <string> -Culture <string> [-Values <string[]>] [-
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes |  | The name for the Example Data Set. Can be given by position, as the first argument. |
-| `Culture` | `string` | Yes |  | The .NET culture the values are in, for example "en-GB". |
+| `Culture` | `string` | Yes |  | The culture code the values are in, for example "en-GB". |
 | `Values` | `string[]` | No |  | The values that make up the Example Data Set. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the created Example Data Set. |
@@ -120,7 +143,7 @@ New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manc
 
 ---
 
-## Set-JIMExampleDataSet
+## :material-database-edit-outline: Set-JIMExampleDataSet
 
 Updates an existing Example Data Set. Built-in data sets cannot be updated.
 
@@ -137,7 +160,7 @@ Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <s
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes |  | The Example Data Set to update. Accepts pipeline input by property name. |
 | `Name` | `string` | No |  | The new name. |
-| `Culture` | `string` | No |  | The .NET culture the values are in, for example "en-GB". |
+| `Culture` | `string` | No |  | The culture code the values are in, for example "en-GB". |
 | `Values` | `string[]` | No |  | The values, replacing all of the Example Data Set's current ones. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Example Data Set's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the updated Example Data Set. |
@@ -161,7 +184,7 @@ Set-JIMExampleDataSet -Id 5 -Values "London", "Manchester", "Bristol", "Leeds" -
 
 ---
 
-## Remove-JIMExampleDataSet
+## :material-database-remove-outline: Remove-JIMExampleDataSet
 
 Deletes an Example Data Set. Built-in data sets cannot be removed. This action cannot be undone.
 
@@ -199,7 +222,7 @@ Remove-JIMExampleDataSet -Id 5 -Force
 
 ---
 
-## Get-JIMExampleDataTemplate
+## :material-file-document-outline: Get-JIMExampleDataTemplate
 
 Retrieves data generation templates that define how test data should be generated. Templates specify object types, attribute patterns, and generation rules used when creating sample identity data.
 
@@ -275,7 +298,7 @@ Get-JIMExampleDataTemplate -Page 1 -PageSize 10
 
 ---
 
-## New-JIMExampleDataTemplate
+## :material-file-plus-outline: New-JIMExampleDataTemplate
 
 Creates a Data Generation Template: a definition of which Metaverse Object Types to generate test objects for, how many of each, and how each attribute's values are generated.
 
@@ -291,7 +314,7 @@ New-JIMExampleDataTemplate [-Name] <string> -ObjectType <hashtable[]> [-ChangeRe
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes |  | The name for the Data Generation Template. Can be given by position, as the first argument. |
-| `ObjectType` | `hashtable[]` | Yes |  | One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted) and Attributes, an optional array of attribute generation hashtables using the API's request field names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate, BoolTrueDistribution, BoolShouldBeRandom, SequentialNumbers, RandomNumbers, WeightedStringValues, ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds, AttributeDependency), except that MetaverseAttribute may be a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order. Unknown keys throw, so a typo is caught before anything is sent. |
+| `ObjectType` | `hashtable[]` | Yes |  | One hashtable per Object Type the template generates objects for. Each takes MetaverseObjectType (a Metaverse Object Type name or id; required), ObjectsToCreate (how many objects to generate; 1 if omitted) and Attributes, an optional array of attribute generation hashtables using the API's request field names (Pattern, Expression, PopulatedValuesPercentage, MinNumber, MaxNumber, MinDate, MaxDate, BoolTrueDistribution, SequentialNumbers, RandomNumbers, WeightedStringValues, ManagerDepthPercentage, MvaRefMinAssignments, MvaRefMaxAssignments, ReferenceMetaverseObjectTypeIds, AttributeDependency), except that MetaverseAttribute may be a Metaverse Attribute name or id, and ExampleDataSets entries may be Example Data Set names or ids, in order. Unknown keys throw, so a typo is caught before anything is sent. |
 | `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the Data Generation Template's Configuration Change History. |
 | `PassThru` | `switch` | No |  | Returns the created Data Generation Template. |
 
@@ -320,8 +343,7 @@ Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
 | `ExampleDataSets` | `object[]` | The Example Data Sets values are drawn from, by name or ID. Order follows array order, which is what index-based patterns refer to. |
 | `WeightedStringValues` | `hashtable[]` | Specific values to choose from, weighted: `@{ Value = "active"; Weight = 0.9 }`. |
 | `PopulatedValuesPercentage` | `int` | What percentage of generated objects receive a value for this attribute. |
-| `BoolTrueDistribution` | `int` | For boolean attributes, what percentage of values are true. |
-| `BoolShouldBeRandom` | `bool` | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | For boolean attributes, the percentage (0 to 100) of the objects given a value that are given true: an exact share, rounded to the nearest object with halves rounded up. Omit it for true or false at random. |
 | `MinDate` / `MaxDate` | `datetime` | For date attributes, the earliest and latest values to generate. |
 | `MinNumber` / `MaxNumber` | `int` | For number attributes, the smallest and largest values to generate. |
 | `SequentialNumbers` / `RandomNumbers` | `bool` | For number attributes, whether values are generated sequentially or randomly. |
@@ -357,7 +379,7 @@ New-JIMExampleDataTemplate -Name "Demo Organisation" -ObjectType @(
 
 ---
 
-## Set-JIMExampleDataTemplate
+## :material-file-edit-outline: Set-JIMExampleDataTemplate
 
 Renames a Data Generation Template and/or replaces its Object Type configuration. Built-in templates cannot be updated.
 
@@ -415,7 +437,52 @@ Set-JIMExampleDataTemplate -Id 7 -NewName "Demo Users v2" -WhatIf
 
 ---
 
-## Remove-JIMExampleDataTemplate
+## :material-content-copy: Copy-JIMExampleDataTemplate
+
+Creates a new Data Generation Template with the same Object Types and generation rules as an existing one. Built-in templates can be copied, which is how to customise one: the copy is never built in, so it can be changed and removed.
+
+<!-- BEGIN GENERATED: Copy-JIMExampleDataTemplate -->
+### Syntax
+
+```powershell
+# ById (default)
+Copy-JIMExampleDataTemplate -Id <int> -NewName <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+
+# ByName
+Copy-JIMExampleDataTemplate -Name <string> -NewName <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes (ById) |  | The Data Generation Template to copy. Accepts pipeline input by property name. |
+| `Name` | `string` | Yes (ByName) |  | The name of the Data Generation Template to copy. |
+| `NewName` | `string` | Yes |  | The name of the new Data Generation Template. It must not already be in use by another template. |
+| `ChangeReason` | `string` | No |  | A reason for the change, recorded on its Activity and shown in the new Data Generation Template's Configuration Change History. |
+| `PassThru` | `switch` | No |  | Returns the new Data Generation Template. |
+
+### Output
+
+With `-PassThru`, the new Data Generation Template; otherwise nothing.
+
+Properties as under [Get-JIMExampleDataTemplate](#get-jimexampledatatemplate).
+<!-- END GENERATED: Copy-JIMExampleDataTemplate -->
+
+### Examples
+
+```powershell title="Copy a built-in template to customise it"
+Copy-JIMExampleDataTemplate -Name "Users & Groups" -NewName "Contoso Demo"
+```
+
+```powershell title="Copy a template, record why, and keep the new template"
+$copy = Copy-JIMExampleDataTemplate -Id 3 -NewName "Contoso Demo" -ChangeReason "Demo for Contoso (CHG0300)" -PassThru
+Set-JIMExampleDataTemplate -Id $copy.Id -NewName "Contoso Demo (2k staff)"
+```
+
+---
+
+## :material-file-remove-outline: Remove-JIMExampleDataTemplate
 
 Deletes a Data Generation Template, including its whole per-Object-Type attribute configuration. Built-in templates cannot be removed. This action cannot be undone; objects the template has already generated are unaffected.
 
@@ -464,7 +531,7 @@ Get-JIMExampleDataTemplate | Where-Object { $_.Name -like "Demo*" -and -not $_.B
 
 ---
 
-## Add-JIMExampleDataTemplateAttribute
+## :material-tag-outline: Add-JIMExampleDataTemplateAttribute
 
 Adds one attribute's generation configuration to an Object Type within an existing Data Generation Template, without restating the rest of the template: the cmdlet reads the template, appends the new attribute, and writes the whole configuration back with every existing setting preserved.
 
@@ -475,10 +542,10 @@ Supply `-MetaverseAttribute` to say which attribute values are generated for.
 
 ```powershell
 # ById (default)
-Add-JIMExampleDataTemplateAttribute -TemplateId <int> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-BoolShouldBeRandom <bool>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Add-JIMExampleDataTemplateAttribute -TemplateId <int> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-BoolShouldBeRandom <bool>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
+Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> [-MetaverseAttribute <object>] [-Pattern <string>] [-Expression <string>] [-ExampleDataSet <object[]>] [-WeightedValue <hashtable[]>] [-PopulatedValuesPercentage <int>] [-BoolTrueDistribution <int>] [-MinDate <datetime>] [-MaxDate <datetime>] [-MinNumber <int>] [-MaxNumber <int>] [-SequentialNumbers <bool>] [-RandomNumbers <bool>] [-ManagerDepthPercentage <int>] [-MvaRefMinAssignments <int>] [-MvaRefMaxAssignments <int>] [-ReferenceMetaverseObjectType <object[]>] [-AttributeDependency <hashtable>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -494,8 +561,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateName <string> -ObjectType <object> 
 | `ExampleDataSet` | `object[]` | No |  | The Example Data Sets (names or ids) values are drawn from. Order follows array order, which is what index-based patterns like "{0} {1}" refer to. |
 | `WeightedValue` | `hashtable[]` | No |  | Specific string values to choose from, weighted to control their distribution: one @{ Value = ..; Weight = .. } hashtable per value. |
 | `PopulatedValuesPercentage` | `int` | No |  | What percentage of generated objects receive a value for this attribute. From 0 to 100. |
-| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, what percentage of values are true. From 0 to 100. |
-| `BoolShouldBeRandom` | `bool` | No |  | For boolean attributes, whether values are generated randomly. |
+| `BoolTrueDistribution` | `int` | No |  | For boolean attributes, the percentage of the objects given a value that are given true. The share is exact, rounded to the nearest object with halves rounded up; when omitted, each object is given true or false at random. From 0 to 100. |
 | `MinDate` | `datetime` | No |  | For date attributes, the earliest value to generate. |
 | `MaxDate` | `datetime` | No |  | For date attributes, the latest value to generate. |
 | `MinNumber` | `int` | No |  | For number attributes, the smallest value to generate. |
@@ -537,7 +603,7 @@ Add-JIMExampleDataTemplateAttribute -TemplateId 7 -ObjectType "User" -MetaverseA
 
 ---
 
-## Invoke-JIMExampleDataTemplate
+## :material-play-circle-outline: Invoke-JIMExampleDataTemplate
 
 Executes a Data Generation Template to create objects in the Metaverse. Execution is queued to the JIM worker service and tracked by an Activity: the cmdlet returns as soon as the server has queued the request. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)), or use `-Wait` to block until generation completes with a live progress display.
 
@@ -614,7 +680,7 @@ Get-JIMActivity -Id $result.ActivityId
 
 ---
 
-## Test-JIMExampleDataExpression
+## :material-function-variant: Test-JIMExampleDataExpression
 
 Tests the expression an Example Data Template attribute generates its value with, against sample values for the attributes it reads, by the same evaluation generating objects runs. Nothing is generated. Each sample is read as the type of the template attribute that generates it on the same object; `Outcome` says whether the attribute would be generated as a value, without one, or whether generating objects from the template would fail. Give `-Expression` to try an edit before saving it. Find a template attribute's ID with [`Get-JIMExampleDataTemplate`](#get-jimexampledatatemplate).
 
@@ -669,7 +735,7 @@ Test-JIMExampleDataExpression -TemplateId 4 -TemplateAttributeId 13 -Expression 
 
 ---
 
-## Building a template end to end
+## :material-hammer-wrench: Building a template end to end
 
 Create a Data Generation Template with one attribute inline, add a second attribute to it, then generate the data:
 
@@ -696,7 +762,7 @@ Invoke-JIMExampleDataTemplate -Id $template.Id -Wait
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse](metaverse.md): cmdlets for querying Metaverse Objects; the schema has [Metaverse Object Types](metaverse-object-types.md) and [Metaverse Attributes](metaverse-attributes.md)
 - [Activities](activities.md): cmdlets for reviewing activity history and execution results

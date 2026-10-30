@@ -500,6 +500,8 @@ services:
       - "${JIM_AD_LAB_PRIMARY_HOST:-dc1.panoply.local}:${JIM_AD_LAB_PRIMARY_ADDRESS:-0.0.0.0}"
       - "${JIM_AD_LAB_SOURCE_HOST:-dc1.resurgam.local}:${JIM_AD_LAB_SOURCE_ADDRESS:-0.0.0.0}"
       - "${JIM_AD_LAB_TARGET_HOST:-dc1.gentian.local}:${JIM_AD_LAB_TARGET_ADDRESS:-0.0.0.0}"
+      # The AD FS server, for the sign-in checks (#2441), which run here as on an administrator's workstation.
+      - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"
     volumes:
       # Written by the harness (Save-ActiveDirectoryCertificate); gitignored, read-only here.
       - ../ad-lab-certs:/certs:ro

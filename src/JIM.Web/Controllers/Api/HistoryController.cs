@@ -6,6 +6,10 @@ using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using JIM.Models.History;
+using JIM.Models.Staging.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -189,8 +193,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             pageSize: pageSize);
 
         // Resolve Connected System names
-        var csHeaders = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        var csLookup = csHeaders.ToDictionary(h => h.Id, h => h.Name);
+        var csLookup = await _application.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         var response = new DeletedObjectsPagedResponse<DeletedCsoResponse>
         {
@@ -275,7 +278,146 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         return Ok(response);
     }
 
+    /// <summary>
+    /// Search changes to Metaverse Objects
+    /// </summary>
+    /// <remarks>
+    /// Finds changes across every Metaverse Object, newest first: by when they were made, by Metaverse Object Type, by
+    /// display name, and by how named attributes changed (for example, Employee Status changed to Disabled). With
+    /// several attribute conditions, <c>All</c> requires every condition to be met by the same change, to one
+    /// Metaverse Object in one Activity; <c>Any</c> requires one. Changes to objects since deleted are included.
+    ///
+    /// Only changes JIM recorded can be found: none are recorded while Metaverse Object change tracking is turned off,
+    /// and history retention removes older ones.
+    /// </remarks>
+    /// <param name="request">The search criteria and the page wanted.</param>
+    /// <returns>One page of matching changes, with the attributes each one changed.</returns>
+    /// <response code="200">Returns the page of matching changes.</response>
+    /// <response code="400">If a condition names an attribute that does not exist or a value not of its type, or the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpPost("metaverse-object-changes/search", Name = "SearchMetaverseObjectChanges")]
+    [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectChangeSearchItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SearchMetaverseObjectChangesAsync([FromBody] MetaverseObjectChangeSearchRequest request)
+    {
+        var page = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginationLimits.MaxPageSize);
+        if (!PaginationLimits.IsWithinDepth(page, pageSize))
+            return BadRequest(ApiErrorResponse.BadRequest(PaginationLimits.DepthExceededMessage(page, pageSize)));
+
+        var criteria = new MetaverseObjectChangeSearchCriteria
+        {
+            FromDate = request.FromDate,
+            ToDate = request.ToDate,
+            ObjectTypeId = request.ObjectTypeId,
+            DisplayNameSearch = request.DisplayNameSearch,
+            MatchMode = request.MatchMode,
+            AttributeConditions = request.Conditions
+                .Select(c => new MetaverseObjectChangeAttributeCondition { AttributeId = c.AttributeId, Operator = c.Operator, Value = c.Value })
+                .ToList()
+        };
+
+        _logger.LogDebug("Searching Metaverse Object changes - Type:{ObjectTypeId}, Conditions:{ConditionCount}, Page:{Page}",
+            request.ObjectTypeId, criteria.AttributeConditions.Count, page);
+
+        try
+        {
+            var result = await _application.Metaverse.SearchMetaverseObjectChangesRangeAsync(
+                criteria, offset: (page - 1) * pageSize, count: pageSize);
+
+            return Ok(PaginatedResponse<MetaverseObjectChangeSearchItem>.Create(
+                result.Results.Select(MetaverseObjectChangeSearchItem.FromResult),
+                result.TotalResults ?? 0,
+                page,
+                pageSize));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// List one attribute's value changes on a Connected System Object change
+    /// </summary>
+    /// <remarks>
+    /// A Connected System Object's change history, and an Activity item's changes, return each changed attribute's
+    /// first ten value changes and its total (<c>valueChangeTotal</c>). A change to a large group can carry one value
+    /// change per member: use this endpoint to page through all of them, in the order the change recorded them. The
+    /// change is found by its id, so a change to an object since deleted can still be read.
+    /// </remarks>
+    /// <param name="changeId">The change record's id, as change history returns it.</param>
+    /// <param name="attributeName">The attribute whose value changes to list, matched case-insensitively.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <param name="search">Optional case-insensitive search over the value, including a referenced object's name.</param>
+    /// <returns>A page of the attribute's value changes, with their total.</returns>
+    /// <response code="200">Returns the page of value changes; empty when the change or attribute has none.</response>
+    /// <response code="400">If the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("connected-system-object-changes/{changeId:guid}/attributes/{attributeName}/values", Name = "GetConnectedSystemObjectChangeValues")]
+    [ProducesResponseType(typeof(PaginatedResponse<CsoValueChangeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectChangeValuesAsync(
+        Guid changeId,
+        string attributeName,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        var result = await _application.ConnectedSystems.GetCsoChangeValueRowsAsync(ChangeValueQuery(changeId, attributeName, pagination, search));
+        return Ok(PaginatedResponse<CsoValueChangeDto>.Create(
+            result.Results.Select(row => row.Value), result.TotalResults ?? 0, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// List one attribute's value changes on a Metaverse Object change
+    /// </summary>
+    /// <remarks>
+    /// A Metaverse Object's change history, the change search, and an Activity item's changes return each changed
+    /// attribute's first ten value changes and its total (<c>valueChangeTotal</c>). A change to a large group can carry
+    /// one value change per member: use this endpoint to page through all of them, in the order the change recorded
+    /// them. The change is found by its id, so a change to an object since deleted can still be read.
+    /// </remarks>
+    /// <param name="changeId">The change record's id, as change history returns it.</param>
+    /// <param name="attributeName">The attribute whose value changes to list, matched case-insensitively.</param>
+    /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
+    /// <param name="search">Optional case-insensitive search over the value, including a referenced object's name.</param>
+    /// <returns>A page of the attribute's value changes, with their total.</returns>
+    /// <response code="200">Returns the page of value changes; empty when the change or attribute has none.</response>
+    /// <response code="400">If the page is too deep.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("metaverse-object-changes/{changeId:guid}/attributes/{attributeName}/values", Name = "GetMetaverseObjectChangeValues")]
+    [ProducesResponseType(typeof(PaginatedResponse<MvoValueChangeDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMetaverseObjectChangeValuesAsync(
+        Guid changeId,
+        string attributeName,
+        [FromQuery] PaginationRequest pagination,
+        [FromQuery] string? search = null)
+    {
+        var result = await _application.Metaverse.GetMvoChangeValueRowsAsync(ChangeValueQuery(changeId, attributeName, pagination, search));
+        return Ok(PaginatedResponse<MvoValueChangeDto>.Create(
+            result.Results.Select(row => row.Value), result.TotalResults ?? 0, pagination.Page, pagination.PageSize));
+    }
+
     #region Private Helpers
+
+    /// <summary>
+    /// The window of one attribute's value changes a page asks for: each value change is its own row, as recorded,
+    /// rather than the portal's view in which a single-valued replacement reads as one Set row.
+    /// </summary>
+    private static ChangeValueRowQuery ChangeValueQuery(Guid changeId, string attributeName, PaginationRequest pagination, string? search) => new()
+    {
+        ChangeIds = [changeId],
+        AttributeName = attributeName,
+        Normalise = false,
+        SearchText = string.IsNullOrWhiteSpace(search) ? null : search,
+        Offset = (pagination.Page - 1) * pagination.PageSize,
+        Count = pagination.PageSize,
+        IncludeTotalCount = true
+    };
 
     private static string MapInitiatorType(ActivityInitiatorType initiatorType)
     {

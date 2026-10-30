@@ -864,20 +864,6 @@ public class SyncImportTaskProcessor
                 // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
                 await StampBatchImportStateAsync(csoBatch, batchRpeis);
 
-                // Add newly created CSOs to the lookup cache
-                foreach (var newCso in csoBatch)
-                {
-                    var extIdValue = newCso.ExternalIdAttributeValue;
-                    if (extIdValue?.StringValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.StringValue, newCso.Id);
-                    else if (extIdValue?.IntValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), newCso.Id);
-                    else if (extIdValue?.LongValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), newCso.Id);
-                    else if (extIdValue?.GuidValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, newCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), newCso.Id);
-                }
-
                 // Track committed CSO IDs so future batches can preserve FK references to them
                 foreach (var cso in csoBatch)
                     committedCsoIds.Add(cso.Id);
@@ -935,27 +921,6 @@ public class SyncImportTaskProcessor
                     batchStart, batchStart + batchSize, totalToUpdate);
                 var csoBatch = connectedSystemObjectsToBeUpdated.GetRange(batchStart, batchSize);
 
-                // Capture old external ID values BEFORE the update mutates AttributeValues,
-                // so we can evict stale cache entries if external IDs changed during import.
-                var oldExternalIds = new Dictionary<Guid, (string? primaryIdValue, string? secondaryIdValue)>();
-                foreach (var cso in csoBatch)
-                {
-                    var oldPrimaryValue = cso.ExternalIdAttributeValue;
-                    var oldPrimaryId = oldPrimaryValue?.StringValue
-                        ?? oldPrimaryValue?.IntValue?.ToString()
-                        ?? oldPrimaryValue?.LongValue?.ToString()
-                        ?? oldPrimaryValue?.GuidValue?.ToString();
-
-                    string? oldSecondaryId = null;
-                    if (cso.SecondaryExternalIdAttributeId.HasValue)
-                    {
-                        var oldSecondaryValue = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
-                        oldSecondaryId = oldSecondaryValue?.StringValue;
-                    }
-
-                    oldExternalIds[cso.Id] = (oldPrimaryId, oldSecondaryId);
-                }
-
                 // Extract just the RPEIs for this batch of CSOs.
                 // Update-phase CSOs already have real IDs, so we match by ConnectedSystemObjectId.
                 var batchCsoIds = new HashSet<Guid>(csoBatch.Select(c => c.Id));
@@ -981,50 +946,7 @@ public class SyncImportTaskProcessor
                 _activityRunProfileExecutionItems.RemoveAll(r => r.ConnectedSystemObjectId.HasValue && batchCsoIds.Contains(r.ConnectedSystemObjectId.Value));
                 await FlushImportRpeisAsync(batchRpeis);
 
-                // Update cache for CSOs that were updated during import.
-                // For PendingProvisioning → Normal transitions: the confirming import has assigned a primary
-                // external ID, so evict the old secondary-keyed cache entry and add a primary-keyed one.
-                // For Normal CSOs: refresh the cache with the current primary external ID.
-                // If any external ID changed (e.g. DN rename), evict the stale cache entry.
-                foreach (var updatedCso in csoBatch)
-                {
-                    var extIdValue = updatedCso.ExternalIdAttributeValue;
-                    if (extIdValue == null)
-                        continue;
-
-                    var newPrimaryId = extIdValue.StringValue
-                        ?? extIdValue.IntValue?.ToString()
-                        ?? extIdValue.LongValue?.ToString()
-                        ?? extIdValue.GuidValue?.ToString();
-
-                    oldExternalIds.TryGetValue(updatedCso.Id, out var oldIds);
-
-                    // Evict old primary cache entry if primary external ID changed
-                    if (oldIds.primaryIdValue != null && newPrimaryId != null
-                        && !oldIds.primaryIdValue.Equals(newPrimaryId, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, oldIds.primaryIdValue);
-                    }
-
-                    // Evict old secondary cache entry if this CSO has a secondary external ID
-                    if (updatedCso.SecondaryExternalIdAttributeId.HasValue && oldIds.secondaryIdValue != null)
-                    {
-                        _syncServer.EvictCsoFromCache(_connectedSystem.Id, updatedCso.SecondaryExternalIdAttributeId.Value, oldIds.secondaryIdValue);
-                    }
-
-                    // Add/refresh primary external ID cache entry
-                    if (extIdValue.StringValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.StringValue, updatedCso.Id);
-                    else if (extIdValue.IntValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.IntValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.LongValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.LongValue.Value.ToString(), updatedCso.Id);
-                    else if (extIdValue.GuidValue != null)
-                        _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
-                }
-
-                // Release this batch's hydrated AttributeValues now that it's been persisted and
-                // the cache eviction/refresh above has read what it needed from them. See
+                // Release this batch's hydrated AttributeValues now that it's been persisted. See
                 // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
                 // kill on 2026-07-21 traced to these values otherwise staying resident for the
                 // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
@@ -2505,6 +2427,10 @@ public class SyncImportTaskProcessor
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
         // and skip-eligibility for this page's candidates.
+        // #1066: a deletion the Connector reported without its Object Type takes the type of the object its External ID
+        // names, before anything below files objects by type.
+        TypeUntypedDeletions(connectedSystemImportResult, crossPageSeenExternalIds);
+
         var hydrationResult = await HydrateCsoPageAsync(connectedSystemImportResult);
         var hydratedCsoPage = hydrationResult.HydratedCsos;
 
@@ -2633,7 +2559,9 @@ public class SyncImportTaskProcessor
                 if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
                 {
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType;
-                    activityRunProfileExecutionItem.ErrorMessage = $"PerformImportAsync: Couldn't find valid Connected System ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
+                    activityRunProfileExecutionItem.ErrorMessage = importObject.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(importObject.ObjectType)
+                        ? "The Connector reported a deletion without its Object Type, and its External ID does not tell JIM which object was deleted: this Connector's External IDs can name different objects in different Object Types. Nothing was deleted; run a Full Import, which detects deletions by absence."
+                        : $"PerformImportAsync: Couldn't find valid Connected System ({_connectedSystem.Id}) object type for imported object type: {importObject.ObjectType}";
                     continue;
                 }
 
@@ -3501,7 +3429,7 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// The import object's External ID value in the form the pre-fetched lookup keys carry it (the same form
-    /// <c>GetAllCsoExternalIdMappingsAsync</c> builds for stored values). Throws for an import object whose External
+    /// <c>GetAllCsoImportStateLookupAsync</c> builds for stored values). Throws for an import object whose External
     /// ID attribute is missing, multi-valued or empty, which the per-object loop reports against its own item.
     /// </summary>
     /// <param name="caseExact">Whose case-exact declaration folds a Text value: the External ID attribute's own unless the
@@ -3538,6 +3466,78 @@ public class SyncImportTaskProcessor
             AttributeDataType.Guid => importObjectAttribute.GuidValues[0].ToString().ToLowerInvariant(),
             _ => throw new InvalidDataException($"LookupCsoByExternalId: Unsupported Connected System Object Type External Id attribute type: {externalIdAttribute.Type}")
         };
+    }
+
+    /// <summary>
+    /// #1066: gives each deletion on the page that the Connector reported without an Object Type the type of the object
+    /// its External ID names, so that every rule below treats it exactly as a deletion the Connector had typed. The
+    /// object is found among those JIM holds, those an earlier page of this run returned, and the page's own typed
+    /// objects. A deletion naming no object JIM knows has nothing to retire and leaves the page, as a typed deletion of
+    /// an object JIM does not hold is ignored. A Connector whose External IDs can name different objects in different
+    /// Object Types cannot have its deletions typed this way, since the value alone does not say which object went;
+    /// those, and a deletion whose External ID somehow names objects of more than one type, stay untyped, and the
+    /// per-object loop reports them without deleting anything.
+    /// </summary>
+    private void TypeUntypedDeletions(ConnectedSystemImportResult importResult, HashSet<string>? earlierPageKeys)
+    {
+        var untyped = importResult.ImportObjects
+            .Where(o => o.ChangeType == ObjectChangeType.Deleted && string.IsNullOrEmpty(o.ObjectType))
+            .ToList();
+        if (untyped.Count == 0 || !_connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes || _connectedSystem.ObjectTypes == null)
+            return;
+
+        var objectTypes = _connectedSystem.ObjectTypes.Where(t => t.Attributes.Any(a => a.IsExternalId)).ToList();
+        var pageKeys = importResult.ImportObjects
+            .Where(o => !string.IsNullOrEmpty(o.ObjectType))
+            .Select(GetDuplicateDetectionKey)
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var deletion in untyped)
+        {
+            var namedTypes = objectTypes.Where(t => NamesKnownObject(deletion, t, earlierPageKeys, pageKeys)).ToList();
+            if (namedTypes.Count == 1)
+            {
+                deletion.ObjectType = namedTypes[0].Name;
+            }
+            else if (namedTypes.Count == 0)
+            {
+                importResult.ImportObjects.Remove(deletion);
+                _unchangedObjectCount++;
+                Log.Debug("TypeUntypedDeletions: The Connector reported a deletion without its Object Type, and JIM knows no object with its External ID. Ignoring.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// #1066: whether a deletion's External ID, read as <paramref name="objectType"/>'s, names an object JIM holds of
+    /// that type, or one an earlier page or this page returned as that type.
+    /// </summary>
+    private bool NamesKnownObject(ConnectedSystemImportObject deletion, ConnectedSystemObjectType objectType, HashSet<string>? earlierPageKeys, HashSet<string> pageKeys)
+    {
+        var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
+        var externalIdImportAttribute = deletion.Attributes.SingleOrDefault(a => a.Name.Equals(externalIdAttribute.Name, StringComparison.OrdinalIgnoreCase));
+        if (externalIdImportAttribute == null)
+            return false;
+
+        try
+        {
+            if (!_csIsEmpty && _csoExternalIdLookup != null &&
+                _csoExternalIdLookup.ContainsKey(CsoLookupKey.For(_connectedSystem.Id, externalIdAttribute.Id, GetExternalIdLookupValue(deletion, externalIdAttribute))))
+                return true;
+        }
+        catch (Exception ex) when (ex is ExternalIdAttributeNotSingleValuedException or ExternalIdAttributeValueMissingException or InvalidDataException)
+        {
+            // A value that cannot be an External ID of this type names nothing of it.
+            return false;
+        }
+
+        var value = GetDuplicateDetectionExternalIdValue(externalIdImportAttribute, externalIdAttribute.Type);
+        if (string.IsNullOrEmpty(value))
+            return false;
+
+        var key = GetDuplicateDetectionKey(objectType, externalIdAttribute, value);
+        return pageKeys.Contains(key) || earlierPageKeys?.Contains(key) == true;
     }
 
     /// <summary>
@@ -5688,8 +5688,8 @@ public class SyncImportTaskProcessor
     /// neither import type: a Full Import skips it by its content hash (the confirming import stamped the disabled
     /// state it holds through the hold), and a Delta Import never returns it. A password that then expires or is
     /// cancelled (a change to the password, not the account), or is delivered without enabling the account, would
-    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection skipping the
-    /// object permanently.
+    /// leave the change held for ever: the account disabled, nothing reported, and Drift Detection never correcting
+    /// its enabled state.
     /// <para>
     /// Each such change is held while a password is still owed to the object's Metaverse Object and released otherwise,
     /// silently and exactly as reconciliation releases it (<see cref="ISyncEngine.JudgeChangesAwaitingInitialPasswordNotReconciled"/>),
@@ -5752,11 +5752,11 @@ public class SyncImportTaskProcessor
             await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
         }
 
-        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked, Executing
-        // or Failed), and is left alone here too.
+        // Anything neither still owed nor released sits on a Pending Export reconciliation leaves alone (Parked or
+        // Executing), and is left alone here too.
         Log.Information("JudgeUnreconciledInitialPasswordHoldsAsync: Judged {Count} change(s) held until an Initial Password is delivered on " +
             "Connected System Object(s) this import did not return. Still held (Initial Password owed): {Held}, " +
-            "Released (no Initial Password owed): {Released}, Left on a Parked, Executing or Failed export: {Left}",
+            "Released (no Initial Password owed): {Released}, Left on a Parked or Executing export: {Left}",
             unreconciled.Count, stillOwedCount, releasedCount, unreconciled.Count - stillOwedCount - releasedCount);
     }
 

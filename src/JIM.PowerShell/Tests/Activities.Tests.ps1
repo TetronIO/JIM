@@ -789,6 +789,69 @@ Describe 'Get-JIMActivityExecutionItem' {
         }
     }
 
+    Context 'Outcomes and changes' {
+
+        It 'Asks for <Switches> with include=<Include>' -ForEach @(
+            @{ Switches = '-IncludeOutcomes'; Splat = @{ IncludeOutcomes = $true }; Include = 'outcomes' }
+            @{ Switches = '-IncludeChanges'; Splat = @{ IncludeChanges = $true }; Include = 'changes' }
+            @{ Switches = '-IncludeOutcomes -IncludeChanges'; Splat = @{ IncludeOutcomes = $true; IncludeChanges = $true }; Include = 'outcomes,changes' }
+        ) {
+            InModuleScope JIM -Parameters @{ Splat = $Splat; Include = $Include } {
+                param($Splat, $Include)
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = $itemId } }
+
+                Get-JIMActivityExecutionItem -Id $itemId @Splat | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -eq "/api/v1/activities/items/$($itemId)?include=$Include" }
+            }
+        }
+
+        It 'Offers the switches only with the item, not with its causes, consequences or a timeline' {
+            $command = Get-Command Get-JIMActivityExecutionItem
+            foreach ($name in 'IncludeOutcomes', 'IncludeChanges') {
+                $command.Parameters[$name].ParameterSets.Keys | Should -Be @('Item')
+            }
+        }
+
+        It 'Returns the outcome tree nested, and each staged export''s change by the id its outcome carries' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $itemId = [guid]::NewGuid()
+                $changeId = [guid]::NewGuid()
+                # The wire shape: camelCase, children nested in their parent outcome.
+                $wire = @{
+                    id = $itemId
+                    outcomes = @(
+                        @{
+                            outcomeType = 'Projected'; ordinal = 0
+                            children = @(
+                                @{ outcomeType = 'PendingExportCreated'; ordinal = 0; stagedChangeType = 'Create'; connectedSystemObjectChangeId = $changeId; children = @() }
+                            )
+                        }
+                    )
+                    changes = @{
+                        metaverseObjectChange = $null
+                        connectedSystemObjectChange = $null
+                        stagedExportChanges = @(
+                            @{ id = $changeId; attributeChanges = @(@{ attributeName = 'mail'; valueChanges = @(@{ valueChangeType = 'Add'; stringValue = 'jsmith@example.com' }) }) }
+                        )
+                    }
+                } | ConvertTo-Json -Depth 10
+                Mock Invoke-RestMethod { $wire | ConvertFrom-Json }
+
+                $result = Get-JIMActivityExecutionItem -Id $itemId -IncludeOutcomes -IncludeChanges
+
+                $staged = @(@($result.Outcomes)[0].Children)[0]
+                $staged.PSObject.Properties.Name | Should -Contain 'ConnectedSystemObjectChangeId'
+                $staged.OutcomeType | Should -Be 'PendingExportCreated'
+                $change = @($result.Changes.StagedExportChanges) | Where-Object Id -eq $staged.ConnectedSystemObjectChangeId
+                @(@($change.AttributeChanges)[0].ValueChanges)[0].StringValue | Should -Be 'jsmith@example.com'
+            }
+        }
+    }
+
     Context 'Causes and consequences' {
 
         It 'Has the item as its default parameter set, with Causes and Consequences beside it' {

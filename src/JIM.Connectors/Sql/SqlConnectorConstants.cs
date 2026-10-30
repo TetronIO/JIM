@@ -174,45 +174,5 @@ public static class SqlConnectorConstants
         }
         """;
 
-    /// <summary>
-    /// The same Object Types document with both Delta Import modes configured, shown in the Delta Import
-    /// Mode setting's Description. Only the mode actually chosen is read, but showing both together is
-    /// what makes the difference between them legible. Parsed by the Connector's own unit tests, so it
-    /// cannot drift out of step with what the parser accepts.
-    /// </summary>
-    public const string DeltaConfigurationExample = """
-        {
-          "objectTypes": [
-            {
-              "name": "Person",
-              "schema": "HR",
-              "table": "V_EMPLOYEES",
-              "anchorColumns": [ "EMPLOYEE_ID" ],
-              "watermarkColumn": "LAST_MODIFIED",
-              "relatedTables": [
-                {
-                  "attributeName": "PhoneNumbers",
-                  "schema": "HR",
-                  "table": "EMPLOYEE_PHONES",
-                  "valueColumn": "PHONE_NUMBER",
-                  "joinColumns": [ "EMPLOYEE_ID" ],
-                  "watermarkColumn": "LAST_MODIFIED"
-                }
-              ],
-              "changeLog": {
-                "schema": "HR",
-                "table": "IDM_CHANGE_LOG",
-                "anchorColumns": [ "EMPLOYEE_ID" ],
-                "sequenceColumn": "CHANGED_AT",
-                "changeTypeColumn": "CHANGE_TYPE",
-                "createValues": [ "I" ],
-                "updateValues": [ "U" ],
-                "deleteValues": [ "D" ]
-              }
-            }
-          ]
-        }
-        """;
-
     #endregion
 }

@@ -34,6 +34,24 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void OpenIsolatedScope_RepositoryOfTheScope_RefusesWritesAndDisposesTheInnerScope()
+    {
+        // A preview walk moves onto the isolated scope (#2598); the guarantee must move with it.
+        var isolatedInner = new Mock<ISyncRepository>();
+        var innerScope = new Mock<ISyncRepositoryScope>();
+        innerScope.Setup(s => s.Repository).Returns(isolatedInner.Object);
+        _inner.Setup(r => r.OpenIsolatedScope()).Returns(innerScope.Object);
+
+        using (var scope = _guard.OpenIsolatedScope())
+        {
+            Assert.That(() => scope.Repository.CreatePendingExportAsync(new PendingExport()),
+                Throws.InstanceOf<PreviewWriteAttemptedException>());
+        }
+
+        innerScope.Verify(s => s.Dispose(), Times.Once);
+    }
+
+    [Test]
     public void CreatePendingExportAsync_IsAWrite_Throws()
     {
         Assert.That(() => _guard.CreatePendingExportAsync(new PendingExport()),
@@ -107,6 +125,55 @@ public class ReadOnlySyncRepositoryGuardTests
     {
         Assert.That(() => _guard.DeleteRetiredGeneratedValuesForAttributeAsync(1, null),
             Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.DeleteRetiredGeneratedValuesForAttributeAsync)));
+    }
+
+    [Test]
+    public void ClaimConfigurationChangeSynchronisationsAsync_IsAWrite_Throws()
+    {
+        // Claiming stamps the rows with a run's Activity; a preview that claimed would take them from the run that must
+        // apply them (#2615). The preview reads what is awaiting through the read-only query below.
+        Assert.That(() => _guard.ClaimConfigurationChangeSynchronisationsAsync(1, [1L], Guid.NewGuid()),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync)));
+    }
+
+    [Test]
+    public void ApplyClaimedConfigurationChangeSynchronisationsAsync_IsAWrite_Throws()
+    {
+        Assert.That(() => _guard.ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid.NewGuid()),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.ApplyClaimedConfigurationChangeSynchronisationsAsync)));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync_IsARead_DelegatesToTheWrappedRepository()
+    {
+        IReadOnlySet<int> awaiting = new HashSet<int> { 7 };
+        _inner.Setup(r => r.GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(3)).ReturnsAsync(awaiting);
+
+        var result = await _guard.GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(3);
+
+        Assert.That(result, Is.SameAs(awaiting));
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeSynchronisationIdsAwaitingAsync_IsARead_DelegatesToTheWrappedRepository()
+    {
+        IReadOnlyList<long> ids = [4L, 5L];
+        _inner.Setup(r => r.GetConfigurationChangeSynchronisationIdsAwaitingAsync(3)).ReturnsAsync(ids);
+
+        var result = await _guard.GetConfigurationChangeSynchronisationIdsAwaitingAsync(3);
+
+        Assert.That(result, Is.SameAs(ids));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync_IsARead_DelegatesToTheWrappedRepository()
+    {
+        var since = DateTime.UtcNow;
+        _inner.Setup(r => r.GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(3, since, It.IsAny<IReadOnlyCollection<int>>())).ReturnsAsync(42);
+
+        var result = await _guard.GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(3, since, [7]);
+
+        Assert.That(result, Is.EqualTo(42));
     }
 
     [Test]

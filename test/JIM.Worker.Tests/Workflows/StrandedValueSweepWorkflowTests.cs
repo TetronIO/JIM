@@ -823,6 +823,31 @@ public class StrandedValueSweepWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task ExecuteStrandedValueSweepAsync_LastConnectorRuleNoGrace_DeletedChangeRecordNamesTheDeletingItemAsync()
+    {
+        var ctx = await SetUpImportRuleAsync();
+        ctx.MvType.DeletionGracePeriod = null;
+        await DbContext.SaveChangesAsync();
+        var mvo = SeedPlainMetaverseObject(ctx);
+        var mvoId = mvo.Id;
+        await SeedJoinRecordAsync(ctx.System, mvoId);
+        await SeedMaxMissingPercentAsync(100);
+        _spySyncRepo.SetMvoChangeTrackingEnabled(true);
+        var system = await ArmSweepAsync(ctx.System);
+        var activity = await BuildActivityAsync(system.Id);
+
+        await Jim.ConnectedSystems.ExecuteStrandedValueSweepAsync(system, activity);
+
+        var item = activity.RunProfileExecutionItems.Single(i => i.SyncOutcomes.Any(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted));
+        var deletedChange = _spySyncRepo.MetaverseObjectChanges.Values.Single(c => c.ChangeType == ObjectChangeType.Deleted && c.DeletedMetaverseObjectId == mvoId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletedChange.DeletedByRunProfileExecutionItemId, Is.EqualTo(item.Id), "the deletion record names the sweep's item that deleted the object (#2460)");
+            Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id));
+        }
+    }
+
+    [Test]
     public async Task ExecuteStrandedValueSweepAsync_AuthoritativeSourceSpecificModeClearedSystemListed_FiresDespiteRemainingJoinAsync()
     {
         // Specific-sources mode fires on ANY listed source's disconnection, even with other connectors

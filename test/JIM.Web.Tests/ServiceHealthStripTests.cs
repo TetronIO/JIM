@@ -150,8 +150,8 @@ public class ServiceHealthStripTests : JimComponentTestContext
         var card = Card(cut, JimService.WorkerSync);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("Full Import: Corporate Directory · 12 min"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Is.EqualTo("Heartbeat 2 seconds ago · up 3 d"), "the uptime rides on the heartbeat line");
+            Assert.That(Text(card, ".jim-service-health-activity"), Does.StartWith("Full Import: Corporate Directory").And.Contain("12 min"));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Heartbeat 2 seconds ago").And.Contain("up 3 d"), "the uptime rides on the heartbeat line");
             Assert.That(card.QuerySelector(".jim-service-health-footer"), Is.Null, "host and version have moved behind the details control");
         }
     }
@@ -257,7 +257,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
     {
         var cut = RenderStrip(HealthyReport());
 
-        Assert.That(Text(Card(cut, JimService.Scheduler), ".jim-service-health-activity"), Is.EqualTo("Idle"));
+        Assert.That(Text(Card(cut, JimService.WorkerDelivery), ".jim-service-health-activity"), Is.EqualTo("Idle"));
     }
 
     [Test]
@@ -274,9 +274,9 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Was running: Full Import: Corporate Directory · up "),
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith("Was running: Full Import: Corporate Directory").And.Contain("up "),
                 "the uptime it had at its last heartbeat stays: it says how long it ran before going quiet");
-            Assert.That(card.TextContent, Does.Not.Contain("· 12 min"), "a dead process is not running anything");
+            Assert.That(card.TextContent, Does.Not.Contain("12 min"), "a dead process is not running anything");
         }
     }
 
@@ -300,7 +300,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         using (Assert.EnterMultipleScope())
         {
             Assert.That(Text(card, ".jim-service-health-activity"), Is.EqualTo("No heartbeat for 4 minutes"));
-            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith($"Last heartbeat {lastSeen} · up "));
+            Assert.That(Text(card, ".jim-service-health-condition"), Does.StartWith($"Last heartbeat {lastSeen}").And.Contain("up "));
         }
     }
 
@@ -447,6 +447,80 @@ public class ServiceHealthStripTests : JimComponentTestContext
             Assert.That(CollapseToggle(cut).GetAttribute("aria-expanded"), Is.EqualTo("false"));
             Assert.That(cut.FindComponents<MudCollapse>().Single(c => c.FindAll(".jim-service-health-grid").Count > 0).Instance.Expanded, Is.False);
         }
+    }
+
+    // ─── Next Schedule (#2549) ───
+
+    private static JIM.Models.Scheduling.DTOs.NextDueSchedule WeeklyReconciliation(ServiceHealthReport report) => new()
+    {
+        Id = Guid.NewGuid(),
+        Name = "Weekly Full Reconciliation",
+        NextRunTime = report.GeneratedAt.AddHours(83)
+    };
+
+    [Test]
+    public void ServiceHealthStrip_ScheduleDue_SchedulerCardSaysWhichAndWhenAndLinksToSchedules()
+    {
+        var report = HealthyReport();
+
+        var cut = Render<ServiceHealthStrip>(p => p.Add(c => c.Report, report).Add(c => c.NextSchedule, WeeklyReconciliation(report)));
+
+        var next = Card(cut, JimService.Scheduler).QuerySelector("[data-testid='service-health-next-schedule']");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(next, Is.Not.Null, "the Scheduler card says when work will next join the queue");
+            Assert.That(next!.TextContent, Does.Contain("Weekly Full Reconciliation").And.Contain("in 3 d"));
+            Assert.That(next!.QuerySelector("a")?.GetAttribute("href"), Is.EqualTo("/admin/operations?t=schedules"));
+            Assert.That(Card(cut, JimService.WorkerSync).QuerySelector("[data-testid='service-health-next-schedule']"), Is.Null,
+                "only the Scheduler fires Schedules");
+        }
+    }
+
+    [Test]
+    public void ServiceHealthStrip_NoScheduleDue_SchedulerCardSaysSo()
+    {
+        var cut = RenderStrip(HealthyReport());
+
+        Assert.That(Card(cut, JimService.Scheduler).QuerySelector("[data-testid='service-health-next-schedule']")!.TextContent,
+            Does.Contain("No Schedules due"));
+    }
+
+    [Test]
+    public void ServiceHealthStrip_SchedulerUnhealthy_DoesNotPromiseTheNextSchedule()
+    {
+        // A Scheduler that has stopped heartbeating will not fire anything, so naming the next run would be a promise
+        // the page cannot keep; the card leads with what is wrong instead.
+        var report = ServiceHealthDisplayTests.Report(
+            ServiceHealthDisplayTests.Derive(JimService.WorkerSync, 2),
+            ServiceHealthDisplayTests.Derive(JimService.Scheduler, 4 * 60));
+
+        var cut = Render<ServiceHealthStrip>(p => p.Add(c => c.Report, report).Add(c => c.NextSchedule, WeeklyReconciliation(report)));
+
+        Assert.That(Card(cut, JimService.Scheduler).QuerySelector("[data-testid='service-health-next-schedule']"), Is.Null);
+    }
+
+    [Test]
+    public void ServiceHealthStrip_Collapsed_KeepsTheNextScheduleInTheHeader()
+    {
+        var report = HealthyReport();
+
+        var cut = Render<ServiceHealthStrip>(p => p
+            .Add(c => c.Report, report)
+            .Add(c => c.NextSchedule, WeeklyReconciliation(report))
+            .Add(c => c.Collapsed, true));
+
+        Assert.That(cut.Find(".jim-service-health-header").TextContent, Does.Contain("next Schedule"),
+            "collapsing hides the cards, so the header carries the next Schedule instead");
+    }
+
+    [Test]
+    public void ServiceHealthStrip_Expanded_LeavesTheNextScheduleToTheCard()
+    {
+        var report = HealthyReport();
+
+        var cut = Render<ServiceHealthStrip>(p => p.Add(c => c.Report, report).Add(c => c.NextSchedule, WeeklyReconciliation(report)));
+
+        Assert.That(cut.Find(".jim-service-health-header").TextContent, Does.Not.Contain("next Schedule"));
     }
 
     [Test]

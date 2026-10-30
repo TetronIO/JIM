@@ -9,9 +9,30 @@ audience: automation-author
 
 The Metaverse is the central identity store in JIM. These cmdlets find and read Metaverse Objects, explain where each value and connection comes from, and review the Metaverse Objects pending deletion. A Metaverse Object's password is set with the [Password Synchronisation](password-synchronisation.md#set-jimmetaverseobjectpassword) cmdlets, and the values JIM generated for it are listed with the [Generated Values](generated-values.md) cmdlets. The Metaverse schema is managed with the [Metaverse Object Type](metaverse-object-types.md) and [Metaverse Attribute](metaverse-attributes.md) cmdlets.
 
+```jim-diagram
+archetype: map
+title: The cmdlets that find a Metaverse Object and explain it
+desc: 'Search-JIMMetaverseObject runs a Predefined Search and returns each match in summary, quickly at scale; pick one, and Get-JIMMetaverseObject gets that Metaverse Object in full. From a Metaverse Object, Get-JIMMetaverseObjectProvenance shows the source of each value, the Connected System and Synchronisation Rule it came from; Get-JIMMetaverseObjectConnection explains its joins, covering each Connected System Object joined to it, and with -IncludeNotConnected why it is not connected elsewhere; and Get-JIMMetaverseObjectChangeHistory lists its changes, newest first. Each box links to the cmdlet or page that covers it.'
+nodes:
+- {id: search, label: Predefined Search, link: predefined-searches.md, row: 0, col: 0}
+- {id: results, label: Search results, link: '#search-jimmetaverseobject', row: 0, col: 1}
+- {id: mvo, label: Metaverse Object, link: '#get-jimmetaverseobject', row: 1, col: 1}
+- {id: provenance, label: Provenance, link: '#get-jimmetaverseobjectprovenance', row: 1, col: 0}
+- {id: connection, label: Connections, link: '#get-jimmetaverseobjectconnection', row: 1, col: 2}
+- {id: cso, label: Connected System Objects, link: connected-system-objects.md, row: 1, col: 3}
+- {id: history, label: Change history, link: '#get-jimmetaverseobjectchangehistory', row: 2, col: 1}
+edges:
+- {from: search, to: results, label: returns}
+- {from: results, to: mvo, label: pick one}
+- {from: mvo, to: provenance, label: sources in}
+- {from: mvo, to: connection, label: joins in}
+- {from: connection, to: cso, label: cover its}
+- {from: mvo, to: history, label: changes in}
+```
+
 ---
 
-## Search-JIMMetaverseObject
+## :material-magnify: Search-JIMMetaverseObject
 
 Runs a [Predefined Search](predefined-searches.md), returning each match in summary with the attributes the search lists. It answers quickly at scale, 100,000 objects and more, so use it for lists and searches; use [`Get-JIMMetaverseObject`](#get-jimmetaverseobject) for an object in full, or to choose the attributes.
 
@@ -84,7 +105,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name" -
 
 ---
 
-## Get-JIMMetaverseObject
+## :material-hub-outline: Get-JIMMetaverseObject
 
 Gets Metaverse Objects: one by ID, or a page of them filtered by Object Type, display name or an attribute's value, or how many match.
 
@@ -126,6 +147,8 @@ Get-JIMMetaverseObject -All [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-S
 
 By default, one page of matching objects, each in summary. With `-Id`, the Metaverse Object in full: its values, where each came from, and the Connected System Objects joined to it. With `-Count`, the number of matching objects.
 
+The object in full also carries ExportReviewPending: whether it is flagged for review against every export Synchronisation Rule, which the next synchronisation of any Connected System carries out.
+
 **By default, or with `-All`**: properties as under [Search-JIMMetaverseObject](#search-jimmetaverseobject).
 
 **With `-Id`**:
@@ -146,16 +169,17 @@ By default, one page of matching objects, each in summary. With `-Id`, the Metav
 | `Origin` | `string` | How the Metaverse Object came to exist: Projected from a Connected System Object, or Internal, created in JIM itself. JIM never deletes an Internal object automatically. One of `Projected` or `Internal`. |
 | `LastConnectorDisconnectedDate` | `datetime` | When the last Connected System Object was disconnected from the Metaverse Object (UTC); empty while one is still joined. |
 | `IsPendingDeletion` | `bool` | Whether the Metaverse Object is due to be deleted under its Object Type's deletion rule. |
+| `ExportReviewPending` | `bool` | Whether the Metaverse Object is flagged for review against every export Synchronisation Rule. The next synchronisation of any Connected System carries the review out, whichever Connected System it is for. |
 | `DeletionEligibleDate` | `datetime` | When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); empty when it is not pending deletion. |
 | `DeletionTriggeredBySystemName` | `string` | The Connected System whose disconnection made the Metaverse Object pending deletion. Empty when it is not pending deletion, when no single system triggered it (its last connection went without one), or when the deletion was scheduled before JIM recorded the trigger. |
 | `Type` | `object` | The Metaverse Object Type, with its Id and Name. It has `Id` and `Name`. |
-| `AttributeValues` | `object[]` | Every value the Metaverse Object holds, one entry per value, each with the attribute it belongs to and the Connected System and Synchronisation Rule that contributed it. Each has `Id`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `StringValue`, `DateTimeValue`, `IntValue`, `LongValue`, `DecimalValue`, `ByteValue`, `GuidValue`, `BoolValue`, `ReferenceValueId`, `ReferenceValueDisplayName`, `ContributedBySystemId`, `ContributedBySystemName`, `ContributedBySyncRuleId`, `ContributedBySyncRuleName` and `NullValue`. |
-| `ConnectedSystemObjects` | `object[]` | Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its connection, as the portal's Connections tab shows them. Each has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. |
+| `AttributeValues` | `object[]` | Every value the Metaverse Object holds, one entry per value, each with the attribute it belongs to and the Connected System and Synchronisation Rule that contributed it. Each has `Id`, `AttributeId`, `AttributeName`, `AttributeType`, `AttributePlurality`, `StringValue`, `DateTimeValue`, `IntValue`, `LongValue`, `DecimalValue`, `ByteValue`, `GuidValue`, `BoolValue`, `ReferenceValueId`, `ReferenceValueDisplayName`, `ContributedBySystemId`, `ContributedBySystemName`, `ContributedBySyncRuleId`, `ContributedBySyncRuleName`, `ContributedByKind`, `ContributedByClaimType` and `NullValue`. |
+| `ConnectedSystemObjects` | `object[]` | Every Connected System Object joined to the Metaverse Object, with how it was joined and the state of its connection, as the portal's Connections tab shows them. Each has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `DisplayName`, `ExternalId`, `SecondaryExternalId`, `PendingExternalId`, `PendingSecondaryExternalId`, `ObjectTypeName`, `JoinType`, `DateJoined`, `Status`, `State`, `IsSource`, `IsTarget`, `PendingAttributeChangeCount` and `LastSynchronised`. |
 
 **With `-Count`**: an `int`.
 <!-- END GENERATED: Get-JIMMetaverseObject -->
 
-With `-Id`, each entry in `AttributeValues` says where its value came from: `ContributedBySystemId` and `ContributedBySystemName` name the Connected System, and `ContributedBySyncRuleId` and `ContributedBySyncRuleName` the Synchronisation Rule that won [Attribute Priority](../concepts/attribute-priority.md). An entry whose `NullValue` is `$true` is an asserted null: a source's deliberate statement that the attribute has no value, carrying provenance only. Treat it as no value, though it is not the same as the attribute having no entry at all.
+With `-Id`, each entry in `AttributeValues` says where its value came from: `ContributedBySystemId` and `ContributedBySystemName` name the Connected System, and `ContributedBySyncRuleId` and `ContributedBySyncRuleName` the Synchronisation Rule that won [Attribute Priority](../concepts/attribute-priority.md). A value set outside synchronisation says so in `ContributedByKind`: `SignInClaim` for a value read from a sign-in token, with the claim in `ContributedByClaimType`, or `System` for a value JIM set itself. An entry whose `NullValue` is `$true` is an asserted null: a source's deliberate statement that the attribute has no value, carrying provenance only. Treat it as no value, though it is not the same as the attribute having no entry at all.
 
 Each entry in `ConnectedSystemObjects` carries what the portal's Connections tab shows. `IsSource` and `IsTarget` say whether an enabled import or export Synchronisation Rule exists for that object's Connected System and Object Type, so an object can be both, or neither. `State` combines the object's status with any queued Pending Export: `InSync`, `UpdatePending`, `ProvisioningExportPending`, `ProvisioningAwaitingConfirmation`, `DeletePending`, `ExportFailed` or `Obsolete`. `PendingAttributeChangeCount` is filled in only for `UpdatePending`.
 
@@ -199,7 +223,7 @@ Get-JIMMetaverseObject -ObjectTypeName "User" -Page 3 -PageSize 50
 
 ---
 
-## Get-JIMMetaverseObjectChangeHistory
+## :material-history: Get-JIMMetaverseObjectChangeHistory
 
 Gets a Metaverse Object's change history, newest first: who or what made each change, the Synchronisation Rule and Run Profile behind it, and the values it changed.
 
@@ -240,16 +264,17 @@ One object per change, newest first.
 | `SyncRuleId` | `int` | The unique identifier of the Synchronisation Rule that made the change, when one did. |
 | `SyncRuleName` | `string` | That Synchronisation Rule's name. |
 | `ActivityRunProfileExecutionItemId` | `guid` | The Activity execution item that recorded the change, when a Run Profile made it. |
+| `ActivityId` | `guid` | The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Empty when the Activity has since been removed by history retention, or for a change recorded before Activities were linked to changes. |
 | `CsoId` | `guid` | The unique identifier of the Connected System Object whose synchronisation made the change, when one did. |
 | `CsoExternalId` | `string` | That Connected System Object's external id, as it was then; kept after the object is deleted. |
 | `ConnectedSystemId` | `int` | The unique identifier of the Connected System the Run Profile belonged to, when one made the change. |
 | `ConnectedSystemName` | `string` | That Connected System's name. |
 | `RunProfileName` | `string` | The name of the Run Profile that made the change, when one did. |
 | `ConnectedSystemRunType` | `string` | The kind of Run Profile that made the change, when one did. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
-| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `AttributeId` and `ValueChanges`. |
+| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `AttributeId`, `ValueChanges` and `ValueChangeTotal`. |
 <!-- END GENERATED: Get-JIMMetaverseObjectChangeHistory -->
 
-Each value change under `AttributeChanges` names the Synchronisation Rule that contributed it, in `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, because one change can carry values from several rules; both are empty when no rule contributed the value. `ContributedBySystemId` and `ContributedBySystemName` name that rule's Connected System, and are empty once the rule has been deleted, though its name survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value.
+Each value change under `AttributeChanges` names the Synchronisation Rule that contributed it, in `ContributedBySyncRuleId` and `ContributedBySyncRuleName`, because one change can carry values from several rules; both are empty when no rule contributed the value. `ContributedBySystemId` and `ContributedBySystemName` name that rule's Connected System, and are empty once the rule has been deleted, though its name survives. `IsGeneratedValue` is `$true` when a Generated Value Attribute Flow produced the value. `ContributedByKind` says what kind of source set the value (`SynchronisationRule`, `SignInClaim`, `System` or `Person`), and `ContributedByClaimType` names the claim for a value read from a sign-in token; both are empty for a change that recorded no source.
 
 ### Examples
 
@@ -268,7 +293,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Group" -Search "Project-Alpha" |
 
 ---
 
-## Get-JIMMetaverseObjectProvenance
+## :material-map-marker-path: Get-JIMMetaverseObjectProvenance
 
 Shows where a Metaverse Object's attribute values came from: which Connected System and Synchronisation Rule contributed each one, or that no contributor is recorded.
 
@@ -322,11 +347,11 @@ With just `-Id`, a summary: each attribute that holds a value, with the distinct
 | `ContributingConnectedSystemObject` | `object` | The joined Connected System Object the current value came from; empty when none can be identified. It has `Id`, `ConnectedSystemId`, `ConnectedSystemName`, `TypeName`, `DisplayName` and `ExternalId`. |
 | `LastSet` | `object` | The most recent recorded change that set the current value, with its Activity; empty when no change is recorded. It has `ChangeTime`, `ActivityId`, `ActivityRunProfileExecutionItemId`, `ActivityDescription`, `InitiatedByName` and `ChangeInitiatorType`. |
 | `Sources` | `object[]` | Every Attribute Flow that can contribute to the attribute on this Object Type, in priority order, each with the value it would supply now and how that compares with the value in use. Each has `Rank`, `MappingId`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName`, `IsExpression`, `IsGeneratedValue`, `Expression`, `State`, `CandidateValues` and `Note`. |
-| `History` | `object[]` | The attribute's change history, newest first: at most 50 entries, HistoryTruncated saying whether there were more. Each has `Kind`, `Value`, `PreviousValue`, `SyncRuleId`, `SyncRuleName`, `IsGeneratedValue` and `Change`. |
+| `History` | `object[]` | The attribute's change history, newest first: at most 50 entries, HistoryTruncated saying whether there were more. Each has `Kind`, `Value`, `PreviousValue`, `SyncRuleId`, `SyncRuleName`, `ContributedByKind`, `ClaimType`, `IsGeneratedValue` and `Change`. |
 | `HistoryTruncated` | `bool` | Whether History stops short of the attribute's full history. |
 <!-- END GENERATED: Get-JIMMetaverseObjectProvenance -->
 
-In the summary, each origin's `Kind` is `NotRecorded`, `SynchronisationRule`, `GeneratedValue` or `SetByPerson`. A `GeneratedValue` origin still names its Connected System and Synchronisation Rule, and its `Corrected` is `$true` once JIM revised the value after a collision. For one attribute, each entry in `Sources` has a `State` saying how its value stands against the one in use: `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`.
+In the summary, each origin's `Kind` is `NotRecorded`, `SynchronisationRule`, `GeneratedValue`, `SignInClaim`, `System` or `SetByPerson`. A `GeneratedValue` origin still names its Connected System and Synchronisation Rule, and its `Corrected` is `$true` once JIM revised the value after a collision. A `SignInClaim` origin is a value JIM read from a sign-in token, and its `ClaimType` names the claim, such as `given_name`; a `System` origin is a value JIM set itself, such as the initial administrator's Type. Each `History` entry carries the same source as `ContributedByKind`, with `ClaimType` for a sign-in claim. For one attribute, each entry in `Sources` has a `State` saying how its value stands against the one in use: `InUse`, `Outranked`, `NoValue`, `NotJoined`, `Disabled` or `NotEvaluated`.
 
 ### Examples
 
@@ -350,7 +375,7 @@ Get-JIMMetaverseObject -AttributeName "Account Name" -AttributeValue jsmith |
 
 ---
 
-## Get-JIMMetaverseObjectConnection
+## :material-link-variant: Get-JIMMetaverseObjectConnection
 
 Explains why a Metaverse Object is connected where it is, and why it is not connected elsewhere. It answers the same question as the Metaverse Object's Connections tab in the portal, in the same words; see [Why it is connected, and why it is not](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not) for what each reason means.
 
@@ -382,8 +407,12 @@ One object per entry: each joined Connected System Object and, with `-IncludeNot
 | `ConnectedSystem` | `string` | The Connected System's name. |
 | `ConnectedSystemId` | `int` | The unique identifier of the Connected System. |
 | `Connected` | `bool` | `$true` for a joined Connected System Object, `$false` for an export Synchronisation Rule that has not connected. |
-| `Object` | `string` | The joined Connected System Object's name, or its external id where it has none; empty when not connected. |
+| `Object` | `string` | The joined Connected System Object's identifier as the portal's Connections tab shows it: its Secondary External ID (for an LDAP Connected System, its distinguished name) where it has one, otherwise its External ID, falling back to the value a queued Pending Export will assign; empty when not connected. |
 | `ConnectedSystemObjectId` | `guid` | The unique identifier of the joined Connected System Object; empty when not connected. |
+| `ExternalId` | `string` | The joined object's External ID; empty when it has none yet or when not connected. |
+| `SecondaryExternalId` | `string` | The joined object's Secondary External ID; empty when its Connected System has none, it has no value yet, or when not connected. |
+| `PendingExternalId` | `string` | The External ID a queued Pending Export will give the joined object, where it has none yet; empty otherwise. |
+| `PendingSecondaryExternalId` | `string` | The Secondary External ID a queued Pending Export will give the joined object, where it has none yet; empty otherwise. |
 | `ObjectType` | `string` | The Connected System Object Type's name. |
 | `Role` | `string` | Source, Target, Source and Target or None, from the enabled Synchronisation Rules for that Connected System and Object Type; always Target when not connected. |
 | `State` | `string` | For a connection, its state, such as InSync or UpdatePending; when not connected, why: NotInScope, ProvisioningDisabled, RuleMisconfigured or NotYetProvisioned. |
@@ -436,7 +465,7 @@ Get-JIMMetaverseObject -ObjectTypeName "Person" -All |
 
 ---
 
-## Get-JIMPendingDeletion
+## :material-delete-clock-outline: Get-JIMPendingDeletion
 
 Gets the Metaverse Objects pending deletion: a page of them, how many there are, or a summary of where their deletions stand.
 
@@ -518,7 +547,7 @@ Get-JIMPendingDeletion -Summary
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Metaverse Object Types](metaverse-object-types.md): the Object Types Metaverse Objects belong to
 - [Metaverse Attributes](metaverse-attributes.md): the attributes they hold, and Attribute Priority

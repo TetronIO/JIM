@@ -44,8 +44,8 @@ public class ActivityRunProfileExecutionItemHeader
     public ActivityRunProfileExecutionItemErrorType? ErrorType { get; set; }
 
     /// <summary>
-    /// The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export
-    /// scope review). Null otherwise.
+    /// The Metaverse Object the item is about, where it records one rather than a Connected System Object (an Export
+    /// Review). Null otherwise.
     /// </summary>
     public Guid? MetaverseObjectId { get; set; }
 

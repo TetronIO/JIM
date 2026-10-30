@@ -61,6 +61,19 @@ public class ConfigurationDriftDto
     public ConfigurationChangeClass HighestChangeClass { get; set; }
 
     /// <summary>
+    /// The Connected System Object Types whose objects the next synchronisation, Delta or Full, will all process, because
+    /// Synchronisation Rule or Object Matching Rule changes saved since it last did so can change what they produce. Longest
+    /// waiting first; empty when nothing is waiting.
+    /// <para>
+    /// These changes are not counted in <c>ChangeCount</c> and do not set <c>HasPendingChanges</c>: an ordinary
+    /// synchronisation applies them, so no Full Synchronisation is called for. They are reported whether or not drift
+    /// itself can be determined. Present only on the response for a single Connected System; a list of Connected
+    /// Systems carries no entries.
+    /// </para>
+    /// </summary>
+    public List<AwaitingSynchronisationObjectTypeDto> AwaitingSynchronisation { get; set; } = new();
+
+    /// <summary>
     /// Creates a DTO from the application-layer status.
     /// </summary>
     public static ConfigurationDriftDto FromStatus(ConfigurationDriftStatus status)
@@ -74,7 +87,8 @@ public class ConfigurationDriftDto
             LastFullSynchronisation = status.LastFullSynchronisation,
             MostRecentChange = status.MostRecentChange,
             ChangeCount = status.ChangeCount,
-            HighestChangeClass = status.HighestChangeClass
+            HighestChangeClass = status.HighestChangeClass,
+            AwaitingSynchronisation = status.AwaitingSynchronisation.Select(AwaitingSynchronisationObjectTypeDto.FromEntry).ToList()
         };
     }
 }

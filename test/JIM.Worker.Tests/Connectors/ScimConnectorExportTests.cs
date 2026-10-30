@@ -630,6 +630,29 @@ public class ScimConnectorExportTests
         }
     }
 
+    [TestCase(PendingExportAttributeChangeType.Add)]
+    [TestCase(PendingExportAttributeChangeType.Update)]
+    public async Task ExportAsync_WritingAMultiValuedExtensionString_SendsTheValueAsAnArrayAsync(PendingExportAttributeChangeType changeType)
+    {
+        // The provider refuses a scalar for a multi-valued attribute, as a strict one does (#2215).
+        var provider = new MockScimProvider();
+        provider.Options.PublishesCustomUserExtension = true;
+        provider.AddUser("alice", "alice");
+        using var handler = provider.CreateHandler();
+        var user = ObjectType("User");
+
+        var results = await ExportAsync(provider, handler,
+            Against("alice", user, PendingExportChangeType.Update,
+                Change("custom.badges", user, "gold", changeType)));
+
+        var badges = (provider.Resources.Single().Attributes[MockScimProvider.CustomUserExtensionUrn] as JsonObject)?["badges"] as JsonArray;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results[0].Success, Is.True, results[0].ErrorMessage);
+            Assert.That(badges?.Select(b => b?.GetValue<string>()), Is.EqualTo(new[] { "gold" }));
+        }
+    }
+
     [Test]
     public async Task ExportAsync_AddingAGroupMember_SendsTheReferenceInItsComplexFormAsync()
     {

@@ -14,6 +14,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -31,7 +32,7 @@
     @if (_connectedSystem != null)
     {
         <MudStack Row Spacing="3">
-            <MudButton Variant="Variant.Outlined"
+            <MudButton Variant="Variant.Filled"
                        StartIcon="@Icons.Material.Filled.Storage"
                        DropShadow="false"
                        Size="Size.Small"
@@ -39,7 +40,7 @@
                 Connector Space
                 <span class="jim-nav-count">@_connectedSystemObjectCount.ToString("N0")</span>
             </MudButton>
-            <MudButton Variant="Variant.Outlined"
+            <MudButton Variant="Variant.Filled"
                        StartIcon="@Icons.Material.Filled.Outbox"
                        DropShadow="false"
                        Size="Size.Small"
@@ -59,7 +60,7 @@
                 var failingText = failures.FailingCount == 1 ? "1 Pending Export is failing." : $"{failures.FailingCount:N0} Pending Exports are failing.";
                 <MudTooltip Arrow="true" Placement="Placement.Top"
                             Text="@($"{failingText}{oldestText} JIM attempts each again at every export run; open them to see what the Connected System refused.")">
-                    <MudButton Variant="Variant.Outlined"
+                    <MudButton Variant="Variant.Filled"
                                StartIcon="@Icons.Material.Filled.ErrorOutline"
                                DropShadow="false"
                                Size="Size.Small"
@@ -78,7 +79,7 @@
                 var amber = UnresolvedReferenceDisplay.SignpostTone(_connectedSystem.UnresolvedReferenceHandling) == UnresolvedReferenceTone.Warning;
                 <MudTooltip Arrow="true" Placement="Placement.Top">
                     <ChildContent>
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    StartIcon="@Icons.Material.Filled.LinkOff"
                                    DropShadow="false"
                                    Size="Size.Small"
@@ -331,9 +332,23 @@ else if (_drift is { TrackingDisabled: true })
     </MudAlert>
 }
 
+@* ─── Changes awaiting synchronisation (#2615) ─── *@
+@* One notice per Object Type the next synchronisation will process in full. Reported whether or not drift can be
+   determined (the changes are real either way), and separate from the drift notice above, which never counts them: an
+   ordinary Delta or Full Synchronisation applies them, so no Full Synchronisation is called for. *@
+@if (_drift is { HasChangesAwaitingSynchronisation: true })
+{
+    var awaitingRunProfile = AwaitingSynchronisationRunProfile.Preferred(_connectedSystem?.RunProfiles);
+    foreach (var awaiting in _drift.AwaitingSynchronisation)
+    {
+        <AwaitingSynchronisationNotice @key="awaiting.ConnectedSystemObjectTypeId" Entry="awaiting" RunProfile="awaitingRunProfile"
+                                       OnRunNow="RunAwaitingSynchronisationNowAsync" Class="mt-2 mb-6" />
+    }
+}
+
 @if (_connectedSystem != null)
 {
-    <NavigableMudTabs TabPanelsClass="pt-5" Class="mt-2">
+    <NavigableMudTabs TabPanelsClass="pt-6" Class="mt-2">
 
         <MudTabPanel Text="Details">
             @* The Full Synchronisation preview (#1530): started from the notice above or a Run Profile, and found again here. *@
@@ -344,11 +359,14 @@ else if (_drift is { TrackingDisabled: true })
         </MudTabPanel>
 
         @* The SCIM endpoint's own tab, beside Details: only a Connected System using the SCIM 2.0 Service Provider
-           Connector has one, and only while the Preview feature is on. *@
+           Connector has one, and only while the Preview feature is on, so its label carries the Preview chip. *@
         @if (_hasScimEndpoint)
         {
             <MudTabPanel Text="SCIM">
-                <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
+                <TabContent>SCIM <PreviewChip Class="ml-1" /></TabContent>
+                <ChildContent>
+                    <ConnectedSystemScimTab ConnectedSystem="_connectedSystem" />
+                </ChildContent>
             </MudTabPanel>
         }
 
@@ -452,6 +470,17 @@ else if (_drift is { TrackingDisabled: true })
     {
         _fullSynchronisationPreviewRequest = new FullSynchronisationPreviewRequest(Guid.NewGuid(), runProfileId);
         NavManager.NavigateTo($"/admin/connected-systems/{Id}");
+    }
+
+    /// <summary>
+    /// "Run now" on a notice of changes awaiting synchronisation (#2615): opens the queue dialog on this Connected System with
+    /// the Run Profile that applies them chosen. The dialog queues the run and says so; the notices stay until the run has
+    /// applied the changes, so the page is reloaded to follow it when a run was queued.
+    /// </summary>
+    private async Task RunAwaitingSynchronisationNowAsync()
+    {
+        if (await QueueRunProfileDialog.ShowAsync(DialogService, Id))
+            await ReloadConnectedSystemAsync();
     }
 
     private void OnFullSynchronisationPreviewRequestHandled(Guid requestId)

@@ -55,7 +55,10 @@ function New-JIMSyncRule {
 
     .OUTPUTS
         With -PassThru, the rule created; otherwise nothing. A deletion source warning is written to the warning
-        stream either way.
+        stream either way. AwaitingSynchronisation lists the Connected System Object Type an enabled import rule makes
+        its Connected System's next synchronisation process in full, with how many objects that is and about how long it
+        takes; it is empty for an export rule and for a rule created disabled, and a warning saying the same is written to
+        the warning stream.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse
@@ -188,6 +191,9 @@ function New-JIMSyncRule {
                 if ($result.deletionSourceWarning) {
                     Write-Warning $result.deletionSourceWarning
                 }
+
+                # The Object Types the save made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $result.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $result

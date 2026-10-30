@@ -140,24 +140,16 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on a set of Connected System Objects (issue #892) once the sync
-    /// engine has re-evaluated them past the unchanged-skip. Called at page flush during synchronisation. No-op when
+    /// engine has re-evaluated them. Called at page flush during synchronisation. No-op when
     /// <paramref name="ids"/> is empty.
     /// </summary>
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a Connected System.
-    /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
-    /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
-    /// Used for cache warming to eliminate N+1 import lookups.
-    /// </summary>
-    /// <param name="connectedSystemId">The Connected System to load mappings for.</param>
-    /// <returns>A dictionary of cache key → CSO GUID mappings.</returns>
-    public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
-
-    /// <summary>
     /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
-    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// dictionary, keyed by <c>CsoLookupKey</c> ("cso:{connectedSystemId}:{attributeId}:{value}", the value
+    /// folded unless the anchor attribute is case-exact). Each CSO is keyed by its primary external ID, or by its
+    /// secondary external ID when it has no primary yet (Pending Provisioning).
     /// </summary>
     public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 
@@ -250,16 +242,26 @@ public interface IConnectedSystemRepository
 
     /// <summary>
     /// Collects all remaining executable exports with unresolved references (deferred) strictly
-    /// after the given keyset cursor, in a single query. Used to fast-path the export batch-collection
-    /// loop once a batch is discovered to be made up entirely of deferred exports (issue #985). Same
-    /// Include chain and keyset predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted
-    /// to HasUnresolvedReferences exports, with no page size limit.
+    /// after the given keyset cursor, in a single query, by id only. Used to fast-path the export
+    /// batch-collection loop once a batch is discovered to be made up entirely of deferred exports
+    /// (issue #985); the deferred pass then loads them a chunk at a time with
+    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same keyset predicate and eligibility as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
+    /// with no page size limit.
     /// </summary>
-    /// <param name="connectedSystemId">The Connected System to load exports for.</param>
+    /// <param name="connectedSystemId">The Connected System to read exports for.</param>
     /// <param name="afterCreatedAt">CreatedAt of the last row already collected, or null to start from the beginning.</param>
     /// <param name="afterId">Id of the last row already collected, or null to start from the beginning.</param>
-    /// <returns>Untracked, deferred Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+    /// <returns>The deferred Pending Export ids, in (CreatedAt, Id) order.</returns>
+    public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
+    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read (each
+    /// change's attribute; the object, its type, and its attribute values with their attributes).
+    /// An id with no row is left out.
+    /// </summary>
+    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
@@ -345,6 +347,16 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Writes what reference resolution changed, and nothing else: each Pending Export's
+    /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
+    /// ResolvedReferenceCsoId. One transaction; tracked copies of the rows written are detached.
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports whose HasUnresolvedReferences to write.</param>
+    /// <param name="resolvedChanges">The attribute value changes resolution stamped.</param>
+    public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
+        IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges);
+
+    /// <summary>
     /// Marks Pending Exports as Executing using a single raw SQL UPDATE statement.
     /// Sets Status to Executing and LastAttemptedAt to the current UTC time.
     /// This bypasses EF Core change tracking for maximum efficiency on simple status updates.
@@ -422,6 +434,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortBy">Optional column to sort by (e.g., "changetype", "status", "created", "errors").</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<PagedResultSet<PendingExportHeader>> GetPendingExportHeadersAsync(
         int connectedSystemId,
         int page,
@@ -430,7 +443,8 @@ public interface IConnectedSystemRepository
         string? searchQuery = null,
         string? sortBy = null,
         bool sortDescending = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a window of Pending Export headers addressed by absolute offset and count, for virtualised
@@ -448,6 +462,7 @@ public interface IConnectedSystemRepository
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
     /// <param name="failingOnly">Whether to return only the Pending Exports whose last attempt failed.</param>
+    /// <param name="changeTypeFilters">Optional filter by one or more change types.</param>
     public Task<RangeResultSet<PendingExportHeader>> GetPendingExportHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -457,7 +472,8 @@ public interface IConnectedSystemRepository
         string? sortBy = null,
         bool sortDescending = true,
         bool includeTotalCount = true,
-        bool failingOnly = false);
+        bool failingOnly = false,
+        IEnumerable<PendingExportChangeType>? changeTypeFilters = null);
 
     /// <summary>
     /// Retrieves a single Pending Export by ID.
@@ -725,6 +741,17 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
+    /// What references to the given Metaverse Objects are written as in a Connected System: per
+    /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier, so export
+    /// execution can resolve hundreds of thousands of group members without materialising the objects.
+    /// A Metaverse Object with no object in the system is absent.
+    /// </summary>
+    /// <param name="metaverseObjectIds">The referenced Metaverse Objects.</param>
+    /// <param name="connectedSystemId">The Connected System the references are written into.</param>
+    public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
     /// Batch loads all Connected System Objects that are joined to Metaverse Objects, grouped by target Connected System.
     /// Used for pre-loading CSO lookup data to avoid O(N×M) queries during export evaluation.
     /// </summary>
@@ -926,15 +953,6 @@ public interface IConnectedSystemRepository
     public Task<IList<DataFlowHeader>> GetDataFlowHeadersAsync(DataFlowQuery query);
 
     /// <summary>
-    /// Gets the change history for a Connected System Object.
-    /// Includes all attribute changes and value changes for displaying in the UI.
-    /// </summary>
-    /// <param name="connectedSystemObjectId">The unique identifier of the CSO.</param>
-    /// <param name="limit">Maximum number of changes to return. Defaults to 100.</param>
-    /// <returns>List of changes ordered by ChangeTime descending (most recent first).</returns>
-    Task<List<ConnectedSystemObjectChange>> GetConnectedSystemObjectChangesAsync(Guid connectedSystemObjectId, int limit = 100);
-
-    /// <summary>
     /// Returns a page of change-history records for a Connected System Object, projected into a flat
     /// DTO so the full entity graph is not materialised. Ordered by <c>ChangeTime</c> descending.
     /// </summary>
@@ -943,6 +961,43 @@ public interface IConnectedSystemRepository
     /// <param name="pageSize">Rows per page; clamp to a sensible upper bound at the call site.</param>
     /// <returns>The page of changes plus the total count of change records for the CSO.</returns>
     Task<(List<CsoChangeHistoryDto> Items, int TotalCount)> GetCsoChangeHistoryAsync(Guid connectedSystemObjectId, int page, int pageSize);
+
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Connected System Object, in the change-history shape
+    /// (#2033); null when it recorded none. Read by item, so a change whose object has since been deleted is found.
+    /// </summary>
+    Task<CsoChangeHistoryDto?> GetCsoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// The Connected System Object changes with the given ids, in the change-history shape (#2033); ids with no change
+    /// are skipped. Used for the snapshots a synchronisation's staged Pending Exports recorded.
+    /// </summary>
+    Task<List<CsoChangeHistoryDto>> GetCsoChangesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
+    /// One window of the values recorded by the given Connected System Object changes (#2498), with the total when
+    /// <see cref="ChangeValueRowQuery.IncludeTotalCount"/> asks for it. A change to a large group carries one value change
+    /// per member, so the change-history shape caps each attribute's values and this reads the rest.
+    /// </summary>
+    Task<RangeResultSet<CsoChangeValueRow>> GetCsoChangeValueRowsAsync(ChangeValueRowQuery query);
+
+    /// <summary>
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
+    /// </summary>
+    Task<List<ChangeValueSummary>> GetCsoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
+    /// How many of each attribute's normalised value rows on one change are Sets, Adds and Removes (#2498).
+    /// </summary>
+    Task<List<ChangeValueAttributeSummary>> GetCsoChangeAttributeValueSummariesAsync(Guid changeId);
+
+    /// <summary>
+    /// Each given Connected System Object's name, as <c>ConnectedSystemObject.NameOrId</c> resolves it (the naming
+    /// tiers, then its external ids), read without materialising the object's values; an object that no longer exists,
+    /// or has no name, has no entry.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
@@ -992,7 +1047,7 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="changeId">The ID of the CSO change record.</param>
     /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
-    Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
+    Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId);
 
     /// <summary>
     /// Gets the deletion record for a Connected System Object that no longer exists, keyed on the object's
@@ -1176,6 +1231,8 @@ public interface IConnectedSystemRepository
     /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
     /// <param name="hasUnresolvedReferences">Optional filter (#959): true for only the objects holding an unresolved
     /// reference value, false for only those holding none.</param>
+    /// <param name="cancellationToken">Cancels the count and the window read, for a caller that no longer wants
+    /// them (a virtualised grid whose reader has typed on or scrolled past the window).</param>
     public Task<RangeResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersRangeAsync(
         int connectedSystemId,
         int offset,
@@ -1187,8 +1244,11 @@ public interface IConnectedSystemRepository
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null,
         bool includeTotalCount = true,
-        bool? hasUnresolvedReferences = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
+        bool? hasUnresolvedReferences = null,
+        CancellationToken cancellationToken = default);
+    /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
+    /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -1243,13 +1303,17 @@ public interface IConnectedSystemRepository
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
     /// <param name="afterId">Keyset cursor; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
+    /// <param name="objectTypeId">Restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>.</param>
+    /// <param name="createdOnOrAfter">Restricts the page to objects created at or after this instant.</param>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        Guid? afterId = null);
+        Guid? afterId = null,
+        int? objectTypeId = null,
+        DateTime? createdOnOrAfter = null);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
@@ -2067,5 +2131,53 @@ public interface IConnectedSystemRepository
     /// only changes to the system itself count).
     /// </summary>
     Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
+    #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    /// <summary>
+    /// Records a saved configuration change as awaiting synchronisation for one Connected System Object Type (#2615):
+    /// the Connected System's next synchronisation, Delta or Full, processes every object of that type and then marks
+    /// the change applied (<see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// <para>
+    /// Written only after the configuration change itself has been saved. The synchronisation's claim relies on that
+    /// order: a row that exists is a change that is already in the Synchronisation Rules the run then loads, so a
+    /// claimed change is never one the run could not see.
+    /// </para>
+    /// </summary>
+    /// <param name="change">The change to record. Its <see cref="ConfigurationChangeSynchronisation.ClaimedByActivityId"/>
+    /// and <see cref="ConfigurationChangeSynchronisation.AppliedAt"/> must be unset.</param>
+    Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the Object Types whose objects its next synchronisation will all
+    /// process because of saved configuration changes that have not been applied yet, with how many changes wait behind
+    /// each and since when. Systems with nothing waiting have no entries. Backs the "changes awaiting synchronisation"
+    /// part of the configuration drift indicator, in one read however many systems are asked about.
+    /// <para>
+    /// A plain read: it claims nothing and marks nothing, so a page showing it never moves a change on.
+    /// </para>
+    /// </summary>
+    Task<List<ObjectTypeAwaitingSynchronisation>> GetConfigurationChangesAwaitingSynchronisationAsync(IList<int> connectedSystemIds);
+
+    /// <summary>
+    /// Returns the saved changes still awaiting one Connected System's next synchronisation, newest first, with the Object
+    /// Type and Connected System names and who saved each. For the page that lists what is waiting; the aggregate read
+    /// above is what a list of systems uses.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="maxChanges">The most changes to return, so a system that has been saved to a great many times cannot
+    /// make the page heavy. The aggregate read carries the true count.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesAwaitingAsync(int connectedSystemId, int maxChanges);
+
+    /// <summary>
+    /// Returns the changes an Activity is part of (#2615): those it recorded, when it is a configuration change, and those
+    /// a synchronisation run claimed, when it is a run. Applied or not. Ordered by Object Type name, then oldest first, so
+    /// a caller can group them.
+    /// </summary>
+    /// <param name="activityId">The Activity.</param>
+    /// <param name="maxChanges">The most changes to return.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesForActivityAsync(Guid activityId, int maxChanges);
+
     #endregion
 }

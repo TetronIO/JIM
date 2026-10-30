@@ -125,8 +125,22 @@ public static class ScimPatchBuilder
             Path = Qualify(attribute, attribute.ScimPath),
             // RFC 7644 section 3.5.2.2: a removal is expressed by the path alone. A canonically-typed slot or a
             // sub-attribute of a single-valued complex attribute is one value at its own path.
-            Value = removing ? null : ScimValueFormatter.ToNode(change.Value, attribute.Type)
+            Value = removing ? null : SimpleValue(change, attribute)
         };
+    }
+
+    /// <summary>
+    /// The value of an add or replace at an attribute's own path. A multi-valued simple attribute takes an array
+    /// (RFC 7644 section 3.5.2): for an add, the values to append; for a replace, which takes every value when no filter
+    /// is given (section 3.5.2.3), the whole set. A scalar leaves both to the provider's leniency, and a strict one
+    /// refuses it (#2215).
+    /// </summary>
+    private static JsonNode? SimpleValue(ScimAttributeChange change, ScimFlattenedAttribute attribute)
+    {
+        var value = ScimValueFormatter.ToNode(change.Value, attribute.Type);
+        return attribute.Access == ScimValueAccess.Simple && attribute.AttributePlurality == AttributePlurality.MultiValued
+            ? new JsonArray(value)
+            : value;
     }
 
     /// <summary>

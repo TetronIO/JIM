@@ -101,7 +101,9 @@ public class ExternalDatabasePreparationDatabaseTests
         var page = Path.Join(ReleasedMigrationManifest.FindRepositoryRoot(), "docs", "administration", "deployment.md");
         var lines = File.ReadAllLines(page);
 
-        var heading = Array.FindIndex(lines, line => line.Trim() == "## Before You Install");
+        // An H2 opens with an icon shortcode (STY-3 in engineering/DOCUMENTATION_STANDARD.md), such as
+        // "## :material-clipboard-list-outline: Before You Install".
+        var heading = Array.FindIndex(lines, line => Regex.IsMatch(line.Trim(), @"^##\s+(?::[a-z0-9]+(?:-[a-z0-9]+)+:\s*)?Before You Install$"));
         Assert.That(heading, Is.GreaterThanOrEqualTo(0), $"{page} has no Before You Install section.");
 
         for (var i = heading + 1; i < lines.Length && !Regex.IsMatch(lines[i], @"^#{1,2}\s"); i++)

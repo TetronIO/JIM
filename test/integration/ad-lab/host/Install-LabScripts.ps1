@@ -13,11 +13,17 @@
         <Destination>\*.ps1                            the host scripts, flat
         <Destination>\guest\*                          the guest scripts, module and autounattend.xml
         <Destination>\delegation\jim-ad-delegation.acl the delegation file, the same one the Samba image uses
+        <Destination>\module\<digest>\JIM\*            the JIM PowerShell module, which registers JIM on the AD FS
+                                                       server (Register-LabIdentityProvider.ps1), one folder per
+                                                       version, named by its digest (Get-LabModuleDigest)
         <Destination>\settings.example.json            a starting point for settings.json
 
     Run it from a clone of the repository, in an elevated PowerShell 7 session on the host. It is idempotent: a file
     already identical to its source is left alone, a changed one is replaced, and the output says which. Nothing in
-    the destination is ever deleted.
+    the destination is ever deleted, except under module: a file in the copy being deployed that the checkout's module
+    no longer has (the registration refuses a module copy that is not exactly the commit's, so a stale file there would
+    keep it refusing), and the copies of other versions not deployed for -ModuleRetentionDays. Those copies are kept
+    so that a run lasting hours still finds its commit's module after a newer main is deployed beside it.
 
     settings.json (read by Invoke-LabRebuild.ps1) is the operator's own file. It is never written unless
     -CreateSettings is given, and then only when it does not exist yet; an existing settings.json makes the run
@@ -37,6 +43,9 @@
 .PARAMETER CreateSettings
     Also create settings.json from the example when it does not exist. Refuses, and copies nothing, when it does.
 
+.PARAMETER ModuleRetentionDays
+    How long a copy of another version of the module is kept after it was last deployed. Default 7.
+
 .EXAMPLE
     .\Install-LabScripts.ps1
 
@@ -52,8 +61,13 @@ param(
 
     [string]$RepositoryRoot = (Join-Path $PSScriptRoot '..' '..' '..' '..'),
 
-    [switch]$CreateSettings
+    [switch]$CreateSettings,
+
+    [ValidateRange(1, 365)]
+    [int]$ModuleRetentionDays = 7
 )
+
+Import-Module (Join-Path $PSScriptRoot '..' 'guest' 'LabFederationServer.psm1') -Force
 
 function Get-LabDeploymentMap {
     <#
@@ -62,9 +76,11 @@ function Get-LabDeploymentMap {
 
     .DESCRIPTION
         HostScript holds file names from test/integration/ad-lab/host; GuestFile holds paths relative to
-        test/integration/ad-lab/guest. Only scripts and modules (.ps1, .psm1, .psd1) are host scripts, and this
-        deployment script is not one of them: it runs from the checkout, not from the host's script root. The
-        delegation file is always mapped. Returns one object per file with Area, Source and Destination.
+        test/integration/ad-lab/guest; ModuleFile holds paths relative to src/JIM.PowerShell, of which only the
+        module's own files (Test-LabModuleFile) are mapped, under module\<ModuleDigest>\JIM. Only scripts and modules
+        (.ps1, .psm1, .psd1) are host scripts, and this deployment script is not one of them: it runs from the
+        checkout, not from the host's script root. The delegation file is always mapped. Returns one object per file
+        with Area, Source and Destination.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject[]])]
@@ -79,8 +95,17 @@ function Get-LabDeploymentMap {
         [string[]]$HostScript = @(),
 
         [AllowEmptyCollection()]
-        [string[]]$GuestFile = @()
+        [string[]]$GuestFile = @(),
+
+        [AllowEmptyCollection()]
+        [string[]]$ModuleFile = @(),
+
+        # The module's digest (Get-LabModuleDigest), which names its folder.
+        [ValidatePattern('^[0-9a-f]{64}$')]
+        [string]$ModuleDigest
     )
+
+    if ($ModuleFile.Count -gt 0 -and -not $ModuleDigest) { throw 'Mapping the module needs its -ModuleDigest.' }
 
     $labRoot = Join-Path $RepositoryRoot 'test' 'integration' 'ad-lab'
     $map = [System.Collections.Generic.List[object]]::new()
@@ -103,6 +128,15 @@ function Get-LabDeploymentMap {
         })
     }
 
+    foreach ($relative in ($ModuleFile | Sort-Object)) {
+        if (-not (Test-LabModuleFile -RelativePath $relative)) { continue }
+        $map.Add([pscustomobject]@{
+            Area        = 'module'
+            Source      = Join-Path $RepositoryRoot 'src' 'JIM.PowerShell' $relative
+            Destination = Join-Path $Destination 'module' $ModuleDigest 'JIM' $relative
+        })
+    }
+
     $map.Add([pscustomobject]@{
         Area        = 'delegation'
         Source      = Join-Path $RepositoryRoot 'test' 'integration' 'docker' 'samba-ad-prebuilt' 'delegation' 'jim-ad-delegation.acl'
@@ -110,6 +144,41 @@ function Get-LabDeploymentMap {
     })
 
     return $map.ToArray()
+}
+
+function Get-LabModuleCopyToPrune {
+    <#
+    .SYNOPSIS
+        Which of the module copies under module\ to delete, by folder name. Pure: the caller lists the folders.
+
+    .DESCRIPTION
+        Each copy is kept under its digest so that a run, which can last hours, still finds its commit's module after
+        the hourly update deploys a newer main. A copy goes once it has not been deployed for RetentionDays (its
+        folder's last write time, which every deployment of it refreshes); the one just deployed never does. module\JIM,
+        the single copy of the earlier layout, always goes: nothing reads it any more.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Copy,
+
+        [Parameter(Mandatory)]
+        [string]$Current,
+
+        [Parameter(Mandatory)]
+        [datetime]$Now,
+
+        [Parameter(Mandatory)]
+        [int]$RetentionDays
+    )
+
+    foreach ($entry in $Copy) {
+        if ($entry.Name -eq $Current) { continue }
+        if ($entry.Name -ceq 'JIM') { $entry.Name; continue }
+        if ($entry.Name -cmatch '^[0-9a-f]{64}$' -and $entry.LastWriteTimeUtc -lt $Now.AddDays(-$RetentionDays)) { $entry.Name }
+    }
 }
 
 function Get-LabSettingsExample {
@@ -146,6 +215,13 @@ function Get-LabSettingsExample {
         federationServers         = [ordered]@{
             'adfs-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' }
         }
+        # The Exchange Mailbox servers, each a member of its domain controller's forest (New-LabExchangeServer.ps1),
+        # installed from the directoryExtensions Exchange media. computerName may be added; it defaults to ex1.
+        exchangeServers           = [ordered]@{
+            'exchange-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' }
+        }
+        # The Exchange prerequisites that are not on its media, downloaded once (README.md, Exchange servers).
+        exchangePrerequisiteDirectory = 'D:\media\exchange-prerequisites'
     }
 
     return ($settings | ConvertTo-Json -Depth 5)
@@ -179,7 +255,15 @@ $hostScripts = @(Get-ChildItem -LiteralPath $hostDirectory -File | ForEach-Objec
 $guestFiles = @(Get-ChildItem -LiteralPath $guestDirectory -File -Recurse | ForEach-Object {
         [System.IO.Path]::GetRelativePath($guestDirectory, $_.FullName)
     })
-$map = Get-LabDeploymentMap -RepositoryRoot $RepositoryRoot -Destination $Destination -HostScript $hostScripts -GuestFile $guestFiles
+$moduleDirectory = Join-Path $RepositoryRoot 'src' 'JIM.PowerShell'
+if (-not (Test-Path -LiteralPath $moduleDirectory -PathType Container)) {
+    throw "'$RepositoryRoot' is not a JIM checkout: expected $moduleDirectory. Pass -RepositoryRoot."
+}
+$moduleFiles = @(Get-ChildItem -LiteralPath $moduleDirectory -File -Recurse | ForEach-Object {
+        [System.IO.Path]::GetRelativePath($moduleDirectory, $_.FullName)
+    })
+$moduleDigest = Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root $moduleDirectory)
+$map = Get-LabDeploymentMap -RepositoryRoot $RepositoryRoot -Destination $Destination -HostScript $hostScripts -GuestFile $guestFiles -ModuleFile $moduleFiles -ModuleDigest $moduleDigest
 
 $missing = @($map | Where-Object { -not (Test-Path -LiteralPath $_.Source -PathType Leaf) })
 if ($missing.Count -gt 0) {
@@ -212,6 +296,31 @@ foreach ($entry in $map) {
     Write-Host ('  {0,-9} {1}' -f $outcome, [System.IO.Path]::GetRelativePath($Destination, $entry.Destination))
 }
 
+# The module is the one place files are removed: the AD FS registration refuses a copy whose digest is not the
+# commit's, so a file the checkout no longer has would hold every run red until someone deleted it by hand.
+$counts['removed'] = 0
+$moduleRoot = Join-Path $Destination 'module'
+$deployedModule = Join-Path $moduleRoot $moduleDigest 'JIM'
+$wanted = [System.Collections.Generic.HashSet[string]]::new([string[]]@($map | Where-Object Area -eq 'module' | ForEach-Object { $_.Destination }), [StringComparer]::OrdinalIgnoreCase)
+foreach ($file in @(Get-ChildItem -LiteralPath $deployedModule -File -Recurse)) {
+    if (-not $wanted.Contains($file.FullName)) {
+        Remove-Item -LiteralPath $file.FullName -Force
+        $counts['removed']++
+        Write-Host ('  {0,-9} {1}' -f 'removed', [System.IO.Path]::GetRelativePath($Destination, $file.FullName))
+    }
+}
+
+# Each commit's module stays under its digest, so a run that started before the hourly update deployed a newer main
+# still finds its own (Register-LabIdentityProvider.ps1). Deploying a copy refreshes its folder's time, and copies not
+# deployed for -ModuleRetentionDays go.
+(Get-Item -LiteralPath (Join-Path $moduleRoot $moduleDigest)).LastWriteTimeUtc = [datetime]::UtcNow
+$copies = @(Get-ChildItem -LiteralPath $moduleRoot -Directory)
+foreach ($name in @(Get-LabModuleCopyToPrune -Copy $copies -Current $moduleDigest -Now ([datetime]::UtcNow) -RetentionDays $ModuleRetentionDays)) {
+    Remove-Item -LiteralPath (Join-Path $moduleRoot $name) -Recurse -Force
+    $counts['removed']++
+    Write-Host ('  {0,-9} {1}' -f 'removed', [System.IO.Path]::GetRelativePath($Destination, (Join-Path $moduleRoot $name)))
+}
+
 Write-Heading 'Settings'
 $exampleText = Get-LabSettingsExample
 Set-Content -LiteralPath $examplePath -Value $exampleText -Encoding utf8
@@ -229,5 +338,5 @@ else {
 }
 
 Write-Heading 'Done'
-Write-Host ("  {0} new, {1} updated, {2} unchanged, in {3}" -f $counts['new'], $counts['updated'], $counts['unchanged'], $Destination)
+Write-Host ("  {0} new, {1} updated, {2} unchanged, {3} removed, in {4}" -f $counts['new'], $counts['updated'], $counts['unchanged'], $counts['removed'], $Destination)
 Write-Host "  The runner reaches these through JIM_AD_LAB_SCRIPT_ROOT=$Destination"

@@ -1,0 +1,14 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# Docs site toolchain: the one place its versions are set. Every install (devcontainer,
+# changelog-lint, docs.yml, publish-api-reference.yml, release.yml) reads this file, and
+# Dependabot (pip, directory /docs) raises the bumps, so a pull request changing it gets
+# the strict build and link check like any other docs change.
+#
+# Pinned exactly (#2058): Material for MkDocs is in maintenance mode (critical fixes to
+# 5 May 2027) and MkDocs 2.0 is incompatible with it, so nothing here may float onto a
+# major. The planned move is to Zensical once its 0.1 release line ships.
+mkdocs==1.6.1
+mkdocs-material==9.7.7
+mkdocs-glightbox==0.5.2

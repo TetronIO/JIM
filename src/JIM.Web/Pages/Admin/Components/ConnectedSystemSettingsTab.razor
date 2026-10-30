@@ -2,6 +2,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
 @using JIM.Models.Staging
+@using JIM.Web.Pages.Admin.Components.Sql
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -88,6 +89,7 @@
                                                                      ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(groupMembers[k])"
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                                      DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
+                                                                     DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
                                                                      ConnectedSystemId="@ConnectedSystem.Id" />
                                     }
                                 </MudPaper>
@@ -104,6 +106,23 @@
                                     headingsRendered++;
                                 }
 
+                                @if (IsCatalogueDocument(settingValue))
+                                {
+                                    @* The setting the Connector's catalogue helps write, edited as a structured
+                                       document rather than as text (#2570). The Connector names it, so nothing
+                                       here knows which Connector it is or what its setting is called. *@
+                                    <SqlObjectTypesEditor @key="settingValue.Setting.Id"
+                                                          SettingValue="@settingValue"
+                                                          SettingValues="@ConnectedSystem.SettingValues"
+                                                          SelectedObjectTypeNames="@SelectedObjectTypeNames"
+                                                          Catalogue="@_catalogueSource"
+                                                          ValueChanged="OnSettingValueChanged"
+                                                          HasProblemsChanged="OnCatalogueDocumentProblemsChangedAsync"
+                                                          Class="@(j == categorySettings.Count - 1 ? "" : "mb-5")" />
+                                    j++;
+                                    continue;
+                                }
+
                                 <ConnectedSystemSettingField @key="settingValue.Setting.Id"
                                                              SettingValue="@settingValue"
                                                              CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
@@ -115,6 +134,7 @@
                                                              ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(settingValue)"
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
+                                                             DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
                                                              ConnectedSystemId="@ConnectedSystem.Id" />
                                 j++;
                             }
@@ -252,7 +272,7 @@
     }
 
 </MudForm>
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync">
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _catalogueDocumentHasProblems || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync" data-testid="jim-settings-save">
     @if (_settingsBeingSaved)
     {
         <MudProgressCircular Class="ms-n1" Indeterminate="true" />
@@ -263,6 +283,13 @@
         <text>Save Settings</text>
     }
 </MudButton>
+@if (_catalogueDocumentHasProblems)
+{
+    @* Saving would be refused with the same problems, which the editor lists beside the document. *@
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" data-testid="jim-settings-save-blocked">
+        Fix the problems shown with @_catalogueDeclaration?.DocumentSettingName before saving.
+    </MudText>
+}
 
 @code {
     /// <summary>
@@ -283,7 +310,7 @@
                 Read the certificate the endpoint above presents, to check JIM trusts it before saving. Nothing is
                 stored until you choose to trust it.
             </MudText>
-            <MudButton Variant="Variant.Outlined" Size="Size.Small" DropShadow="false"
+            <MudButton Variant="Variant.Filled" Size="Size.Small" DropShadow="false"
                        StartIcon="@(_fetchingCertificate ? null : Icons.Material.Filled.Search)"
                        Disabled="_fetchingCertificate"
                        OnClick="FetchServerCertificateAsync" data-testid="jim-fetch-server-certificate">
@@ -371,33 +398,67 @@
     private MudForm? _settingsForm;
 
     /// <summary>
-    /// Whether this Connected System's Connector supports Discover Domain Controllers (issue #1167), asked once
-    /// per the same reasoning as <see cref="_supportsCertificateFetch"/>: a property of the Connector, stable
-    /// for the life of the Connected System.
+    /// What this Connected System's Connector says about directory server discovery (issue #1167), or null when
+    /// it does not support it. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>: a
+    /// property of the Connector, stable for the life of the Connected System.
     /// </summary>
-    private bool _supportsDirectoryServerDiscovery;
+    private ConnectorDirectoryServerDiscovery? _directoryServerDiscovery;
+
+    /// <summary>
+    /// The setting this Connected System's Connector reads its catalogue to help write (#2570), or null when it
+    /// has no catalogue. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>.
+    /// </summary>
+    private ConnectorCatalogueDeclaration? _catalogueDeclaration;
+
+    /// <summary>Whether the editor of <see cref="_catalogueDeclaration"/>'s setting holds problems saving would be refused for.</summary>
+    private bool _catalogueDocumentHasProblems;
+
+    /// <summary>
+    /// Reads the catalogue with the settings on screen, for the editor of <see cref="_catalogueDeclaration"/>'s setting.
+    /// </summary>
+    private IConnectedSystemCatalogueSource? _catalogueSource;
 
     protected override async Task OnParametersSetAsync()
     {
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;
-            _supportsDirectoryServerDiscovery = false;
+            _directoryServerDiscovery = null;
+            _catalogueDeclaration = null;
+            _catalogueSource = null;
             return;
         }
 
         using var jim = JimFactory.Create();
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
-        _supportsDirectoryServerDiscovery = await jim.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+        _directoryServerDiscovery = await jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+        _catalogueDeclaration = await jim.ConnectedSystems.GetCatalogueDeclarationAsync(ConnectedSystem.Id);
+
+        // Kept across renders so the editor's catalogue reads are not repeated each time this tab re-renders. The
+        // drafts are read when each catalogue read happens, so it always reads with the settings on screen.
+        _catalogueSource = _catalogueDeclaration == null
+            ? null
+            : _catalogueSource ?? new ConnectedSystemCatalogueSource(JimFactory, ConnectedSystem.Id, DiscoveryDraftSettingValues);
     }
 
     /// <summary>
-    /// Whether <paramref name="settingValue"/> is the field the Discover Domain Controllers action targets:
-    /// identified by the connector-agnostic <see cref="ConnectorSettingNames.LdapPreferredDomainController"/>
-    /// name rather than by display text, so the field's label can change without silently breaking this match.
+    /// Whether <paramref name="settingValue"/> is the document the Connector's catalogue helps write, and so is
+    /// edited with the catalogue-driven editor rather than as text.
+    /// </summary>
+    private bool IsCatalogueDocument(ConnectedSystemSettingValue settingValue) =>
+        _catalogueDeclaration != null &&
+        settingValue.Setting.Type == ConnectedSystemSettingType.Text &&
+        settingValue.Setting.Name == _catalogueDeclaration.DocumentSettingName;
+
+    private IEnumerable<string> SelectedObjectTypeNames =>
+        (ConnectedSystem.ObjectTypes ?? []).Where(objectType => objectType.Selected).Select(objectType => objectType.Name);
+
+    /// <summary>
+    /// Whether <paramref name="settingValue"/> is the field the Discover action targets: the one the Connector
+    /// itself names, so nothing here knows which Connector it is or what its settings are called.
     /// </summary>
     private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) =>
-        _supportsDirectoryServerDiscovery && settingValue.Setting.Name == ConnectorSettingNames.LdapPreferredDomainController;
+        _directoryServerDiscovery != null && settingValue.Setting.Name == _directoryServerDiscovery.TargetSettingName;
 
     /// <summary>
     /// Gates the Discover... action on the Connected System's required Connectivity settings currently having a
@@ -406,7 +467,7 @@
     /// </summary>
     private bool CanDiscoverDirectoryServers()
     {
-        if (!_supportsDirectoryServerDiscovery)
+        if (_directoryServerDiscovery == null)
             return false;
 
         return ConnectedSystem.SettingValues
@@ -556,7 +617,7 @@
     }
 
     /// <summary>
-    /// The connectivity settings as they stand on screen for the Discover Domain Controllers action, credential
+    /// The connectivity settings as they stand on screen for the Discover action, credential
     /// included: unlike the certificate trust action above, discovery must bind to the directory, and on a
     /// Connected System whose settings have never been saved the typed credential is the only one there is.
     /// The credential travels via the draft's explicit encrypted channel and is never persisted by discovery.
@@ -594,6 +655,18 @@
     {
         // no action needed; handling the child component's callback re-renders this component,
         // refreshing required-group feedback and the save button's enabled state
+    }
+
+    /// <summary>
+    /// Holds Save Settings while the catalogue-edited document has problems. When they clear, the form is validated
+    /// afresh: it is not a form field, so the form never re-evaluated itself while the document was the only thing
+    /// wrong, and its validity can still be the stale one from when the page opened on an empty document.
+    /// </summary>
+    private async Task OnCatalogueDocumentProblemsChangedAsync(bool hasProblems)
+    {
+        _catalogueDocumentHasProblems = hasProblems;
+        if (!hasProblems && _settingsForm != null)
+            await _settingsForm.ValidateAsync();
     }
 
     private async Task OnFileSelectedAsync()

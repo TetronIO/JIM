@@ -172,6 +172,31 @@ public class ConnectedSystemDeletionPreviewDatabaseTests
         }
     }
 
+    /// <summary>
+    /// The Worker completes the run's Activity on the same context once the run returns (#2598). The run's per-object
+    /// pass clears the change tracker when it ends, which detaches the task and its Activity; the next checkpoint save
+    /// then reloads both, and the Worker's own instance of the Activity collided with the reloaded one.
+    /// </summary>
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ThenCompletingItsActivityOnTheSameContext_CompletesAsync()
+    {
+        var topology = await SeedAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var repo = new PostgresDataRepository(ctx);
+            using var jim = new JimApplication(repo, syncRepository: new JIM.PostgresData.Repositories.SyncRepository(repo));
+            var task = await FenceAndQueueAsync(ctx, topology.HrSystemId);
+            await jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+            await jim.Activities.CompleteActivityAsync(task.Activity!);
+        }
+
+        await using var verify = NewContext(tracking: false);
+        var activity = await verify.Activities.SingleAsync(a => a.TargetOperationType == ActivityTargetOperationType.Deprovision);
+        Assert.That(activity.Status, Is.EqualTo(ActivityStatus.Complete));
+    }
+
     [Test]
     public async Task QueuedChangeTheTargetAlreadyHolds_PreviewProposesTheWithdrawalAndTheRunRecordsItWithItsSnapshotAsync()
     {

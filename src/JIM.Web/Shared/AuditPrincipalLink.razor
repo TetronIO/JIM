@@ -6,15 +6,14 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* Who did something, resolved so a person links to their Metaverse Object under its own Object Type, and drawn by
-   <ActivityInitiator /> so it reads the same as an Activity's initiator everywhere else (#2066). *@
-<ActivityInitiator InitiatedByType="@PrincipalType"
+   <InitiatorChip /> so it reads the same as an Activity's initiator everywhere else (#2066). *@
+<InitiatorChip InitiatedByType="@PrincipalType"
                    InitiatedById="@PrincipalId"
                    InitiatedByName="@PrincipalName"
                    UserHref="@_mvoHref"
                    UserLookedUp="@(PrincipalType == ActivityInitiatorType.User)"
                    ScheduleName="@ScheduleName"
-                   ScheduleExecutionId="@ScheduleExecutionId"
-                   Dense="@Dense" />
+                   ScheduleExecutionId="@ScheduleExecutionId" />
 
 @code {
     [Parameter] public ActivityInitiatorType PrincipalType { get; set; }
@@ -26,9 +25,6 @@
 
     /// <summary>The Schedule Execution that produced the work, which the Schedule's name links to.</summary>
     [Parameter] public Guid? ScheduleExecutionId { get; set; }
-
-    /// <summary>Smaller icons for a dense row.</summary>
-    [Parameter] public bool Dense { get; set; }
 
     private string? _mvoHref;
 

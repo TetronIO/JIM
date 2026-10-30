@@ -9,6 +9,33 @@ audience: administrator
 
 When an import stages a reference attribute value (for example a group member's Distinguished Name) that does not correspond to any object in the Connector Space, JIM cannot resolve the reference. The most common cause is the referenced object sitting outside the configured [Container Scope](partitions-and-containers.md), which can be entirely deliberate: excluding foreign or out-of-remit objects from import is a normal scoping decision.
 
+```jim-diagram
+archetype: comparison
+title: The three Unresolved Reference Handling modes
+desc: "Error, the default, marks each affected object's Run Profile execution item with an Unresolved Reference error and completes the Activity with a warning showing the errored items; choose it when every reference is expected to resolve. Warn raises no per-object errors and completes the Activity with a warning carrying a summary count and View Affected Objects; choose it when unresolved references are worth a glance but should not read as failures. Ignore raises neither, and the import completes successfully; choose it when unresolved references are expected and benign. In every mode each execution item records how many references were left unresolved, and the same setting governs export."
+columns:
+  - { label: Error, sub: the default }
+  - { label: Warn }
+  - { label: Ignore }
+rows:
+  - label: Execution item
+    cells:
+      - { text: Unresolved Reference error }
+      - { text: no error, sub: references listed in amber }
+      - { text: no error, sub: references listed in amber }
+  - label: Activity
+    cells:
+      - { text: warning, sub: showing the errored items }
+      - { text: warning, sub: "a summary count, View Affected Objects" }
+      - { text: completes successfully }
+  - label: Choose it when
+    cells:
+      - { text: every reference should resolve }
+      - { text: "worth a glance, not a failure" }
+      - { text: expected and benign }
+footer: "In every mode each execution item counts its unresolved references; the setting governs export too"
+```
+
 Each Connected System has an **Unresolved Reference Handling** setting that controls what happens when this occurs during import:
 
 | Mode | Behaviour |
@@ -31,7 +58,7 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
 
-## Finding out why a reference is unresolved
+## :material-magnify: Finding out why a reference is unresolved
 
 For each unresolved reference, JIM works out the most likely cause by comparing the value with the Connected System's partitions and its current Container Scope, using the Connector's own rule for which Container holds a value (for a directory, the Distinguished Name's position in the hierarchy). It then says whether the fix lies in JIM's configuration or in the Connected System, and what to do:
 
@@ -47,7 +74,7 @@ For each unresolved reference, JIM works out the most likely cause by comparing 
 
 The causes are judged against the Container Scope as it stands now, not as it stood when the import ran, so they always describe what would fix the references today: once you select a Container, its references read **Not found in scope** until the next Full Import imports the objects they name and resolves them. Above the list, the panel's **Next steps** group the references by the change that would fix them, most first, so a group whose hundreds of unresolved members all sit in one unselected Container shows one step rather than hundreds. Steps you can take in JIM are listed first, under **Fix in JIM**, then those that lie in the Connected System. **Where they point**, above the filtered Connector Space, gives the same steps for the whole Connected System, each with how many objects its references sit on, so a thousand affected objects read as the two or three changes behind them. Nothing about the references themselves changes until an import resolves them.
 
-## On export
+## :material-export: On export
 
 The same setting governs the export side. When JIM writes a reference attribute (a manager, a group's members) it needs the referenced object's own identifier in the target Connected System, which it can only have once that object exists there. A Pending Export whose references cannot all be resolved yet is not held back whole: everything that can be written is written now (a Create inserts the row without the reference columns; a group gains the members that can be resolved), and the Pending Export stays pending, carrying only the reference values still owed, until they resolve. It is retried on the deferred cadence and finished when the referenced objects can be addressed.
 

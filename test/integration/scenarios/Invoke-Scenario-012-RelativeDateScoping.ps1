@@ -395,11 +395,10 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remaining))
             }
 
-            # The source data is now static but the clock has advanced past the end date, so the sync and
-            # export hot paths would skip $empClock (unchanged since last sync). The Temporal Scope Reconciler
-            # (#892) is the mechanism that detects this: trigger its built-in schedule to flag the object, then
-            # run a sync. The flag lets the flagged CSO past the unchanged-skip so scope is re-evaluated and the
-            # now-out-of-scope object is disconnected (flag-and-delegate).
+            # The source data is now static but the clock has advanced past the end date, so a Delta
+            # Synchronisation would not select $empClock (unchanged since last sync). The Temporal Scope
+            # Reconciler (#892) detects the transition and flags the object (flag-and-delegate); the flag is
+            # what brings it into the Delta Synchronisation below, which disconnects it.
             $reconSchedule = @(Get-JIMSchedule | Where-Object { $_.name -eq "Temporal Scope Reconciliation" })
             if ($reconSchedule.Count -ne 1) {
                 throw "T4 expected exactly one built-in 'Temporal Scope Reconciliation' schedule; found $($reconSchedule.Count)"
@@ -421,11 +420,12 @@ try {
             Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
             Write-Host "  OK Reconciler sweep completed" -ForegroundColor Green
 
-            # Second run: NO data change. The reconciler flagged $empClock; sync now re-evaluates it out of scope.
-            $syncProfile = @(Get-JIMRunProfile -ConnectedSystemId $hrSystem.id | Where-Object { $_.name -eq "Full Synchronisation" })
-            if ($syncProfile.Count -ne 1) { throw "T4 could not resolve the Full Synchronisation run profile" }
+            # Second run: NO data change. The reconciler flagged $empClock; a Delta Synchronisation selects it by
+            # the flag and re-evaluates it out of scope.
+            $syncProfile = @(Get-JIMRunProfile -ConnectedSystemId $hrSystem.id | Where-Object { $_.name -eq "Delta Synchronisation" })
+            if ($syncProfile.Count -ne 1) { throw "T4 could not resolve the Delta Synchronisation run profile" }
             $sync = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileId $syncProfile[0].id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $sync.activityId -Name "T4 Full Synchronisation (after boundary)"
+            Assert-ActivitySuccess -ActivityId $sync.activityId -Name "T4 Delta Synchronisation (after boundary)"
             Assert-ActivityHasChanges -ActivityId $sync.activityId -Name "T4 Sync (after boundary)" -ExpectedChangeType "DisconnectedOutOfScope" -MinCount 1
 
             if (Test-MvoExists -EmployeeId $empClock) {
@@ -435,7 +435,7 @@ try {
                 throw "T4 control ($empActive) must remain IN scope and untouched, but its Metaverse Object is gone"
             }
 
-            Add-StepResult -Name "ReEvaluatedEachRun" -Success $true -Note "Identical data; the Temporal Scope Reconciler flagged the object as 'now' advanced past its fixed end date, and sync disconnected it (flag-and-delegate)"
+            Add-StepResult -Name "ReEvaluatedEachRun" -Success $true -Note "Identical data; the Temporal Scope Reconciler flagged the object as 'now' advanced past its fixed end date, and a Delta Synchronisation disconnected it (flag-and-delegate)"
         }
         catch {
             Add-StepResult -Name "ReEvaluatedEachRun" -Success $false -ErrorMsg $_.Exception.Message

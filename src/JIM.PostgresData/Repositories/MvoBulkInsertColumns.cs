@@ -30,7 +30,7 @@ internal static class MvoBulkInsertColumns
         "DeletionInitiatedById", "DeletionInitiatedByName",
         "DeletionTriggeredBySystemId", "DeletionTriggeredBySystemName",
         "DeletionPolicySnapshotJson", "DeletionScheduledByRunProfileExecutionItemId",
-        "CachedDisplayName", "ScopeReviewPending", "LastScopeEvaluatedAt"
+        "CachedDisplayName", "ScopeReviewPending", "LastScopeEvaluatedAt", "UnsynchronisedChangesJson"
     ];
 
     /// <summary>
@@ -38,13 +38,15 @@ internal static class MvoBulkInsertColumns
     /// synchronisation update path (<see cref="SyncRepository.UpdateMetaverseObjectsBulkAsync"/>).
     /// This is <see cref="MetaverseObjects"/> minus <see cref="MetaverseObjectsUpdateExclusions"/> (and, as
     /// with the insert list, the store-generated xmin concurrency token). Excluded beyond the immutable
-    /// primary key (Id) and the create-only Created timestamp are ScopeReviewPending and
-    /// LastScopeEvaluatedAt: other writers set them through dedicated statements while a synchronisation
+    /// primary key (Id) and the create-only Created timestamp are ScopeReviewPending, LastScopeEvaluatedAt and
+    /// UnsynchronisedChangesJson: other writers set them through dedicated statements while a synchronisation
     /// holds the object as it loaded it (an export Synchronisation Rule's configuration change flags every
-    /// object of its type, #1925; the Temporal Scope Reconciler flags and stamps on its own schedule, #892),
-    /// and the synchronisation's own drain clears the flag through a dedicated statement too. Writing them
-    /// here from the loaded entity would put back the value it was loaded with, silently losing a review the
-    /// change asked for. The Connected System Object update list excludes its scope columns for the same reason.
+    /// object of its type, #1925; the Temporal Scope Reconciler flags and stamps on its own schedule, #892; a
+    /// write outside synchronisation flags the object and records what it changed, #2615), and the
+    /// synchronisation's own drain clears the flag and the record through a dedicated statement too. Writing
+    /// them here from the loaded entity would put back the value it was loaded with, silently losing a review
+    /// (or a change to deliver) that the write asked for. The Connected System Object update list excludes its
+    /// scope columns for the same reason.
     /// BulkInsertColumnCompletenessTests keeps the two lists in lockstep with <see cref="MetaverseObjects"/>
     /// so a migration that adds a mutable column must be placed in one of them consciously, rather than
     /// being silently dropped from every bulk update.
@@ -65,7 +67,7 @@ internal static class MvoBulkInsertColumns
     /// </summary>
     internal static readonly string[] MetaverseObjectsUpdateExclusions =
     [
-        "Id", "Created", "ScopeReviewPending", "LastScopeEvaluatedAt"
+        "Id", "Created", "ScopeReviewPending", "LastScopeEvaluatedAt", "UnsynchronisedChangesJson"
     ];
 
     /// <summary>
@@ -77,6 +79,7 @@ internal static class MvoBulkInsertColumns
         "DateTimeValue", "IntValue", "LongValue", "DecimalValue", "ByteValue",
         "GuidValue", "BoolValue", "ReferenceValueId",
         "UnresolvedReferenceValueId", "ContributedBySystemId",
-        "ContributedBySyncRuleId", "NullValue"
+        "ContributedBySyncRuleId", "NullValue", "ContributedByKind",
+        "ContributedByClaimType"
     ];
 }

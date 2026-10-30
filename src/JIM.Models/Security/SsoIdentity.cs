@@ -11,6 +11,21 @@ namespace JIM.Models.Security;
 /// </summary>
 public record SsoIdentity
 {
+    /// <summary>The OIDC claim <see cref="DisplayName"/> is read from.</summary>
+    public const string DisplayNameClaimType = "name";
+
+    /// <summary>The OIDC claim <see cref="FirstName"/> is read from.</summary>
+    public const string FirstNameClaimType = "given_name";
+
+    /// <summary>The OIDC claim <see cref="LastName"/> is read from.</summary>
+    public const string LastNameClaimType = "family_name";
+
+    /// <summary>The OIDC claim <see cref="UserPrincipalName"/> is read from.</summary>
+    public const string UserPrincipalNameClaimType = "preferred_username";
+
+    /// <summary>The OIDC claim <see cref="Email"/> is read from.</summary>
+    public const string EmailClaimType = "email";
+
     /// <summary>
     /// The immutable unique identifier for the user, taken from the configured SSO unique-id
     /// claim (for example the <c>sub</c> claim). Required; without it the user cannot be matched.
@@ -28,4 +43,7 @@ public record SsoIdentity
 
     /// <summary>Optional user principal name (OIDC <c>preferred_username</c> claim).</summary>
     public string? UserPrincipalName { get; init; }
+
+    /// <summary>Optional email address (OIDC <c>email</c> claim).</summary>
+    public string? Email { get; init; }
 }

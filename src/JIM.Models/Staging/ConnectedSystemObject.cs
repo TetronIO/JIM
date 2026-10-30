@@ -259,35 +259,6 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
-    /// Set by the page loader when a CSO's attributes have not changed since the last completed sync.
-    /// When true, the sync processor skips Attribute Flow, export evaluation, and drift detection
-    /// for this CSO — avoiding the overhead of loading and comparing unchanged attribute values.
-    /// </summary>
-    [NotMapped]
-    public bool IsUnchangedSinceLastSync { get; set; }
-
-    /// <summary>
-    /// Whether a Full Synchronisation loading with <paramref name="watermark"/> (see
-    /// <c>ConnectedSystem.GetUnchangedObjectWatermark</c>) treats this object as unchanged and skips it: a joined,
-    /// normal object neither created nor updated since. One rule for the run's loader and the Full Synchronisation
-    /// preview (#1530), so the preview never proposes a change for an object the run will not process.
-    /// </summary>
-    /// <remarks>
-    /// An object flagged by the Temporal Scope Reconciler (<see cref="ScopeReviewPending"/>, #892) has moved in or out
-    /// of scope with the clock, and one marked <see cref="DerivedInputChangePending"/> (#1750) has a derived flow whose
-    /// input changed in another system: neither is unchanged, though its own data is. One marked
-    /// <see cref="SynchronisationPending"/> (#2092) carries a change no synchronisation has processed yet, whatever its
-    /// timestamps say: a change committed while a run was in flight is stamped below the watermark that run wrote.
-    /// </remarks>
-    public bool IsUnchangedSince(DateTime watermark) =>
-        Status == ConnectedSystemObjectStatus.Normal &&
-        MetaverseObjectId.HasValue &&
-        !ScopeReviewPending &&
-        !DerivedInputChangePending &&
-        !SynchronisationPending &&
-        (LastUpdated == null ? Created <= watermark : LastUpdated.Value <= watermark);
-
-    /// <summary>
     /// Only for use by JIM.Service to determine what attribute values need adding and change-tracking.
     /// </summary>
     [NotMapped]

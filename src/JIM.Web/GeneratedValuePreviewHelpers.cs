@@ -79,8 +79,20 @@ public static class GeneratedValuePreviewHelpers
         !hasInputs
             ? string.Empty
             : usedNeutralSample
-                ? "using placeholder sample values; enter your own above, in \"Test this Expression\", to see this reflect them"
+                ? "an example, with each input standing in as its own name; enter values to see yours"
                 : "using the sample values entered above";
+
+    /// <summary>
+    /// The preview's caption when its candidates come from the base the tester's values give generation (#2471).
+    /// </summary>
+    public const string TriedValuesCaption = "from the values tried";
+
+    /// <summary>
+    /// Why the values tried give generation nothing (#2471): the base waits for an input, or could not be worked out.
+    /// </summary>
+    public static string DescribeNothingGenerated(GeneratedBaseOutcome outcome, string? targetName) => outcome == GeneratedBaseOutcome.Waits
+        ? $"Nothing is generated for {targetName ?? "this attribute"} until every input the base expression reads has a value."
+        : $"The base could not be worked out from these values, so nothing would be generated for {targetName ?? "this attribute"}.";
 
     /// <summary>
     /// Joins a list of candidate values with the mockup's trailing ellipsis ("joe.bloggs1, joe.bloggs2,
@@ -91,8 +103,8 @@ public static class GeneratedValuePreviewHelpers
 
     /// <summary>
     /// The existing-object count line for an import-mode generated mapping on a saved Synchronisation Rule
-    /// (plan Phase 3 point 2): "1,245 existing Metaverse Objects have no Account Name and would receive one on
-    /// the next full synchronisation." Handles zero gracefully rather than reading as "nothing counted yet".
+    /// (plan Phase 3 point 2): "1,245 existing Metaverse Objects have no Account Name and would receive one at
+    /// the next synchronisation." Handles zero gracefully rather than reading as "nothing counted yet".
     /// </summary>
     public static string DescribeExistingObjectCount(int count, string attributeName)
     {
@@ -100,7 +112,7 @@ public static class GeneratedValuePreviewHelpers
             return $"Every existing Metaverse Object already has a value for {attributeName}.";
 
         var noun = count == 1 ? "Metaverse Object has" : "Metaverse Objects have";
-        return $"{count:N0} existing {noun} no {attributeName} and would receive one on the next full synchronisation.";
+        return $"{count:N0} existing {noun} no {attributeName} and would receive one at the next synchronisation.";
     }
 
     /// <summary>

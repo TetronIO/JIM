@@ -230,6 +230,7 @@ public partial class ActivityRepository : IActivityRepository
 
     public async Task<ActivityRpeiErrorCounts> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
+        // One group or none, so Single: FirstOrDefault over a constant-key group makes EF Core log warning 10103.
         var counts = await Repository.Database.ActivityRunProfileExecutionItems
             .Where(r => r.Activity.Id == activityId)
             .GroupBy(_ => 1)
@@ -240,7 +241,7 @@ public partial class ActivityRepository : IActivityRepository
                 TotalUnhandledErrors = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
                 TotalObjectTypeChangeRefusals = g.Count(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return counts != null
             ? new ActivityRpeiErrorCounts(counts.TotalWithErrors, counts.TotalRpeis, counts.TotalUnhandledErrors, counts.TotalObjectTypeChangeRefusals)
@@ -843,6 +844,39 @@ public partial class ActivityRepository : IActivityRepository
             .ToDictionaryAsync(x => x.ParentId, x => x.Count);
     }
 
+    /// <inheritdoc />
+    public async Task<Dictionary<int, List<TimeSpan>>> GetRecentSuccessfulRunProfileDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int perRunProfile)
+    {
+        if (runProfileIds.Count == 0 || perRunProfile <= 0)
+            return new Dictionary<int, List<TimeSpan>>();
+
+        // One query for every requested Run Profile: the queue rarely holds more than a handful of distinct profiles,
+        // and the per-group Take translates to a ROW_NUMBER window over just their successful executions.
+        var ids = runProfileIds.Distinct().ToList();
+        var rows = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ConnectedSystemRunProfileId != null
+                        && ids.Contains(a.ConnectedSystemRunProfileId.Value)
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning)
+                        && a.ExecutionTime != null)
+            .GroupBy(a => a.ConnectedSystemRunProfileId!.Value)
+            .Select(g => new
+            {
+                RunProfileId = g.Key,
+                Durations = g.OrderByDescending(a => a.Executed)
+                    .ThenByDescending(a => a.Id)
+                    .Take(perRunProfile)
+                    .Select(a => a.ExecutionTime!.Value)
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.RunProfileId, r => r.Durations);
+    }
+
     public async Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync()
     {
         var query = BuildWorkerTaskQuery();
@@ -1299,6 +1333,28 @@ public partial class ActivityRepository : IActivityRepository
     }
 
     /// <summary>
+    /// The ids of every Connected System attribute named after a candidate in
+    /// <see cref="ObjectNaming.ConnectedSystemNameAttributes"/>, across all Connected Systems, as one list per
+    /// candidate in preference order. Names match case-insensitively, as connector schemas vary in casing.
+    /// </summary>
+    private async Task<List<List<int>>> GetConnectedSystemNameAttributeIdTiersAsync()
+    {
+        var candidateNames = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLower()).ToList();
+        var candidates = await Repository.Database.ConnectedSystemAttributes
+            .AsNoTracking()
+            .Where(a => candidateNames.Contains(a.Name.ToLower()))
+            .Select(a => new { a.Id, a.Name })
+            .ToListAsync();
+
+        return ObjectNaming.ConnectedSystemNameAttributes
+            .Select(candidate => candidates
+                .Where(a => string.Equals(a.Name, candidate, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Id)
+                .ToList())
+            .ToList();
+    }
+
+    /// <summary>
     /// Shared core for the paged and range Run Profile Execution Item header reads: applies every filter and the
     /// sort to one Activity's execution items, windows them by absolute <paramref name="offset"/> and
     /// <paramref name="count"/>, and projects the window to header DTOs, alongside the total match count (or
@@ -1317,13 +1373,18 @@ public partial class ActivityRepository : IActivityRepository
         IEnumerable<ActivityRunProfileExecutionItemSyncOutcomeType>? outcomeTypeFilter,
         bool includeTotalCount)
     {
-        // Execution items can reference Connected System Objects in any system, so name candidates are
-        // matched by attribute name rather than by pre-resolved ids. Lowered here so the comparison
-        // translates to a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
-        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
-        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
-        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
-        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+        // Resolve the name candidates to attribute ids up front, one list per tier, so the sort, search and
+        // projection below probe the (ConnectedSystemObjectId, AttributeId) index directly. Matching by
+        // attribute name inside the read instead made PostgreSQL re-scan the whole attribute table once per
+        // item per tier: a display-name sort over 40,000 items took 48 seconds and exceeded the command
+        // timeout. Execution items can reference Connected System Objects in any system, so the tiers span
+        // every system. Coalesced in tier order below; extend alongside ObjectNaming.ConnectedSystemNameAttributes
+        // (guarded by ConnectedSystemNameAttributeTierCountTests).
+        var nameAttributeIdTiers = await GetConnectedSystemNameAttributeIdTiersAsync();
+        var nameTier1 = nameAttributeIdTiers[0];
+        var nameTier2 = nameAttributeIdTiers[1];
+        var nameTier3 = nameAttributeIdTiers[2];
+        var allNameAttributeIds = nameAttributeIdTiers.SelectMany(tier => tier).ToList();
 
         // Header-tier read: do NOT eager-load the ConnectedSystemObject graph. The previous
         // implementation Include()d each RPEI's CSO plus its entire (multi-valued) AttributeValues
@@ -1395,9 +1456,7 @@ public partial class ActivityRepository : IActivityRepository
                 // Search the name candidates (live CSO attributes)
                 (item.ConnectedSystemObject != null &&
                  item.ConnectedSystemObject.AttributeValues.Any(av =>
-                    (av.Attribute.Name.ToLower() == nameCandidate1 ||
-                     av.Attribute.Name.ToLower() == nameCandidate2 ||
-                     av.Attribute.Name.ToLower() == nameCandidate3) &&
+                    allNameAttributeIds.Contains(av.AttributeId) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
                 // Search display name (snapshot fallback)
@@ -1440,15 +1499,15 @@ public partial class ActivityRepository : IActivityRepository
             // sort key matches what the Display Name column renders, then the snapshot for deleted CSOs.
             "displayname" or "name" => sortDescending
                 ? query.OrderByDescending(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                       ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot)
                 : query.OrderBy(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault()
+                    ? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
                       ?? item.DisplayNameSnapshot
                     : item.DisplayNameSnapshot),
             "type" or "objecttype" => sortDescending
@@ -1499,9 +1558,9 @@ public partial class ActivityRepository : IActivityRepository
                 i.ObjectTypeSnapshot,
                 i.MetaverseObjectId,
                 DisplayNameLive =
-                    i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate1).Select(av => av.StringValue).FirstOrDefault()
-                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate2).Select(av => av.StringValue).FirstOrDefault()
-                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => av.Attribute.Name.ToLower() == nameCandidate3).Select(av => av.StringValue).FirstOrDefault(),
+                    i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
                 TypeLive = i.ConnectedSystemObject!.Type!.Name,
                 // External id rendered by ExternalIdValueText, the shared definition the Connector Space
                 // list uses too. Keep the projection single-column: selecting an anonymous type of the raw
@@ -1959,7 +2018,6 @@ public partial class ActivityRepository : IActivityRepository
             errorTypeCounts.GetValueOrDefault(ActivityRunProfileExecutionItemErrorType.GeneratedValueCollisionUnresolved);
 
         // NoChange stats (always from RPEIs — no outcome equivalent)
-        var totalNoChanges = ChangeTypeCount(ObjectChangeType.NoChange);
         var totalMvoNoAttributeChanges = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.MvoNoAttributeChanges);
         var totalCsoAlreadyCurrent = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.CsoAlreadyCurrent);
 
@@ -2011,9 +2069,6 @@ public partial class ActivityRepository : IActivityRepository
             TotalPendingExportsFailed = totalPendingExportsFailed,
 
             // NoChange stats
-#pragma warning disable CS0618 // Type or member is obsolete
-            TotalNoChanges = totalNoChanges,
-#pragma warning restore CS0618
             TotalMvoNoAttributeChanges = totalMvoNoAttributeChanges,
             TotalCsoAlreadyCurrent = totalCsoAlreadyCurrent,
         };
@@ -2163,7 +2218,7 @@ public partial class ActivityRepository : IActivityRepository
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id)
     {
         // The item's own row and nothing it points at: callers read its columns only, so none of the graph
-        // GetActivityRunProfileExecutionItemAsync loads for the portal is paid for here.
+        // GetActivityRunProfileExecutionItemDetailAsync loads for the portal is paid for here.
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .SingleOrDefaultAsync(i => i.Id == id);
@@ -2190,110 +2245,43 @@ public partial class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
-    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id)
+    /// <inheritdoc />
+    public async Task<List<ActivityRunProfileExecutionItemSyncOutcome>> GetSyncOutcomesAsync(Guid runProfileExecutionItemId)
     {
-        // AsTracking required: multiple Include paths create cycles through ReferenceValue navigations
-        // (e.g. CSO -> AttributeValues -> ReferenceValue(CSO) -> AttributeValues).
+        return await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .AsNoTracking()
+            .Where(o => o.ActivityRunProfileExecutionItemId == runProfileExecutionItemId)
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemDetailAsync(Guid id)
+    {
+        // Every collection here is bounded by the item, never by the objects it touched (#2498). The Connected System
+        // Object's values are filtered to the ones that name and identify it (the naming tiers, its external ids), as
+        // the Metaverse Object detail load filters its connectors' values: an unfiltered load read every member of a
+        // large group. Change records come without their attribute changes; their values are summarised and read a
+        // window at a time.
+        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(name => name.ToLower()).ToList();
         return await Repository.Database.ActivityRunProfileExecutionItems
-            .AsTracking()
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            // CSO includes
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
+                .ThenInclude(cso => cso!.Type)
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
+                .ThenInclude(cso => cso!.AttributeValues.Where(av =>
+                    nameAttributes.Contains(av.Attribute.Name.ToLower()) || av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId))
+                    .ThenInclude(av => av.Attribute)
             .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.Type)
-            // CSO -> MVO includes (for projected/joined CSOs to access the linked MVO)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-            .ThenInclude(cso => cso!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.Type)
-            // CSO change includes (for import updates/deletes)
+                .ThenInclude(cso => cso!.MetaverseObject)
+                    .ThenInclude(mvo => mvo!.Type)
+            // For deletions, the preserved object type supports the deletion rule display.
             .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            // For deletions, include the preserved object type to support deletion rule UI display
-            .Include(q => q.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.DeletedObjectType)
-            // MVO change includes (for sync operations that produce MVO attribute changes)
+                .ThenInclude(c => c!.DeletedObjectType)
             .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.MetaverseObject)
-            .ThenInclude(mvo => mvo!.Type)
-            // MVO change attribute detail (for displaying MVO attribute changes in outcome tree)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.Type)
-            .Include(q => q.MetaverseObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
-            .ThenInclude(vc => vc.ReferenceValue)
-            .ThenInclude(rv => rv!.AttributeValues)
-            .ThenInclude(av => av.Attribute)
-            // Sync outcome tree (causality chain)
+            // Each outcome's staged change names the record it staged; its values are summarised like the item's.
             .Include(q => q.SyncOutcomes)
-            // PendingExportCreated outcome CSO change snapshots (for rendering attribute detail)
-            .Include(q => q.SyncOutcomes)
-            .ThenInclude(o => o.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.Attribute)
-            .Include(q => q.SyncOutcomes)
-            .ThenInclude(o => o.ConnectedSystemObjectChange)
-            .ThenInclude(c => c!.AttributeChanges)
-            .ThenInclude(ac => ac.ValueChanges)
+                .ThenInclude(o => o.ConnectedSystemObjectChange)
             .SingleOrDefaultAsync(q => q.Id == id);
     }
     #endregion
@@ -2325,8 +2313,20 @@ public partial class ActivityRepository : IActivityRepository
 
     public async Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass)
     {
+        // A change recorded as awaiting synchronisation, applied or not, is left out (#2615). The Connected System's next
+        // synchronisation carries it to the objects that already exist, so it is neither a reason to run a Full
+        // Synchronisation nor, once applied, anything still to do. The recorded row names the Activity that saved the
+        // change, which is how the two are matched; the drift indicator reports the waiting ones separately. Every change
+        // JIM does not apply by itself (an export Attribute Flow edit, a Metaverse Attribute change) has no row and stays.
+        //
+        // Nor is a change the save judged to need no Full Synchronisation (#2615): an export rule's scope or Deprovisioning
+        // Action change is applied by the review the save flags, at the next synchronisation of any Connected System, and has
+        // no row to match. The judgement is on the Activity, and only an explicit false leaves a change out: a null is a change
+        // captured before it was recorded, or one the save could not judge, and counts as it always did.
         return await Repository.Database.Activities
-            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass)
+            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass
+                        && a.ConfigurationChangeNeedsFullSynchronisation != false
+                        && !Repository.Database.ConfigurationChangeSynchronisations.Any(c => c.ConfigurationChangeActivityId == a.Id))
             .Select(a => new ConfigurationChangeImpactData
             {
                 When = a.Created,

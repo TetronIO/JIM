@@ -300,26 +300,28 @@
     },
     {
       "clientId": "jim-powershell",
-      "name": "JIM PowerShell Module",
-      "description": "Public client for JIM PowerShell module — uses PKCE with loopback redirect",
+      "name": "JIM PowerShell module",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "http://localhost:8408/*",
-        "http://localhost:8409/*",
-        "http://localhost:8402/*",
-        "http://localhost:8403/*",
-        "http://localhost:8400/*",
-        "http://localhost:8401/*",
-        "http://localhost:8406/*",
-        "http://localhost:8407/*",
-        "http://localhost:8404/*",
-        "http://localhost:8405/*"
+        "http://localhost:8400/callback/",
+        "http://localhost:8401/callback/",
+        "http://localhost:8402/callback/",
+        "http://localhost:8403/callback/",
+        "http://localhost:8404/callback/",
+        "http://localhost:8405/callback/",
+        "http://localhost:8406/callback/",
+        "http://localhost:8407/callback/",
+        "http://localhost:8408/callback/",
+        "http://localhost:8409/callback/",
+        "http://localhost:5200/api/reference/",
+        "https://localhost:7000/api/reference/"
       ],
       "webOrigins": [
-        "+"
+        "http://localhost:5200",
+        "https://localhost:7000"
       ],
       "notBefore": 0,
       "bearerOnly": false,
@@ -358,21 +360,17 @@
     },
     {
       "clientId": "jim-web",
-      "name": "JIM Web Application",
-      "description": "JIM web UI and API — confidential client with PKCE",
+      "name": "JIM",
       "surrogateAuthRequired": false,
       "enabled": true,
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "secret": "jim-dev-secret",
       "redirectUris": [
-        "https://localhost:7000/*",
-        "http://localhost:5200/*"
+        "http://localhost:5200/signin-oidc",
+        "https://localhost:7000/signin-oidc"
       ],
-      "webOrigins": [
-        "https://localhost:7000",
-        "http://localhost:5200"
-      ],
+      "webOrigins": [],
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,
@@ -386,7 +384,7 @@
       "attributes": {
         "realm_client": "false",
         "backchannel.logout.session.required": "true",
-        "post.logout.redirect.uris": "http://localhost:5200/*##https://localhost:7000/*",
+        "post.logout.redirect.uris": "http://localhost:5200/signout-callback-oidc##https://localhost:7000/signout-callback-oidc",
         "pkce.code.challenge.method": "S256",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
@@ -561,12 +559,11 @@
     },
     {
       "name": "jim-api",
-      "description": "JIM API access scope",
+      "description": "JIM's API",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
-        "consent.screen.text": "Access JIM API",
-        "display.on.consent.screen": "true"
+        "display.on.consent.screen": "false"
       },
       "protocolMappers": [
         {
@@ -576,10 +573,9 @@
           "consentRequired": false,
           "config": {
             "included.client.audience": "jim-web",
-            "id.token.claim": "false",
-            "lightweight.claim": "false",
             "access.token.claim": "true",
-            "userinfo.token.claim": "false"
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
           }
         }
       ]

@@ -75,6 +75,12 @@
                     <dt>Source</dt>
                     <dd><span class="jim-inspector-subtle">Source not recorded</span></dd>
                 }
+                @if (primaryOrigin.Kind is ValueOriginKind.SignInClaim or ValueOriginKind.System)
+                {
+                    @* Set outside synchronisation (#2472): read from a sign-in token (and which claim), or fixed by JIM. *@
+                    <dt>Source</dt>
+                    <dd><ValueOriginChip Origin="@primaryOrigin" /></dd>
+                }
                 @if (primaryOrigin.Kind == ValueOriginKind.SetByPerson)
                 {
                     <dt>Set by</dt>
@@ -188,7 +194,13 @@
     <div class="jim-inspector-section">
         <div class="jim-inspector-label-row">
             <span class="jim-inspector-label">History</span>
-            <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+            <span class="d-flex gap-3">
+                <MudLink OnClick="@(() => OnOpenInTimeline.InvokeAsync())">Open in Timeline</MudLink>
+                @if (CausalityExplorerHref != null)
+                {
+                    <MudLink Href="@CausalityExplorerHref" data-testid="jim-mvo-inspector-explore-causality">Explore causality</MudLink>
+                }
+            </span>
         </div>
         @if (Provenance.History.Count == 0)
         {
@@ -237,6 +249,18 @@
                             {
                                 <span>· @entry.SyncRuleName</span>
                             }
+                            else if (entry.ContributedByKind == ValueContributorKind.SignInClaim)
+                            {
+                                <span>· @ValueOriginGrouping.SignInClaimLabel</span>
+                                @if (!string.IsNullOrEmpty(entry.ClaimType))
+                                {
+                                    <span class="jim-text-code jim-value-origin-claim">@entry.ClaimType</span>
+                                }
+                            }
+                            else if (entry.ContributedByKind == ValueContributorKind.System)
+                            {
+                                <span>· @ValueOriginGrouping.SystemLabel</span>
+                            }
                             @if (generatedEvent == GeneratedValueHistoryEvent.Corrected)
                             {
                                 @* Collision Remediation writes the value outside any synchronisation, so there is no Activity
@@ -271,6 +295,13 @@
     /// <summary>Raised by "Open in Timeline": the host switches the page to the Changes tab.</summary>
     [Parameter]
     public EventCallback OnOpenInTimeline { get; set; }
+
+    /// <summary>
+    /// The Causality Explorer's address for the object, offered beside "Open in Timeline"; null when the reader may
+    /// not open it. It opens on the object: the explorer has no focus on a single attribute yet.
+    /// </summary>
+    [Parameter]
+    public string? CausalityExplorerHref { get; set; }
 
     private ProvenanceConnectedSystemObject? ContributingConnectedSystemObject => Provenance.ContributingConnectedSystemObject;
 

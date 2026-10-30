@@ -9,6 +9,28 @@ audience: administrator
 
 Object Matching Rules define how a Connected System Object is matched to an existing Metaverse Object. Each rule compares one source, a Connected System attribute or an expression over the Connected System Object, with one Metaverse attribute:
 
+```jim-diagram
+archetype: decision
+title: How an Object Matching Rule decides a join
+desc: "JIM tries the Object Matching Rules in order. If a rule's value matches exactly one Metaverse Object, the objects are Joined and the rule and value are recorded. If it matches several, the result is an Ambiguous Match and nothing joins or projects. If the rule cannot be worked out, the result is Object Matching Rule Failed and no later rule is tried. If nothing matches, or the rule has no value, JIM tries the next rule; when no rules are left, the result is No match, and projection or provisioning may create an object."
+start: {label: Connected System Object}
+questions:
+- {id: rule, label: Next Object Matching Rule, sub: 'how many Metaverse Objects match?'}
+- {id: more, label: 'More rules?'}
+outcomes:
+- {id: joined, label: Joined, sub: the rule and value recorded, good: true}
+- {id: ambiguous, label: Ambiguous Match, sub: nothing joins or projects}
+- {id: failed, label: Object Matching Rule Failed, sub: no later rule is tried}
+- {id: none, label: No match, sub: projection or provisioning may create one}
+answers:
+- {from: rule, to: joined, label: exactly one}
+- {from: rule, to: ambiguous, label: several}
+- {from: rule, to: failed, label: cannot be worked out}
+- {from: rule, to: more, label: 'none, or no value'}
+- {from: more, to: rule, label: 'yes: try it'}
+- {from: more, to: none, label: 'no'}
+```
+
 | Connected System attribute or expression | Metaverse Object Attribute | Description |
 |---------------|---------------|-------------|
 | `employeeId` | `Employee ID` | Match on employee identifier |
@@ -23,7 +45,7 @@ JIM tries the matching rules in order; a rule with no value, or no match, passes
 
 A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on **Case sensitive** only where a system treats them as different objects; see [Case Sensitivity](../concepts/case-sensitivity.md#object-matching-rules).
 
-## Matching outcomes
+## :material-arrow-decision-outline: Matching outcomes
 
 | Outcome | Description |
 |---------|-------------|
@@ -35,7 +57,7 @@ A matching rule ignores case by default, so `JBloggs` matches `jbloggs`. Turn on
 
 A join to a Metaverse Object also records the rule and value on the joining object's [Activity item](activity-execution-items.md), and a [Sync Preview](sync-preview.md) names them for a join it predicts.
 
-## Matching on an expression
+## :material-function-variant: Matching on an expression
 
 Two systems often hold the same identifier in different formats: a directory stores `1007` where HR has `E1007`, pads
 it to `001007`, keeps stray spaces, or joins two fields into one key. Matching those attribute to attribute finds
@@ -77,7 +99,7 @@ unjoined Connected System Object of that type. If it cannot do so for some of th
 match stops with an **Object Matching Rule Failed** error naming one of those objects, rather than provisioning an
 account that may already exist. Correct that object's value, or the expression, then synchronise again.
 
-## Testing a rule
+## :material-flask-outline: Testing a rule
 
 **Try it**, under the rule editor, shows what the rule would do for one object before you save it, worked out with the same code a synchronisation runs.
 
@@ -94,7 +116,7 @@ To keep a test of a saved rule and run it again after later changes, create a [c
 
 Automation gets the same test of a saved rule through [`Test-JIMMatchingRule`](../powershell/object-matching-rules.md#test-jimmatchingrule) and the REST API's `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/matching-rules/{ruleId}/test` and `POST /api/v1/synchronisation/sync-rules/{syncRuleId}/matching-rules/{ruleId}/test` endpoints.
 
-## Simple vs advanced matching mode
+## :material-tune-variant: Simple vs advanced matching mode
 
 Object matching can be configured at two levels:
 
@@ -128,7 +150,7 @@ Switching the mode warns about anything it strands:
 The warnings appear in the portal after the switch, in the REST response's `warnings` list, and on the PowerShell
 warning stream from [`Switch-JIMMatchingMode`](../powershell/object-matching-rules.md#switch-jimmatchingmode).
 
-## Previewing a behaviour change
+## :material-eye-outline: Previewing a behaviour change
 
 The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
 population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
@@ -160,14 +182,14 @@ Automation gets the same evaluation: `New-JIMConfigurationChangePreview -SyncRul
 `POST` to the rule's `behaviour/preview` endpoint. See
 [Configuration Change Preview](configuration-changes.md).
 
-## Previewing an Object Matching change
+## :material-vector-link: Previewing an Object Matching change
 
 Matching mistakes do not fail. A rule matched too loosely joins an account to the wrong Metaverse Object, and everything it
 contributes goes with it; a rule matched too tightly projects a second Metaverse Object beside the right one. Both look like
 a successful synchronisation, and both are found later by a person.
 
 The Matching tab therefore offers **Preview Impact** beside **Add Matching Rule**, and again on the Simple/Advanced
-switch. It answers what the proposed matching would do, without saving it.
+switch. It answers what the proposed matching would do, without saving it. Saving then records the change as [awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation) for the Object Type, so the Connected System's next synchronisation, Delta included, matches its unjoined objects.
 
 The preview reports:
 

@@ -3,14 +3,29 @@ title: Upgrading on Podman
 description: Upgrade JIM on Podman to a newer release, connected or air-gapped, rootful or rootless, and roll it back if you must.
 type: how-to
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Upgrading on Podman
 
 On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. Do the steps in [Before you upgrade](upgrading.md#before-you-upgrade) first. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
-## Upgrade JIM
+```jim-diagram
+archetype: lifecycle
+title: An upgrade on Podman, and the way back
+desc: "With the old release running, steps 1 and 2 stop JIM, leaving the bundled database running, take the backup, and keep the current pod files as jim.yaml.previous and jim-database.yaml.previous. While JIM is stopped, the backup and the .previous files hold the old release. Steps 3 and 4 put the new release's files and images in place and start JIM, restarting the database first, so the new release runs. To roll back, stop JIM again, restore the backup, put the .previous files back, and start JIM on the old release."
+states:
+  - { id: old, label: Old release }
+  - { id: stopped, label: JIM stopped, sub: "backup, `.previous` files" }
+  - { id: new, label: New release }
+transitions:
+  - { from: old, to: stopped, label: "steps 1 and 2", note: "stop, back up" }
+  - { from: stopped, to: new, label: "steps 3 and 4", note: "new files, start" }
+  - { from: new, to: stopped, label: "roll back: stop" }
+  - { from: stopped, to: old, label: "restore, start" }
+```
+
+## :material-update: Upgrade JIM
 
 1. **Stop JIM**, leaving the bundled database running, and **take your backup** per [Backup & Disaster Recovery](backup-recovery.md):
 
@@ -60,15 +75,15 @@ On Podman, an upgrade replaces the pod files, which name the release's images, a
     systemctl start jim.service
     ```
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 Check it as [Check it worked](upgrading.md#verifying) on Upgrading describes, with `systemctl status jim-database.service jim.service` in place of `docker compose ps`, and re-enable the Schedules you disabled.
 
-## Rolling back {#rolling-back}
+## :material-backup-restore: Rolling back {#rolling-back}
 
 Stop JIM, restore the pre-upgrade backup as [Rolling back](upgrading.md#rolling-back) describes (it explains why both halves go back together), put `jim.yaml.previous` and `jim-database.yaml.previous` back in place of the new files, and start JIM again.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Upgrading](upgrading.md): what to do before you upgrade, what happens as JIM starts, how to check it worked, and rolling back.
 - [Running on Podman](podman.md): the pod files, and rootful or rootless.

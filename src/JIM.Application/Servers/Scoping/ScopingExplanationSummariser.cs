@@ -609,7 +609,7 @@ internal static class ScopingExplanationSummariser
                 "In scope; staged at the next synchronisation",
                 "What happens next",
                 TextBullets(
-                    "This Metaverse Object is marked for an export scope review.",
+                    "This Metaverse Object is awaiting its Export Review.",
                     $"The next synchronisation of any Connected System reviews it and stages its provisioning to {connectedSystemName}."),
                 $"in scope of the Synchronisation Rule \"{ruleName}\"; the next synchronisation stages its provisioning."),
             NotConnectedReason.NotYetProvisioned => (

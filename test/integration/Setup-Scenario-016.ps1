@@ -317,7 +317,10 @@ function New-Scenario16ConnectedSystem {
         [Parameter(Mandatory=$true)][string[]]$SelectTypeNames,
         # Only the identity system runs Delta Imports, so only it declares how (#1424). The export-only
         # systems leave the mode unset, which is the answer for a Connected System that never runs one.
-        [Parameter(Mandatory=$false)][string]$DeltaImportMode
+        [Parameter(Mandatory=$false)][string]$DeltaImportMode,
+        # Oracle only. Left unset, the system takes the connector's default, Native Network Encryption,
+        # which is what an administrator who never opens the setting gets and so what most runs exercise.
+        [Parameter(Mandatory=$false)][string]$OracleEncryption
     )
 
 Write-TestStep "Step 6" "Creating the Connected System '$Name'"
@@ -351,9 +354,12 @@ else {
     $settings[(Get-SettingId "Oracle Database Identified By")] = @{ stringValue = "Service Name" }
     $settings[(Get-SettingId "Oracle Service Name")] = @{ stringValue = $config.ServiceName }
 
-    # The container's listener has no Advanced Networking configuration, and the connector's Native
-    # Network Encryption mode negotiates REQUIRED rather than REQUESTED, so it would refuse to connect.
-    $settings[(Get-SettingId "Oracle Encryption")] = @{ stringValue = "None" }
+    # The container's listener is left on Oracle's defaults, which accept encryption without requiring
+    # it, so the connector's REQUIRED negotiation gets AES with SHA-2 checksumming. The
+    # Connection.OracleEncryption row proves what each session actually negotiated.
+    if ($OracleEncryption) {
+        $settings[(Get-SettingId "Oracle Encryption")] = @{ stringValue = $OracleEncryption }
+    }
 
     # Both opt-ins on: these two settings are what turn NUMBER(1) into Boolean and RAW(16) into Guid,
     # and both reinterpretations are matrix rows in their own right.
@@ -492,9 +498,14 @@ $importSystem = New-Scenario16ConnectedSystem -Name $systemName `
 # this rule instead would be the wrong trade: scoped to one department only two of the ten referenced
 # managers would have an account, and the reference row would be measuring the scope rather than the
 # reference resolution it exists to test.
+#
+# On Oracle it is also the one system that connects with no encryption. None is still a supported
+# setting (for a lab), so one system keeps exercising it, and the Connection.OracleEncryption row
+# checks it really does send plain text while the other two encrypt.
 $appUserSystem = New-Scenario16ConnectedSystem -Name $appUserSystemName `
     -Purpose "Application accounts, whose manager column references another account in this same system." `
-    -SelectTypeNames @("AppUser")
+    -SelectTypeNames @("AppUser") `
+    -OracleEncryption $(if ($Provider -eq "Oracle") { "None" } else { $null })
 
 # The remaining account shapes. These two can share, because their scopes are already disjoint by
 # department (Research and Finance) and neither references the other.
@@ -627,7 +638,7 @@ $importMappings = @(
     @{ Cs = 'START_DATE';          Mv = 'Employee Start Date' }
     # Offset-carrying (-05:00 in the seeded data): unambiguous on the wire, so no setting applies.
     @{ Cs = 'HIRED_AT';            Mv = 'Employee End Date'   }
-    @{ Cs = 'EMPLOYEE_GUID';       Mv = 'objectGUID'          }
+    @{ Cs = 'EMPLOYEE_GUID';       Mv = 'Object GUID'         }
     @{ Cs = 'PHOTO';               Mv = 'Photo'               }
     @{ Cs = 'MANAGER_EMPLOYEE_ID'; Mv = 'Manager'             }
     @{ Cs = 'PhoneNumbers';        Mv = 'Other Telephones'    }

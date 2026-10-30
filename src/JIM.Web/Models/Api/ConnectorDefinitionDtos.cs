@@ -235,6 +235,12 @@ public class ConnectorDefinitionSettingDto
     public string? Description { get; set; }
 
     /// <summary>
+    /// An example value to start from, such as a complete JSON document, shown verbatim beneath the setting in the
+    /// portal. Null when the Connector supplies no example for the setting.
+    /// </summary>
+    public string? Example { get; set; }
+
+    /// <summary>
     /// The settings page section the setting appears under: Connectivity, General, Capabilities, Schema, Import or Export.
     /// </summary>
     public string Category { get; set; } = null!;
@@ -300,6 +306,7 @@ public class ConnectorDefinitionSettingDto
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,
+            Example = entity.Example,
             Category = entity.Category.ToString(),
             Type = entity.Type.ToString(),
             DefaultCheckboxValue = entity.DefaultCheckboxValue,
@@ -326,7 +333,7 @@ public class ConnectorDefinitionFileDto
     public int Id { get; set; }
 
     /// <summary>
-    /// The filename of the connector file, e.g. "JIM.Connectors.dll".
+    /// The file name of the Connector file, such as "Example.Connector.dll".
     /// </summary>
     public string Filename { get; set; } = null!;
 

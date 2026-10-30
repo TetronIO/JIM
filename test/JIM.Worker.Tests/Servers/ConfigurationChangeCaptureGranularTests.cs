@@ -9,6 +9,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using Moq;
@@ -66,6 +67,11 @@ public class ConfigurationChangeCaptureGranularTests
         // The duplicate-target check (#1532) reads the Synchronisation Rule's existing mappings on every
         // mapping create/update; these tests exercise change capture, so default the list to empty.
         _csRepo.Setup(r => r.GetSyncRuleMappingsAsync(It.IsAny<int>())).ReturnsAsync(new List<SyncRuleMapping>());
+
+        // Which Object Types an enabled import rule covers, read when a Simple Mode Object Matching Rule change is recorded
+        // as awaiting synchronisation (#2615): none here, as these tests are about the change history.
+        IList<SyncRuleHeader> noImportRules = [];
+        _csRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(noImportRules);
 
         _protection = new FakeProtection();
         _jim = new JimApplication(_repo.Object, syncRepository: TestUtilities.QueuedChangeWithdrawalSyncRepository()) { CredentialProtection = _protection };

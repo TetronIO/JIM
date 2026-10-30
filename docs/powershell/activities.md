@@ -9,9 +9,33 @@ audience: automation-author
 
 Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is recorded as a **Data Generation** Activity, separate from changes to an Example Data Template. Use these cmdlets to review Activities, retrieve a Run Profile execution's statistics, and inspect the child Activities a parent operation spawned. To find out what happened to one object in a run, and why, see [Execution Items](execution-items.md).
 
+```jim-diagram
+archetype: decision
+title: Which Activity cmdlet answers your question
+desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
+questions:
+  - { id: id, label: "Do you have its ID?", sub: "an `ActivityId`, as a run returns" }
+  - { id: need, label: "What do you need?" }
+outcomes:
+  - { id: list, label: "`Get-JIMActivity`", sub: "filtered by `-Status` and more" }
+  - { id: follow, label: "`Get-JIMActivity -Follow`", sub: progress until it completes }
+  - { id: full, label: "`Get-JIMActivity -Id`", sub: the Activity in full }
+  - { id: stats, label: "`Get-JIMActivityStats`", sub: a run's counts and timings }
+  - { id: items, label: "`-ExecutionItems`", sub: "with `-Id`: one row per object" }
+  - { id: children, label: "`Get-JIMActivityChildren`", sub: one row per child Activity }
+answers:
+  - { from: id, to: list, label: "no: list them" }
+  - { from: id, to: need, label: "yes" }
+  - { from: need, to: follow, label: to watch it run }
+  - { from: need, to: full, label: all of it }
+  - { from: need, to: stats, label: its statistics }
+  - { from: need, to: items, label: what happened to each object }
+  - { from: need, to: children, label: the Activities it spawned }
+```
+
 ---
 
-## Get-JIMActivity
+## :material-history: Get-JIMActivity
 
 Retrieves activity history from JIM. Activities are created automatically whenever an operation runs, providing a full audit trail of synchronisation runs, data generation tasks, certificate management operations, and other administrative actions.
 
@@ -60,6 +84,8 @@ Get-JIMActivity -Id <guid>
 ### Output
 
 A list returns each Activity's header, and `-Id` the Activity in full. `-ExecutionItems` returns each of the Activity's Run Profile Execution Items. `-Follow` shows progress while it follows, then returns the Activity in full.
+
+An Activity read in full carries ConfigurationChangeSynchronisations. For a configuration change Activity it has one entry per Object Type the change affects, saying whether a synchronisation has applied the change yet. For a synchronisation run it has one entry per Object Type the run processed in full because of changes saved before it started, with the ObjectCount processed and whether it applied them. It is empty for every other Activity.
 
 **By default**:
 
@@ -170,8 +196,10 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `LastSeen` | `datetime` | Failed authentication events and SCIM request summaries only: when the most recent attempt or request this Activity counts was made (UTC). It advances as more arrive, so a poller can pick up a changed count by watching it. |
 | `AggregationWindowStart` | `datetime` | Failed authentication events and SCIM request summaries only: the start of the 15-minute UTC window this Activity aggregates. Anything after the window ends is counted on a new Activity, so once the window has passed this one no longer changes. |
 | `ScimRequests` | `object` | SCIM request summaries only: what a SCIM client's requests did within the window. Empty for every other Activity. It has `Created`, `Updated`, `Deleted` and `Rejected`. |
-| `ImportWatermarkFrom` | `string` | Imports only: the point the import started reading from, as its Connector records it (for example `{"changeSequence":8}`). Empty for an import with nothing to start from, such as a Connected System's first, and for every other Activity. |
-| `ImportWatermarkTo` | `string` | Imports only: the point the import read up to, which the next import starts from. Empty when the import recorded none (it failed or was cancelled first, or its Connector keeps no such point) and for every other Activity. |
+| `ImportWatermarkFrom` | `string` | Imports only: what the Connector had stored for the Connected System when the import began, exactly as it keeps it (for example `{"changeSequence":8}`). It holds the watermark the import read changes after, and can hold more: the LDAP Connector's also records what it detected about the directory. Empty for an import with nothing to start from, such as a Connected System's first, and for every other Activity. `ImportReadRange` says what it means. |
+| `ImportWatermarkTo` | `string` | Imports only: what the Connector stored for the Connected System once the import had staged everything it read, exactly as it keeps it. It holds the watermark the next import reads changes after. Empty when the import recorded none (it failed or was cancelled first, or its Connector keeps no watermark) and for every other Activity. `ImportReadRange` says what it means. |
+| `ImportReadRange` | `object` | Imports only: the two watermarks as the import's Connector reads them. Each gives a `Kind` (what the watermark counts in, such as `access log` or `change sequence`) and its `Points`: one per Object Type or source, named by its `Scope`, for a Connector that keeps several (the SQL Connector does), otherwise one with no `Scope`. Each point has a `Number`, a UTC `Time` or a `Text` value. Empty when the Activity recorded no watermark, its Connected System has since been deleted, or its Connector does not describe its watermarks. It has `From` and `To`. |
+| `ConfigurationChangeSynchronisations` | `object[]` | Saving an import Synchronisation Rule or an Object Matching Rule makes the Connected System's next synchronisation, Delta or Full, process every object of the Connected System Object Type, because the change can alter what existing objects produce. For a configuration change Activity, one entry per Object Type it saved changes for, saying whether a synchronisation has applied them yet or the next one will. For a synchronisation run, one entry per Object Type it processed in full because of changes saved before it started, with the number of objects processed and whether it applied them. Empty for every other Activity, and for a change that needs none. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount`, `IsApplied`, `AppliedAt`, `AppliedByActivityId` and `Changes`. |
 
 **With `-ExecutionItems`**:
 
@@ -183,7 +211,7 @@ A list returns each Activity's header, and `-Id` the Activity in full. `-Executi
 | `ConnectedSystemObjectType` | `string` | The object's type: its Connected System Object's current type, or the type recorded with the item where that object no longer exists. |
 | `ObjectChangeType` | `string` | What happened to the object. One of `NotSet`, `Added`, `Updated`, `Deleted`, `Projected`, `Joined`, `AttributeFlow`, `Disconnected`, `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`, `DriftCorrection`, `Exported`, `Deprovisioned`, `NoChange`, `PendingExport`, `PendingExportConfirmed`, `Created` or `ExportScopeReview`. |
 | `ErrorType` | `string` | The kind of failure; `NotSet` or empty when the object did not fail. One of `NotSet`, `AmbiguousMatch`, `CouldNotMatchObjectType`, `CouldNotJoinDueToExistingJoin`, `DuplicateImportedAttributes`, `MissingExternalIdAttributeValue`, `UnexpectedAttribute`, `UnresolvedReference`, `UnsupportedExternalIdAttributeType`, `ExportNotConfirmed`, `ExportConfirmationFailed`, `CsoCreationFailed`, `DuplicateObject`, `InvalidGeneratedExternalId`, `UnhandledError`, `ExpressionEvaluationError`, `ExpressionMissingInput`, `MultiValuedToSingleValued`, `DeltaImportFallbackToFullImport`, `ImportHashVerificationFailed`, `ImportAttributeValueError`, `ConnectorConfigurationError`, `CouldNotExportDueToExistingConnectedSystemObject`, `ClassMembershipRequirementsNotMet`, `GeneratedValueExhausted`, `GeneratedValueWidthExceeded`, `GeneratedValueCollisionUnresolved`, `UniqueValueAlreadyInUse`, `ObjectMatchingRuleFailed`, `ObjectTypeChanged`, `PasswordRequiredToEnableAccount`, `AmbiguousProvisioningMatch`, `ScopingCriterionFailed`, `DatesCollapseAtTargetResolution`, `OutsideManagedScope`, `AccessDenied`, `RejectedByConnectedSystem`, `PlaceholderMemberConstraintViolation`, `MissingDependency`, `ConcurrencyConflict` or `CredentialAttributeNotExported`. |
-| `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one rather than a Connected System Object (an export scope review). Empty otherwise. |
+| `MetaverseObjectId` | `guid` | The Metaverse Object the item is about, where it records one rather than a Connected System Object (an Export Review). Empty otherwise. |
 | `OutcomeSummary` | `string` | Outcome types with counts, for example `Projected:1,AttributeFlow:12,PendingExportCreated:2`. Empty for an item recorded before outcomes were tracked, or when outcome tracking is disabled. |
 <!-- END GENERATED: Get-JIMActivity -->
 
@@ -257,7 +285,7 @@ Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
 
 ---
 
-## Get-JIMActivityStats
+## :material-chart-box-outline: Get-JIMActivityStats
 
 Retrieves execution statistics for a Run Profile activity, including counts of processed items, errors, and timing information. This is useful for monitoring synchronisation health and identifying performance trends.
 
@@ -344,7 +372,7 @@ if ($stats.TotalObjectErrors -gt 0) {
 
 ---
 
-## Get-JIMActivityChildren
+## :material-file-tree-outline: Get-JIMActivityChildren
 
 Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
@@ -412,7 +440,7 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](../configuration/activities.md): what activities are, lifecycle, summary statistics, and parent/child execution model
 - [Execution Items](execution-items.md): cmdlets for what happened to each object in a Run Profile execution, and what caused it

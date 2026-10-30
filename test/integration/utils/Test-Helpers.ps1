@@ -329,6 +329,49 @@ function Get-ActiveDirectoryLabSetting {
     throw "The Active Directory lab needs the environment variable $Name to be set, and it is not. See test/integration/ad-lab/README.md."
 }
 
+function Get-ActiveDirectoryLabFederationConfig {
+    <#
+    .SYNOPSIS
+        The configuration of the lab's AD FS server, adfs-primary, which JIM signs in through in the AD FS scenarios.
+
+    .DESCRIPTION
+        adfs-primary is a member server of dc-primary's forest (test/integration/ad-lab/README.md, The AD FS server). It
+        is reached by its service name, adfs.panoply.local, the name its HTTPS certificate carries and the one its
+        endpoints are published on, so Host is that name and not the server's own (adfs1.panoply.local).
+
+        DirectoryType is ActiveDirectoryFederation: it is not a directory, and no directory function accepts it.
+        Save-ActiveDirectoryCertificate does, to read its certificate off the wire on 443.
+
+        Read from JIM_AD_LAB_ADFS_PRIMARY_ADDRESS (required), JIM_AD_LAB_ADFS_PRIMARY_HOST (default
+        adfs.panoply.local) and JIM_AD_LAB_ADFS_PRIMARY_VM (default adfs-primary; the monthly rebuild points it at the
+        candidate). Authority is what JIM_SSO_AUTHORITY is set to. Issuer is the discovery document's issuer, which
+        AD FS also puts in its ID tokens: the authority itself. AccessTokenIssuer is what it puts in access tokens
+        instead (its access_token_issuer): the federation service identifier, plain HTTP whatever its endpoints are.
+
+    .OUTPUTS
+        A hashtable.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param()
+
+    $serviceName = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_HOST' -Default 'adfs.panoply.local'
+    return @{
+        DirectoryType      = 'ActiveDirectoryFederation'
+        Instance           = 'AdfsPrimary'
+        ContainerName      = $null
+        Host               = $serviceName
+        Address            = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS'
+        VmName             = Get-ActiveDirectoryLabSetting -Name 'JIM_AD_LAB_ADFS_PRIMARY_VM' -Default 'adfs-primary'
+        Port               = 443
+        Authority          = "https://$serviceName/adfs"
+        DiscoveryPath      = '/adfs/.well-known/openid-configuration'
+        Issuer             = "https://$serviceName/adfs"
+        AccessTokenIssuer  = "http://$serviceName/adfs/services/trust"
+        CheckpointBaseline = 'baseline'
+    }
+}
+
 function Test-TemplateSpansSyncPages {
     <#
     .SYNOPSIS
@@ -1288,8 +1331,13 @@ function Save-ActiveDirectoryCertificate {
         acceptable for a lab on an isolated Hyper-V network and is why the Subject Alternative Name
         check exists; it is not a way to trust a domain controller across an untrusted network.
 
+        The lab's AD FS server is fetched the same way, on 443 by its service name
+        (Get-ActiveDirectoryLabFederationConfig): the readiness check verifies discovery against it. JIM itself
+        is not given it here; the AD FS scenarios trust it the way an administrator would.
+
     .PARAMETER DirectoryConfig
-        An ActiveDirectory config from Get-DirectoryConfig (Host, Address, VmName, Port).
+        An ActiveDirectory config from Get-DirectoryConfig (Host, Address, VmName, Port), or the AD FS server's
+        from Get-ActiveDirectoryLabFederationConfig.
 
     .PARAMETER CertificateDirectory
         Where to write the certificates. Defaults to test/integration/ad-lab-certs, the folder the
@@ -1307,9 +1355,10 @@ function Save-ActiveDirectoryCertificate {
         [string]$CertificateDirectory = (Join-Path $PSScriptRoot '../ad-lab-certs')
     )
 
-    if (([string]$DirectoryConfig['DirectoryType']) -ne 'ActiveDirectory') {
-        throw "Save-ActiveDirectoryCertificate: the directory config is for '$($DirectoryConfig['DirectoryType'])', not ActiveDirectory."
+    if (([string]$DirectoryConfig['DirectoryType']) -notin 'ActiveDirectory', 'ActiveDirectoryFederation') {
+        throw "Save-ActiveDirectoryCertificate: the directory config is for '$($DirectoryConfig['DirectoryType'])', not ActiveDirectory or the lab's AD FS server (ActiveDirectoryFederation)."
     }
+    $certificateKind = if ($DirectoryConfig['DirectoryType'] -eq 'ActiveDirectoryFederation') { 'HTTPS' } else { 'LDAPS' }
 
     # These reach a shell inside the toolbox (the </dev/null redirect needs one) and a file name, so
     # each must be a plain name before it is used.
@@ -1328,7 +1377,7 @@ function Save-ActiveDirectoryCertificate {
     }
 
     $toolbox = $script:AdLabToolboxContainerName
-    Write-Host "  Fetching ${vmName}'s LDAPS certificate (${hostName} at ${address}:${port}) through the toolbox..." -ForegroundColor Gray
+    Write-Host "  Fetching ${vmName}'s $certificateKind certificate (${hostName} at ${address}:${port}) through the toolbox..." -ForegroundColor Gray
 
     $running = docker ps --filter "name=^/${toolbox}$" --format '{{.Names}}' 2>$null
     if (-not $running) {
@@ -1348,7 +1397,7 @@ function Save-ActiveDirectoryCertificate {
     }
     $sanText = @($sanOutput | ForEach-Object { "$_" }) -join "`n"
     if (-not (Test-CertificateSanHasName -SubjectAltNameText $sanText -DnsName $hostName)) {
-        throw "Save-ActiveDirectoryCertificate: ${vmName}'s LDAPS certificate does not carry '$hostName' in its Subject Alternative Name list, so the Connected System could not validate it. Was the domain controller built with -ExtraCertificateNames for this name? Subject Alternative Names found: $sanText"
+        throw "Save-ActiveDirectoryCertificate: ${vmName}'s $certificateKind certificate does not carry '$hostName' in its Subject Alternative Name list, so JIM could not validate it. Was the machine built for this name (-ExtraCertificateNames for a domain controller, -ServiceName for the AD FS server)? Subject Alternative Names found: $sanText"
     }
 
     New-Item -ItemType Directory -Path $CertificateDirectory -Force | Out-Null
@@ -2934,6 +2983,42 @@ function Write-Spinner {
     Write-Host "`r  $spinner $Message".PadRight(80) -NoNewline -ForegroundColor Yellow
 }
 
+function Get-WorkerMemoryWarningPattern {
+    <#
+    .SYNOPSIS
+        The regular expression for the line the Worker's memory guard adds to an Activity's warning when memory was
+        low while it ran. Keep in step with WorkerMemoryOutcome.WarningText (src/JIM.Worker).
+    #>
+    return '^Memory was low while this ran: '
+}
+
+function Write-WorkerMemoryWarning {
+    <#
+    .SYNOPSIS
+        Reports that memory was low while an Activity ran, and records it for the run summary.
+
+    .DESCRIPTION
+        The runner sets JIM_MEMORY_WARNINGS_PATH to a results file and repeats what is recorded there beside its pass
+        or fail line, so a pass the host was barely able to give is not mistaken for a comfortable one. Without the
+        variable (a scenario run on its own) the warning is only written to the console.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Warning
+    )
+
+    Write-Host "  ⚠ $Name ran short of memory (ActivityId: $ActivityId): $Warning" -ForegroundColor Yellow
+    if ($env:JIM_MEMORY_WARNINGS_PATH) {
+        Add-Content -Path $env:JIM_MEMORY_WARNINGS_PATH -Value "${Name}: $Warning" -Encoding UTF8
+    }
+}
+
 function Get-UniquenessProbeWarningPattern {
     <#
     .SYNOPSIS
@@ -3037,6 +3122,28 @@ function Assert-ActivitySuccess {
     }
 
     $status = $activity.status
+
+    # The Worker's memory guard warns when the host is short of memory while a run is in progress. That is a fact
+    # about the host, not about whether the run was right, and at the Scale templates a host sits close enough to the
+    # guard's line that a gigabyte of unrelated activity decides it. Report it (here and in the run summary) and judge
+    # the Activity on everything else it says.
+    if ($status -eq 'CompleteWithWarning' -and $activity.warningMessage) {
+        $warningLines = @("$($activity.warningMessage)" -split "\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $memoryLines = @($warningLines | Where-Object { $_.Trim() -match (Get-WorkerMemoryWarningPattern) })
+        if ($memoryLines.Count -gt 0) {
+            Write-WorkerMemoryWarning -Name $Name -ActivityId $ActivityId -Warning $memoryLines[0].Trim()
+            $otherLines = @($warningLines | Where-Object { $_.Trim() -notmatch (Get-WorkerMemoryWarningPattern) })
+            $activity.warningMessage = $otherLines -join "`n"
+
+            if ($otherLines.Count -eq 0) {
+                # An object error also makes an Activity Complete with warning, so only a run with none is complete.
+                $stats = Get-JIMActivityStats -ActivityId $ActivityId -ErrorAction SilentlyContinue
+                if ($stats -and $stats.totalObjectErrors -eq 0) {
+                    $status = 'Complete'
+                }
+            }
+        }
+    }
 
     # A warning accepted only for the shape the caller names: every line of the Activity's own warning message
     # matches, and no object failed (an item error would also make the status CompleteWithWarning).
@@ -5617,6 +5724,75 @@ function Assert-NoWorkerErrors {
     Write-Host "✓ PASSED: No Error/Fatal lines in $($Containers -join ', ') logs" -ForegroundColor Green
 }
 
+function Assert-JimServicesNotRestarted {
+    <#
+    .SYNOPSIS
+        Fails the scenario when a JIM service container restarted while it ran.
+
+    .DESCRIPTION
+        A process the kernel kills for lack of memory logs nothing on its way out, so the error-line scans cannot
+        see it; the container's restart can. Compares each container's start time with the scenario's start, and
+        when one restarted, quotes the kernel's out-of-memory record if it has one, so the failure names its cause
+        rather than leaving it to be dug out of dmesg.
+
+    .PARAMETER Since
+        When the scenario started (UTC).
+
+    .PARAMETER Containers
+        Containers to check. Defaults to jim.web, jim.worker, jim.scheduler.
+
+    .PARAMETER KernelLog
+        Returns the kernel log's lines. Defaults to dmesg, falling back to a non-interactive sudo when the kernel
+        log is restricted; returns nothing when neither is permitted.
+
+    .OUTPUTS
+        Throws if any container restarted. Returns quietly otherwise.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [datetime]$Since,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Containers = (Get-JimServiceContainers),
+
+        [Parameter(Mandatory=$false)]
+        [scriptblock]$KernelLog = {
+            $lines = @(dmesg -T 2>$null)
+            if ($lines.Count -eq 0) { $lines = @(sudo -n dmesg -T 2>$null) }
+            $lines
+        }
+    )
+
+    $restarted = @()
+    foreach ($container in $Containers) {
+        $state = [string](docker inspect --format '{{.State.StartedAt}}|{{.RestartCount}}' $container 2>$null)
+        if (-not $state) { continue }
+
+        $startedAt = [datetime]::Parse($state.Split('|')[0], [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal)
+        if ($startedAt -gt $Since.ToUniversalTime()) {
+            $restarted += $container
+        }
+    }
+
+    if ($restarted.Count -eq 0) {
+        Write-Host "✓ PASSED: No JIM service restarted during the scenario" -ForegroundColor Green
+        return
+    }
+
+    $message = "$($restarted -join ', ') restarted during the scenario"
+    $oomKills = @(& $KernelLog | Where-Object { $_ -match 'Out of memory: Killed process \d+ \(dotnet\)' })
+    if ($oomKills.Count -gt 0) {
+        $message += "; a JIM process was killed by the kernel for lack of memory: $($oomKills[-1])"
+    }
+    else {
+        $message += '; the kernel log holds no out-of-memory kill of a JIM process, or could not be read'
+    }
+
+    Write-Host "✗ FAILED: $message" -ForegroundColor Red
+    throw $message
+}
+
 function Remove-ContainerWithMissingNetwork {
     <#
     .SYNOPSIS
@@ -5657,3 +5833,69 @@ function Remove-ContainerWithMissingNetwork {
 
 # Functions are automatically available when dot-sourced
 # No need for Export-ModuleMember
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Initial Password delivery (#2039, #2064). Shared by the scenarios that provision accounts with an Initial Password:
+# on real Active Directory each is created disabled and enabled by the delivery, and until its password is delivered
+# JIM holds its userAccountControl change, so a step that expects the accounts settled must wait for this first.
+# ─────────────────────────────────────────────────────────────────────────────
+function Wait-ForInitialPasswordDelivery {
+    <#
+    .SYNOPSIS
+        Waits for the Password Delivery Service to deliver every password queued for a Connected System, and
+        throws, naming what is left, when that does not happen.
+    .DESCRIPTION
+        A delivered password leaves the queue, so nothing Pending or Delivering is the signal. A Parked or Expired
+        change will not deliver without a person, and a Held one waits for Password Synchronisation to be switched
+        on for the Connected System, so any of those ends the wait at once rather than at the timeout. Otherwise the
+        wait fails only when delivery stops making progress for StallSeconds, so it scales with the template: the
+        Password Delivery Service works through one Connected System's queue an account at a time (about 1,000 in
+        three minutes on Samba AD), so no fixed budget suits both Nano and the Scale templates. The default stall
+        allows for one retry on JIM's default schedule, whose first backoff is five minutes: a directory that does
+        not yet show an account it has just created answers the first attempt that way.
+    #>
+    param(
+        [Parameter(Mandatory=$true)][int]$ConnectedSystemId,
+        [Parameter(Mandatory=$true)][string]$ConnectedSystemName,
+        [Parameter(Mandatory=$false)][int]$StallSeconds = 420
+    )
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    # Progress is the queue's waiting count falling. The per-status reads below return their first page only, so the
+    # count comes from the queue summary; this scenario queues passwords for one Connected System, so it is exact.
+    $sinceProgress = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastWaiting = [int]::MaxValue
+    while ($true) {
+        $waiting = [int](Get-JIMPendingPasswordChange -Summary).WaitingCount
+        if ($waiting -lt $lastWaiting) {
+            $lastWaiting = $waiting
+            $sinceProgress.Restart()
+        }
+
+        $outstanding = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Pending) +
+                       @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Delivering)
+        $parked = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Parked)
+        $expired = @(Get-JIMPendingPasswordChange -ConnectedSystemId $ConnectedSystemId -Status Expired)
+        $held = @($outstanding | Where-Object { $_.held })
+
+        if ($outstanding.Count -eq 0 -and $parked.Count -eq 0 -and $expired.Count -eq 0) {
+            Write-Host ("  OK Initial Passwords delivered to {0} {1:N1} s after the export" -f $ConnectedSystemName, $stopwatch.Elapsed.TotalSeconds) -ForegroundColor Green
+            return
+        }
+
+        $cannotDeliver = $parked.Count -gt 0 -or $expired.Count -gt 0 -or $held.Count -gt 0
+        if ($cannotDeliver -or $sinceProgress.Elapsed.TotalSeconds -ge $StallSeconds) {
+            # A change's own status, held flag, attempts and target message say far more than "it timed out": a
+            # Parked change carries the directory's refusal in its own words.
+            $details = @(@($parked) + @($expired) + @($outstanding) | Select-Object -First 5 | ForEach-Object {
+                "{0} (status {1}, held {2}, attempts {3}): {4}" -f $_.metaverseObjectDisplayName, $_.status, $_.held, $_.attemptCount, $_.targetMessage
+            })
+            $reason = if ($cannotDeliver) { "they cannot be delivered without a person" } else { "none was delivered for $StallSeconds seconds, $waiting still waiting" }
+            throw ("The Initial Passwords queued for $ConnectedSystemName were not all delivered: $reason. " +
+                "Pending or Delivering: $($outstanding.Count) ($($held.Count) held), Parked: $($parked.Count), Expired: $($expired.Count). " +
+                "Until they are, the accounts stay disabled. First few: $($details -join '; ')")
+        }
+
+        Start-Sleep -Seconds 1
+    }
+}

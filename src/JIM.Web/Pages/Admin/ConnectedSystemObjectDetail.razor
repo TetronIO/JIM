@@ -91,8 +91,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">Metaverse Object:</MudText>
                     <MudLink Typo="Typo.body1" Href="@Utilities.GetMetaverseObjectHref(ConnectedSystemObject.MetaverseObject)">
-                        @(Utilities.GetMetaverseObjectHrefText(ConnectedSystemObject.MetaverseObject) ??
-                                        ConnectedSystemObject.MetaverseObjectId.ToString())
+                        @ConnectedSystemObject.MetaverseObject.NameOrId
                     </MudLink>
                 </MudStack>
                 <MudDivider Vertical="true" FlexItem="true" Class="my-1" />
@@ -108,14 +107,14 @@
 
         @* Second row: what can be done with the object. None of them is the page's main action, so all are outlined in the neutral colour: primary marks a main action alone. *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap mt-3" Spacing="2">
-            <MudButton Variant="Variant.Outlined" DropShadow="false"
+            <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Visibility" OnClick="PreviewSyncAsync"
                        Disabled="@_previewLoading" data-testid="jim-cso-preview-sync">
                 @(_previewLoading ? "Previewing…" : "Preview Sync")
             </MudButton>
 
             @* Opens the Causality Explorer on this object (#2100): what happened to it, newest first, and why. *@
-            <MudButton Variant="Variant.Outlined" DropShadow="false"
+            <MudButton Variant="Variant.Filled" DropShadow="false"
                        StartIcon="@Icons.Material.Filled.Hub" Href="@($"/causality/connected-system-objects/{ConnectedSystemObject.Id}")"
                        data-testid="jim-cso-explore-causality">Explore causality</MudButton>
 
@@ -125,7 +124,7 @@
             @* an unjoined object has no person to queue it against.                                          *@
             @if (_supportedExpiryBehaviours.Count > 0 && ConnectedSystemObject.MetaverseObjectId.HasValue)
             {
-                <MudButton Variant="Variant.Outlined" DropShadow="false"
+                <MudButton Variant="Variant.Filled" DropShadow="false"
                            StartIcon="@Icons.Material.Filled.Key" OnClick="OpenSetPasswordDialogAsync"
                            data-testid="jim-cso-set-password">Set Password</MudButton>
             }
@@ -359,11 +358,12 @@
             {
                 @* A SCIM 2.0 Service Provider object's imported changes also show the SCIM requests behind them (#124). *@
                 <ChangeHistoryTimeline Changes="@_changeHistoryRows"
+                                       ValueReader="@(_changeValueReader ??= new CsoChangeHistoryValueReader(JimFactory))"
                                        ChangeDetailExtra="@(_showScimRequests ? ScimRequestsFor : null)" />
                 @if (_changeHistoryRows.Count < _changeHistoryTotal)
                 {
                     <div class="d-flex justify-center mt-3">
-                        <MudButton Variant="Variant.Outlined"
+                        <MudButton Variant="Variant.Filled"
                                    Disabled="@_changeHistoryLoading"
                                    OnClick="LoadMoreChangeHistoryAsync">
                             @if (_changeHistoryLoading)
@@ -445,6 +445,9 @@
     private int _changeHistoryNextPage = 1;
     private bool _changeHistoryLoading;
     private readonly List<ChangeHistoryTimeline.ChangeGroup> _changeHistoryRows = new();
+
+    // Reads a change's values where the change history loaded only the first of them (#2498).
+    private CsoChangeHistoryValueReader? _changeValueReader;
 
     private List<BreadcrumbItem> Breadcrumbs { get; set; } = null!;
 
@@ -689,44 +692,8 @@
         }
     }
 
-    private ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(CsoChangeHistoryDto dto)
-    {
-        return new ChangeHistoryTimeline.ChangeGroup
-        {
-            ChangeId = dto.Id,
-            ChangeType = dto.ChangeType,
-            ChangeTime = dto.ChangeTime,
-            ChangeInitiatorType = MapInitiatorType(dto.InitiatedByType),
-            ChangeInitiatorName = dto.InitiatedByName,
-            ChangeInitiatorId = dto.InitiatedById,
-            ChangeMechanismType = "Import",
-            ConnectedSystemId = ConnectedSystemHeader?.Id,
-            ConnectedSystemName = ConnectedSystemHeader?.Name,
-            RunProfileName = dto.RunProfileName,
-            SyncRuleId = null,
-            SyncRuleName = null,
-            ActivityRunProfileExecutionItemId = dto.ActivityRunProfileExecutionItemId,
-            AttributeChanges = dto.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => new ChangeHistoryTimeline.AttributeChange
-                {
-                    AttributeName = ac.AttributeName,
-                    ChangeType = vc.ValueChangeType,
-                    Value = vc.ReferenceValue == null ? vc.ToDisplayString() : null,
-                    ReferenceValue = vc.ReferenceValue != null
-                        ? new ChangeHistoryTimeline.ReferenceValueInfo
-                        {
-                            TypeName = vc.ReferenceValue.TypeName,
-                            DisplayName = vc.ReferenceValue.DisplayName ?? vc.ReferenceValue.Id.ToString(),
-                            SecondaryId = vc.ReferenceValue.SecondaryId,
-                            Href = Utilities.GetConnectedSystemObjectHref(vc.ReferenceValue.ConnectedSystemId, vc.ReferenceValue.Id)
-                        }
-                        : null,
-                    IsMultiValued = ac.AttributePlurality == AttributePlurality.MultiValued,
-                    AttributeType = ac.AttributeType
-                }))
-                .ToList()
-        };
-    }
+    private ChangeHistoryTimeline.ChangeGroup MapDtoToChangeGroup(CsoChangeHistoryDto dto) =>
+        CsoChangeGroupMapper.Map(dto, ConnectedSystemHeader?.Id, ConnectedSystemHeader?.Name);
 
     /// <summary>
     /// One row of the attributes table: an attribute and the values of it this object holds. Public so the
@@ -939,15 +906,6 @@
         };
     }
 
-    private static string MapInitiatorType(ActivityInitiatorType initiatorType)
-    {
-        return initiatorType switch
-        {
-            ActivityInitiatorType.User => "User",
-            ActivityInitiatorType.ApiKey => "ApiKey",
-            _ => "Unknown"
-        };
-    }
 
     /// <summary>
     /// Gets a user-friendly display identifier for the CSO.

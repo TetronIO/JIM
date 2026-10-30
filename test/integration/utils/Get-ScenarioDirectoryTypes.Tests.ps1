@@ -36,6 +36,10 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 22 | Should -Be @('OpenLDAP')
     }
 
+    It 'restricts Scenario 032 (Intra-type References) to OpenLDAP' {
+        Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 32 | Should -Be @('OpenLDAP')
+    }
+
     It 'restricts Scenario 017 (Initial Password) to Samba AD and the Active Directory lab' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber 17 | Should -Be @('SambaAD', 'ActiveDirectory')
     }
@@ -52,8 +56,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
-    It 'restricts Scenarios 024 and 025 (Active Directory lab only) to ActiveDirectory' {
-        foreach ($number in 24, 25) {
+    It 'restricts Scenarios 024, 025, 030 and 031 (Active Directory lab only) to ActiveDirectory' {
+        foreach ($number in 24, 25, 30, 31) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')
         }
     }
@@ -81,16 +85,16 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $null | Should -Be @('SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory')
     }
 
-    It 'runs the Active Directory lab on whatever Samba AD runs, except the scenarios only a real domain controller can hold' {
-        # The lab stands in for Samba AD everywhere but 024 and 025, so a scenario supports one if and
+    It 'runs the Active Directory lab on whatever Samba AD runs, except the scenarios only a real domain controller or its AD FS server can hold' {
+        # The lab stands in for Samba AD everywhere but 024, 025, 030 and 031, so a scenario supports one if and
         # only if it supports the other. That is what let the -Scenario All sweep drop its
         # "judge an ActiveDirectory sweep by Samba AD" substitution.
         foreach ($number in 1..40) {
             $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number)
-            if ($number -in 24, 25) {
-                $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller"
+            if ($number -in 24, 25, 30, 31) {
+                $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller or the lab's AD FS server"
             }
-            elseif ($number -in 14, 19, 22) {
+            elseif ($number -in 14, 19, 22, 32) {
                 $supported | Should -Not -Contain 'ActiveDirectory' -Because "Scenario $number is OpenLDAP only"
             }
             else {
@@ -173,6 +177,10 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 29 | Should -Be $true
     }
 
+    It 'is true for Scenario 033 (initial administrator provisioning, File Connector systems only)' {
+        Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 33 | Should -Be $true
+    }
+
     It 'is false for a scenario that does use a directory' {
         Test-ScenarioIsDirectoryAgnostic -ScenarioNumber 1 | Should -Be $false
     }
@@ -186,6 +194,18 @@ Describe 'Test-ScenarioIsDirectoryAgnostic' {
     }
 }
 
+Describe 'Test-ScenarioRunsOnItsOwn' {
+    It 'keeps Scenario 031 (AD FS sign-in) out of the sweep, for ad-lab.yml to run on its own and report as jim-ad-lab-adfs' {
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber 31 | Should -BeTrue
+    }
+
+    It 'leaves every other scenario in the sweep, Scenario 030 (AD FS trust) included' {
+        foreach ($number in (1..40 | Where-Object { $_ -ne 31 })) {
+            Test-ScenarioRunsOnItsOwn -ScenarioNumber $number | Should -BeFalse -Because "Scenario $number is part of -Scenario All"
+        }
+        Test-ScenarioRunsOnItsOwn -ScenarioNumber $null | Should -BeFalse
+    }
+}
 Describe 'Get-ScenarioDirectoryTypeMenuEntry' {
     It 'offers a scenario with no restriction every directory type and All' {
         Get-ScenarioDirectoryTypeMenuEntry -ScenarioNumber 1 | Should -Be @('SambaAD', 'OpenLDAP', 'DirectoryServer389', 'ActiveDirectory', 'All')

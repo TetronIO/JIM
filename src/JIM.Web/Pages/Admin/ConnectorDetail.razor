@@ -14,12 +14,17 @@
 
 <PageTitle>Connector: @_connector?.Name</PageTitle>
 <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connector:</span> <span class="mud-primary-text">@_connector?.Name</span>
+    @if (_connector != null && Helpers.IsPreviewConnector(_connector.Name))
+    {
+        <PreviewChip Class="ml-1" />
+    }
     @* A built-in Connector links to its own page; any other, to the Connectors overview. Each page is a literal
        so the docs coverage check (COV-5) can confirm it exists. *@
     <PageInfo Title="Connector"
               DocsPage="@(_connector?.Name == ConnectorConstants.LdapConnectorName ? "connectors/jim-ldap-connector.md"
                         : _connector?.Name == ConnectorConstants.FileConnectorName ? "connectors/jim-file-connector.md"
                         : _connector?.Name == ConnectorConstants.ScimClientConnectorName ? "connectors/jim-scim-connector.md"
+                        : _connector?.Name == ConnectorConstants.ScimServiceProviderConnectorName ? "connectors/jim-scim-service-provider-connector.md"
                         : _connector?.Name == ConnectorConstants.SqlConnectorName ? "connectors/jim-sql-connector.md"
                         : "connectors/index.md")">
         A Connector is how JIM talks to one kind of system, such as a directory or a database. This page shows what it is and what it can do.
@@ -35,7 +40,7 @@
 
 @if (_connector != null)
 {
-    <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-5">
+    <NavigableMudTabs Class="mt-2" TabPanelsClass="pt-6">
 
         <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">

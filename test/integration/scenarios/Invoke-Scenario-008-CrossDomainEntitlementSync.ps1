@@ -18,7 +18,7 @@
     4. Sync groups with membership preservation
 
 .PARAMETER Step
-    Which test step to execute (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort, All)
+    Which test step to execute (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort, ImportRuleChange, All)
 
 .PARAMETER LeaverWindowSeconds
     LeaverCohort step only: how far in the future to place the cohort's end dates, i.e. the
@@ -47,7 +47,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("ImportToMV", "InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "LeaverCohort", "All")]
+    [ValidateSet("ImportToMV", "InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "LeaverCohort", "ImportRuleChange", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -285,11 +285,13 @@ try {
             -Filter $filter `
             -Attributes @($userNameAttr)
         if ($null -eq $result) { return @() }
-        $users = @()
+        # A List, not `$users += ...`: += copies the whole array on every add, which at 750k users took ~5 minutes
+        # of single-core time per call.
+        $users = [System.Collections.Generic.List[string]]::new()
         $lines = $result -split "`n"
         foreach ($line in $lines) {
             if ($line -match "^${userNameAttr}:\s*(.+)$") {
-                $users += $matches[1].Trim()
+                $users.Add($matches[1].Trim())
             }
         }
         return $users
@@ -1833,16 +1835,17 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remainingSeconds))
             }
 
-            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so the
-            # hot path (which skips unchanged objects) must miss the scope transition entirely.
-            Write-Host "  Negative control: full sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
-            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Full Sync"
+            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so a Delta
+            # Synchronisation (which selects only changed objects) must miss the scope transition entirely.
+            # A Full Synchronisation would not: it evaluates every object (#891).
+            Write-Host "  Negative control: delta sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
+            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Delta Sync"
             $controlDisconnected = Get-ActivityChangeCount -ActivityId $controlSync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($controlDisconnected -ne 0) {
-                throw "LeaverCohort negative control failed: a plain full sync disconnected $controlDisconnected object(s) without the reconciler. Either the unchanged-skip is not working or something else changed the cohort."
+                throw "LeaverCohort negative control failed: a delta sync with no data changes disconnected $controlDisconnected object(s). Something changed the cohort."
             }
-            Write-Host "    OK Hot path missed the static-data transition (0 disconnections)" -ForegroundColor Green
+            Write-Host "    OK Delta sync missed the static-data transition (0 disconnections)" -ForegroundColor Green
 
             # Step 7.7: Reconciler sweep. The built-in schedule is disabled by setup; trigger it
             # manually and wait for a terminal state (same pattern as Scenarios 012/13).
@@ -1865,13 +1868,13 @@ try {
             Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
             Write-Host "    OK Reconciler sweep completed" -ForegroundColor Green
 
-            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); this sync
-            # re-evaluates them past the unchanged-skip, disconnects them out of scope, and the
-            # User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
-            # Metaverse Objects synchronously, staging Target deprovisioning.
-            Write-Host "  Running full sync to process the flagged cohort..." -ForegroundColor Gray
-            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Full Sync"
+            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); a delta sync
+            # selects them by the flag (the run a schedule makes most often), disconnects them out of
+            # scope, and the User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace)
+            # deletes their Metaverse Objects synchronously, staging Target deprovisioning.
+            Write-Host "  Running delta sync to process the flagged cohort..." -ForegroundColor Gray
+            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Delta Sync"
             $applyDisconnected = Get-ActivityChangeCount -ActivityId $applySync.activityId -ChangeType "DisconnectedOutOfScope"
             if ($applyDisconnected -ne $cohortUids.Count) {
                 throw "LeaverCohort apply sync disconnected $applyDisconnected object(s) but the cohort has $($cohortUids.Count). The reconciler must flag the whole cohort in one sweep and the sync must process every flagged object."
@@ -1888,11 +1891,17 @@ try {
             # its nearest recorded cause, so the change waiting to export can be explained without opening the run.
             Write-Host "  Validating Queued by on the staged Target exports..." -ForegroundColor Gray
             $queuedByFailures = [System.Collections.Generic.List[string]]::new()
-            $stagedExports = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -All)
+            # Ask for just the two exports needed rather than every staged export: at Scale750k40kGroups the Target
+            # holds over 15,000, and listing them all walked 300+ pages.
             $groupsLosingMembers = @($verificationGroups | Where-Object { $groupBaselines[$_].CohortInGroup.Count -gt 0 })
-            $groupExport = $stagedExports | Where-Object {
-                $_.ChangeType -eq 'Update' -and $groupsLosingMembers -contains $_.SourceMetaverseObjectDisplayName } | Select-Object -First 1
-            $accountExport = $stagedExports | Where-Object { $_.ChangeType -eq 'Delete' -and $_.ConnectedSystemObjectId } | Select-Object -First 1
+            $groupExport = $null
+            foreach ($groupName in $groupsLosingMembers) {
+                $groupExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Update -Search $groupName -All) |
+                    Where-Object { $_.SourceMetaverseObjectDisplayName -eq $groupName } | Select-Object -First 1
+                if ($groupExport) { break }
+            }
+            $accountExport = @(Get-JIMPendingExport -ConnectedSystemId $targetSystem.id -ChangeType Delete -PageSize 100) |
+                Where-Object { $_.ConnectedSystemObjectId } | Select-Object -First 1
             foreach ($staged in @(
                     @{ Label = "the Group export"; Export = $groupExport },
                     @{ Label = "the account deletion"; Export = $accountExport })) {
@@ -2127,6 +2136,183 @@ try {
 
             $testResults.Steps += "LeaverCohort"
         }
+    }
+
+    # Test 8: ImportRuleChange (an import Synchronisation Rule change is applied by the next Delta Synchronisation, #2615)
+    #
+    # Last, after LeaverCohort, so that it cannot disturb that step. LeaverCohort's negative control relies on a Delta
+    # Synchronisation with no data changes processing only the changed objects; a change left awaiting synchronisation for the
+    # user Object Type would make that run process every user and see the scope transition it is there to miss. This step needs
+    # only a synchronised baseline and hands that baseline back (the Attribute Flow removed, its value recalled, nothing awaiting
+    # synchronisation). The one thing LeaverCohort leaves behind that matters here, a cohort of users in Source that are out of
+    # scope and not joined, is left out of the expected count below.
+    #
+    # Under All it is left out at the Scale templates: it runs two Delta Synchronisations that each process every user, which
+    # adds nothing those runs measure. Ask for it by name to run it there.
+    if ($Step -eq "ImportRuleChange" -or ($Step -eq "All" -and $Template -notlike "Scale*")) {
+        Write-TestSection "Test 8: ImportRuleChange (Import Rule Change Applied by a Delta Synchronisation)"
+
+        Write-Host "This test validates that an import Attribute Flow change reaches existing objects at the next Delta Synchronisation:" -ForegroundColor Gray
+        Write-Host "  - The change is recorded as awaiting synchronisation for the user Object Type only" -ForegroundColor Gray
+        Write-Host "  - A Delta Synchronisation with no change in Source processes every user, and not the groups" -ForegroundColor Gray
+        Write-Host "  - Removing the Attribute Flow is applied the same way, restoring the baseline" -ForegroundColor Gray
+        Write-Host ""
+
+        if (-not (Test-TemplateSpansSyncPages -Template $Template)) {
+            Write-Host "  ⚠ Single-page run: every user fits in one synchronisation page at the $Template template, so the code between pages is not exercised. Run at Medium or above." -ForegroundColor Yellow
+        }
+
+        # What the change touches: Source's user and group import rules, and the Connected System Object Type each applies to.
+        $sourceRules = @(Get-JIMSyncRule -ConnectedSystemId $sourceSystem.id)
+        $userImportRule = $sourceRules | Where-Object { $_.direction -eq "Import" -and $_.metaverseObjectTypeName -eq "User" } | Select-Object -First 1
+        $groupImportRule = $sourceRules | Where-Object { $_.direction -eq "Import" -and $_.metaverseObjectTypeName -eq "Group" } | Select-Object -First 1
+        if (-not $userImportRule -or -not $groupImportRule) {
+            throw "ImportRuleChange could not find the Source user and group import Synchronisation Rules"
+        }
+        $userTypeId = $userImportRule.connectedSystemObjectTypeId
+        $groupTypeId = $groupImportRule.connectedSystemObjectTypeId
+
+        # The probe: a constant Attribute Flow into a Metaverse attribute that no Attribute Flow in this scenario reads or writes
+        # (Office is bound to the User type and appears in none of the mappings in Setup-Scenario-008.ps1). It changes every
+        # user's Metaverse value without a change in Source, and gives Target nothing to export.
+        $probeAttributeName = "Office"
+        $probeValue = "ImportRuleChange"
+        $probeAttribute = Get-JIMMetaverseAttribute -Name $probeAttributeName -ErrorAction Stop
+
+        # How many users the next synchronisation must process, and how many of them reach the Metaverse. LeaverCohort leaves its
+        # cohort in Source out of scope and not joined, so those users are processed but carry no value to assert.
+        $userCsoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $sourceSystem.id -ObjectTypeId $userTypeId -Count)
+        $groupCsoCount = [int](Get-JIMConnectedSystemObject -ConnectedSystemId $sourceSystem.id -ObjectTypeId $groupTypeId -Count)
+        $unjoinedUsers = @(Get-JIMConnectedSystemObject -ConnectedSystemId $sourceSystem.id -ObjectTypeId $userTypeId -JoinType NotJoined -All -PageSize 100)
+        $expectedUsers = $userCsoCount - $unjoinedUsers.Count
+        if ($expectedUsers -lt 1) {
+            throw "ImportRuleChange found no joined users in Source; it needs the synchronised baseline from InitialSync"
+        }
+        Write-Host "  Source holds $userCsoCount user(s), $expectedUsers of them joined, and $groupCsoCount group(s)" -ForegroundColor Cyan
+
+        # What Source's next synchronisation will process in full: one entry per Object Type with changes waiting for it.
+        function Get-SourceAwaitingSynchronisation {
+            return @((Get-JIMConnectedSystem -Id $sourceSystem.id).configurationDrift.awaitingSynchronisation | Where-Object { $_ })
+        }
+
+        function Get-UserCountWithProbeValue {
+            return [int](Get-JIMMetaverseObject -Count -ObjectTypeName "User" -AttributeName $probeAttributeName -AttributeValue $probeValue)
+        }
+
+        # A Delta Synchronisation of Source on its own, with no import before it: nothing in Source has changed.
+        function Invoke-SourceDeltaSync {
+            param([Parameter(Mandatory)][string]$Name)
+            $run = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $run.activityId -Name $Name
+            return Get-JIMActivity -Id $run.activityId
+        }
+
+        # What a run that applied the change must show. The Activity names the Object Type it processed in full and the changes
+        # it applied by doing so; its processed count shows it really did, with every user in it but not every group.
+        function Assert-UserTypeProcessedInFull {
+            param([Parameter(Mandatory)]$Activity, [Parameter(Mandatory)][string]$Label)
+
+            $inFull = @($Activity.configurationChangeSynchronisations)
+            Assert-Equal -Expected 1 -Actual $inFull.Count -Message "The $Label run processed one Object Type in full"
+            Assert-Equal -Expected $userTypeId -Actual $inFull[0].connectedSystemObjectTypeId -Message "The $Label run processed the user Object Type in full ($($inFull[0].objectTypeName))"
+            $appliedChanges = @($inFull[0].changes).Count
+            Assert-Condition -Condition ($inFull[0].isApplied -eq $true -and $appliedChanges -ge 1) -Message "The $Label run applied the $appliedChanges change(s) it claimed"
+
+            $processed = [int]$Activity.objectsProcessed
+            Assert-Condition -Condition ($processed -ge $userCsoCount) -Message "The $Label run processed $processed object(s), at least all $userCsoCount users"
+            Assert-Condition -Condition ($processed -lt ($userCsoCount + $groupCsoCount)) -Message "The $Label run did not process the groups in full ($processed of $($userCsoCount + $groupCsoCount) objects)"
+        }
+
+        # Baseline. A run that stopped part-way, or a repeat of this step, can leave the probe Attribute Flow, its value or changes
+        # awaiting synchronisation behind: put them right first, so that what follows measures this step's change alone.
+        foreach ($leftover in @(Get-JIMSyncRuleMapping -SyncRuleId $userImportRule.id | Where-Object { $_.targetMetaverseAttributeId -eq $probeAttribute.id })) {
+            Write-Host "  Removing the probe Attribute Flow an earlier run left behind (mapping $($leftover.id))..." -ForegroundColor Yellow
+            Remove-JIMSyncRuleMapping -SyncRuleId $userImportRule.id -MappingId $leftover.id -Force -ErrorAction Stop
+        }
+        if (@(Get-SourceAwaitingSynchronisation).Count -gt 0) {
+            Write-Host "  Applying the changes already awaiting synchronisation..." -ForegroundColor Yellow
+            Invoke-SourceDeltaSync -Name "ImportRuleChange baseline Delta Sync" | Out-Null
+        }
+        $awaiting = @(Get-SourceAwaitingSynchronisation)
+        Assert-Equal -Expected 0 -Actual $awaiting.Count -Message "Baseline: nothing is awaiting synchronisation"
+        $withProbeValue = Get-UserCountWithProbeValue
+        Assert-Equal -Expected 0 -Actual $withProbeValue -Message "Baseline: no user has a value for $probeAttributeName"
+
+        $probeMapping = $null
+        try {
+            # Step 8.1: Save the change. The save reports what it made the next synchronisation do.
+            Write-Host "  Adding $probeAttributeName = `"$probeValue`" to '$($userImportRule.name)'..." -ForegroundColor Gray
+            $probeMapping = New-JIMSyncRuleMapping -SyncRuleId $userImportRule.id -TargetMetaverseAttributeId $probeAttribute.id `
+                -Expression "`"$probeValue`"" -ErrorAction Stop
+            $saved = @($probeMapping.awaitingSynchronisation)
+            Assert-Equal -Expected 1 -Actual $saved.Count -Message "The save reports one Object Type awaiting synchronisation"
+            Assert-Equal -Expected $userTypeId -Actual $saved[0].connectedSystemObjectTypeId -Message "The save reports the user Object Type"
+
+            # Step 8.2: Awaiting synchronisation for the user Object Type only, on the Connected System and on the rule.
+            $awaiting = @(Get-SourceAwaitingSynchronisation)
+            Assert-Equal -Expected 1 -Actual $awaiting.Count -Message "One Object Type is awaiting synchronisation on Source"
+            Assert-Equal -Expected $userTypeId -Actual $awaiting[0].connectedSystemObjectTypeId -Message "It is the user Object Type ($($awaiting[0].objectTypeName))"
+            Assert-Condition -Condition ($awaiting[0].changeCount -ge 1 -and @($awaiting[0].changes).Count -ge 1) -Message "The change behind it is listed: $(@($awaiting[0].changes)[0].reason)"
+            Assert-Equal -Expected $userCsoCount -Actual $awaiting[0].objectCount -Message "The next synchronisation will process all $userCsoCount users"
+            $userRuleNow = Get-JIMSyncRule -Id $userImportRule.id
+            $groupRuleNow = Get-JIMSyncRule -Id $groupImportRule.id
+            Assert-Condition -Condition ($userRuleNow.awaitingSynchronisationChangeCount -ge 1) -Message "The user import rule shows the change awaiting synchronisation"
+            Assert-Equal -Expected 0 -Actual $groupRuleNow.awaitingSynchronisationChangeCount -Message "The group import rule shows nothing awaiting synchronisation"
+
+            # Step 8.3: One Delta Synchronisation, with nothing changed in Source, applies it.
+            Write-Host "  Running Source Delta Synchronisation (no import: nothing has changed in Source)..." -ForegroundColor Gray
+            $changeRun = Invoke-SourceDeltaSync -Name "ImportRuleChange Delta Sync"
+            Assert-UserTypeProcessedInFull -Activity $changeRun -Label "change"
+            $stagedExports = Get-ActivityChangeCount -ActivityId $changeRun.id -ChangeType "PendingExport"
+            Write-Host "    Pending Exports staged by the change run: $stagedExports (none expected: no export Attribute Flow reads $probeAttributeName)" -ForegroundColor $(if ($stagedExports -eq 0) { "Gray" } else { "Yellow" })
+
+            # Step 8.4: Every user carries the value, whichever synchronisation page it fell on. The count covers them all; the
+            # two ends of the Metaverse's creation order (the order the users were projected in, which normally puts them on
+            # different pages of the run when the template spans more than one) are then read in full, to check the value and the
+            # rule that contributed it.
+            $withProbeValue = Get-UserCountWithProbeValue
+            Assert-Equal -Expected $expectedUsers -Actual $withProbeValue -Message "All $expectedUsers joined users have a value for $probeAttributeName"
+            $firstPage = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName $probeAttributeName -AttributeValue $probeValue -Page 1 -PageSize 100)
+            $lastPage = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName $probeAttributeName -AttributeValue $probeValue -Page ([int][Math]::Ceiling($withProbeValue / 100.0)) -PageSize 100)
+            foreach ($end in @(@{ Label = "first"; Mvo = $firstPage[0] }, @{ Label = "last"; Mvo = $lastPage[-1] })) {
+                Assert-MvoAttributeValue -MvoId $end.Mvo.id -AttributeName $probeAttributeName -ExpectedValue $probeValue `
+                    -ExpectedContributingSyncRuleName $userImportRule.name -Name "The $($end.Label) user ($($end.Mvo.displayName)) has a value for $probeAttributeName"
+            }
+
+            # Step 8.5: Applied, so nothing is awaiting synchronisation any more.
+            $awaiting = @(Get-SourceAwaitingSynchronisation)
+            Assert-Equal -Expected 0 -Actual $awaiting.Count -Message "Nothing is awaiting synchronisation after the Delta Synchronisation"
+            $userRuleNow = Get-JIMSyncRule -Id $userImportRule.id
+            Assert-Equal -Expected 0 -Actual $userRuleNow.awaitingSynchronisationChangeCount -Message "The user import rule shows nothing awaiting synchronisation"
+        }
+        finally {
+            # Step 8.6: Whatever happened above, leave the rule as Setup-Scenario-008.ps1 made it.
+            if ($probeMapping) {
+                Remove-JIMSyncRuleMapping -SyncRuleId $userImportRule.id -MappingId $probeMapping.id -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Step 8.7: Restore. Removing the Attribute Flow is itself a change to the user import rule, so it is awaiting synchronisation
+        # again, and the next Delta Synchronisation applies it the same way, recalling the value it contributed.
+        $remaining = @(Get-JIMSyncRuleMapping -SyncRuleId $userImportRule.id | Where-Object { $_.targetMetaverseAttributeId -eq $probeAttribute.id })
+        Assert-Equal -Expected 0 -Actual $remaining.Count -Message "The probe Attribute Flow was removed"
+        $awaiting = @(Get-SourceAwaitingSynchronisation)
+        Assert-Equal -Expected 1 -Actual $awaiting.Count -Message "The removal is awaiting synchronisation on Source"
+        Assert-Equal -Expected $userTypeId -Actual $awaiting[0].connectedSystemObjectTypeId -Message "It is the user Object Type ($($awaiting[0].objectTypeName))"
+
+        Write-Host "  Running Source Delta Synchronisation to restore the baseline..." -ForegroundColor Gray
+        $restoreRun = Invoke-SourceDeltaSync -Name "ImportRuleChange Delta Sync (restore)"
+        Assert-UserTypeProcessedInFull -Activity $restoreRun -Label "restore"
+        $withProbeValue = Get-UserCountWithProbeValue
+        Assert-Equal -Expected 0 -Actual $withProbeValue -Message "No user has a value for $probeAttributeName any more"
+        $awaiting = @(Get-SourceAwaitingSynchronisation)
+        Assert-Equal -Expected 0 -Actual $awaiting.Count -Message "Nothing is awaiting synchronisation after the restore"
+
+        Write-Host ""
+        Write-Host "✓ ImportRuleChange test completed successfully" -ForegroundColor Green
+        Write-Host "  An import Attribute Flow change reached all $expectedUsers joined users at a Delta Synchronisation, and its removal was applied the same way" -ForegroundColor Gray
+
+        $testResults.Steps += "ImportRuleChange"
     }
 
     Write-TestSection "Test Execution Summary"

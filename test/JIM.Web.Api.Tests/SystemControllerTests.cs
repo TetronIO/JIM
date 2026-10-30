@@ -440,6 +440,28 @@ public class SystemControllerTests
     }
 
     [Test]
+    public async Task GetServiceHealthAsync_MemoryReported_MapsTheFiguresAndAMemoryLowVerdict()
+    {
+        var heartbeat = Heartbeat(JimService.WorkerSync, DateTime.UtcNow.AddSeconds(-2));
+        heartbeat.ProcessMemoryBytes = 41_000_000_000;
+        heartbeat.MemoryTotalBytes = 62_000_000_000;
+        heartbeat.MemoryAvailableBytes = 5_000_000_000;
+        var controller = BuildHealthController(heartbeat);
+
+        var result = await controller.GetServiceHealthAsync();
+
+        var worker = ((ServiceHealthResponse)((OkObjectResult)result).Value!).Services.Single(s => s.Service == JimService.WorkerSync);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(worker.Status, Is.EqualTo(ServiceHealthStatus.Degraded));
+            Assert.That(worker.Condition, Is.EqualTo(ServiceHealthCondition.MemoryLow));
+            Assert.That(worker.ProcessMemoryBytes, Is.EqualTo(41_000_000_000));
+            Assert.That(worker.MemoryTotalBytes, Is.EqualTo(62_000_000_000));
+            Assert.That(worker.MemoryAvailableBytes, Is.EqualTo(5_000_000_000));
+        }
+    }
+
+    [Test]
     public async Task GetServiceHealthAsync_WithNoHeartbeats_ReportsEveryServiceNeverStartedAndOverallUnhealthy()
     {
         var controller = BuildHealthController();

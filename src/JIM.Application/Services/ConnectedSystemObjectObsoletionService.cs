@@ -235,6 +235,10 @@ public static class ConnectedSystemObjectObsoletionService
         if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
             MetaverseObjectDeletionRuleApplier.RecordSchedulingItem(mvo, deletionExecutionItem);
 
+        // An immediate deletion is carried out by this item; the Deleted change record names it (#2460).
+        if (mvoDeletionFate == MvoDeletionFate.DeletedImmediately)
+            MetaverseObjectDeletionRuleApplier.RecordDeletingItem(mvo, deletionExecutionItem);
+
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
         // surviving contributor where one exists. An attribute with another contributor is always handed to the
         // survivor (a safe change-of-value, not a clear); the question the freeze answers is what happens to the

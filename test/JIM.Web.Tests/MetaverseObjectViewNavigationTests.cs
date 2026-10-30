@@ -43,12 +43,14 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
     private static readonly Guid AlphaId = Guid.NewGuid();
     private static readonly Guid BravoId = Guid.NewGuid();
+    private static readonly Guid FlaggedId = Guid.NewGuid();
     private const int NotConnectedRuleId = 92;
 
     private Mock<IMetaverseRepository> _metaverse = null!;
     private Mock<IConnectedSystemRepository> _connectedSystems = null!;
     private Mock<IActivityRepository> _activities = null!;
     private NavigationManager _navigation = null!;
+    private BunitAuthorizationContext _authorisation = null!;
 
     protected override void ConfigureAdditionalServices()
     {
@@ -69,6 +71,7 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
             .ReturnsAsync([]);
         SetupObject(AlphaId, connectorCount: 2, createdBy: "Alpha Administrator");
         SetupObject(BravoId, connectorCount: 1, createdBy: null);
+        SetupObject(FlaggedId, connectorCount: 1, createdBy: null, scopeReviewPending: true);
 
         sync.Setup(r => r.GetRetiredGeneratedValueHeadersForObjectAsync(It.IsAny<Guid>())).ReturnsAsync([]);
         sync.Setup(r => r.GetPendingPasswordChangeHeadersAsync(
@@ -111,18 +114,18 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object, sync.Object));
 
-        var authorisation = AddAuthorization();
-        authorisation.SetAuthorized("administrator");
-        authorisation.SetRoles("User", "Administrator");
+        _authorisation = AddAuthorization();
+        _authorisation.SetAuthorized("administrator");
     }
 
     [SetUp]
     public void SetUp()
     {
         _navigation = Services.GetRequiredService<NavigationManager>();
+        _authorisation.SetRoles("User", "Administrator");
     }
 
-    private void SetupObject(Guid id, int connectorCount, string? createdBy)
+    private void SetupObject(Guid id, int connectorCount, string? createdBy, bool scopeReviewPending = false)
     {
         _metaverse
             .Setup(r => r.GetMetaverseObjectHeaderAsync(id))
@@ -135,7 +138,8 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
                 {
                     Id = id,
                     Type = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" },
-                    Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                    Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                    ScopeReviewPending = scopeReviewPending
                 },
                 ChangeCount = 1,
                 ConnectorCount = connectorCount,
@@ -191,9 +195,9 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
     /// <summary>
     /// Opens the page on one object and tab, as a deep link does: the tabs read <c>?t=</c> on their first render.
     /// </summary>
-    private IRenderedComponent<View> RenderObject(Guid id, string tab)
+    private IRenderedComponent<View> RenderObject(Guid id, string tab, string? view = null)
     {
-        _navigation.NavigateTo($"/t/{TypeUrlParam}/v/{id}?t={tab}");
+        _navigation.NavigateTo($"/t/{TypeUrlParam}/v/{id}?t={tab}" + (view == null ? "" : $"&view={view}"));
         return Render<View>(p => p
             .Add(c => c.TypeNameUrlParam, TypeUrlParam)
             .Add(c => c.IdParam, id));
@@ -219,18 +223,45 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
         page.FindComponents<MudTabPanel>().Single(p => p.Instance.Text == "Connections").Instance.BadgeData;
 
     /// <summary>
-    /// The page opens the Causality Explorer on itself (#2100) from whichever tab is showing.
+    /// The Causality Explorer is an Administrator's diagnostic, opened from the Inspect view (#2100): the page offers
+    /// it there, on this object, and nowhere else.
+    /// </summary>
+    [Test]
+    public void ExploreCausality_OfferedFromTheInspectViewOnThisObject()
+    {
+        var page = RenderObject(AlphaId, "details", "inspect");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponent<MvoDetailsTable>().Instance.CausalityExplorerHref,
+            Is.EqualTo($"/causality/metaverse-objects/{AlphaId}")));
+    }
+
+    /// <summary>
+    /// The tab bar carries only the views of the object; the explorer is not offered beside the tabs on any of them.
     /// </summary>
     [TestCase("details")]
     [TestCase("changes")]
-    public void ExploreCausality_OpensTheExplorerOnThisObject(string tab)
+    public void ExploreCausality_NotOfferedBesideTheTabs(string tab)
     {
         SetupChangeHistory(AlphaId, "Alpha change");
 
         var page = RenderObject(AlphaId, tab);
 
-        page.WaitForAssertion(() => Assert.That(page.Find("[data-testid='jim-mvo-explore-causality']").GetAttribute("href"),
-            Is.EqualTo($"/causality/metaverse-objects/{AlphaId}")));
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        Assert.That(page.FindAll("[data-testid='jim-mvo-explore-causality']"), Is.Empty);
+    }
+
+    /// <summary>
+    /// A reader who is not an Administrator cannot open the explorer, so the Inspect view does not offer it.
+    /// </summary>
+    [Test]
+    public void ExploreCausality_NotOfferedToAReaderWhoIsNotAnAdministrator()
+    {
+        _authorisation.SetRoles("User");
+
+        var page = RenderObject(AlphaId, "details", "inspect");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MvoDetailsTable>(), Is.Not.Empty));
+        Assert.That(page.FindComponent<MvoDetailsTable>().Instance.CausalityExplorerHref, Is.Null);
     }
 
     [Test]
@@ -364,6 +395,47 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
         ShowObject(page, BravoId, "properties");
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("Alpha Administrator")));
+    }
+
+    private const string ExportReviewBanner = "[data-testid='jim-export-review-banner']";
+
+    /// <summary>
+    /// An object flagged for review against every export rule says so above its tabs, to an administrator (#2615).
+    /// </summary>
+    [Test]
+    public void ExportReview_ObjectFlaggedForReview_IsShownToAnAdministrator()
+    {
+        var page = RenderObject(FlaggedId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindAll(ExportReviewBanner), Has.Count.EqualTo(1)));
+    }
+
+    [Test]
+    public void ExportReview_ObjectNotFlagged_ShowsNoBanner()
+    {
+        var page = RenderObject(AlphaId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        Assert.That(page.FindAll(ExportReviewBanner), Is.Empty);
+    }
+
+    /// <summary>
+    /// The banner is for administrators, and the flag is not read for anyone else: the component the page places is told
+    /// nothing is pending, so nothing about the review reaches a reader who cannot see it.
+    /// </summary>
+    [Test]
+    public void ExportReview_ReaderWhoIsNotAnAdministrator_SeesNoBannerAndIsNotGivenTheFlag()
+    {
+        _authorisation.SetRoles("User");
+
+        var page = RenderObject(FlaggedId, "details");
+
+        page.WaitForAssertion(() => Assert.That(page.FindComponents<MudTabPanel>(), Is.Not.Empty));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.FindAll(ExportReviewBanner), Is.Empty);
+            Assert.That(page.FindComponent<ExportReviewPendingBanner>().Instance.Pending, Is.False);
+        }
     }
 
     private sealed class FakeJimApplicationFactory(IRepository repository, ISyncRepository syncRepository) : IJimApplicationFactory

@@ -156,7 +156,8 @@ public class ExportPhaseWiringTests : WorkflowTestBase
                 It.IsAny<Func<ISyncRepositoryScope>?>(),
                 It.IsAny<Func<List<ProcessedExportItem>, Task>?>(),
                 It.IsAny<JIM.Application.UniqueValues.UniqueValueReservationSet?>(),
-                It.IsAny<Action<IReadOnlyList<string>>?>()))
+                It.IsAny<Action<IReadOnlyList<string>>?>(),
+                It.IsAny<Guid?>()))
             .Returns(async (
                 ConnectedSystem _,
                 IConnector _,
@@ -168,7 +169,8 @@ public class ExportPhaseWiringTests : WorkflowTestBase
                 Func<ISyncRepositoryScope>? _,
                 Func<List<ProcessedExportItem>, Task>? _,
                 JIM.Application.UniqueValues.UniqueValueReservationSet? _,
-                Action<IReadOnlyList<string>>? _) =>
+                Action<IReadOnlyList<string>>? _,
+                Guid? _) =>
             {
                 if (progressCallback != null)
                 {

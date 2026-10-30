@@ -64,6 +64,13 @@ public class MvoChangeHistoryDto
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
 
     /// <summary>
+    /// The Activity the change was made in, such as a synchronisation, a scheduled deletion or a sign-in. Null when
+    /// the Activity has since been removed by history retention, or for a change recorded before Activities were
+    /// linked to changes.
+    /// </summary>
+    public Guid? ActivityId { get; set; }
+
+    /// <summary>
     /// The unique identifier of the Connected System Object whose synchronisation made the change, when one did.
     /// </summary>
     public Guid? CsoId { get; set; }
@@ -116,7 +123,16 @@ public class MvoAttributeChangeDto
     /// </summary>
     public int? AttributeId { get; set; }
 
+    /// <summary>
+    /// The attribute's first value changes, at most ten. When <c>valueChangeTotal</c> is larger, the rest are read a
+    /// page at a time from the change's attribute values endpoint.
+    /// </summary>
     public List<MvoValueChangeDto> ValueChanges { get; set; } = new();
+
+    /// <summary>
+    /// How many value changes the attribute has in all, including any not returned in <c>valueChanges</c>.
+    /// </summary>
+    public int ValueChangeTotal { get; set; }
 }
 
 /// <summary>
@@ -169,10 +185,20 @@ public class MvoValueChangeDto
     public string? ContributedBySystemName { get; set; }
 
     /// <summary>
-    /// True when a Generated Value Attribute Flow produced this value (#399): the contributing Synchronisation Rule
-    /// is the generating one and the value is one the generation produced. Set by
-    /// <c>MetaverseServer.GetMvoChangeHistoryAsync</c>, not by the repository.
+    /// What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Null when no source was
+    /// recorded for the change.
     /// </summary>
+    /// <remarks>#2472.</remarks>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ContributedByClaimType { get; set; }
+
+    /// <summary>
+    /// True when a Generated Value Attribute Flow produced this value; false when a Synchronisation Rule mapping, a
+    /// sign-in claim or another source did.
+    /// </summary>
+    // Set by MetaverseServer.GetMvoChangeHistoryAsync, not by the repository (#399).
     public bool IsGeneratedValue { get; set; }
 
     /// <summary>

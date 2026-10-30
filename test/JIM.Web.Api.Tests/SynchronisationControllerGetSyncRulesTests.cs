@@ -14,6 +14,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Staging.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -34,6 +35,7 @@ public class SynchronisationControllerGetSyncRulesTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
     private Mock<ICredentialProtectionService> _mockCredentialProtection = null!;
@@ -47,8 +49,12 @@ public class SynchronisationControllerGetSyncRulesTests
         _mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+        _mockConnectedSystemRepo.StubConfigurationChangeSynchronisationReads();
+        _mockMetaverseRepo.StubExportReviewReads();
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
@@ -142,6 +148,55 @@ public class SynchronisationControllerGetSyncRulesTests
 
         _mockConnectedSystemRepo.Verify(r => r.GetSyncRuleHeadersAsync(null, null), Times.Once);
         _mockConnectedSystemRepo.Verify(r => r.GetSyncRulesAsync(It.IsAny<bool>()), Times.Never);
+    }
+
+    /// <summary>
+    /// What each rule on the page is waiting on comes from one read per kind of rule, however many rules the page holds.
+    /// </summary>
+    [Test]
+    public async Task GetSyncRulesAsync_ImportAndExportRules_ReportWhatTheyAreWaitingOnWithOneReadEachAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync([new ObjectTypeAwaitingSynchronisation { ConnectedSystemId = 1, ConnectedSystemObjectTypeId = 0, ChangeCount = 3 }]);
+        _mockMetaverseRepo.Setup(r => r.GetExportReviewPendingCountsAsync(It.IsAny<IReadOnlyCollection<int>>()))
+            .ReturnsAsync(new Dictionary<int, int> { [0] = 12 });
+
+        var result = await _controller.GetSyncRulesAsync(new PaginationRequest(), new SyncRuleFilterRequest()) as OkObjectResult;
+        var rules = ((PaginatedResponse<SyncRuleHeader>)result!.Value!).Items.ToDictionary(rule => rule.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rules[1].AwaitingSynchronisationChangeCount, Is.EqualTo(3), "an import rule on the waiting type");
+            Assert.That(rules[3].ExportReviewPendingCount, Is.EqualTo(12), "an export rule on a Metaverse Object Type with flagged objects");
+            Assert.That(rules[3].AwaitingSynchronisationChangeCount, Is.Zero);
+            Assert.That(rules[1].ExportReviewPendingCount, Is.Zero);
+            _mockConnectedSystemRepo.Verify(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()), Times.Once);
+            _mockMetaverseRepo.Verify(r => r.GetExportReviewPendingCountsAsync(It.IsAny<IReadOnlyCollection<int>>()), Times.Once);
+        }
+    }
+
+    [Test]
+    public async Task GetSyncRulesAsync_FilteredToExportRules_DoesNotReadChangesAwaitingSynchronisationAsync()
+    {
+        await _controller.GetSyncRulesAsync(new PaginationRequest(), new SyncRuleFilterRequest { Directions = [SyncRuleDirection.Export] });
+
+        _mockConnectedSystemRepo.Verify(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetSyncRuleAsync_ImportRuleOfAWaitingType_ReportsHowManyChangesAreWaitingAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(new SyncRule
+        {
+            Id = 5, Name = "HR Inbound", Direction = SyncRuleDirection.Import, ConnectedSystemId = 1, ConnectedSystemObjectTypeId = 9,
+            MetaverseObjectTypeId = 4
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangesAwaitingSynchronisationAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync([new ObjectTypeAwaitingSynchronisation { ConnectedSystemId = 1, ConnectedSystemObjectTypeId = 9, ChangeCount = 2 }]);
+
+        var result = await _controller.GetSyncRuleAsync(5) as OkObjectResult;
+
+        Assert.That(((SyncRuleHeader)result!.Value!).AwaitingSynchronisationChangeCount, Is.EqualTo(2));
     }
 
     [Test]

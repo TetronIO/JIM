@@ -102,10 +102,11 @@ html[lang] {
     --mud-palette-table-hover: rgba(30, 58, 95, 0.09);
 
     /* === JIM Custom: Attribute table name column === */
-    /* A cool grey from the same navy as the borders. It was #f2f0f0, a warm grey, which is the other half
-       of why the old blue hover jarred here: a cool highlight over a warm ground. Same weight against the
-       white surface as before, so the column still reads as a row header. */
-    --jim-attr-name-bg: #eef1f4;
+    /* The inner-surface value (#f7f7f7), as the dark theme uses its own: this column is a surface nested in
+       the table, like the header row it now matches. It was #eef1f4, a steel blue-grey that was the only cool
+       tone in a theme of neutral greys and violet, and read as foreign. The lightest neutral also leaves the
+       selected row's violet tint as the one thing in the column that stands out. */
+    --jim-attr-name-bg: #f7f7f7;
 
     /* === JIM Custom: JSON Syntax Highlighting === */
     --jim-json-key: #005da8;

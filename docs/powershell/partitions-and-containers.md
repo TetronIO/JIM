@@ -9,9 +9,36 @@ audience: automation-author
 
 The partition and container cmdlets import a Connected System's hierarchy, choose which of its partitions and containers JIM imports objects from, and how far beneath each container. How they decide what JIM sees is covered in [Partitions and Containers](../configuration/partitions-and-containers.md).
 
+```jim-diagram
+archetype: comparison
+title: Two ways to set Container Scope, one Container or the whole scope as text
+desc: "Container Scope can be set one Container at a time with Set-JIMConnectedSystemContainer, or all at once as text with Set-JIMConnectedSystemContainerScopeText. Set-JIMConnectedSystemContainer changes what one Container states, with -Selected, -Excluded and -Scope, one call per Container; every Container it does not name keeps its setting, and the partition holding it must be selected separately, with Set-JIMConnectedSystemPartition. Set-JIMConnectedSystemContainerScopeText states the whole scope, one include or exclude line per Container; a Container the text does not name is deselected, naming a Container selects its partition, and the text is applied in one call, all or nothing, so one bad line changes nothing. Either way, the Containers must first be imported with Import-JIMConnectedSystemHierarchy."
+columns:
+  - { label: One Container, sub: "`Set-JIMConnectedSystemContainer`" }
+  - { label: The whole scope as text, sub: "given to `-Text`" }
+rows:
+  - label: You state
+    cells:
+      - { text: "`-Selected`, `-Excluded`, `-Scope`", sub: for that Container alone }
+      - { text: one line per Container, sub: "`include` or `exclude`" }
+  - label: Containers not named
+    cells:
+      - { text: keep their settings }
+      - { text: are deselected }
+  - label: The partition
+    cells:
+      - { text: "selected separately", sub: "`Set-JIMConnectedSystemPartition`" }
+      - { text: selected by naming a Container in it }
+  - label: Many Containers
+    cells:
+      - { text: one call each }
+      - { text: one call, sub: "all or nothing: one bad line changes nothing" }
+footer: "Import the Containers first with `Import-JIMConnectedSystemHierarchy`"
+```
+
 ---
 
-## Import-JIMConnectedSystemHierarchy
+## :material-import: Import-JIMConnectedSystemHierarchy
 
 Imports a Connected System's partitions and containers, or refreshes those imported before, keeping your selections.
 
@@ -75,7 +102,7 @@ Get-JIMConnectedSystem -Id 3 |
 
 ---
 
-## Get-JIMConnectedSystemPartition
+## :material-view-list-outline: Get-JIMConnectedSystemPartition
 
 Gets a Connected System's partitions, each with its tree of containers.
 
@@ -118,9 +145,9 @@ Get-JIMConnectedSystem -Id 3 | Get-JIMConnectedSystemPartition
 
 ---
 
-## Get-JIMConnectedSystemDirectoryServer
+## :material-dns-outline: Get-JIMConnectedSystemDirectoryServer
 
-Discovers the domain controllers in a Connected System's directory, with the Active Directory Site each belongs to. Only Connected Systems using the LDAP Connector against an Active Directory or Samba AD directory support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
+Discovers the directory servers in a Connected System's directory, for choosing a value for the setting its Connector fills from discovery. For the LDAP Connector these are the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site each belongs to, and the setting is Preferred Domain Controller; Connectors that do not support discovery, and LDAP directories that are not AD-family (OpenLDAP, 389 Directory Server, Generic), return an error naming why. Purely informational: it never writes anything. Aliased as `Get-JIMConnectedSystemDomainController`.
 
 <!-- BEGIN GENERATED: Get-JIMConnectedSystemDirectoryServer -->
 ### Syntax
@@ -137,12 +164,14 @@ Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
 
 ### Output
 
-One entry per domain controller found: its HostName, and the Active Directory Site it belongs to.
+One entry per server found: its HostName, the Active Directory Site it belongs to (empty for directories that have no Sites), and the id and name of the setting its host name is a value for.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `HostName` | `string` | The fully qualified domain name of the directory server, e.g. "dc01.corp.local". |
 | `Site` | `string` | The Active Directory Site the server belongs to, e.g. "Default-First-Site-Name". Empty for directories that have no concept of Sites. |
+| `TargetSettingId` | `int` | The id of the Connected System setting this server's host name is a value for (for the LDAP Connector, Preferred Domain Controller): the key to use when setting it with `Set-JIMConnectedSystem -SettingValues` or the update endpoint. Empty only if the Connected System does not carry the setting its Connector names. |
+| `TargetSettingName` | `string` | The name of the Connected System setting this server's host name is a value for, e.g. "Preferred Domain Controller". |
 <!-- END GENERATED: Get-JIMConnectedSystemDirectoryServer -->
 
 ### Examples
@@ -165,7 +194,7 @@ Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
 
 ---
 
-## Set-JIMConnectedSystemPartition
+## :material-pencil-outline: Set-JIMConnectedSystemPartition
 
 Chooses whether JIM imports objects from a partition of a Connected System.
 
@@ -208,7 +237,7 @@ Set-JIMConnectedSystemPartition -ConnectedSystemId 3 -PartitionId 1 -Selected $f
 
 ---
 
-## Set-JIMConnectedSystemContainer
+## :material-folder-outline: Set-JIMConnectedSystemContainer
 
 Chooses whether, and how far beneath it, JIM imports objects from a container.
 
@@ -294,7 +323,7 @@ Set-JIMConnectedSystemContainer -ConnectedSystemId 3 -ContainerId 12 -Excluded $
 
 ---
 
-## Get-JIMConnectedSystemContainerScopeText
+## :material-folder-search-outline: Get-JIMConnectedSystemContainerScopeText
 
 Reads a Connected System's Container Scope as text, one statement per line.
 
@@ -346,7 +375,7 @@ Get-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 |
 
 ---
 
-## Set-JIMConnectedSystemContainerScopeText
+## :material-folder-edit-outline: Set-JIMConnectedSystemContainerScopeText
 
 States a Connected System's whole Container Scope as text.
 
@@ -402,7 +431,7 @@ Set-JIMConnectedSystemContainerScopeText -ConnectedSystemId 3 -Text 'include one
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create, change and delete the Connected Systems whose hierarchy these cmdlets manage
 - [Connected System Schema](connected-system-schema.md): import the schema, and choose the Object Types imported from the selected containers

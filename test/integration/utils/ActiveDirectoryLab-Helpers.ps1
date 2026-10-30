@@ -27,8 +27,32 @@
 
 Set-StrictMode -Version Latest
 
-# The instances the lab has, in the order they are reverted and reported.
-$script:AdLabInstanceOrder = @('Primary', 'Source', 'Target')
+# The instances the lab has, in the order they are reverted and reported. AdfsPrimary, the AD FS server, comes after
+# the domain controller its baseline pairs with (test/integration/ad-lab/README.md, The AD FS server).
+$script:AdLabInstanceOrder = @('Primary', 'Source', 'Target', 'AdfsPrimary')
+
+# The scenarios that sign in through the lab's AD FS server. Only these revert it (it takes minutes: AD FS is a
+# delayed-start service) and start JIM with it as the identity provider.
+$script:AdLabFederationScenarios = @(30, 31)
+
+function Test-ActiveDirectoryLabFederationScenario {
+    <#
+    .SYNOPSIS
+        Whether a scenario signs in through the lab's AD FS server, adfs-primary.
+
+    .PARAMETER ScenarioNumber
+        The scenario's number, or $null when there is none.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    return ($null -ne $ScenarioNumber -and $ScenarioNumber -in $script:AdLabFederationScenarios)
+}
 
 function Get-JimComposeArgument {
     <#
@@ -40,10 +64,16 @@ function Get-JimComposeArgument {
         jim.scheduler, the database) must use the same list of files or compose sees a different
         project each time. An Active Directory run adds the lab overlay, which gives the JIM
         containers extra_hosts entries for the domain controllers' FQDNs (their names are in no DNS the
-        containers can see, and their certificates name the FQDN).
+        containers can see, and their certificates name the FQDN). A scenario that signs in through the
+        lab's AD FS server (Test-ActiveDirectoryLabFederationScenario) adds the AD FS overlay after it, which
+        makes adfs-primary JIM's identity provider.
 
     .PARAMETER DirectoryType
         The run's directory type.
+
+    .PARAMETER ScenarioNumber
+        The scenario's number, or $null when there is none (the "All" sweep, which runs each scenario as its
+        own invocation).
 
     .PARAMETER BaseArguments
         The arguments that address the JIM stack before the lab overlay is appended. Defaults to the two
@@ -59,12 +89,19 @@ function Get-JimComposeArgument {
         [string]$DirectoryType,
 
         [Parameter(Mandatory=$false)]
-        [string[]]$BaseArguments = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml')
+        [string[]]$BaseArguments = @('-f', 'docker-compose.yml', '-f', 'docker-compose.override.yml'),
+
+        [Parameter(Mandatory=$false)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
     )
 
     $composeArguments = @($BaseArguments)
     if ($DirectoryType -eq 'ActiveDirectory') {
         $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab.yml')
+        if (Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $ScenarioNumber) {
+            $composeArguments += @('-f', 'test/integration/docker/docker-compose.ad-lab-adfs.yml')
+        }
     }
     return [string[]]$composeArguments
 }
@@ -72,7 +109,7 @@ function Get-JimComposeArgument {
 function Get-ActiveDirectoryLabInstance {
     <#
     .SYNOPSIS
-        The lab instances (Primary, Source, Target) a scenario uses, in revert order.
+        The lab instances (Primary, Source, Target, AdfsPrimary) a scenario uses, in revert order.
 
     .DESCRIPTION
         Primary is always used: it is the run's DirectoryConfig. Scenarios 2 and 8 also use Source and
@@ -80,6 +117,10 @@ function Get-ActiveDirectoryLabInstance {
         samba-ad-source and samba-ad-target. Scenario 25 uses Primary and Source: Primary has the Active
         Directory Recycle Bin on and Source has it off, and the scenario compares the two. Reverting a
         domain controller a scenario does not use costs minutes, so the rest get Primary alone.
+
+        A scenario that signs in through AD FS (Test-ActiveDirectoryLabFederationScenario) also uses
+        AdfsPrimary, after Primary: its baseline is the pair of dc-primary's, which holds its computer
+        account and group Managed Service Account, so the domain controller is reverted first.
 
     .PARAMETER ScenarioNumber
         The scenario's number, or $null when there is none.
@@ -93,10 +134,13 @@ function Get-ActiveDirectoryLabInstance {
     )
 
     if ($ScenarioNumber -in 2, 8) {
-        return [string[]]$script:AdLabInstanceOrder
+        return [string[]]@('Primary', 'Source', 'Target')
     }
     if ($ScenarioNumber -eq 25) {
         return [string[]]@('Primary', 'Source')
+    }
+    if (Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $ScenarioNumber) {
+        return [string[]]@('Primary', 'AdfsPrimary')
     }
     return [string[]]@('Primary')
 }
@@ -194,7 +238,7 @@ function Select-ActiveDirectoryLabCheckpoint {
         never chosen; that is how a stale one is rejected and rebuilt.
 
     .PARAMETER Instance
-        Primary, Source or Target.
+        Primary, Source, Target or AdfsPrimary (the AD FS server, never populated).
 
     .PARAMETER ScenarioNumber
         The scenario's number, or $null.
@@ -215,7 +259,7 @@ function Select-ActiveDirectoryLabCheckpoint {
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Primary', 'Source', 'Target')]
+        [ValidateSet('Primary', 'Source', 'Target', 'AdfsPrimary')]
         [string]$Instance,
 
         [Parameter(Mandatory=$false)]
@@ -337,7 +381,8 @@ function Get-ActiveDirectoryLabState {
         $state = ConvertFrom-LabDomainControllerJson -Json $json
 
         if ($state.CheckpointNames -cnotcontains $baseline) {
-            throw "The lab domain controller '$vmName' has no '$baseline' checkpoint (it has: $(if ($state.CheckpointNames.Count -gt 0) { $state.CheckpointNames -join ', ' } else { 'none' })). Every reset reverts to it, so the machine has to be built first: see test/integration/ad-lab/README.md (New-LabDomainController.ps1)."
+            $kind, $buildScript = if ($instance -eq 'AdfsPrimary') { 'AD FS server', 'New-LabFederationServer.ps1' } else { 'domain controller', 'New-LabDomainController.ps1' }
+            throw "The lab $kind '$vmName' has no '$baseline' checkpoint (it has: $(if ($state.CheckpointNames.Count -gt 0) { $state.CheckpointNames -join ', ' } else { 'none' })). Every reset reverts to it, so the machine has to be built first: see test/integration/ad-lab/README.md ($buildScript)."
         }
 
         $states += @{
@@ -430,6 +475,179 @@ function Invoke-ActiveDirectoryLabRestore {
     }
 }
 
+function Get-ActiveDirectoryLabFederationRequest {
+    <#
+    .SYNOPSIS
+        The HTTP request for the AD FS server's discovery document, written in printf's escapes.
+
+    .DESCRIPTION
+        The toolbox has openssl but no HTTP client, so the readiness check sends this through openssl s_client with
+        printf. HTTP/1.1 with Connection: close, so AD FS ends the connection after its one response and s_client
+        exits. The path and host come from the config, which Get-ActiveDirectoryLabFederationConfig builds from plain
+        names, and Wait-ActiveDirectoryLabFederationReady checks them again before they reach a shell.
+
+    .PARAMETER FederationConfig
+        The AD FS server's config (Get-ActiveDirectoryLabFederationConfig).
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$FederationConfig
+    )
+
+    return "GET $($FederationConfig.DiscoveryPath) HTTP/1.1\r\nHost: $($FederationConfig.Host)\r\nConnection: close\r\n\r\n"
+}
+
+function Test-ActiveDirectoryLabFederationDiscovery {
+    <#
+    .SYNOPSIS
+        Whether the AD FS server's answer to the discovery request shows it ready for JIM to sign in through.
+
+    .DESCRIPTION
+        Ready means a 200 with a JSON body whose issuer is the config's Issuer (the authority, as AD FS publishes it)
+        and whose authorization endpoint is under the config's Authority, the service name. AD FS is a delayed-start service, so for a minute or two after the machine answers on 443 it returns
+        503; that is not ready, and the reason says so.
+
+    .PARAMETER Response
+        What s_client printed: the status line, the headers, a blank line and the body.
+
+    .PARAMETER FederationConfig
+        The AD FS server's config (Get-ActiveDirectoryLabFederationConfig).
+
+    .OUTPUTS
+        A hashtable with Ready and Reason.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$Response,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$FederationConfig
+    )
+
+    $text = (($Response -join "`n") -replace "`r", '').Trim()
+    if (-not $text) {
+        return @{ Ready = $false; Reason = 'no response to the discovery request' }
+    }
+
+    $statusLine = ($text -split "`n")[0]
+    if ($statusLine -notmatch '^HTTP/\S+\s+200\b') {
+        return @{ Ready = $false; Reason = "discovery answered '$statusLine'" }
+    }
+
+    $bodyStart = $text.IndexOf('{')
+    $bodyEnd = $text.LastIndexOf('}')
+    $document = $null
+    if ($bodyStart -ge 0 -and $bodyEnd -gt $bodyStart) {
+        try { $document = $text.Substring($bodyStart, $bodyEnd - $bodyStart + 1) | ConvertFrom-Json -ErrorAction Stop } catch { $document = $null }
+    }
+    if ($null -eq $document) {
+        return @{ Ready = $false; Reason = 'the discovery response had no JSON document' }
+    }
+
+    $issuer = if ($document.PSObject.Properties['issuer']) { [string]$document.issuer } else { '' }
+    if ($issuer -ne $FederationConfig.Issuer) {
+        return @{ Ready = $false; Reason = "the discovery document's issuer is '$issuer', not '$($FederationConfig.Issuer)'" }
+    }
+    $authorize = if ($document.PSObject.Properties['authorization_endpoint']) { [string]$document.authorization_endpoint } else { '' }
+    if (-not $authorize.StartsWith("$($FederationConfig.Authority)/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return @{ Ready = $false; Reason = "the discovery document's authorization_endpoint '$authorize' is not under $($FederationConfig.Authority)" }
+    }
+
+    return @{ Ready = $true; Reason = 'discovery answered with the expected issuer and endpoints' }
+}
+
+function Wait-ActiveDirectoryLabFederationReady {
+    <#
+    .SYNOPSIS
+        Wait for the lab's AD FS server to publish its discovery document, verified, by its service name.
+
+    .DESCRIPTION
+        The AD FS counterpart of Wait-ActiveDirectoryReady.ps1. Each poll first makes sure its HTTPS certificate is
+        saved for the toolbox (Save-ActiveDirectoryCertificate, retried until the server answers on 443 at all), then
+        asks for the discovery document through openssl s_client in the toolbox, verifying the certificate against
+        that saved copy and the service name, as JIM will. Ready is Test-ActiveDirectoryLabFederationDiscovery's.
+
+        The certificate is not given to JIM: the AD FS scenarios trust it the way an administrator would.
+
+    .PARAMETER FederationConfig
+        The AD FS server's config (Get-ActiveDirectoryLabFederationConfig).
+
+    .PARAMETER TimeoutSeconds
+        How long to keep asking.
+
+    .PARAMETER PollSeconds
+        The pause between polls.
+
+    .OUTPUTS
+        $true when ready, $false when the timeout passed first.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Operator-facing progress in the runner, coloured like the runner''s own output.')]
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$FederationConfig,
+
+        [Parameter(Mandatory=$true)]
+        [int]$TimeoutSeconds,
+
+        [Parameter(Mandatory=$false)]
+        [int]$PollSeconds = 10
+    )
+
+    # These reach a shell inside the toolbox, so each must be a plain name or path first.
+    foreach ($key in 'Address', 'Host', 'VmName', 'DiscoveryPath') {
+        if ([string]$FederationConfig[$key] -notmatch '^[A-Za-z0-9./_-]+$') {
+            throw "Wait-ActiveDirectoryLabFederationReady: the $key '$($FederationConfig[$key])' is not a plain name."
+        }
+    }
+
+    $request = Get-ActiveDirectoryLabFederationRequest -FederationConfig $FederationConfig
+    $address, $hostName, $vmName = $FederationConfig.Address, $FederationConfig.Host, $FederationConfig.VmName
+    $port = if ($FederationConfig.Port) { [int]$FederationConfig.Port } else { 443 }
+    $fetch = "printf '$request' | openssl s_client -quiet -connect ${address}:${port} -servername $hostName " +
+        "-verify_return_error -verify_hostname $hostName -CAfile /certs/$vmName.pem 2>/dev/null"
+
+    Write-Host "  Waiting for $vmName to publish its discovery document at https://$hostName$($FederationConfig.DiscoveryPath)..." -ForegroundColor DarkGray
+    # Counted in polls rather than read off the clock, so the wait is the same however long each poll takes to fail.
+    $attempts = [int][Math]::Max(1, [Math]::Ceiling($TimeoutSeconds / [Math]::Max(1, $PollSeconds)))
+    $certificateSaved = $false
+    $reason = 'not asked yet'
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        if (-not $certificateSaved) {
+            try {
+                Save-ActiveDirectoryCertificate -DirectoryConfig $FederationConfig | Out-Null
+                $certificateSaved = $true
+            }
+            catch {
+                $reason = "its certificate could not be read yet: $($_.Exception.Message)"
+            }
+        }
+
+        if ($certificateSaved) {
+            # A literal, as in LDAP-Helpers.ps1's Invoke-LdapTool: a $script: variable is not set in a child script's scope.
+            $response = @(docker exec 'jim-ldap-toolbox' sh -c $fetch 2>&1 | ForEach-Object { "$_" })
+            $result = Test-ActiveDirectoryLabFederationDiscovery -Response $response -FederationConfig $FederationConfig
+            if ($result.Ready) {
+                Write-Host "  OK $vmName is ready: $($result.Reason)" -ForegroundColor Green
+                return $true
+            }
+            $reason = $result.Reason
+        }
+
+        if ($attempt -lt $attempts) { Start-Sleep -Seconds $PollSeconds }
+    }
+
+    Write-Host "  $vmName was not ready after $TimeoutSeconds seconds: $reason" -ForegroundColor Red
+    return $false
+}
+
 function Invoke-ActiveDirectoryLabCheckpoint {
     <#
     .SYNOPSIS
@@ -481,6 +699,279 @@ function Invoke-ActiveDirectoryLabDelegation {
     )
 
     Invoke-LabControl -Script 'Grant-LabDelegation.ps1' -Arguments @('-Name', $VmName, '-ContainerDn', $ContainerDn) | Out-Null
+}
+
+function Get-ActiveDirectoryLabModuleDigest {
+    <#
+    .SYNOPSIS
+        The digest of the JIM PowerShell module in this checkout, which the host's copy must match before it registers
+        JIM on the AD FS server (Register-LabIdentityProvider.ps1, #2441).
+
+    .PARAMETER RepositoryRoot
+        The JIM checkout.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RepositoryRoot
+    )
+
+    Import-Module (Join-Path $RepositoryRoot 'test' 'integration' 'ad-lab' 'guest' 'LabFederationServer.psm1') -Force
+    return (Get-LabModuleDigest -Entry @(Read-LabModuleFile -Root (Join-Path $RepositoryRoot 'src' 'JIM.PowerShell')))
+}
+
+function ConvertFrom-LabIdentityProviderRegistrationOutput {
+    <#
+    .SYNOPSIS
+        Reads what Register-LabIdentityProvider.ps1 printed: its last line, one JSON object. Returns ClientId,
+        ClientSecret, PublicClientId, ApiScope, ClaimType, MvAttribute and ModuleDigest.
+
+    .DESCRIPTION
+        Throws when the output is not that JSON, or a value JIM needs is missing. The message never repeats the output,
+        which holds the client secret.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    $line = @($Text -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 1
+    $json = $null
+    try { $json = $line | ConvertFrom-Json -ErrorAction Stop } catch { $json = $null }
+    if ($null -eq $json -or $json -isnot [pscustomobject]) {
+        throw 'Register-LabIdentityProvider.ps1 printed something that is not the JSON registration it should end with.'
+    }
+    foreach ($name in 'clientId', 'clientSecret', 'publicClientId', 'apiScope', 'claimType', 'mvAttribute') {
+        if (-not $json.PSObject.Properties[$name] -or [string]::IsNullOrEmpty([string]$json.$name)) {
+            throw "Register-LabIdentityProvider.ps1 returned no $name."
+        }
+    }
+
+    return [pscustomobject]@{
+        ClientId       = [string]$json.clientId
+        ClientSecret   = [string]$json.clientSecret
+        PublicClientId = [string]$json.publicClientId
+        ApiScope       = [string]$json.apiScope
+        ClaimType      = [string]$json.claimType
+        MvAttribute    = [string]$json.mvAttribute
+        ModuleDigest   = [string]$json.moduleDigest
+    }
+}
+
+function Register-ActiveDirectoryLabIdentityProvider {
+    <#
+    .SYNOPSIS
+        Registers JIM on the lab's AD FS server, as customers do, and returns the registration (#2441).
+
+    .DESCRIPTION
+        Runs Register-LabIdentityProvider.ps1 on the hypervisor host, which runs JIM's Register-JIMIdentityProvider
+        against the AD FS server over PowerShell Direct, from a copy of the module it first checks is this commit's. Call
+        it after the AD FS server has been reverted and answers (Wait-ActiveDirectoryLabFederationReady).
+
+        In Actions the client secret is masked in the log before anything else happens, and handed to the
+        workflow's scrub step through GITHUB_ENV (as JIM_AD_LAB_SCRUB_<id>), which removes it from every result file
+        before upload. It is written nowhere else; the caller gives it to JIM through the process environment
+        (Set-ActiveDirectoryLabSsoEnvironment).
+
+    .PARAMETER FederationConfig
+        The AD FS server's configuration (Get-ActiveDirectoryLabFederationConfig).
+
+    .PARAMETER Url
+        JIM's address as the sign-in checks reach it (Get-ActiveDirectoryLabJimUrl).
+
+    .PARAMETER ModuleDigest
+        Get-ActiveDirectoryLabModuleDigest for this checkout.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'The ::add-mask:: command must reach the Actions log.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$FederationConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Url,
+
+        [Parameter(Mandatory=$true)]
+        [string]$ModuleDigest
+    )
+
+    $output = Invoke-LabControl -Script 'Register-LabIdentityProvider.ps1' -Arguments @('-Name', $FederationConfig.VmName, '-Url', $Url, '-ModuleDigest', $ModuleDigest)
+    $registration = ConvertFrom-LabIdentityProviderRegistrationOutput -Text $output
+    Protect-ActiveDirectoryLabSecret -Secret $registration.ClientSecret
+
+    return $registration
+}
+
+function Protect-ActiveDirectoryLabSecret {
+    <#
+    .SYNOPSIS
+        Keeps a secret the run made (a client secret, a throwaway account's password) out of everything it publishes:
+        in Actions, masks it in the log and hands it to the workflow's scrub step through GITHUB_ENV, as
+        JIM_AD_LAB_SCRUB_<id>, which removes it from every result file before upload. Outside Actions it does nothing.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'The ::add-mask:: command must reach the Actions log.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Secret
+    )
+
+    if ($env:GITHUB_ACTIONS -ne 'true') { return }
+    Write-Host "::add-mask::$Secret"
+    if ($env:GITHUB_ENV) {
+        Add-Content -LiteralPath $env:GITHUB_ENV -Value "JIM_AD_LAB_SCRUB_$([guid]::NewGuid().ToString('N'))=$Secret" -Encoding utf8
+    }
+}
+
+function ConvertFrom-LdapObjectGuidOutput {
+    <#
+    .SYNOPSIS
+        Reads the objectGUID from ldapsearch output, which prints it base64 (objectGUID:: ...), as the GUID Windows and
+        JIM read it: the bytes in Microsoft order, so the same value AD FS issues as the oid claim (#2438).
+    #>
+    [CmdletBinding()]
+    [OutputType([guid])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$Line
+    )
+
+    $value = @($Line | ForEach-Object { if ("$_" -match '^objectGUID::\s*(\S+)\s*$') { $Matches[1] } }) | Select-Object -First 1
+    if (-not $value) { throw 'The search returned no objectGUID.' }
+    $bytes = [Convert]::FromBase64String($value)
+    if ($bytes.Length -ne 16) { throw "The objectGUID returned is $($bytes.Length) bytes, not 16 bytes." }
+    return [guid]::new($bytes)
+}
+
+function Get-ActiveDirectoryObjectGuid {
+    <#
+    .SYNOPSIS
+        An Active Directory object's objectGUID, read over LDAPS as the directory administrator.
+    #>
+    [CmdletBinding()]
+    [OutputType([guid])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Dn
+    )
+
+    $output = Invoke-LDAPSearch -DirectoryConfig $DirectoryConfig -BaseDN $Dn -BindDN $DirectoryConfig.BindDN -BindPassword $DirectoryConfig.BindPassword `
+        -Filter '(objectClass=*)' -Attributes @('objectGUID')
+    if ($null -eq $output) { throw "Could not read the objectGUID of '$Dn'." }
+    return (ConvertFrom-LdapObjectGuidOutput -Line @($output))
+}
+
+function New-ActiveDirectoryLabSignInAdministrator {
+    <#
+    .SYNOPSIS
+        Creates the account JIM's AD FS sign-in checks sign in as its initial administrator (#2441): jim-sso-admin in
+        dc-primary's CN=Users, with a password drawn for this run. Returns SamAccountName, UserPrincipalName, Password
+        and ObjectGuid.
+
+    .DESCRIPTION
+        A customer turning SSO on names one of their own accounts as JIM_SSO_INITIAL_ADMIN; this is the lab's. It is
+        never the domain Administrator, whose password the lab's control plane depends on. dc-primary is reverted to
+        its baseline before every scenario, so the account is new each time and dies at the next revert. The password
+        is protected (Protect-ActiveDirectoryLabSecret) before the account is made, and no message repeats it.
+
+    .PARAMETER DirectoryConfig
+        dc-primary's configuration (Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance Primary).
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Creates a throwaway account in a lab directory the next revert discards.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$DirectoryConfig
+    )
+
+    $samAccountName = 'jim-sso-admin'
+    $domain = ([string]$DirectoryConfig.Domain).ToLowerInvariant()
+    $dn = "CN=$samAccountName,CN=Users,$($DirectoryConfig.BaseDN)"
+    $password = Get-ActiveDirectoryFixturePassword -Avoid @($samAccountName, 'jim', 'sso', 'admin')
+    Protect-ActiveDirectoryLabSecret -Secret $password
+
+    $created = New-DirectoryUser -DirectoryConfig $DirectoryConfig -Dn $dn -SamAccountName $samAccountName -Password $password `
+        -Attributes ([ordered]@{ givenName = 'Single'; sn = 'Sign-On'; displayName = 'JIM Sign-In Administrator'; mail = "$samAccountName@$domain" })
+    if ($created.Outcome -ne 'Created') {
+        throw "Could not create the sign-in administrator '$dn' (outcome $($created.Outcome)). dc-primary should have been reverted to its baseline, which holds no such account."
+    }
+
+    return [pscustomobject]@{
+        SamAccountName    = $samAccountName
+        UserPrincipalName = "$samAccountName@$domain"
+        Password          = $password
+        ObjectGuid        = Get-ActiveDirectoryObjectGuid -DirectoryConfig $DirectoryConfig -Dn $dn
+    }
+}
+
+function Set-ActiveDirectoryLabSignInEnvironment {
+    <#
+    .SYNOPSIS
+        Switches JIM to the identifier the AD FS registration returned, with the lab's administrator as the initial
+        admin, by setting the JIM_AD_LAB_ADFS_* variables docker-compose.ad-lab-adfs.yml reads (claim type, Metaverse
+        attribute, initial admin), and gives the sign-in checks the administrator's name and password (ADMIN_UPN,
+        ADMIN_PASSWORD). All in this process's environment; nothing is written to a file.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Sets this process''s environment only.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Registration,
+
+        [Parameter(Mandatory=$true)]
+        [object]$Administrator
+    )
+
+    $env:JIM_AD_LAB_ADFS_CLAIM_TYPE = $Registration.ClaimType
+    $env:JIM_AD_LAB_ADFS_MV_ATTRIBUTE = $Registration.MvAttribute
+    $env:JIM_AD_LAB_ADFS_INITIAL_ADMIN = ([guid]$Administrator.ObjectGuid).ToString()
+    $env:JIM_AD_LAB_ADFS_ADMIN_UPN = $Administrator.UserPrincipalName
+    $env:JIM_AD_LAB_ADFS_ADMIN_PASSWORD = $Administrator.Password
+}
+
+function Set-ActiveDirectoryLabSsoEnvironment {
+    <#
+    .SYNOPSIS
+        Puts a registration where docker-compose.ad-lab-adfs.yml reads it: the JIM_AD_LAB_ADFS_* variables of this
+        process, which compose interpolates into jim.web's JIM_SSO_* settings. Nothing is written to a file.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Sets this process''s environment only.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [object]$Registration
+    )
+
+    $env:JIM_AD_LAB_ADFS_CLIENT_ID = $Registration.ClientId
+    $env:JIM_AD_LAB_ADFS_CLIENT_SECRET = $Registration.ClientSecret
+    $env:JIM_AD_LAB_ADFS_API_SCOPE = $Registration.ApiScope
+    $env:JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID = $Registration.PublicClientId
+}
+
+function Get-ActiveDirectoryLabJimUrl {
+    <#
+    .SYNOPSIS
+        JIM's address as the AD FS sign-in checks reach it: jim.web's HTTPS port on the Docker network. The checks run
+        in the LDAP toolbox container, the lab's stand-in for an administrator's workstation, which resolves both
+        jim.web and the AD FS server's name; jim.web's certificate (Initialize-JimWebTlsCertificate) names jim.web. The
+        registration's redirect URIs are made from it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    return 'https://jim.web:8443'
 }
 
 function Get-ActiveDirectoryLabGuestBuild {

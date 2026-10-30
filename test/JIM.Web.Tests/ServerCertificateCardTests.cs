@@ -188,6 +188,107 @@ public class ServerCertificateCardTests : JimComponentTestContext
     }
 
     /// <summary>
+    /// An untrusted issuer on a connection that accepts only a root (Oracle Database over TCPS), where JIM found the root:
+    /// trusting it works, so it is offered, and the card says why nothing else is.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrusted_OffersTheRootAndSaysSo()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Has.Count.EqualTo(1));
+            Assert.That(cut.Markup, Does.Contain("Corp Root CA"));
+        }
+    }
+
+    /// <summary>
+    /// The same connection where JIM could not find the root: nothing it could offer would work, so nothing is offered,
+    /// and the remediation says where the root has to come from.
+    /// </summary>
+    /// <summary>
+    /// The whole chain is shown, so the card does not read as though the server sent one certificate, and the root is
+    /// marked as the one on offer; the others are there to read, with a line saying so.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrusted_ListsTheWholeChainAndMarksTheRootAsOffered()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        var rows = cut.FindAll("[data-testid='jim-certificate-chain-element']");
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows.Select(row => row.GetAttribute("data-trust")), Is.EqualTo(new[] { "offered", "reference", "reference" }));
+            Assert.That(rows[0].TextContent, Does.Contain("Corp Root CA"));
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-reference-note']"), Has.Count.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// Without the root, nothing in the chain can be trusted here, so every row is for reference and none is offered.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrustedAndNoneWasFound_OffersNoRow()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: false))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-element']").Select(row => row.GetAttribute("data-trust")),
+            Is.EqualTo(new[] { "reference", "reference" }));
+    }
+
+    /// <summary>
+    /// Where any certificate in the chain can be trusted, no row is singled out and there is nothing to explain.
+    /// </summary>
+    [Test]
+    public void ServerCertificateCard_WhereAnyCertificateCanBeTrusted_MarksNoRow()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, WithChain(complete: true))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-element']").Select(row => row.GetAttribute("data-trust")), Is.All.Null);
+            Assert.That(cut.FindAll("[data-testid='jim-certificate-chain-reference-note']"), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void ServerCertificateCard_WhereOnlyARootCanBeTrustedAndNoneWasFound_DoesNotOfferTheTrustAction()
+    {
+        var cut = Render<ServerCertificateCard>(p => p
+            .Add(c => c.Diagnostic, RootOnlyDiagnostic(withRoot: false))
+            .Add(c => c.ConnectedSystemId, 42));
+
+        Assert.That(cut.FindAll("[data-testid='jim-certificate-trust']"), Is.Empty);
+    }
+
+    private static ServerCertificateDiagnostic RootOnlyDiagnostic(bool withRoot)
+    {
+        var diagnostic = Diagnostic(ServerCertificateFailureReason.UntrustedIssuer);
+        diagnostic.TrustAnchorMustBeRoot = true;
+        diagnostic.Chain =
+        [
+            new ServerCertificateChainElement { Subject = diagnostic.Subject!, Issuer = "CN=Corp Issuing CA, O=Corp", Thumbprint = "ABCDEF0123" },
+            new ServerCertificateChainElement { Subject = "CN=Corp Issuing CA, O=Corp", Issuer = "CN=Corp Root CA, O=Corp", Thumbprint = "BBBB", IsCertificateAuthority = true }
+        ];
+        if (withRoot)
+            diagnostic.Chain.Add(new ServerCertificateChainElement { Subject = "CN=Corp Root CA, O=Corp", Issuer = "CN=Corp Root CA, O=Corp", Thumbprint = "CCCC", IsCertificateAuthority = true, IsSelfSigned = true });
+
+        diagnostic.IsChainComplete = withRoot;
+        diagnostic.RootThumbprint = withRoot ? "CCCC" : null;
+        return diagnostic;
+    }
+
+    /// <summary>
     /// The card renders in places that cannot act, such as an Activity naming no Connected System. It stays usable
     /// there; it just does not offer the action.
     /// </summary>

@@ -7,38 +7,55 @@
 @* which Connected System Object Type, in which Connected System. It renders once, beneath the page's             *@
 @* breadcrumbs, so it is on screen on every tab; Matching, Scope and Attribute Flow all read against it.          *@
 @*                                                                                                                *@
-@* The Metaverse stays on the left and the Connected System on the right whatever the direction, as the create    *@
-@* form draws them, and only the arrow turns. The row this replaced sat between the Description field and the     *@
-@* first switch on the Details tab and drew a fixed arrow from the Metaverse type to the Connected System type,   *@
-@* so an Inbound rule read as though it exported. See JIM.Web/CLAUDE.md "Synchronisation Rule identity strip".   *@
+@* It reads left to right in the direction the data flows: the source type on the left, the destination on the   *@
+@* right, and the arrow pointing at the destination, as the create form orders its pickers. The row this replaced  *@
+@* drew a fixed arrow from the Metaverse type to the Connected System type, so an Inbound rule read as though it  *@
+@* exported. See JIM.Web/CLAUDE.md "Synchronisation Rule identity strip".                                          *@
 
 @* An outlined MudPaper, so the strip takes the design system's border and radius, with the panels' px-4 and a   *@
 @* py-2 that keeps it one line tall, level with the tab bar; only the shrink-to-fit layout is its own.           *@
 @* jim-identity-strip is a hook, not a style.                                                                     *@
 <MudPaper Outlined="true" Class="jim-identity-strip d-inline-flex align-center gap-3 px-4 py-2">
-    <ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />
+    @(IsOutbound ? MetaverseChip : ConnectedSystemChip)
     <MudTooltip Text="@FlowTooltip" Arrow="true" Placement="Placement.Top">
         <span class="@($"jim-identity-flow {FlowClass}")">
-            @if (!IsOutbound)
-            {
-                <span class="jim-identity-flow-head"></span>
-            }
             <span class="jim-identity-flow-line"></span>
             <span class="jim-identity-flow-label">@DirectionLabel</span>
             <span class="jim-identity-flow-line"></span>
-            @if (IsOutbound)
-            {
-                <span class="jim-identity-flow-head"></span>
-            }
+            <span class="jim-identity-flow-head"></span>
         </span>
     </MudTooltip>
-    <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />
+    @(IsOutbound ? ConnectedSystemChip : MetaverseChip)
     <MudDivider Vertical="true" FlexItem="true" />
     <span class="mud-text-secondary">in</span>
-    <MudLink Href="@($"/admin/connected-systems/{ConnectedSystemId}")" Class="jim-identity-strip-system">
+    <MudLink Href="@ConnectedSystemHref" Class="jim-identity-strip-system">
         <MudIcon Icon="@Icons.Material.Filled.Power" Size="Size.Small" />
         @ConnectedSystemName
     </MudLink>
+    @* ─── What the rule is waiting on (#2615) ─── *@
+    @* An import rule whose Object Type has saved changes waiting: the next synchronisation of its Connected System
+       processes every object of the type. An export rule: Metaverse Objects of its type flagged for review against every
+       export rule. Each appears only while there is something waiting, and only on the rule it is about. *@
+    @if (ShowAwaitingSynchronisation)
+    {
+        <MudDivider Vertical="true" FlexItem="true" />
+        <MudTooltip Arrow="true" Placement="Placement.Top">
+            <TooltipContent>
+                <TooltipText Text="@AwaitingSynchronisationTooltip" />
+            </TooltipContent>
+            <ChildContent>
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Href="@ConnectedSystemHref" Class="ma-0"
+                         data-testid="jim-awaiting-synchronisation-chip">
+                    Awaiting synchronisation
+                </MudChip>
+            </ChildContent>
+        </MudTooltip>
+    }
+    @if (ShowExportReviewPending)
+    {
+        <MudDivider Vertical="true" FlexItem="true" />
+        <ExportReviewPendingChip Count="@ExportReviewPendingCount" Class="ma-0" />
+    }
 </MudPaper>
 
 @code {
@@ -50,13 +67,14 @@
     public SyncRuleDirection Direction { get; set; }
 
     /// <summary>
-    /// The Metaverse Object Type the rule works with, always the left-hand chip.
+    /// The Metaverse Object Type the rule works with: the left-hand chip for an export, the right-hand for an import.
     /// </summary>
     [Parameter]
     public string? MetaverseObjectTypeName { get; set; }
 
     /// <summary>
-    /// The Connected System Object Type the rule works with, always the right-hand chip.
+    /// The Connected System Object Type the rule works with: the left-hand chip for an import, the right-hand for an
+    /// export.
     /// </summary>
     [Parameter]
     public string? ConnectedSystemObjectTypeName { get; set; }
@@ -73,9 +91,47 @@
     [Parameter, EditorRequired]
     public string ConnectedSystemName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// For an import rule, how many saved changes are waiting for the Connected System's next synchronisation to process
+    /// every object of the rule's Connected System Object Type. Zero shows nothing, and so does any other direction.
+    /// </summary>
+    [Parameter]
+    public int AwaitingSynchronisationChangeCount { get; set; }
+
+    /// <summary>
+    /// For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against
+    /// every export rule. Zero shows nothing, and so does any other direction.
+    /// </summary>
+    [Parameter]
+    public int ExportReviewPendingCount { get; set; }
+
     private bool IsOutbound => Direction != SyncRuleDirection.Import;
 
+    private bool ShowAwaitingSynchronisation => !IsOutbound && AwaitingSynchronisationChangeCount > 0;
+
+    private bool ShowExportReviewPending => IsOutbound && ExportReviewPendingCount > 0;
+
+    private string ConnectedSystemHref => $"/admin/connected-systems/{ConnectedSystemId}";
+
+    private string AwaitingSynchronisationTooltip
+    {
+        get
+        {
+            var changes = AwaitingSynchronisationChangeCount == 1
+                ? "1 saved change reaches"
+                : $"{AwaitingSynchronisationChangeCount:N0} saved changes reach";
+            var objects = string.IsNullOrWhiteSpace(ConnectedSystemObjectTypeName) ? "object" : $"{ConnectedSystemObjectTypeName} object";
+            return $"{changes} existing objects at the next synchronisation of {ConnectedSystemName}, which processes every {objects}.";
+        }
+    }
+
     private string DirectionLabel => IsOutbound ? "Outbound" : "Inbound";
+
+    private RenderFragment MetaverseChip =>
+        @<ObjectChip Kind="ObjectChipKind.MetaverseObject" TypeName="@MetaverseObjectTypeName" Tooltip="Metaverse Object Type" Class="ma-0" />;
+
+    private RenderFragment ConnectedSystemChip =>
+        @<ObjectChip Kind="ObjectChipKind.ConnectedSystemObject" TypeName="@ConnectedSystemObjectTypeName" Tooltip="Connected System Object Type" Class="ma-0" />;
 
     private string FlowClass => IsOutbound ? "jim-identity-flow-outbound" : "jim-identity-flow-inbound";
 

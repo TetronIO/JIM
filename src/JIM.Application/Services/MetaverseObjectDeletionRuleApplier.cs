@@ -112,6 +112,23 @@ public static class MetaverseObjectDeletionRuleApplier
     }
 
     /// <summary>
+    /// Records on a Metaverse Object about to be deleted the item deleting it, so its Deleted change record names it
+    /// and the deleted object's causality timeline can find its deletion (#2460). The immediate-deletion sibling of
+    /// <see cref="RecordSchedulingItem"/>, and likewise recorded whatever the sync outcome tracking level.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object being deleted.</param>
+    /// <param name="deletingItem">The item recording the deletion.</param>
+    public static void RecordDeletingItem(MetaverseObject mvo, ActivityRunProfileExecutionItem deletingItem)
+    {
+        ArgumentNullException.ThrowIfNull(mvo);
+        ArgumentNullException.ThrowIfNull(deletingItem);
+
+        if (deletingItem.Id == Guid.Empty)
+            deletingItem.Id = Guid.NewGuid();
+        mvo.DeletingRunProfileExecutionItemId = deletingItem.Id;
+    }
+
+    /// <summary>
     /// Builds the serialised decision-time deletion policy snapshot (#119) for a deletion rule evaluation:
     /// produced whenever the evaluation records an outcome (triggered, or evaluated against the source list
     /// without triggering); null for a plain non-event or an untyped Metaverse Object.

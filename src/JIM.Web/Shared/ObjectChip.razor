@@ -1,9 +1,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* The one way JIM renders a reference to an OBJECT anywhere on the site: a glyph naming which of the *@
-@* seven kinds it is (Connected System Object, Metaverse Object, Connected System, Synchronisation Rule,       *@
-@* Pending Export, Deletion Record, Run Profile), the object's type as a dimmed prefix, then its name with      *@
+@* The one way JIM renders a reference to an OBJECT anywhere on the site: a glyph naming which kind it is  *@
+@* (Connected System Object, Metaverse Object, Connected System, Synchronisation Rule, Pending Export,        *@
+@* Deletion Record, Run Profile; and, as who did something, API Key, Schedule and System, which              *@
+@* <InitiatorChip /> chooses between), the object's type as a dimmed prefix, then its name with                *@
 @* ellipsis overflow. This component previously covered only the CS/MV pair with a MudChip/MudAvatar; it now    *@
 @* also takes over the look and the kind set of the causality panel's own CausalityEntityChip (now retired),    *@
 @* so an object reads identically whether the reference sits inside the causality panel or anywhere else.       *@
@@ -17,7 +18,7 @@
 @* inline-flex box of its own, and putting that between the link and the chip would sit a new box across the *@
 @* hover treatment's descendant selectors. Wrapping the whole link leaves jim-chip-link's subtree intact.    *@
 <MudTooltip Text="@EffectiveTooltip" Arrow="true" Placement="Placement.Top">
-    @if (!string.IsNullOrEmpty(Href))
+    @if (!string.IsNullOrEmpty(Href) && !Deleted)
     {
         <MudLink Href="@Href" Underline="Underline.None" Class="jim-chip-link">
             @Chip
@@ -85,6 +86,13 @@
     public bool ShowGlyph { get; set; } = true;
 
     /// <summary>
+    /// Whether the object no longer exists: the chip is low-lighted with a dashed outline and a bin icon, and never a
+    /// link, since there is nothing left to open. Pass a tooltip saying when it went ("Deleted 7 hours ago").
+    /// </summary>
+    [Parameter]
+    public bool Deleted { get; set; }
+
+    /// <summary>
     /// The same "type: name" text the chip itself renders, when it has a name to show; the kind's full name
     /// otherwise (a type-alone chip, or no name and no type). Overridden by <see cref="Tooltip"/>.
     /// </summary>
@@ -107,6 +115,10 @@
         ObjectChipKind.SynchronisationRule => "SR",
         ObjectChipKind.PendingExport => "PE",
         ObjectChipKind.DeletionRecord => "DR",
+        ObjectChipKind.ApiKey => "KEY",
+        ObjectChipKind.Schedule => "SCH",
+        ObjectChipKind.System => "JIM",
+        ObjectChipKind.Activity => "ACT",
         _ => "RP"
     };
 
@@ -121,6 +133,10 @@
         ObjectChipKind.SynchronisationRule => "Synchronisation Rule",
         ObjectChipKind.PendingExport => "Pending Export",
         ObjectChipKind.DeletionRecord => "Deletion Record",
+        ObjectChipKind.ApiKey => "API Key",
+        ObjectChipKind.Schedule => "Schedule",
+        ObjectChipKind.System => "System",
+        ObjectChipKind.Activity => "Activity",
         _ => "Run Profile"
     };
 
@@ -130,6 +146,10 @@
         ObjectChipKind.MetaverseObject => "mvo",
         ObjectChipKind.ConnectedSystem => "sys",
         ObjectChipKind.SynchronisationRule => "rule",
+        ObjectChipKind.ApiKey => "key",
+        ObjectChipKind.Schedule => "sch",
+        ObjectChipKind.System => "jim",
+        ObjectChipKind.Activity => "act",
         _ => "other"
     };
 
@@ -142,7 +162,7 @@
         ? (HasName ? $"{TypeName}: " : TypeName!)
         : string.Empty;
 
-    private RenderFragment Chip => @<span class="jim-object-chip @(ShowGlyph ? null : "plain") @Class">
+    private RenderFragment Chip => @<span class="jim-object-chip @(ShowGlyph ? null : "plain") @(Deleted ? "deleted" : null) @Class">
         @if (ShowGlyph)
         {
             <span class="jim-object-chip-glyph @GlyphClass" aria-hidden="true" title="@GlyphFullName">@GlyphText</span>
@@ -154,6 +174,10 @@
         @if (HasName)
         {
             <span class="jim-object-chip-name">@Name</span>
+        }
+        @if (Deleted)
+        {
+            <MudIcon Icon="@Icons.Material.Outlined.Delete" Class="jim-object-chip-deleted-icon" aria-label="Deleted" />
         }
     </span>;
 }

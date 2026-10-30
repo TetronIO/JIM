@@ -32,6 +32,11 @@
     <div class="jim-service-health-header">
         <MudText Typo="Typo.h6" Class="jim-service-health-title">Service Health</MudText>
         <span class="jim-service-health-summary">@ServiceHealthDisplay.Summary(Report)</span>
+        @* Collapsed, the cards are hidden and the next Schedule with them, so the header carries it instead (#2549). *@
+        @if (Collapsed && SchedulerHealthy && ServiceHealthDisplay.NextScheduleHeaderPhrase(NextSchedule, Report.GeneratedAt, TimeZoneInfo.Local) is { } nextSchedulePhrase)
+        {
+            <span class="jim-service-health-summary jim-service-health-muted">· @nextSchedulePhrase</span>
+        }
         <div class="jim-service-health-header-end">
             @* The relay is not a service of JIM's but it decides whether this page moves on its own; while it is
                reconnecting every live figure on the tabs below is on its polling fallback. *@
@@ -68,6 +73,7 @@
             var detailsOpen = _openDetails.Contains(service.Service);
             var hostName = service.HostName;
             var version = service.Version;
+            var memory = ServiceHealthDisplay.Memory(service);
             <MudPaper Outlined="true" Class="pa-3 jim-service-health-card" data-service="@service.Service" data-status="@service.Status" @key="service.Service">
                 <div class="jim-service-health-card-top">
                     <span class="jim-service-health-label jim-one-line" title="@ServiceHealthDisplay.Label(service.Service)">@ServiceHealthDisplay.Label(service.Service)</span>
@@ -83,11 +89,27 @@
                 </div>
                 @* The activity line is the one line an administrator reads first; its full text is its title so a
                    long Run Profile name clipped by the card is still available. *@
-                <div class="jim-service-health-activity jim-one-line" title="@activity">
+                <div class="jim-service-health-activity jim-one-line" title="@ActivityTitle(service, activity)">
                     @activity
                     @if (!unhealthy && service.CurrentWork != null && service.CurrentWorkStartedAt is { } workStartedAt)
                     {
                         <span class="jim-service-health-muted"> · @ServiceHealthDisplay.CompactDuration(asOf - workStartedAt)</span>
+                    }
+                    @* The Scheduler's card also says when it will next add work to the queue (#2549): the one thing the
+                       Activity tab beneath cannot show, because a Schedule that has not fired has queued nothing yet. *@
+                    @if (service.Service == JimService.Scheduler && !unhealthy)
+                    {
+                        <span class="jim-service-health-muted" data-testid="service-health-next-schedule">
+                            · @if (NextSchedule is { } next)
+                            {
+                                <text>Next: </text><MudLink Href="/admin/operations?t=schedules">@next.Name</MudLink>
+                                @($" {ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, asOf, TimeZoneInfo.Local)} ({ServiceHealthDisplay.NextScheduleCountdown(next.NextRunTime, asOf)})")
+                            }
+                            else
+                            {
+                                <text>No Schedules due</text>
+                            }
+                        </span>
                     }
                 </div>
                 @* For a healthy or degraded service this is the condition in plain words, with the uptime after it.
@@ -146,6 +168,13 @@
                                         @CopyButton("version", versionText)
                                     </dd>
                                 }
+                                @if (memory != null)
+                                {
+                                    <dt>Memory</dt>
+                                    <dd>
+                                        <span class="jim-service-health-details-reading" data-testid="service-health-memory">@memory</span>
+                                    </dd>
+                                }
                                 @if (instance != null)
                                 {
                                     <dt>Instance</dt>
@@ -176,6 +205,32 @@
     /// </summary>
     [Parameter, EditorRequired]
     public ServiceHealthReport Report { get; set; } = null!;
+
+    /// <summary>
+    /// Whether the Scheduler is up to fire the next Schedule; a down one's next run is not something to promise.
+    /// </summary>
+    private bool SchedulerHealthy => Report.Services.Any(s => s.Service == JimService.Scheduler && s.Status != ServiceHealthStatus.Unhealthy);
+
+    /// <summary>
+    /// The activity line's full text, for its title: clipped by a narrow card, the Scheduler's next Schedule is still
+    /// there to read on hover.
+    /// </summary>
+    private string ActivityTitle(ServiceHealth service, string activity)
+    {
+        if (service.Service != JimService.Scheduler || service.Status == ServiceHealthStatus.Unhealthy)
+            return activity;
+
+        return NextSchedule is { } next
+            ? $"{activity} · Next: {next.Name} {ServiceHealthDisplay.NextScheduleWhen(next.NextRunTime, Report.GeneratedAt, TimeZoneInfo.Local)}"
+            : $"{activity} · No Schedules due";
+    }
+
+    /// <summary>
+    /// The enabled Schedule due to fire soonest, or null when none is due. Shown on the Scheduler's card, and in the
+    /// header while the cards are collapsed (#2549).
+    /// </summary>
+    [Parameter]
+    public JIM.Models.Scheduling.DTOs.NextDueSchedule? NextSchedule { get; set; }
 
     /// <summary>
     /// Classes for the strip's root, for the owner's spacing.

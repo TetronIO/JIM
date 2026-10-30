@@ -73,7 +73,7 @@ public class SynchronisationController(
     public async Task<IActionResult> GetConnectedSystemsAsync([FromQuery] PaginationRequest pagination)
     {
         _logger.LogTrace("Requested Connected Systems (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        // Use GetConnectedSystemHeadersAsync which correctly computes PendingExportObjectsCount via SQL COUNT subquery.
+        // Use GetConnectedSystemHeadersAsync, which counts each system's objects and Pending Exports in the database.
         // The previous implementation used GetConnectedSystemsAsync().Select(FromEntity) which didn't load
         // the PendingExports navigation property, resulting in PendingExportObjectsCount always being 0.
         var headers = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
@@ -1568,6 +1568,8 @@ public class SynchronisationController(
     /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
     /// <param name="search">Optional search text to filter by target object, source MVO, or error message.</param>
     /// <param name="failing">When true, returns only the Pending Exports whose last attempt failed. Each is attempted again at every export run; its failingSince says since when it has been failing.</param>
+    /// <param name="changeType">Optional: return only the Pending Exports that make this kind of change.</param>
+    /// <param name="status">Optional: return only the Pending Exports with this status. A failing Pending Export is Pending; use failing to find those.</param>
     /// <returns>A paginated set of Pending Export headers.</returns>
     [HttpGet("connected-systems/{connectedSystemId:int}/pending-exports", Name = "GetPendingExports")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExportHeader>), StatusCodes.Status200OK)]
@@ -1577,14 +1579,20 @@ public class SynchronisationController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? search = null,
-        [FromQuery] bool failing = false)
+        [FromQuery] bool failing = false,
+        [FromQuery] PendingExportChangeType? changeType = null,
+        [FromQuery] PendingExportStatus? status = null)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 100) pageSize = 100;
 
         var result = await _application.ConnectedSystems.GetPendingExportHeadersAsync(
-            connectedSystemId, page, pageSize, searchQuery: search, failingOnly: failing);
+            connectedSystemId, page, pageSize,
+            statusFilters: status.HasValue ? [status.Value] : null,
+            searchQuery: search,
+            failingOnly: failing,
+            changeTypeFilters: changeType.HasValue ? [changeType.Value] : null);
 
         return Ok(new PaginatedResponse<PendingExportHeader>
         {
@@ -2394,23 +2402,174 @@ public class SynchronisationController(
 
     #endregion
 
+    #region Catalogue
+
+    /// <summary>
+    /// List the tables and views a Connected System's source contains
+    /// </summary>
+    /// <remarks>
+    /// Reads the source's own catalogue with the Connected System's saved settings, so a script, or an
+    /// administrator writing the SQL Connector's Object Types document, can see what there is to choose from.
+    /// Purely informational: nothing is written to JIM or to the source.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <returns>One entry per table and view the configured account can see: tables first, then views.</returns>
+    /// <response code="200">The tables and views.</response>
+    /// <response code="400">The Connector cannot describe what its source contains, or the Connected System's settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not read the catalogue, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/catalogue", Name = "GetConnectedSystemCatalogue")]
+    [ProducesResponseType(typeof(IEnumerable<ConnectedSystemCatalogueObjectDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemCatalogueAsync(int connectedSystemId)
+    {
+        _logger.LogTrace("Reading the catalogue for Connected System: {Id}", connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var objects = await _application.ConnectedSystems.GetCatalogueObjectsAsync(connectedSystemId, cancellationToken: HttpContext?.RequestAborted ?? default);
+            return Ok(objects.Select(ConnectedSystemCatalogueObjectDto.FromModel));
+        });
+    }
+
+    /// <summary>
+    /// Describe one table or view in a Connected System's source
+    /// </summary>
+    /// <remarks>
+    /// Returns the object's columns, its primary key in key order, and the foreign keys it declares (one entry per
+    /// constraint, a composite key's columns paired in order). A name is matched ignoring case, as schema discovery
+    /// matches it. Views declare no keys. Purely informational.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to read.</param>
+    /// <param name="schema">The schema the table or view is in. Leave it out to find the object by name alone, which is refused where the name is in more than one schema.</param>
+    /// <param name="name">The table or view.</param>
+    /// <response code="200">The table or view's columns and keys.</response>
+    /// <response code="400">No name was given, the name is in more than one schema and none was given, the Connector cannot describe what its source contains, or the settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists, or the configured account cannot see a table or view of that name.</response>
+    /// <response code="502">JIM could not read the catalogue, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/catalogue/object", Name = "GetConnectedSystemCatalogueObject")]
+    [ProducesResponseType(typeof(ConnectedSystemCatalogueObjectDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> GetConnectedSystemCatalogueObjectAsync(int connectedSystemId, [FromQuery] string? schema, [FromQuery] string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(ApiErrorResponse.BadRequest("Name the table or view to describe."));
+
+        _logger.LogTrace("Describing {Name} in the catalogue for Connected System: {Id}", LogSanitiser.Sanitise(name), connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var detail = await _application.ConnectedSystems.GetCatalogueObjectAsync(connectedSystemId, schema, name, cancellationToken: HttpContext?.RequestAborted ?? default);
+            if (detail == null)
+            {
+                var qualified = string.IsNullOrWhiteSpace(schema) ? name : $"{schema}.{name}";
+                return NotFound(ApiErrorResponse.NotFound($"The database account cannot see a table or view called '{qualified}'. Check the name, the schema, and the permissions granted to the account JIM connects as."));
+            }
+
+            return Ok(ConnectedSystemCatalogueObjectDetailDto.FromModel(detail));
+        });
+    }
+
+    /// <summary>
+    /// Describe the columns a query would return
+    /// </summary>
+    /// <remarks>
+    /// Learns a SELECT statement's result columns from the source without reading a row, as schema discovery does
+    /// for an Object Type read from a 'select'. The statement is held to the same rule: a single SELECT or WITH
+    /// statement, with no terminating semicolon. Purely informational.
+    /// </remarks>
+    /// <param name="connectedSystemId">The Connected System whose source to ask.</param>
+    /// <param name="request">The statement.</param>
+    /// <response code="200">The statement's columns.</response>
+    /// <response code="400">No statement was given, it is not a single query, the source would not accept it, the Connector cannot describe what its source contains, or the settings are not complete enough to connect.</response>
+    /// <response code="404">No Connected System with that identifier exists.</response>
+    /// <response code="502">JIM could not reach the source, e.g. the database was unreachable or refused the credentials.</response>
+    [HttpPost("connected-systems/{connectedSystemId:int}/catalogue/statement", Name = "DescribeConnectedSystemCatalogueStatement")]
+    [ProducesResponseType(typeof(ConnectedSystemCatalogueObjectDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
+    public async Task<IActionResult> DescribeConnectedSystemCatalogueStatementAsync(int connectedSystemId, [FromBody] DescribeCatalogueStatementRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Statement))
+            return BadRequest(ApiErrorResponse.BadRequest("Supply the statement to describe."));
+
+        _logger.LogTrace("Describing a statement for Connected System: {Id}", connectedSystemId);
+
+        return await ReadCatalogueAsync(connectedSystemId, async () =>
+        {
+            var detail = await _application.ConnectedSystems.DescribeCatalogueStatementAsync(connectedSystemId, request.Statement, cancellationToken: HttpContext?.RequestAborted ?? default);
+            return Ok(ConnectedSystemCatalogueObjectDetailDto.FromModel(detail));
+        });
+    }
+
+    /// <summary>
+    /// The checks and failure mapping every catalogue read shares: an unknown Connected System is a 404, a
+    /// Connector with no catalogue and settings the administrator has not finished are a 400, a request the
+    /// Connector refuses (an ambiguous name, a statement it will not run) is a 400, and anything else is the
+    /// source failing, a 502.
+    /// </summary>
+    private async Task<IActionResult> ReadCatalogueAsync(int connectedSystemId, Func<Task<IActionResult>> read)
+    {
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        if (await _application.ConnectedSystems.GetCatalogueDeclarationAsync(connectedSystemId) == null)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot describe what its source contains."));
+
+        try
+        {
+            return await read();
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+        // Fallback dispatcher: any failure reading the source (unreachable, refused credentials, a malformed
+        // response) becomes a 502 rather than the generic 500, and the cancellation exclusion keeps an aborted
+        // request propagating rather than being reported as a catalogue failure.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Failed to read the catalogue for Connected System {Id}: {Message}",
+                connectedSystemId, LogSanitiser.Sanitise(ex.Message));
+            return StatusCode(StatusCodes.Status502BadGateway,
+                ApiErrorResponse.BadGateway($"JIM could not read what the source contains: {ex.Message}"));
+        }
+    }
+
+    #endregion
+
     #region Directory Servers
 
     /// <summary>
-    /// Discover the domain controllers in a Connected System's directory
+    /// Discover the directory servers in a Connected System's directory
     /// </summary>
     /// <remarks>
-    /// Lists the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site
-    /// each belongs to, using the Connected System's currently saved connectivity settings. Purely informational:
-    /// this never writes to the Preferred Domain Controller setting; only an administrator's own subsequent
-    /// update of the Connected System does that.
+    /// Lists the servers in the Connected System's directory, using its currently saved connectivity settings, so
+    /// a value can be chosen for the setting its Connector fills from discovery. For the LDAP Connector these are
+    /// the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site each
+    /// belongs to, and the setting is Preferred Domain Controller. Purely informational: this never writes to any
+    /// setting; only an administrator's own subsequent update of the Connected System does that.
     /// </remarks>
-    /// <param name="connectedSystemId">The Connected System whose directory to discover domain controllers in.</param>
-    /// <returns>The discovered domain controllers.</returns>
-    /// <response code="200">The domain controllers discovered.</response>
-    /// <response code="400">The Connector does not support directory server discovery, or the connected directory is not AD-family.</response>
+    /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
+    /// <returns>The discovered directory servers, each naming the setting (by id and name) its host name is a value for.</returns>
+    /// <response code="200">The directory servers discovered.</response>
+    /// <response code="400">The Connector does not support directory server discovery, or does not support it for this directory (the LDAP Connector discovers only in Active Directory and Samba AD).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
-    /// <response code="502">JIM could not discover domain controllers, e.g. the directory was unreachable or refused the credentials.</response>
+    /// <response code="502">JIM could not discover directory servers, e.g. the directory was unreachable or refused the credentials.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/directory-servers", Name = "GetConnectedSystemDirectoryServers")]
     [ProducesResponseType(typeof(IEnumerable<ConnectedSystemDirectoryServerDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -2425,14 +2584,20 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        if (!await _application.ConnectedSystems.SupportsDirectoryServerDiscoveryAsync(connectedSystemId))
+        var discovery = await _application.ConnectedSystems.GetDirectoryServerDiscoveryAsync(connectedSystemId);
+        if (discovery == null)
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
+
+        // Each server names the setting it is a value for, by id as well as name, so a caller can set it without
+        // knowing which Connector it is talking to (Set-JIMConnectedSystem keys settings by id).
+        var targetSettingId = connectedSystem.SettingValues
+            .FirstOrDefault(sv => sv.Setting.Name == discovery.TargetSettingName)?.Setting.Id;
 
         try
         {
             var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId);
-            return Ok(directoryServers.Select(ConnectedSystemDirectoryServerDto.FromModel));
+            return Ok(directoryServers.Select(s => ConnectedSystemDirectoryServerDto.FromModel(s, discovery.TargetSettingName, targetSettingId)));
         }
         catch (NotSupportedException ex)
         {
@@ -3140,7 +3305,7 @@ public class SynchronisationController(
     /// <returns>The outcome, including the certificate as it now sits in the store.</returns>
     /// <response code="201">The certificate was added to the JIM certificate store.</response>
     /// <response code="200">The certificate was already in the store, so there was nothing to do.</response>
-    /// <response code="400">No thumbprint was supplied, the Connected System is not configured to make an encrypted connection, or a certificate authority in the server's chain cannot be relied on (outcome <c>InvalidChain</c>).</response>
+    /// <response code="400">No thumbprint was supplied, the Connected System is not configured to make an encrypted connection, a certificate authority in the server's chain cannot be relied on (outcome <c>InvalidChain</c>), or the connection accepts only the root of the chain, as Oracle Database over TCPS does, and something else was chosen (outcome <c>RootRequired</c>).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
     /// <response code="409">The server is presenting a different certificate from the one named, so nothing was trusted.</response>
     /// <response code="502">The server could not be reached to read its certificate again, so nothing was trusted.</response>
@@ -3675,6 +3840,9 @@ public class SynchronisationController(
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
+        // What each rule on the page is waiting on: two reads for the whole page, not one per rule.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync(result.Items.ToList());
+
         return Ok(result);
     }
 
@@ -3694,7 +3862,9 @@ public class SynchronisationController(
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {id} not found."));
 
-        return Ok(SyncRuleHeader.FromEntity(rule));
+        var header = SyncRuleHeader.FromEntity(rule);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([header]);
+        return Ok(header);
     }
 
     /// <summary>
@@ -3707,7 +3877,9 @@ public class SynchronisationController(
     /// <returns>The created Synchronisation Rule details.</returns>
     /// <response code="201">Synchronisation Rule created successfully. <c>deletionSourceWarning</c> is set when the new rule projects into a
     /// Metaverse Object Type deleted When Authoritative Source Disconnected from a Connected System that is not one of its
-    /// authoritative sources; the rule was created regardless.</response>
+    /// authoritative sources; the rule was created regardless. <c>awaitingSynchronisation</c> names the Connected System
+    /// Object Type an enabled import rule makes its Connected System's next synchronisation process in full, with how many
+    /// objects that is and about how long it takes.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("sync-rules", Name = "CreateSyncRule")]
@@ -3784,11 +3956,16 @@ public class SynchronisationController(
 
         _logger.LogInformation("Created Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
+        // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+        var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
         // Retrieve the created Synchronisation Rule. A new rule had no prior projection, so any projection it carries is
         // new and may need the deletion source warning (#1256).
         var created = await _application.ConnectedSystems.GetSyncRuleAsync(syncRule.Id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore: null);
-        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning));
+        var createdResponse = SyncRuleSaveResponse.FromSave(created!, syncRule, deletionSourceWarning, awaitingSynchronisation);
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([createdResponse]);
+        return CreatedAtRoute("GetSyncRule", new { id = syncRule.Id }, createdResponse);
     }
 
     /// <summary>
@@ -3802,7 +3979,9 @@ public class SynchronisationController(
     /// attribute that the update left with a missing input, for example by disabling the rule; <c>deletionSourceWarning</c>
     /// is set when the update takes the rule into projecting into a Metaverse Object Type deleted When Authoritative Source
     /// Disconnected from a Connected System that is not one of its authoritative sources (the update goes ahead
-    /// regardless).</response>
+    /// regardless); <c>awaitingSynchronisation</c> names each Connected System Object Type an import rule's change makes its
+    /// Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how
+    /// long it takes (empty when the change needs none).</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -3886,10 +4065,17 @@ public class SynchronisationController(
 
         _logger.LogInformation("Updated Synchronisation Rule: {Id} ({Name})", syncRule.Id, LogSanitiser.Sanitise(syncRule.Name));
 
+        // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+        var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
         // Retrieve the updated Synchronisation Rule; the save's warnings and dependants travel on the instance it saved.
         var updated = await _application.ConnectedSystems.GetSyncRuleAsync(id);
         var deletionSourceWarning = await _application.ConnectedSystems.GetSyncRuleDeletionSourceWarningAsync(syncRule, projectedTypeIdBefore);
-        return Ok(SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning));
+        var updatedResponse = SyncRuleSaveResponse.FromSave(updated!, syncRule, deletionSourceWarning, awaitingSynchronisation);
+
+        // The save itself may have made the rule's type await synchronisation; say so in the response to it.
+        await _application.ConnectedSystems.PopulateSyncRuleReviewStateAsync([updatedResponse]);
+        return Ok(updatedResponse);
     }
 
     /// <summary>
@@ -3971,6 +4157,10 @@ public class SynchronisationController(
     /// This matters because both toggles are silently destructive. Flipping the Deprovisioning Action to Delete
     /// converts every future scope exit into a deletion in the target system; flipping the Out-of-Scope Action to
     /// Disconnect can mass-disconnect joined objects, recalling what they contributed to the Metaverse.
+    ///
+    /// Saving the change takes effect at the next synchronisation: an import rule's Connected System processes every
+    /// object of the rule's Object Type in its next Delta or Full Synchronisation, and an export rule's change is
+    /// applied by the review the save flags, at the next synchronisation of any Connected System.
     ///
     /// An omitted or null field previews the stored rule's value, matching the update endpoint's semantics
     /// exactly. Apply the previewed change through <c>PUT sync-rules/{id}</c>.
@@ -4790,7 +4980,9 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The mapping creation request.</param>
     /// <returns>The created Attribute Flow Mapping.</returns>
-    /// <response code="201">Mapping created successfully. The response's <c>warnings</c> lists any non-blocking warnings the save raised.</response>
+    /// <response code="201">Mapping created successfully. The response's <c>warnings</c> lists any non-blocking warnings the save raised,
+    /// and its <c>awaitingSynchronisation</c> the Connected System Object Type an import mapping makes its Connected System's next
+    /// synchronisation process in full, with how many objects that is and about how long it takes.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="404">Synchronisation Rule or referenced Attributes not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -4970,9 +5162,13 @@ public class SynchronisationController(
 
             _logger.LogInformation("Created mapping {MappingId} for Synchronisation Rule {SyncRuleId}", mapping.Id, syncRuleId);
 
+            // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+            var awaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+
             // Retrieve the created mapping to get all populated fields
             var created = await _application.ConnectedSystems.GetSyncRuleMappingAsync(mapping.Id);
             var dto = SyncRuleMappingDto.FromEntity(created!);
+            dto.AwaitingSynchronisation = awaitingSynchronisation;
             // The reloaded copy carries no in-memory state, so a save-time sequence skip (plan decision 3) is
             // reported from the original, saved instance the server stamped it on.
             if (dto.Generation != null)
@@ -5028,7 +5224,9 @@ public class SynchronisationController(
     /// <returns>The updated mapping.</returns>
     /// <response code="200">Returns the updated mapping; its <c>warnings</c> lists any non-blocking warnings the save raised,
     /// and its <c>dependentDerivedFlows</c> any Attribute Flow deriving a Metaverse attribute that the update left with a
-    /// missing input (the update goes ahead regardless).</response>
+    /// missing input (the update goes ahead regardless). Its <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type an import mapping's change makes its Connected System's next synchronisation process in full, with how many
+    /// objects that is and about how long it takes.</response>
     /// <response code="400">The request named no setting, named one that does not apply to this mapping, carried an invalid Expression,
     /// or excluded a Connected System the generated value is not exported to unchanged (the message names it).</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
@@ -5082,6 +5280,8 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated mapping {MappingId} on Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
             var dto = SyncRuleMappingDto.FromEntity(updated);
+            // What the save recorded as awaiting synchronisation, with what processing it costs (#2615).
+            dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
             await AttachGeneratedValueParticipantsAsync([dto], [updated], syncRule.ConnectedSystemId);
             await AttachGeneratedValueBuiltValuesAsync([dto], [updated], syncRule);
             if (DerivedFlowGraph.ReadsMetaverse(updated))
@@ -5103,8 +5303,8 @@ public class SynchronisationController(
     /// Delete an Attribute Flow Mapping
     /// </summary>
     /// <remarks>
-    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next Full
-    /// Synchronisation of the contributing system (surviving lower-priority contributors are re-elected). Pass
+    /// By default, the Metaverse attribute values an import mapping contributed are recalled at the next
+    /// synchronisation of the contributing system, Delta or Full (surviving lower-priority contributors are re-elected). Set
     /// <c>keepContributedValues=true</c> to leave them in place instead: their provenance is severed before the
     /// mapping is deleted, permanently exempting them from recall. Use the mapping's
     /// contributed-values-summary endpoint first to understand the impact. Export mappings contribute nothing,
@@ -5114,11 +5314,12 @@ public class SynchronisationController(
     /// <param name="mappingId">The unique identifier of the mapping to delete.</param>
     /// <param name="keepContributedValues">True to keep the Metaverse attribute values the mapping contributed
     /// (their provenance is severed, so nothing ever recalls them); false (the default) to leave them to be
-    /// recalled at the next Full Synchronisation of the contributing system.</param>
+    /// recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     /// <returns>What the deletion affected.</returns>
     /// <response code="200">Mapping deleted. The body states the contributed values affected and, in
     /// <c>dependentDerivedFlows</c>, any Attribute Flow deriving a Metaverse attribute that the deletion left with a
-    /// missing input (the deletion goes ahead regardless).</response>
+    /// missing input (the deletion goes ahead regardless), and in <c>awaitingSynchronisation</c> the Connected System
+    /// Object Type an import mapping's deletion makes its Connected System's next synchronisation process in full.</response>
     /// <response code="404">Synchronisation Rule or mapping not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpDelete("sync-rules/{syncRuleId:int}/mappings/{mappingId:int}", Name = "DeleteSyncRuleMapping")]
@@ -5157,7 +5358,9 @@ public class SynchronisationController(
             AffectedValueCount = result.AffectedValueCount,
             AffectedObjectCount = result.AffectedObjectCount,
             ContributedValuesKept = result.ContributedValuesKept,
-            DependentDerivedFlows = result.DependentDerivedFlows
+            DependentDerivedFlows = result.DependentDerivedFlows,
+            // What the deletion recorded as awaiting synchronisation, with what processing it costs (#2615).
+            AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync()
         });
     }
 
@@ -6056,7 +6259,9 @@ public class SynchronisationController(
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
     /// <param name="request">The rule creation request.</param>
     /// <returns>The created Object Matching Rule.</returns>
-    /// <response code="201">Object Matching Rule created successfully.</response>
+    /// <response code="201">Object Matching Rule created successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the new rule makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Connected System or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6131,7 +6336,7 @@ public class SynchronisationController(
 
             return CreatedAtRoute("GetObjectMatchingRule",
                 new { connectedSystemId, ruleId = rule.Id },
-                ObjectMatchingRuleDto.FromEntity(rule));
+                await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ArgumentException ex)
         {
@@ -6154,7 +6359,9 @@ public class SynchronisationController(
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Object Matching Rule.</returns>
-    /// <response code="200">Object Matching Rule updated successfully.</response>
+    /// <response code="200">Object Matching Rule updated successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the change makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Connected System or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6241,7 +6448,7 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Connected System {SystemId}", ruleId, connectedSystemId);
 
-            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+            return Ok(await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ConfigurationTestsRegressedException ex)
         {
@@ -6311,6 +6518,17 @@ public class SynchronisationController(
     #endregion
 
     #region Synchronisation Rule Object Matching Rules (Advanced Mode)
+
+    /// <summary>
+    /// The response to a create or update of an Object Matching Rule: the rule, with the Connected System Object Types the save
+    /// recorded as awaiting synchronisation and what processing them costs (#2615).
+    /// </summary>
+    private async Task<ObjectMatchingRuleDto> ObjectMatchingRuleSaveResponseAsync(ObjectMatchingRule rule)
+    {
+        var dto = ObjectMatchingRuleDto.FromEntity(rule);
+        dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+        return dto;
+    }
 
     /// <summary>
     /// Builds an Object Matching Rule's sources from a request. Each source names exactly one of a Connected System
@@ -6413,7 +6631,9 @@ public class SynchronisationController(
     /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
     /// <param name="request">The rule creation request.</param>
     /// <returns>The created Object Matching Rule.</returns>
-    /// <response code="201">Object Matching Rule created successfully.</response>
+    /// <response code="201">Object Matching Rule created successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the new rule makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Synchronisation Rule or referenced entities not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6478,7 +6698,7 @@ public class SynchronisationController(
 
             return CreatedAtRoute("GetSyncRuleObjectMatchingRule",
                 new { syncRuleId, ruleId = rule.Id },
-                ObjectMatchingRuleDto.FromEntity(rule));
+                await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ArgumentException ex)
         {
@@ -6501,7 +6721,9 @@ public class SynchronisationController(
     /// <param name="ruleId">The unique identifier of the Matching Rule.</param>
     /// <param name="request">The update request.</param>
     /// <returns>The updated Object Matching Rule.</returns>
-    /// <response code="200">Object Matching Rule updated successfully.</response>
+    /// <response code="200">Object Matching Rule updated successfully. <c>awaitingSynchronisation</c> names the Connected System Object
+    /// Type the change makes its Connected System's next synchronisation process in full, with how many objects that is and
+    /// about how long it takes.</response>
     /// <response code="400">Invalid request data.</response>
     /// <response code="404">Synchronisation Rule or Matching Rule not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
@@ -6576,7 +6798,7 @@ public class SynchronisationController(
 
             _logger.LogInformation("Updated Object Matching Rule {RuleId} for Synchronisation Rule {SyncRuleId}", ruleId, syncRuleId);
 
-            return Ok(ObjectMatchingRuleDto.FromEntity(rule));
+            return Ok(await ObjectMatchingRuleSaveResponseAsync(rule));
         }
         catch (ConfigurationTestsRegressedException ex)
         {

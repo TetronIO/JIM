@@ -586,8 +586,7 @@ public class ConfigurationChangePreviewServer
         if (summariser.ReferencedConnectedSystemIds.Count == 0)
             return new Dictionary<int, string>();
 
-        var headers = await _application.ConnectedSystems.GetConnectedSystemHeadersAsync();
-        return headers.ToDictionary(h => h.Id, h => h.Name);
+        return await _application.ConnectedSystems.GetConnectedSystemNamesAsync();
     }
 
     private async Task FailPreviewAsync(ConfigurationChangePreview preview, Activity activity, Exception exception,

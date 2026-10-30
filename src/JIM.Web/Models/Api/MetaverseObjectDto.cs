@@ -91,6 +91,12 @@ public class MetaverseObjectDto
     public bool IsPendingDeletion { get; set; }
 
     /// <summary>
+    /// Whether the Metaverse Object is flagged for review against every export Synchronisation Rule. The next synchronisation
+    /// of any Connected System carries the review out, whichever Connected System it is for.
+    /// </summary>
+    public bool ExportReviewPending { get; set; }
+
+    /// <summary>
     /// When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); null when it is not
     /// pending deletion.
     /// </summary>
@@ -159,6 +165,7 @@ public class MetaverseObjectDto
             Origin = entity.Origin,
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
             IsPendingDeletion = entity.IsPendingDeletion,
+            ExportReviewPending = entity.ScopeReviewPending,
             DeletionEligibleDate = entity.DeletionEligibleDate,
             DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName,
             Type = MetaverseObjectTypeDto.FromEntity(entity.Type),
@@ -238,6 +245,15 @@ public class MetaverseObjectAttributeValueDto
     public string? ContributedBySyncRuleName { get; set; }
 
     /// <summary>
+    /// What kind of source set the value: SynchronisationRule, SignInClaim, System or Person. Null when no source was
+    /// recorded.
+    /// </summary>
+    public ValueContributorKind? ContributedByKind { get; set; }
+
+    /// <summary>The sign-in claim that supplied the value, such as <c>given_name</c>, when the source is a sign-in claim; otherwise null.</summary>
+    public string? ContributedByClaimType { get; set; }
+
+    /// <summary>
     /// When true, this row is an asserted null: a connected, in-scope contributor positively asserted
     /// "no value" for this attribute. All value fields are null and the row carries provenance only.
     /// Consumers must treat such a row as "no value present", not as a value; it exists so a deliberate
@@ -268,6 +284,8 @@ public class MetaverseObjectAttributeValueDto
             ContributedBySystemName = entity.ContributedBySystem?.Name,
             ContributedBySyncRuleId = entity.ContributedBySyncRuleId,
             ContributedBySyncRuleName = entity.ContributedBySyncRule?.Name,
+            ContributedByKind = entity.ContributedByKind,
+            ContributedByClaimType = entity.ContributedByClaimType,
             NullValue = entity.NullValue
         };
     }
@@ -289,8 +307,23 @@ public class MetaverseObjectConnectionDto
     /// <summary>The name of the Connected System that holds the object.</summary>
     public string ConnectedSystemName { get; set; } = null!;
 
-    /// <summary>The object's best-ranked name, falling back to its external id.</summary>
+    /// <summary>The object's best-ranked name, falling back to its External ID.</summary>
     public string? DisplayName { get; set; }
+
+    /// <summary>The object's External ID; null when it has none yet (an object awaiting provisioning).</summary>
+    public string? ExternalId { get; set; }
+
+    /// <summary>
+    /// The object's Secondary External ID (for an LDAP Connected System, its distinguished name); null when the Connected
+    /// System has none or the object has no value for it yet.
+    /// </summary>
+    public string? SecondaryExternalId { get; set; }
+
+    /// <summary>The External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingExternalId { get; set; }
+
+    /// <summary>The Secondary External ID a queued Pending Export will give the object, where it has none yet; null otherwise.</summary>
+    public string? PendingSecondaryExternalId { get; set; }
 
     /// <summary>The Connected System Object Type's name (for example "user").</summary>
     public string ObjectTypeName { get; set; } = null!;
@@ -334,8 +367,9 @@ public class MetaverseObjectConnectionDto
 
     /// <summary>
     /// Maps one derived connection, preferring the name the Metaverse Object's own graph carries: the
-    /// connections derivation loads only identifying values (a group can hold thousands), so it names a row by
-    /// its external id, where the detail response has always used the object's best-ranked name.
+    /// connections derivation loads only identifying values (a group can hold thousands), so it carries no name
+    /// and the row falls back to its External ID, where the detail response has always used the object's best-ranked
+    /// name.
     /// </summary>
     public static MetaverseObjectConnectionDto FromConnection(
         MetaverseObjectConnection connection,
@@ -347,7 +381,11 @@ public class MetaverseObjectConnectionDto
             Id = connection.ConnectedSystemObjectId,
             ConnectedSystemId = connection.ConnectedSystemId,
             ConnectedSystemName = connection.ConnectedSystemName,
-            DisplayName = bestRankedName ?? connection.DisplayName,
+            DisplayName = bestRankedName ?? connection.ExternalId ?? connection.PendingExternalId,
+            ExternalId = connection.ExternalId,
+            SecondaryExternalId = connection.SecondaryExternalId,
+            PendingExternalId = connection.PendingExternalId,
+            PendingSecondaryExternalId = connection.PendingSecondaryExternalId,
             ObjectTypeName = connection.ObjectTypeName,
             JoinType = connection.JoinType,
             DateJoined = connectedSystemObject.DateJoined,

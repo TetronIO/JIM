@@ -46,5 +46,27 @@ public enum ObjectChipKind
     /// <summary>
     /// A Run Profile, shown with a two-letter <c>RP</c> glyph.
     /// </summary>
-    RunProfile
+    RunProfile,
+
+    /// <summary>
+    /// An API key, as who did something, shown with a three-letter <c>KEY</c> glyph.
+    /// </summary>
+    ApiKey,
+
+    /// <summary>
+    /// A Schedule, as what started something, shown with a three-letter <c>SCH</c> glyph.
+    /// </summary>
+    Schedule,
+
+    /// <summary>
+    /// An Activity: a recorded operation, such as a parent Activity, shown with a three-letter <c>ACT</c> glyph, its
+    /// type as the prefix and its target as the name.
+    /// </summary>
+    Activity,
+
+    /// <summary>
+    /// JIM itself, as who did something (seeding, housekeeping, a sign-in), shown with a three-letter <c>JIM</c> glyph.
+    /// Never a link: there is nothing to open.
+    /// </summary>
+    System
 }

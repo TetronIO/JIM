@@ -361,6 +361,88 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         }
     }
 
+    /// <summary>
+    /// An import pre-generates every new object's id before writing them in batches, so a change record for an
+    /// object in one batch can reference an object (a manager, a nested group) that a later batch writes. Writing the
+    /// foreign key to it then failed the whole import with 23503 (found by Scenario 032 at Medium, #2492). The value
+    /// is written without the foreign key, and keeps the DN in StringValue for the post-import fix-up to resolve.
+    /// </summary>
+    [Test]
+    public async Task PersistRpeiCsoChangesAsync_ReferenceToAnObjectNotWrittenYet_PersistsWithoutTheForeignKeyAsync()
+    {
+        // Arrange
+        var connectorDefinition = new ConnectorDefinition { Name = $"Connector-{Guid.NewGuid():N}", BuiltIn = false };
+        var system = new ConnectedSystem { Name = $"System-{Guid.NewGuid():N}", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+        var managerAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "manager", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        csType.Attributes.Add(managerAttribute);
+        var writtenManager = new ConnectedSystemObject { Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal };
+
+        await using (var seed = NewContext())
+        {
+            seed.AddRange(connectorDefinition, system, csType, writtenManager);
+            await seed.SaveChangesAsync();
+        }
+
+        // A later batch's object: its id is known, its row is not written yet.
+        var unwrittenManager = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = csType.Id, ConnectedSystemId = system.Id };
+
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = system.Id,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Added,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        var attributeChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Attribute = managerAttribute,
+            AttributeName = managerAttribute.Name,
+            AttributeType = managerAttribute.Type,
+            ConnectedSystemChange = change
+        };
+        change.AttributeChanges.Add(attributeChange);
+        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(
+            attributeChange, ValueChangeType.Add, "uid=later,ou=People,dc=example,dc=local") { ReferenceValue = unwrittenManager });
+        attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(
+            attributeChange, ValueChangeType.Add, "uid=earlier,ou=People,dc=example,dc=local") { ReferenceValue = writtenManager });
+
+        var rpei = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Added,
+            ConnectedSystemObjectChange = change
+        };
+
+        // Act
+        await using (var writeCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeCtx);
+            await repository.Sync.PersistRpeiCsoChangesAsync([rpei]);
+        }
+
+        // Assert
+        await using var verify = NewContext();
+        var persisted = await verify.ConnectedSystemObjectChangeAttributeValues
+            .AsNoTracking()
+            .Where(v => v.ConnectedSystemObjectChangeAttribute.ConnectedSystemChange.Id == change.Id)
+            .Select(v => new { v.StringValue, ReferenceValueId = EF.Property<Guid?>(v, "ReferenceValueId") })
+            .ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted, Has.Count.EqualTo(2));
+            var later = persisted.Single(v => v.StringValue!.StartsWith("uid=later", StringComparison.Ordinal));
+            Assert.That(later.ReferenceValueId, Is.Null, "A reference to an object not yet written must not carry the foreign key.");
+            var earlier = persisted.Single(v => v.StringValue!.StartsWith("uid=earlier", StringComparison.Ordinal));
+            Assert.That(earlier.ReferenceValueId, Is.EqualTo(writtenManager.Id), "A reference to a written object keeps the foreign key.");
+        }
+    }
+
     [Test]
     public async Task CreatePendingExportsAsync_AttributeValueChangeCarriesSyncRuleAttribution_RoundTripsIdAndNameAsync()
     {

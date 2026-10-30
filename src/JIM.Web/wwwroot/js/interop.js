@@ -48,14 +48,26 @@ window.jimInterop = {
             return false;
         }
     },
-    // Rewrites the current URL's query string in place, without adding a history entry and without telling
-    // Blazor. A virtualised list keeps its search, sort and scroll position in the URL so a refresh or a shared
-    // link lands where the reader left off, and it updates that URL as the reader scrolls. NavigationManager
+    // Updates parameters in the current URL's query string in place, without adding a history entry and without
+    // telling Blazor. A virtualised list keeps its search, sort and scroll position in the URL so a refresh or a
+    // shared link lands where the reader left off, and it updates that URL as the reader scrolls. NavigationManager
     // cannot be used for this: it raises a navigation, which re-runs the page's OnParametersSetAsync and so its
     // whole database load, on every scroll. replaceState is also the right history semantics here, because
     // scrolling a list is not somewhere the back button should return you to.
-    replaceQueryString: function (query) {
-        var url = window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+    // parameters maps a name to a value, an array of values (written as repeated parameters) or null (removed).
+    // Only the names given are touched, and the merge happens here against the live URL: one page can have several
+    // writers (the Operations Activity tab's toggles and filters beside its Completed list), and a writer rebuilding
+    // the whole query from its own copy would drop whatever the others had written since.
+    updateQueryString: function (parameters) {
+        var query = new URLSearchParams(window.location.search);
+        Object.keys(parameters || {}).forEach(function (name) {
+            var value = parameters[name];
+            query.delete(name);
+            if (value === null || value === undefined) return;
+            (Array.isArray(value) ? value : [value]).forEach(function (v) { query.append(name, v); });
+        });
+        var search = query.toString();
+        var url = window.location.pathname + (search ? '?' + search : '') + window.location.hash;
         window.history.replaceState(window.history.state, '', url);
     },
     // Reads a textarea's or input's selection as [start, end] (UTF-16 offsets, the same units as a .NET string).
@@ -74,6 +86,21 @@ window.jimInterop = {
         if (typeof value === 'string' && element.value !== value) element.value = value;
         element.focus();
         element.setSelectionRange(start, end);
+    },
+    // Selects one line of a textarea that does not scroll itself (the SQL Object Types JSON view's), and scrolls the
+    // box around it so the line shows: a third of the way down when it was out of view, and from the start of the line.
+    selectTextLine: function (element, scroller, start, end, line) {
+        if (!element) return;
+        element.focus({ preventScroll: true });
+        element.setSelectionRange(start, end);
+        if (!scroller) return;
+        var lineHeight = parseFloat(getComputedStyle(element).lineHeight) || 20;
+        var top = (line - 1) * lineHeight;
+        if (top < scroller.scrollTop || top + lineHeight > scroller.scrollTop + scroller.clientHeight) {
+            scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 3);
+        }
+        scroller.scrollLeft = 0;
+        scroller.scrollIntoView({ block: 'nearest' });
     },
     // Focuses a textarea or input and selects all its text, so Ctrl+C copies it at once: the Copy summary fallback,
     // offered when the browser refuses the clipboard. A dialog's focus trap takes focus as the dialog opens, which can
@@ -280,6 +307,45 @@ window.jimVirtualList = {
         if (entry.timer) window.clearTimeout(entry.timer);
         entry.element.removeEventListener('scroll', entry.handler);
         delete window.jimVirtualList._observed[selector];
+    }
+};
+
+// Measures the Operations Activity tab's Queued section (#2549) so it can show as many rows as fit while In progress
+// stays in view. Reports on attach and again after the window is resized, never as data arrives, so rows do not come
+// and go under a reader. Positions are measured from the top of the document, not the viewport: the question is how
+// the page lays out on arrival, whatever the reader has scrolled to since.
+window.jimQueueRows = {
+    // Keyed by the tbody's id rather than the element: the element is gone by the time .NET asks for its listener
+    // to be released (the render that removed it is what prompts the release), and an id still names the entry.
+    _observed: new Map(),
+    observe: function (elementId, dotNetRef, debounceMs) {
+        var element = document.getElementById(elementId);
+        if (!element) return;
+        window.jimQueueRows.stop(elementId);
+
+        var report = function () {
+            var rows = element.querySelectorAll('tr.jim-activity-row');
+            var rowHeight = rows.length ? rows[rows.length - 1].getBoundingClientRect().height : 0;
+            var top = element.getBoundingClientRect().top + window.scrollY;
+            dotNetRef.invokeMethodAsync('OnQueueMeasured', window.innerHeight, top, rowHeight).catch(function () { });
+        };
+        var entry = { timer: null };
+        entry.handler = function () {
+            if (entry.timer) window.clearTimeout(entry.timer);
+            entry.timer = window.setTimeout(report, debounceMs || 150);
+        };
+
+        window.addEventListener('resize', entry.handler, { passive: true });
+        window.jimQueueRows._observed.set(elementId, entry);
+        report();
+    },
+    stop: function (elementId) {
+        var entry = window.jimQueueRows._observed.get(elementId);
+        if (!entry) return;
+
+        if (entry.timer) window.clearTimeout(entry.timer);
+        window.removeEventListener('resize', entry.handler);
+        window.jimQueueRows._observed.delete(elementId);
     }
 };
 

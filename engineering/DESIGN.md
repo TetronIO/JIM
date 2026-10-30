@@ -116,9 +116,9 @@ components:
   button-secondary-hover:
     backgroundColor: "{colors.secondary-darken}"
     textColor: "{colors.on-secondary}"
-  button-outlined:
-    backgroundColor: "#FFFFFF00"
-    textColor: "{colors.primary}"
+  button-default:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.on-surface}"
     rounded: "{rounded.sm}"
     padding: 12px
   card:
@@ -257,7 +257,7 @@ JIM uses a three-tier type system. Each typeface has a defined role; do not mix 
 
 Body text, UI controls, navigation, list items, table content, and heading levels H2 to H6. The default voice everywhere except code and the display-accent layer. Designed by IBM, SIL Open Font License 1.1. Sharper character disambiguation (1/l/I, 0/O) than many grotesques, which matters where GUIDs, DNs, and command snippets appear.
 
-Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/ibm-plex-sans/`. Loaded via Google Fonts on the docs site as the variable font, so docs body text sits at weight 450 (IBM's text weight; 400 reads faint on screen), with bold at 600, at 16px on every screen width (Material's root-size growth above 1600px is pinned off) and a line height of 1.65.
 
 ### IBM Plex Mono (technical)
 
@@ -273,7 +273,7 @@ Used sparingly for hero titles, the portal sidebar wordmark, and publication-sty
 
 **Where not to use:** body text, sub-headings (H2 to H6), tables, UI controls, or marketing prose. Overuse tips the brand from "considered modern" toward "developer-tool studio".
 
-Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded via CSS `@import` from Google Fonts on the docs site.
+Self-hosted in the portal at `wwwroot/fonts/space-grotesk/`. Loaded from Google Fonts on the docs site, in the same request as the Plex faces (`docs/overrides/main.html`).
 
 ### Heading weight corrections
 
@@ -297,25 +297,30 @@ Cards and elevated surfaces use subtle background shifts between `background` an
 
 The MkDocs Material docs site uses a standard two-column layout (nav plus content). Table and admonition body text is set at 0.72rem (up from Material's 0.64rem default). Default Material hover shadow on cards is removed for a flatter look consistent with the portal.
 
+The header is a neutral surface in both themes: `#f3f3f3` in light mode and the navy surface `#0d1e30` in dark, each separated from the page by a hairline. Brand purple fills only the home page hero, and both themes light it the same way: a radial glow from the top centre. In light mode the glow sits over a vertical brand-purple gradient (`#4f3c9c` to `#3b2b80`), and a faint lavender band (`#f3f0fb` fading to white) carries the purple into the page behind the system diagram. In dark mode it is purple light rising from the header into the navy page (a radial glow over a gradient from `#0d1e30` to `#051526`), so the hero has no hard edge and no violet surface sits against the navy. Grid cards are white with a cool hairline (`#e4e1ec`) in light mode and the navy surface in dark, so the icon tiles read cleanly in both.
+
+Readers choose the content width with a header toggle: the reading width by default, or the full window, which everything fills, text included. Table columns can be resized by dragging the header cell's right edge. Both are described in `docs/CLAUDE.md` > Reader layout controls.
+
+Icons are Material Design Icons, never emoji (STY-1 in `DOCUMENTATION_STANDARD.md`). An icon opening an H2 (every H2 on every page has one; no lower heading does) or a grid card is drawn as a 4px-radius tile tinted with brand purple; table status marks use the success, error and warning colours.
+
 ## Components
 
 ### Buttons
 
-Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Outlined buttons use a transparent background with the default text colour and a border drawn from it. Hover state darkens to `primary-darken` on a primary button, and tints the background on an outlined one.
+Primary buttons use `primary` background with `on-primary` text, 4px corners (the global `DefaultBorderRadius`). Default-colour buttons are filled with a face just off the theme's surface, the default text colour and a 1px border from the theme's lines (`site.css`, "The Default-colour filled button"), so the theme decides how they look and a disabled button, which has no border, never resembles one. Hover state darkens to `primary-darken` on a primary button, and tints the face on a default one.
 
-**Colour says what a button does; the variant says how much it matters.** `primary` is the page's main action, `error` and `warning` are dangerous ones, and every other action takes the neutral default colour. Filled is reserved for the one action a view most wants taken, outlined is an ordinary action, and text is the least of them.
+**Colour says what a button does.** `primary` is the page's main action, `error` and `warning` are dangerous ones, and every other action takes the default colour. An ordinary action is filled in the default colour, and a text button is the least of them.
 
 - **A view has at most one filled `primary` button, and a `primary` button is always filled.** A view is a page as it is seen at once, or a dialog. Its main action is the one filled `primary` button: the Details tab's **Save Changes**. A page with no main action (a Connected System Object, a Metaverse Object) has no `primary` button at all.
-- **Every other action is outlined in the default colour,** or a text button where it is lesser still. The Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's filled **Save Changes** as a neutral outlined button, and a Connected System Object's **Preview Sync** and **Set Password** are a pair of them.
-- **Never fill a button in the default colour:** MudBlazor draws it as a grey block, which reads as disabled.
+- **Every other action is filled in the default colour,** or a text button where it is lesser still. The Full Synchronisation preview's **Run Full Synchronisation** sits above the Details tab's **Save Changes** as a default-colour button, and a Connected System Object's **Preview Sync** and **Set Password** are a pair of them. Outlined is kept for a dangerous action on a page.
 - **The colours with no button meaning stay off buttons.** `secondary` means the Connected System side in JIM's chips, and `info` and `success` belong to alerts, whose buttons take the alert's colour (see below).
 - **A destructive action** on a page (**Delete Connected System**, **Delete All Objects**, **Cancel Execution**) is outlined in `error`. It is filled in `error` only as the confirming button of its own dialog, where it is that dialog's one filled button.
-- **In a dialog, the filled button is the recommended way out,** which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** outlined and **Cancel** as text.
-- **An action repeated on every row of a table** (**View**, **Preview Sync**, **Explore**) is a text button in `primary`. It is the one exception to the colour rule, because a row action reads and behaves as a link, and links are `primary` throughout the portal; outlined, it would turn a long list into a column of boxes.
+- **In a dialog, the one `primary` (or confirming `error`) button is the recommended way out,** which is not always the one that does the most. On the out-of-date preview dialog it is **Preview again**, with **Run anyway** in the default colour and **Cancel** as text.
+- **An action repeated on every row of a table** (**View**, **Preview Sync**, **Explore**) is a text button in `primary`. It is the one exception to the colour rule, because a row action reads and behaves as a link, and links are `primary` throughout the portal; as a button, it would turn a long list into a column of boxes.
 - **Choosing between views or sibling pages** (Connected Systems and Connectors, the Metaverse Object's Form, Tabs and Inspect) is a segmented control, not a button group with the chosen option filled: the choice is a state, not an action.
 - Outside the rule: buttons inside alerts, which follow the paragraph below, and the small icon buttons that act on one item in a list or table.
 
-In the portal a build check (`ButtonEmphasisConventionTests`) holds every component to what one file can show: no filled button in a colour without a main or dangerous meaning, no `primary` button that is not filled (bar a text button on a table row), no outlined or text button in a colour with no button meaning, no filled destructive button outside a dialog's actions, no more than one filled button showing in a dialog's actions, no filled button on a table row, and no filled button group. "One filled button per page" spans several components, so that half is for review.
+In the portal a build check (`ButtonEmphasisConventionTests`) holds every component to what one file can show: no filled button in a colour with no button meaning, no outlined button in the default colour, no `primary` button that is not filled (bar a text button on a table row), no outlined or text button in a colour with no button meaning, no filled destructive button outside a dialog's actions, no more than one `primary`, `error` or `warning` filled button showing in a dialog's actions, no filled button on a table row, and no filled button group. "One filled button per page" spans several components, so that half is for review.
 
 A button inside an alert is filled in the alert's severity colour (`warning` on a warning, `error` on an error, and so on), never `primary`, so the action reads as part of the message it answers. A lesser action beside it is a text button in the alert's colour. In the portal this is the `<AlertButton>` component, enforced by a build check; see `src/JIM.Web/CLAUDE.md` > Alerts.
 
@@ -340,6 +345,21 @@ Header row uses `background` token. Row content uses `body-sm` typography. Alter
 The diagram design system covers the docs site (`docs.junctional.io`) and marketing surfaces (`junctional.io`), so diagrams read as one family across both properties. Concept diagrams are **hand-authored SVGs inlined into the page** (via `pymdownx.snippets` on the docs site): geometry lives in the SVG, and every colour lives in the site stylesheet as a `--jimdg-*` custom property, so a single SVG serves both light and dark mode through the normal theme toggle. The reference implementation is `docs/assets/diagrams/hub-and-spoke.svg` plus the "Concept diagrams" section of `docs/assets/stylesheets/custom.css`.
 
 Diagrams use the **brand colours**, not the portal `--mud-palette-*` tokens, consistent with the brand-vs-theme rule above. The semantic roles mirror the causality-visualisation roles: purple for JIM/metaverse-side concepts, navy for Connected-System-side concepts.
+
+### Generated diagrams
+
+Most docs pages carry a **generated diagram**: a short `jim-diagram` spec in the page, rendered at build time by `docs/hooks/diagrams.py` in the same token language as the hand-drawn concept diagrams (authoring: `docs/CLAUDE.md` > Generated diagrams). The renderer owns layout, so every page's diagram is unique in content but consistent in form. Six archetypes cover what docs pages explain:
+
+| Archetype | Shape | Use it for |
+|-----------|-------|------------|
+| Flow | Input, steps in a frame, detours, output | Something that processes (a Synchronisation Rule) |
+| Lifecycle | States with labelled transitions, a start dot, a dashed terminal | Something that moves between states (a Connected System and its cmdlets) |
+| Anatomy | A value as a token with callouts, or an object as a card of parts; property chips | Something made of parts (an API key) |
+| Decision | Questions down the left, outcomes on the right; the wanted outcome solid | A branching outcome or diagnosis (matching, troubleshooting) |
+| Comparison | Options side by side against shared rows; a twelve-dot meter | "Which one do I use" (Full against Delta) |
+| Map | Nodes on a grid joined along rows and columns; nodes may be links | How several things connect (the glossary) |
+
+Each is drawn twice, wide (800 units) and narrow (360 units, for phones), and one shows per breakpoint. The visual vocabulary is shared: the hub frame for "inside this", stage boxes for steps and states, navy-outlined system boxes for what lies outside, solid purple (`--jimdg-core-*`) for the one thing to notice, lavender (`--jimdg-layer-*`) for questions and headers, purple edge labels and flows, and Plex Mono for code (`` `backticked` `` in a spec). Text renders at no less than 10px on screen at the reading width and on a phone; `scripts/Test-Diagrams.ps1` enforces that, along with labels inside their boxes, no overlaps and no line through text.
 
 ### Element tokens
 

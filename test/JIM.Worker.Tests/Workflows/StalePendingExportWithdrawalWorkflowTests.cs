@@ -210,6 +210,56 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         Assert.That(WithdrawalOutcomes(activity), Is.Empty, DescribeOutcomes(activity));
     }
 
+    [Test]
+    public async Task FullSync_MergedClassAttributeWithdrawnBeforeExport_WithdrawsTheClassItObligedAsync()
+    {
+        // The first flow of a merged auxiliary class's attribute stages the class add with it. When the attribute's
+        // value is then withdrawn before the export, the target already holds what the Metaverse wants (nothing), so the
+        // queued attribute change is withdrawn. The class add was only there because of it: left behind, it asks the
+        // directory to add a class whose required attributes nothing writes, so every export is refused (Scenario 019,
+        // Dora).
+        var ctx = await SetUpAsync(directoryProjects: false, titleIsMergedClassAttribute: true);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", title: null);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        Assert.That(DirectoryChangeValues(ctx, "objectClass"), Is.EqualTo(new[] { "badgeHolder" }),
+            "precondition: the first flow of the merged class's attribute stages the class with it");
+
+        RemoveValue(hrCso, "Title");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        Assert.That(DirectoryPendingExports(ctx), Is.Empty,
+            "with the attribute withdrawn, nothing obliges the class, so nothing is left to export");
+    }
+
+    [Test]
+    public async Task FullSync_MergedClassAttributeWithdrawnWhileAnotherOfItsAttributesIsQueued_KeepsTheClassAsync()
+    {
+        // The class stays while any queued change still carries one of its attributes.
+        var ctx = await SetUpAsync(directoryProjects: false, titleIsMergedClassAttribute: true, displayNameIsMergedClassAttribute: true);
+        var hrCso = SeedCso(ctx.Hr, ctx.HrType, "E1", "Alice", "Engineer");
+        SeedCso(ctx.Directory, ctx.DirectoryType, "E1", "Alice", title: null);
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Directory);
+        SetValue(hrCso, "DisplayName", "Alicia");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        RemoveValue(hrCso, "Title");
+        await ModifyCsoAsync(hrCso);
+        await RunFullSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(DirectoryChangeValues(ctx, "Title"), Is.Empty, "arrange check: the queued Title was withdrawn");
+            Assert.That(DirectoryChangeValues(ctx, "DisplayName"), Is.EqualTo(new[] { "Alicia" }), "the other attribute's change stays queued");
+            Assert.That(DirectoryChangeValues(ctx, "objectClass"), Is.EqualTo(new[] { "badgeHolder" }),
+                "and it still obliges the class, so the class add stays with it");
+        }
+    }
+
     // ---- Topology ----
 
     private sealed record Context(
@@ -218,7 +268,7 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         ConnectedSystem Directory,
         ConnectedSystemObjectType DirectoryType);
 
-    private async Task<Context> SetUpAsync(bool directoryProjects)
+    private async Task<Context> SetUpAsync(bool directoryProjects, bool titleIsMergedClassAttribute = false, bool displayNameIsMergedClassAttribute = false)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvEmployeeId = mvType.Attributes.First(a => a.Name == "EmployeeId");
@@ -228,7 +278,9 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         var hr = await CreateConnectedSystemAsync("HR");
         var hrType = await CreateCsoTypeAsync(hr.Id, "User", Attributes());
         var directory = await CreateConnectedSystemAsync("Directory");
-        var directoryType = await CreateCsoTypeAsync(directory.Id, "User", Attributes());
+        var directoryType = await CreateCsoTypeAsync(directory.Id, "User", Attributes(withClassMembership: titleIsMergedClassAttribute));
+        if (titleIsMergedClassAttribute)
+            await MergeAuxiliaryClassAsync(directoryType, displayNameIsMergedClassAttribute ? ["Title", "DisplayName"] : ["Title"]);
 
         // HR: projects (or, when the Directory projects, joins by EmployeeId) and contributes every value.
         var hrImport = await CreateImportSyncRuleAsync(hr.Id, hrType, mvType, "HR Import", enableProjection: !directoryProjects);
@@ -253,13 +305,39 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         return new Context(hr, hrType, directory, directoryType);
     }
 
-    private static List<ConnectedSystemObjectTypeAttribute> Attributes() =>
-    [
-        new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
-        new() { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true },
-        new() { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true },
-        new() { Name = "Title", Type = AttributeDataType.Text, Selected = true }
-    ];
+    private static List<ConnectedSystemObjectTypeAttribute> Attributes(bool withClassMembership = false)
+    {
+        List<ConnectedSystemObjectTypeAttribute> attributes =
+        [
+            new() { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true },
+            new() { Name = "Title", Type = AttributeDataType.Text, Selected = true }
+        ];
+        if (withClassMembership)
+            attributes.Add(new() { Name = "objectClass", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.MultiValued, Selected = true });
+        return attributes;
+    }
+
+    /// <summary>
+    /// Makes the Directory compose objectClass, with <paramref name="attributeNames"/> contributed by a merged
+    /// "badgeHolder" auxiliary class, as an RFC 4512 directory's schema does once an auxiliary class is merged.
+    /// </summary>
+    private async Task MergeAuxiliaryClassAsync(ConnectedSystemObjectType directoryType, IEnumerable<string> attributeNames)
+    {
+        var badgeHolder = await CreateCsoTypeAsync(directoryType.ConnectedSystemId, "badgeHolder", []);
+        badgeHolder.Selected = false;
+        directoryType.Tags.Add(new ConnectedSystemObjectTypeTag { Key = ObjectTypeTags.Keys.ClassMembershipAttribute, Value = "objectClass" });
+        directoryType.Extensions.Add(new ConnectedSystemObjectTypeExtension
+        {
+            BaseObjectTypeId = directoryType.Id,
+            ExtensionObjectTypeId = badgeHolder.Id,
+            ExtensionObjectType = badgeHolder
+        });
+        foreach (var name in attributeNames)
+            directoryType.Attributes.Single(a => a.Name == name).ClassName = "badgeHolder";
+        await DbContext.SaveChangesAsync();
+    }
 
     private static void AddImportFlow(SyncRule rule, ConnectedSystemObjectType csoType, string csAttributeName, MetaverseAttribute target)
     {
@@ -302,7 +380,7 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         });
     }
 
-    private ConnectedSystemObject SeedCso(ConnectedSystem system, ConnectedSystemObjectType type, string employeeId, string displayName, string title)
+    private ConnectedSystemObject SeedCso(ConnectedSystem system, ConnectedSystemObjectType type, string employeeId, string displayName, string? title)
     {
         var cso = new ConnectedSystemObject
         {
@@ -316,7 +394,10 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
         AddValue(cso, type, "ExternalId", guidValue: Guid.NewGuid());
         AddValue(cso, type, "EmployeeId", employeeId);
         AddValue(cso, type, "DisplayName", displayName);
-        AddValue(cso, type, "Title", title);
+        if (title != null)
+            AddValue(cso, type, "Title", title);
+        if (type.Attributes.Any(a => a.Name == "objectClass"))
+            AddValue(cso, type, "objectClass", type.Name);
         SyncRepo.SeedConnectedSystemObject(cso);
         return cso;
     }
@@ -333,6 +414,9 @@ public class StalePendingExportWithdrawalWorkflowTests : WorkflowTestBase
 
     private static void SetValue(ConnectedSystemObject cso, string name, string value) =>
         cso.AttributeValues.Single(av => av.Attribute.Name == name).StringValue = value;
+
+    private static void RemoveValue(ConnectedSystemObject cso, string name) =>
+        cso.AttributeValues.Remove(cso.AttributeValues.Single(av => av.Attribute.Name == name));
 
     private List<PendingExport> DirectoryPendingExports(Context ctx) =>
         SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == ctx.Directory.Id).ToList();

@@ -147,12 +147,12 @@ For testing the Change History UI (CSO and MVO change timelines), use the SQL se
 
 ```bash
 # Run against your development/test database
-docker compose exec jim.database psql -U jim -d jim_test -f /workspaces/JIM/test/data/seed-change-history.sql
+docker compose exec jim.database psql -U jim -d jim_test -f /workspaces/JIM/test/data/seed-change-history-simple.sql
 ```
 
 **Maintaining the SQL Script:**
 
-The SQL script at `test/data/seed-change-history.sql` generates realistic change history data for UI testing. **If the database schema changes** (e.g., new columns, renamed tables, changed relationships for MetaverseObjectChanges, ConnectedSystemObjectChanges, or related tables), you MUST regenerate this script:
+The SQL script at `test/data/seed-change-history-simple.sql` generates realistic change history data for UI testing. **If the database schema changes** (e.g., new columns, renamed tables, changed relationships for MetaverseObjectChanges, ConnectedSystemObjectChanges, or related tables), you MUST regenerate this script:
 
 1. **When to regenerate:**
    - Migrations added/changed for MetaverseObjectChanges, MetaverseObjectChangeAttributes, MetaverseObjectChangeAttributeValues tables
@@ -161,7 +161,7 @@ The SQL script at `test/data/seed-change-history.sql` generates realistic change
    - Changes to MetaverseObject, MetaverseAttribute, or navigation property structures
 
 2. **How to regenerate:**
-   - Read the current `test/data/seed-change-history.sql` to understand the data scenario
+   - Read the current `test/data/seed-change-history-simple.sql` to understand the data scenario
    - Review recent migrations in `src/JIM.PostgresData/Migrations/` to understand schema changes
    - Rewrite the SQL script to match the new schema while preserving the same realistic test scenario:
      - Alice (Person): 5-7 changes including promotions, department moves, email updates, salary changes
@@ -383,9 +383,9 @@ The test image enables `olcSortVals: member` (on `olcDatabase={-1}frontend,cn=co
 
 Unlike the map sizes above, `sortvals` is deliberately **NOT** reconciled by `start-openldap.sh`: it only affects entries written while active, and applying it to snapshot data stored unsorted breaks value lookups (binary search over unsorted values, causing silent duplicate misdetection and failing value deletes). The init script is part of the OpenLDAP base image hash, which every snapshot records as the base it was baked from, so pre-sortvals snapshots invalidate and rebuild automatically with sorted data. Never "fix" this by adding a reconcile.
 
-**OpenLDAP accesslog `logold` write amplification (known cost, do not remove):**
+**OpenLDAP accesslog `logold` is off, and must stay off:**
 
-Both suffixes' accesslog overlays set `olcAccessLogOld: (objectClass=*)`, which logs the **old values of every modified attribute** into the accesslog. On large-group membership modifies this writes the entire pre-modification member list per operation (a 500K-member group generates tens of GB of accesslog over a full export; measured 93 GB at Scale500k25kGroups with batch size 100). It cannot be removed yet: JIM's delta import types deleted objects from `reqOld` (`BuildDeleteImportObjectFromAccesslog` in `LdapConnectorImport.cs` returns null without it, silently dropping the delete), and slapo-accesslog has no per-operation-type `logold` control. The larger Modify Batch Size default (1000) cuts the amplification ~10x. Removing JIM's `reqOld` dependency (resolving the deleted object's type from the existing CSO by entryUUID/DN instead) is the structural fix that would let both test images and customers drop `logold`.
+The init script (`01-add-second-suffix.sh`) removes `olcAccessLogOld`/`olcAccessLogOldAttr` from every accesslog overlay, including the one Bitnami creates for the primary suffix with `logold (objectClass=*)` by default (#1066). `logold` matches entries, not operations, and logs the old values of every modified attribute, so each membership modify of a large group re-logged its whole member list: 34 GB of accesslog against 4.5 GB of directory data at Scale750k40kGroups, 93 GB at Scale500k25kGroups, and enough sustained writes to exhaust a DRAM-less drive's write cache and time out export modifies. JIM needs none of it: an OpenLDAP deletion is reported by `reqEntryUUID` and `reqDN` only, without an Object Type, and the import types it from the object it holds (`TypeUntypedDeletions` in `SyncImportTaskProcessor`). Verified on the lab's OpenLDAP 2.6.10 that `reqEntryUUID` is recorded on deletes with `logold` off. Do not reintroduce `logold` to "help" delete handling.
 
 **OpenLDAP container memory scales per template:**
 

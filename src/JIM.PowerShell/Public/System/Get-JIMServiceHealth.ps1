@@ -16,10 +16,13 @@ function Get-JIMServiceHealth {
         Each service's Status is one of:
 
         - Healthy: heartbeating within the last 15 seconds. Nothing to do.
-        - Degraded: alive, but something is not right. Condition says what: HeartbeatOverdue (more than 15 seconds
-          since the last heartbeat, not yet long enough to presume the process gone; it may be paused under load or
-          the database may be slow) or Stalled (its current work has not moved forward for more than 10 minutes;
-          the process is up, the task it is running may be wedged; only judged for work that reports progress).
+        - Degraded: alive, but something is not right. Condition says what: MemoryLow (85% or more of the memory the
+          service can draw on is in use; the Worker stops its running work at 92% rather than be stopped by the
+          operating system part-way through, so give JIM more memory or run less at once), HeartbeatOverdue (more
+          than 15 seconds since the last heartbeat, not yet long enough to presume the process gone; it may be
+          paused under load or the database may be slow) or Stalled (its current work has not moved forward for more
+          than 10 minutes; the process is up, the task it is running may be wedged; only judged for work that
+          reports progress).
         - Unhealthy: presumed down. Condition is NoHeartbeat (none for 60 seconds for the Worker services, 120
           seconds for the Scheduler) or NeverStarted (it has never reported at all). Queued and scheduled work will
           not run until it is back.
@@ -28,7 +31,10 @@ function Get-JIMServiceHealth {
 
         Reason puts the condition in plain words with the figures that matter. CurrentWork names what the service was doing when it last reported (for
         example "Full Import: Corporate Directory"), and Version is the JIM version that instance runs: compare it
-        with the web tier's version from -Summary, because a mismatch means a partial upgrade.
+        with the web tier's version from -Summary, because a mismatch means a partial upgrade. ProcessMemoryBytes is
+        the memory the service's process held at its last heartbeat; MemoryTotalBytes is what it can draw on in all
+        (its container's memory limit when one is set, otherwise the host's memory) and MemoryAvailableBytes how much
+        of that was still free. All three are null for a service that has not reported them.
 
         With -Summary, one object is returned instead: Overall (the worst status present), WebVersion, GeneratedAt
         and the per-service objects under Services. A monitoring script that alerts on anything other than Healthy
@@ -72,9 +78,15 @@ function Get-JIMServiceHealth {
     .EXAMPLE
         Get-JIMServiceHealth | Where-Object Condition -eq 'Stalled' | Select-Object Service, CurrentWork, LastProgressAt
 
-        Names the work that has stalled. The process is up; the task is what needs looking at, and the Operations
-        page's Queue tab is where to cancel it if it is genuinely wedged.
+        Names the work that has stalled. The process is up; the task is what needs looking at, and the In Progress
+        section of the Operations page's Activity tab is where to cancel it if it is genuinely wedged.
 
+    .EXAMPLE
+        Get-JIMServiceHealth | Select-Object Service,
+            @{ Name = 'ProcessGB'; Expression = { [math]::Round($_.ProcessMemoryBytes / 1e9, 1) } },
+            @{ Name = 'InUsePercent'; Expression = { [math]::Round(100 * (1 - $_.MemoryAvailableBytes / $_.MemoryTotalBytes)) } }
+        Shows how much memory each service holds and how full the memory it draws on is. A large synchronisation that
+        takes the Worker past 85% is worth sizing for before it reaches 92%, where the Worker stops it.
     .EXAMPLE
         $health = Get-JIMServiceHealth -Summary
         $health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVersion } |
@@ -125,6 +137,9 @@ function Get-JIMServiceHealth {
                 InstanceId           = $service.instanceId
                 LastProgressAt       = $service.lastProgressAt
                 Detail               = $service.detail
+                ProcessMemoryBytes   = $service.processMemoryBytes
+                MemoryTotalBytes     = $service.memoryTotalBytes
+                MemoryAvailableBytes = $service.memoryAvailableBytes
             }
             $item.PSObject.TypeNames.Insert(0, 'JIM.ServiceHealth')
             $item

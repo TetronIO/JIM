@@ -9,11 +9,38 @@ audience: automation-author
 
 A Sync Preview answers what synchronising one object would do right now, with the configuration already saved. It changes nothing: it stages no exports and writes no objects. Unlike a [Configuration Change Preview](previews.md), it is synchronous and needs no Activity id: it evaluates one object against the Synchronisation Rules already saved and returns immediately. See [Sync Preview](../configuration/sync-preview.md) for what the outcome tree and the destructive cascade mean.
 
+```jim-diagram
+archetype: comparison
+title: The two Sync Preview cmdlets compared
+desc: 'Get-JIMConnectedSystemObjectSyncPreview starts from a Connected System Object, named by -ConnectedSystemId and -Id. It previews the inbound chain (scope, join or projection, and Attribute Flow), then the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade. Get-JIMMetaverseObjectSyncPreview starts from a Metaverse Object, named by -Id, as it stands now: it has no inbound chain, so Inbound is always empty and there is no cascade, and it previews only the outbound decisions its current state would produce. Either way the would-be Pending Exports are listed in ProposedExports and nothing is staged. Both return the same object, and nothing changes: check HasBlockingErrors first.'
+columns:
+- {label: Connected System Object, sub: '`Get-JIMConnectedSystemObjectSyncPreview`'}
+- {label: Metaverse Object, sub: '`Get-JIMMetaverseObjectSyncPreview`'}
+rows:
+- label: Starts from
+  cells:
+  - {text: the object, sub: '`-ConnectedSystemId` and `-Id`'}
+  - {text: the object as it stands now, sub: '`-Id`'}
+- label: Inbound
+  cells:
+  - {text: 'scope, join or projection, Attribute Flow'}
+  - {text: none, sub: '`Inbound` is always empty'}
+- label: Outbound
+  cells:
+  - {text: what the resulting Metaverse Object would export, sub: '`ProposedExports`; nothing is staged'}
+  - {text: what its current state would export, sub: '`ProposedExports`; nothing is staged'}
+- label: Destructive cascade
+  cells:
+  - {text: where it would leave scope and disconnect, sub: 'Metaverse Object deletion, downstream deprovisioning'}
+  - {text: none, sub: no inbound chain to leave}
+footer: 'Both return the same object and change nothing: check `HasBlockingErrors` first'
+```
+
 Both return the same object, tabled under [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview). Check `HasBlockingErrors` before reading anything else: a preview that surfaced a blocking error describes a synchronisation that would fail, not one that would succeed as shown.
 
 ---
 
-## Get-JIMConnectedSystemObjectSyncPreview
+## :material-eye-outline: Get-JIMConnectedSystemObjectSyncPreview
 
 Previews what synchronising a Connected System Object would do: the inbound chain (scope, join or projection, Attribute Flow), the outbound decisions the resulting Metaverse Object state would produce, and, where the object would fall out of scope and disconnect, the destructive cascade (whether the Metaverse Object would be deleted or scheduled for deletion, and which downstream Connected System Objects would be deprovisioned).
 
@@ -37,7 +64,7 @@ What synchronising the object would do, were the real synchronisation to run now
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `OutcomeTree` | `object[]` | The outcomes the synchronisation would produce, as a tree, in the same shape as the outcomes recorded on a Run Profile Execution Item. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `Ordinal` and `Children`. |
+| `OutcomeTree` | `object[]` | The outcomes the synchronisation would produce, as a tree, in the same shape as the outcomes recorded on a Run Profile Execution Item. Each has `OutcomeType`, `TargetEntityId`, `TargetEntityDescription`, `SyncRuleId`, `SyncRuleName`, `StagedChangeType`, `DetailCount`, `DetailMessage`, `ObjectMatchingRuleId`, `ObjectMatchingRuleDescriptionSnapshot`, `MatchedValue`, `ConnectedSystemObjectChangeId`, `Ordinal` and `Children`. |
 | `Inbound` | `object` | The inbound summary: would the object project or join, and what Attribute Flows would result. Empty for a Metaverse Object preview, which has no inbound chain. It has `WouldProject`, `ProjectedMetaverseObjectTypeId`, `ProjectedMetaverseObjectTypeName`, `WouldJoinMetaverseObjectId`, `WouldJoinObjectMatchingRuleId`, `WouldJoinObjectMatchingRuleDescription`, `WouldJoinMatchedValue`, `AlreadyJoinedMetaverseObjectId` and `AttributeFlowChanges`. |
 | `ProposedExports` | `object[]` | The Pending Exports that would be staged per target Connected System, were the real synchronisation to run. None of them is staged: the preview changes nothing. Each has `ConnectedSystemId`, `ChangeType`, `ConnectedSystemObjectId`, `SourceMetaverseObjectId` and `AttributeChanges`. |
 | `Errors` | `object[]` | Conditions that would prevent the real synchronisation. Distinct from Warnings so a caller can render blockers and advisories differently without parsing message text. Each has `Code`, `Detail`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `AttributeName` and `MatchCandidates`. |
@@ -71,7 +98,7 @@ $preview.Warnings | Where-Object Code -eq 'OutOfScope' | Select-Object Detail
 
 ---
 
-## Get-JIMMetaverseObjectSyncPreview
+## :material-hub-outline: Get-JIMMetaverseObjectSyncPreview
 
 Previews what synchronising from a Metaverse Object's current state would do: the outbound decisions that state would produce. A Metaverse Object is never synchronised itself; its Connected System Objects are, so this cmdlet evaluates the Metaverse Object **as it stands now**, outbound only, with no inbound chain of its own (`Inbound` is always `$null`). For the full inbound-then-outbound chain of one Connected System Object, use [`Get-JIMConnectedSystemObjectSyncPreview`](#get-jimconnectedsystemobjectsyncpreview) instead.
 
@@ -108,7 +135,7 @@ $preview.ProposedExports | Format-Table ConnectedSystemId, ChangeType
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Sync Preview](../configuration/sync-preview.md): what these cmdlets evaluate, including the destructive cascade
 - [Previews](previews.md): previewing a proposed configuration change across every object it would affect

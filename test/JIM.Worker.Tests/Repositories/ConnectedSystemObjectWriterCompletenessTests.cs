@@ -61,8 +61,10 @@ public class ConnectedSystemObjectWriterCompletenessTests
         ["DeleteAllConnectedSystemObjectsAndDependenciesAsync"] = "releases joins of rows deleted by the same operation"
     };
 
+    // EF inserts are matched on the DbSet reached through the context, so a Metaverse Object's in-memory connector
+    // collection (mvo.ConnectedSystemObjects.Add) is not mistaken for one.
     private static readonly Regex WriteStatement = new(
-        @"(?:\b(?:UPDATE|INSERT\s+INTO|COPY)\s+""{1,2}ConnectedSystemObjects""{1,2}(?:[\s(]|$))|(?:\bConnectedSystemObjects\.(?:Add|AddRange)\()",
+        @"(?:\b(?:UPDATE|INSERT\s+INTO|COPY)\s+""{1,2}ConnectedSystemObjects""{1,2}(?:[\s(]|$))|(?:\b(?:Database|[Cc]ontext)\.ConnectedSystemObjects\.(?:Add|AddRange)\()",
         RegexOptions.Compiled);
 
     private static readonly Regex MethodDeclaration = new(

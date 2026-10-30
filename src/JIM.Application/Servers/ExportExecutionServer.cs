@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using System.Globalization;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
@@ -104,6 +105,9 @@ public class ExportExecutionServer
     /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
     /// <param name="uniqueValueReservations">The worker's process-wide reservation set, which values Collision
     /// Remediation draws are claimed in (Unique Value Generation, #242, release 4); a run-local set when null.</param>
+    /// <param name="containersCreated">Optional callback naming the containers the export created.</param>
+    /// <param name="activityId">The export run's Activity, which a Metaverse Object change Collision Remediation
+    /// records links to (#2460).</param>
     /// <returns>Export execution result with preview information</returns>
     public async Task<ExportExecutionResult> ExecuteExportsAsync(
         ConnectedSystem connectedSystem,
@@ -116,7 +120,8 @@ public class ExportExecutionServer
         Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        Action<IReadOnlyList<string>>? containersCreated = null)
+        Action<IReadOnlyList<string>>? containersCreated = null,
+        Guid? activityId = null)
     {
         options ??= new ExportExecutionOptions();
         cancellationToken.ThrowIfCancellationRequested();
@@ -202,7 +207,7 @@ public class ExportExecutionServer
         {
             var classifies = connectedSystem.ConnectorDefinition?.SupportsUniquenessRejectionClassification == true;
             var recordMetaverseChanges = classifies && await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
-            _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges);
+            _collisionRemediation = new CollisionRemediationRun(Application, connectedSystem, uniqueValueReservations ?? new UniqueValueReservationSet(), recordMetaverseChanges, activityId);
         }
 
         _containersCreated = containersCreated;
@@ -665,8 +670,11 @@ public class ExportExecutionServer
                 // collected in memory; a strictly-increasing cursor is immune to both, so
                 // nothing is ever re-read. The previous OFFSET implementation restarted its
                 // scan from zero for every batch and degraded to O(n²) page loads once
-                // thousands of deferred exports accumulated (issue #985).
-                var deferredExports = new List<PendingExport>();
+                // thousands of deferred exports accumulated (issue #985). Deferred exports are
+                // collected by id only, in queue order: the deferred pass loads them a chunk at a
+                // time, so the whole set, with every member value of every deferred group, is
+                // never held at once.
+                var deferredExportIds = new List<Guid>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
 
@@ -688,77 +696,169 @@ public class ExportExecutionServer
                 });
                 DateTime? cursorCreatedAt = null;
                 Guid? cursorId = null;
+                var exhausted = false;
                 var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                while (true)
+                // Reads forward to the next batch of exports that can be written now, collecting the deferred
+                // (reference-bearing) ones it passes on the way; null once nothing executable remains. Shared by the
+                // sequential loop and the parallel workers below, which call it one at a time on the caller's context.
+                async Task<List<PendingExport>?> ReadNextImmediateBatchAsync()
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    List<PendingExport> batch;
-
-                    while (true)
+                    while (!exhausted)
                     {
-                        List<PendingExport> rawBatch;
-                        using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
-                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
-                            .SetTag("take", options.BatchSize))
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        List<PendingExport> batch;
+
+                        while (true)
                         {
-                            rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
-                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
+                            List<PendingExport> rawBatch;
+                            using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
+                                .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
+                                .SetTag("take", options.BatchSize))
+                            {
+                                rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
+                                    connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId, excludedChangeTypes);
+                            }
+
+                            if (rawBatch.Count == 0)
+                            {
+                                batch = rawBatch;
+                                break;
+                            }
+
+                            // Advance the cursor past everything just read, whether or not it
+                            // survives the processed filter below.
+                            var lastRow = rawBatch[^1];
+                            cursorCreatedAt = lastRow.CreatedAt;
+                            cursorId = lastRow.Id;
+
+                            // Safety net: a monotonic cursor never re-reads rows, but keep the
+                            // in-memory filter as a guard against duplicates.
+                            batch = processedIds.Count > 0
+                                ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
+                                : rawBatch;
+
+                            if (batch.Count > 0)
+                                break;
+
+                            // Entire page was already processed (unexpected under keyset paging);
+                            // keep sweeping forward.
                         }
 
-                        if (rawBatch.Count == 0)
+                        if (batch.Count == 0)
                         {
-                            batch = rawBatch;
+                            exhausted = true;
                             break;
                         }
 
-                        // Advance the cursor past everything just read, whether or not it
-                        // survives the processed filter below.
-                        var lastRow = rawBatch[^1];
-                        cursorCreatedAt = lastRow.CreatedAt;
-                        cursorId = lastRow.Id;
+                        // Apply in-memory eligibility filter (same as the old GetExecutableExportsAsync)
+                        var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
 
-                        // Safety net: a monotonic cursor never re-reads rows, but keep the
-                        // in-memory filter as a guard against duplicates.
-                        batch = processedIds.Count > 0
-                            ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
-                            : rawBatch;
+                        // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
+                        processedIds.UnionWith(batch.Select(pe => pe.Id));
 
-                        if (batch.Count > 0)
+                        // Track eligible export IDs for the result (used by preview mode and tests)
+                        result.ProcessedPendingExportIds.AddRange(eligibleExports.Select(pe => pe.Id));
+
+                        // Separate immediate from deferred exports
+                        var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
+                        var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
+                        deferredExportIds.AddRange(batchDeferred.Select(pe => pe.Id));
+
+                        // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
+                        // excludedChangeTypes above already keeps a withheld type out of every batch this
+                        // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
+                        // failed, or given an execution item; its withheld total was already added to
+                        // processedCount once, up front, not accumulated here.
+                        immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
+
+                        if (immediateExports.Count > 0)
+                            return immediateExports;
+
+                        if (batchDeferred.Count == batch.Count
+                            && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
+                        {
+                            // Fast path (issue #985c): the whole batch just loaded was deferred
+                            // (reference-bearing) and nothing in it was executable. Continuing to
+                            // page through the remainder 100 rows at a time would only ever rebuild
+                            // the same deferred list one page slower; at group-heavy scale (10K+
+                            // deferred exports) this was the entire cost of the collection loop.
+                            // Collect everything beyond the cursor with a single set-based query and
+                            // stop scanning; a mixed batch (some immediate, some deferred) always
+                            // returns above instead and keeps paging normally.
+                            //
+                            // The existence probe above is REQUIRED before stopping: deferred and
+                            // executable exports interleave in (CreatedAt, Id) order, so a full batch
+                            // of deferred exports does not prove the remainder of the queue is
+                            // deferred too. Without the probe, executable exports created after a
+                            // contiguous deferred run would silently never execute in this run; a
+                            // behaviour regression versus page-by-page scanning. The probe is a cheap
+                            // indexed existence check (no Includes, no materialisation); when it
+                            // finds executable exports beyond the cursor, normal paging continues.
+                            using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
+                                .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
+
+                            var remainingDeferredIds = await SyncRepo.GetRemainingDeferredExportIdsAsync(
+                                connectedSystem.Id, cursorCreatedAt, cursorId);
+
+                            // Safety net: mirror the processedIds guard above, even though a
+                            // strictly-increasing cursor should make duplicates impossible here.
+                            if (processedIds.Count > 0)
+                                remainingDeferredIds = remainingDeferredIds.Where(id => !processedIds.Contains(id)).ToList();
+
+                            processedIds.UnionWith(remainingDeferredIds);
+                            result.ProcessedPendingExportIds.AddRange(remainingDeferredIds);
+                            deferredExportIds.AddRange(remainingDeferredIds);
+
+                            span.SetTag("collectedCount", remainingDeferredIds.Count);
+                            span.SetSuccess();
+
+                            exhausted = true;
                             break;
+                        }
 
-                        // Entire page was already processed (unexpected under keyset paging);
-                        // keep sweeping forward.
+                        // Note: a batch with only ineligible/deferred exports, where the fast path above
+                        // did not apply (a mixed batch, or executable exports still exist beyond the
+                        // cursor), keeps the scan going forward, since later batches (ordered by
+                        // CreatedAt) may contain eligible exports.
                     }
 
-                    if (batch.Count == 0)
-                        break;
+                    return null;
+                }
 
-                    // Apply in-memory eligibility filter (same as the old GetExecutableExportsAsync)
-                    var eligibleExports = batch.Where(pe => IsReadyForExecution(pe)).ToList();
+                // Batches run concurrently when the Connected System allows more than one at a time (Max Export
+                // Parallelism, or the Connector's recommendation) and there is more than one batch to run.
+                var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
+                    && result.TotalPendingExports > options.BatchSize;
 
-                    // Track all batch IDs as processed (even ineligible ones, to avoid re-fetching)
-                    foreach (var pe in batch)
-                        processedIds.Add(pe.Id);
+                if (useParallelBatches)
+                {
+                    await ProcessBatchesInParallelAsync(connectedSystem, connector,
+                        async () =>
+                        {
+                            var next = await ReadNextImmediateBatchAsync();
 
-                    // Track eligible export IDs for the result (used by preview mode and tests)
-                    foreach (var pe in eligibleExports)
-                        result.ProcessedPendingExportIds.Add(pe.Id);
-
-                    // Separate immediate from deferred exports
-                    var immediateExports = eligibleExports.Where(pe => !pe.HasUnresolvedReferences).ToList();
-                    var batchDeferred = eligibleExports.Where(pe => pe.HasUnresolvedReferences).ToList();
-                    deferredExports.AddRange(batchDeferred);
-
-                    // Run Profile Safeguards (#1618): a defensive guard, not the primary mechanism -
-                    // excludedChangeTypes above already keeps a withheld type out of every batch this
-                    // loop reads. Whatever it drops is left exactly as found (Pending), not marked,
-                    // failed, or given an execution item; its withheld total was already added to
-                    // processedCount once, up front, not accumulated here.
-                    immediateExports = ReserveAgainstLedger(immediateExports, changeLimitLedger);
-
-                    if (immediateExports.Count > 0)
+                            // Each batch is re-loaded by the worker that runs it, so what was read here serves only to
+                            // choose the batch. Clear the change tracker to keep it from growing across the run (see
+                            // the sequential loop below).
+                            SyncRepo.ClearChangeTracker();
+                            return next;
+                        },
+                        stopOnBatchFailure: true, result, options, cancellationToken, progressCallback,
+                        connectorFactory!, repositoryFactory!, "ExportBatch",
+                        processedExportsOffset: processedCount,
+                        batchCompletedCallback: batchCompletedCallback,
+                        batchExecuted: batchCount =>
+                        {
+                            var executedSoFar = Interlocked.Add(ref processedCount, batchCount);
+                            Log.Information("MetricsCheckpoint: Export processed={ObjectsProcessed} elapsed={ElapsedMs}ms total={TotalObjects} cs={ConnectedSystemName}",
+                                executedSoFar, (long)exportPhaseStopwatch.Elapsed.TotalMilliseconds, result.TotalPendingExports, connectedSystem.Name);
+                        });
+                }
+                else
+                {
+                    while (await ReadNextImmediateBatchAsync() is { } immediateExports)
                     {
                         // Report progress
                         await ReportProgressAsync(progressCallback, new ExportProgressInfo
@@ -847,63 +947,12 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         SyncRepo.ClearChangeTracker();
                     }
-                    else if (batchDeferred.Count == batch.Count
-                        && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
-                    {
-                        // Fast path (issue #985c): the whole batch just loaded was deferred
-                        // (reference-bearing) and nothing in it was executable. Continuing to
-                        // page through the remainder 100 rows at a time would only ever rebuild
-                        // the same deferred list one page slower; at group-heavy scale (10K+
-                        // deferred exports) this was the entire cost of the collection loop.
-                        // Collect everything beyond the cursor with a single set-based query and
-                        // stop scanning; a mixed batch (some immediate, some deferred) always
-                        // takes the branch above instead and keeps paging normally.
-                        //
-                        // The existence probe above is REQUIRED before breaking out: deferred and
-                        // executable exports interleave in (CreatedAt, Id) order, so a full batch
-                        // of deferred exports does not prove the remainder of the queue is
-                        // deferred too. Without the probe, executable exports created after a
-                        // contiguous deferred run would silently never execute in this run; a
-                        // behaviour regression versus page-by-page scanning. The probe is a cheap
-                        // indexed existence check (no Includes, no materialisation); when it
-                        // finds executable exports beyond the cursor, this branch is skipped and
-                        // normal paging continues for this iteration.
-                        using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
-                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
-
-                        var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
-                            connectedSystem.Id, cursorCreatedAt, cursorId);
-
-                        // Safety net: mirror the in-loop processedIds guard above, even though a
-                        // strictly-increasing cursor should make duplicates impossible here.
-                        if (processedIds.Count > 0)
-                            remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
-
-                        foreach (var pe in remainingDeferred)
-                        {
-                            processedIds.Add(pe.Id);
-                            result.ProcessedPendingExportIds.Add(pe.Id);
-                        }
-
-                        deferredExports.AddRange(remainingDeferred);
-
-                        span.SetTag("collectedCount", remainingDeferred.Count);
-                        span.SetSuccess();
-
-                        break;
-                    }
-                    // Note: no break when a batch has only ineligible/deferred exports and the
-                    // fast path above did not trigger (a mixed batch, or executable exports still
-                    // exist beyond the cursor); the outer loop continues scanning forward since
-                    // later batches (ordered by CreatedAt) may contain eligible exports. The loop
-                    // only exits when batch.Count == 0 (database exhausted, handled above) or via
-                    // the fast-path break above.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)
-                if (deferredExports.Count > 0)
+                if (deferredExportIds.Count > 0)
                 {
-                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options, changeLimitLedger,
+                    await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExportIds, result, options, changeLimitLedger,
                         cancellationToken, progressCallback, connectorFactory, repositoryFactory);
 
                     // Drain any remaining deferred export items via callback
@@ -1004,12 +1053,20 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Processes deferred exports (those with unresolved references) after all immediate exports.
+    /// Processes deferred exports (those with unresolved references) after all immediate exports, a chunk at a time
+    /// (<see cref="ExportExecutionOptions.DeferredChunkSize"/>). Each chunk is loaded, resolved against what the
+    /// referenced objects' references are written as, saved, and handed out as batches only once the batches before it
+    /// have all been taken; so the pass holds one chunk in memory, and its progress moves from the first chunk. Loading,
+    /// resolving and saving the whole set before writing any of it left a 790k-object export at 0% for six minutes.
     /// </summary>
+    /// <remarks>
+    /// A later chunk resolves against the objects as they stand when it is loaded, so it can resolve a reference to an
+    /// object an earlier chunk wrote; whole-set resolution waited for the next run for those.
+    /// </remarks>
     private async Task ProcessDeferredExportsAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls connector,
-        List<PendingExport> deferredExports,
+        List<Guid> deferredExportIds,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         ExportChangeLimitLedger changeLimitLedger,
@@ -1018,187 +1075,166 @@ public class ExportExecutionServer
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory)
     {
-        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
+        var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
+            && deferredExportIds.Count > options.BatchSize;
 
-        // This pass counts its own work: the deferred exports, each finished with once it has been
-        // written or confirmed still unwritable. Reporting the export's totals here left the pass
-        // reading as complete for the whole time it ran.
-        var passTotal = deferredExports.Count;
+        // This pass counts its own work: the deferred exports, each finished with once it has been written, confirmed
+        // still unwritable, or withheld. Reporting the export's totals here left the pass reading as complete for the
+        // whole time it ran.
+        var passTotal = deferredExportIds.Count;
+        var immediateProcessedCount = result.SuccessCount + result.FailedCount;
+        var chunks = deferredExportIds.Chunk(Math.Max(1, options.DeferredChunkSize)).ToList();
+        var nextChunk = 0;
+        var readyBatches = new Queue<List<PendingExport>>();
 
-        await ReportProgressAsync(progressCallback, new ExportProgressInfo
+        // The pass's progress is the exports its batches have written plus those it finished with unwritten. Chunks are
+        // prepared under the batch runner's gate on the caller's context while parallel workers write, so both counters
+        // are read and written atomically; and every report reads them as it is made, so the bar never steps back.
+        var written = 0;
+        var finishedUnwritten = 0;
+
+        // Read by batches as they record their outcomes, added to as each chunk is resolved.
+        var unresolvedReferenceNotes = new ConcurrentDictionary<Guid, string>();
+
+        // What the pass records for exports it does not write. Kept off the result until the batches are done: the
+        // parallel workers add their own outcomes to it under a lock this pass does not hold.
+        var deferredItems = new List<ProcessedExportItem>();
+        var deferredWholeCount = 0;
+        var resolvedCount = 0;
+        var writtenInPartCount = 0;
+        var missingMvoIds = new HashSet<Guid>();
+
+        Task ReportPassProgressAsync(string message) => ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
             Phase = ExportPhase.ResolvingReferences,
             TotalExports = result.TotalPendingExports,
-            ProcessedExports = result.SuccessCount,
+            ProcessedExports = immediateProcessedCount + Volatile.Read(ref written),
             PassTotal = passTotal,
-            PassProcessed = 0,
-            Message = $"Resolving {deferredExports.Count} deferred exports"
+            PassProcessed = Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten),
+            Message = message
         });
 
-        // Bulk pre-fetch all referenced CSOs in a single query
-        var mvoIds = CollectUnresolvedMvoIds(deferredExports);
-        Dictionary<Guid, ConnectedSystemObject> csoLookup;
-        using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
-            .SetTag("mvoIdCount", mvoIds.Count))
+        await ReportPassProgressAsync($"Resolving {passTotal} deferred exports");
+
+        // Loads, resolves and saves one chunk, records what it cannot write, and returns what it can.
+        async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart)
         {
-            csoLookup = mvoIds.Count > 0
-                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                : new Dictionary<Guid, ConnectedSystemObject>();
-        }
+            await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
 
-        // Separate resolved from still-unresolved exports. A still-unresolved export that has something
-        // it can write now (issue #1398) is written now alongside the resolved ones and stays pending only
-        // for the references it still owes; one with nothing writable is deferred whole, as before.
-        var resolvedExports = new List<PendingExport>();
-        var writeInPartExports = new List<PendingExport>();
-        var stillUnresolvedExports = new List<PendingExport>();
-        var resolveProcessedCount = 0;
-
-        foreach (var export in deferredExports)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
-            if (resolved)
+            List<PendingExport> chunkExports;
+            using (Diagnostics.Diagnostics.Database.StartSpan("LoadDeferredChunk")
+                .SetTag("count", chunkIds.Length))
             {
-                export.HasUnresolvedReferences = false;
-                resolvedExports.Add(export);
-            }
-            else
-            {
-                stillUnresolvedExports.Add(export);
-                if (CanWriteInPart(export))
-                    writeInPartExports.Add(export);
+                chunkExports = await SyncRepo.GetDeferredExportsByIdsAsync(chunkIds);
             }
 
-            resolveProcessedCount++;
-
-            // Throttle progress reporting — resolution is a microsecond dictionary lookup,
-            // but each progress report triggers a SaveChangesAsync round-trip. Report every
-            // 50 items or on the final item to avoid hundreds of unnecessary DB writes.
-            if (resolveProcessedCount % 50 == 0 || resolveProcessedCount == deferredExports.Count)
+            if (chunkExports.Count < chunkIds.Length)
             {
-                await ReportProgressAsync(progressCallback, new ExportProgressInfo
+                // Collected by the first pass and gone since: nothing left to write, so finished with.
+                Log.Warning("ProcessDeferredExportsAsync: {Missing} of {Count} deferred export(s) collected for {SystemName} no longer exist and were skipped",
+                    chunkIds.Length - chunkExports.Count, chunkIds.Length, connectedSystem.Name);
+                Interlocked.Add(ref finishedUnwritten, chunkIds.Length - chunkExports.Count);
+            }
+
+            // What each referenced Metaverse Object's object in this system is written as, in one query.
+            var mvoIds = CollectUnresolvedMvoIds(chunkExports);
+            Dictionary<Guid, ReferenceAnchorSummary> anchors;
+            using (Diagnostics.Diagnostics.Database.StartSpan("FetchReferenceAnchors")
+                .SetTag("mvoIdCount", mvoIds.Count))
+            {
+                anchors = mvoIds.Count > 0
+                    ? await SyncRepo.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                    : new Dictionary<Guid, ReferenceAnchorSummary>();
+            }
+
+            // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
+            // now (issue #1398) is written now alongside the resolved ones and stays pending only for the references it
+            // still owes; one with nothing writable is deferred whole, as before.
+            var resolvedExports = new List<PendingExport>();
+            var writeInPartExports = new List<PendingExport>();
+            var stillUnresolvedExports = new List<PendingExport>();
+            var resolvedChanges = new Dictionary<Guid, List<PendingExportAttributeValueChange>>();
+            foreach (var export in chunkExports)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var exportResolvedChanges = new List<PendingExportAttributeValueChange>();
+                if (TryResolveReferencesFromLookup(export, anchors, exportResolvedChanges))
                 {
-                    Phase = ExportPhase.ResolvingReferences,
-                    TotalExports = result.TotalPendingExports,
-                    ProcessedExports = result.SuccessCount + result.FailedCount,
-                    // Resolution classifies; it finishes with nothing. Counting it here would run the
-                    // window to full and then back down as the writing began, which the estimator
-                    // reads as a new phase and the administrator reads as progress being lost.
-                    PassTotal = passTotal,
-                    PassProcessed = 0,
-                    Message = $"Resolving deferred exports ({resolveProcessedCount} / {deferredExports.Count})"
-                });
+                    export.HasUnresolvedReferences = false;
+                    resolvedExports.Add(export);
+                }
+                else
+                {
+                    stillUnresolvedExports.Add(export);
+                    if (CanWriteInPart(export))
+                        writeInPartExports.Add(export);
+                }
+
+                if (exportResolvedChanges.Count > 0)
+                    resolvedChanges[export.Id] = exportResolvedChanges;
             }
-        }
 
-        // What each still-unresolved export owes, and why (issue #1398): a reference whose target object
-        // exists but has no anchor yet is merely waiting; one whose target has no object in this system
-        // at all cannot resolve as things stand, and is reported per the Connected System's Unresolved
-        // Reference Handling. Built before anything is written so the write's own item can carry it.
-        var unresolvedReferenceNotes = await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, csoLookup, result);
+            resolvedCount += resolvedExports.Count;
+            writtenInPartCount += writeInPartExports.Count;
+            missingMvoIds.UnionWith(CollectUnresolvedMvoIds(stillUnresolvedExports).Where(id => !anchors.ContainsKey(id)));
 
-        // Batch-export resolved deferred exports, and the partial writes alongside them
-        var exportsToWrite = resolvedExports.Concat(writeInPartExports).ToList();
+            // What each still-unresolved export owes, and why (issue #1398): a reference whose target object exists but
+            // has no anchor yet is merely waiting; one whose target has no object in this system at all cannot resolve as
+            // things stand, and is reported per the Connected System's Unresolved Reference Handling. Built before
+            // anything is written so the write's own item can carry it.
+            foreach (var (exportId, note) in await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, anchors, result))
+                unresolvedReferenceNotes[exportId] = note;
 
-        // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, before
-        // the exports are split into batches. A deferred export withheld here is left exactly as the
-        // first pass left it: still Pending, its unresolved-reference state untouched (the in-memory
-        // resolution above is never persisted for it), and NOT marked deferred - it simply was not
-        // attempted this run, so DeferredCount must not count it either. The next Export run resolves
-        // and attempts it in the ordinary order.
-        exportsToWrite = ReserveAgainstLedger(exportsToWrite, changeLimitLedger);
+            // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, chunk by chunk in queue
+            // order. A deferred export withheld here is left exactly as the first pass left it: still Pending, its
+            // unresolved-reference state untouched (the in-memory resolution above is never saved for it), and NOT marked
+            // deferred - it simply was not attempted this run, so DeferredCount must not count it either. The next
+            // Export run resolves and attempts it in the ordinary order.
+            var writable = resolvedExports.Concat(writeInPartExports).ToList();
+            var exportsToWrite = ReserveAgainstLedger(writable, changeLimitLedger);
+            Interlocked.Add(ref finishedUnwritten, writable.Count - exportsToWrite.Count);
 
-        if (exportsToWrite.Count > 0)
-        {
-            // Persist the in-memory reference resolutions BEFORE executing the deferred batches.
-            // The parallel path (ProcessBatchesInParallelAsync) re-loads each batch by ID on a
-            // fresh per-batch repository/DbContext, which only sees persisted state; without
-            // persisting first, those contexts read the still-unresolved rows and send raw
-            // Metaverse Object identifiers to the target system (observed against OpenLDAP as
-            // "member: value #0 invalid per syntax" when Max Export Parallelism first defaulted
-            // above 1). The sequential path passes these in-memory instances straight to the
-            // connector and does not strictly need the persist, but doing it unconditionally
-            // also means a worker crash mid-export no longer loses completed resolution work.
-            // UpdatePendingExportsAsync persists both the parent rows and the attribute value
-            // change rows (StringValue/UnresolvedReferenceValue) via raw SQL.
-            using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedDeferredExports")
-                .SetTag("count", exportsToWrite.Count))
+            if (exportsToWrite.Count > 0)
             {
-                await SyncRepo.UpdatePendingExportsAsync(exportsToWrite);
+                // Saved BEFORE the chunk's batches run. The parallel path (ProcessBatchesInParallelAsync) re-loads each
+                // batch by id on a fresh per-batch repository/DbContext, which only sees saved state; without this, those
+                // contexts read the still-unresolved rows and send raw Metaverse Object identifiers to the target system
+                // (observed against OpenLDAP as "member: value #0 invalid per syntax" when Max Export Parallelism first
+                // defaulted above 1). The sequential path hands these in-memory instances straight to the Connector and
+                // does not strictly need it, but saving unconditionally also means a worker crash mid-export no longer
+                // loses completed resolution work. Only what resolution changed is written.
+                var changesToSave = exportsToWrite
+                    .SelectMany(export => resolvedChanges.TryGetValue(export.Id, out var changes) ? changes : [])
+                    .ToList();
+
+                await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
+                using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedReferences")
+                    .SetTag("count", exportsToWrite.Count)
+                    .SetTag("changeCount", changesToSave.Count))
+                {
+                    await SyncRepo.PersistResolvedReferencesAsync(exportsToWrite, changesToSave);
+                }
             }
 
-            // Clear the change tracker before exporting deferred batches.
-            // The CSO lookup query above re-loaded entities into the tracker, which causes
-            // identity conflicts when the EF fallback paths (used in tests with in-memory DB)
-            // try to attach/update the original PE instances.
-            SyncRepo.ClearChangeTracker();
-
-            var deferredBatches = exportsToWrite
-                .Select((export, index) => new { export, index })
-                .GroupBy(x => x.index / options.BatchSize)
-                .Select(g => g.Select(x => x.export).ToList())
-                .ToList();
-
-            if (useParallelBatches && deferredBatches.Count > 1)
-            {
-                // Snapshot the immediate-phase counts, mirroring ProcessDeferredBatchesSequentiallyAsync:
-                // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so
-                // progress reports add deferred-phase progress to this fixed offset rather than
-                // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
-                var immediateProcessedCount = result.SuccessCount + result.FailedCount;
-                await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
-                    unresolvedReferenceNotes: unresolvedReferenceNotes);
-            }
-            else
-            {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, deferredBatches, result, cancellationToken, progressCallback, passTotal,
-                    connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes);
-            }
-        }
-
-        // Mark the exports that wrote nothing as deferred in batch. Those written in part were left
-        // pending by ProcessBatchSuccessAsync with the same cadence, and counted as written.
-        var deferredWholeExports = stillUnresolvedExports.Except(writeInPartExports).ToList();
-        if (stillUnresolvedExports.Count > 0)
-        {
-            var unresolvedMvoIds = CollectUnresolvedMvoIds(stillUnresolvedExports);
-            var resolvedMvoIds = csoLookup.Keys.ToHashSet();
-            var missingMvoIds = unresolvedMvoIds.Except(resolvedMvoIds).ToList();
-
-            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references: " +
-                "{WrittenInPart} written in part and pending for their references, {DeferredWhole} deferred whole. " +
-                "{Resolved} resolved this cycle. " +
-                "{MissingCount} referenced MVO(s) have no CSO in the target system: [{MissingIds}]",
-                stillUnresolvedExports.Count, writeInPartExports.Count, deferredWholeExports.Count, resolvedExports.Count,
-                missingMvoIds.Count,
-                string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
-        }
-
-        if (deferredWholeExports.Count > 0)
-        {
-            var markedDeferredCount = 0;
-
+            // Mark the exports that wrote nothing as deferred. Those written in part are left pending by
+            // ProcessBatchSuccessAsync with the same cadence, and counted as written.
+            var deferredWholeExports = stillUnresolvedExports.Except(writeInPartExports).ToList();
             foreach (var export in deferredWholeExports)
             {
-                var exportUnresolvedCount = export.AttributeValueChanges.Count(IsUnresolvedReference);
-                var exportTotalChanges = export.AttributeValueChanges.Count;
                 Log.Debug("ProcessDeferredExportsAsync: Deferring export {ExportId} for CSO {CsoId} - " +
                     "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
-                    export.Id, export.ConnectedSystemObjectId, exportUnresolvedCount, exportTotalChanges);
+                    export.Id, export.ConnectedSystemObjectId, export.AttributeValueChanges.Count(IsUnresolvedReference), export.AttributeValueChanges.Count);
 
                 await MarkExportDeferredAsync(export);
-                result.DeferredCount++;
+                deferredWholeCount++;
 
-                // Nothing was written, so there is no write to report; but a reference that can never
-                // resolve as things stand is reported on its own item under Error handling (issue #1398),
-                // otherwise the export would sit deferred for ever with nothing to say why.
+                // Nothing was written, so there is no write to report; but a reference that can never resolve as things
+                // stand is reported on its own item under Error handling (issue #1398), otherwise the export would sit
+                // deferred for ever with nothing to say why.
                 if (unresolvedReferenceNotes.TryGetValue(export.Id, out var note))
                 {
-                    result.ProcessedExportItems.Add(new ProcessedExportItem
+                    deferredItems.Add(new ProcessedExportItem
                     {
                         ChangeType = export.ChangeType,
                         ConnectedSystemObject = export.ConnectedSystemObject,
@@ -1209,24 +1245,75 @@ public class ExportExecutionServer
                     }.WithCauseFrom(export));
                 }
 
-                // Confirming an export still cannot be written finishes with it as surely as
-                // writing it does, so it counts towards this pass's own work. Throttled to keep the
-                // progress writes off the per-export path.
-                markedDeferredCount++;
-                if (markedDeferredCount % 50 == 0 || markedDeferredCount == deferredWholeExports.Count)
-                {
-                    await ReportProgressAsync(progressCallback, new ExportProgressInfo
-                    {
-                        Phase = ExportPhase.ResolvingReferences,
-                        TotalExports = result.TotalPendingExports,
-                        ProcessedExports = result.SuccessCount + result.FailedCount,
-                        PassTotal = passTotal,
-                        PassProcessed = exportsToWrite.Count + markedDeferredCount,
-                        Message = "Recording exports that are still waiting on their references"
-                    });
-                }
+                // Confirming an export still cannot be written finishes with it as surely as writing it does.
+                Interlocked.Increment(ref finishedUnwritten);
             }
+
+            if (deferredWholeExports.Count > 0)
+                await ReportPassProgressAsync("Recording exports that are still waiting on their references");
+
+            // The chunk's own reads and writes leave nothing the batches need tracked; keep the caller's context from
+            // growing across chunks.
+            SyncRepo.ClearChangeTracker();
+            return exportsToWrite;
         }
+
+        // Batches are taken on demand; a chunk is prepared only when every batch of the one before it has been taken.
+        async Task<List<PendingExport>?> TakeNextDeferredBatchAsync()
+        {
+            while (readyBatches.Count == 0 && nextChunk < chunks.Count)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var chunkStart = nextChunk * Math.Max(1, options.DeferredChunkSize);
+                var exportsToWrite = await PrepareChunkAsync(chunks[nextChunk++], chunkStart);
+                foreach (var batch in exportsToWrite.Chunk(options.BatchSize))
+                    readyBatches.Enqueue(batch.ToList());
+            }
+
+            return readyBatches.TryDequeue(out var next) ? next : null;
+        }
+
+        if (useParallelBatches)
+        {
+            // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so progress reports add
+            // deferred-phase progress to the immediate phase's fixed count rather than resetting to a phase-local count
+            // (the "2,884 of 209,984" UI regression). A failed deferred batch does not stop the others, as it never has
+            // on this pass: each batch's references were resolved independently.
+            await ProcessBatchesInParallelAsync(connectedSystem, connector, TakeNextDeferredBatchAsync,
+                stopOnBatchFailure: false, result, options,
+                cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
+                unresolvedReferenceNotes: unresolvedReferenceNotes,
+                batchExecuted: count => Interlocked.Add(ref written, count),
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+        }
+        else
+        {
+            await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, TakeNextDeferredBatchAsync, result, cancellationToken,
+                progressCallback, passTotal, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes,
+                batchExecuted: count => Interlocked.Add(ref written, count),
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+        }
+
+        result.DeferredCount += deferredWholeCount;
+        result.ProcessedExportItems.AddRange(deferredItems);
+
+        var stillUnresolvedCount = writtenInPartCount + deferredWholeCount;
+        if (stillUnresolvedCount > 0)
+        {
+            Log.Information("ProcessDeferredExportsAsync: {StillUnresolved} export(s) have unresolved references: " +
+                "{WrittenInPart} written in part and pending for their references, {DeferredWhole} deferred whole. " +
+                "{Resolved} resolved this cycle. " +
+                "{MissingCount} referenced MVO(s) have no CSO in the target system: [{MissingIds}]",
+                stillUnresolvedCount, writtenInPartCount, deferredWholeCount, resolvedCount,
+                missingMvoIds.Count,
+                string.Join(", ", missingMvoIds.Take(10).Select(id => id.ToString())));
+        }
+
+        Log.Information("ProcessDeferredExportsAsync: Deferred pass for {SystemName} finished {Finished} of {Total} deferred export(s) in {Chunks} chunk(s): " +
+            "{Written} written, {Unwritten} finished without being written",
+            connectedSystem.Name, Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten), passTotal, chunks.Count,
+            Volatile.Read(ref written), Volatile.Read(ref finishedUnwritten));
     }
 
     /// <summary>
@@ -1242,7 +1329,7 @@ public class ExportExecutionServer
     private async Task<Dictionary<Guid, string>> BuildUnresolvedReferenceNotesAsync(
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
-        Dictionary<Guid, ConnectedSystemObject> csoLookup,
+        IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
         ExportExecutionResult result)
     {
         var notes = new Dictionary<Guid, string>();
@@ -1255,7 +1342,7 @@ public class ExportExecutionServer
             .SelectMany(export => export.AttributeValueChanges
                 .Where(IsUnresolvedReference)
                 .Select(change => (Export: export, Change: change, MvoId: Guid.TryParse(change.UnresolvedReferenceValue, out var mvoId) ? mvoId : (Guid?)null)))
-            .Where(u => u.MvoId.HasValue && !csoLookup.ContainsKey(u.MvoId.Value))
+            .Where(u => u.MvoId.HasValue && !anchors.ContainsKey(u.MvoId.Value))
             .Select(u => (u.Export, u.Change, MvoId: u.MvoId!.Value))
             .ToList();
 
@@ -1330,22 +1417,29 @@ public class ExportExecutionServer
     // inlined in ExecuteUsingCallsWithBatchingAsync to support batch-loading from the database.
 
     /// <summary>
-    /// Processes deferred batches sequentially using the existing connector and DbContext.
+    /// Processes deferred batches sequentially using the existing connector and DbContext, taking each batch as the last
+    /// one finishes.
     /// </summary>
+    /// <param name="takeNextBatch">Returns the next batch to execute, or null when there are no more.</param>
     /// <param name="passTotal">
     /// How many deferred exports this pass covers, so its progress is reported against its own work
     /// rather than the export's totals.
     /// </param>
+    /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
+    /// <param name="passProcessedOffset">How many of the pass's exports it has finished with without writing them,
+    /// counted towards its progress beside the batches written.</param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
-        List<List<PendingExport>> batches,
+        Func<Task<List<PendingExport>?>> takeNextBatch,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         int passTotal,
         TimeSpan initialPasswordTimeToLive,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        Action<int>? batchExecuted = null,
+        Func<int>? passProcessedOffset = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -1360,25 +1454,17 @@ public class ExportExecutionServer
             TotalExports = result.TotalPendingExports,
             ProcessedExports = immediateProcessedCount + processedCount,
             PassTotal = passTotal,
-            PassProcessed = processedCount,
+            PassProcessed = processedCount + (passProcessedOffset?.Invoke() ?? 0),
             Message = subPhase
         });
 
-        foreach (var batch in batches)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Report progress for deferred batch execution
-            await ReportProgressAsync(progressCallback, new ExportProgressInfo
-            {
-                Phase = ExportPhase.Executing,
-                TotalExports = result.TotalPendingExports,
-                ProcessedExports = immediateProcessedCount + processedCount,
-                PassTotal = passTotal,
-                PassProcessed = processedCount,
-                CurrentBatchSize = batch.Count,
-                Message = "Exporting deferred"
-            });
+            var batch = await takeNextBatch();
+            if (batch == null)
+                break;
 
             ExecutingBatchMark executingMark;
             using (Diagnostics.Diagnostics.Database.StartSpan("MarkDeferredBatchAsExecuting")
@@ -1424,20 +1510,56 @@ public class ExportExecutionServer
             }
 
             processedCount += batch.Count;
+            batchExecuted?.Invoke(batch.Count);
+
+            // Reported once the batch is recorded, as the parallel path does: reported before it, the pass's last report
+            // stopped a batch short of its total.
+            await ReportProgressAsync(progressCallback, new ExportProgressInfo
+            {
+                Phase = ExportPhase.Executing,
+                TotalExports = result.TotalPendingExports,
+                ProcessedExports = immediateProcessedCount + processedCount,
+                PassTotal = passTotal,
+                PassProcessed = processedCount + (passProcessedOffset?.Invoke() ?? 0),
+                CurrentBatchSize = batch.Count,
+                Message = "Exporting deferred"
+            });
         }
     }
 
     /// <summary>
-    /// Processes multiple batches concurrently using separate DbContext and connector instances per batch.
-    /// Each batch task creates its own IRepository (with its own DbContext) and connector instance.
-    /// The batch's Pending Exports are re-loaded by ID from the batch's context to ensure proper
-    /// change tracking. Progress reporting is serialised via SemaphoreSlim to protect the caller's
-    /// shared DbContext.
+    /// Executes batches concurrently on up to <see cref="ExportExecutionOptions.MaxParallelism"/> workers. Each worker
+    /// keeps one connector for every batch it runs: worker 0 uses the primary connector, every other worker opens one of
+    /// its own from the factory on its first batch. A connector whose batch fails is discarded and the worker opens a fresh
+    /// one for its next batch. Each batch runs on a repository scope (and so a DbContext) of its own, re-loading its
+    /// Pending Exports by id.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Everything that touches the caller's own DbContext (taking the next batch, progress, the connector's narration, the
+    /// per-batch callback and persisting what a connector returns at close) goes through one gate, so the caller's context
+    /// is never used by two workers at once.
+    /// </para>
+    /// <para>
+    /// Batches are taken on demand rather than read ahead: each worker starts on a batch of its own, taken in order so the
+    /// primary connector gets the first, then takes the next one whenever it is free. With
+    /// <paramref name="stopOnBatchFailure"/> set, a failed batch stops every worker taking another; batches already running
+    /// finish and are recorded, and nothing is read that is not then sent, exactly as when the sequential path stops at
+    /// a failed batch.
+    /// </para>
+    /// </remarks>
+    /// <param name="takeNextBatch">Returns the next batch to execute, or null when there are no more. Called under the
+    /// caller's context gate, one call at a time.</param>
+    /// <param name="stopOnBatchFailure">Whether a failed batch stops further batches being taken.</param>
+    /// <param name="spanName">The connector span each batch's export is recorded under.</param>
+    /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
+    /// <param name="passProcessedOffset">With <paramref name="passTotal"/>: how many of the pass's exports it has finished
+    /// with without writing them, counted towards its progress beside the batches written.</param>
     private async Task ProcessBatchesInParallelAsync(
         ConnectedSystem connectedSystem,
         IConnectorExportUsingCalls primaryConnector,
-        List<List<PendingExport>> batches,
+        Func<Task<List<PendingExport>?>> takeNextBatch,
+        bool stopOnBatchFailure,
         ExportExecutionResult result,
         ExportExecutionOptions options,
         CancellationToken cancellationToken,
@@ -1448,281 +1570,271 @@ public class ExportExecutionServer
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null,
         int? passTotal = null,
-        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
+        IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
+        Action<int>? batchExecuted = null,
+        Func<int>? passProcessedOffset = null)
     {
-        Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
-            batches.Count, options.MaxParallelism);
-
-        // Collect batch ID lists - each batch task will re-load its entities from its own context
-        var batchIdLists = batches
-            .Select(batch => batch.Select(pe => pe.Id).ToList())
-            .ToList();
-
-        // Serialise progress reporting to protect the caller's shared DbContext
-        using var progressSemaphore = new SemaphoreSlim(1, 1);
+        // The one gate on the caller's DbContext; see the remarks above.
+        using var callerContextGate = new SemaphoreSlim(1, 1);
         var processedCount = 0;
+        var stopTaking = 0;
+        var batchCounter = 0;
 
-        // Sub-phase narration from the batch connectors, on the same gate as the per-batch progress
-        // below so that concurrent batches cannot report through the caller's DbContext at once.
+        // Sub-phase narration from the batch connectors, on the same gate as everything else that reaches the caller's
+        // DbContext, so that concurrent batches cannot report through it at once.
         using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
         {
             Phase = ExportPhase.Executing,
             TotalExports = result.TotalPendingExports,
             ProcessedExports = processedExportsOffset + Volatile.Read(ref processedCount),
             PassTotal = passTotal,
-            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) : null,
+            PassProcessed = passTotal.HasValue ? Volatile.Read(ref processedCount) + (passProcessedOffset?.Invoke() ?? 0) : null,
             Message = subPhase
-        }, progressSemaphore);
+        }, callerContextGate);
 
         // Lock for thread-safe result aggregation
         var resultLock = new object();
 
-        using var throttle = new SemaphoreSlim(options.MaxParallelism, options.MaxParallelism);
-
-        var batchTasks = batchIdLists.Select((batchIds, batchIndex) => Task.Run(async () =>
+        async Task<T> UnderCallerContextGateAsync<T>(Func<Task<T>> action)
         {
-            await throttle.WaitAsync(cancellationToken);
-
-            // Set once this batch's outcome, success or failure, is in the shared result, so a failure closing its Connector
-            // afterwards is not counted as the batch failing a second time (#2083).
-            var batchOutcomeRecorded = false;
+            await callerContextGate.WaitAsync(cancellationToken);
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                return await action();
+            }
+            finally
+            {
+                callerContextGate.Release();
+            }
+        }
 
-                // Create a per-batch repository scope with its own context; disposing it when
-                // the batch completes releases the context and its pooled connection (undisposed
-                // scopes pinned one connection per batch and exhausted the pool at scale).
-                using var batchScope = repositoryFactory();
-                var batchRepo = batchScope.Repository;
+        async Task<List<PendingExport>?> TakeNextBatchAsync()
+        {
+            if (Volatile.Read(ref stopTaking) == 1)
+                return null;
 
-                // Re-load this batch's Pending Exports from the batch's own context
-                var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
-                if (batch.Count == 0)
-                {
-                    Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
-                        batchIndex, batchIds.Count);
-                    return;
-                }
-
-                // Create a connector for this batch; one of its own is prepared and opened inside the try below
-                IConnectorExportUsingCalls batchConnector;
-                IConnector? ownedConnector = null;
-                if (batchIndex == 0)
-                {
-                    // First batch uses the already-opened primary connector
-                    batchConnector = primaryConnector;
-                }
-                else
-                {
-                    var newConnector = connectorFactory();
-                    if (newConnector is not IConnectorExportUsingCalls callsConnector)
-                    {
-                        Log.Error("ProcessBatchesInParallelAsync: Connector factory returned non-calls connector for batch {BatchIndex}", batchIndex);
-                        return;
-                    }
-                    batchConnector = callsConnector;
-                    ownedConnector = newConnector;
-                }
-
-                // Tracks whether this batch completed without throwing, mirroring the primary
-                // connector's exportPhaseSucceeded flag above: used by the finally block below to
-                // decide whether a persistence failure while handling CloseExportConnection's return
-                // value may propagate on its own, or must be logged and swallowed so it does not
-                // replace/mask a batch failure that is already unwinding through the same finally.
-                var batchExportSucceeded = false;
-
-                // Declared outside the try so the catches below, which record an interrupted batch through this batch's own
-                // repository while its scope is still alive, know what the batch was before it was sent (#2083). Null until
-                // the batch is marked: one whose Connector could not be opened was never touched.
-                ExecutingBatchMark? executingMark = null;
-                var batchResult = new ExportExecutionResult();
-                var batchResultMerged = false;
+            return await UnderCallerContextGateAsync(async () =>
+            {
+                // Checked again under the gate: a worker may have stopped the run while this one waited for it.
+                if (Volatile.Read(ref stopTaking) == 1)
+                    return null;
 
                 try
                 {
-                    // A batch connector of its own is prepared and opened inside the try, so one that fails
-                    // to open is still closed and disposed by the finally block below, and what it returns
-                    // at close (a pin the failure invalidated, issue #230) is still persisted (#1875).
-                    if (ownedConnector != null)
-                    {
-                        PrepareConnectorForExport(ownedConnector, connectedSystem);
-                        batchConnector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
-                    }
-
-                    // Mark batch as executing (raw SQL - context-independent)
-                    executingMark = await MarkBatchAsExecutingAsync(batch, batchRepo);
-
-                    // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
-                    // set on the primary's copies would never reach this batch's connector (#2039, #2158).
-                    var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
-                        batchConnector is IConnectorPasswordManagement);
-
-                    // Execute batch via connector. The batch was re-loaded from persisted state above,
-                    // which is why the reference resolutions and the writable/unresolved split (issue
-                    // #1398) are persisted before this path runs: ForConnector decides from what it reads.
-                    var (exportResults, batchClassRefused, batchContradictions) = await ExportBatchAsync(batchConnector, connectedSystem, batch, cancellationToken, connectorProgress);
-
-                    // Process results using the batch's own repository
-                    batchResult.ClassMembershipRefusedCount = batchClassRefused;
-                    batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
-                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
-
-                    // Aggregate results into shared result (thread-safe)
-                    lock (resultLock)
-                    {
-                        AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
-                    }
-                    batchResultMerged = true;
-                    batchOutcomeRecorded = true;
-
-                    // Stream processed items per-batch (outside lock — callback may do async I/O)
-                    if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
-                    {
-                        await batchCompletedCallback(batchResult.ProcessedExportItems);
-                    }
-
-                    // Report progress (serialised to protect caller's DbContext)
-                    var newProcessedCount = Interlocked.Add(ref processedCount, batch.Count);
-                    if (progressCallback != null)
-                    {
-                        await progressSemaphore.WaitAsync(cancellationToken);
-                        try
-                        {
-                            await progressCallback(new ExportProgressInfo
-                            {
-                                Phase = ExportPhase.Executing,
-                                TotalExports = result.TotalPendingExports,
-                                ProcessedExports = processedExportsOffset + newProcessedCount,
-                                PassTotal = passTotal,
-                                PassProcessed = passTotal.HasValue ? newProcessedCount : null,
-                                CurrentBatchSize = batch.Count,
-                                Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
-                            });
-                        }
-                        finally
-                        {
-                            progressSemaphore.Release();
-                        }
-                    }
-
-                    // Reached only if nothing above threw; used by the finally block below to tell a
-                    // genuine batch failure apart from a clean run.
-                    batchExportSucceeded = true;
+                    return await takeNextBatch();
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
-                    if (executingMark != null)
-                        await ReleaseBatchAfterCancellationAsync(batch, executingMark, batchRepo, connectedSystem.Name);
+                    // Reading the next batch failed: nothing more can be read, so no worker takes another.
+                    Volatile.Write(ref stopTaking, 1);
                     throw;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            });
+        }
+
+        // Each worker starts on a batch of its own, taken in order, so worker 0 (on the primary connector) runs the first.
+        var firstBatches = new List<List<PendingExport>>();
+        for (var i = 0; i < options.MaxParallelism; i++)
+        {
+            var batch = await TakeNextBatchAsync();
+            if (batch == null)
+                break;
+            firstBatches.Add(batch);
+        }
+
+        Log.Information("ProcessBatchesInParallelAsync: Processing batches with up to {Workers} worker(s) (MaxParallelism={MaxParallelism}, stop on a failed batch: {StopOnBatchFailure})",
+            firstBatches.Count, options.MaxParallelism, stopOnBatchFailure);
+
+        var workers = firstBatches
+            .Select((firstBatch, workerIndex) => Task.Run(() => RunWorkerAsync(workerIndex, firstBatch), cancellationToken))
+            .ToList();
+
+        await Task.WhenAll(workers);
+
+        async Task RunWorkerAsync(int workerIndex, List<PendingExport> firstBatch)
+        {
+            // This worker's connector, kept for every batch it runs. Worker 0 starts on the primary connector, which the
+            // caller opened and will close; any other connector is the worker's own, opened on first use and closed here.
+            IConnectorExportUsingCalls? connector = workerIndex == 0 ? primaryConnector : null;
+            IConnector? ownedConnector = null;
+
+            var completed = false;
+            try
+            {
+                var batch = firstBatch;
+                while (batch != null)
                 {
-                    // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope is
-                    // alive: its Pending Exports still Executing get one failed attempt each, with an execution item naming
-                    // their object. Results this batch already merged stand; the failure is reported on a result of its own.
-                    Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
-                    var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
-                    await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                    lock (resultLock)
+                    var batchIndex = Interlocked.Increment(ref batchCounter) - 1;
+                    if (!await ExecuteBatchAsync(batchIndex, batch))
                     {
-                        AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
+                        // A connector whose batch failed may be broken: this worker opens a fresh one for its next batch.
+                        await DiscardConnectorAsync(unwinding: false);
+                        if (stopOnBatchFailure)
+                            Volatile.Write(ref stopTaking, 1);
                     }
-                    batchOutcomeRecorded = true;
 
-                    if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
-                    {
-                        try
-                        {
-                            await batchCompletedCallback(failureResult.ProcessedExportItems);
-                        }
-                        catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
-                        {
-                            Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
-                        }
-                    }
+                    batch = await TakeNextBatchAsync();
                 }
-                finally
+
+                completed = true;
+            }
+            finally
+            {
+                // Whatever stopped this worker early (cancellation, or a failure it could not record) stops the others
+                // taking more; the batches they are running finish. Its connector is closed either way, without masking
+                // anything that is unwinding.
+                if (!completed)
+                    Volatile.Write(ref stopTaking, 1);
+                await DiscardConnectorAsync(unwinding: !completed);
+            }
+
+            // Executes one batch on this worker's connector. True when the batch's outcome was recorded as executed (its
+            // individual exports may still have failed); false when the batch failed as a whole.
+            async Task<bool> ExecuteBatchAsync(int batchIndex, List<PendingExport> callersBatch)
+            {
+                var batchIds = callersBatch.Select(pe => pe.Id).ToList();
+                try
                 {
-                    // Close the batch connector (but not the primary - that's managed by the caller)
-                    if (batchIndex != 0)
+                    // A per-batch repository scope with its own context; disposing it when the batch completes releases
+                    // the context and its pooled connection (undisposed scopes pinned one connection per batch and
+                    // exhausted the pool at scale).
+                    using var batchScope = repositoryFactory();
+                    var batchRepo = batchScope.Repository;
+
+                    // Re-load this batch's Pending Exports from the batch's own context
+                    var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
+                    if (batch.Count == 0)
                     {
-                        // Before its connection closes, whether or not the batch succeeded (#2197).
-                        if (ownedConnector != null)
-                            CaptureCreatedContainers(ownedConnector, result, resultLock);
+                        Log.Warning("ProcessBatchesInParallelAsync: Batch {BatchIndex} returned 0 exports for {IdCount} IDs",
+                            batchIndex, batchIds.Count);
+                        return true;
+                    }
 
-                        string? closeReturn;
-                        try
+                    // Declared outside the try so the catches below, which record an interrupted batch through this batch's
+                    // own repository while its scope is still alive, know what the batch was before it was sent (#2083).
+                    // Null until the batch is marked: one whose Connector could not be opened was never touched.
+                    ExecutingBatchMark? executingMark = null;
+                    var batchResult = new ExportExecutionResult();
+                    var batchResultMerged = false;
+
+                    try
+                    {
+                        // The worker's own connector is prepared and opened inside the try, so one that fails to open
+                        // fails this batch and is still closed and disposed when it is discarded, and what it returns at
+                        // close (a pin the failure invalidated, issue #230) is still persisted (#1875).
+                        if (connector == null)
                         {
-                            closeReturn = batchConnector.CloseExportConnection();
-                        }
-                        finally
-                        {
-                            (batchConnector as IDisposable)?.Dispose();
+                            ownedConnector = connectorFactory();
+                            if (ownedConnector is not IConnectorExportUsingCalls callsConnector)
+                                throw new InvalidOperationException($"The connector factory returned a {ownedConnector.GetType().Name}, which cannot export using calls.");
+
+                            connector = callsConnector;
+                            PrepareConnectorForExport(ownedConnector, connectedSystem);
+                            connector.OpenExportConnection(connectedSystem.SettingValues, connectedSystem.PersistedConnectorData);
                         }
 
-                        // Persist connector state the connector chose to override at close (issue
-                        // #230). Null (the overwhelmingly common case) means "nothing to override".
-                        if (closeReturn != null)
+                        // Mark batch as executing (raw SQL - context-independent)
+                        using (Diagnostics.Diagnostics.Database.StartSpan("MarkBatchAsExecuting")
+                            .SetTag("batchSize", batch.Count))
+                        {
+                            executingMark = await MarkBatchAsExecutingAsync(batch, batchRepo);
+                        }
+
+                        // Decided on the instances this batch re-loaded, through the batch's own repository: a flag
+                        // set on the caller's copies would never reach this batch's connector (#2039, #2158).
+                        var initialPasswordRuleIds = await FlagExportsFollowedByAPasswordAsync(batch, batchRepo, connectedSystem,
+                            connector is IConnectorPasswordManagement);
+
+                        // Execute batch via connector. The batch was re-loaded from persisted state above, which is why the
+                        // deferred pass persists its reference resolutions and the writable/unresolved split (issue #1398)
+                        // before this path runs: ForConnector decides from what it reads.
+                        List<ConnectedSystemExportResult> exportResults;
+                        using (Diagnostics.Diagnostics.Connector.StartSpan(spanName)
+                            .SetTag("connectedSystemId", connectedSystem.Id)
+                            .SetTag("batchSize", batch.Count)
+                            .SetTag("worker", workerIndex))
+                        {
+                            (exportResults, var batchClassRefused, var batchContradictions) = await ExportBatchAsync(connector, connectedSystem, batch, cancellationToken, connectorProgress);
+                            batchResult.ClassMembershipRefusedCount = batchClassRefused;
+                            batchResult.SingleValuedContradictionRefusedCount = batchContradictions;
+                        }
+
+                        // Process results using the batch's own repository
+                        using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
+                            .SetTag("batchSize", batch.Count))
+                        {
+                            await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo,
+                                connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                        }
+
+                        // Aggregate results into shared result (thread-safe)
+                        lock (resultLock)
+                        {
+                            AccumulateBatchResult(result, batchResult, includeItems: batchCompletedCallback == null);
+                        }
+                        batchResultMerged = true;
+
+                        // Stream processed items per batch, through the caller's context
+                        if (batchCompletedCallback != null && batchResult.ProcessedExportItems.Count > 0)
+                            await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(batchResult.ProcessedExportItems); return true; });
+
+                        await RecordBatchExecutedAsync(batch.Count);
+                        return true;
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // The run was cancelled while the Connector held this batch, and it gave no results (#2083).
+                        if (executingMark != null)
+                            await ReleaseBatchAfterCancellationAsync(batch, executingMark, batchRepo, connectedSystem.Name);
+                        throw;
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                    {
+                        // A failed attempt at this batch (#2083), recorded through the batch's own repository while its scope
+                        // is alive: its Pending Exports still Executing get one failed attempt each, with an execution item
+                        // naming their object. Results this batch already merged stand; the failure is reported on a result
+                        // of its own.
+                        Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+                        var failureResult = batchResultMerged ? new ExportExecutionResult() : batchResult;
+                        await RecordBatchFailureAsync(batch, executingMark, ex, failureResult, batchRepo, connectedSystem.Name);
+
+                        lock (resultLock)
+                        {
+                            AccumulateBatchResult(result, failureResult, includeItems: batchCompletedCallback == null);
+                        }
+
+                        if (batchCompletedCallback != null && failureResult.ProcessedExportItems.Count > 0)
                         {
                             try
                             {
-                                await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                                await UnderCallerContextGateAsync(async () => { await batchCompletedCallback(failureResult.ProcessedExportItems); return true; });
                             }
-                            catch (Exception persistEx) when (!batchExportSucceeded)
+                            catch (Exception callbackEx) when (callbackEx is not OperationCanceledException)
                             {
-                                // The batch itself already failed and that exception is propagating out
-                                // of this finally block. A .NET finally block that itself throws
-                                // replaces the in-flight exception rather than chaining it, which would
-                                // silently hide the batch's own failure behind an unrelated persistence
-                                // error. Log and let the original batch failure continue to unwind.
-                                Log.Error(persistEx,
-                                    "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while batch {BatchIndex} is failing for Connected System {ConnectedSystemId}. The batch's own failure takes precedence and will propagate.",
-                                    batchIndex, connectedSystem.Id);
+                                Log.Error(callbackEx, "ProcessBatchesInParallelAsync: Could not record the execution items of failed batch {BatchIndex}", batchIndex);
                             }
                         }
+
+                        await RecordBatchExecutedAsync(batch.Count);
+                        return false;
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // Let cancellation propagate
-                throw;
-            }
-            catch (Exception ex) when (batchOutcomeRecorded)
-            {
-                // The batch's outcome is already recorded, and only closing its Connector failed afterwards (#2083): reported
-                // once, as an item of its own, rather than as the batch failing again.
-                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex}'s results were recorded, but closing its connection failed", batchIndex);
-                lock (resultLock)
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
-                    result.ProcessedExportItems.Add(new ProcessedExportItem
-                    {
-                        ChangeType = PendingExportChangeType.Update,
-                        Succeeded = false,
-                        ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
-                        ErrorType = ConnectedSystemExportErrorType.General
-                    });
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-            {
-                // Reached when the batch could not even be loaded (its repository scope or the reload failed), so no Pending
-                // Export of it was touched and none can be named; a batch that was loaded records its own failure above. Its
-                // exports are left for the next run.
-                Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
+                    // Reached when the batch could not even be loaded (its repository scope or the reload failed), so no
+                    // Pending Export of it was touched and none can be named; a batch that was loaded records its own
+                    // failure above. Its exports are left for the next run.
+                    Log.Error(ex, "ProcessBatchesInParallelAsync: Batch {BatchIndex} failed", batchIndex);
 
-                // Create ProcessedExportItems so the RPEI pipeline can record the failures. Without ProcessedExportItems,
-                // the activity would silently report Status: Complete with no error RPEIs. Each names its change from the
-                // caller's copy of the batch, since this batch's own reload is what failed.
-                lock (resultLock)
-                {
-                    result.FailedCount += batchIds.Count;
-                    foreach (var export in batches[batchIndex])
+                    // Create ProcessedExportItems so the RPEI pipeline can record the failures. Without them, the activity
+                    // would silently report Status: Complete with no error RPEIs. Each names its change from the caller's
+                    // copy of the batch, since this batch's own reload is what failed.
+                    lock (resultLock)
                     {
-                        result.ProcessedExportItems.Add(new ProcessedExportItem
+                        result.FailedCount += batchIds.Count;
+                        result.ProcessedExportItems.AddRange(callersBatch.Select(export => new ProcessedExportItem
                         {
                             ChangeType = export.ChangeType,
                             ConnectedSystemObject = export.ConnectedSystemObject,
@@ -1733,17 +1845,107 @@ public class ExportExecutionServer
                             ErrorMessage = $"Batch export failed: {ex.Message}",
                             ErrorCount = export.ErrorCount,
                             ErrorType = ConnectedSystemExportErrorType.General
-                        }.WithCauseFrom(export));
+                        }.WithCauseFrom(export)));
                     }
+                    return false;
                 }
             }
-            finally
-            {
-                throttle.Release();
-            }
-        }, cancellationToken)).ToList();
 
-        await Task.WhenAll(batchTasks);
+            // Counts a batch as finished, and reports progress through the caller's context.
+            async Task RecordBatchExecutedAsync(int batchCount)
+            {
+                Interlocked.Add(ref processedCount, batchCount);
+                batchExecuted?.Invoke(batchCount);
+
+                if (progressCallback == null)
+                    return;
+
+                await UnderCallerContextGateAsync(async () =>
+                {
+                    // Read under the gate, not from the add above: two workers finishing together would otherwise report
+                    // in either order, and the later count could reach the Activity first and then be overwritten by the
+                    // earlier one.
+                    var processedSoFar = Volatile.Read(ref processedCount);
+                    await progressCallback(new ExportProgressInfo
+                    {
+                        Phase = ExportPhase.Executing,
+                        TotalExports = result.TotalPendingExports,
+                        ProcessedExports = processedExportsOffset + processedSoFar,
+                        PassTotal = passTotal,
+                        PassProcessed = passTotal.HasValue ? processedSoFar + (passProcessedOffset?.Invoke() ?? 0) : null,
+                        CurrentBatchSize = batchCount,
+                        Message = passTotal.HasValue ? "Exporting deferred" : "Exporting"
+                    });
+                    return true;
+                });
+            }
+
+            // Lets go of this worker's connector. The primary is only forgotten (the caller closes it); a connector of the
+            // worker's own is closed and disposed, what it created captured first and what it returns at close persisted.
+            async Task DiscardConnectorAsync(bool unwinding)
+            {
+                connector = null;
+                var toClose = ownedConnector;
+                ownedConnector = null;
+                if (toClose is not IConnectorExportUsingCalls closing)
+                    return;
+
+                // Before its connection closes, which forgets them, whether or not its batches succeeded (#2197).
+                CaptureCreatedContainers(toClose, result, resultLock);
+
+                string? closeReturn;
+                try
+                {
+                    try
+                    {
+                        closeReturn = closing.CloseExportConnection();
+                    }
+                    finally
+                    {
+                        (toClose as IDisposable)?.Dispose();
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Every batch this connector ran has its outcome recorded, and only closing its connection failed
+                    // afterwards (#2083): reported once, as an item of its own, rather than as a batch failing again.
+                    Log.Error(ex, "ProcessBatchesInParallelAsync: Worker {WorkerIndex}'s batch results were recorded, but closing its connection failed", workerIndex);
+                    lock (resultLock)
+                    {
+                        result.ProcessedExportItems.Add(new ProcessedExportItem
+                        {
+                            ChangeType = PendingExportChangeType.Update,
+                            Succeeded = false,
+                            ErrorMessage = $"A batch's results were recorded, but closing its connection failed: {ex.Message}",
+                            ErrorType = ConnectedSystemExportErrorType.General
+                        });
+                    }
+                    return;
+                }
+
+                // Persist connector state the connector chose to override at close (issue #230), through the caller's
+                // context. Null (the overwhelmingly common case) means "nothing to override".
+                if (closeReturn == null)
+                    return;
+
+                try
+                {
+                    await UnderCallerContextGateAsync(async () =>
+                    {
+                        await Application.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, closeReturn);
+                        return true;
+                    });
+                }
+                catch (Exception persistEx) when (unwinding)
+                {
+                    // Something is already unwinding through this worker. Throwing here would replace it rather than chain
+                    // it and hide the real failure behind an unrelated persistence error, so log and let it continue.
+                    Log.Error(persistEx,
+                        "ProcessBatchesInParallelAsync: Failed to persist connector data returned by CloseExportConnection while worker {WorkerIndex} is failing for Connected System {ConnectedSystemId}. The worker's own failure takes precedence and will propagate.",
+                        workerIndex, connectedSystem.Id);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -3263,10 +3465,8 @@ public class ExportExecutionServer
                 : new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
         }
 
-        // Apply changes to each CSO in-memory, tracking old external ID values for cache invalidation
+        // Apply changes to each CSO in-memory
         var csoUpdates = new List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)>();
-        var cacheEvictions = new List<(int connectedSystemId, int attributeId, string oldValue)>();
-        var cacheAdditions = new List<(int connectedSystemId, int attributeId, string newValue, Guid csoId)>();
 
         foreach (var (cso, exportResult) in csosToUpdate)
         {
@@ -3281,12 +3481,6 @@ public class ExportExecutionServer
                 var externalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
 
-                // Capture old primary external ID value before overwriting for cache invalidation
-                var oldPrimaryIdValue = externalIdAttrValue?.StringValue
-                    ?? externalIdAttrValue?.GuidValue?.ToString()
-                    ?? externalIdAttrValue?.IntValue?.ToString(CultureInfo.InvariantCulture)
-                    ?? externalIdAttrValue?.LongValue?.ToString(CultureInfo.InvariantCulture);
-
                 if (externalIdAttrValue == null)
                 {
                     externalIdAttrValue = new ConnectedSystemObjectAttributeValue
@@ -3300,11 +3494,6 @@ public class ExportExecutionServer
 
                 ApplyExternalIdToAttributeValue(externalIdAttrValue, externalIdAttribute?.Type, exportResult.ExternalId, cso.Id);
 
-                // Track cache invalidation: evict old value if it differs from the new one
-                if (oldPrimaryIdValue != null && !oldPrimaryIdValue.Equals(exportResult.ExternalId, StringComparison.OrdinalIgnoreCase))
-                    cacheEvictions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, oldPrimaryIdValue));
-                cacheAdditions.Add((cso.ConnectedSystemId, cso.ExternalIdAttributeId, exportResult.ExternalId, cso.Id));
-
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
                     cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
@@ -3315,9 +3504,6 @@ public class ExportExecutionServer
             {
                 var secondaryExternalIdAttrValue = cso.AttributeValues
                     .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-
-                // Capture old secondary external ID value before overwriting for cache invalidation
-                var oldSecondaryIdValue = secondaryExternalIdAttrValue?.StringValue;
 
                 if (secondaryExternalIdAttrValue == null)
                 {
@@ -3331,11 +3517,6 @@ public class ExportExecutionServer
                 }
 
                 secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
-
-                // Track cache invalidation: evict old value if it differs from the new one
-                if (oldSecondaryIdValue != null && !oldSecondaryIdValue.Equals(exportResult.SecondaryExternalId, StringComparison.OrdinalIgnoreCase))
-                    cacheEvictions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, oldSecondaryIdValue));
-                cacheAdditions.Add((cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, exportResult.SecondaryExternalId, cso.Id));
 
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
@@ -3358,12 +3539,6 @@ public class ExportExecutionServer
             }
             Log.Information("BatchUpdateCsosAfterSuccessfulExportAsync: Batch updated {Count} CSOs", csoUpdates.Count);
         }
-
-        // Update cache after successful persistence: evict stale entries, then add current ones
-        foreach (var (connectedSystemId, attributeId, oldValue) in cacheEvictions)
-            Application.ConnectedSystems.EvictCsoFromCache(connectedSystemId, attributeId, oldValue);
-        foreach (var (connectedSystemId, attributeId, newValue, csoId) in cacheAdditions)
-            Application.ConnectedSystems.AddCsoToCache(connectedSystemId, attributeId, newValue, csoId);
     }
 
     /// <summary>
@@ -3843,11 +4018,15 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Attempts to resolve unresolved reference attributes in a Pending Export using a pre-fetched CSO lookup.
-    /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN),
-    /// not the primary external ID (objectGUID). We use the secondary external ID when available.
+    /// Attempts to resolve unresolved reference attributes in a Pending Export using pre-fetched reference anchors.
+    /// For LDAP systems, references like 'member' need to be resolved to Distinguished Names (DN), not the primary
+    /// external ID (objectGUID); the anchors carry the secondary external ID where the object has one.
     /// </summary>
-    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport, Dictionary<Guid, ConnectedSystemObject> csoLookup)
+    /// <param name="anchors">Per referenced Metaverse Object, its object in the target system and that object's anchor.</param>
+    /// <param name="resolvedChanges">Given each change this call resolves, so the caller can save exactly those.</param>
+    internal static bool TryResolveReferencesFromLookup(PendingExport pendingExport,
+        IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
+        ICollection<PendingExportAttributeValueChange>? resolvedChanges = null)
     {
         var allResolved = true;
 
@@ -3860,25 +4039,11 @@ public class ExportExecutionServer
             if (!Guid.TryParse(attrChange.UnresolvedReferenceValue, out var referencedMvoId))
                 continue;
 
-            // Look up the CSO from the pre-fetched dictionary
-            if (csoLookup.TryGetValue(referencedMvoId, out var referencedCso))
+            if (anchors.TryGetValue(referencedMvoId, out var referenced))
             {
-                // For reference attributes, prefer the secondary external ID (e.g., DN for LDAP)
-                // as this is what the Connected System uses for references.
-                // Fall back to primary external ID if secondary is not available.
-                var secondaryExternalIdAttr = referencedCso.AttributeValues
-                    .FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true);
-
-                var externalIdAttr = referencedCso.AttributeValues
-                    .FirstOrDefault(av => av.Attribute?.IsExternalId == true);
-
-                // Use secondary external ID (DN) if available, otherwise fall back to primary
-                var resolvedAttr = secondaryExternalIdAttr ?? externalIdAttr;
-                var resolvedValue = resolvedAttr?.ToReferenceValueString();
-
-                if (resolvedValue != null)
+                if (referenced.AnchorValue != null)
                 {
-                    attrChange.StringValue = resolvedValue;
+                    attrChange.StringValue = referenced.AnchorValue;
                     attrChange.UnresolvedReferenceValue = null;
 
                     // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
@@ -3886,12 +4051,13 @@ public class ExportExecutionServer
                     // resolution site; the column then persists with the rest of the change, so
                     // optimistic apply can populate ConnectedSystemObjectAttributeValue.ReferenceValueId
                     // without a further database round-trip, this run or any later one.
-                    attrChange.ResolvedReferenceCsoId = referencedCso.Id;
+                    attrChange.ResolvedReferenceCsoId = referenced.ConnectedSystemObjectId;
+                    resolvedChanges?.Add(attrChange);
 
                     Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
                         referencedMvoId,
                         LogSanitiser.Sanitise(attrChange.StringValue),
-                        secondaryExternalIdAttr != null ? "secondary external ID (DN)" : "primary external ID");
+                        referenced.IsSecondaryExternalId ? "secondary external ID (DN)" : "primary external ID");
                 }
                 else
                 {
@@ -3901,7 +4067,7 @@ public class ExportExecutionServer
                     // leaving it unresolved keeps the export deferred until the anchor arrives.
                     Log.Debug("TryResolveReferencesFromLookup: Cannot resolve reference for PE {PeId}: " +
                         "CSO {CsoId} (MVO {MvoId}) does not hold an anchor value yet. Export stays deferred.",
-                        pendingExport.Id, referencedCso.Id, referencedMvoId);
+                        pendingExport.Id, referenced.ConnectedSystemObjectId, referencedMvoId);
                     allResolved = false;
                 }
             }
@@ -3945,27 +4111,30 @@ public class ExportExecutionServer
         Log.Information("ExecuteDeferredReferencesAsync: Checking {Count} deferred export(s) from previous cycles for reference resolution",
             unresolvedExports.Count);
 
-        // Bulk pre-fetch all referenced CSOs in a single query
+        // Bulk pre-fetch what every referenced object is written as, in a single query
         var mvoIds = CollectUnresolvedMvoIds(unresolvedExports);
-        Dictionary<Guid, ConnectedSystemObject> csoLookup;
-        using (Diagnostics.Diagnostics.Database.StartSpan("BulkFetchCsosByMvoIds")
+        Dictionary<Guid, ReferenceAnchorSummary> anchors;
+        using (Diagnostics.Diagnostics.Database.StartSpan("FetchReferenceAnchors")
             .SetTag("mvoIdCount", mvoIds.Count))
         {
-            csoLookup = mvoIds.Count > 0
-                ? await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                : new Dictionary<Guid, ConnectedSystemObject>();
+            anchors = mvoIds.Count > 0
+                ? await SyncRepo.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
+                : new Dictionary<Guid, ReferenceAnchorSummary>();
         }
 
-        // Resolve references using the pre-fetched lookup and collect resolved exports for batch update
+        // Resolve references using the pre-fetched anchors and collect resolved exports for batch update
         var resolvedExports = new List<PendingExport>();
+        var resolvedChanges = new List<PendingExportAttributeValueChange>();
         var stillUnresolvedCount = 0;
         foreach (var export in unresolvedExports)
         {
-            var resolved = TryResolveReferencesFromLookup(export, csoLookup);
+            var exportResolvedChanges = new List<PendingExportAttributeValueChange>();
+            var resolved = TryResolveReferencesFromLookup(export, anchors, exportResolvedChanges);
             if (resolved)
             {
                 export.HasUnresolvedReferences = false;
                 resolvedExports.Add(export);
+                resolvedChanges.AddRange(exportResolvedChanges);
                 Log.Debug("ExecuteDeferredReferencesAsync: Resolved references for export {ExportId}", export.Id);
             }
             else
@@ -3983,13 +4152,13 @@ public class ExportExecutionServer
             "{Resolved}/{Total} deferred export(s) resolved, {StillUnresolved} still pending",
             resolvedExports.Count, unresolvedExports.Count, stillUnresolvedCount);
 
-        // Batch update all resolved exports in a single SaveChanges
+        // Save what resolution changed on the resolved exports; partial resolutions of those still waiting are not kept
         if (resolvedExports.Count > 0)
         {
             using (Diagnostics.Diagnostics.Database.StartSpan("UpdateResolvedDeferredExports")
                 .SetTag("count", resolvedExports.Count))
             {
-                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
+                await SyncRepo.PersistResolvedReferencesAsync(resolvedExports, resolvedChanges);
             }
         }
     }

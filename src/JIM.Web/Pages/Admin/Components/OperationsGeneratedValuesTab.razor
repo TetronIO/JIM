@@ -65,9 +65,9 @@
     <MudItem xs="12" sm="4">
         <MudSelect T="int?" Label="Connected System" Value="_connectedSystemId" ValueChanged="OnConnectedSystemFilterChangedAsync"
                    Variant="Variant.Outlined" Clearable="true" Dense="true" Placeholder="All">
-            @foreach (var system in _connectedSystems)
+            @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
             {
-                <MudSelectItem T="int?" Value="@system.Id">@system.Name</MudSelectItem>
+                <MudSelectItem T="int?" Value="@id">@name</MudSelectItem>
             }
         </MudSelect>
     </MudItem>
@@ -99,7 +99,7 @@
     <ToolBarExtras>
         @* Acts on the filter shown, not on a selection: every held value matching the Connected System and Synchronisation
            Rule filters. An allowed rename is never released by Try again, so it is not counted. *@
-        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Variant="Variant.Outlined"
+        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Variant="Variant.Filled"
                    Disabled="@(_busy || _summary.NeedsDecisionCount == 0)" OnClick="TryAgainAllAsync"
                    data-testid="generated-values-try-again-all">
             Try again for all @_summary.NeedsDecisionCount.ToString("N0")
@@ -158,7 +158,7 @@
                                    OnClick="@(() => AllowRenameAsync(context.Item))" data-testid="generated-value-allow-rename">
                             Allow the rename…
                         </MudButton>
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@_busy"
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" DropShadow="false" Disabled="@_busy"
                                    OnClick="@(() => TryAgainAsync(context.Item))" data-testid="generated-value-try-again">
                             Try again
                         </MudButton>
@@ -190,7 +190,7 @@
 
 @code {
     private VirtualisedDataGrid<GeneratedValueDecisionHeader>? _grid;
-    private List<ConnectedSystemHeader> _connectedSystems = [];
+    private Dictionary<int, string> _connectedSystemNames = [];
     private List<SyncRuleHeader> _syncRules = [];
     private GeneratedValueDecisionSummary _summary = new();
 
@@ -236,7 +236,7 @@
         _syncRuleId = SyncRuleIdFilter;
 
         using var jim = JimFactory.Create();
-        _connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
         _syncRules = [.. (await jim.ConnectedSystems.GetSyncRuleHeadersAsync()).OrderBy(r => r.Name)];
         await LoadSummaryAsync();
     }

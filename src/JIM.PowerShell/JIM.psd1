@@ -6,7 +6,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.16.0'
+    ModuleVersion = '0.17.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -54,6 +54,7 @@
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemContainerScopeText',
         'Set-JIMConnectedSystemContainerScopeText',
+        'Get-JIMConnectedSystemCatalogue',
         'Get-JIMConnectedSystemDirectoryServer',
         'Get-JIMConnectedSystemObject',
         'Get-JIMConnectedSystemObjectType',
@@ -227,6 +228,8 @@
         'Test-JIMCertificate',
         'Export-JIMCertificate',
         'Get-JIMIdentityProviderTrust',
+        'Register-JIMIdentityProvider',
+        'Get-JIMSignInDiagnostic',
 
         # Security
         'Get-JIMRole',
@@ -237,6 +240,7 @@
 
         # Data Generation
         'Add-JIMExampleDataTemplateAttribute',
+        'Copy-JIMExampleDataTemplate',
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
@@ -255,6 +259,9 @@
         # History
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
+        'Search-JIMMetaverseObjectChange',
+        'Get-JIMConnectedSystemObjectChangeValue',
+        'Get-JIMMetaverseObjectChangeValue',
         'Invoke-JIMHistoryCleanup',
 
         # Configuration Change Previews

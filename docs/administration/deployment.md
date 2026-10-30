@@ -3,7 +3,7 @@ title: Deployment
 description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
 type: how-to
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Deployment
@@ -13,11 +13,11 @@ This guide installs JIM in production, on Docker or Podman, connected to the int
 !!! tip "Quick Start"
     The [Getting Started](../getting-started/index.md) guide gets you running in under five minutes, for evaluation.
 
-## Prerequisites
+## :material-clipboard-list-outline: Prerequisites
 
 [Prerequisites](../getting-started/prerequisites.md) lists what JIM needs: a container runtime, an identity provider, a TLS certificate and a PostgreSQL database, with the hardware to size for the number of objects you synchronise and the one port to open.
 
-## Architecture Overview
+## :material-sitemap-outline: Architecture Overview
 
 JIM runs as four services: a Docker Compose stack on Docker, or two pods on Podman (see [How JIM Runs on Podman](podman.md#how-jim-runs-on-podman)).
 
@@ -62,7 +62,7 @@ Start-up order does not matter: each JIM service waits up to five minutes for Po
 
 ---
 
-## Before You Install
+## :material-clipboard-check-outline: Before You Install
 
 Have these ready, whichever way you install:
 
@@ -80,7 +80,7 @@ Have these ready, whichever way you install:
 
 ---
 
-## Connected Deployment
+## :material-cloud-outline: Connected Deployment
 
 ### With the Installer (Recommended)
 
@@ -144,7 +144,7 @@ Then carry on at [After Installing](#after-installing).
 
 ---
 
-## Air-Gapped Deployment
+## :material-lan-disconnect: Air-Gapped Deployment
 
 Each [release](https://github.com/TetronIO/JIM/releases) includes a bundle, `jim-release-X.Y.Z.tar.gz`, holding everything an installation needs: the images, the compose files and the installer. Nothing is downloaded while installing from it.
 
@@ -249,7 +249,7 @@ Then carry on at [After Installing](#after-installing).
 
 ---
 
-## What the Installer Does
+## :material-cog-outline: What the Installer Does
 
 `setup.sh` installs JIM on Docker or Podman, whichever the server has, asking which where both are installed (or pass `--runtime docker` or `--runtime podman`). It installs in `/opt/jim` (or `./jim` when not run as root) and asks, in turn:
 
@@ -276,7 +276,7 @@ For automation, every question can be answered in advance with an environment va
 
 ---
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 JIM prepares its database on first start, with no manual step, and does not serve requests until that has finished. The installer waits for it; after a manual start, `jim.web` shows as `healthy` once JIM is ready:
 
@@ -297,10 +297,10 @@ JIM prepares its database on first start, with no manual step, and does not serv
 
     If it does not become ready, the worker's log names the problem, for example a database permission it lacks: `sudo podman logs jim-worker`. For a rootless installation, see [Rootless commands](podman.md#rootless-commands).
 
-## After Installing
+## :material-rocket-launch-outline: After Installing
 
 1. **Trust the certificate authority**, if the installer created JIM's certificate: add `/opt/jim/tls/ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM (see [Distributing the certificate authority](tls-and-reverse-proxy.md#distributing-the-certificate-authority)). Until then, browsers warn about JIM's certificate.
-2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access.
+2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access. If JIM shows **Sign-in is unavailable** instead, it cannot reach your identity provider or does not trust its certificate; see [Troubleshooting](troubleshooting.md#opening-jim-shows-sign-in-is-unavailable).
 
 !!! warning "Always name the compose files"
     Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.
@@ -339,11 +339,11 @@ If you need to integrate with an external system that writes to a fixed network 
 
 ---
 
-## TLS and Reverse Proxy
+## :material-certificate-outline: TLS and Reverse Proxy
 
 JIM serves HTTPS itself, with a certificate for its host name that the installer creates or that your organisation's certificate authority issues. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers the certificate, renewing and replacing it, running JIM behind a reverse proxy or load balancer, and changing its port.
 
-## Health Monitoring
+## :material-heart-pulse: Health Monitoring
 
 ### Health Endpoints
 
@@ -398,7 +398,7 @@ JIM also includes a Logs page in the web UI for viewing application and database
 
 ---
 
-## PowerShell Module
+## :material-console: PowerShell Module
 
 JIM includes a cross-platform PowerShell module for scripting, automation, and Identity as Code (IDaC). The module works on Windows, macOS, and Linux and requires PowerShell 7.0+.
 
@@ -472,7 +472,7 @@ Test-JIMConnection
 
 ---
 
-## Production Readiness Checklist
+## :material-clipboard-text-outline: Production Readiness Checklist
 
 Use this checklist before going live:
 

@@ -9,7 +9,21 @@ audience: administrator
 
 Where JIM reads a directory from, and which part of it, matter as much as how. This page covers finding and pinning a domain controller, multi-domain forests and referrals, Container Scope and excluding a container, and tuning OpenLDAP for large groups.
 
-## Discovering Domain Controllers
+```jim-diagram
+archetype: lifecycle
+title: How JIM pins a domain controller, and when it lets go
+desc: "On Active Directory and Samba AD, with Preferred Domain Controller blank, the first connection goes through Host and the Connected System is not pinned. JIM reads the domain controller it reached from the rootDSE and, once a throwaway connection proves that name reachable, pins every later connection, within a run and across Run Profile executions, to that domain controller by FQDN. If the name cannot be reached, nothing is pinned and the Activity carries a warning. If the pinned domain controller becomes unavailable, the run fails outright and the pin is cleared; the next run resolves via Host again and re-pins, and a Full Import re-establishes the Delta Import baseline. A Preferred Domain Controller, when set, always takes priority over any pin."
+start: { label: Host }
+container: { label: Active Directory and Samba AD, note: "a Preferred Domain Controller, when set, always takes priority over any pin" }
+states:
+  - { id: unpinned, label: Not pinned, sub: connects via Host }
+  - { id: pinned, label: Pinned, sub: every connection to one FQDN }
+transitions:
+  - { from: unpinned, to: pinned, label: "discovered, and reachable by name", note: "if not: stays unpinned, with a warning" }
+  - { from: pinned, to: unpinned, label: pinned domain controller unavailable, note: "the run fails; a Full Import re-baselines" }
+```
+
+## :material-magnify: Discovering Domain Controllers
 
 Administrators often do not know which domain controller to enter in Preferred Domain Controller. Rather than typing a hostname blind, use the **Discover...** action beside the field on the Connected System's settings page: it lists every domain controller in the forest, with the Active Directory Site each belongs to, and clicking one fills the field with your choice. Read-only domain controllers appear in the list and are not marked as such. Choose a writable one: JIM exports to the domain controller it connects to, and a read-only one cannot accept the changes.
 
@@ -29,7 +43,7 @@ GET /api/v1/synchronisation/connected-systems/3/directory-servers
 
 See [`Get-JIMConnectedSystemDirectoryServer`](../powershell/partitions-and-containers.md#get-jimconnectedsystemdirectoryserver) in the PowerShell reference.
 
-## Domain Controller Discovery and Pinning
+## :material-pin-outline: Domain Controller Discovery and Pinning
 
 For Active Directory and Samba AD, JIM connects to a single, consistent domain controller rather than reconnecting via whatever the Host setting happens to resolve to each time. This matters for two reasons:
 
@@ -44,13 +58,13 @@ For Active Directory and Samba AD, JIM connects to a single, consistent domain c
 
 Pinning only applies to Active Directory and Samba AD; OpenLDAP, 389 Directory Server and generic directories are unaffected.
 
-## Multi-domain forests
+## :material-sitemap-outline: Multi-domain forests
 
 A Connected System manages one domain today. During Partition discovery on Active Directory or Samba AD, JIM lists every domain in the forest, because that is what the directory's crossRef objects expose; it has no way to tell from that list alone which domains the connected domain controller actually holds. A domain controller only ever holds its own domain's naming context and does not chase referrals to serve objects from another domain in the forest.
 
 If you select a Partition for a domain the connected domain controller does not host, the import fails fast with an error naming the Partition and the domain controller, rather than silently returning zero objects. To manage more than one domain, create a separate Connected System per domain, each with its Host setting pointing at that domain's own domain controllers.
 
-## Referrals
+## :material-arrow-decision-outline: Referrals
 
 **JIM does not follow LDAP referrals.** A referral is the directory's way of saying "the objects you asked for live on another server"; JIM ignores it and works only with what the connected server returns directly.
 
@@ -60,7 +74,7 @@ In practice this affects Partition discovery on Active Directory and Samba AD, w
 
 **What to do instead:** connect a Connected System to each directory server whose objects you need, as described under [Multi-domain forests](#multi-domain-forests) above. If a server has no network path from the JIM host and is only reachable by referral from a server that does, JIM cannot manage its objects.
 
-## Container Scope
+## :material-folder-outline: Container Scope
 
 Each selected Container carries a scope, set with the two-segment control on its row in the Container tree on the Connected System's **Scope** tab:
 
@@ -83,7 +97,7 @@ Scope is also settable from the REST API (`PUT /api/v1/synchronisation/connected
 !!! note "Objects that reference something out of scope"
     A reference attribute pointing at an object outside the imported Containers cannot be resolved, and JIM reports it as an unresolved reference naming Container Scope as the likely cause. Narrowing a Container is a common way to create these; if a group's members live in a Container you have just excluded, either bring that Container back into scope or expect the membership to import incompletely.
 
-## Excluding a Container
+## :material-folder-cancel-outline: Excluding a Container
 
 Service Account, mailbox-archive and staging OUs sitting inside an otherwise wholly-managed branch are the ordinary shape of a production directory. **Exclude** carves one of those out of a selection made above it: select `OU=Corp` as a whole subtree, then exclude `OU=Service Accounts,OU=Corp`, and JIM imports everything in `OU=Corp` except that branch.
 
@@ -119,7 +133,7 @@ include OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com
 
 See [Stating Container Scope as text](../configuration/partitions-and-containers.md#stating-container-scope-as-text-advanced-mode) for the full syntax, the portal's **Advanced** mode, and the [`Get-`](../powershell/partitions-and-containers.md#get-jimconnectedsystemcontainerscopetext) and [`Set-JIMConnectedSystemContainerScopeText`](../powershell/partitions-and-containers.md#set-jimconnectedsystemcontainerscopetext) cmdlets.
 
-## Directory Tuning for Large Groups (OpenLDAP)
+## :material-tune-variant: Directory Tuning for Large Groups (OpenLDAP)
 
 When provisioning groups with very large memberships (tens of thousands of members and up) to OpenLDAP, the directory's own write path becomes the bottleneck: each membership modification makes slapd duplicate-check the new values against every existing value with a linear scan, so the cost of appending members grows with the group's current size.
 
@@ -136,4 +150,4 @@ add: olcSortVals
 olcSortVals: member
 ```
 
-JIM's own large-scale integration testing (up to 500,000 users, with individual groups of up to 495,000 members) runs OpenLDAP with `sortvals member` enabled, and we recommend it for any deployment where large group memberships are provisioned. Note that `sortvals` only affects entries written after it is enabled; enable it before loading data, or reload existing data (`slapcat`/`slapadd`) afterwards. See the [OpenLDAP tuning guide](https://www.openldap.org/doc/admin26/tuning.html) and the `slapd.conf(5)` man page for details.
+JIM's own large-scale testing (up to 500,000 users, with individual groups of up to 495,000 members) runs OpenLDAP with `sortvals member` enabled, and we recommend it for any deployment where large group memberships are provisioned. Note that `sortvals` only affects entries written after it is enabled; enable it before loading data, or reload existing data (`slapcat`/`slapadd`) afterwards. See the [OpenLDAP tuning guide](https://www.openldap.org/doc/admin26/tuning.html) and the `slapd.conf(5)` man page for details.

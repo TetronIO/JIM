@@ -3,16 +3,41 @@ title: JIM LDAP Connector
 description: Synchronise identities with Active Directory, OpenLDAP, 389 Directory Server and other LDAP directories, and the settings it takes.
 type: object
 audience: administrator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # JIM LDAP Connector
 
-The JIM LDAP Connector enables bi-directional synchronisation with LDAP-compliant directory services. It supports a wide range of directories and provides full lifecycle management of identity objects, from importing existing data to provisioning new accounts and groups.
+The JIM LDAP Connector synchronises identities in both directions with LDAP directory services, from importing existing data to provisioning new accounts and groups.
 
 **Capabilities:** Full Import, Delta Import, Export, Probe
 
-## Supported Directories
+```jim-diagram
+archetype: decision
+title: How JIM tells which directory it has reached
+desc: "During schema discovery JIM reads the directory's Root DSE and asks up to three questions. If the Root DSE advertises the Active Directory capability in supportedCapabilities, the directory is Samba AD when its vendor name says Samba, and Active Directory otherwise; an AD LDS instance lands here too. If not, a vendor name or Root DSE class naming OpenLDAP makes it OpenLDAP. If not, a vendor name of 389 Project, or a vendor version beginning 389-Directory, makes it 389 Directory Server. Anything else is a generic directory. The type decides how JIM behaves: Active Directory and Samba AD Delta Imports track update sequence numbers (USNs), OpenLDAP's read cn=accesslog, and 389 Directory Server's and generic directories' read the changelog."
+start: { label: Root DSE }
+questions:
+  - { id: ad, label: "Active Directory capability?", sub: "in `supportedCapabilities`" }
+  - { id: openldap, label: "OpenLDAP?", sub: "vendor name, or the Root DSE's class" }
+  - { id: dirsrv, label: "389 Directory Server?", sub: "vendor `389 Project`, or version `389-Directory`" }
+outcomes:
+  - { id: samba, label: Samba AD, sub: Delta Import tracks USNs }
+  - { id: msad, label: Active Directory, sub: "Delta Import tracks USNs; AD LDS too" }
+  - { id: oldap, label: OpenLDAP, sub: "Delta Import reads `cn=accesslog`" }
+  - { id: ds389, label: 389 Directory Server, sub: Delta Import reads the changelog }
+  - { id: generic, label: Generic, sub: Delta Import reads the changelog }
+answers:
+  - { from: ad, to: samba, label: "yes, Samba vendor" }
+  - { from: ad, to: msad, label: "yes" }
+  - { from: ad, to: openldap, label: "no" }
+  - { from: openldap, to: oldap, label: "yes" }
+  - { from: openldap, to: dirsrv, label: "no" }
+  - { from: dirsrv, to: ds389, label: "yes" }
+  - { from: dirsrv, to: generic, label: "no" }
+```
+
+## :material-server-outline: Supported Directories
 
 | Directory | Notes |
 |-----------|-------|
@@ -20,12 +45,12 @@ The JIM LDAP Connector enables bi-directional synchronisation with LDAP-complian
 | **Active Directory Lightweight Directory Services (AD LDS)** | Untested. JIM treats an AD LDS instance as Active Directory. Use Full Import and export; do not rely on Delta Import, password setting or domain controller discovery, which are built for a domain and have not been tried against an instance |
 | **OpenLDAP** | Full support including parallel import, accesslog-based delta import, and RFC 4512 schema discovery |
 | **Samba AD** | Full support with Active Directory compatibility |
-| **389 Directory Server** | Full support, verified against 389 Directory Server 3.1 by JIM's integration lab: schema discovery, Full Import, export, changelog Delta Import (deletions and renames included), password setting over LDAPS, and password policy discovery. Detected from the root DSE vendor name "389 Project", or a vendor version beginning "389-Directory". Identifies objects by `entryUUID`, imports in parallel with paged results, reads the Retro Changelog plug-in's changelog for Delta Import (see [Import](#import)) and its password policy from `cn=config` (see [Password policy discovery](jim-ldap-connector-passwords.md#password-policy-discovery)); the access to grant is under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) |
+| **389 Directory Server** | Full support, tested against 389 Directory Server 3.1: schema discovery, Full Import, export, changelog Delta Import (deletions and renames included), password setting over LDAPS, and password policy discovery. Identifies objects by `entryUUID`, imports in parallel with paged results, reads the Retro Changelog plug-in's changelog for Delta Import (see [Import](#import)) and its password policy from `cn=config` (see [Password policy discovery](jim-ldap-connector-passwords.md#password-policy-discovery)); the access to grant is under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) |
 | **Other RFC 4512-compliant directories** | Supported via generic LDAP mode with automatic directory type detection |
 
-JIM automatically detects the directory type during schema discovery by inspecting the Root DSE and adjusts its behaviour accordingly. No manual directory type configuration is required.
+JIM detects the directory type from the Root DSE during schema discovery and adjusts its behaviour to suit; there is nothing to configure.
 
-## Features
+## :material-star-four-points-outline: Features
 
 ### Import
 
@@ -35,12 +60,12 @@ JIM automatically detects the directory type during schema discovery by inspecti
     - **OpenLDAP**<br /> Uses the accesslog overlay (`cn=accesslog`).
     - **389 Directory Server and generic directories**<br /> Uses the directory's changelog.
     - **Every directory type**<br /> Before it queries a single change, a Delta Import confirms that the account JIM connects as can read where the directory keeps its changes. [LDAP Connector Delta Import](jim-ldap-connector-delta-import.md) explains each mechanism, and how a Delta Import fails safe.
-- **Parallel imports**<br /> Configurable concurrency for OpenLDAP and generic directories, allowing multiple containers and object types to be imported simultaneously.
+- **Parallel imports**<br /> Configurable concurrency for OpenLDAP, 389 Directory Server and generic directories, allowing multiple containers and object types to be imported simultaneously.
 - **Paged results**<br /> Automatic RFC 2696 Simple Paged Results support for large directories.
 - **Configurable search timeout**<br /> Control how long to wait for LDAP search results.
 - **Reading values as their attribute's type**<br /> Each value is read as its attribute's data type, in the forms [How values are read](#how-values-are-read) lists.
 - **Values JIM cannot read**<br /> A value that does not fit its attribute's type is reported with the entry's distinguished name, never guessed at, as [Values JIM could not import](../configuration/activity-execution-items.md#values-jim-could-not-import) describes.
-- **Overlapping Object Types**<br /> An entry carrying more than one selected structural class imports as the most specific of them: with both `user` and `computer` selected, an Active Directory computer imports as `computer`, and on an RFC 4512 directory with both `person` and `inetOrgPerson` selected, an `inetOrgPerson` entry imports as `inetOrgPerson`. Schema discovery records which classes each Object Type inherits from, so this holds whatever order the directory lists an entry's classes in. Object Types discovered before JIM recorded inheritance resolve by the order instead, read from where the entry lists `top` (first on Active Directory and Samba AD, often last in an RFC 4512 directory); refresh the schema of any Connected System with overlapping Object Types selected to record inheritance. Because of this rule, selecting or deselecting an overlapping Object Type changes the Object Type that entries JIM already holds import as; JIM refuses that change by default and keeps the existing objects, as [When an object changes Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type) explains.
+- **Overlapping Object Types**<br /> An entry carrying more than one selected structural class imports as the most specific of them: with both `user` and `computer` selected, an Active Directory computer imports as `computer`, and on an RFC 4512 directory with both `person` and `inetOrgPerson` selected, an `inetOrgPerson` entry imports as `inetOrgPerson`. Schema discovery records which classes each Object Type inherits from, so this holds whatever order the directory lists an entry's classes in. Object Types discovered before JIM recorded inheritance resolve by the order the entry lists its classes in until you refresh the schema, so refresh any Connected System with overlapping Object Types selected. Because of this rule, selecting or deselecting an overlapping Object Type changes the Object Type that entries JIM already holds import as; JIM refuses that change by default and keeps the existing objects, as [When an object changes Object Type](../configuration/connected-system-schema.md#when-an-object-changes-object-type) explains.
 
 ### Export
 
@@ -58,9 +83,11 @@ JIM automatically detects the directory type during schema discovery by inspecti
 
 - **Automatic RFC 4512 schema parsing**<br /> Object classes and attributes are discovered directly from the directory's subschema subentry.
 - **Data types from the directory's schema**<br /> Each attribute's data type comes from its syntax, and cannot be overridden. Active Directory's Enumeration attributes (omSyntax 10), such as `sAMAccountType` and `instanceType`, are whole numbers and are discovered as Number attributes. Other directories' INTEGER attributes, such as `uidNumber`, are Long Number.
-- **Structural and auxiliary class support**<br /> Optionally include auxiliary classes in schema discovery.
+- **Structural and auxiliary class support**<br /> On Active Directory, optionally include auxiliary classes in schema discovery; other directories always do.
 - **Auxiliary class merging**<br /> Merge an auxiliary class's attributes into a structural Object Type so JIM can import and export them, with JIM composing each entry's `objectClass` itself. See [Auxiliary Object Classes](jim-ldap-connector-auxiliary-classes.md) below.
 - **Internal class classification**<br /> Classes the directory keeps for its own configuration or operation are marked internal, and the schema screen puts them out of the way. See [Internal object types](#internal-object-types) below.
+- **Operational attributes**<br /> On RFC 4512 directories, attributes the directory maintains itself, such as `createTimestamp` and `pwdFailureTime`, are offered unselected and read-only; see [Operational Attributes](jim-ldap-connector-operational-attributes.md).
+- **Case-exact attributes**<br /> Discovered from each attribute's matching rule, or on Active Directory its syntax; see [Case-exact attributes](../concepts/case-sensitivity.md#case-exact-attributes).
 - **Partition discovery**<br /> Automatically enumerates naming contexts and organisational units.
 - **Hidden partition filtering**<br /> Skip Configuration, Schema, and DNS partitions for improved performance.
 
@@ -97,15 +124,15 @@ The Connected System's **Details** tab shows a **Detected** strip above the form
 | Directory Type | Always, once detected (Active Directory, Samba AD, OpenLDAP, 389 Directory Server, or Generic) |
 | Vendor | The directory reported one |
 | DNS Host Name | The directory reported one |
-| Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported, see [Supported Directories](#supported-directories)) |
+| Paging | Always, once detected (Supported / Not Supported; Samba AD reports Not Supported) |
 | Pinned Directory Server | A domain controller has been [pinned](jim-ldap-connector-topology.md#domain-controller-discovery-and-pinning) |
 | Invocation Id | JIM could read the pinned domain controller's invocationId |
 
-These are read from data JIM already captured during a previous connection; viewing them never opens a new connection to the directory. Before the first successful connection, the strip says nothing has been detected yet. It is read-only: there is nothing here to configure.
+The strip is read-only, and viewing it never opens a connection; [Detected facts](../configuration/connected-systems.md#detected-facts) says where it comes from.
 
 Available to automation via `GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/capabilities` and `Get-JIMConnectedSystemCapability -ConnectedSystemId <id>`.
 
-## Connection Settings
+## :material-lan-connect: Connection Settings
 
 ### Connectivity
 
@@ -144,7 +171,7 @@ Available to automation via `GET /api/v1/synchronisation/connected-systems/{conn
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Include Auxiliary Classes | Include auxiliary object classes alongside structural classes during schema discovery. | `false` |
+| Include Auxiliary Classes | Applies to Active Directory. Include auxiliary object classes alongside structural classes during schema discovery; RFC 4512 directories always include them. | `false` |
 
 #### Internal object types
 
@@ -154,7 +181,7 @@ On 389 Directory Server 3.1, 78 of the 184 structural classes it publishes belon
 
 The Connector marks those Object Types **internal**, and the Schema tab hides them, telling you how many it is holding back and offering **Show internal object types** to see them. Nothing is discarded: every class is still discovered, still stored, and still selectable. An Object Type you have already selected is never hidden, whatever its classification.
 
-The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. For 389 Directory Server the vendor arc also carries `inetOrgPerson` and the recommended user classes, so JIM matches an exact list of the classes 389 ships for itself instead of the arc; still an OID, never a name. Classes carrying the RFC 4512 `OBSOLETE` flag are treated the same way, since that is the directory itself declaring them superseded. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
+The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. For 389 Directory Server the vendor arc also carries `inetOrgPerson` and the recommended user classes, so JIM matches an exact list of the classes 389 ships for itself instead of the arc. Classes carrying the RFC 4512 `OBSOLETE` flag are treated the same way, since that is the directory itself declaring them superseded. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
 
 Active Directory needs none of this: the Connector already asks the directory to exclude its own hidden and defunct classes when it enumerates them, so what you see is already the classes an administrator manages.
 
@@ -175,19 +202,20 @@ A naming context or crossRef partition the service account cannot read (a least-
 |---------|-------------|---------|
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
-| Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2 to 8. | `4` |
+| Export Concurrency | Concurrent LDAP operations per export batch ([Export Performance](../configuration/export-performance.md)). Recommended range: 2 to 8. | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 [Troubleshooting the LDAP Connector](jim-ldap-connector-troubleshooting.md) covers connection, sign-in, import, Delta Import and export failures, each by the message it shows.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [LDAP Connector Delta Import](jim-ldap-connector-delta-import.md): how each directory type reports its changes, and the checks a Delta Import makes first.
 - [LDAP Connector Values Already in Use](jim-ldap-connector-values-in-use.md): values already in place, and probing for values already in use.
 - [LDAP Connector Auxiliary Object Classes](jim-ldap-connector-auxiliary-classes.md): merging auxiliary classes into an Object Type.
+- [LDAP Connector Operational Attributes](jim-ldap-connector-operational-attributes.md): importing the attributes a directory maintains itself.
 - [LDAP Connector Domain Controllers and Containers](jim-ldap-connector-topology.md): domain controllers, forests, referrals and Container Scope.
 - [LDAP Connector Certificates](jim-ldap-connector-certificates.md): LDAPS and certificate validation.
 - [LDAP Connector Passwords](jim-ldap-connector-passwords.md): setting passwords, and the password policy JIM discovers.

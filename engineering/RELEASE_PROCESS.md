@@ -6,7 +6,7 @@ This document describes how to create releases of JIM, including support for air
 
 JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the GitHub Actions workflow automatically:
 
-1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
+1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-ad-lab-adfs` commit status (its AD FS gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
 2. Validates the build and runs all tests
 3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
 4. Publishes the PowerShell module to PSGallery
@@ -24,6 +24,13 @@ A release is refused unless the exact commit being tagged has a `success` commit
 - **Reading a result:** `pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`; otherwise it exits 1 and prints the state (or "not reported"), the run link and the remedy. The commit status's description carries the scenario count and the domain controller operating system build, and each run uploads the regression report and `dc-builds.json` as artefacts.
 - **The lab is patched by rebuild** (`ad-lab-rebuild.yml`, after each Patch Tuesday), so a red night after a rebuild is attributable to the Windows update or to JIM: the build is in every run's record.
 - **The lab runner is in its own runner group.** It is the only runner in a dedicated `jim-ad-lab` runner group (repository access `TetronIO/JIM` only; workflow allowlist exactly `ad-lab.yml` and `ad-lab-rebuild.yml` at `refs/heads/main`), not in `tetron-trusted`: a runner carrying the default labels there would be offered ordinary `ci.yml` push jobs, which need `sudo pwsh` and a larger machine. It also means the gate itself never needs the lab: the `jim-ad-lab-gate` job runs on the ordinary release runners and only reads a commit status. Dispatching `ad-lab.yml` from a branch other than `main` is refused by that allowlist unless the branch ref has been added to it (as a release tag is added to `tetron-trusted` in the steps below), which is one more reason to dispatch the release commit on `main`.
+
+### Its AD FS gate
+
+The same `ad-lab.yml` run also signs people in to JIM through the lab's real AD FS server (portal sign-in, the initial administrator, `/api`, `Connect-JIM`, an account renamed in Active Directory, an employee with no JIM role refused every Administrator API, and the API reference's Try It; #2441, #2594) and posts the result as a commit status of its own, `jim-ad-lab-adfs`, so a sign-in failure never turns the LDAP result red or the reverse. A release is refused unless the commit being tagged has a `success` `jim-ad-lab-adfs` status as well. The checks are Scenario 031, which the run reports apart from the LDAP scenarios; the gate starts switched off until they have passed for the first time.
+
+- **One run answers both gates.** The dispatched lab run on the release commit posts both statuses; there is nothing more to dispatch.
+- **It is enforced twice, behind its own switch:** the `/release` skill runs `scripts/Test-AdLabFederationReleaseGate.ps1` before it tags, and the `jim-ad-lab-adfs-gate` job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_AD_LAB_ADFS_GATE_ENFORCED` is `true`; set it after the checks' first green run (`gh variable set JIM_AD_LAB_ADFS_GATE_ENFORCED --body true`). Once set there is no override.
 
 ## The Pre-Release Integration Gate
 
@@ -132,6 +139,8 @@ git push origin main --tags
    gh workflow run ad-lab.yml --ref main        # runs on the head of main: it must be the release commit
    gh run watch "$(gh run list --workflow ad-lab.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
    pwsh -File ./scripts/Test-AdLabReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
+   # only while JIM_AD_LAB_ADFS_GATE_ENFORCED is true: the same run's AD FS sign-in checks
+   pwsh -File ./scripts/Test-AdLabFederationReleaseGate.ps1 -Sha "$(git rev-parse origin/main)"
    ```
    If either script exits 1 it names the state and the run; fix the cause, run that workflow again and re-check. Once enforced, there is no override.
 
@@ -146,7 +155,7 @@ git push origin main --tags
 10. **Monitor the workflow**: The release workflow will run automatically. Check the Actions tab for progress.
 
 11. **Verify the release**: Once complete, verify:
-   - GitHub Release page has the bundle, checksums, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
+   - GitHub Release page has the bundle, its own checksum file (`jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped site can check the archive before carrying it in, #1942), the bundle's `checksums.sha256`, and standalone deployment files (`docker-compose.yml`, `docker-compose.production.yml`, `.env.example` published as `default.env.example`, the installer, `setup.sh`, and the Podman files: `jim.yaml`, `jim-database.yaml`, `jim-config.yaml`, `jim-secrets.yaml`, `jim.kube`, `jim-database.kube` and `jim.network`)
    - Docker images are available at `ghcr.io/tetronio/jim-web:0.3.0` (etc.)
    - PowerShell module is available on PSGallery
 
@@ -260,13 +269,13 @@ cosign verify ghcr.io/tetronio/jim-web:0.2.0
 
 Each release refreshes the screenshots on junctional.io's product tour, and the JIM screenshot on tetron.io's homepage, without anyone capturing them by hand ([#582](https://github.com/TetronIO/JIM/issues/582); design in [`PRD_SCREENSHOT_AUTOMATION.md`](prd/doing/PRD_SCREENSHOT_AUTOMATION.md)).
 
-- **When:** the `jim-screenshots` job in `pre-release.yml` runs once the pre-release suite has passed, on the same runner and the same commit, the one the release tags. It cannot hold up a release: the gate reads the `jim-pre-release` status, already posted by then.
+- **When:** the `jim-screenshots` job in `pre-release.yml` runs once the pre-release suite has passed, on the same runner and the same commit, the one the release tags. It cannot hold up a release: the gate reads the `jim-pre-release` status, already posted by then. It runs only when a release is being prepared: after a release pull request merges (the push that changes `VERSION`), or when the workflow is dispatched with its **screenshots** box ticked. A plain dispatch runs the suite alone, so the suite can be run at any time without touching either site. It is also skipped, with a warning, when `VERSION`'s tag already exists on another commit: that version has shipped, so the images would show unreleased code under its name and the site pull requests would merge at once.
 - **What it does:** `Capture-Screenshots.ps1 -PrepareData` loads integration Scenario 8 at `Scale100k50Groups`, rebuilds the JIM services at the release version with the portal in Production mode, and captures every image in `scripts/screenshots/manifest.json` at its published size. The whole library (78 images) is kept as the run's artefact for 90 days.
 - **What it refuses:** no one looks at the images before the sites show them, so the capture fails rather than publish an image at the wrong size, a blank one (its luminance barely varies), or a dark and light pair in the same theme (the light image is not clearly brighter); `scripts/screenshots/ScreenshotChecks.ps1` holds the last two checks and their thresholds. junctional.io is then built with the new images (`npm ci`, `npm run build`) before anything is committed, and tetron.io's pull request has its own check, the preview deployment, which builds the site with the new image.
 - **Where the images go:** a pull request on junctional.io, `Product tour screenshots for JIM v<version>`, from the branch `screenshots/v<version>`, made by `scripts/screenshots/Publish-TourScreenshots.ps1` with the `jim-automation` app. It adds `src/assets/tour/v<version>/` with only the images the tour shows, sets `imageVersion` in both dictionaries, writes the homepage images to `public/assets/screenshots/` (fixed addresses, for links from outside the site such as JIM's README), and removes the folders no step uses any more. And a pull request on tetron.io, `JIM screenshot for JIM v<version>`, from its own `screenshots/v<version>` branch, made by `scripts/screenshots/Publish-TetronScreenshots.ps1`: it replaces `assets/images/homepage-dark.png`, the homepage hero, after checking a page still shows it. Each commit is made through GitHub's API, so it is signed. The two sites have their own steps, so one failing does not hold the other back.
 - **When the sites change:** when the release is published, never before. `release.yml`'s `publish-screenshots` job runs `scripts/screenshots/Merge-ReleaseScreenshots.ps1` once the GitHub release exists, and merges each pull request once GitHub reports its checks passed (its mergeable state is `clean`; it waits up to 15 minutes). The tag can be pushed while `jim-screenshots` is still capturing, since the gate does not wait for it; in that case the job finds no pull request yet, says so in a notice, and `jim-screenshots` merges each pull request itself as it opens it, having found the release already published. Each site deploys on merge. A prerelease version's screenshots stay in the artefact; no pull request is opened.
-- **What you do:** nothing, unless the run says otherwise. A pull request that cannot be merged (a failed check, a conflict) is a warning on the release run naming why; the release itself is unaffected. Fix the cause, then re-run `publish-screenshots`, or merge the pull request by hand. To keep a release's screenshots off a site, close its pull request before the release is published. Each step's alt text on junctional.io is not updated automatically: when a release changes what a tour image shows, correct the step's `alt` in both dictionaries (the `/release` checklist reminds you).
-- **Running it again:** re-run the `jim-screenshots` job alone. It moves each branch to a fresh commit and updates the open pull requests rather than opening others, and merges them if the release is already published.
+- **What you do:** nothing, unless the run says otherwise. A pull request that cannot be merged (a failed check, a conflict) fails the release run's `publish-screenshots` job, with an error naming why; the release itself is already published and unaffected. Fix the cause, then re-run `publish-screenshots`, or merge the pull request by hand. To keep a release's screenshots off a site, close its pull request before the release is published. Each step's alt text on junctional.io is not updated automatically: when a release changes what a tour image shows, correct the step's `alt` in both dictionaries (the `/release` checklist reminds you).
+- **Running it again:** re-run the `jim-screenshots` job alone, or dispatch `pre-release.yml` with **screenshots** ticked (which runs the suite first). It moves each branch to a fresh commit and updates the open pull requests rather than opening others, and merges them if the release is already published.
 - **Locally:** `pwsh ./scripts/Capture-Screenshots.ps1 -Version v<version> -PrepareData` in the devcontainer (it needs 20+ GB for `Scale100k50Groups`), then `Publish-TourScreenshots.ps1 -DryRun -Build` against a junctional.io checkout, or `Publish-TetronScreenshots.ps1 -DryRun` against a tetron.io one, to see what the pull request would change.
 
 **The runner, once** (TetronIO/ci-runners): Node.js 22 and Chromium's system libraries, from `scripts/toolchain/install-playwright-for-runner.sh` there; the job installs Playwright itself, at the version `.devcontainer/setup.sh` pins. When that pin (`PLAYWRIGHT_MCP_VERSION`) moves, re-run the host script with the new version, in case the new Chromium needs another library. The `jim-automation` app needs **Contents** and **Pull requests** write on junctional.io and tetron.io (`notify-site` needs only the first, on junctional.io); merging needs nothing more. Neither site may require an approving review on `main`, or the merge is refused. The first run builds the `Scale100k50Groups` OpenLDAP snapshot and the runner keeps it.
@@ -326,7 +335,7 @@ Then restart services:
 docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 ```
 
-Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
+Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path. An upgrade with the installer also keeps the PostgreSQL image the previous release ran, tagged `jim-previous` (`deploy/setup.sh`), so rolling back an air-gapped installation never needs to download it, including on Docker's containerd image store (#2299).
 
 ### 2. Restore the Database (If the Release Applied Migrations)
 
@@ -412,10 +421,13 @@ Nothing publishes unless Docker images build successfully; PSGallery publish wai
 
 ### Image Load Fails in Air-Gapped Environment
 
-1. Verify the `.tar` file wasn't corrupted during transfer:
+1. Verify the archive wasn't corrupted during transfer, before extracting it, then the files inside it:
    ```bash
+   sha256sum -c jim-release-X.Y.Z.tar.gz.sha256
+   # after extracting, from inside jim-release-X.Y.Z/
    sha256sum -c checksums.sha256
    ```
+   Every bundle up to v0.16.0 shipped a `checksums.sha256` that failed on every line, because each file was listed under the build machine's folders (#1942); the release workflow now runs both checks on the archive as published.
 
 2. Ensure sufficient disk space for Docker images
 

@@ -21,7 +21,7 @@
               DebounceInterval="@DebounceInterval"
               Variant="Variant.Outlined"
               Margin="@Margin"
-              Class="@Class"
+              Class="@FieldClass"
               Style="@Style"
               autocomplete="@Autocomplete" />
 
@@ -76,6 +76,14 @@
     public bool Disabled { get; set; }
 
     /// <summary>
+    /// Whether the list this box narrows is still fetching its results. The magnifier gives way to a spinner, so a
+    /// search slow enough to need saying so says it where the reader just typed. Pass the owning list's delayed
+    /// indicator rather than a raw "request in flight" flag, or every quick search flashes it.
+    /// </summary>
+    [Parameter]
+    public bool Loading { get; set; }
+
+    /// <summary>
     /// Field density. Defaults to <see cref="MudBlazor.Margin.Dense"/>, which suits a table toolbar; pass
     /// <see cref="MudBlazor.Margin.None"/> when the field sits in a form grid beside normal-density inputs.
     /// </summary>
@@ -114,6 +122,9 @@
     /// so the administrator can type at once.
     /// </summary>
     public ValueTask FocusAsync() => _textField?.FocusAsync() ?? ValueTask.CompletedTask;
+
+    // The spinner is drawn by site.css over the start adornment; see .jim-search-field-loading there.
+    private string? FieldClass => Loading ? $"jim-search-field-loading {Class}".TrimEnd() : Class;
 
     private string? EffectivePlaceholder => Placeholder ?? (string.IsNullOrEmpty(Label) ? "Search" : null);
 

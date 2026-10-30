@@ -8,8 +8,9 @@ namespace JIM.Models.Transactional;
 /// <summary>
 /// One node of a speculative sync outcome tree (#288, PRD decision D4): the unpersisted counterpart of
 /// <see cref="ActivityRunProfileExecutionItemSyncOutcome"/>, carrying exactly the display fields the real
-/// tree renders from and nothing persistence-shaped (no keys, no parent pointer, no entity references), so a
-/// preview result serialises for API return without EF navigation cycles (PRD requirement 3).
+/// tree renders from and nothing persistence-shaped (no key of its own, no parent pointer, no entity references), so a
+/// preview result serialises for API return without EF navigation cycles (PRD requirement 3). The one id it carries,
+/// <see cref="ConnectedSystemObjectChangeId"/>, is a scalar pointing at a recorded change (#2033), not a navigation.
 /// </summary>
 /// <remarks>
 /// <see cref="FromSyncOutcome"/> is the one shared mapping between a really-recorded outcome and this shape:
@@ -81,6 +82,12 @@ public class SyncOutcomeNode
     public string? MatchedValue { get; set; }
 
     /// <summary>
+    /// On a recorded Pending Export outcome, the id of the change that captured what the Pending Export would write;
+    /// null on every other outcome and on a preview, which records no change.
+    /// </summary>
+    public Guid? ConnectedSystemObjectChangeId { get; set; }
+
+    /// <summary>
     /// Ordering among siblings, for consistent display order.
     /// </summary>
     public int Ordinal { get; set; }
@@ -110,6 +117,7 @@ public class SyncOutcomeNode
         ObjectMatchingRuleId = outcome.ObjectMatchingRuleId,
         ObjectMatchingRuleDescriptionSnapshot = outcome.ObjectMatchingRuleDescriptionSnapshot,
         MatchedValue = outcome.MatchedValue,
+        ConnectedSystemObjectChangeId = outcome.ConnectedSystemObjectChangeId,
         Ordinal = outcome.Ordinal,
         Children = outcome.Children.OrderBy(c => c.Ordinal).Select(FromSyncOutcome).ToList()
     };

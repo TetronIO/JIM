@@ -4,14 +4,29 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Renders nothing at all when the configuration is settled: silence is the reward for a system that needs no action.
-   Tracking being switched off is deliberately not rendered here either. It is a single global condition, so repeating
-   it on every row of a list states the same fact many times over; the hosting page says it once instead. *@
+@* Renders nothing at all when the configuration is settled and nothing is waiting: silence is the reward for a system
+   that needs no action. Tracking being switched off is deliberately not rendered here either. It is a single global
+   condition, so repeating it on every row of a list states the same fact many times over; the hosting page says it once
+   instead.
+
+   Changes awaiting the next synchronisation (#2615) are a state of their own, beside the drift chip rather than inside
+   it: they never count as drift, because an ordinary Delta or Full Synchronisation applies them, so the two are
+   different asks (wait for the next run; run a Full Synchronisation). A system can have both. *@
 @if (Status != null && (Status.HasPendingChanges || Status.NeverFullySynchronised))
 {
     <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
         <MudChip T="string" Color="@ChipColour" Variant="Variant.Text" Icon="@ChipIcon" Class="jim-stat-chip">
             @ChipLabel
+        </MudChip>
+    </MudTooltip>
+}
+
+@if (Status is { HasChangesAwaitingSynchronisation: true })
+{
+    <MudTooltip Text="@AwaitingTooltipText" Arrow="true" Placement="Placement.Top">
+        <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Icon="@Icons.Material.Filled.PendingActions" Class="jim-stat-chip"
+                 data-testid="jim-awaiting-synchronisation-chip">
+            @AwaitingChangeCount.ToString("N0")
         </MudChip>
     </MudTooltip>
 }
@@ -81,6 +96,27 @@
             return Status.HighestChangeClass == ConfigurationChangeClass.Destructive
                 ? $"{changes}{since}, including a destructive change. Review before running a Full Synchronisation."
                 : $"{changes}{since}. Run a Full Synchronisation to {apply}.";
+        }
+    }
+
+    // The saved changes waiting for the next synchronisation, across every Object Type that has any.
+    private int AwaitingChangeCount => Status?.AwaitingSynchronisation.Sum(awaiting => awaiting.ChangeCount) ?? 0;
+
+    private string AwaitingTooltipText
+    {
+        get
+        {
+            if (Status == null)
+                return string.Empty;
+
+            var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? "this Connected System" : ConnectedSystemName;
+            var typeNames = Status.AwaitingSynchronisation.Select(awaiting => awaiting.ObjectTypeName).ToList();
+            var types = typeNames.Count == 1
+                ? $"{typeNames[0]} object"
+                : $"object of {string.Join(", ", typeNames.Take(typeNames.Count - 1))} and {typeNames[^1]}";
+            var changes = AwaitingChangeCount == 1 ? "1 saved change awaits" : $"{AwaitingChangeCount:N0} saved changes await";
+
+            return $"{changes} the next synchronisation of {subject}, which processes every {types}.";
         }
     }
 }

@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
@@ -1243,11 +1245,6 @@ public partial class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectWithProvenanceAsync(id);
     }
 
-    public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
-    {
-        return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);
-    }
-
     /// <summary>
     /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
     /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
@@ -1281,20 +1278,82 @@ public partial class MetaverseServer
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
         var (items, totalCount) = await Application.Repository.Metaverse.GetMvoChangeHistoryAsync(metaverseObjectId, page, pageSize);
+        await MarkGeneratedValuesAsync(metaverseObjectId, items);
+        return (items, totalCount);
+    }
 
-        // Name a Generated Value as one on the Changes tab exactly as the inspector's History does (#399).
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Metaverse Object (#2033), in the shape and with the
+    /// Generated Value marking object change history gives it; null when the item recorded none.
+    /// </summary>
+    /// <param name="runProfileExecutionItemId">The item whose change to read.</param>
+    /// <param name="metaverseObjectId">The item's Metaverse Object, when it still exists; Generated Values are named
+    /// from its current ownership, so a change on a since-deleted object carries no marking.</param>
+    public async Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId, Guid? metaverseObjectId)
+    {
+        var change = await Application.Repository.Metaverse.GetMvoChangeForExecutionItemAsync(runProfileExecutionItemId);
+        if (change != null && metaverseObjectId.HasValue)
+            await MarkGeneratedValuesAsync(metaverseObjectId.Value, [change]);
+        return change;
+    }
+
+    /// <summary>
+    /// One window of the values recorded by the given Metaverse Object changes (#2498), with the contributing Connected
+    /// System resolved and Generated Values named as object change history names them. A change to a large group carries
+    /// one value change per member, so the change-history shape caps each attribute's values and this reads the rest.
+    /// </summary>
+    public async Task<RangeResultSet<MvoChangeValueRow>> GetMvoChangeValueRowsAsync(ChangeValueRowQuery query)
+    {
+        var result = await Application.Repository.Metaverse.GetMvoChangeValueRowsAsync(query);
+        foreach (var rows in result.Results.Where(r => r.MetaverseObjectId.HasValue).GroupBy(r => r.MetaverseObjectId!.Value))
+            await MarkGeneratedValuesAsync(rows.Key, rows
+                .Where(r => r.AttributeId.HasValue)
+                .SelectMany(r => (r.PreviousValue is { } previous ? new[] { r.Value, previous } : [r.Value]).Select(v => (r.AttributeId!.Value, v))));
+        return result;
+    }
+
+    /// <summary>
+    /// A summary of each given Metaverse Object change's value rows (#2498), as <see cref="GetMvoChangeValueRowsAsync"/>
+    /// reads them: how many are Sets, Adds and Removes, and the one Synchronisation Rule they agree on.
+    /// </summary>
+    public async Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds)
+    {
+        return await Application.Repository.Metaverse.GetMvoChangeValueSummariesAsync(changeIds);
+    }
+
+    /// <summary>
+    /// How many of each attribute's value rows on one Metaverse Object change are Sets, Adds and Removes (#2498), as
+    /// <see cref="GetMvoChangeValueRowsAsync"/> reads them.
+    /// </summary>
+    public async Task<List<ChangeValueAttributeSummary>> GetMvoChangeAttributeValueSummariesAsync(Guid changeId)
+    {
+        return await Application.Repository.Metaverse.GetMvoChangeAttributeValueSummariesAsync(changeId);
+    }
+
+    /// <summary>
+    /// Names a Generated Value as one on the Changes tab exactly as the inspector's History does (#399).
+    /// </summary>
+    private Task MarkGeneratedValuesAsync(Guid metaverseObjectId, List<MvoChangeHistoryDto> changes) =>
+        MarkGeneratedValuesAsync(metaverseObjectId, changes
+            .SelectMany(i => i.AttributeChanges)
+            .Where(ac => ac.AttributeId.HasValue)
+            .SelectMany(ac => ac.ValueChanges.Select(vc => (ac.AttributeId!.Value, vc))));
+
+    /// <summary>
+    /// Names each given value of <paramref name="metaverseObjectId"/>'s attributes a Generated Value or not; shared by
+    /// change history and the window reads over a change's values, so the two name them alike.
+    /// </summary>
+    private async Task MarkGeneratedValuesAsync(Guid metaverseObjectId, IEnumerable<(int AttributeId, MvoValueChangeDto Value)> values)
+    {
         var generatedValues = await GetGeneratedValuesByAttributeAsync(metaverseObjectId);
         if (generatedValues.Count == 0)
-            return (items, totalCount);
+            return;
 
-        foreach (var attributeChange in items.SelectMany(i => i.AttributeChanges).Where(ac => ac.AttributeId.HasValue))
+        foreach (var (attributeId, valueChange) in values)
         {
-            var ownership = generatedValues.GetValueOrDefault(attributeChange.AttributeId!.Value);
-            foreach (var valueChange in attributeChange.ValueChanges)
-                valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
+            var ownership = generatedValues.GetValueOrDefault(attributeId);
+            valueChange.IsGeneratedValue = ProvenanceLogic.IsGeneratedValueRecord(valueChange.ContributedBySyncRuleId, valueChange.ToDisplayString(), ownership);
         }
-
-        return (items, totalCount);
     }
 
     public async Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id)
@@ -1315,7 +1374,7 @@ public partial class MetaverseServer
     /// Updates a Metaverse Object and optionally records the update for audit trail.
     /// When additions/removals are provided and change tracking is enabled, a change record is created automatically.
     /// Callers that only update operational metadata (e.g. deletion dates) can omit additions/removals
-    /// to skip change tracking.
+    /// to skip change tracking. An update that changes attribute values also flags the object for export scope review.
     /// </summary>
     /// <param name="metaverseObject">The MVO to update.</param>
     /// <param name="additions">Attribute values being added (null to skip change tracking).</param>
@@ -1324,6 +1383,7 @@ public partial class MetaverseServer
     /// <param name="initiatedById">The ID of the principal initiating the update.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the update.</param>
     /// <param name="changeInitiatorType">The mechanism that initiated the update (e.g. System, User).</param>
+    /// <param name="activityId">The Activity the update is made in, which the change record links to.</param>
     public async Task UpdateMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         List<MetaverseObjectAttributeValue>? additions = null,
@@ -1331,7 +1391,8 @@ public partial class MetaverseServer
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Record change history if additions/removals are provided
         if (additions != null || removals != null)
@@ -1344,7 +1405,8 @@ public partial class MetaverseServer
                 initiatedById,
                 initiatedByName,
                 ObjectChangeType.Updated,
-                changeInitiatorType);
+                changeInitiatorType,
+                activityId);
         }
 
         // Keep the denormalised CachedDisplayName in sync if any naming attribute was affected. It must
@@ -1358,6 +1420,19 @@ public partial class MetaverseServer
         if (nameAttributeChanged)
             metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
+        // A changed attribute value is a write outside any synchronisation, so no synchronisation has visited the object
+        // to re-evaluate its export scope or to deliver the new value to the systems that hold the object (#2615): flag
+        // it, and record what changed, so the next synchronisation of any Connected System reviews it against every export
+        // rule and stages the change. Callers passing no changed values update operational metadata, which cannot move an
+        // object into or out of scope or change anything an export carries, so they leave both alone. Set before the save
+        // so they are written in the same statement as the edit: the drain's guarded clear then sees the row's version
+        // move and keeps the flag and the record for a change it loaded the object before.
+        if (additions is { Count: > 0 } || removals is { Count: > 0 })
+        {
+            metaverseObject.ScopeReviewPending = true;
+            RecordUnsynchronisedChanges(metaverseObject, additions, removals);
+        }
+
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
 
         // A direct edit is a write outside any Connected System's synchronisation (#1750 Phase 4, FR 9): nothing has run
@@ -1365,6 +1440,33 @@ public partial class MetaverseServer
         // attribute. After the save, so a hosting run that clears the mark has seen the edit.
         if (additions != null || removals != null)
             await MarkDerivedInputChangesAsync(metaverseObject, (additions ?? []).Concat(removals ?? []).ToList());
+    }
+
+    /// <summary>
+    /// Merges one write's changes into what the Metaverse Object already records as awaiting delivery (#2615): a second
+    /// edit before the next synchronisation adds to the first's, it never replaces it.
+    /// </summary>
+    private static void RecordUnsynchronisedChanges(
+        MetaverseObject metaverseObject,
+        List<MetaverseObjectAttributeValue>? additions,
+        List<MetaverseObjectAttributeValue>? removals)
+    {
+        MetaverseObjectUnsynchronisedChanges? recorded = null;
+        try
+        {
+            recorded = MetaverseObjectUnsynchronisedChanges.FromJson(metaverseObject.UnsynchronisedChangesJson);
+        }
+        catch (JsonException ex)
+        {
+            // A document nothing can read cannot be delivered either way, and failing here would fail the write (a
+            // sign-in, say) over a record of an earlier one: start afresh, saying so.
+            Log.Warning(ex, "RecordUnsynchronisedChanges: the unsynchronised changes recorded on Metaverse Object {MvoId} cannot be read, " +
+                "so they are replaced by this write's; the earlier changes will not be delivered to Connected Systems.", metaverseObject.Id);
+        }
+
+        recorded ??= new MetaverseObjectUnsynchronisedChanges();
+        recorded.Record(additions, removals);
+        metaverseObject.UnsynchronisedChangesJson = recorded.ToJson();
     }
 
     /// <summary>
@@ -1377,7 +1479,7 @@ public partial class MetaverseServer
     /// <para>
     /// A dependency cycle in the enabled derived flows is logged and marks nothing rather than failing the edit: the
     /// edit is already saved, every hosting synchronisation fails hard on the cycle until it is broken, and this path
-    /// serves sign-in (the SSO profile supplement), which must not lock an administrator out of fixing the cycle.
+    /// serves sign-in (the SSO profile refresh), which must not lock an administrator out of fixing the cycle.
     /// </para>
     /// </summary>
     private async Task MarkDerivedInputChangesAsync(MetaverseObject metaverseObject, List<MetaverseObjectAttributeValue> changedValues)
@@ -1433,7 +1535,8 @@ public partial class MetaverseServer
         Guid? initiatedById = null,
         string? initiatedByName = null,
         ObjectChangeType changeType = ObjectChangeType.Updated,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -1458,7 +1561,8 @@ public partial class MetaverseServer
             InitiatedByType = initiatedByType,
             InitiatedById = initiatedById,
             InitiatedByName = initiatedByName,
-            ChangeInitiatorType = effectiveChangeInitiatorType
+            ChangeInitiatorType = effectiveChangeInitiatorType,
+            ActivityId = activityId
         };
 
         // Contributor provenance (#1519 follow-up): a value being added here may be a value whose
@@ -1485,6 +1589,11 @@ public partial class MetaverseServer
     }
 
     public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
+    }
+
+    public async Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(metaverseObjectType, metaverseAttribute, attributeValue);
     }
@@ -1546,19 +1655,22 @@ public partial class MetaverseServer
 
     /// <summary>
     /// Creates a Metaverse Object and optionally records the creation for audit trail.
-    /// Change tracking is handled automatically when enabled — callers just pass initiator info.
+    /// Change tracking is handled automatically when enabled; callers just pass initiator info. The object is also
+    /// flagged for export scope review, as it is created outside any synchronisation.
     /// </summary>
     /// <param name="metaverseObject">The MVO to create.</param>
     /// <param name="initiatedByType">The type of principal initiating the creation.</param>
     /// <param name="initiatedById">The ID of the principal initiating the creation.</param>
     /// <param name="initiatedByName">The display name of the principal initiating the creation.</param>
     /// <param name="changeInitiatorType">The mechanism that initiated the creation (e.g. System, ExampleData).</param>
+    /// <param name="activityId">The Activity the creation is made in, which the change record links to.</param>
     public async Task CreateMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        MetaverseObjectChangeInitiatorType? changeInitiatorType = null)
+        MetaverseObjectChangeInitiatorType? changeInitiatorType = null,
+        Guid? activityId = null)
     {
         // Record change history if enabled (before persist so EF saves in same transaction)
         if (metaverseObject.AttributeValues.Count > 0)
@@ -1571,11 +1683,17 @@ public partial class MetaverseServer
                 initiatedById,
                 initiatedByName,
                 ObjectChangeType.Created,
-                changeInitiatorType);
+                changeInitiatorType,
+                activityId);
         }
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
         metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
+
+        // Created outside any synchronisation, so none has visited it to evaluate its export scope (#2615): flag it, and
+        // the next synchronisation of any Connected System reviews it against every export rule, whether the rule that
+        // covers it existed before the object or not.
+        metaverseObject.ScopeReviewPending = true;
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
@@ -1611,12 +1729,15 @@ public partial class MetaverseServer
     /// <param name="finalAttributeValues">Pre-captured attribute values to record as the final state.
     /// Required when the sync processor has already recalled attributes from the MVO before deletion.
     /// When null, the method uses the MVO's current attribute values (loading from DB if needed).</param>
+    /// <param name="activityId">The Activity the deletion is made in, which the change record links to. It can differ
+    /// from the initiator: housekeeping records the principal that scheduled the deletion, in its own Activity.</param>
     public async Task DeleteMetaverseObjectAsync(
         MetaverseObject metaverseObject,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,
-        List<MetaverseObjectAttributeValue>? finalAttributeValues = null)
+        List<MetaverseObjectAttributeValue>? finalAttributeValues = null,
+        Guid? activityId = null)
     {
         // Check if MVO change tracking is enabled
         var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
@@ -1664,7 +1785,9 @@ public partial class MetaverseServer
                 // Preserve object identity for the deleted objects browser
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
-                DeletedObjectDisplayName = displayName
+                DeletedObjectDisplayName = displayName,
+                ActivityId = activityId,
+                DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId
             };
 
             // Contributor provenance (#1519 follow-up): the sync processor path passes a snapshot taken
@@ -1725,6 +1848,16 @@ public partial class MetaverseServer
     public async Task<int> GetMetaverseObjectOfTypeCountAsync(MetaverseObjectType metaverseObjectType)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectOfTypeCountAsync(metaverseObjectType.Id);
+    }
+
+    /// <summary>
+    /// How many Metaverse Objects of a type are flagged for review against every export rule at the next synchronisation
+    /// of any Connected System (#2615). Zero when none are.
+    /// </summary>
+    public async Task<int> GetExportReviewPendingCountAsync(int metaverseObjectTypeId)
+    {
+        var counts = await Application.Repository.Metaverse.GetExportReviewPendingCountsAsync([metaverseObjectTypeId]);
+        return counts.GetValueOrDefault(metaverseObjectTypeId);
     }
 
     /// <summary>
@@ -2304,11 +2437,81 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// The most attribute conditions one Metaverse Object change search may combine. Each becomes a nested
+    /// predicate over the change tables, so the bound keeps a single request's query cost proportionate.
+    /// </summary>
+    public const int MaxChangeSearchConditions = 10;
+
+    /// <summary>
+    /// Searches Metaverse Object changes across every object (#1901), for the Object Changes page, its REST endpoint
+    /// and its cmdlet: a window of the changes matching <paramref name="criteria"/>, newest first, addressed by
+    /// absolute offset and count. Each attribute condition is checked against its attribute's definition and its
+    /// value parsed to that attribute's data type before anything is queried.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The criteria cannot be searched: an attribute that does not exist, a value that is not of its attribute's type,
+    /// too many conditions, or a time range that ends before it starts. The message says which, for the administrator.
+    /// </exception>
+    public async Task<RangeResultSet<MetaverseObjectChangeSearchResult>> SearchMetaverseObjectChangesRangeAsync(
+        MetaverseObjectChangeSearchCriteria criteria,
+        int offset,
+        int count,
+        bool includeTotalCount = true)
+    {
+        var query = await ResolveChangeSearchAsync(criteria);
+        return await Application.Repository.Metaverse.SearchMetaverseObjectChangesRangeAsync(query, offset, count, includeTotalCount);
+    }
+
+    private async Task<MetaverseObjectChangeSearchQuery> ResolveChangeSearchAsync(MetaverseObjectChangeSearchCriteria criteria)
+    {
+        ArgumentNullException.ThrowIfNull(criteria);
+
+        if (criteria.FromDate.HasValue && criteria.ToDate.HasValue && criteria.FromDate.Value > criteria.ToDate.Value)
+            throw new ArgumentException("The time range ends before it starts.");
+
+        if (criteria.AttributeConditions.Count > MaxChangeSearchConditions)
+            throw new ArgumentException($"A search can combine at most {MaxChangeSearchConditions} attribute conditions.");
+
+        var conditions = new List<ResolvedAttributeChangeCondition>();
+        foreach (var condition in criteria.AttributeConditions)
+        {
+            if (!Enum.IsDefined(condition.Operator))
+                throw new ArgumentException($"'{condition.Operator}' is not a recognised attribute change operator.");
+
+            var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeAsync(condition.AttributeId)
+                ?? throw new ArgumentException($"There is no Metaverse Attribute with id {condition.AttributeId}.");
+
+            if (!AttributeChangeConditionParser.TryParse(attribute.Type, condition.Value, out var match, out var error))
+                throw new ArgumentException($"{attribute.Name}: {error}");
+
+            conditions.Add(new ResolvedAttributeChangeCondition
+            {
+                AttributeId = attribute.Id,
+                AttributeType = attribute.Type,
+                Operator = condition.Operator,
+                Match = match
+            });
+        }
+
+        return new MetaverseObjectChangeSearchQuery
+        {
+            FromDate = criteria.FromDate,
+            ToDate = criteria.ToDate,
+            ObjectTypeId = criteria.ObjectTypeId,
+            DisplayNameSearch = string.IsNullOrWhiteSpace(criteria.DisplayNameSearch) ? null : criteria.DisplayNameSearch.Trim(),
+            Conditions = conditions,
+            MatchMode = Enum.IsDefined(criteria.MatchMode)
+                ? criteria.MatchMode
+                : throw new ArgumentException($"'{criteria.MatchMode}' is not a recognised condition match mode.")
+        };
+    }
+
+    /// <summary>
     /// Gets the full change history for a deleted MVO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
-    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    public async Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
         return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
     }

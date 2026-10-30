@@ -45,6 +45,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
+    public virtual DbSet<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorSpaceClearJoinRecord> ConnectorSpaceClearJoinRecords { get; set; } = null!;
@@ -325,6 +326,12 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjectChanges_DeletedMetaverseObjectId")
             .HasFilter("\"DeletedMetaverseObjectId\" IS NOT NULL");
 
+        // The Object Changes search (#1901) orders every Metaverse Object change newest first and filters by time
+        // range, across all objects; without this it sorts the whole change table for each window it reads.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasIndex(mvoc => mvoc.ChangeTime)
+            .HasDatabaseName("IX_MetaverseObjectChanges_ChangeTime");
+
         // A deleted Connected System Object's deletion record, the only place its id survives.
         modelBuilder.Entity<ConnectedSystemObjectChange>()
             .HasIndex(csoc => csoc.DeletedConnectedSystemObjectId)
@@ -363,6 +370,24 @@ public class JimDbContext : DbContext
             .HasOne(c => c.ActivityRunProfileExecutionItem)
             .WithOne(r => r.ConnectedSystemObjectChange)
             .HasForeignKey<ConnectedSystemObjectChange>(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // The Metaverse Object side of the same rule (#2460). Change history and Activities are trimmed on their own
+        // clocks, so a change record can outlive the Activity it was made in. Left to convention (NO ACTION) the
+        // database refused to delete any such Activity, failing the same oldest retention batch on every run.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasOne(c => c.ActivityRunProfileExecutionItem)
+            .WithOne(r => r.MetaverseObjectChange)
+            .HasForeignKey<MetaverseObjectChange>(c => c.ActivityRunProfileExecutionItemId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // The Activity a change was made in (#2460), by the same rule: history outlives the Activity. No navigation, so
+        // nothing loads or serialises an Activity graph through a change record; the foreign key's index keeps an
+        // Activity delete from scanning the whole change table to clear it.
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasOne<Activity>()
+            .WithMany()
+            .HasForeignKey(c => c.ActivityId)
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<ConnectedSystemObjectChange>()
@@ -547,6 +572,8 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemPasswordSynchronisation>()
             .HasIndex(ps => ps.Enabled)
             .HasDatabaseName("IX_ConnectedSystemPasswordSynchronisations_Enabled");
+
+        ConfigureConfigurationChangeSynchronisations(modelBuilder);
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)
@@ -883,10 +910,12 @@ public class JimDbContext : DbContext
             .IsUnique();
 
         // Performance indexes for frequently queried tables
-        // ConnectedSystemObject: composite index for lookups by system and type
+        // ConnectedSystemObject: composite index for lookups by system and type. Id is the trailing key so that a
+        // synchronisation paging one Object Type at a time (#2492) walks its keyset cursor within the type on the
+        // index, keeping every page O(pageSize); the (system, type) prefix still serves the plain lookups.
         modelBuilder.Entity<ConnectedSystemObject>()
-            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId })
-            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId");
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.TypeId, cso.Id })
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id");
 
         // PendingExport: composite index for export queries by system and status
         modelBuilder.Entity<PendingExport>()
@@ -1080,6 +1109,12 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
             .HasFilter("\"ScopeReviewPending\"");
 
+        // What a write outside synchronisation changed on the object (#2615), a document the review reads and the guarded
+        // clear nulls; nothing queries into it, so it is a plain string column of jsonb type, as the SCIM store's are.
+        modelBuilder.Entity<MetaverseObject>()
+            .Property(mvo => mvo.UnsynchronisedChangesJson)
+            .HasColumnType("jsonb");
+
         // Partial index on the Metaverse-Derived Attribute Flow mark (#1750). Delta synchronisation selects a Connected
         // System's objects that are new, changed, OR marked (WHERE "ConnectedSystemId" = @cs AND ... OR
         // "DerivedInputChangePending"); marks are rare and cleared once processed, so keying the partial index on
@@ -1097,6 +1132,13 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObject>()
             .HasIndex(cso => cso.ConnectedSystemId, "IX_ConnectedSystemObjects_ConnectedSystemId_SynchronisationPending")
             .HasFilter("\"SynchronisationPending\"");
+
+        // Partial index on the Temporal Scope Reconciler's flag (#892), the third marked arm of Delta Synchronisation's
+        // OR. The reconciler flags only objects whose scope the clock has moved, and the synchronisation that
+        // re-evaluates one clears it, so keying on ConnectedSystemId keeps the arm an O(flagged) index scan.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => cso.ConnectedSystemId, "IX_ConnectedSystemObjects_ConnectedSystemId_ScopeReviewPending")
+            .HasFilter("\"ScopeReviewPending\"");
 
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
@@ -1803,6 +1845,45 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<GeneratedValueRevisionPending>()
             .HasIndex(r => r.Created)
             .HasDatabaseName("IX_GeneratedValueRevisionsPending_Created");
+    }
+
+    /// <summary>
+    /// Configuration changes awaiting synchronisation (#2615): one row per saved change per Connected System Object
+    /// Type that the Connected System's next synchronisation must apply by processing every object of the type.
+    /// <para>
+    /// Both ownership foreign keys cascade, so the rows go with their Connected System and with the type they are
+    /// about (removed from the schema); a type with no objects has nothing left to process. The three references to
+    /// history (the saving Activity, the claiming Activity and the Synchronisation Rule) are SetNull: the row records
+    /// that a change was applied, and outlives what it names, with <c>Reason</c> carrying the snapshot (#1990). Left to
+    /// convention an optional foreign key is NO ACTION, which would refuse deleting any rule or Activity a change had
+    /// ever named.
+    /// </para>
+    /// <para>
+    /// Declared without navigations: see <see cref="ConfigurationChangeSynchronisation"/>.
+    /// </para>
+    /// </summary>
+    private static void ConfigureConfigurationChangeSynchronisations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ConfigurationChangeSynchronisation>(change =>
+        {
+            change.HasOne<ConnectedSystem>().WithMany().HasForeignKey(c => c.ConnectedSystemId).OnDelete(DeleteBehavior.Cascade);
+            change.HasOne<ConnectedSystemObjectType>().WithMany().HasForeignKey(c => c.ConnectedSystemObjectTypeId).OnDelete(DeleteBehavior.Cascade);
+            change.HasOne<Activity>().WithMany().HasForeignKey(c => c.ConfigurationChangeActivityId).OnDelete(DeleteBehavior.SetNull);
+            change.HasOne<Activity>().WithMany().HasForeignKey(c => c.ClaimedByActivityId).OnDelete(DeleteBehavior.SetNull);
+            change.HasOne<SyncRule>().WithMany().HasForeignKey(c => c.SyncRuleId).OnDelete(DeleteBehavior.SetNull);
+
+            // Every synchronisation claims and counts its system's changes awaiting synchronisation first thing, and a
+            // Delta Synchronisation with nothing else to do must find that there are none cheaply. The rows are
+            // few and short-lived; the applied ones are history and are never read by the run.
+            change.HasIndex(c => c.ConnectedSystemId)
+                .HasFilter("\"AppliedAt\" IS NULL")
+                .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_Awaiting");
+
+            // The history of a type's changes, and the cascade from the Connected System, which the filtered index above
+            // cannot serve (it holds no applied row).
+            change.HasIndex(c => new { c.ConnectedSystemId, c.ConnectedSystemObjectTypeId })
+                .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_ObjectTypeId");
+        });
     }
 
     /// <summary>

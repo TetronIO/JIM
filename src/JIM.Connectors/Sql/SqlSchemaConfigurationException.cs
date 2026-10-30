@@ -24,4 +24,9 @@ internal class SqlSchemaConfigurationException : InvalidSettingValuesException
     internal SqlSchemaConfigurationException(string message, Exception? innerException) : base(message, innerException)
     {
     }
+
+    /// <summary>
+    /// The document field the problem is in, where one can be named; lets an editor show the problem beside it.
+    /// </summary>
+    internal string? Field { get; init; }
 }

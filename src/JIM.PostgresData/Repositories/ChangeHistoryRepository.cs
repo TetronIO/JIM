@@ -246,7 +246,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
                 Oldest = g.Min(c => c.ChangeTime),
                 Newest = g.Max(c => c.ChangeTime)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return minMax == null ? null : (minMax.Oldest, minMax.Newest);
     }
@@ -269,7 +269,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
                 Oldest = g.Min(c => c.ChangeTime),
                 Newest = g.Max(c => c.ChangeTime)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return minMax == null ? null : (minMax.Oldest, minMax.Newest);
     }
@@ -292,7 +292,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
                 Oldest = g.Min(a => a.Created),
                 Newest = g.Max(a => a.Created)
             })
-            .FirstOrDefaultAsync();
+            .SingleOrDefaultAsync();
 
         return minMax == null ? null : (minMax.Oldest, minMax.Newest);
     }

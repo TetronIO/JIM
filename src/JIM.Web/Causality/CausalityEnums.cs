@@ -83,6 +83,15 @@ public enum CausalityAttributeOperation
 }
 
 /// <summary>
+/// Which kind of change record an event's attribute rows come from (#2498): the two are read through different tables.
+/// </summary>
+public enum CausalityChangeSide
+{
+    ConnectedSystemObject,
+    MetaverseObject
+}
+
+/// <summary>
 /// What kind of change a Table view row (#1519 Phase 3) states, derived from its event's outcome
 /// type. Every value but <see cref="AttributeChange"/> is an object-level fact; see
 /// <see cref="CausalityTableModelBuilder"/> for the outcome-type mapping.

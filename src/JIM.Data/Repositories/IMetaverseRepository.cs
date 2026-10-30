@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
@@ -103,10 +104,16 @@ public interface IMetaverseRepository
 
     /// <summary>
     /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
-    /// scope, unless an export Synchronisation Rule changed since the run read its rules; see
-    /// <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
+    /// scope, unless an export Synchronisation Rule changed since the run read its rules or the object was written
+    /// since the run loaded it; see <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingAsync</c>.
     /// </summary>
-    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on every Metaverse Object of a type no enabled export Synchronisation
+    /// Rule covers, in one statement (#2615); see <c>ISyncRepository.ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync</c>.
+    /// </summary>
+    public Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark);
 
     /// <summary>
     /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c> (issue #1925); see
@@ -147,8 +154,6 @@ public interface IMetaverseRepository
     /// </summary>
     public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
 
-    public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
-
     /// <summary>
     /// Loads a Metaverse Object with attribute loading controlled by the specified strategy.
     /// <see cref="MvoAttributeLoadStrategy.CappedMva"/> caps MVA values and includes per-attribute total counts.
@@ -174,6 +179,30 @@ public interface IMetaverseRepository
     /// <param name="pageSize">Rows per page; clamp to a sensible upper bound at the call site.</param>
     /// <returns>The page of changes plus the total count of change records for the MVO.</returns>
     public Task<(List<MvoChangeHistoryDto> Items, int TotalCount)> GetMvoChangeHistoryAsync(Guid metaverseObjectId, int page, int pageSize);
+
+    /// <summary>
+    /// The change a Run Profile Execution Item recorded on its Metaverse Object, in the change-history shape (#2033);
+    /// null when it recorded none. Read by item, so a change whose object has since been deleted is found.
+    /// </summary>
+    public Task<MvoChangeHistoryDto?> GetMvoChangeForExecutionItemAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// One window of the values recorded by the given Metaverse Object changes (#2498), with the total when
+    /// <see cref="ChangeValueRowQuery.IncludeTotalCount"/> asks for it. Each value's contributing Connected System is
+    /// resolved as change history resolves it.
+    /// </summary>
+    public Task<RangeResultSet<MvoChangeValueRow>> GetMvoChangeValueRowsAsync(ChangeValueRowQuery query);
+
+    /// <summary>
+    /// A summary of each given change's normalised value rows (#2498): how many are Sets, Adds and Removes, and the
+    /// one Synchronisation Rule they agree on. A change with no values is omitted.
+    /// </summary>
+    public Task<List<ChangeValueSummary>> GetMvoChangeValueSummariesAsync(IReadOnlyCollection<Guid> changeIds);
+
+    /// <summary>
+    /// How many of each attribute's normalised value rows on one change are Sets, Adds and Removes (#2498).
+    /// </summary>
+    public Task<List<ChangeValueAttributeSummary>> GetMvoChangeAttributeValueSummariesAsync(Guid changeId);
 
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
@@ -285,9 +314,23 @@ public interface IMetaverseRepository
 
     public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, string attributeValue);
 
+    /// <summary>
+    /// Gets the Metaverse Object of a type whose Guid-typed attribute holds a value, such as the <c>Object GUID</c> an
+    /// SSO sign-in names (#2438).
+    /// </summary>
+    public Task<MetaverseObject?> GetMetaverseObjectByTypeAndAttributeAsync(MetaverseObjectType metaverseObjectType, MetaverseAttribute metaverseAttribute, Guid attributeValue);
+
     public Task<int> GetMetaverseObjectCountAsync();
 
     public Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// For each of the given Metaverse Object Types, how many of its Metaverse Objects are flagged for review against
+    /// every export rule at the next synchronisation of any Connected System (<c>ScopeReviewPending</c>). Types with none
+    /// flagged are absent from the dictionary. One read however many types are asked about, served by the partial index on
+    /// the flag.
+    /// </summary>
+    public Task<Dictionary<int, int>> GetExportReviewPendingCountsAsync(IReadOnlyCollection<int> metaverseObjectTypeIds);
 
     /// <summary>
     /// Gets the count of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
@@ -667,11 +710,28 @@ public interface IMetaverseRepository
         bool includeTotalCount = true);
 
     /// <summary>
+    /// Searches Metaverse Object changes across every object (#1901): a window of the changes matching
+    /// <paramref name="query"/>, addressed by absolute offset and count and ordered newest first, for the Object
+    /// Changes page, its REST endpoint and its cmdlet. Changes to objects since deleted are included and described by
+    /// their preserved identity. Pass <paramref name="includeTotalCount"/> as false to skip counting the whole match
+    /// set; the returned total is then null rather than zero.
+    /// </summary>
+    /// <param name="query">The validated search; conditions carry values already parsed to each attribute's type.</param>
+    /// <param name="offset">The zero-based index of the first row wanted.</param>
+    /// <param name="count">How many rows are wanted; must be at least one. Clamped to the header window cap.</param>
+    /// <param name="includeTotalCount">Whether to count the whole match set alongside the window.</param>
+    Task<RangeResultSet<MetaverseObjectChangeSearchResult>> SearchMetaverseObjectChangesRangeAsync(
+        MetaverseObjectChangeSearchQuery query,
+        int offset,
+        int count,
+        bool includeTotalCount = true);
+
+    /// <summary>
     /// Gets the full change history for a deleted MVO by its change ID.
     /// </summary>
     /// <param name="changeId">The ID of the MVO change record.</param>
     /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
-    Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
+    Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId);
 
     /// <summary>
     /// Gets the deletion record for a Metaverse Object that no longer exists, keyed on the object's own id.

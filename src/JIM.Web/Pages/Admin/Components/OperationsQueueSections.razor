@@ -1,0 +1,788 @@
+@using JIM.Models.Activities
+@using JIM.Models.Scheduling
+@using JIM.Models.Staging
+@using JIM.Models.Tasking
+@using JIM.Models.Tasking.DTOs
+@using JIM.Utilities
+@using JIM.Web.Models
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+@inject IWebHostEnvironment Environment
+@inject IUiNotificationService UiNotifications
+@inject IActivityEtaTracker EtaTracker
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Activity tab's Queued and In progress sections (#2549). Both come from one read of the worker queue, so they
+   share this component, its refresh and its notification subscription; Completed is a separate read and component. *@
+
+@* Each section is one of two shapes. Empty, it is a single line: its icon, its name and why it is empty, with no
+   chevron (there is nothing to fold) and no paper (a bordered box around one sentence is the busiest way to say
+   nothing is happening). Holding rows, it is a heading with a chevron and the count, over a table that folds under
+   the heading when the section is collapsed. The table stays mounted while folded: the Queued table's rows are
+   measured against the window, and a table rebuilt on every expand would be measured over again. The tab owns
+   which sections are expanded, because it keeps that choice in the URL; a chevron only asks it to toggle. *@
+
+@* ─── Queued ─── *@
+<section aria-labelledby="activity-queued-heading" data-testid="activity-queued"
+         data-empty="@(_queuedRows.Count == 0 ? "true" : "false")" data-collapsed="@(QueuedExpanded ? "false" : "true")">
+    @if (_queuedRows.Count == 0)
+    {
+        <div class="jim-activity-ledger-row">
+            <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
+            <MudText Typo="Typo.h6" id="activity-queued-heading" Class="jim-activity-ledger-title">Queued</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing queued matches the filters." : "Nothing is queued.")</span>
+        </div>
+    }
+    else
+    {
+        <div class="jim-activity-section-header">
+            @SectionToggle(ActivitySection.Queued, QueuedExpanded, "Queued", QueuedBodyId)
+            <MudIcon Icon="@Icons.Material.Filled.PendingActions" Color="Color.Warning" />
+            <MudText Typo="Typo.h6" id="activity-queued-heading">Queued</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-queued-count">@_queuedCount</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Next run at the bottom, nearest In Progress</MudText>
+        </div>
+        <MudCollapse Expanded="@QueuedExpanded">
+            <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@QueuedBodyId">
+                <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
+                    <colgroup>
+                        <col style="@ActivityTableColumns.State" />
+                        <col style="@ActivityTableColumns.ConnectedSystem" />
+                        <col style="@ActivityTableColumns.RunProfile" />
+                        <col style="@ActivityTableColumns.Detail" />
+                        <col style="@ActivityTableColumns.InitiatedBy" />
+                        <col style="@ActivityTableColumns.FirstTime" />
+                        <col style="@ActivityTableColumns.SecondTime" />
+                        <col style="@ActivityTableColumns.Actions" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th><MudText Typo="Typo.button">Runs</MudText></th>
+                            <th><MudText Typo="Typo.button">Connected System</MudText></th>
+                            <th><MudText Typo="Typo.button">Run Profile</MudText></th>
+                            <th><MudText Typo="Typo.button">Status</MudText></th>
+                            <th><MudText Typo="Typo.button">Initiated By</MudText></th>
+                            <th><MudText Typo="Typo.button">Queued</MudText></th>
+                            <th>
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent>
+                                        <TooltipText Text="When each task is expected to start. Estimated from the median of the last five successful runs of each Run Profile ahead of it. Left blank where there is nothing to estimate from." />
+                                    </TooltipContent>
+                                    <ChildContent><MudText Typo="Typo.button">Est. Start</MudText></ChildContent>
+                                </MudTooltip>
+                            </th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="@QueuedRowsId">
+                        @if (_hiddenQueuedCount > 0 || _showAllQueued)
+                        {
+                            <tr class="jim-activity-more-row">
+                                <td colspan="8">
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ToggleShowAllQueued"
+                                               StartIcon="@(_showAllQueued ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)">
+                                        @(_showAllQueued ? "Show fewer" : $"Show {_hiddenQueuedCount} more")
+                                    </MudButton>
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var row in _visibleQueuedRows)
+                        {
+                            if (row.IsHeader)
+                            {
+                                <ScheduleExecutionHeaderRow ScheduleExecutionId="@row.ScheduleExecutionId"
+                                                            ScheduleName="@row.ScheduleName"
+                                                            Progress="@ProgressFor(row.ScheduleExecutionId)"
+                                                            Summary="@ScheduleSummary(row.ScheduleExecutionId)"
+                                                            OnCancel="HandleCancelScheduleExecutionAsync" />
+                            }
+                            else if (row.Task is { } task)
+                            {
+                                <tr class="jim-activity-row" @key="task.Id">
+                                    <td>
+                                        <div class="d-flex align-center gap-1">
+                                            <MudChip T="string" Variant="Variant.Text" Color="@(row.PositionLabel == "Next" ? Color.Info : Color.Default)" Class="ma-0">@row.PositionLabel</MudChip>
+                                            @if (row.IsParallel)
+                                            {
+                                                <MudTooltip Text="Starts at the same time as the other tasks of its Schedule step" Arrow="true" Placement="Placement.Top">
+                                                    <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
+                                                </MudTooltip>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td><OneLineText Text="@ConnectedSystemCell(task)" /></td>
+                                    <td><OneLineText Text="@RunProfileCell(task)" /></td>
+                                    <td>
+                                        <MudChip T="string" Variant="Variant.Text" Class="ma-0"
+                                                 Color="@(task.Status == WorkerTaskStatus.Queued ? Color.Warning : Color.Default)">
+                                            @(task.Status == WorkerTaskStatus.Queued ? "Queued" : "Waiting for previous step")
+                                        </MudChip>
+                                    </td>
+                                    <td>@InitiatorCell(task)</td>
+                                    <td>
+                                        <MudTooltip Text="@task.Timestamp.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                            @task.Timestamp.ToLocalTime().ToRelativeTime()
+                                        </MudTooltip>
+                                    </td>
+                                    <td>@EstimateCell(_starts.GetValueOrDefault(task.Id))</td>
+                                    <td class="text-right">
+                                        @if (task.Status == WorkerTaskStatus.Queued)
+                                        {
+                                            @CancelButton(task)
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudCollapse>
+    }
+</section>
+
+@* ─── In progress ─── *@
+<section aria-labelledby="activity-running-heading" data-testid="activity-in-progress"
+         data-empty="@(_runningRows.Count == 0 ? "true" : "false")" data-collapsed="@(InProgressExpanded ? "false" : "true")">
+    @if (_runningRows.Count == 0)
+    {
+        <div class="jim-activity-ledger-row">
+            <span class="jim-activity-now-dot jim-activity-now-dot--idle" aria-hidden="true"></span>
+            <MudText Typo="Typo.h6" id="activity-running-heading" Class="jim-activity-ledger-title">In Progress</MudText>
+            <span class="jim-activity-ledger-message">@(Filters.IsActive ? "Nothing running matches the filters." : "Nothing is running.")</span>
+        </div>
+    }
+    else
+    {
+        <div class="jim-activity-section-header">
+            @SectionToggle(ActivitySection.InProgress, InProgressExpanded, "In Progress", RunningBodyId)
+            <span class="jim-activity-now-dot" aria-hidden="true"></span>
+            <MudText Typo="Typo.h6" id="activity-running-heading">In Progress</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" data-testid="activity-in-progress-count">@_runningCount</MudText>
+        </div>
+        <MudCollapse Expanded="@InProgressExpanded">
+            <MudPaper Outlined="true" Class="jim-activity-table-paper" id="@RunningBodyId">
+                <MudSimpleTable Hover="true" Elevation="0" Class="jim-activity-table">
+                    <colgroup>
+                        <col style="@ActivityTableColumns.State" />
+                        <col style="@ActivityTableColumns.ConnectedSystem" />
+                        <col style="@ActivityTableColumns.RunProfile" />
+                        <col style="@ActivityTableColumns.Detail" />
+                        <col style="@ActivityTableColumns.InitiatedBy" />
+                        <col style="@ActivityTableColumns.FirstTime" />
+                        <col style="@ActivityTableColumns.SecondTime" />
+                        <col style="@ActivityTableColumns.Actions" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th><MudText Typo="Typo.button">Status</MudText></th>
+                            <th><MudText Typo="Typo.button">Connected System</MudText></th>
+                            <th><MudText Typo="Typo.button">Run Profile</MudText></th>
+                            <th><MudText Typo="Typo.button">Progress</MudText></th>
+                            <th><MudText Typo="Typo.button">Initiated By</MudText></th>
+                            <th><MudText Typo="Typo.button">Started</MudText></th>
+                            <th>
+                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                    <TooltipContent>
+                                        <TooltipText Text="When each run is expected to finish. Estimated from the median of the Run Profile's last five successful runs, and never sooner than its current step needs. Left blank where there is nothing to estimate from." />
+                                    </TooltipContent>
+                                    <ChildContent><MudText Typo="Typo.button">Est. Finish</MudText></ChildContent>
+                                </MudTooltip>
+                            </th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _runningRows)
+                        {
+                            if (row.IsHeader)
+                            {
+                                <ScheduleExecutionHeaderRow ScheduleExecutionId="@row.ScheduleExecutionId"
+                                                            ScheduleName="@row.ScheduleName"
+                                                            Progress="@ProgressFor(row.ScheduleExecutionId)"
+                                                            Summary="@ScheduleSummary(row.ScheduleExecutionId)"
+                                                            OnCancel="HandleCancelScheduleExecutionAsync" />
+                            }
+                            else if (row.Task is { } task)
+                            {
+                                <tr class="jim-activity-row" @key="task.Id">
+                                    <td>
+                                        <div class="d-flex align-center gap-1">
+                                            <MudChip T="string" Variant="Variant.Text" Class="ma-0"
+                                                     Color="@(task.Status == WorkerTaskStatus.Processing ? Color.Success : Color.Warning)">
+                                                @(task.Status == WorkerTaskStatus.Processing ? "Processing" : "Cancelling")
+                                            </MudChip>
+                                            @if (row.IsParallel)
+                                            {
+                                                <MudTooltip Text="Running at the same time as the other tasks of its Schedule step" Arrow="true" Placement="Placement.Top">
+                                                    <MudIcon Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small" Class="mud-text-secondary" />
+                                                </MudTooltip>
+                                            }
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (task.ActivityId is { } activityId)
+                                        {
+                                            <MudLink Href="@($"/activity/{activityId}?from=operations")">@ConnectedSystemCell(task)</MudLink>
+                                        }
+                                        else
+                                        {
+                                            <OneLineText Text="@ConnectedSystemCell(task)" />
+                                        }
+                                    </td>
+                                    <td><OneLineText Text="@RunProfileCell(task)" /></td>
+                                    <td class="jim-queue-progress-cell">
+                                        <WorkerTaskProgress Status="@task.Status" ObjectsToProcess="@task.ObjectsToProcess"
+                                                            ObjectsProcessed="@task.ObjectsProcessed" ProgressMessage="@task.ProgressMessage"
+                                                            Steps="@task.Steps" />
+                                    </td>
+                                    <td>@InitiatorCell(task)</td>
+                                    <td>
+                                        @if (task.Started is { } started)
+                                        {
+                                            <MudTooltip Text="@started.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                                @started.ToLocalTime().ToRelativeTime()
+                                            </MudTooltip>
+                                        }
+                                        else
+                                        {
+                                            <EmptyValue />
+                                        }
+                                    </td>
+                                    <td>@EstimateCell(_finishes.GetValueOrDefault(task.Id))</td>
+                                    <td class="text-right">
+                                        @if (task.Status == WorkerTaskStatus.Processing)
+                                        {
+                                            @CancelButton(task)
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudCollapse>
+    }
+</section>
+
+@code {
+    /// <summary>The chevron that asks the tab to fold or unfold a section; the tab answers through the Expanded parameters.</summary>
+    private RenderFragment SectionToggle(ActivitySection section, bool expanded, string name, string controlsId) =>
+        @<MudTooltip Text="@(expanded ? $"Collapse {name}" : $"Expand {name}")" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                           Class="@($"jim-activity-collapse-toggle{(expanded ? " jim-activity-collapse-toggle--open" : string.Empty)}")"
+                           aria-label="@(expanded ? $"Collapse {name}" : $"Expand {name}")"
+                           aria-expanded="@(expanded ? "true" : "false")" aria-controls="@controlsId"
+                           OnClick="@(() => ToggleRequested.InvokeAsync(section))" />
+        </MudTooltip>;
+
+    private const string QueuedBodyId = "activity-queued-body";
+    private const string QueuedRowsId = "activity-queued-rows";
+    private const string RunningBodyId = "activity-running-body";
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>Whether the Queued section's table is unfolded under its heading.</summary>
+    [Parameter] public bool QueuedExpanded { get; set; } = true;
+
+    /// <summary>Whether the In progress section's table is unfolded under its heading.</summary>
+    [Parameter] public bool InProgressExpanded { get; set; } = true;
+
+    /// <summary>Raised when a section's chevron is clicked; the tab flips that section and writes the choice to the URL.</summary>
+    [Parameter] public EventCallback<ActivitySection> ToggleRequested { get; set; }
+
+    /// <summary>The tab's filters; Queued and In progress apply every one but Result and Has child activities.</summary>
+    [Parameter] public OperationsActivityFilters Filters { get; set; } = OperationsActivityFilters.None;
+
+    /// <summary>Looks a Schedule's name up by id, for the Schedule filter.</summary>
+    [Parameter] public Func<Guid, string?> ScheduleName { get; set; } = _ => null;
+
+    // The space In progress needs below Queued to stay in view: its heading, its table's header and one running row.
+    private const double InProgressReserve = 190;
+
+    private List<WorkerTaskHeader> _workerTaskHeaders = new();
+    private Dictionary<Guid, ScheduleExecutionProgress?> _scheduleProgress = new();
+    private Dictionary<int, TimeSpan> _medianDurations = new();
+    private HashSet<int> _medianRunProfileIds = new();
+    private readonly Dictionary<Guid, double?> _stepSecondsRemaining = new();
+    private Dictionary<Guid, DateTime?> _starts = new();
+    private readonly Dictionary<Guid, DateTime?> _finishes = new();
+
+    private List<QueueDisplayRow> _queuedRows = [];
+    private List<QueueDisplayRow> _visibleQueuedRows = [];
+    private List<QueueDisplayRow> _runningRows = [];
+    private int _queuedCount;
+    private int _runningCount;
+    private int _hiddenQueuedCount;
+    private bool _showAllQueued;
+    private int _queuedRowBudget = QueueRowBudget.ProvisionalRows;
+
+    private bool _observingQueue;
+    private DotNetObjectReference<OperationsQueueSections>? _selfReference;
+    private OperationsActivityFilters? _appliedFilters;
+
+    private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private bool _demoMode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+
+        // In development, ?d=true query string activates demo mode with mock data
+        if (Environment.IsDevelopment())
+        {
+            var uri = new Uri(NavigationManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            if (string.Equals(query["d"], "true", StringComparison.OrdinalIgnoreCase))
+            {
+                var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+                _demoMode = true;
+                _workerTaskHeaders = OperationsQueueDemoData.Build(user.Id, user.NameOrId);
+                _scheduleProgress = OperationsQueueDemoData.ScheduleProgress(_workerTaskHeaders);
+                _medianDurations = OperationsQueueDemoData.MedianDurations();
+                RebuildRows();
+                return;
+            }
+        }
+
+        _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();
+        await RefreshDerivedDataAsync(jim);
+        RebuildRows();
+
+        // Event-driven refresh (issue #307): database notifications trigger an immediate refresh, so the
+        // queue reacts in real time rather than waiting for the next polling cycle.
+        UiNotifications.WorkerTaskChanged += OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+
+        // Polling fallback: fast (1 second) while real-time notifications are unavailable, slow
+        // (30 seconds, a reconciliation safety net for missed notifications) while they are flowing.
+        // The interval is re-read every iteration, so availability changes take effect without
+        // restarting the loop.
+        var token = _pollingCancellationTokenSource.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    var delay = UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(1);
+                    await Task.Delay(delay, token);
+                    await RefreshWorkerTaskHeadersAsync(force: true);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Ignore errors during polling, will retry on next interval
+                }
+            }
+        }, token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // A filter change reshapes the sections without anything new to read.
+        if (_appliedFilters != null && _appliedFilters != Filters)
+        {
+            RebuildRows();
+        }
+
+        _appliedFilters = Filters;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The Queued table exists only while something is queued (folded or not), so its rows are measured from the
+        // render that draws it, and the listener is released by the render that removes it; a table drawn again
+        // later is a new element and is measured afresh. Observation is keyed by the element's id rather than a
+        // reference to it, so the release reaches the listener after the element has gone.
+        var tableDrawn = _queuedRows.Count > 0;
+        if (tableDrawn && !_observingQueue)
+        {
+            _selfReference ??= DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("jimQueueRows.observe", QueuedRowsId, _selfReference, 150);
+                _observingQueue = true;
+            }
+            catch (InvalidOperationException)
+            {
+                // Prerendering: JS interop is not available yet, and the provisional budget stands until it is.
+            }
+        }
+        else if (!tableDrawn && _observingQueue)
+        {
+            await StopObservingQueueAsync();
+        }
+    }
+
+    private async Task StopObservingQueueAsync()
+    {
+        _observingQueue = false;
+        try
+        {
+            await JS.InvokeVoidAsync("jimQueueRows.stop", QueuedRowsId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has already gone; the listener went with the page.
+        }
+        catch (InvalidOperationException)
+        {
+            // Prerendering; nothing was attached.
+        }
+    }
+
+    /// <summary>Called from <c>jimQueueRows</c> with the window height, where Queued's rows start and a row's height.</summary>
+    [JSInvokable]
+    public Task OnQueueMeasured(double viewportHeight, double rowsTop, double rowHeight)
+    {
+        var budget = QueueRowBudget.Calculate(viewportHeight, rowsTop, InProgressReserve, rowHeight);
+        if (budget == _queuedRowBudget)
+            return Task.CompletedTask;
+
+        _queuedRowBudget = budget;
+        ApplyQueuedLimit();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleShowAllQueued()
+    {
+        _showAllQueued = !_showAllQueued;
+        ApplyQueuedLimit();
+    }
+
+    /// <summary>
+    /// Fetches the latest Worker Task headers and applies additions, updates and removals to the held list,
+    /// re-rendering only when something changed. Serves both the polling loop and event-driven refreshes; overlapping
+    /// invocations are skipped via a non-blocking semaphore. <paramref name="force"/> re-derives the estimates even
+    /// when the queue is unchanged, because time passing moves them.
+    /// </summary>
+    private async Task RefreshWorkerTaskHeadersAsync(bool force = false)
+    {
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            var changed = false;
+            using var refreshJim = JimFactory.Create();
+            var latest = await refreshJim.Tasking.GetWorkerTaskHeadersAsync();
+
+            foreach (var latestHeader in latest)
+            {
+                var held = _workerTaskHeaders.SingleOrDefault(h => h.Id == latestHeader.Id);
+                if (held == null)
+                {
+                    _workerTaskHeaders.Add(latestHeader);
+                    changed = true;
+                }
+                else if (held.UpdateFrom(latestHeader))
+                {
+                    // Updated in place rather than replaced, so a row keyed by its task is redrawn where it stands
+                    // and a link in it is not rebuilt out from under a click in progress.
+                    changed = true;
+                }
+            }
+
+            var departed = _workerTaskHeaders.Where(held => latest.All(l => l.Id != held.Id)).ToList();
+            foreach (var header in departed)
+            {
+                _workerTaskHeaders.Remove(header);
+                _stepSecondsRemaining.Remove(header.Id);
+                changed = true;
+            }
+
+            if (!changed && !force)
+                return;
+
+            if (changed)
+                await RefreshDerivedDataAsync(refreshJim);
+
+            RebuildRows();
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Everything read alongside the queue: each Schedule Execution's shape, the typical durations of the Run Profiles
+    /// in it (re-read only when that set changes), and the current step's live estimate for each running task.
+    /// </summary>
+    private async Task RefreshDerivedDataAsync(JimApplication jim)
+    {
+        await RefreshScheduleProgressAsync(jim);
+
+        var runProfileIds = _workerTaskHeaders
+            .Select(t => t.ConnectedSystemRunProfileId)
+            .OfType<int>()
+            .ToHashSet();
+        if (!runProfileIds.SetEquals(_medianRunProfileIds))
+        {
+            _medianDurations = runProfileIds.Count == 0 ? new() : await jim.Activities.GetMedianRecentRunDurationsAsync(runProfileIds);
+            _medianRunProfileIds = runProfileIds;
+        }
+
+        foreach (var task in _workerTaskHeaders.Where(t => t.Status == WorkerTaskStatus.Processing))
+        {
+            _stepSecondsRemaining[task.Id] = task is { ActivityId: { } activityId, ObjectsToProcess: > 0 }
+                ? EtaTracker.RecordSample(activityId, task.ObjectsProcessed ?? 0, task.ObjectsToProcess ?? 0).EstimatedSecondsRemaining
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Re-derives both sections from the held queue: the run order and its estimates over the whole queue, so "Next"
+    /// and every estimate stay true whatever the filters hide, then the rows that pass the filters.
+    /// </summary>
+    private void RebuildRows()
+    {
+        var now = DateTime.UtcNow;
+
+        var running = _workerTaskHeaders
+            .Where(t => t.Status is WorkerTaskStatus.Processing or WorkerTaskStatus.CancellationRequested)
+            .OrderBy(t => t.ScheduleStepIndex ?? int.MaxValue)
+            .ThenBy(t => t.Started ?? t.Timestamp)
+            .ToList();
+
+        _finishes.Clear();
+        var remaining = new List<TimeSpan?>();
+        foreach (var task in running)
+        {
+            var typical = task.ConnectedSystemRunProfileId is { } runProfileId && _medianDurations.TryGetValue(runProfileId, out var median)
+                ? median
+                : (TimeSpan?)null;
+            var left = QueueStartEstimator.Remaining(task.Started, typical, _stepSecondsRemaining.GetValueOrDefault(task.Id), now);
+            _finishes[task.Id] = left is { } known ? now + known : null;
+            remaining.Add(left);
+        }
+
+        var slots = QueueRunSlot.Plan(_workerTaskHeaders);
+        _starts = QueueStartEstimator.Estimate(slots, QueueStartEstimator.LongestRemaining(remaining), _medianDurations, now);
+
+        _queuedRows = FilterRows(QueueDisplayRow.Build(slots));
+        _queuedCount = _queuedRows.Count(r => !r.IsHeader);
+        ApplyQueuedLimit();
+
+        _runningRows = FilterRows(BuildRunningRows(running));
+        _runningCount = _runningRows.Count(r => !r.IsHeader);
+    }
+
+    /// <summary>The running tasks, each Schedule Execution's under one header; parallel where several share a step.</summary>
+    private static List<QueueDisplayRow> BuildRunningRows(List<WorkerTaskHeader> running)
+    {
+        var rows = new List<QueueDisplayRow>();
+        Guid? currentExecution = null;
+        foreach (var task in running)
+        {
+            if (task.ScheduleExecutionId is { } execution && execution != currentExecution)
+                rows.Add(new QueueDisplayRow { IsHeader = true, ScheduleExecutionId = execution, ScheduleName = task.ScheduleExecutionName });
+
+            currentExecution = task.ScheduleExecutionId;
+            rows.Add(new QueueDisplayRow
+            {
+                Task = task,
+                ScheduleExecutionId = task.ScheduleExecutionId,
+                IsParallel = task.ScheduleExecutionId != null && running.Count(t =>
+                    t.ScheduleExecutionId == task.ScheduleExecutionId && t.ScheduleStepIndex == task.ScheduleStepIndex) > 1
+            });
+        }
+
+        return rows;
+    }
+
+    /// <summary>The rows whose tasks pass the filters, keeping a Schedule header only while one of its tasks remains.</summary>
+    private List<QueueDisplayRow> FilterRows(List<QueueDisplayRow> rows)
+    {
+        if (!Filters.IsActive)
+            return rows;
+
+        var kept = rows.Where(r => r.IsHeader || Filters.Matches(r.Task!, ScheduleName)).ToList();
+        return kept
+            .Where((row, index) => !row.IsHeader || (index + 1 < kept.Count && !kept[index + 1].IsHeader && kept[index + 1].ScheduleExecutionId == row.ScheduleExecutionId))
+            .ToList();
+    }
+
+    private void ApplyQueuedLimit()
+    {
+        if (_showAllQueued)
+        {
+            _visibleQueuedRows = _queuedRows;
+            _hiddenQueuedCount = 0;
+            return;
+        }
+
+        (_visibleQueuedRows, _hiddenQueuedCount) = QueueDisplayRow.Limit(_queuedRows, _queuedRowBudget);
+    }
+
+    private ScheduleExecutionProgress? ProgressFor(Guid? scheduleExecutionId) =>
+        scheduleExecutionId is { } id ? _scheduleProgress.GetValueOrDefault(id) : null;
+
+    /// <summary>
+    /// What a Schedule Execution's header says about where it has got to. How many of its tasks run in parallel is the
+    /// step rail's to say, beside it.
+    /// </summary>
+    private string ScheduleSummary(Guid? scheduleExecutionId)
+    {
+        var tasks = _workerTaskHeaders.Where(t => t.ScheduleExecutionId == scheduleExecutionId).ToList();
+        var progress = ProgressFor(scheduleExecutionId);
+        return progress == null
+            ? $"{tasks.Count} tasks"
+            : progress.CurrentStepNumber.HasValue
+                ? $"Step {progress.CurrentStepNumber} of {progress.TotalSteps}"
+                : $"{tasks.Count} tasks across {progress.TotalSteps} steps";
+    }
+
+    private static RenderFragment InitiatorCell(WorkerTaskHeader task) =>
+        @<InitiatorChip InitiatedByType="@task.InitiatedByType" InitiatedById="@task.InitiatedById"
+                        InitiatedByName="@task.InitiatedByName" ScheduleName="@task.ScheduleExecutionName"
+                        ScheduleExecutionId="@task.ScheduleExecutionId" />;
+
+    /// <summary>An estimated time: the clock time today, the day and time beyond it, blank where there is none.</summary>
+    private static RenderFragment EstimateCell(DateTime? utc) => utc is { } value
+        ? @<MudTooltip Text="@value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+              <span class="jim-activity-estimate">@FormatEstimate(value)</span>
+          </MudTooltip>
+        : @<EmptyValue />;
+
+    private RenderFragment CancelButton(WorkerTaskHeader task) =>
+        @<MudTooltip Text="Cancel Task" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error"
+                           OnClick="() => HandleCancelTaskAsync(task)" Size="Size.Small" aria-label="Cancel Task" />
+        </MudTooltip>;
+
+    private static string FormatEstimate(DateTime utc)
+    {
+        var local = utc.ToLocalTime();
+        return local.Date == DateTime.UtcNow.ToLocalTime().Date ? $"~{local:HH:mm}" : $"~{local:ddd HH:mm}";
+    }
+
+    private static string ConnectedSystemCell(WorkerTaskHeader task) => task.ConnectedSystemName ?? task.Name;
+
+    private static string RunProfileCell(WorkerTaskHeader task) => task.RunProfileName ?? task.Type;
+
+    private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
+
+    private void OnActivityProgressChanged(Guid activityId) => TriggerNotificationRefresh();
+
+    // On reconnection, refresh immediately to reconcile anything missed while real-time was unavailable.
+    private void OnRealTimeAvailabilityChanged(bool available) => TriggerNotificationRefresh();
+
+    /// <summary>
+    /// Runs a refresh in response to a notification. Event handlers run off the sync context and must
+    /// never throw into the notification relay, so failures are swallowed; the polling fallback retries.
+    /// </summary>
+    private void TriggerNotificationRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshWorkerTaskHeadersAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Transient refresh failures are recoverable; the polling fallback covers the gap
+            }
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
+        await _pollingCancellationTokenSource.CancelAsync();
+
+        if (_observingQueue)
+            await StopObservingQueueAsync();
+
+        _selfReference?.Dispose();
+    }
+
+    private async Task HandleCancelTaskAsync(WorkerTaskHeader workerTaskHeader)
+    {
+        var result = await DialogService.ShowMessageBoxAsync(
+            "Cancel Task",
+            $"Are you sure you want to cancel the task '{workerTaskHeader.Name}'?",
+            yesText: "Cancel Task",
+            cancelText: "Keep It");
+
+        if (result != true)
+            return;
+
+        using var jim = JimFactory.Create();
+        await jim.Tasking.RequestWorkerTaskCancellationAsync(workerTaskHeader.Id);
+        Snackbar.Add("Worker task cancellation requested.", Severity.Success);
+    }
+
+    private async Task HandleCancelScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        var scheduleName = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId == scheduleExecutionId)
+            .Select(t => t.ScheduleExecutionName)
+            .FirstOrDefault() ?? "this schedule execution";
+
+        var result = await DialogService.ShowMessageBoxAsync(
+            "Cancel Schedule Execution",
+            $"Are you sure you want to cancel '{scheduleName}'? All tasks will be cancelled immediately, including any that are currently processing.",
+            yesText: "Cancel Execution",
+            cancelText: "Keep Running");
+
+        if (result != true)
+            return;
+
+        using var jim = JimFactory.Create();
+        var cancelled = await jim.Scheduler.CancelScheduleExecutionAsync(scheduleExecutionId);
+        if (cancelled)
+            Snackbar.Add("Schedule execution cancelled.", Severity.Success);
+        else
+            Snackbar.Add("Could not cancel execution; it may have already completed.", Severity.Warning);
+    }
+
+    /// <summary>
+    /// Rebuilds each Schedule Execution's shape from the queue's own tasks plus what its finished
+    /// tasks left behind. One query for the whole queue, run only when the queue has actually changed.
+    /// </summary>
+    private async Task RefreshScheduleProgressAsync(JimApplication jim)
+    {
+        if (_demoMode)
+            return;
+
+        var executionIds = _workerTaskHeaders
+            .Where(t => t.ScheduleExecutionId.HasValue)
+            .Select(t => t.ScheduleExecutionId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (executionIds.Count == 0)
+        {
+            _scheduleProgress = new Dictionary<Guid, ScheduleExecutionProgress?>();
+            return;
+        }
+
+        var outcomes = await jim.Activities.GetScheduleStepOutcomesAsync(executionIds);
+
+        _scheduleProgress = executionIds.ToDictionary(
+            executionId => executionId,
+            executionId => ScheduleStepReading.FromQueue(
+                _workerTaskHeaders.Where(t => t.ScheduleExecutionId == executionId).ToList(),
+                outcomes.GetValueOrDefault(executionId, [])));
+    }
+}

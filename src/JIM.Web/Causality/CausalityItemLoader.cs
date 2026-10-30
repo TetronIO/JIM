@@ -8,6 +8,7 @@ using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
+using JIM.Models.Utility;
 
 namespace JIM.Web.Causality;
 
@@ -52,9 +53,11 @@ public static class CausalityItemLoader
     /// <returns>The item's causality, or null where the item does not exist.</returns>
     public static async Task<CausalityItemData?> LoadAsync(JimApplication jim, Guid runProfileExecutionItemId, ICausalityLinks? links = null)
     {
-        var item = await jim.Activities.GetActivityRunProfileExecutionItemAsync(runProfileExecutionItemId);
-        if (item == null)
+        var detail = await jim.Activities.GetActivityRunProfileExecutionItemDetailAsync(runProfileExecutionItemId);
+        if (detail == null)
             return null;
+
+        var item = detail.Item;
 
         var activity = await jim.Activities.GetActivityAsync(item.ActivityId);
 
@@ -86,6 +89,7 @@ public static class CausalityItemLoader
             : null;
 
         var (identityHeader, deletedIdentityId) = await ResolveIdentityAsync(jim, item);
+        var changeValues = await LoadChangeValuesAsync(jim, item, detail.ChangeValueSummaries);
 
         return new CausalityItemData
         {
@@ -100,6 +104,7 @@ public static class CausalityItemLoader
             LivePendingExportIds = livePendingExportIds,
             ProvisionedConnectedSystemObjectNames = provisionedConnectedSystemObjectNames,
             Chain = chain,
+            ChangeValues = changeValues,
             IdentityHeader = identityHeader,
             DeletedIdentityId = deletedIdentityId,
             MetaverseObjectType = await ResolveMetaverseObjectTypeAsync(jim, item),
@@ -231,11 +236,10 @@ public static class CausalityItemLoader
             var disconnectedOutcome = item.SyncOutcomes
                 .FirstOrDefault(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
                     or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
-            if (disconnectedOutcome?.TargetEntityId is { } disconnectedMetaverseObjectId)
+            if (disconnectedOutcome?.TargetEntityId is { } disconnectedMetaverseObjectId
+                && await jim.Metaverse.GetMetaverseObjectHeaderAsync(disconnectedMetaverseObjectId) is { } header)
             {
-                var mvo = await jim.Metaverse.GetMetaverseObjectAsync(disconnectedMetaverseObjectId);
-                if (mvo?.Type != null)
-                    mvoTypeId = mvo.Type.Id;
+                mvoTypeId = header.TypeId;
             }
         }
 
@@ -256,6 +260,44 @@ public static class CausalityItemLoader
             ? await jim.Metaverse.GetMetaverseObjectTypeAsync(mvoTypeId.Value, false)
             : null;
     }
+
+    /// <summary>
+    /// The item's change values (#2498): the summary of each change record, and the rows of every change small enough to
+    /// carry whole, read in one window per side. A change to a large group is left to be read a window at a time where
+    /// it is shown, so the page never loads one value per member.
+    /// </summary>
+    private static async Task<CausalityChangeValues> LoadChangeValuesAsync(
+        JimApplication jim, ActivityRunProfileExecutionItem item, IReadOnlyDictionary<Guid, ChangeValueSummary> summaries)
+    {
+        var small = summaries.Values.Where(s => s.RowCount <= CausalityChangeValues.InlineLimit).ToList();
+        var metaverseChangeId = item.MetaverseObjectChange?.Id;
+        var smallMetaverse = small.Where(s => s.ChangeId == metaverseChangeId).ToList();
+        var smallConnectedSystem = small.Where(s => s.ChangeId != metaverseChangeId).ToList();
+
+        var rows = new Dictionary<Guid, IReadOnlyList<CausalityAttributeRow>>();
+        if (smallConnectedSystem.Count > 0)
+        {
+            var read = await jim.ConnectedSystems.GetCsoChangeValueRowsAsync(WholeChangesQuery(smallConnectedSystem));
+            foreach (var group in read.Results.GroupBy(r => r.ChangeId))
+                rows[group.Key] = group.Select(CausalityAttributeRowMapper.FromRow).ToList();
+        }
+
+        if (smallMetaverse.Count > 0)
+        {
+            var read = await jim.Metaverse.GetMvoChangeValueRowsAsync(WholeChangesQuery(smallMetaverse));
+            foreach (var group in read.Results.GroupBy(r => r.ChangeId))
+                rows[group.Key] = group.Select(CausalityAttributeRowMapper.FromRow).ToList();
+        }
+
+        return new CausalityChangeValues { Summaries = summaries, Rows = rows };
+    }
+
+    /// <summary>Every row of the given small changes, in source order: one window holds them all.</summary>
+    private static ChangeValueRowQuery WholeChangesQuery(IReadOnlyCollection<ChangeValueSummary> changes) => new()
+    {
+        ChangeIds = changes.Select(c => c.ChangeId).ToList(),
+        Count = changes.Sum(c => c.RowCount)
+    };
 
     /// <summary>
     /// Resolves which of the Pending Exports this item created are still queued. A Pending Export is
@@ -317,15 +359,9 @@ public static class CausalityItemLoader
         if (provisionedByConnectedSystem.Count == 0)
             return null;
 
-        var names = new Dictionary<Guid, string>();
-        foreach (var group in provisionedByConnectedSystem)
-        {
-            var csos = await jim.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(group.Key, group.Distinct());
-            // A deleted-since object simply has no entry: the recorded "type: id" label stands.
-            foreach (var cso in csos.Where(cso => cso.NameOrId != null))
-                names[cso.Id] = cso.NameOrId!;
-        }
-
-        return names;
+        // Named without reading the objects' values (#2498): a provisioned group's own values are its members. A
+        // deleted-since object simply has no entry: the recorded "type: id" label stands.
+        return await jim.ConnectedSystems.GetConnectedSystemObjectNamesAsync(
+            provisionedByConnectedSystem.SelectMany(group => group).Distinct().ToList());
     }
 }

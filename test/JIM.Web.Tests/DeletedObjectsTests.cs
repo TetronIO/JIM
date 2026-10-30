@@ -49,11 +49,8 @@ public class DeletedObjectsTests : JimComponentTestContext
         repository.Setup(r => r.Metaverse).Returns(_metaverse.Object);
 
         _connectedSystems
-            .Setup(r => r.GetConnectedSystemHeadersAsync())
-            .ReturnsAsync(new List<ConnectedSystemHeader>
-            {
-                new() { Id = ConnectedSystemId, Name = "Panoply AD" }
-            });
+            .Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [ConnectedSystemId] = "Panoply AD" });
         _metaverse
             .Setup(r => r.GetMetaverseObjectTypeHeadersAsync())
             .ReturnsAsync(new List<MetaverseObjectTypeHeader>());
@@ -200,29 +197,33 @@ public class DeletedObjectsTests : JimComponentTestContext
         };
         SetupMvoChanges([deletion]);
 
-        var update = new MetaverseObjectChange
+        var update = new MvoChangeHistoryDto
         {
             Id = Guid.NewGuid(),
             ChangeType = ObjectChangeType.Updated,
-            ChangeTime = DateTime.UtcNow.AddDays(-1)
+            ChangeTime = DateTime.UtcNow.AddDays(-1),
+            AttributeChanges =
+            [
+                new MvoAttributeChangeDto
+                {
+                    AttributeName = "Manager",
+                    AttributeType = AttributeDataType.Reference,
+                    ValueChangeTotal = 1,
+                    ValueChanges =
+                    [
+                        new MvoValueChangeDto
+                        {
+                            ValueChangeType = ValueChangeType.Add,
+                            ReferenceValue = new MvoChangeReferenceDto { Id = managerId, DisplayName = "Ada Lovelace", TypeName = "Person", TypePluralName = "People" }
+                        }
+                    ]
+                }
+            ]
         };
-        var managerAttribute = new MetaverseObjectChangeAttribute
-        {
-            AttributeName = "Manager",
-            AttributeType = AttributeDataType.Reference,
-            MetaverseObjectChange = update
-        };
-        var manager = new MetaverseObject
-        {
-            Id = managerId,
-            CachedDisplayName = "Ada Lovelace",
-            Type = new MetaverseObjectType { Id = 7, Name = "Person", PluralName = "People" }
-        };
-        managerAttribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(managerAttribute, ValueChangeType.Add, manager));
-        update.AttributeChanges.Add(managerAttribute);
+        var deletionRecord = new MvoChangeHistoryDto { Id = deletionId, ChangeType = ObjectChangeType.Deleted, ChangeTime = deletion.ChangeTime };
         _metaverse
             .Setup(r => r.GetDeletedMvoChangeHistoryAsync(deletionId))
-            .ReturnsAsync([update, deletion]);
+            .ReturnsAsync([update, deletionRecord]);
 
         // Both history dialogs (the deleted object's, then the change details inside its timeline) are inline
         // MudDialogs, so their content renders into the provider rather than into the page.

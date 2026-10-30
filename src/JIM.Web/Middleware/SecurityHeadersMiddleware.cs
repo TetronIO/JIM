@@ -48,11 +48,12 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
     /// <item><description><c>font-src 'self'</c>: IBM Plex Sans/Mono, Space Grotesk and Inter are all self-hosted
     /// under <c>wwwroot/fonts</c> and referenced by relative <c>url()</c> in the site's font CSS; there is no
     /// external font host to allow.</description></item>
-    /// <item><description><c>connect-src 'self' wss: ws:</c>: Blazor Server's SignalR circuit
-    /// (<c>MapBlazorHub</c>, default path <c>/_blazor</c>) is a same-origin WebSocket; both schemes are listed
-    /// explicitly so the policy behaves identically whether JIM is reached over http (local development) or
-    /// https (deployed), rather than relying on browsers' implicit ws/wss-to-http/https scheme equivalence for
-    /// <c>'self'</c>.</description></item>
+    /// <item><description><c>connect-src 'self'</c>: Blazor Server's SignalR circuit (<c>MapBlazorHub</c>,
+    /// default path <c>/_blazor</c>) is a same-origin WebSocket, and CSP Level 3 makes <c>'self'</c> match
+    /// <c>ws:</c> and <c>wss:</c> on the page's own host, over http and https alike. The policy used to add bare
+    /// <c>wss:</c> and <c>ws:</c> scheme sources to avoid relying on that matching; those allow a WebSocket to
+    /// any host, so they were removed (#2603). A browser old enough to predate that matching would refuse the
+    /// circuit's WebSocket.</description></item>
     /// <item><description><c>frame-ancestors 'none'</c>: JIM is never legitimately embedded in another site's
     /// frame; this is the modern, CSP-native replacement for (and is paired with) the
     /// <c>X-Frame-Options: DENY</c> header below for older user agents.</description></item>
@@ -72,10 +73,28 @@ public class SecurityHeadersMiddleware(RequestDelegate next)
         "style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data:; " +
         "font-src 'self'; " +
-        "connect-src 'self' wss: ws:; " +
+        "connect-src 'self'; " +
         "frame-ancestors 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self'";
+
+    /// <summary>
+    /// The policy for the API reference (<c>/api/reference</c>): <see cref="ContentSecurityPolicy"/>, with the
+    /// identity provider's token endpoint origin added to <c>connect-src</c>. Try It signs in from the browser and
+    /// exchanges its code at that endpoint with <c>fetch</c> (#2594), which <c>connect-src 'self'</c> refuses. Only
+    /// the origin is added, and only for an absolute http or https address, so nothing from the identity provider's
+    /// configuration can add any other source or directive.
+    /// </summary>
+    /// <param name="tokenEndpoint">The token endpoint the API reference's OpenAPI document gives, or null when the
+    /// identity provider's configuration could not be read.</param>
+    /// <returns>The policy, or <see cref="ContentSecurityPolicy"/> unchanged when there is no usable endpoint.</returns>
+    public static string ApiReferenceContentSecurityPolicy(string? tokenEndpoint)
+    {
+        if (!Uri.TryCreate(tokenEndpoint, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
+            return ContentSecurityPolicy;
+
+        return ContentSecurityPolicy.Replace("connect-src 'self'; ", $"connect-src 'self' {uri.GetLeftPart(UriPartial.Authority)}; ", StringComparison.Ordinal);
+    }
 
     public async Task InvokeAsync(HttpContext context)
     {

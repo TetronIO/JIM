@@ -651,10 +651,24 @@ internal class LdapConnectorExport
     {
         var addRequest = BuildContainerAddRequest(containerDn);
 
-        var response = (AddResponse)_executor.SendRequest(addRequest);
-        if (response.ResultCode != ResultCode.Success)
+        try
         {
-            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+            var response = (AddResponse)_executor.SendRequest(addRequest);
+            if (response.ResultCode == ResultCode.EntryAlreadyExists)
+            {
+                LogContainerCreatedElsewhere(containerDn);
+                return;
+            }
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+            }
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.EntryAlreadyExists)
+        {
+            LogContainerCreatedElsewhere(containerDn);
+            return;
         }
 
         // Track the created container for auto-selection
@@ -1120,15 +1134,41 @@ internal class LdapConnectorExport
     {
         var addRequest = BuildContainerAddRequest(containerDn);
 
-        var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
-        if (response.ResultCode != ResultCode.Success)
+        try
         {
-            throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+            var response = (AddResponse)await _executor.SendRequestAsync(addRequest);
+            if (response.ResultCode == ResultCode.EntryAlreadyExists)
+            {
+                LogContainerCreatedElsewhere(containerDn);
+                return;
+            }
+
+            if (response.ResultCode != ResultCode.Success)
+            {
+                throw new LdapException((int)response.ResultCode, $"Failed to create container '{containerDn}': {response.ErrorMessage}");
+            }
+        }
+        catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.EntryAlreadyExists)
+        {
+            LogContainerCreatedElsewhere(containerDn);
+            return;
         }
 
         _createdContainerExternalIds.Add(containerDn);
 
         _logger.Information("LdapConnectorExport.CreateContainerAsync: Successfully created container '{ContainerDn}'", LogSanitiser.Sanitise(containerDn));
+    }
+
+    /// <summary>
+    /// A container add answered with entryAlreadyExists means another writer created it between this connector finding
+    /// it missing and adding it: typically a parallel export batch, which has a connector (and so a container
+    /// semaphore) of its own. The container is there, which is all the object's create needs, but this connector did
+    /// not create it, so it is not reported as created.
+    /// </summary>
+    private void LogContainerCreatedElsewhere(string containerDn)
+    {
+        _logger.Information("LdapConnectorExport: Container '{ContainerDn}' was created by another writer before this connector could create it; continuing",
+            LogSanitiser.Sanitise(containerDn));
     }
 
     #endregion

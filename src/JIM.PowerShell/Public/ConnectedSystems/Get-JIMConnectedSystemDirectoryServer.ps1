@@ -4,28 +4,30 @@
 function Get-JIMConnectedSystemDirectoryServer {
     <#
     .SYNOPSIS
-        Discovers the domain controllers in a Connected System's directory.
+        Discovers the directory servers in a Connected System's directory.
 
     .DESCRIPTION
-        Lists the domain controllers in an Active Directory or Samba AD forest, with the Active
-        Directory Site each belongs to, using the Connected System's currently saved connectivity
-        settings. Only Connected Systems using the LDAP connector against an AD-family directory
-        support this; other connectors, and non-AD-family LDAP directories (OpenLDAP, Generic), return
-        an error naming why.
+        Lists the servers in a Connected System's directory, using its currently saved connectivity
+        settings. For the LDAP connector these are the domain controllers in an Active Directory or
+        Samba AD forest, with the Active Directory Site each belongs to. Connectors that do not support
+        discovery, and LDAP directories that are not AD-family (OpenLDAP, 389 Directory Server,
+        Generic), return an error naming why.
 
         Purely informational: this never writes anything. It only helps you find a value for the
-        Preferred Domain Controller setting; setting it is a separate call to Set-JIMConnectedSystem.
+        setting the connector fills from discovery (Preferred Domain Controller, for the LDAP
+        connector); setting it is a separate call to Set-JIMConnectedSystem.
 
     .PARAMETER ConnectedSystemId
         The ID of the Connected System.
 
     .OUTPUTS
-        One entry per domain controller found: its HostName, and the Active Directory Site it belongs to.
+        One entry per server found: its HostName, the Active Directory Site it belongs to (null for directories
+        that have no Sites), and the id and name of the setting its host name is a value for.
 
     .EXAMPLE
         Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1
 
-        Lists the domain controllers discovered for Connected System 1.
+        Lists the directory servers discovered for Connected System 1.
 
     .EXAMPLE
         Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1 | Where-Object { $_.site -eq 'London' }
@@ -36,6 +38,13 @@ function Get-JIMConnectedSystemDirectoryServer {
         Get-JIMConnectedSystem -Name "Corp AD" | Get-JIMConnectedSystemDirectoryServer
 
         Discovers domain controllers for the Connected System named "Corp AD".
+
+    .EXAMPLE
+        $server = Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 1 | Where-Object { $_.Site -eq 'London' } | Select-Object -First 1
+        Set-JIMConnectedSystem -Id 1 -SettingValues @{ $server.TargetSettingId = @{ stringValue = $server.HostName } }
+
+        Discovers a server in the London Site and sets it as the value of the setting discovery fills (Preferred
+        Domain Controller, for the LDAP connector), without needing to know that setting's id.
 
     .LINK
         Get-JIMConnectedSystem

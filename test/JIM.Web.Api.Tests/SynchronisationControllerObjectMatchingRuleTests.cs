@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -77,6 +78,11 @@ public class SynchronisationControllerObjectMatchingRuleTests
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _connectedSystemRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+
+        // Which Object Types an enabled import rule covers, read when a matching change is recorded as awaiting
+        // synchronisation (#2615): none here, as these tests are about the endpoints.
+        IList<SyncRuleHeader> noImportRules = [];
+        _connectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(noImportRules);
 
         _csoType = new ConnectedSystemObjectType
         {
@@ -200,6 +206,65 @@ public class SynchronisationControllerObjectMatchingRuleTests
 
         Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
         _connectedSystemRepo.Verify(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>()), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleObjectMatchingRule_SystemInAdvancedMode_ReportsTheTypeItRecordedWithItsCostAsync()
+    {
+        // #2615: a matching change alters what an import produces for every object of the type, so the save records the type
+        // as awaiting synchronisation and the response says how many objects the next synchronisation will process.
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(ConnectedSystemId, CsoTypeId, null)).ReturnsAsync(640);
+
+        var result = await _controller.CreateSyncRuleObjectMatchingRuleAsync(SyncRuleId, SyncRuleScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var awaiting = ((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectTypeName, Is.EqualTo("User"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(640));
+        }
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SimpleModeTypeCoveredByAnEnabledImportRule_ReportsTheTypeItRecordedAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem;
+        IList<SyncRuleHeader> importRules =
+        [
+            new SyncRuleHeader
+            {
+                Id = SyncRuleId, Name = "Import Users", Direction = SyncRuleDirection.Import, Enabled = true,
+                ConnectedSystemId = ConnectedSystemId, ConnectedSystemName = "HR",
+                ConnectedSystemObjectTypeId = CsoTypeId, ConnectedSystemObjectTypeName = "User"
+            }
+        ];
+        _connectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(importRules);
+        _connectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(ConnectedSystemId, CsoTypeId, null)).ReturnsAsync(640);
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var awaiting = ((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(awaiting.ConnectedSystemName, Is.EqualTo("HR"));
+            Assert.That(awaiting.ObjectCount, Is.EqualTo(640));
+        }
+    }
+
+    [Test]
+    public async Task CreateObjectMatchingRule_SimpleModeTypeNoImportRuleCovers_ReportsNothingAwaitingSynchronisationAsync()
+    {
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.ConnectedSystem;
+
+        var result = await _controller.CreateObjectMatchingRuleAsync(ConnectedSystemId, TypeScopedRequest());
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(((ObjectMatchingRuleDto)((CreatedAtRouteResult)result).Value!).AwaitingSynchronisation, Is.Empty,
+            "nothing synchronises the objects of a type no enabled import rule covers");
     }
 
     [Test]

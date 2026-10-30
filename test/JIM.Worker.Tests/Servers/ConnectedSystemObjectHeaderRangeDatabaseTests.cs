@@ -180,6 +180,23 @@ public class ConnectedSystemObjectHeaderRangeDatabaseTests
     }
 
     [Test]
+    public async Task Range_CancelledToken_StopsTheQueryAsync()
+    {
+        // The grid cancels a window it no longer wants (the reader typed on, or scrolled past it). A read that
+        // ignored the token would run its whole search to completion for nobody, and a reader typing a word one
+        // letter at a time would stack one full scan per pause on the database.
+        var systemId = await SeedAsync(3);
+        var jim = NewJim();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        Assert.That(
+            async () => await jim.ConnectedSystems.GetConnectedSystemObjectHeadersRangeAsync(
+                systemId, offset: 0, count: 3, searchQuery: "User", cancellationToken: cancellation.Token),
+            Throws.InstanceOf<OperationCanceledException>());
+    }
+
+    [Test]
     public async Task Range_MidWindow_ReturnsCorrectSliceAtAbsoluteOffsetAsync()
     {
         var systemId = await SeedAsync(10);

@@ -53,6 +53,26 @@ public class MetaverseObjectDtoTests
     }
 
     [Test]
+    public void FromEntity_SignInClaimValue_MapsContributorKindAndClaimType()
+    {
+        var entity = new MetaverseObjectAttributeValue
+        {
+            AttributeId = 4,
+            StringValue = "Jo",
+            ContributedByKind = ValueContributorKind.SignInClaim,
+            ContributedByClaimType = "given_name"
+        };
+
+        var dto = MetaverseObjectAttributeValueDto.FromEntity(entity);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ContributedByKind, Is.EqualTo(ValueContributorKind.SignInClaim));
+            Assert.That(dto.ContributedByClaimType, Is.EqualTo("given_name"));
+        }
+    }
+
+    [Test]
     public void FromEntity_WithoutProvenance_MapsNullProvenanceFields()
     {
         var entity = new MetaverseObjectAttributeValue
@@ -205,7 +225,8 @@ public class MetaverseObjectDtoTests
                 ConnectedSystemObjectId = csoId,
                 ConnectedSystemId = 3,
                 ConnectedSystemName = "Primary Directory",
-                DisplayName = "CN=jsmith,OU=Users,DC=example,DC=com",
+                ExternalId = "8f0c2a4e-1d3b-4c5a-9e7f-2b6d8a0c4e1f",
+                SecondaryExternalId = "CN=jsmith,OU=Users,DC=example,DC=com",
                 ObjectTypeName = "user",
                 JoinType = ConnectedSystemObjectJoinType.Joined,
                 IsSource = true,
@@ -225,6 +246,8 @@ public class MetaverseObjectDtoTests
             Assert.That(row.Id, Is.EqualTo(csoId));
             Assert.That(row.ConnectedSystemId, Is.EqualTo(3));
             Assert.That(row.ConnectedSystemName, Is.EqualTo("Primary Directory"));
+            Assert.That(row.ExternalId, Is.EqualTo("8f0c2a4e-1d3b-4c5a-9e7f-2b6d8a0c4e1f"));
+            Assert.That(row.SecondaryExternalId, Is.EqualTo("CN=jsmith,OU=Users,DC=example,DC=com"));
             Assert.That(row.ObjectTypeName, Is.EqualTo("user"));
             Assert.That(row.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
             Assert.That(row.IsSource, Is.True);
@@ -254,7 +277,7 @@ public class MetaverseObjectDtoTests
                 ConnectedSystemObjectId = csoId,
                 ConnectedSystemId = 3,
                 ConnectedSystemName = "Primary Directory",
-                DisplayName = "CN=jsmith,OU=Users,DC=example,DC=com",
+                ExternalId = "jsmith",
                 State = ConnectedSystemObjectConnectionState.InSync
             }
         };
@@ -303,6 +326,33 @@ public class MetaverseObjectDtoTests
                 }
             ]
         };
+    }
+
+    /// <summary>
+    /// The explanations response (what Get-JIMMetaverseObjectConnection reads) carries the same identifiers as the
+    /// portal's Connections tab: confirmed values, and the values a Pending Export will assign where none is confirmed.
+    /// </summary>
+    [Test]
+    public void ConnectionExplanationDto_FromModel_MapsEveryIdentifier()
+    {
+        var model = new MetaverseObjectConnectionExplanation
+        {
+            ConnectedSystemObjectId = Guid.NewGuid(),
+            ExternalId = "8f0c2a4e-1d3b-4c5a-9e7f-2b6d8a0c4e1f",
+            SecondaryExternalId = "CN=jsmith,OU=Users,DC=example,DC=com",
+            PendingExternalId = "jsmith",
+            PendingSecondaryExternalId = "CN=jsmith,OU=Staff,DC=example,DC=com"
+        };
+
+        var dto = MetaverseObjectConnectionExplanationDto.FromModel(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ExternalId, Is.EqualTo(model.ExternalId));
+            Assert.That(dto.SecondaryExternalId, Is.EqualTo(model.SecondaryExternalId));
+            Assert.That(dto.PendingExternalId, Is.EqualTo(model.PendingExternalId));
+            Assert.That(dto.PendingSecondaryExternalId, Is.EqualTo(model.PendingSecondaryExternalId));
+        }
     }
 
     #endregion

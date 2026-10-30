@@ -1,0 +1,51 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# AD FS overlay for the JIM stack: the lab's AD FS server, adfs-primary, as JIM's identity provider.
+#
+# Run-IntegrationTests.ps1 adds this file after docker-compose.ad-lab.yml for the scenarios that sign in through
+# AD FS (Test-ActiveDirectoryLabFederationScenario in utils/ActiveDirectoryLab-Helpers.ps1):
+#
+#   docker compose ... -f test/integration/docker/docker-compose.ad-lab.yml -f test/integration/docker/docker-compose.ad-lab-adfs.yml ...
+#
+# Compose merges jim.web's environment by name, so these replace docker-compose.override.yml's Keycloak values and
+# leave everything else as it is. The AD FS server is reached by its service name, the name its certificate and its
+# discovery document carry, which is in no DNS the container can see, so it is mapped to the server's address like
+# the domain controllers in docker-compose.ad-lab.yml.
+#
+# The authority's certificate is self-signed and nothing in the container trusts it: that is deliberate. The AD FS
+# scenarios start with JIM reporting it Untrusted and trust it as an administrator would
+# (Add-JIMCertificate -FromIdentityProvider).
+#
+# JIM's registration on AD FS is made on every run, after the AD FS server is reverted and answers, by JIM's own
+# Register-JIMIdentityProvider (Register-ActiveDirectoryLabIdentityProvider in the runner, #2441). The runner puts
+# what it returns in its own process environment (JIM_AD_LAB_ADFS_*, never a file) and recreates jim.web, so these
+# are interpolated from there. Until then they read "unregistered", which names no client on AD FS.
+#
+# The sign-in identifier starts as .env's sub, Subject Identifier and placeholder initial admin: the registration and
+# the administrator account it names only exist once the AD FS server and dc-primary answer, after JIM first starts.
+# The runner then sets JIM up as a customer would before turning AD FS sign-in on (#2441): it registers JIM, creates
+# the administrator account in dc-primary (jim-sso-admin), and recreates jim.web with the registration's oid matched to
+# the built-in Object GUID attribute, and that account as the initial admin.
+#
+# JIM is registered, and signed in to, at https://jim.web:8443 (Get-ActiveDirectoryLabJimUrl), jim.web's HTTPS port on
+# the Docker network: the sign-in checks run in the LDAP toolbox container, which resolves jim.web and the AD FS
+# server's name (docker-compose.integration-tests.yml), as an administrator's workstation resolves both.
+
+services:
+  jim.web:
+    environment:
+      - JIM_SSO_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
+      - JIM_SSO_PUBLIC_AUTHORITY=https://${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}/adfs
+      - JIM_SSO_CLIENT_ID=${JIM_AD_LAB_ADFS_CLIENT_ID:-unregistered}
+      - JIM_SSO_SECRET=${JIM_AD_LAB_ADFS_CLIENT_SECRET:-unregistered}
+      - JIM_SSO_API_SCOPE=${JIM_AD_LAB_ADFS_API_SCOPE:-unregistered}
+      - JIM_SSO_PUBLIC_CLIENT_ID=${JIM_AD_LAB_ADFS_PUBLIC_CLIENT_ID:-unregistered}
+      - JIM_SSO_CLAIM_TYPE=${JIM_AD_LAB_ADFS_CLAIM_TYPE:-sub}
+      - JIM_SSO_MV_ATTRIBUTE=${JIM_AD_LAB_ADFS_MV_ATTRIBUTE:-Subject Identifier}
+      - JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ADFS_INITIAL_ADMIN:-00000000-0000-0000-0000-000000000001}
+      # Empty, so docker-compose.override.yml's Keycloak issuers are not trusted here: JIM accepts the issuers AD FS's
+      # discovery document names (#2440).
+      - JIM_SSO_VALID_ISSUERS=
+    extra_hosts:
+      - "${JIM_AD_LAB_ADFS_PRIMARY_HOST:-adfs.panoply.local}:${JIM_AD_LAB_ADFS_PRIMARY_ADDRESS:-0.0.0.0}"

@@ -129,6 +129,27 @@ Set-Thing -Id $thing.Id `
         { Get-TutorialStep -Path $path } | Should -Throw '*checkpoint*line 3*'
     }
 
+    It 'skips a block whose language has a hyphen, such as a jim-diagram spec' {
+        $markdown = @'
+# T
+
+```jim-diagram
+archetype: flow
+```
+
+## Step 1: Do it
+
+=== "PowerShell"
+
+    ```powershell
+    Get-Thing
+    ```
+'@
+        $steps = @(Get-TutorialStep -Path (New-TutorialPage $markdown))
+        $steps.Kind | Should -Be @('Code')
+        $steps[0].Code | Should -Be 'Get-Thing'
+    }
+
     It 'fails on an empty checkpoint' {
         $path = New-TutorialPage "# T`n`n<!-- checkpoint: -->`n"
         { Get-TutorialStep -Path $path } | Should -Throw '*checkpoint*'

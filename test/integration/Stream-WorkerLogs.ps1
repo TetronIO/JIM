@@ -121,8 +121,9 @@ try {
     & docker logs -f $ContainerName 2>&1 | ForEach-Object {
         $line = $_ -replace $prefixPattern, ''
 
-        # Only capture DiagnosticListener spans and MetricsCheckpoint lines
-        if ($line -match "^DiagnosticListener:" -or $line -match "^MetricsCheckpoint:") {
+        # Only capture DiagnosticListener spans and MetricsCheckpoint lines. A slow span's breakdown line (#2492) is
+        # for people reading the log, not a span timing, so it stays out of the bench stream.
+        if (($line -match "^DiagnosticListener:" -and $line -notmatch "^DiagnosticListener: .* breakdown: ") -or $line -match "^MetricsCheckpoint:") {
             $buffer.Add($line)
         }
 

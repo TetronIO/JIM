@@ -9,7 +9,29 @@ audience: administrator
 
 Some configuration edits are harmless. Others decide whether accounts are deleted. The two sit side by side on the same pages, so JIM judges every save by the properties that actually changed, and reacts only where it matters.
 
-## How JIM classifies a change
+```jim-diagram
+archetype: comparison
+title: The three classes of configuration change
+desc: 'JIM classes each property a save changes. A Cosmetic change, such as a name, a description or an icon, goes straight through. A Sync-affecting change, such as scope, mappings or matching, asks you to confirm, listing each change from its old value to its new one. A Destructive change, such as a Deprovisioning Action or a deletion rule, asks you to confirm and also states in plain terms what the change will do. A save is judged by the properties that changed, not the page they are on.'
+columns:
+- {label: Cosmetic, sub: labels and display}
+- {label: Sync-affecting, sub: what synchronisation does}
+- {label: Destructive, sub: whether objects are removed}
+rows:
+- label: For example
+  cells:
+  - {text: 'a name, a description, an icon'}
+  - {text: 'scope, mappings, matching'}
+  - {text: 'Deprovisioning Actions, deletion rules'}
+- label: On save
+  cells:
+  - {text: goes straight through}
+  - {text: asks you to confirm, sub: 'each change, old value to new'}
+  - {text: asks you to confirm, sub: and says what it will do}
+footer: 'Judged by the properties changed: a rename saved with a Deprovisioning Action change is destructive'
+```
+
+## :material-tag-text-outline: How JIM classifies a change
 
 Every configuration property carries one of three classes:
 
@@ -21,21 +43,56 @@ Every configuration property carries one of three classes:
 
 The class is worked out from the properties you actually changed, not from the page you changed them on. Renaming a Synchronisation Rule saves in silence even though the Deprovisioning Action sits on the same form; changing both in one save is treated as destructive.
 
-## Confirming a change before you save it
+## :material-content-save-check-outline: Confirming a change before you save it
 
-Where a change is sync-affecting or destructive, JIM shows a confirmation before saving. It lists what is changing, leads with the most consequential change, and names the object being changed. Where a destructive property is involved it also says what that property governs and what your particular change will do; switching a Deprovisioning Action *to* Delete and switching it *back* are both confirmed, but they are described differently, because they are opposite consequences.
+Where a change is sync-affecting or destructive, JIM shows a confirmation before saving. It lists what is changing, leads with the most consequential change, names the object being changed, and says [when the change takes effect](#when-a-change-takes-effect): exactly, for a Synchronisation Rule; for every other surface, with a reminder that saving does not apply the change to existing objects and a Full Synchronisation does. Where a destructive property is involved it also says what that property governs and what your particular change will do; switching a Deprovisioning Action *to* Delete and switching it *back* are both confirmed, but they are described differently, because they are opposite consequences.
 
 Cancelling the confirmation abandons the save. Nothing is written.
 
 A change that stops a [configuration test case](configuration-tests.md#when-a-change-stops-a-case-passing) passing is not saved until you choose: keep editing (nothing is saved), accept the new result, or save anyway. Accepting or saving anyway is recorded on the change's entry, naming each case.
 
-!!! note "Saving is not applying"
+## :material-timer-sand: When a change takes effect
 
-    A saved configuration change does not reach existing objects until synchronisation runs again, so the confirmation ends by recommending a Full Synchronisation. The Connected System pages show a [changed-since indicator](connected-systems.md#configuration-changes-pending-a-full-synchronisation) so you can see at a glance which systems have configuration waiting for one.
+Saving writes configuration; a synchronisation carries it to the objects that already exist. For a change to an import Synchronisation Rule or an Object Matching Rule, that is the Connected System's next synchronisation, Delta or Full, and JIM shows the wait at every step:
 
-    Metaverse Object Type deletion settings are the exception: they take effect immediately. Objects that already satisfy a new deletion rule become eligible for deletion on the next synchronisation or housekeeping pass, with no further change made to them. The confirmation says so.
+```jim-diagram
+archetype: flow
+title: How a saved import rule change reaches existing objects
+desc: 'Five steps carry a saved change to an import Synchronisation Rule to the objects it affects. Optionally preview it (1). Save it (2): the confirmation says when it takes effect. It then waits as awaiting synchronisation (3), shown on the Connected System page with a Run now button. The Connected System''s next synchronisation, Delta or Full, processes every object of the affected Object Type and applies it (4). The Activities record it (5): the run lists the changes it applied, and each change says which run applied it.'
+steps:
+- {id: preview, label: Preview, sub: optional, badge: 1}
+- {id: save, label: Save, sub: says when it applies, badge: 2}
+- {id: wait, label: Awaiting synchronisation, sub: Run now, badge: 3}
+- {id: run, label: Synchronisation, sub: every object of the type, badge: 4}
+- {id: activity, label: Activities, sub: Applied by, badge: 5}
+```
 
-## Previewing a change before you make it
+1. **Preview**<br /> The rule editor's preview button reports which objects the change would move, changing nothing; see [Previewing a change](#previewing-a-change-before-you-make-it).
+2. **Save**<br /> The confirmation states when the change takes effect. For an import change it reads: "At the next synchronisation of {System}, Delta or Full. That run processes every {Type} object, not only the changed ones: {count} objects, about {N} minutes at the speed of its last Full Synchronisation. Other Object Types are processed as usual. Until then the Connected System's page lists it as awaiting synchronisation, with a button to run that synchronisation straight away." The estimate is left out until the Connected System has had a Full Synchronisation. REST and PowerShell callers get the same facts: the response to saving a Synchronisation Rule, an Attribute Flow or an Object Matching Rule lists the Connected System, the Object Type, the object count and the estimated duration under `AwaitingSynchronisation`, and the cmdlets that save them warn of the same.
+3. **Awaiting synchronisation**<br /> The change shows on the Connected System, with **Run now**; see [Changes awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation).
+4. **The synchronisation**<br /> The run processes every object of the affected Object Type, and only the changed objects of the others, then marks the change applied. Every Metaverse Object those objects join or project is processed too, so export evaluation runs on them as usual.
+5. **The Activities**<br /> The synchronisation's Activity lists the changes behind each Object Type it processed in full, and each change's own Activity says **Applied by** that run.
+
+What waits for which synchronisation depends on what you changed:
+
+| You change | It reaches existing objects at | Until then |
+|---|---|---|
+| An import Synchronisation Rule (scope, enabling, projection, Out-of-Scope Action, Attribute Flow, Attribute Priority, matching) or an Object Matching Rule | The next synchronisation of the Connected System, Delta or Full, which processes every object of the affected Object Type | The Connected System lists it as awaiting synchronisation, and the rule shows **Awaiting synchronisation** |
+| An export Synchronisation Rule's scope, provisioning or Deprovisioning Action | The next synchronisation of any Connected System, which reviews every Metaverse Object of the rule's type | The rule and the Metaverse Object Type show **Export review pending**; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect). The Connected System does not count it as pending a Full Synchronisation |
+| An export Attribute Flow | The target Connected System's next Full Synchronisation | The Connected System shows it as pending a Full Synchronisation, as it does the part of an export rule save that the review does not carry |
+| A Metaverse Attribute or Object Type, or what a Connected System imports (schema selection, partitions and containers) | A Full Synchronisation, after a Full Import where the change alters what JIM reads | The same |
+| A Metaverse Object Type's deletion settings | At once: objects that already satisfy a new deletion rule become eligible for deletion on the next synchronisation or housekeeping run, with no further change to them | The confirmation says so |
+
+The confirmation names the one that applies. For an export scope change it reads "At the next synchronisation of any Connected System, which reviews every {type} Metaverse Object against the rule as it now stands." For an export Attribute Flow it reads "Existing objects get this at the next Full Synchronisation of {System}."
+
+JIM records an import change as awaiting synchronisation only when it can alter what an import produces:
+
+- **Not recorded**<br /> A cosmetic change (a name, a description), a save that changed nothing, and an edit to a rule that is disabled before and after the save.
+- **Simple Mode matching**<br /> A Simple Mode Object Matching Rule change is recorded for its Object Type only when an enabled import rule covers that type, since nothing else synchronises its objects.
+- **Tracking off**<br /> With [configuration change tracking](service-settings.md) off, JIM cannot tell what changed, so it records every save of an import rule.
+- **Recording fails**<br /> The change stays saved, and the save's Activity fails with a message telling you to run a Full Synchronisation, which applies it whatever was lost; see [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md).
+
+## :material-eye-outline: Previewing a change before you make it
 
 A confirmation tells you *what* you are changing. A **Configuration Change Preview** tells you what it would *do*: JIM evaluates the proposed change against the objects already in the Metaverse and reports which of them would be affected, changing nothing.
 
@@ -85,7 +142,7 @@ In the portal, previewing leaves the change unsaved: read the result, then save 
 
 Automation gets the same evaluation. Start a preview with [`New-JIMConfigurationChangePreview`](../powershell/previews.md), or `POST` to the surface's own preview endpoint in the [REST API](../../api/reference/), then pass the preview's Activity id back on the change itself so the audit records the link.
 
-## Where the confirmation appears
+## :material-page-layout-header-footer: Where the confirmation appears
 
 | Surface | Changes that can trigger it |
 |---|---|
@@ -95,13 +152,13 @@ Automation gets the same evaluation. Start a preview with [`New-JIMConfiguration
 | [Metaverse Attributes](metaverse.md#attributes) | Data type, plurality, Object Type bindings |
 | [Service Settings](service-settings.md) | The few settings that steer synchronisation; nearly all Service Settings are operational and save in silence |
 
-## When JIM stays silent
+## :material-bell-outline: When JIM stays silent
 
 The confirmation appears only when JIM can tell what changed, which means [configuration change tracking](service-settings.md) must be switched on. With tracking off there is no recorded baseline to compare against, so JIM says nothing rather than guessing. Creating a new object is never confirmed either: there is no prior state, so nothing existing is at risk.
 
 Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the Configuration Change History exactly as a portal change is.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Sync Preview](sync-preview.md): previewing what synchronising one object would do with the configuration you already have, including the destructive cascade
 - [Activities](activities.md): every configuration change is recorded as an Activity, with a versioned before-and-after snapshot
@@ -111,5 +168,5 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 - [Synchronisation Rules](deprovisioning.md#previewing-a-destructive-toggle-change): previewing a change to the destructive toggles
 - [Object Matching](object-matching-rules.md#previewing-an-object-matching-change): previewing a change to which identity an account joins
 - [Behaviour toggles](object-matching-rules.md#previewing-a-behaviour-change): previewing a change to whether a rule runs, and what it may create
-- [Connected Systems](connected-systems.md#configuration-changes-pending-a-full-synchronisation): the changed-since indicator
+- [Connected Systems](connected-systems.md#changes-awaiting-synchronisation): the changes awaiting synchronisation, and the changed-since indicator
 - [Service Settings](service-settings.md): switching configuration change tracking on or off

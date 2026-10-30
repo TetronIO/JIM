@@ -914,6 +914,31 @@ public class ConfigurationChangePreviewServerTests
         }
     }
 
+    /// <summary>
+    /// A group about one Connected System carries that system's name, read from the names lookup rather than from the
+    /// headers, whose counts read every Connected System Object.
+    /// </summary>
+    [Test]
+    public async Task RunPreviewAsync_GroupForAConnectedSystem_NamesTheSystemFromTheNamesLookupAsync()
+    {
+        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        connectedSystems.Setup(r => r.GetConnectedSystemNamesAsync())
+            .ReturnsAsync(new Dictionary<int, string> { [12] = "Corporate AD" });
+        _repo.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+        _adapter.Deltas.Add(OutOfScope("Ada") with { ConnectedSystemId = 12 });
+
+        var server = NewServer();
+        var request = NewRequest();
+        var start = await server.StartPreviewAsync(request);
+        await server.RunPreviewAsync(start.ActivityId, request, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_persistedGroups.Single().ConnectedSystemName, Is.EqualTo("Corporate AD"));
+            connectedSystems.Verify(r => r.GetConnectedSystemHeadersAsync(), Times.Never);
+        }
+    }
+
     private static PreviewDelta OutOfScope(string name) => new(
         ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope,
         ObjectDisplayName: name,

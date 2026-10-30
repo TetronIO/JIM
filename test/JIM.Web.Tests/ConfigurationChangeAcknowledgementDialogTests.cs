@@ -4,6 +4,7 @@
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Staging.DTOs;
 using JIM.Web.Models;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
@@ -173,6 +174,169 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
             Item("Enabled", ConfigurationChangeClass.SyncAffecting)));
 
         Assert.That(provider.Markup, Does.Not.Contain("from the preview"));
+    }
+
+    // -- when this takes effect (#2615): which variant shows is what the save will do ----------------------------------------
+
+    private const string Effect = "[data-testid='jim-effect']";
+    private const string EffectGeneral = "[data-testid='jim-effect-general']";
+    private const string EffectAwaiting = "[data-testid='jim-effect-awaiting-synchronisation']";
+    private const string EffectUntilThen = "[data-testid='jim-effect-until-then']";
+    private const string EffectExportReview = "[data-testid='jim-effect-export-review']";
+    private const string EffectFullSynchronisation = "[data-testid='jim-effect-full-synchronisation']";
+
+    private static ConfigurationChangePreflight PreflightWith(ConfigurationChangeEffect effect) =>
+        Preflight(ConfigurationChangeClass.SyncAffecting, Item("Enabled", ConfigurationChangeClass.SyncAffecting)).WithEffect(effect);
+
+    private static AwaitingSynchronisationEstimate Estimate(string objectType = "user", int objectCount = 12_500, TimeSpan? duration = null) => new()
+    {
+        ConnectedSystemId = 3,
+        ConnectedSystemName = "HR Import",
+        ConnectedSystemObjectTypeId = 7,
+        ObjectTypeName = objectType,
+        ObjectCount = objectCount,
+        EstimatedDuration = duration
+    };
+
+    [Test]
+    public void AcknowledgementDialog_NoEffectStated_GivesTheGeneralReminderOnly()
+    {
+        // Every surface that does not state its effect (a Connected System tab, a Service Setting).
+        var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting, Item("Enabled", ConfigurationChangeClass.SyncAffecting)));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectGeneral), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(Effect), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ImportChangeRecordedAsAwaiting_SaysWhenItTakesEffectAndWhereToFindIt()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect { ObjectTypesProcessedInFull = [Estimate()] }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(Effect), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(EffectAwaiting), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(EffectUntilThen), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(EffectExportReview), Is.Empty);
+            Assert.That(provider.FindAll(EffectFullSynchronisation), Is.Empty, "processing the type applies everything, so no Full Synchronisation is called for");
+            Assert.That(provider.FindAll(EffectGeneral), Is.Empty, "the general reminder would contradict it");
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_SeveralObjectTypesRecorded_GivesOneParagraphEach()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect
+        {
+            ObjectTypesProcessedInFull = [Estimate("user"), Estimate("group", objectCount: 40)]
+        }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectAwaiting), Has.Count.EqualTo(2));
+            Assert.That(provider.FindAll(EffectUntilThen), Has.Count.EqualTo(1), "where to find it is said once");
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ImportChange_StatesTheCountAndTheEstimateWhereThereIsOne()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect
+        {
+            ObjectTypesProcessedInFull = [Estimate(objectCount: 12_500, duration: TimeSpan.FromMinutes(28))]
+        }));
+
+        var paragraph = provider.Find(EffectAwaiting).TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paragraph, Does.Contain("12,500"));
+            Assert.That(paragraph, Does.Contain("28"));
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ImportChangeOnASystemWithNoFullSynchronisationHistory_LeavesOutTheDuration()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect
+        {
+            ObjectTypesProcessedInFull = [Estimate(objectCount: 12_500, duration: null)]
+        }));
+
+        var paragraph = provider.Find(EffectAwaiting).TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paragraph, Does.Contain("12,500"));
+            Assert.That(paragraph, Does.Not.Contain("minute"), "no speed to estimate from, so nothing is invented");
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ExportChangeThatFlagsObjects_SaysTheNextSynchronisationOfAnySystemReviewsThem()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect { ExportReviewMetaverseObjectTypeName = "Person" }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectExportReview), Has.Count.EqualTo(1));
+            Assert.That(provider.Find(EffectExportReview).TextContent, Does.Contain("Person"));
+            Assert.That(provider.FindAll(EffectAwaiting), Is.Empty);
+            Assert.That(provider.FindAll(EffectUntilThen), Is.Empty, "nothing is listed as awaiting synchronisation for an export change");
+            Assert.That(provider.FindAll(EffectFullSynchronisation), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ChangeLeftForAFullSynchronisation_NamesWhatAndWhere()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect
+        {
+            FullSynchronisationSections = ["Attribute Flow"],
+            FullSynchronisationConnectedSystemName = "Contoso AD"
+        }));
+
+        var paragraph = provider.Find(EffectFullSynchronisation).TextContent;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(paragraph, Does.Contain("Attribute Flow"));
+            Assert.That(paragraph, Does.Contain("Contoso AD"));
+            Assert.That(provider.FindAll(EffectAwaiting), Is.Empty);
+            Assert.That(provider.FindAll(EffectExportReview), Is.Empty);
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_ExportChangeThatFlagsObjectsAndAlsoEditsAnAttributeFlow_SaysBoth()
+    {
+        var provider = ShowDialog(PreflightWith(new ConfigurationChangeEffect
+        {
+            ExportReviewMetaverseObjectTypeName = "Person",
+            FullSynchronisationSections = ["Attribute Flow"],
+            FullSynchronisationConnectedSystemName = "Contoso AD"
+        }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectExportReview), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(EffectFullSynchronisation), Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void AcknowledgementDialog_EffectWithNothingToState_FallsBackToTheGeneralReminder()
+    {
+        // Defensive: a consequential change whose effect has nothing in it must not leave the administrator with no
+        // statement of when it applies at all.
+        var provider = ShowDialog(PreflightWith(ConfigurationChangeEffect.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectGeneral), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(Effect), Is.Empty);
+        }
     }
 
     private static ConfigurationChangePreflight Preflight(ConfigurationChangeClass highest,

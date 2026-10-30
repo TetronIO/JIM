@@ -11,6 +11,9 @@ function Get-JIMMetaverseObjectChangeHistory {
         ordered by change time descending (most recent first). Each record carries the
         initiator, Synchronisation Rule, and run profile context, plus the per-attribute value changes.
 
+        Each changed attribute carries its first ten value changes and, in valueChangeTotal, how many there are. A
+        change to a large group can carry one per member; Get-JIMMetaverseObjectChangeValue gets the rest.
+
         By default, returns a single page of results. Use -All to automatically paginate
         through all change records and return every row.
 

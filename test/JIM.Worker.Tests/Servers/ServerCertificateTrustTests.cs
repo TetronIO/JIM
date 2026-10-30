@@ -320,6 +320,42 @@ public class ServerCertificateTrustTests
         }
     }
 
+    [TestCase("intermediate")]
+    [TestCase("server")]
+    public async Task TrustServerCertificateAsync_WhenTheConnectionNeedsARootAndSomethingElseIsChosen_TrustsNothingAsync(string chosenTier)
+    {
+        // Oracle Database over TCPS: its driver accepts the chain only when it ends at a root trusted in JIM, so storing
+        // an intermediate or the server's own certificate would report "trusted" and the next connection would be refused
+        // exactly as before. The trust is refused instead, naming the root that does work.
+        GivenTheConnectedSystemIs(StubConnector.RootOnlyConnectorName);
+        var (_, intermediate, leaf) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId,
+            chosenTier == "server" ? leaf.Thumbprint : intermediate.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.RootRequired));
+            Assert.That(result.Message, Does.Contain("Corp Root CA"));
+            _mockCertRepo.Verify(r => r.CreateAsync(It.IsAny<TrustedCertificate>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task TrustServerCertificateAsync_WhenTheConnectionNeedsARootAndTheRootIsChosen_TrustsItAsync()
+    {
+        GivenTheConnectedSystemIs(StubConnector.RootOnlyConnectorName);
+        var (root, _, _) = GivenTheServerPresentsAThreeTierChain(ServerCertificateChainElementSource.SentByServer);
+
+        var result = await _jim.Certificates.TrustServerCertificateAsync(ConnectedSystemId, root.Thumbprint, _testUser);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(ServerCertificateTrustOutcome.Trusted));
+            Assert.That(result.Certificate!.Thumbprint, Is.EqualTo(root.Thumbprint));
+        }
+    }
+
     [Test]
     public async Task TrustServerCertificateAsync_WithASpacedThumbprint_StillMatchesTheCertificateAsync()
     {
@@ -616,19 +652,23 @@ public class ServerCertificateTrustTests
     {
         public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null)
         {
-            return connectorName == StubConnector.PlainConnectorName
-                ? new StubPlainConnector()
-                : new StubConnector();
+            return connectorName switch
+            {
+                StubConnector.PlainConnectorName => new StubPlainConnector(),
+                StubConnector.RootOnlyConnectorName => new StubConnector(trustAnchorMustBeRoot: true),
+                _ => new StubConnector()
+            };
         }
     }
 
-    private class StubConnector : IConnector, IConnectorSecureEndpoint
+    private class StubConnector(bool trustAnchorMustBeRoot = false) : IConnector, IConnectorSecureEndpoint
     {
         public const string SecureConnectorName = "Stub Secure Connector";
         public const string PlainConnectorName = "Stub Plain Connector";
+        public const string RootOnlyConnectorName = "Stub Root-Only Connector";
         public const string SettingBaseUrl = "Base URL";
 
-        public string Name => SecureConnectorName;
+        public string Name => trustAnchorMustBeRoot ? RootOnlyConnectorName : SecureConnectorName;
 
         public string? Description => null;
 
@@ -640,7 +680,8 @@ public class ServerCertificateTrustTests
             if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
                 return null;
 
-            return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS");
+            return new SecureEndpoint(uri.Host, uri.IsDefaultPort ? 443 : uri.Port, TimeSpan.FromSeconds(10), "test server", "HTTPS",
+                TrustAnchorMustBeRoot: trustAnchorMustBeRoot);
         }
     }
 

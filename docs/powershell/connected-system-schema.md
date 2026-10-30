@@ -9,9 +9,106 @@ audience: automation-author
 
 The schema cmdlets import a Connected System's schema and choose which of its Object Types and attributes JIM manages. The auxiliary object classes an LDAP Connected System composes have [their own page](connected-system-auxiliary-classes.md). How the schema shapes what JIM synchronises is covered in [Connected Systems](../configuration/connected-systems.md).
 
+```jim-diagram
+archetype: anatomy
+title: Which cmdlet sets each part of a Connected System's schema
+desc: "Import-JIMConnectedSystemSchema reads a Connected System's Object Types and their attributes into JIM, and refreshes them later; run it with -Preview first to see what a refresh would change. Set-JIMConnectedSystemObjectType sets whether JIM manages an Object Type, with -Selected. Set-JIMConnectedSystemAttribute sets, for each attribute, whether JIM manages it, with -Selected; which attribute is the external ID, with -IsExternalId, one per Object Type; and its data type, plurality and case-exactness, with -Type, -Plurality and -CaseExact. It changes one attribute at a time, or many at once with -AttributeUpdates. Get-JIMConnectedSystemObjectType reads the result."
+subject:
+  kind: object
+  label: Connected System schema
+  parts:
+    - { label: Object Types and attributes, detail: "`Import-JIMConnectedSystemSchema`" }
+    - { label: What a refresh would change, detail: "`-Preview`, before applying it" }
+    - { label: Which Object Types JIM manages, detail: "`Set-JIMConnectedSystemObjectType`" }
+    - { label: Which attributes JIM manages, detail: "`Set-JIMConnectedSystemAttribute`" }
+    - { label: The external ID, detail: "`-IsExternalId`, one per Object Type" }
+    - { label: "Type, plurality, case-exactness", detail: "`-Type`, `-Plurality`, `-CaseExact`" }
+    - { label: Many attributes at once, detail: "`-AttributeUpdates`" }
+```
+
 ---
 
-## Import-JIMConnectedSystemSchema
+## :material-table-search: Get-JIMConnectedSystemCatalogue
+
+Lists what a Connected System's source contains, read from the source's own catalogue: every table and view the configured account can see, or, for one of them, its columns, primary key and foreign keys. It also describes the columns a SELECT statement would return, without reading any rows. Use it to find the names to put in the SQL Connector's Object Types setting before importing the schema. Purely informational: it never writes anything. Connectors that cannot describe their source return an error naming why.
+
+<!-- BEGIN GENERATED: Get-JIMConnectedSystemCatalogue -->
+### Syntax
+
+```powershell
+# List (default)
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int>
+
+# Object
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int> -Name <string> [-Schema <string>]
+
+# Statement
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId <int> -Statement <string>
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `Name` | `string` | Yes (Object) |  | The table or view to describe. Matched ignoring case. |
+| `Schema` | `string` | No (Object) |  | The schema the table or view is in. Leave it out to find the object by name alone, which is refused when the name is in more than one schema. |
+| `Statement` | `string` | Yes (Statement) |  | A SELECT (or WITH) statement whose result columns to describe: a single statement, with no terminating semicolon. |
+
+### Output
+
+By default, one entry per table and view, tables first. With `-Name` or `-Statement`, one description.
+
+**By default**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `SchemaName` | `string` | The schema the object is in, e.g. "HR". Empty where the source has no schemas. |
+| `Name` | `string` | The object's name, exactly as the source spells it, e.g. "EMPLOYEES". |
+| `Kind` | `string` | Whether it is a "Table" or a "View". |
+
+**With `-Name` or `-Statement`**:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `SchemaName` | `string` | The schema the object is in. Empty for a query, or where the source has no schemas. |
+| `Name` | `string` | The object's name, exactly as the source spells it. Empty for a query. |
+| `Kind` | `string` | Whether it is a "Table", a "View" or a "Statement" (a query). |
+| `Columns` | `object[]` | Every column, in the order the source reports them. Each has `Name`, `DataTypeName`, `MaxLength`, `Precision`, `Scale` and `IsNullable`. |
+| `PrimaryKey` | `string[]` | The primary key's columns, in key order. Empty where none is declared, which is always so for a view or a query. |
+| `ForeignKeys` | `object[]` | The foreign keys the table declares, one entry per constraint. Empty for a view or a query. Each has `ConstraintName`, `Columns`, `ReferencedSchemaName`, `ReferencedObjectName` and `ReferencedColumns`. |
+<!-- END GENERATED: Get-JIMConnectedSystemCatalogue -->
+
+### Examples
+
+```powershell title="List the tables and views a Connected System can see"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3
+```
+
+```powershell title="List only the views"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 | Where-Object { $_.Kind -eq 'View' }
+```
+
+```powershell title="List a table's columns"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Schema 'HR' -Name 'EMPLOYEES' | Select-Object -ExpandProperty Columns
+```
+
+```powershell title="Find a table's primary key, the usual anchor"
+(Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Schema 'HR' -Name 'EMPLOYEES').PrimaryKey
+```
+
+```powershell title="Describe a SELECT statement's columns without running it"
+Get-JIMConnectedSystemCatalogue -ConnectedSystemId 3 -Statement 'SELECT EMPLOYEE_ID, GIVEN_NAME FROM HR.EMPLOYEES'
+```
+
+### Notes
+
+- It reads with the Connected System's saved settings, so save the connection settings first.
+- A view declares no keys, so its `PrimaryKey` and `ForeignKeys` are always empty; choose its anchor columns yourself.
+
+---
+
+## :material-import: Import-JIMConnectedSystemSchema
 
 Imports a Connected System's schema, its Object Types and their attributes, or refreshes one imported before.
 
@@ -89,7 +186,7 @@ With `-Preview`, what the refresh would change; with `-PassThru`, the Connected 
 | `InitialPasswordTimeToLive` | `string` | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Empty means JIM's default of seven days, and is reported as empty rather than as the default so a caller can tell a system configured to seven days from one never configured. |
 | `RequireSecureTransport` | `bool` | Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an administrator sets by hand, and a synchronised password change. |
 | `UnresolvedReferenceHandling` | `string` | How an imported reference value that cannot be resolved to a Connected System Object is treated. The default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while still logging the occurrence. One of `Error`, `Warn` or `Ignore`. |
-| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount` and `HighestChangeClass`. |
+| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount`, `HighestChangeClass` and `AwaitingSynchronisation`. |
 | `StrandedValueSweepArmedAt` | `datetime` | When a stranded-value sweep was armed by a Connector Space clear, or empty when no sweep is armed. The sweep runs at the first Full Synchronisation of this Connected System after LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays armed and a Full Synchronisation does nothing beyond ordinary synchronisation. |
 | `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
 | `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
@@ -139,7 +236,7 @@ New-JIMConnectedSystem "LDAP Directory" -ConnectorDefinitionId 1 -PassThru |
 
 ---
 
-## Get-JIMConnectedSystemObjectType
+## :material-shape-outline: Get-JIMConnectedSystemObjectType
 
 Gets the Object Types in a Connected System's schema, with their attributes.
 
@@ -209,7 +306,7 @@ Get-JIMConnectedSystem -Id 3 |
 
 ---
 
-## Set-JIMConnectedSystemObjectType
+## :material-pencil-outline: Set-JIMConnectedSystemObjectType
 
 Changes whether JIM manages a Connected System Object Type, and what happens to the values its objects contributed when they are deleted.
 
@@ -260,7 +357,7 @@ Deselecting an Object Type takes it out of management: the next Full Import mark
 
 ---
 
-## Set-JIMConnectedSystemAttribute
+## :material-tag-outline: Set-JIMConnectedSystemAttribute
 
 Updates the selection, external ID configuration, data type and case-exact declaration of attributes on a Connected System Object Type. Supports updating a single attribute or multiple attributes in bulk.
 
@@ -370,7 +467,7 @@ Set-JIMConnectedSystemAttribute -ConnectedSystemId 3 -ObjectTypeId 1 -AttributeU
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create, change and delete the Connected Systems whose schema these cmdlets manage
 - [Auxiliary Object Classes](connected-system-auxiliary-classes.md): the auxiliary classes an LDAP Connected System's Object Types carry

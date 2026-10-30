@@ -55,6 +55,9 @@ public interface ISyncEngine
     /// the inline incumbent-comparison gate so a lower-priority contribution does not overwrite a higher-priority
     /// one; when null (the default), every mapping flows as before (last-writer-wins).
     /// </param>
+    /// <param name="cannotResolveThisRun">Optional: whether an unresolved reference value is final for this run, because
+    /// the object it points at will not be joined before the run ends. A final reference does not hold back the
+    /// attribute's removals. Every unresolved reference is final when <paramref name="isFinalReferencePass"/> is true.</param>
     /// <returns>A list of errors raised during Attribute Flow (for example, a multi-valued source flowing
     /// to a single-valued target), empty if none.</returns>
     List<AttributeFlowError> FlowInboundAttributes(
@@ -65,7 +68,8 @@ public interface ISyncEngine
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
-        AttributePriorityContext? priorityContext = null);
+        AttributePriorityContext? priorityContext = null,
+        Func<ConnectedSystemObjectAttributeValue, bool>? cannotResolveThisRun = null);
 
     /// <summary>
     /// The derived pass of Metaverse-Derived Attribute Flows (#1750) for one level: evaluates every derived mapping
@@ -315,12 +319,13 @@ public interface ISyncEngine
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
-    /// LastConnectorDisconnectedDate, starting the deletion grace period. Ask AFTER removing the disconnected
-    /// CSO from the object's collection. Only a Projected object whose Type's Deletion Rule is
-    /// WhenLastConnectorDisconnected qualifies.
+    /// LastConnectorDisconnectedDate, starting the deletion grace period. Only a Projected object whose Type's
+    /// Deletion Rule is WhenLastConnectorDisconnected qualifies.
     /// </summary>
     /// <param name="mvo">The Metaverse Object the CSO was just disconnected from.</param>
-    bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo);
+    /// <param name="remainingConnectorCount">How many Connected System Objects are still joined to it once the
+    /// disconnect is written, counted from the store rather than the object's in-memory collection.</param>
+    bool ShouldMarkLastConnectorDisconnected(MetaverseObject mvo, int remainingConnectorCount);
 
     /// <summary>
     /// Decides what kind of export, if any, a Metaverse Object change stages against one export
@@ -363,14 +368,18 @@ public interface ISyncEngine
     /// Withdraws the changes staged on a Pending Export that an export evaluation has just found unnecessary,
     /// because the target already holds what the evaluation's skipped (no-net-change) changes would set: the same
     /// supersede rule as <see cref="MergeAttributeChangesIntoPendingExport"/>, applied when the answer for an
-    /// attribute is "no change". A change already sent and awaiting confirmation is kept. Pure in-memory mutation.
+    /// attribute is "no change". A change already sent and awaiting confirmation is kept, and a class add the withdrawal
+    /// leaves nothing to oblige is withdrawn with it. Pure in-memory mutation.
     /// </summary>
     /// <param name="stagedPendingExport">The Pending Export already staged for the CSO, mutated in place.</param>
     /// <param name="alreadyCurrentChanges">The changes the evaluation skipped as already current on the target.</param>
+    /// <param name="objectType">The Object Type the Pending Export writes, for its class membership; null leaves class
+    /// adds as they are.</param>
     /// <returns>The staged changes withdrawn, which the run records on the object's execution item (#2001).</returns>
     List<PendingExportAttributeValueChange> WithdrawChangesAlreadyCurrent(
         PendingExport stagedPendingExport,
-        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges);
+        IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType);
 
     /// <summary>
     /// Creates the Pending Export attribute value changes an export Synchronisation Rule's Attribute Flow

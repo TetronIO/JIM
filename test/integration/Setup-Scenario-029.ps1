@@ -104,7 +104,7 @@ Remove-Module JIM -Force -ErrorAction SilentlyContinue
 Import-Module $modulePath -Force -ErrorAction Stop
 Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 # In Development: only a development host or this harness can turn it on.
-Enable-JIMFeature -Name "Features.ScimServiceProvider" -AllowInDevelopment | Out-Null
+Enable-JIMFeature -Name "Features.ScimServiceProvider" | Out-Null
 Write-Host "  OK Connected; Features.ScimServiceProvider on" -ForegroundColor Green
 
 # Step 2: Resolve connector definitions

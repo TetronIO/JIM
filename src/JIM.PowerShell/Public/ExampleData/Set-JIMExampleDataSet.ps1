@@ -17,7 +17,7 @@ function Set-JIMExampleDataSet {
         The new name.
 
     .PARAMETER Culture
-        The .NET culture the values are in, for example "en-GB".
+        The culture code the values are in, for example "en-GB".
 
     .PARAMETER Values
         The values, replacing all of the Example Data Set's current ones.

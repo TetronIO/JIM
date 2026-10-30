@@ -9,9 +9,32 @@ audience: automation-author
 
 Worker Task cmdlets let you monitor and cancel queued and in-progress background operations (synchronisation runs, Connector Space clears, example data generation, and similar). Worker Tasks are ephemeral: once a task completes, its record is deleted and the associated [Activity](activities.md) becomes the durable audit record, so these cmdlets only ever return in-flight work.
 
+```jim-diagram
+archetype: comparison
+title: A Worker Task and the Activity it leaves behind
+desc: "A Worker Task exists only while its work is in flight: queued, processing or cancellation requested. Get-JIMWorkerTask reads it, with its status and the step it is on, and Stop-JIMWorkerTask cancels it, the cancellation completing asynchronously. Once the task completes, its record is deleted. The Activity is the durable audit record: Get-JIMActivity reads it, with its outcome and statistics, long after the task has gone; it is not something to stop. Once the task has started processing, its ActivityId links the two."
+columns:
+  - { label: Worker Task, sub: the work in flight }
+  - { label: Activity, sub: the durable record }
+rows:
+  - label: Exists
+    cells:
+      - { text: while queued or processing, sub: deleted once it completes }
+      - { text: after the task has gone }
+  - label: Read with
+    cells:
+      - { text: "`Get-JIMWorkerTask`", sub: "status, and the step it is on" }
+      - { text: "`Get-JIMActivity`", sub: outcome and statistics }
+  - label: Stop with
+    cells:
+      - { text: "`Stop-JIMWorkerTask`", sub: completes asynchronously }
+      - { text: nothing to stop, sub: it records what happened }
+footer: "Once a task starts processing, its `ActivityId` names its Activity"
+```
+
 ---
 
-## Get-JIMWorkerTask
+## :material-cog-outline: Get-JIMWorkerTask
 
 Gets currently queued, processing, or cancellation-requested Worker Tasks.
 
@@ -53,12 +76,17 @@ Each Worker Task's header, with one property the module adds.
 | `ObjectsProcessed` | `int` | The number of objects processed so far (from the associated Activity). |
 | `ProgressMessage` | `string` | The current progress message (from the associated Activity). |
 | `Steps` | `object` | The run's steps and the one running now, or empty where the task is not a Run Profile execution and so has no steps: clearing Connected System Objects, example data generation and factory reset all record none. A list view showing this task falls back to the object counts alone in that case. It has `CurrentStepName`, `CurrentStepNumber`, `TotalSteps` and `Steps`. |
+| `ExecutionMode` | `string` | Whether the worker runs this task on its own or together with the tasks queued alongside it. One of `Sequential` or `Parallel`. |
+| `Started` | `datetime` | When the worker started this task (UTC), or empty while it has not started. |
+| `ConnectedSystemRunProfileId` | `int` | The Run Profile this task executes, or empty where the task is not a Run Profile execution. |
+| `ConnectedSystemName` | `string` | The name of the Connected System whose Run Profile this task executes, or empty where the task is not a Run Profile execution or the Run Profile no longer exists. |
+| `RunProfileName` | `string` | The name of the Run Profile this task executes, or empty where the task is not a Run Profile execution or the Run Profile no longer exists. |
 | `ScheduleExecutionId` | `guid` | If this task is part of a schedule execution, the execution ID for UI grouping. |
 | `ScheduleExecutionName` | `string` | The schedule name at execution time, for display in the queue UI. |
 | `ScheduleStepIndex` | `int` | The step index within the schedule, for ordering within the group. |
 | `ScheduleTotalSteps` | `int` | The number of step groups the Schedule Execution is working through. |
 | `ScheduleCurrentStepIndex` | `int` | The step group the Schedule Execution has reached, counting from 0. |
-| `StepDisplay` | `string` | The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Queue, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run Profile execution, since those record no steps. |
+| `StepDisplay` | `string` | The step the run is on, as one sentence such as "Step 3 of 7: Saving changes". It is the sentence the portal shows in Admin > Operations > Activity, and the one `Start-JIMRunProfile -Wait` shows live, so a run reads the same wherever it is watched from. Empty for a task that is not a Run Profile execution, since those record no steps. |
 <!-- END GENERATED: Get-JIMWorkerTask -->
 
 ### Examples
@@ -81,7 +109,7 @@ Get-JIMWorkerTask | Where-Object { $_.Steps -and $_.Steps.CurrentStepNumber -eq 
 
 ---
 
-## Stop-JIMWorkerTask
+## :material-stop-circle-outline: Stop-JIMWorkerTask
 
 Cancels a queued or in-progress Worker Task. Cancellation completes asynchronously: JIM returns as soon as the request has been accepted.
 
@@ -118,7 +146,7 @@ Get-JIMWorkerTask | Stop-JIMWorkerTask -Force
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Activities](activities.md): cmdlets for reviewing the durable audit record a Worker Task leaves behind
 - [Schedules](schedules.md): cmdlets for configuring the automated workflows that queue Worker Tasks

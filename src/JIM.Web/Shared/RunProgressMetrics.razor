@@ -67,7 +67,7 @@
 
     <div class="jim-run-metrics">
         <div class="jim-run-metric">
-            <MudText Typo="Typo.caption" Class="jim-run-metric-label">Processed</MudText>
+            <MudText Typo="Typo.caption" Class="jim-run-metric-label">@ProcessedLabel</MudText>
             <MudText Typo="Typo.body1" Class="jim-run-metric-value">@ProcessedText</MudText>
         </div>
 
@@ -142,6 +142,13 @@
     public IReadOnlyList<ActivityPhase> Phases { get; set; } = [];
 
     /// <summary>
+    /// What the counters count in the running step: objects, or the reference values a Synchronisation's
+    /// cross-page reference step works through.
+    /// </summary>
+    [Parameter]
+    public RunPhaseCountUnit CountUnit { get; set; }
+
+    /// <summary>
     /// The Activity's message: what the run is doing inside the step it has reached. Null when the
     /// run is not in flight.
     /// </summary>
@@ -207,6 +214,8 @@
 
     private bool IsIndeterminate => ObjectsToProcess <= 0;
 
+    private string ProcessedLabel => CountUnit == RunPhaseCountUnit.ReferenceValues ? "Reference values processed" : "Processed";
+
     /// <summary>
     /// Truncated to the tenth rather than rounded, so the only thing that reads as 100% is a step
     /// that has genuinely finished. Rounding put "100.0%" on screen beside a time remaining for as
@@ -218,13 +227,12 @@
         : Math.Floor(Math.Clamp((double)ObjectsProcessed / ObjectsToProcess * 100d, 0d, 100d) * 10d) / 10d;
 
     /// <summary>
-    /// A rate of zero once the run is under way means samples exist but the counter has not moved,
-    /// which is the run tidying up rather than the run having stopped. Saying so beats an empty
-    /// cell or a fabricated estimate, and it is what the worker's own tracker used to report inside
-    /// the progress message. Before the first object is processed the rate is legitimately zero,
-    /// and that is a run yet to get going, not a stalled one.
+    /// Every object counted while the step is still running: it is saving what it processed. Only
+    /// the total says this. A counter standing still short of it is a run working through slow
+    /// objects (a page of large groups can hold it for minutes), and reading that as tidying up
+    /// put "Finishing up" beside 95%.
     /// </summary>
-    private bool IsStalled => ObjectsPerSecond is <= 0 && ObjectsProcessed > 0;
+    private bool IsFinishingUp => !IsIndeterminate && ObjectsProcessed >= ObjectsToProcess;
 
     private string ProcessedText => IsIndeterminate
         ? ObjectsProcessed.ToString("N0")
@@ -243,7 +251,7 @@
     {
         get
         {
-            if (IsStalled)
+            if (IsFinishingUp)
                 return "Finishing up";
 
             if (EstimatedSecondsRemaining is not { } seconds)

@@ -237,6 +237,12 @@ $matrixRows = @(
         providers = @('SqlServer', 'Oracle')
     }
     @{
+        name = 'Connection.OracleEncryption'
+        description = 'Native Network Encryption, the default, negotiates AES with SHA-2 checksumming against a real listener; None sends plain text'
+        tiers = @('Quick', 'Default', 'FullMatrix')
+        providers = @('Oracle')
+    }
+    @{
         name = 'Scale.FullImport500k'
         description = '500,000-row Full Import without unbounded memory growth'
         tiers = @('FullMatrix')

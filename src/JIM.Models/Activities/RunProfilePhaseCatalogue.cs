@@ -44,11 +44,12 @@ public static class RunProfilePhaseCatalogue
     [
         new(RunPhaseKeys.SyncPrepare, "Preparing"),
         new(RunPhaseKeys.SyncProcessObjects, "Processing Connected System Objects"),
-        new(RunPhaseKeys.SyncResolveCrossPageReferences, "Resolving cross-page references"),
-        // Only reached when the Temporal Scope Reconciler has flagged objects, so most runs record
-        // it skipped; that is the point of declaring it, because when it does run it batches
-        // through the flagged set and writes Pending Exports with nothing else accounting for it.
-        new(RunPhaseKeys.SyncReviewExportScope, "Reviewing export scope")
+        new(RunPhaseKeys.SyncResolveCrossPageReferences, "Resolving cross-page references", CountUnit: RunPhaseCountUnit.ReferenceValues),
+        // Only reached when the Temporal Scope Reconciler, an export rule change or a change made outside
+        // synchronisation has flagged objects, so most runs record it skipped; that is the point of
+        // declaring it, because when it does run it batches through the flagged set and writes Pending
+        // Exports with nothing else accounting for it.
+        new(RunPhaseKeys.SyncReviewExportScope, "Reviewing exports")
     ];
 
     private static readonly IReadOnlyList<RunProfilePhase> ExportPhases =
@@ -86,4 +87,16 @@ public static class RunProfilePhaseCatalogue
     /// </summary>
     public static string? GetConnectorHostPhaseKey(ConnectedSystemRunType runType) =>
         GetPhases(runType).FirstOrDefault(p => p.HostsConnectorPhases)?.Key;
+
+    /// <summary>
+    /// What the counters count while the given step of the given run type runs: its declared
+    /// <see cref="RunProfilePhase.CountUnit"/>, or objects for a step not declared here (a Connector's own) or none.
+    /// </summary>
+    public static RunPhaseCountUnit GetCountUnit(ConnectedSystemRunType? runType, string? phaseKey)
+    {
+        if (runType is not { } type || phaseKey == null)
+            return RunPhaseCountUnit.Objects;
+
+        return GetPhases(type).FirstOrDefault(p => p.Key == phaseKey)?.CountUnit ?? RunPhaseCountUnit.Objects;
+    }
 }

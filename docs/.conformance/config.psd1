@@ -8,8 +8,8 @@
 # This folder starts with a dot, so MkDocs never publishes it.
 @{
     # Pages the checks skip, as globs relative to docs/. Contributor pages leave the public site in
-    # Phase 5 of the plan, and the changelog page is a one-line include of CHANGELOG.md.
-    Exclude                 = @('CLAUDE.md', 'reference/changelog.md')
+    # Phase 5 of the plan.
+    Exclude                 = @('CLAUDE.md')
 
     # Block: every finding fails. Ratchet: findings beyond the baseline fail, and the baseline only
     # shrinks. Warn: reported, never fails. Promote a Warn rule to Ratchet or Block once it has run
@@ -43,7 +43,15 @@
         'LANG-6' = 'Block'
         'LANG-7' = 'Ratchet'
         'LANG-8' = 'Block'
+        # No names of what JIM is built with: it shipped clean, so it blocks (VOI-6).
+        'LANG-10' = 'Block'
         'TERM-1' = 'Block'
+        # No emoji: icons come from Material Design Icons, which the theme ships (STY-1, STY-3).
+        'STY-1'  = 'Block'
+        # Heading icons on a section's index page, every H2, and nowhere else (STY-3).
+        'STY-3'  = 'Block'
+        # Every page has a diagram (VIS-1), from its first commit.
+        'VIS-1'  = 'Block'
     }
 
     RequiredFrontMatter     = @('title', 'description', 'type', 'audience')
@@ -112,6 +120,10 @@
     # A folder or page is added once every page in it declares its type and has no baseline
     # entries, and is never taken off again.
     ConformantFolders       = @('getting-started', 'api', 'reference', 'administration', 'configuration', 'concepts', 'connectors', 'powershell')
+    # Ratchet rules introduced after their pages were conformant: they keep a baseline on
+    # conformant pages too, so the pages that predate them are held at their debt and a new
+    # page has none. Remove a rule from here when its baseline is empty, and promote it to Block.
+    BaselineOnConformant    = @()
     ConformantPages         = @(
         'index.md'
         'concepts/index.md'
@@ -196,4 +208,14 @@
     FuturePatterns          = @('\bcoming soon\b', '\b(?:is|are) planned\b', '(?<!(?:is|are) )\bplanned for\b', '\bfuture (?:releases?|versions?|updates?)\b',
         '\bwill be (?:added|introduced|supported|available|provided|extended)\b')
     MinimiserPatterns       = @('\bsimply\b', '\bstraightforward\b', '\bobviously\b', '\bof course\b')
+
+    # LANG-10 (regular expressions, any case unless a pattern turns it off with (?-i)). The frameworks and
+    # libraries JIM is built with, its own project names, and its development infrastructure. Not .NET on
+    # its own: a ".NET regular expression" or ".NET date format" names the syntax a reader writes. Not the
+    # jim.web, jim.worker and jim.scheduler containers, which a reader deploys, hence the case-sensitive
+    # project names.
+    InternalTermPatterns    = @('\b(?:Mud)?Blazor\b', '\bSignalR\b', '\bKestrel\b', '\b(?:ASP|ADO)\.NET\b', '\bNpgsql\b',
+        '\bEF Core\b', '\bEntity Framework\b', '\.NET (?:runtime|culture)\b',
+        '(?-i:\bJIM\.(?:Web|Worker|Scheduler|Application|Models|Data|PostgresData|Connectors|Utilities)\b)',
+        '\bdevcontainers?\b', '\bCodespaces\b', '\bintegration (?:lab|test harness)\b')
 }

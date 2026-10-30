@@ -89,7 +89,7 @@ try {
     }
     $meta = ConvertFrom-LabVmNote -Notes $vm.Notes
     $port = Get-LabReadinessPort -Role $meta.Role
-    $service = if ($meta.Role -eq 'FederationServer') { 'HTTPS' } else { 'LDAPS' }
+    $service = if ($meta.Role -eq 'DomainController') { 'LDAPS' } else { 'HTTPS' }
 
     $snapshots = @(Get-VMSnapshot -VMName $Name -Name $Checkpoint -ErrorAction SilentlyContinue)
     if ($snapshots.Count -eq 0) {

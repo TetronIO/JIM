@@ -90,10 +90,10 @@ print_step "Installing .NET Entity Framework Core tools..."
 # This handles cases where the tool cache becomes corrupted after container rebuilds
 rm -rf ~/.dotnet/tools/dotnet-ef ~/.dotnet/tools/.store/dotnet-ef 2>/dev/null || true
 # Use explicit version to avoid "Settings file not found" errors with latest package
-if dotnet tool install --global dotnet-ef --version 10.0.13; then
-    print_success "dotnet-ef 10.0.13 installed globally"
+if dotnet tool install --global dotnet-ef --version 10.0.14; then
+    print_success "dotnet-ef 10.0.14 installed globally"
 else
-    print_warning "dotnet-ef installation failed - you may need to install manually: dotnet tool install --global dotnet-ef --version 10.0.13"
+    print_warning "dotnet-ef installation failed - you may need to install manually: dotnet tool install --global dotnet-ef --version 10.0.14"
 fi
 
 # Add .NET tools to PATH
@@ -223,10 +223,10 @@ fi
 
 # 6. Install MkDocs Material for documentation preview
 print_step "Installing MkDocs Material..."
-if pip install "mkdocs>=1.6,<2" "mkdocs-material>=9.7,<10" "mkdocs-glightbox>=0.4,<1" --break-system-packages --quiet 2>/dev/null; then
+if pip install -r docs/requirements.txt --break-system-packages --quiet 2>/dev/null; then
     print_success "MkDocs Material installed (mkdocs serve on port 8000)"
 else
-    print_warning "MkDocs Material installation failed - you can install manually: pip install \"mkdocs>=1.6,<2\" \"mkdocs-material>=9.7,<10\" \"mkdocs-glightbox>=0.4,<1\" --break-system-packages"
+    print_warning "MkDocs Material installation failed - you can install manually: pip install -r docs/requirements.txt --break-system-packages"
 fi
 
 # 7. Install Playwright browser for the Playwright MCP server (in-IDE UI validation)

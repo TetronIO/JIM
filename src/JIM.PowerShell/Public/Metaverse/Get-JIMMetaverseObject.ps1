@@ -62,6 +62,9 @@ function Get-JIMMetaverseObject {
         values, where each came from, and the Connected System Objects joined to it. With -Count, the number of
         matching objects.
 
+        The object in full also carries ExportReviewPending: whether it is flagged for review against every export
+        Synchronisation Rule, which the next synchronisation of any Connected System carries out.
+
     .EXAMPLE
         Get-JIMMetaverseObject
 

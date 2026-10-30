@@ -736,8 +736,9 @@ public class ExportEvaluationServer
                 await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
                 workingSet.RecordDisconnection(new OutboundDisconnection(cso.Id, cso.ConnectedSystemId, mvo.Id, exportRule.Id, exportRule.Name));
 
-                // Was that the last connector? (Asked after the removal above, per the engine's contract.)
-                if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+                // Was that the last connector? Counted from what is still joined, now the disconnect is written, not
+                // from mvo.ConnectedSystemObjects, which holds only the connectors this run loaded (#2598).
+                if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo, await CountRemainingConnectorsAsync(mvo)))
                 {
                     mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
                     Log.Information("HandleOutboundDeprovisioningAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
@@ -765,6 +766,13 @@ public class ExportEvaluationServer
                 return null;
         }
     }
+
+    /// <summary>
+    /// How many Connected System Objects are still joined to <paramref name="mvo"/> in the store. Asked once a
+    /// disconnect or deletion has been written, it is the number of connectors the object has left.
+    /// </summary>
+    private async Task<int> CountRemainingConnectorsAsync(MetaverseObject mvo)
+        => (await SyncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id)).Count;
 
     /// <summary>
     /// Scope-out form of the never-exported cancellation. The CSO here comes from the per-page cache, which also
@@ -803,8 +811,8 @@ public class ExportEvaluationServer
         Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: Cancelled never-exported provisioning of CSO {CsoId} in system {SystemId} for MVO {MvoId}: removed unsent Create Pending Export {PendingExportId} and the CSO; nothing was exported",
             cso.Id, cso.ConnectedSystemId, mvo.Id, existingPe.Id);
 
-        // Was that the last connector? (Asked after the removal above, per the engine's contract.)
-        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo))
+        // Was that the last connector? Counted from what is still joined, now the object is deleted (#2598).
+        if (_syncEngine.ShouldMarkLastConnectorDisconnected(mvo, await CountRemainingConnectorsAsync(mvo)))
         {
             mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
             Log.Information("TryCancelNeverExportedProvisioningOnScopeOutAsync: MVO {MvoId} has no more connectors. LastConnectorDisconnectedDate set to {Date}",
@@ -1346,7 +1354,7 @@ public class ExportEvaluationServer
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
     /// Metaverse Objects (reference recall, #908). Without this, a target system without referential
     /// integrity keeps the deleted object (for example a leaver) as a group member forever: the
-    /// referencing group's CSOs never change, so the unchanged-skip means no sync ever re-evaluates
+    /// referencing group's CSOs never change, so no Delta Synchronisation ever re-evaluates
     /// them. Each referencing Metaverse Object is evaluated ONCE with every reference it lost in this
     /// batch, so a group losing many members in one run gets one Pending Export carrying all removals.
     /// Recall only updates existing target objects; provisioning remains the job of normal sync.
@@ -2672,7 +2680,7 @@ public class ExportEvaluationServer
             // Nothing new to stage, but a change queued earlier for one of these attributes may now be stale.
             if (existingCso != null)
             {
-                var withdrawn = await WithdrawQueuedChangesAlreadyCurrentAsync(existingCso.Id, alreadyCurrentChanges, cache, existingPendingExports, mvo.Id);
+                var withdrawn = await WithdrawQueuedChangesAlreadyCurrentAsync(existingCso.Id, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType, cache, existingPendingExports, mvo.Id);
                 RecordWithdrawal(withdrawals, existingCso.Id, exportRule, mvo.Id, withdrawn);
             }
 
@@ -2718,7 +2726,7 @@ public class ExportEvaluationServer
                 // dropped here exactly as in the merge-replace branch below.
                 var changesToMergeInMemory = DropChangesRestatingAHeldChange(attributeChanges, existingPendingExport, csoId.Value);
                 var mergeResult = _syncEngine.MergeAttributeChangesIntoPendingExport(existingPendingExport, changesToMergeInMemory);
-                var withdrawnInMemory = _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges);
+                var withdrawnInMemory = _syncEngine.WithdrawChangesAlreadyCurrent(existingPendingExport, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType);
                 RecordWithdrawal(withdrawals, csoId.Value, exportRule, mvo.Id, withdrawnInMemory);
 
                 if (mergeResult.ReplacedCount > 0 || mergeResult.AddedCount > 0)
@@ -2878,7 +2886,7 @@ public class ExportEvaluationServer
                 // The queued changes the target no longer needs are withdrawn rather than carried into the replacement;
                 // read before the delete below detaches them, so the run can report what was withdrawn (#2001).
                 var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(
-                    attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges);
+                    attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges, exportRule.ConnectedSystemObjectType);
 
                 // Every incoming change restated a held change: the evaluation stages nothing new, so the persisted
                 // Pending Export is kept, as the no-change path above keeps it. Anything the target no longer needs is
@@ -2914,32 +2922,7 @@ public class ExportEvaluationServer
                 // change on purpose). The rebuilt Pending Export is reconciled while any change awaits
                 // confirmation, whatever its own status (see SyncEngine.ReconcileCsoAgainstPendingExport).
                 var driftOnlyChanges = SelectSurvivingDriftChanges(attributeChanges, dbPendingExport.AttributeValueChanges, alreadyCurrentChanges)
-                    .Select(avc => new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = avc.AttributeId,
-                        Attribute = avc.Attribute,
-                        StringValue = avc.StringValue,
-                        DateTimeValue = avc.DateTimeValue,
-                        IntValue = avc.IntValue,
-                        LongValue = avc.LongValue,
-                        DecimalValue = avc.DecimalValue,
-                        ByteValue = avc.ByteValue,
-                        GuidValue = avc.GuidValue,
-                        BoolValue = avc.BoolValue,
-                        UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
-                        ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
-                        ChangeType = avc.ChangeType,
-                        SyncRuleId = avc.SyncRuleId,
-                        SyncRuleName = avc.SyncRuleName,
-                        Status = avc.Status,
-                        ExportAttemptCount = avc.ExportAttemptCount,
-                        LastExportedAt = avc.LastExportedAt,
-                        LastImportedValue = avc.LastImportedValue,
-                        // A held change stays held through the rebuild (#2039); dropping the flag would have the next
-                        // import retry a value the target refuses until the Initial Password is delivered.
-                        AwaitsInitialPassword = avc.AwaitsInitialPassword
-                    })
+                    .Select(SyncEngine.CarryOverSurvivingChange)
                     .ToList();
 
                 var mergedChanges = new List<PendingExportAttributeValueChange>(attributeChanges);
@@ -2952,11 +2935,13 @@ public class ExportEvaluationServer
 
                 replacedPendingExport = dbPendingExport;
 
-                // Delete the old PE from the database
+                // Delete the old PE from the database: at once, or queued for the batch's single delete when the
+                // caller has opened a Pending Export batch (the cross-page reference step, #2492). Either way it reads
+                // as gone from here on, and the replacement below is inserted after it.
                 using (var deleteSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("DeletePendingExportForMerge")
                     .SetTag("attributeChangeCount", dbPendingExport.AttributeValueChanges.Count))
                 {
-                    await SyncRepo.DeletePendingExportAsync(dbPendingExport);
+                    await SyncRepo.DeletePendingExportForMergeAsync(dbPendingExport);
                     deleteSpan.SetSuccess();
                 }
 
@@ -3152,15 +3137,7 @@ public class ExportEvaluationServer
 
         // Persist immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
-        {
             await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-
-            // Add to lookup cache so confirming imports can find this PendingProvisioning CSO
-            // by secondary external ID without a DB round-trip.
-            // When deferSave=true, the caller (FlushPendingExportOperationsAsync) handles cache population.
-            if (secondaryIdChange.StringValue != null)
-                Application.ConnectedSystems.AddCsoToCache(cso.ConnectedSystemId, cso.SecondaryExternalIdAttributeId.Value, secondaryIdChange.StringValue, cso.Id);
-        }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
             LogSanitiser.Sanitise(secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown"), cso.Id, deferSave);
@@ -3251,6 +3228,7 @@ public class ExportEvaluationServer
     private async Task<List<PendingExportAttributeValueChange>> WithdrawQueuedChangesAlreadyCurrentAsync(
         Guid csoId,
         IReadOnlyCollection<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType,
         ExportEvaluationCache cache,
         List<PendingExport>? existingPendingExports,
         Guid mvoId)
@@ -3262,7 +3240,7 @@ public class ExportEvaluationServer
         var inMemory = existingPendingExports?.FirstOrDefault(pe => pe.ConnectedSystemObjectId == csoId);
         if (inMemory is { ChangeType: PendingExportChangeType.Update })
         {
-            withdrawn.AddRange(_syncEngine.WithdrawChangesAlreadyCurrent(inMemory, alreadyCurrentChanges));
+            withdrawn.AddRange(_syncEngine.WithdrawChangesAlreadyCurrent(inMemory, alreadyCurrentChanges, objectType));
             if (withdrawn.Count > 0)
             {
                 if (inMemory.AttributeValueChanges.Count == 0)
@@ -3281,7 +3259,7 @@ public class ExportEvaluationServer
         if (persisted is not { ChangeType: PendingExportChangeType.Update } || persisted.Status == PendingExportStatus.Executing)
             return withdrawn;
 
-        var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], persisted.AttributeValueChanges, alreadyCurrentChanges);
+        var withdrawnFromPersisted = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], persisted.AttributeValueChanges, alreadyCurrentChanges, objectType);
         if (withdrawnFromPersisted.Count == 0)
             return withdrawn;
 
@@ -3659,7 +3637,8 @@ public class ExportEvaluationServer
         // What a real evaluation would withdraw from the object's queued Pending Export (#2001), for a synchronisation and
         // a recall alike: the recall executors record the same withdrawal (#2011).
         var withdrawnChanges = PreviewQueuedChangesWithdrawn(
-            queuedPendingExport, existingCso, effectiveChangeType, evaluatedChangeCount, attributeChanges, noNetChangeSkippedChanges);
+            queuedPendingExport, existingCso, effectiveChangeType, evaluatedChangeCount, attributeChanges, noNetChangeSkippedChanges,
+            exportRule.ConnectedSystemObjectType);
 
         return new OutboundPreviewEntry
         {
@@ -3732,7 +3711,8 @@ public class ExportEvaluationServer
         PendingExportChangeType? changeType,
         int evaluatedChangeCount,
         List<PendingExportAttributeValueChange> attributeChanges,
-        List<PendingExportAttributeValueChange> alreadyCurrentChanges)
+        List<PendingExportAttributeValueChange> alreadyCurrentChanges,
+        ConnectedSystemObjectType? objectType)
     {
         if (queued == null || existingCso == null || alreadyCurrentChanges.Count == 0)
             return [];
@@ -3740,7 +3720,7 @@ public class ExportEvaluationServer
         if (evaluatedChangeCount == 0)
         {
             return changeType == PendingExportChangeType.Update && queued.ChangeType == PendingExportChangeType.Update && queued.Status != PendingExportStatus.Executing
-                ? SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], queued.AttributeValueChanges, alreadyCurrentChanges)
+                ? SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], queued.AttributeValueChanges, alreadyCurrentChanges, objectType)
                 : [];
         }
 
@@ -3751,7 +3731,7 @@ public class ExportEvaluationServer
             return [];
         }
 
-        return SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, queued.AttributeValueChanges, alreadyCurrentChanges);
+        return SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent(attributeChanges, queued.AttributeValueChanges, alreadyCurrentChanges, objectType);
     }
 
     /// <summary>

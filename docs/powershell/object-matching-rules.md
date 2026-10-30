@@ -9,9 +9,22 @@ audience: automation-author
 
 The Object Matching Rule cmdlets manage how JIM pairs a Connected System Object with an existing Metaverse Object, on import and before provisioning, and switch where those rules live. In simple mode, the default, a Connected System's rules sit on its Object Types and every Synchronisation Rule for the type shares them: the `*-JIMMatchingRule` cmdlets manage them. In advanced mode each Synchronisation Rule has its own, managed with the `*-JIMSyncRuleMatchingRule` cmdlets. JIM consults only the rules of the mode a Connected System is in, and refuses to create a rule of the other kind. How matching works, and when to use each mode, is covered in [Object Matching Rules](../configuration/object-matching-rules.md).
 
+```jim-diagram
+archetype: lifecycle
+title: Switching a Connected System between matching modes
+desc: 'A Connected System is in one of two matching modes, and JIM consults only that mode''s Object Matching Rules. Simple mode, the default, keeps the rules on its Object Types, managed with the *-JIMMatchingRule cmdlets. Advanced mode gives each Synchronisation Rule its own, managed with the *-JIMSyncRuleMatchingRule cmdlets. Switch-JIMMatchingMode -Mode SyncRule moves it to advanced mode and copies each Object Type''s rules onto its import Synchronisation Rules that have none; export rules receive nothing. Switch-JIMMatchingMode -Mode ConnectedSystem moves it back to simple mode and moves the Synchronisation Rules'' rules onto their Object Types. JIM refuses to create a rule of the other mode''s kind.'
+container: {label: Connected System, note: '`Switch-JIMMatchingMode` moves it between modes; JIM consults only the current mode''s rules'}
+states:
+- {id: simple, label: Simple mode, sub: 'the default: rules on each Object Type'}
+- {id: advanced, label: Advanced mode, sub: rules on each Synchronisation Rule}
+transitions:
+- {from: simple, to: advanced, label: '`-Mode SyncRule`', note: copies rules onto import rules}
+- {from: advanced, to: simple, label: '`-Mode ConnectedSystem`', note: moves rules onto Object Types}
+```
+
 ---
 
-## Switch-JIMMatchingMode
+## :material-toggle-switch-variant: Switch-JIMMatchingMode
 
 Switches a Connected System between simple mode, where its Object Matching Rules sit on its Object Types, and advanced mode, where each Synchronisation Rule has its own. The rules move with the switch.
 
@@ -66,7 +79,7 @@ Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode ConnectedSystem -PassThru |
 
 ---
 
-## Get-JIMMatchingRule
+## :material-vector-link: Get-JIMMatchingRule
 
 Gets the Object Matching Rules on a Connected System Object Type, in the order JIM tries them, or one rule by ID. These are the rules simple mode uses.
 
@@ -107,6 +120,7 @@ The rules, in the order JIM tries them, or the one rule.
 | `Sources` | `object[]` | The rule's source: one entry, naming a Connected System attribute or an expression. Each has `Id`, `Order`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName` and `Expression`. |
 | `CaseSensitive` | `bool` | Whether the comparison respects case; false ignores it. |
 | `Created` | `datetime` | When the rule was created. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a create or update of the rule: the Connected System Object Types the save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the save recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the rule belongs to, so the rule can be piped to `Set-JIMMatchingRule` and `Remove-JIMMatchingRule`. |
 <!-- END GENERATED: Get-JIMMatchingRule -->
 
@@ -122,7 +136,7 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 
 ---
 
-## New-JIMMatchingRule
+## :material-plus-circle-outline: New-JIMMatchingRule
 
 Creates an Object Matching Rule on a Connected System Object Type: a Connected System attribute, or an expression over the Connected System Object, matched against a Metaverse attribute on the Metaverse Object Type the rule searches.
 
@@ -155,7 +169,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int> -MetaverseObjec
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing.
+With `-PassThru`, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMMatchingRule](#get-jimmatchingrule).
 <!-- END GENERATED: New-JIMMatchingRule -->
@@ -187,7 +201,7 @@ New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 3 `
 
 ---
 
-## Set-JIMMatchingRule
+## :material-pencil-outline: Set-JIMMatchingRule
 
 Changes an Object Matching Rule on a Connected System Object Type. What you leave out stays as it is; a source attribute or expression replaces the rule's source.
 
@@ -223,7 +237,7 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int> -SourceExpression <string
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing.
+With `-PassThru`, the rule as changed; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMMatchingRule](#get-jimmatchingrule).
 <!-- END GENERATED: Set-JIMMatchingRule -->
@@ -244,7 +258,7 @@ Set-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -SourceExpression '"E" + Trim(cs[
 
 ---
 
-## Remove-JIMMatchingRule
+## :material-trash-can-outline: Remove-JIMMatchingRule
 
 Deletes an Object Matching Rule from a Connected System Object Type.
 
@@ -282,7 +296,7 @@ Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Force
 
 ---
 
-## Get-JIMSyncRuleMatchingRule
+## :material-link-variant: Get-JIMSyncRuleMatchingRule
 
 Gets the Object Matching Rules on a Synchronisation Rule, in the order JIM tries them, or one rule by ID. These are the rules advanced mode uses.
 
@@ -322,6 +336,7 @@ The rules, in the order JIM tries them, or the one rule.
 | `Sources` | `object[]` | The rule's source: one entry, naming a Connected System attribute or an expression. Each has `Id`, `Order`, `ConnectedSystemAttributeId`, `ConnectedSystemAttributeName` and `Expression`. |
 | `CaseSensitive` | `bool` | Whether the comparison respects case; false ignores it. |
 | `Created` | `datetime` | When the rule was created. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a create or update of the rule: the Connected System Object Types the save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the save recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 <!-- END GENERATED: Get-JIMSyncRuleMatchingRule -->
 
 ### Examples
@@ -336,7 +351,7 @@ Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3
 
 ---
 
-## New-JIMSyncRuleMatchingRule
+## :material-link-variant-plus: New-JIMSyncRuleMatchingRule
 
 Creates an Object Matching Rule on a Synchronisation Rule: a Connected System attribute, or an expression over the Connected System Object, matched against a Metaverse attribute. The rule searches the Synchronisation Rule's Metaverse Object Type, so there is none to give.
 
@@ -367,7 +382,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int> -SourceExpression <string> -Target
 
 ### Output
 
-With `-PassThru`, the rule created; otherwise nothing.
+With `-PassThru`, the rule created; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the new rule makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMatchingRule](#get-jimsyncrulematchingrule).
 <!-- END GENERATED: New-JIMSyncRuleMatchingRule -->
@@ -396,7 +411,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
 
 ---
 
-## Set-JIMSyncRuleMatchingRule
+## :material-link-edit: Set-JIMSyncRuleMatchingRule
 
 Changes an Object Matching Rule on a Synchronisation Rule. What you leave out stays as it is; a source attribute or expression replaces the rule's source.
 
@@ -431,7 +446,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int> -SourceExpression <strin
 
 ### Output
 
-With `-PassThru`, the rule as changed; otherwise nothing.
+With `-PassThru`, the rule as changed; otherwise nothing. AwaitingSynchronisation names the Connected System Object Type the change makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream.
 
 Properties as under [Get-JIMSyncRuleMatchingRule](#get-jimsyncrulematchingrule).
 <!-- END GENERATED: Set-JIMSyncRuleMatchingRule -->
@@ -450,7 +465,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 `
 
 ---
 
-## Remove-JIMSyncRuleMatchingRule
+## :material-link-variant-remove: Remove-JIMSyncRuleMatchingRule
 
 Deletes an Object Matching Rule from a Synchronisation Rule.
 
@@ -488,7 +503,7 @@ Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 -Force
 
 ---
 
-## Test-JIMMatchingRule
+## :material-test-tube: Test-JIMMatchingRule
 
 Tests what a saved Object Matching Rule would match on for sample values or a real Connected System Object and, with `-LookUp`, which Metaverse Object a synchronisation would join. See [Testing a rule](../configuration/object-matching-rules.md#testing-a-rule).
 
@@ -546,7 +561,7 @@ Test-JIMMatchingRule -ConnectedSystemId 3 -Id 40 -ConnectedSystemObjectId '0b0e1
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Object Matching Rules](../configuration/object-matching-rules.md): how matching works, its outcomes, matching on an expression, and the two modes
 - [Previews](previews.md#new-jimconfigurationchangepreview): preview a change to the rules, or a mode switch, before making it

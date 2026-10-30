@@ -13,10 +13,29 @@ The JIM SQL Connector connects JIM to identity data held in a relational databas
 
 One Connected System covers one database, and can synchronise several of its tables at once. You describe which tables (or views) hold which kind of object in a short JSON document; JIM discovers the columns and their types from the database itself.
 
+```jim-diagram
+archetype: anatomy
+title: What one entry in the Object Types document says
+desc: "Each entry in the Object Types document describes one Object Type, and says only what the database cannot. name is what JIM calls the Object Type. table, or a select statement, is where its rows come from; an Object Type read through select can be imported but not exported to. anchorColumns are the columns that identify a row, and become its External ID. columns lists the columns holding another object's key, which become references. relatedTables names child tables, each of which becomes a multi-valued attribute. watermarkColumn or changeLog is needed only for a Delta Import. JIM discovers the ordinary columns and their types itself, and checks the document when you save it."
+subject:
+  kind: object
+  label: One Object Type entry
+  parts:
+    - { label: "`name`", detail: what JIM calls the Object Type }
+    - { label: "`table` or `select`", detail: "where its rows come from; `select` is import only" }
+    - { label: "`anchorColumns`", detail: "identify a row: the External ID" }
+    - { label: "`columns`", detail: "another object's key: a reference" }
+    - { label: "`relatedTables`", detail: "a child table: a multi-valued attribute" }
+    - { label: "`watermarkColumn` or `changeLog`", detail: for Delta Import only }
+properties:
+  - { name: Ordinary columns, value: discovered by JIM }
+  - { name: Checked, value: when you save }
+```
+
 !!! note "This page is about databases JIM synchronises with"
     JIM's own data store is PostgreSQL and is configured when JIM is deployed; see [Deployment](../administration/deployment.md). Nothing on this page affects it.
 
-## Supported databases
+## :material-database-outline: Supported databases
 
 | Database | Connection | Notes |
 |----------|------------|-------|
@@ -25,22 +44,22 @@ One Connected System covers one database, and can synchronise several of its tab
 
 Both databases use the same settings and the same Object Types document, and behave the same way; only the connection details differ. For other database engines, see [Wider database support](#wider-database-support).
 
-## What the connector can do
+## :material-format-list-checks: What the connector can do
 
 | Capability | Supported | What it means for you |
 |---|---|---|
-| Full Import | ✅ | Reads every row of each table or view you have selected. Large tables are read a page at a time, so a table of half a million rows is a routine import. See [Full Import](#full-import). |
-| Delta Import | ✅ | Reads only what has changed since the last import, using either a change-log table your database maintains or a last-modified column. See [Delta Import](#delta-import). |
-| Export | ✅ | Creates, updates and deletes rows, including the rows of related tables (phone numbers, group members). See [Export](#export). |
-| Multi-valued attributes | ✅ | A table holding one row per value (a person's phone numbers, a group's members) becomes a multi-valued attribute on the parent object. |
-| References | ✅ | A column holding another row's key (a manager, a department) is synchronised as a reference to that object, not as a bare number. |
-| Paging | ✅ | The Run Profile's Page Size sets how many rows are read per query. |
-| Partitions and Containers | ❌ | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
-| Parallel Export | ❌ | Exports are written one object at a time, each in its own transaction. |
-| Password set | ❌ | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
-| Probe | ✅ | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](jim-sql-connector-values-in-use.md). |
+| Full Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads every row of each table or view you have selected. Large tables are read a page at a time, so a table of half a million rows is a routine import. See [Full Import](#full-import). |
+| Delta Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Reads only what has changed since the last import, using either a change-log table your database maintains or a last-modified column. See [Delta Import](#delta-import). |
+| Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Creates, updates and deletes rows, including the rows of related tables (phone numbers, group members). See [Export](#export). |
+| Multi-valued attributes | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | A table holding one row per value (a person's phone numbers, a group's members) becomes a multi-valued attribute on the parent object. |
+| References | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | A column holding another row's key (a manager, a department) is synchronised as a reference to that object, not as a bare number. |
+| Paging | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | The Run Profile's Page Size sets how many rows are read per query. |
+| Partitions and Containers | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | Not applicable to databases. Each Object Type names its own table, which is all the scoping a database needs. |
+| Parallel Export | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | Exports are written one object at a time, each in its own transaction. |
+| Password set | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | JIM does not write passwords to databases. Applications that hold passwords in a table store them in their own format, which JIM cannot safely produce. |
+| Probe | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the database whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](jim-sql-connector-values-in-use.md). |
 
-## Before you begin
+## :material-clipboard-list-outline: Before you begin
 
 You will need:
 
@@ -50,7 +69,7 @@ You will need:
 - **To know your tables**: which table or view holds each kind of object, which column (or columns) identifies a row, and which columns hold other rows' keys. A DBA can usually answer this in minutes.
 - **The time zone the database records in**, if it stores dates and times without an offset. Most do; see [Dates and times](#dates-and-times).
 
-## Setting up a Connected System
+## :material-server-network-outline: Setting up a Connected System
 
 ### Step 1: Create the Connected System
 
@@ -82,7 +101,7 @@ JIM builds the connection string from these values; there is nothing to paste, a
 | Setting | Applies to | Default | What it does |
 |---------|------------|---------|--------------|
 | Encrypt Connection | SQL Server | On | Encrypts the connection with TLS. If the server cannot encrypt, the connection fails rather than falling back to plain text. The server's certificate is checked against your operating system's trusted authorities and any certificates you have added under **Admin > Certificates**. |
-| Oracle Encryption | Oracle | Native Network Encryption | **Native Network Encryption** encrypts the session on the ordinary listener with no certificates to manage, and is how most Oracle estates encrypt client traffic. **TCPS (TLS)** uses a TLS listener (usually port 2484) and a server certificate. **None** sends data unencrypted; use it only in a lab. |
+| Oracle Encryption | Oracle | Native Network Encryption | **Native Network Encryption** encrypts the session on the ordinary listener with no certificates to manage, and is how most Oracle estates encrypt client traffic. **TCPS (TLS)** uses a TLS listener (usually port 2484) and a server certificate; one from your own certificate authority works once the root of its chain is trusted in JIM. **None** sends data unencrypted; use it only in a lab. |
 | Connection Timeout | Both | 30 seconds | How long to wait for the server before giving up. |
 
 #### Date and Time
@@ -104,7 +123,7 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 | Setting | Required | What to enter |
 |---------|----------|---------------|
-| Object Types | Yes | The JSON document describing your tables. Step 2 explains it. |
+| Object Types | Yes | Which tables or views hold each kind of object, and what identifies a row. The portal shows one card per Object Type; Step 2 explains it. |
 
 #### Delta Import
 
@@ -114,7 +133,36 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-The **Object Types** setting tells JIM which tables hold which objects. Each entry names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type** and work through its steps:
+
+```jim-diagram
+archetype: flow
+title: The steps of Add Object Type
+desc: "Add Object Type works through four steps. Source names the Object Type and the table, view or SELECT statement it reads from (1). Anchor chooses the columns that identify a row, with the table's primary key preselected (2). References marks columns holding another Object Type's anchor (3), and Multi-valued attributes adds child tables holding one row per value (4); both are optional, so the Object Type can be added from the Anchor step on. The result is a card for the Object Type, where everything the steps set can be changed later."
+out: { label: Object Type card, note: everything stays editable }
+steps:
+  - { id: source, label: Source, sub: "table, view or SELECT", badge: 1 }
+  - { id: anchor, label: Anchor, sub: primary key preselected, badge: 2 }
+  - { id: refs, label: References, sub: optional, badge: 3 }
+  - { id: mva, label: Multi-valued attributes, sub: optional, badge: 4 }
+```
+
+1. **Source**: a name for the Object Type, and its **Schema** and **Table or view**, or a **SELECT statement** where you cannot create a view.
+2. **Anchor**: the column or columns whose values identify a row, in key order. JIM preselects the table's primary key and says so; a view declares no keys, so for a view you choose.
+3. **References** (optional): columns whose values hold another object's anchor, such as a manager.
+4. **Multi-valued attributes** (optional): child tables holding one row per value, such as phone numbers or group members.
+
+The Object Type can be added from the Anchor step on; anything skipped can be added later on its card, where everything the steps set can also be changed.
+
+Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where a column has a foreign key to another Object Type's anchor, JIM offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it, opening **Add Object Type** with that table chosen. Nothing changes until you accept. If JIM cannot reach the database, it says why, names are typed instead, and **Retry** reads the list again.
+
+You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent. A card shows any problem with its Object Type as you work, and a collapsed card shows how many it has.
+
+#### The Object Types document
+
+Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows, highlighted and with line numbers, so you can copy it out or paste one in. Each problem JIM finds is listed above the text and marked on its line, and **Save Settings** waits until there are none. A pasted document that is not valid JSON, or that uses a field the document does not have, has to be fixed there before **View as cards** can show it. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
+
+Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 
 ```json title="A Person with a manager reference and a related table of phone numbers"
 {
@@ -141,11 +189,9 @@ The **Object Types** setting tells JIM which tables hold which objects. Each ent
 }
 ```
 
-You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent.
+The document is checked when you save. A mistake is reported immediately, naming the Object Type and field, and an unrecognised field name is treated as a mistake rather than ignored, so a typo cannot silently leave data out. Where the unrecognised name is close to a real one, the message suggests it: `Did you mean 'anchorColumns'?`.
 
-The document is checked when you save. A mistake is reported immediately, naming the Object Type and field, and an unrecognised field name is treated as a mistake rather than ignored, so a typo cannot silently leave data out.
-
-#### Object Type fields
+##### Object Type fields
 
 | Field | Required | What it is |
 |-------|----------|------------|
@@ -159,7 +205,7 @@ The document is checked when you save. A mistake is reported immediately, naming
 | `watermarkColumn` | For Watermark Column Delta Import | The last-modified column on this table; see [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md). |
 | `changeLog` | For Change-Log Table Delta Import | The change-log table for this Object Type; see [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md). |
 
-#### Related table fields
+##### Related table fields
 
 A related table turns a child table into a multi-valued attribute. The commonest case is group membership: a `GROUP_MEMBERS` table of `(GROUP_ID, EMPLOYEE_ID)` becomes a `Members` attribute on the `Group` Object Type, and with `referencesObjectType` each member is a reference to a `Person`. Every row is a value, whatever the column's type, so a related table of dates imports each date. A related table of true or false values becomes a single-valued attribute, because a Boolean holds one value; a parent with rows holding both has each value reported rather than one chosen.
 
@@ -188,7 +234,7 @@ What you will see:
 
 Create [Run Profiles](../configuration/run-profiles.md) for the operations you need (Full Import, Delta Import, Export) and [Synchronisation Rules](../configuration/synchronisation-rules.md) to say what flows where, exactly as for any other Connected System. The sections below describe how each operation behaves against a database, and what to expect.
 
-## How the connector behaves
+## :material-cog-outline: How the connector behaves
 
 ### Full Import
 
@@ -274,29 +320,29 @@ Schema discovery gives each date column a [Date resolution](../configuration/con
 
 The Connector's own Delta Import watermarks and anchors are held more finely, to a ten-millionth of a second (seven fractional digits). An Oracle `TIMESTAMP(9)` column is fine as a Delta Import watermark, change-log sequence or anchor so long as its values carry no more digits than that, which is always the case for values from `SYSTIMESTAMP` (microseconds). A value with genuine nanoseconds is read back shortened, so the row a page or a run stopped on is read again.
 
-## Worked examples
+## :material-file-document-outline: Worked examples
 
 [SQL Connector Worked Examples](jim-sql-connector-examples.md) configures two databases end to end: an HR application on Microsoft SQL Server, and an HR schema with groups on Oracle Database.
 
-## Security
+## :material-shield-lock-outline: Security
 
 [SQL Connector Security](jim-sql-connector-security.md) covers the database account's permissions, encryption in transit and a connection test that fails on the certificate, how the password is kept out of logs, and what you are trusting.
 
-## Licensing notice
+## :material-scale-balance: Licensing notice
 
 The Oracle dialect uses **Oracle Data Provider for .NET, Managed Driver** (`Oracle.ManagedDataAccess.Core`), which Oracle distributes under the **Oracle Free Distribution, Hosting, and Use Terms and Conditions**. Those terms allow the driver to be redistributed unmodified and used in your business operations at no charge, provided a copy of the terms accompanies any distribution and Oracle's notices are left in place. JIM ships a copy of the terms in every image at `/app/third-party-notices/` and in the repository under [`third-party-notices/`](https://github.com/TetronIO/JIM/tree/main/third-party-notices). If your organisation has its own licence agreement with Oracle covering the driver, that agreement applies instead. Please read the terms; this notice is not legal advice.
 
 The SQL Server dialect uses `Microsoft.Data.SqlClient`, which is MIT licensed.
 
-## Wider database support
+## :material-database-plus-outline: Wider database support
 
 The connector supports Microsoft SQL Server and Oracle Database; for other engines, see the [Roadmap](../reference/roadmap.md). If you need another database engine, or need one of those sooner, tell us in the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas); what comes next is decided by who asks.
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 [Troubleshooting the SQL Connector](jim-sql-connector-troubleshooting.md) covers connection, schema import, Delta Import and export failures, each by the message it shows.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md)
 - [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md)

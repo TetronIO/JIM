@@ -6,22 +6,23 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @*
-    Lists the domain controllers JIM discovers in a Connected System's directory, so an administrator can pick
-    one instead of having to already know a hostname. Selecting a row fills the Preferred Domain Controller field
-    on the settings page; nothing here writes anything on its own. Failures (an unreachable directory, refused
+    Lists the directory servers JIM discovers in a Connected System's directory, so an administrator can pick
+    one instead of having to already know a hostname. Selecting a row fills the field the Connector names on the
+    settings page; nothing here writes anything on its own. The wording uses the Connector's own term for its
+    servers (the LDAP Connector's are domain controllers). Failures (an unreachable directory, refused
     credentials) render inside the dialog with a Retry action rather than crashing the page.
 *@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">Discover Domain Controllers</MudText>
+        <MudText Typo="Typo.h6">@Title(ServerTerm)</MudText>
     </TitleContent>
     <DialogContent>
         @if (_loading)
         {
             <MudStack AlignItems="AlignItems.Center" Class="pa-8" Spacing="4">
                 <MudProgressCircular Indeterminate="true" />
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Discovering domain controllers...</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Discovering @(ServerTerm)...</MudText>
             </MudStack>
         }
         else if (_errorMessage != null)
@@ -31,7 +32,7 @@
         else if (_directoryServers is { Count: 0 })
         {
             <MudAlert Severity="Severity.Info">
-                JIM did not find any domain controllers in this directory's CN=Sites configuration.
+                JIM did not find any @(ServerTerm) in this directory.
             </MudAlert>
         }
         else if (_directoryServers != null)
@@ -91,10 +92,18 @@
     private IMudDialogInstance MudDialog { get; set; } = null!;
 
     /// <summary>
-    /// The Connected System whose directory to discover domain controllers in.
+    /// The Connected System whose directory to discover servers in.
     /// </summary>
     [Parameter, EditorRequired]
     public int ConnectedSystemId { get; set; }
+
+    /// <summary>
+    /// What the Connector calls the servers it discovers, plural and lower case (e.g. "domain controllers").
+    /// </summary>
+    [Parameter]
+    public string ServerTerm { get; set; } = DefaultServerTerm;
+
+    private const string DefaultServerTerm = "directory servers";
 
     /// <summary>
     /// Connectivity settings entered on screen but not yet saved, applied over the saved ones so an
@@ -126,7 +135,7 @@
             _directoryServers = await jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, DraftSettingValues);
         }
         // Dialog boundary: any discovery failure (an unreachable directory, refused credentials, a directory
-        // that is not AD-family) must render inside the dialog rather than crash the page, so every failure
+        // the Connector cannot discover servers in) must render inside the dialog rather than crash the page, so every failure
         // reason is shown the same way, with the same Retry action, regardless of its cause. Cancellation is
         // excluded so a tearing-down circuit propagates rather than rendering as a discovery failure.
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -145,14 +154,23 @@
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>
-    /// Opens the dialog and returns the selected domain controller's FQDN, or null when the administrator closed
-    /// the dialog without selecting one.
+    /// "Discover Domain Controllers" from "domain controllers": the term reads in lower case mid-sentence and in
+    /// title case as the dialog's title. Words already carrying capitals (an acronym) are left as they are.
     /// </summary>
-    public static async Task<string?> ShowAsync(IDialogService dialogService, int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    private static string Title(string serverTerm) =>
+        $"Discover {System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(serverTerm)}";
+
+    /// <summary>
+    /// Opens the dialog and returns the selected server's FQDN, or null when the administrator closed the dialog
+    /// without selecting one.
+    /// </summary>
+    public static async Task<string?> ShowAsync(IDialogService dialogService, int connectedSystemId, string? serverTerm, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
+        var term = string.IsNullOrWhiteSpace(serverTerm) ? DefaultServerTerm : serverTerm;
         var parameters = new DialogParameters<DirectoryServerDiscoveryDialog>
         {
             { x => x.ConnectedSystemId, connectedSystemId },
+            { x => x.ServerTerm, term },
             { x => x.DraftSettingValues, draftSettingValues }
         };
         var options = new DialogOptions
@@ -162,7 +180,7 @@
             CloseOnEscapeKey = true
         };
 
-        var dialog = await dialogService.ShowAsync<DirectoryServerDiscoveryDialog>("Discover Domain Controllers", parameters, options);
+        var dialog = await dialogService.ShowAsync<DirectoryServerDiscoveryDialog>(Title(term), parameters, options);
         var result = await dialog.Result;
 
         return result is null or { Canceled: true } ? null : result.Data as string;

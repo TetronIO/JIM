@@ -54,6 +54,12 @@ public class CsoChangeHistoryDto
     public string? RunProfileName { get; set; }
 
     /// <summary>
+    /// The kind of run that recorded the change (an import, a synchronisation or an export); empty when it was not
+    /// recorded by a run, or the run's Activity has since been removed.
+    /// </summary>
+    public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
+
+    /// <summary>
     /// The attributes the change touched, each with the values it added and removed.
     /// </summary>
     public List<CsoAttributeChangeDto> AttributeChanges { get; set; } = new();
@@ -70,7 +76,16 @@ public class CsoAttributeChangeDto
 
     public AttributePlurality AttributePlurality { get; set; }
 
+    /// <summary>
+    /// The attribute's first value changes, at most ten. When <c>valueChangeTotal</c> is larger, the rest are read a
+    /// page at a time from the change's attribute values endpoint.
+    /// </summary>
     public List<CsoValueChangeDto> ValueChanges { get; set; } = new();
+
+    /// <summary>
+    /// How many value changes the attribute has in all, including any not returned in <c>valueChanges</c>.
+    /// </summary>
+    public int ValueChangeTotal { get; set; }
 }
 
 /// <summary>
@@ -98,6 +113,12 @@ public class CsoValueChangeDto
     public bool? BoolValue { get; set; }
 
     public CsoChangeReferenceDto? ReferenceValue { get; set; }
+
+    /// <summary>
+    /// Whether the referenced object had not yet been exported when the change was recorded; <c>stringValue</c> then
+    /// holds the identifier it was given (such as its distinguished name), the value a reader recognises.
+    /// </summary>
+    public bool IsPendingExportStub { get; set; }
 
     /// <summary>
     /// The export Synchronisation Rule whose mapping produced this value. Null when the value was not

@@ -3,7 +3,7 @@ title: JML Lifecycle
 description: How JIM provisions, updates and deprovisions accounts as people join, move within and leave an organisation.
 type: concept
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # JML Lifecycle
@@ -16,7 +16,7 @@ The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model
 
 JIM handles each transition through its [Synchronisation Rules](../configuration/synchronisation-rules.md) and the [synchronisation pipeline](synchronisation-pipeline.md), acting on your configuration without anyone stepping in.
 
-## 👤 Joiner
+## :material-account-plus-outline: Joiner
 
 A **joiner** event occurs when a new identity appears in a source system for the first time, as when HR creates a record for a new employee.
 
@@ -30,7 +30,7 @@ A **joiner** event occurs when a new identity appears in a source system for the
 
 4. **Inbound Attribute Flow**<br /> The new employee's attributes (name, department, employee ID and so on) flow from the Connected System Object into the new Metaverse Object.
 
-5. **Outbound evaluation**<br /> Export Synchronisation Rules evaluate the new Metaverse Object. For each one it is in scope for, JIM **provisions** a new Connected System Object in that rule's target Connected System.
+5. **Outbound evaluation**<br /> Export Synchronisation Rules evaluate the new Metaverse Object. For each one that provisions and has it in scope, JIM **provisions** a new Connected System Object in that rule's target Connected System, unless an Object Matching Rule finds an existing account to join.
 
 6. **Export**<br /> The provisioned objects are exported to the target systems, creating the actual accounts, such as an Active Directory user account or a mailbox.
 
@@ -47,7 +47,7 @@ A new employee, Jane Smith, is added to the HR system:
 7. Export creates Jane's Active Directory account. Active Directory will not create an enabled account that has no password, so the Synchronisation Rule that provisions it has an [Initial Password](passwords.md#giving-new-connected-system-objects-their-first-password): JIM creates the account disabled and queues her password.
 8. The password is set within seconds, which enables the account, and the next import confirms it holds `512`.
 
-## 🔄 Mover
+## :material-account-switch-outline: Mover
 
 A **mover** event occurs when an existing identity's attributes change: a department transfer, a new title, a name change, an office move, and so on.
 
@@ -82,7 +82,9 @@ A mover event can also change whether an identity is **in scope** for a Synchron
 
 When an identity falls out of scope for an export Synchronisation Rule, its account in that rule's target system is **deprovisioned**, as the leaver section describes.
 
-## 🚪 Leaver
+Scope also changes without the record changing. A relative date, such as a leave date, moves an identity across a boundary on its own, and [Temporal Scope Reconciliation](../configuration/schedules.md#built-in-schedules) flags it so the next synchronisation acts. An edited rule moves every identity it newly includes or excludes at the next synchronisation. [Scoping Criteria](../configuration/scoping-criteria.md#what-re-checks-an-object) shows what re-checks an identity, and when.
+
+## :material-account-minus-outline: Leaver
 
 A **leaver** event occurs when an identity is removed, or marked inactive, in the source system, as when HR processes an employee's termination.
 
@@ -90,7 +92,7 @@ A **leaver** event occurs when an identity is removed, or marked inactive, in th
 
 1. **Import**<br /> JIM detects the change: the record has been deleted from the source system, so its Connected System Object is **obsoleted**; or a status attribute has changed, such as `employeeStatus` becoming "Terminated".
 
-2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object, and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
+2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object (unless the import rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps it joined), and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
 
 3. **Outbound evaluation**<br /> Each export Synchronisation Rule reacts. A Metaverse Object that is deleted, or falls out of the rule's scope, is **deprovisioned** from that rule's target system; a status change flows out through the rule's expressions, to disable an account, for example.
 
@@ -138,7 +140,7 @@ Grace periods are valuable for:
 
 During the grace period, the Metaverse Object stays in the Metaverse, marked for deletion. If the identity reappears before the period expires, the deletion is cancelled and the identity is restored, but only when the reappearance undoes what triggered the deletion. Under **When Last Connector Disconnected**, any system reconnecting cancels it. Under **When Authoritative Source Disconnected**, a reconnection from any selected source cancels it in All sources mode, while in Specific mode only the system whose disconnection scheduled the deletion can; an unrelated system reconnecting does not rescue the object.
 
-## End-to-End Example
+## :material-file-document-outline: End-to-End Example
 
 Here is a complete JML lifecycle for one employee.
 

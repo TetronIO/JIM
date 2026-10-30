@@ -1,171 +1,176 @@
 ---
 title: "SSO Setup: Keycloak"
-description: Register JIM with Keycloak so administrators sign in to the portal, and the PowerShell module, with their Keycloak accounts.
+description: Register JIM with Keycloak so people sign in to the portal, and the PowerShell module, with their Keycloak accounts.
 type: how-to
 audience: implementer
 ---
 
 # SSO Setup: Keycloak
 
-Step-by-step instructions for configuring Single Sign-On with JIM using Keycloak as the OIDC identity provider.
+Use this guide to let people sign in to JIM with their Keycloak accounts, both in the portal and in the PowerShell module with `Connect-JIM`. One command registers JIM in your Keycloak realm, and you give JIM the values it returns. JIM identifies each person by their Keycloak user ID, the `sub` claim, which is the same in tokens from the portal and from the PowerShell module.
+
+```jim-diagram
+archetype: comparison
+title: "JIM's two Keycloak clients compared"
+desc: "A Keycloak client cannot be both confidential and public, so JIM has two. The portal's client, jim, is confidential: client authentication is on, and its client secret is JIM_SSO_SECRET. Its redirect URI is /signin-oidc, with /signout-callback-oidc after sign-out, and it is JIM_SSO_CLIENT_ID. The PowerShell module's client, jim-powershell, is public: client authentication is off and it has no secret. Its redirect URIs are http://localhost:8400/callback/ and the same for each port up to 8409, it may also ask for offline_access for a refresh token, and it is JIM_SSO_PUBLIC_CLIENT_ID. Both sign in with PKCE, and both have the jim-api client scope as optional, which puts jim in the access token's audience; no other client may ask for it."
+columns:
+  - { label: "`jim`", sub: "the portal, confidential" }
+  - { label: "`jim-powershell`", sub: "the PowerShell module, public" }
+rows:
+  - label: Client authentication
+    cells:
+      - { text: "On, with a secret", sub: "`JIM_SSO_SECRET`" }
+      - { text: "Off, no secret" }
+  - label: Redirect URIs
+    cells:
+      - { text: "`/signin-oidc`", sub: "and `/signout-callback-oidc`" }
+      - { text: "`localhost` ports 8400 to 8409", sub: "`/callback/`, ten in all" }
+  - label: Client scopes
+    cells:
+      - { text: "`jim-api`, optional" }
+      - { text: "`jim-api`, optional", sub: "and `offline_access`" }
+  - label: In JIM
+    cells:
+      - { text: "`JIM_SSO_CLIENT_ID`" }
+      - { text: "`JIM_SSO_PUBLIC_CLIENT_ID`" }
+footer: "Both sign in with PKCE; `jim-api` puts `jim` in the access token's audience"
+```
 
 !!! info "Read the overview first"
-    This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the prerequisites, the [confidential vs public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, and the [testing steps](../sso-setup.md#testing-your-configuration) you run once configuration is complete.
+    This page is one of the provider-specific guides linked from the [SSO Setup overview](../sso-setup.md). The overview covers the [confidential and public client](../sso-setup.md#confidential-vs-public-clients) model these steps rely on, [how JIM recognises people](../sso-setup.md#how-jim-recognises-people), and the [testing steps](../sso-setup.md#testing-your-configuration) you can run once configuration is complete.
 
-## Step 1: Create a Realm (if needed)
+## :material-clipboard-list-outline: Before you begin
 
-1. Log in to the Keycloak Admin Console
-2. Hover over the realm dropdown and click **Create Realm**
-3. Enter a **Realm name** (e.g. `jim`)
-4. Click **Create**
+You need:
 
-## Step 2: Create a Client for JIM
+- **A Keycloak realm for the people who will sign in to JIM.** To create one, open the Keycloak Admin Console, open the realm list, and select **Create realm**.
+- **JIM's address**, such as `https://jim.example.com`, with the port if JIM does not use 443.
+- **PowerShell 7 with the JIM PowerShell module**, on any computer that can reach Keycloak. See [Installation](../../powershell/index.md#installation).
+- **An account that administers the realm**: a Keycloak administrator in the master realm, or an account in JIM's realm with the `realm-admin` role of its `realm-management` client.
+- **JIM trusting Keycloak's HTTPS certificate,** when it comes from your own certificate authority. See [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 
-1. Navigate to **Clients**
-2. Click **Create client**
-3. Configure the client:
-    - **Client type**: OpenID Connect
+## :material-numeric-1-circle-outline: Step 1: Register JIM with Keycloak
+
+`Register-JIMIdentityProvider` creates JIM's clients in the realm and returns the values JIM needs. It creates a confidential client for the portal, `jim`, a public client for the PowerShell module, `jim-powershell`, and the `jim-api` client scope, which puts `jim` in the audience of an access token, as JIM requires. Only JIM's two clients may ask for `jim-api`. What each one contains is on the cmdlet's page: [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
+
+1. In PowerShell 7, run the command with JIM's address and the realm's address, and sign in as the account that administers the realm when it asks:
+
+    ```powershell
+    $registration = Register-JIMIdentityProvider -Provider Keycloak -Url 'https://jim.example.com' -Authority 'https://sso.example.com/realms/jim' -Credential (Get-Credential)
+    $registration | Select-Object Authority, ClientId, PublicClientId, ApiScope, ClaimType, MvAttribute
+    ```
+
+    The account signs in to the master realm. If it belongs to JIM's realm instead, add `-AdminRealm 'jim'`. Add `-WhatIf` first if you want to see each change the command would make; it makes none.
+
+2. Copy the portal's client secret, and keep it safe until Step 3:
+
+    ```powershell
+    [System.Net.NetworkCredential]::new('', $registration.ClientSecret).Password | Set-Clipboard
+    ```
+
+    The command returns the secret only when it creates or replaces it. Keycloak also shows it on the `jim` client's **Credentials** tab.
+
+### Register JIM by hand instead
+
+These steps make the same registration in the Keycloak Admin Console. Replace `https://jim.example.com` with JIM's address.
+
+1. Under **Clients**, select **Create client**, and create the portal's client:
     - **Client ID**: `jim`
-4. Click **Next**
-5. Configure capability:
-    - **Client authentication**: ON
-    - **Authorisation**: OFF
-    - **Authentication flow**: Check **Standard flow** (Authorisation Code)
-6. Click **Next**
-7. Configure login settings:
-    - **Root URL**: `https://your-jim-url` (`your-jim-url` is JIM's address, such as `jim.example.com`, with `:port` added if JIM does not use 443)
-    - **Valid redirect URIs**: `https://your-jim-url/signin-oidc`
-    - **Valid post logout redirect URIs**: `https://your-jim-url/signout-callback-oidc`
-    - **Web origins**: `https://your-jim-url`
-8. Click **Save**
-
-## Step 3: Get the Client Secret
-
-1. Go to the **Credentials** tab
-2. Copy the **Client secret**
-
-!!! note "Scripts and services use API keys"
-    JIM accepts Keycloak access tokens from people only: a token gets the roles of the Metaverse Object its `sub` identifies. A Keycloak service account (a client using the client credentials grant) identifies no Metaverse Object, so its tokens get no roles and JIM refuses them. For unattended scripts and services, issue a JIM API key instead; see [API Authentication](../../api/authentication.md).
-
-## Step 4: Create the API Client Scope
-
-1. Navigate to **Client scopes**
-2. Click **Create client scope**
-3. Configure:
+    - **Client authentication**: On
+    - **Authentication flow**: **Standard flow** only. Clear **Direct access grants**.
+    - **Valid redirect URIs**: `https://jim.example.com/signin-oidc`
+    - **Valid post logout redirect URIs**: `https://jim.example.com/signout-callback-oidc`
+2. On the client's **Advanced** tab, under **Advanced settings**, set **Proof Key for Code Exchange Code Challenge Method** to **S256**, and save. Copy the **Client secret** from the **Credentials** tab.
+3. Create the PowerShell module's client the same way, with these differences:
+    - **Client ID**: `jim-powershell`
+    - **Client authentication**: Off
+    - **Valid redirect URIs**: `http://localhost:8400/callback/` and the same for each port up to 8409, ten in all. The module listens on the first free port of these. Add `https://jim.example.com/api/reference/` too, with the trailing slash, for the API reference's **Try It**, which signs in with the same client.
+    - **Web origins**: `https://jim.example.com`, so Keycloak answers **Try It**'s token request from the browser.
+    - No post logout redirect URI.
+4. Under **Client scopes**, select **Create client scope**:
     - **Name**: `jim-api`
-    - **Type**: None
-    - **Protocol**: OpenID Connect
-4. Click **Save**
-5. Go to the **Mappers** tab
-6. Click **Configure a new mapper**
-7. Select **Audience**
-8. Configure:
+    - **Type**: None. A realm default scope is added to every new client, and any client that can ask for `jim-api` can get tokens JIM accepts.
+    - **Include in token scope**: On
+5. On `jim-api`'s **Mappers** tab, select **Configure a new mapper**, then **Audience**:
     - **Name**: `jim-api-audience`
-    - **Included Client Audience**: `jim` (the client from Step 2, and the value of `JIM_SSO_CLIENT_ID`)
-    - **Add to access token**: ON
-9. Click **Save**
+    - **Included Client Audience**: `jim`
+    - **Add to ID token**: Off
+    - **Add to access token**: On
+6. On each of the two clients' **Client scopes** tabs, select **Add client scope**, and add `jim-api` as **Optional**. Check that `basic`, `profile` and `email` are listed as **Default**, and on `jim-powershell`, that `offline_access` is listed as **Optional**, so the module gets a refresh token.
 
-The audience must be the Step 2 client and nothing else: JIM accepts an access token only when its `aud` includes `JIM_SSO_CLIENT_ID`.
+## :material-numeric-2-circle-outline: Step 2: Find your first administrator's user ID
 
-**Type: None** keeps `jim-api` from being offered to every client created in the realm. The **Type** field sets the scope's realm default, and Keycloak links realm default scopes to each new client. Any client that can request `jim-api` can obtain tokens JIM accepts, so Steps 5 and 6 link it only to JIM's own two clients.
+JIM gives the Administrator role to the person whose Keycloak user ID is `JIM_SSO_INITIAL_ADMIN`, at their first sign-in, and creates their Metaverse Object. In the Keycloak Admin Console, open JIM's realm, select **Users**, and open the account they sign in with. The **ID** on its **Details** tab is the value, a GUID such as `3f2504e0-4f89-11d3-9a0c-0305e82c3301`.
 
-## Step 5: Assign the Scope to the Client
+## :material-numeric-3-circle-outline: Step 3: Configure JIM
 
-1. Navigate to **Clients** > **jim**
-2. Go to the **Client scopes** tab
-3. Click **Add client scope**
-4. Select `jim-api` and add as **Optional**
-
-## Step 6: Configure PowerShell Module Authentication (Recommended)
-
-Configuring the PowerShell module now means administrators can connect to JIM interactively with their SSO account. Unattended scripts cannot sign in interactively, so they use a JIM API key.
-
-The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. **Keycloak requires this to be a separate client** from the confidential web client: a single Keycloak client cannot be both confidential (with a secret) and public (PKCE/loopback). You must create a second, public client and tell JIM about it via `JIM_SSO_PUBLIC_CLIENT_ID` in Step 7.
-
-1. Navigate to **Clients**
-2. Click **Create client**
-3. Configure the client:
-    - **Client type**: OpenID Connect
-    - **Client ID**: `jim-powershell` (this exact value is what you'll set `JIM_SSO_PUBLIC_CLIENT_ID` to in Step 7)
-4. Click **Next**
-5. Configure capability:
-    - **Client authentication**: OFF (this makes it a public client)
-    - **Authorisation**: OFF
-    - **Authentication flow**: Check **Standard flow** (Authorisation Code)
-6. Click **Next**
-7. Configure login settings:
-    - **Root URL**: Leave empty
-    - **Valid redirect URIs**: `http://localhost:8400/callback/`
-    - **Web origins**: `+` (allows all origins from redirect URIs)
-8. Click **Save**
-9. Go to the **Client scopes** tab
-10. Click **Add client scope**
-11. Select `jim-api` and add as **Optional**
-12. Confirm `offline_access` is listed (Keycloak adds it as a default optional scope on new clients). If it is missing, click **Add client scope**, select `offline_access`, and add it as **Optional**. This lets the module receive a refresh token for silent renewal and token persistence.
-
-!!! note
-    The PowerShell module uses loopback redirect URIs per [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252). If port 8400 is busy, the module will try ports 8401 to 8409. Add the corresponding redirect URIs (e.g. `http://localhost:8401/callback/` through `http://localhost:8409/callback/`) if port conflicts are likely in your environment.
-
-## Step 7: Configure JIM Environment Variables
+Set these environment variables to the values from Steps 1 and 2, then restart JIM (see [Configuration Reference](../configuration.md)):
 
 ```bash
-# Keycloak Configuration
-JIM_SSO_AUTHORITY=https://{your-keycloak-server}/realms/{realm-name}
-JIM_SSO_CLIENT_ID=jim
-JIM_SSO_SECRET={your-client-secret}
-JIM_SSO_API_SCOPE=jim-api
+JIM_SSO_AUTHORITY={Authority}
+JIM_SSO_CLIENT_ID={ClientId}
+JIM_SSO_SECRET={the client secret from Step 1}
+JIM_SSO_API_SCOPE={ApiScope}
+JIM_SSO_PUBLIC_CLIENT_ID={PublicClientId}
 
-# Client ID for the public client you created in Step 6 for the PowerShell
-# module. Required if you want interactive (SSO) PowerShell authentication;
-# omit if you only plan to use API keys.
-JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
-
-# User identity mapping
+# Identify people by their Keycloak user ID ({ClaimType} and {MvAttribute})
 JIM_SSO_CLAIM_TYPE=sub
 JIM_SSO_MV_ATTRIBUTE=Subject Identifier
-JIM_SSO_INITIAL_ADMIN={your-admin-sub-value}
+JIM_SSO_INITIAL_ADMIN={the user ID from Step 2}
 ```
 
 **Example:**
 
 ```bash
-JIM_SSO_AUTHORITY=https://keycloak.example.com/realms/jim
+JIM_SSO_AUTHORITY=https://sso.example.com/realms/jim
 JIM_SSO_CLIENT_ID=jim
 JIM_SSO_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz123456
 JIM_SSO_API_SCOPE=jim-api
 JIM_SSO_PUBLIC_CLIENT_ID=jim-powershell
+JIM_SSO_CLAIM_TYPE=sub
+JIM_SSO_MV_ATTRIBUTE=Subject Identifier
+JIM_SSO_INITIAL_ADMIN=3f2504e0-4f89-11d3-9a0c-0305e82c3301
 ```
 
-## Check it worked
+`JIM_SSO_PUBLIC_CLIENT_ID` is what lets administrators sign in with `Connect-JIM`. Scripts that run unattended cannot sign in interactively, so they use a JIM API key instead; see [API Authentication](../../api/authentication.md).
 
-1. Open JIM in a browser. JIM sends you to Keycloak to sign in, then returns you to JIM, signed in.
+!!! note "Scripts and services use API keys"
+    JIM accepts Keycloak access tokens from people only: a token gets the roles of the Metaverse Object its `sub` identifies. A Keycloak service account identifies no Metaverse Object, so its tokens get no roles and JIM refuses them.
+
+## :material-check-decagram-outline: Check it worked
+
+1. Open JIM in a browser as your first administrator. JIM sends you to Keycloak to sign in, then returns you to JIM, signed in.
 2. Open `/claims` and check that `sub`, `name` and `email` carry your values.
-3. If you set up PowerShell authentication, run `Connect-JIM -Url "https://your-jim-url"`, sign in in the browser it opens, then run `Test-JIMConnection`. It reports `Connected : True` and `AuthMethod : OAuth`.
+3. In PowerShell 7, run `Connect-JIM -Url 'https://jim.example.com'`, sign in in the browser it opens, then run `Get-JIMUserInfo`. It reports `IsAdministrator : True`, with the `Administrator` and `User` roles.
 
-To check sign-out and API access too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
+To check sign-out too, see [Testing Your Configuration](../sso-setup.md#testing-your-configuration).
 
-## Realms set up from an earlier version of this guide
+## :material-check-all: Keep the registration right
 
-Earlier versions of this guide created `jim-api` with **Type: Optional** and offered a `jim-service` service account client. To bring such a realm in line:
+Run `Register-JIMIdentityProvider` again, with the same `-Url` and `-Authority`, to check and repair the registration. It changes nothing when the registration is right, and puts back whatever has drifted, such as a removed redirect URI, PKCE turned off, or `jim-api` added to another client. The values it returns stay the same, so JIM's settings need no change. Add `-WhatIf` to list what has drifted without changing it.
 
-1. Under **Client scopes**, set the **Assigned type** of `jim-api` to **None**.
-2. For each client other than `jim` and `jim-powershell`, open its **Client scopes** tab and remove `jim-api` if it is listed.
-3. Delete the `jim-service` client if nothing uses it.
+If JIM's address changes, run it with the new address. It replaces the portal's redirect URIs; the client IDs and the secret stay as they are. If people reach JIM at more than one address, give each to `-Url`.
 
-## Keycloak Troubleshooting
+To check the registration on a schedule, run it as a Keycloak client's service account with `-ClientCredential`, giving the account the `realm-admin` role of JIM's realm's `realm-management` client. See [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
+
+## :material-history: Realms set up from an earlier version of this guide
+
+Earlier versions of this guide created `jim-api` with **Type: Optional**, and offered a `jim-service` service account client. To bring such a realm in line, run `Register-JIMIdentityProvider` with `-WhatIf` and your clients' IDs, for example `-ClientId 'jim' -PublicClientId 'jim-powershell'`. It lists what differs, such as `jim-api` offered to every new client or to clients other than JIM's. Run it again without `-WhatIf` to correct it. Delete the `jim-service` client if nothing uses it.
+
+## :material-wrench-outline: Keycloak Troubleshooting
 
 - **Sign-in is unavailable / JIM does not trust the certificate**: Keycloak's HTTPS certificate comes from a certificate authority JIM does not trust, usually your own. Trust it for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
-- **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive)
-- **Client scopes**: Verify `openid`, `profile`, and `email` scopes are included
-- **Token mapper**: If the `sub` claim is missing, add a mapper in Client Scopes > openid > Mappers
+- **`Register-JIMIdentityProvider` says Keycloak refused a request**: the account cannot administer the realm. Give it the `realm-admin` role of the realm's `realm-management` client, or use a master realm administrator.
+- **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive).
+- **`Invalid parameter: redirect_uri`, or tokens without `sub`, `name` or `email`**: the registration has drifted. Run `Register-JIMIdentityProvider` with `-WhatIf` to see what, then without it to repair it.
 
 **Checking claim values:**
 
 1. Navigate to **Clients** > **jim** > **Client scopes**
 2. Click **Evaluate**
-3. Select a user and click **Evaluate**
-4. Check the **Generated access token** to see claim values
+3. Select a user, enter `jim-api` under **Scope parameter**, and click **Evaluate**
+4. Check the **Generated access token**: its `aud` includes `jim`, and its `sub` is the user's ID
 
-## Next steps
+## :material-arrow-right-circle-outline: Next steps
 
 If sign-out fails, see [Sign-Out Troubleshooting](../sso-setup.md#sign-out-troubleshooting).

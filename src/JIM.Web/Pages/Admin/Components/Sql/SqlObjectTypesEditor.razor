@@ -1,0 +1,462 @@
+@using System.Net
+@using JIM.Connectors.Sql
+@using JIM.Models.Staging
+@using JIM.Web.Models
+@inject IDialogService DialogService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The SQL Connector's Object Types setting, edited as one card per Object Type with names chosen from the
+   database's catalogue (#2570). The setting still stores the JSON document REST and PowerShell send, and the
+   editor writes it back after every change, so saving validates exactly what it always has. *@
+<div class="@Class" data-testid="jim-sql-object-types-editor">
+    <div class="d-flex align-center flex-wrap gap-2">
+        <div>
+            <MudText Typo="Typo.h6">@SettingValue.Setting.Name</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @if (_jsonView)
+                {
+                    <text>The document REST and PowerShell send as this setting's value.</text>
+                }
+                else if (_model is { ObjectTypes.Count: > 0 })
+                {
+                    @(_model.ObjectTypes.Count == 1 ? "1 Object Type. Select it to change it." : $"{_model.ObjectTypes.Count} Object Types. Select one to change it.")
+                }
+                else
+                {
+                    <text>Which tables and views JIM reads objects from, and what identifies them.</text>
+                }
+            </MudText>
+        </div>
+        <MudSpacer />
+        @if (_jsonView)
+        {
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync"
+                       Disabled="@string.IsNullOrEmpty(SettingValue.StringValue)" data-testid="jim-sql-json-copy">Copy</MudButton>
+        }
+        @* The cards cannot show a document that cannot be read; the problems above the text say what to fix. *@
+        <MudButton Variant="Variant.Text" StartIcon="@(_jsonView ? Icons.Material.Filled.ViewAgenda : Icons.Material.Filled.DataObject)"
+                   OnClick="ToggleJsonViewAsync" Disabled="@(_jsonView && !CardsCanShowTheDocument)" data-testid="jim-sql-object-types-json-toggle">
+            @(_jsonView ? "View as cards" : "View as JSON")
+        </MudButton>
+        @if (_jsonView && string.IsNullOrWhiteSpace(SettingValue.StringValue) && !string.IsNullOrEmpty(SettingValue.Setting.Example))
+        {
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PostAdd" OnClick="InsertExampleAsync"
+                       data-testid="jim-sql-json-insert-example">Insert Example</MudButton>
+        }
+        @if (!_jsonView)
+        {
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync"
+                       data-testid="jim-sql-object-types-add">Add Object Type</MudButton>
+        }
+    </div>
+
+    @if (_jsonView)
+    {
+        <SqlObjectTypesJsonView Value="@SettingValue.StringValue" ValueChanged="OnJsonChangedAsync" Problems="@_problems"
+                                Label="@SettingValue.Setting.Name" Class="mt-4" />
+    }
+    else if (_model != null)
+    {
+        @if (_catalogueLoading)
+        {
+            <div class="d-flex align-center gap-2 mt-4" data-testid="jim-sql-catalogue-loading">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Reading the database's tables and views...</MudText>
+            </div>
+        }
+        else if (_catalogueFailure != null)
+        {
+            @* The reason is the driver's own message and often runs to several lines, so it gets a column of its
+               own and Retry stays on the right rather than wrapping into the text. *@
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="jim-sql-inline-alert mt-4" data-testid="jim-sql-catalogue-unavailable">
+                <div class="jim-sql-inline-alert-body">
+                    <div class="jim-sql-inline-alert-text">
+                        <strong>JIM could not read the database's tables and views, so names are typed rather than chosen.</strong>
+                        <div class="mt-1">@_catalogueFailure</div>
+                    </div>
+                    <span class="jim-sql-inline-alert-actions">
+                        <AlertButton Severity="Severity.Warning" Size="Size.Small" OnClick="RetryCatalogueAsync"
+                                     data-testid="jim-sql-catalogue-retry">Retry</AlertButton>
+                    </span>
+                </div>
+            </MudAlert>
+        }
+
+        @if (_model.DocumentProblems.Count > 0)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-4">
+                @string.Join(" ", _model.DocumentProblems)
+            </MudAlert>
+        }
+
+        <div class="mt-4">
+            @for (var i = 0; i < _model.ObjectTypes.Count; i++)
+            {
+                var index = i;
+                var objectType = _model.ObjectTypes[index];
+                <SqlObjectTypeCard @key="objectType"
+                                   Model="_model"
+                                   Index="index"
+                                   Expanded="@_expanded.Contains(objectType)"
+                                   ExpandedChanged="@(expanded => SetExpanded(objectType, expanded))"
+                                   CatalogueObjects="_catalogueObjects"
+                                   LoadTable="@(CatalogueReadable ? LoadTableAsync : null)"
+                                   DescribeStatement="@(CatalogueReadable ? DescribeStatementAsync : null)"
+                                   DeltaImportMode="@DeltaImportMode"
+                                   OnChanged="WriteBackAsync"
+                                   OnRemove="@(() => RemoveObjectTypeAsync(objectType))"
+                                   OnAddObjectType="AddSuggestedObjectTypeAsync" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>The Object Types setting's value: read when the editor opens, written after every change.</summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemSettingValue SettingValue { get; set; } = null!;
+
+    /// <summary>All the Connected System's settings as they stand on screen, for the Delta Import Mode.</summary>
+    [Parameter]
+    public IReadOnlyList<ConnectedSystemSettingValue> SettingValues { get; set; } = [];
+
+    /// <summary>The Object Types selected for synchronisation on the Schema tab.</summary>
+    [Parameter]
+    public IEnumerable<string> SelectedObjectTypeNames { get; set; } = [];
+
+    /// <summary>Where the editor reads the database's catalogue; null where none can be read.</summary>
+    [Parameter]
+    public IConnectedSystemCatalogueSource? Catalogue { get; set; }
+
+    /// <summary>Raised after the setting's value changes.</summary>
+    [Parameter]
+    public EventCallback ValueChanged { get; set; }
+
+    /// <summary>
+    /// Raised when the document gains or loses problems the Connector would refuse it for, so the settings tab can
+    /// hold Save Settings while there are any.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> HasProblemsChanged { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private SqlObjectTypesEditorModel? _model;
+
+    /// <summary>The parser's problems with the document as it stands, located for the JSON view.</summary>
+    private IReadOnlyList<SqlObjectTypesJsonProblem> _problems = [];
+
+    /// <summary>What <see cref="HasProblemsChanged"/> last said; the settings tab assumes none until told.</summary>
+    private bool _reportedHasProblems;
+    private bool _jsonView;
+    private readonly HashSet<SqlObjectTypeDocument> _expanded = [];
+
+    private IReadOnlyList<ConnectorCatalogueObject> _catalogueObjects = [];
+    private bool _catalogueLoading;
+
+    /// <summary>
+    /// The read of the table list in progress, or last made, so the Add Object Type dialog can wait for it when
+    /// opened before it has finished, rather than finding no catalogue.
+    /// </summary>
+    private Task _catalogueLoad = Task.CompletedTask;
+    private string? _catalogueFailure;
+    private bool _catalogueRequested;
+
+    /// <summary>
+    /// Catalogue reads for this editing session, by what was read. A Retry clears them, so a database that has
+    /// changed, or settings corrected on screen, are read afresh.
+    /// </summary>
+    private readonly Dictionary<string, Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>>> _reads = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether cards may read their tables' columns. Not while the list of tables is still being read, and not
+    /// once it has failed: each read would wait out the same connection timeout to report the same failure. A
+    /// successful Retry lets them read again.
+    /// </summary>
+    private bool CatalogueReadable => Catalogue != null && !_catalogueLoading && _catalogueFailure == null;
+
+    private string? DeltaImportMode => SettingValues
+        .FirstOrDefault(sv => sv.Setting.Name == SqlConnectorConstants.SettingDeltaImportMode)?.StringValue;
+
+    private bool CardsCanShowTheDocument => !_problems.Any(problem => problem.StopsReading);
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadModel();
+
+        // Opened on JSON straight away where the document cannot be shown as cards, so nothing is hidden.
+        _jsonView = _model == null;
+        await RefreshProblemsAsync();
+    }
+
+    /// <summary>
+    /// Re-reads the parser's problems with the setting's value, and tells the settings tab when there come to be
+    /// some, or none, so Save Settings is held exactly while saving would be refused.
+    /// </summary>
+    private async Task RefreshProblemsAsync()
+    {
+        _problems = SqlObjectTypesJsonProblems.Locate(SettingValue.StringValue);
+        var hasProblems = _problems.Count > 0;
+        if (hasProblems == _reportedHasProblems)
+            return;
+
+        _reportedHasProblems = hasProblems;
+        await HasProblemsChanged.InvokeAsync(hasProblems);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_model != null)
+        {
+            _model.DeltaImportMode = DeltaImportMode;
+            _model.SelectedObjectTypeNames = SelectedObjectTypeNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (Catalogue != null && !_catalogueRequested)
+        {
+            _catalogueRequested = true;
+            await LoadCatalogueAsync();
+        }
+    }
+
+    private void LoadModel()
+    {
+        if (SqlObjectTypesEditorModel.TryLoad(SettingValue.StringValue, out var model, out _))
+        {
+            _model = model;
+            _model!.DeltaImportMode = DeltaImportMode;
+            _model.SelectedObjectTypeNames = SelectedObjectTypeNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // A single Object Type is opened for the administrator; with several, the summaries are the overview.
+            if (_model.ObjectTypes.Count == 1)
+                _expanded.Add(_model.ObjectTypes[0]);
+        }
+        else
+        {
+            _model = null;
+        }
+    }
+
+    private async Task LoadCatalogueAsync()
+    {
+        if (Catalogue == null)
+            return;
+
+        _catalogueLoading = true;
+        _catalogueFailure = null;
+        StateHasChanged();
+
+        _catalogueLoad = ReadCatalogueObjectsAsync(Catalogue);
+        await _catalogueLoad;
+    }
+
+    private async Task ReadCatalogueObjectsAsync(IConnectedSystemCatalogueSource catalogue)
+    {
+        var read = await catalogue.GetObjectsAsync();
+        _catalogueObjects = read.Value ?? [];
+        _catalogueFailure = read.Failure;
+        _catalogueLoading = false;
+    }
+
+    /// <summary>The table list for the Add Object Type dialog, once any read in progress has finished.</summary>
+    private async Task<IReadOnlyList<ConnectorCatalogueObject>> CatalogueObjectsWhenReadAsync()
+    {
+        await _catalogueLoad;
+        return _catalogueObjects;
+    }
+
+    /// <summary>
+    /// A table's columns for the Add Object Type dialog, once any read of the table list has finished. Where that
+    /// read failed, its reason is the answer: reading the table would wait out the same failure.
+    /// </summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> TableWhenReadAsync(string? schema, string table)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await LoadTableAsync(schema, table);
+    }
+
+    /// <summary>A statement's columns for the Add Object Type dialog; see <see cref="TableWhenReadAsync"/>.</summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> StatementWhenReadAsync(string statement)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await DescribeStatementAsync(statement);
+    }
+
+    private async Task RetryCatalogueAsync()
+    {
+        _reads.Clear();
+        await LoadCatalogueAsync();
+    }
+
+    private Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> LoadTableAsync(string? schema, string table)
+    {
+        var key = $"T|{schema}|{table}";
+        if (!_reads.TryGetValue(key, out var read) || read is { IsCompletedSuccessfully: true, Result.Succeeded: false })
+            _reads[key] = read = Catalogue!.GetObjectAsync(schema, table);
+
+        return read;
+    }
+
+    private Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> DescribeStatementAsync(string statement)
+    {
+        var key = $"S|{statement}";
+        if (!_reads.TryGetValue(key, out var read) || read is { IsCompletedSuccessfully: true, Result.Succeeded: false })
+            _reads[key] = read = Catalogue!.DescribeStatementAsync(statement);
+
+        return read;
+    }
+
+    /// <summary>
+    /// Writes the document back to the setting, in its canonical layout, and tells the settings tab so its save
+    /// gate and any dependent fields follow.
+    /// </summary>
+    private async Task WriteBackAsync()
+    {
+        if (_model == null)
+            return;
+
+        SettingValue.StringValue = _model.ToJson();
+        await RefreshProblemsAsync();
+        await ValueChanged.InvokeAsync();
+    }
+
+    private void SetExpanded(SqlObjectTypeDocument objectType, bool expanded)
+    {
+        if (expanded)
+            _expanded.Add(objectType);
+        else
+            _expanded.Remove(objectType);
+    }
+
+    private Task AddObjectTypeAsync() => AddObjectTypeFromAsync(null, null);
+
+    /// <summary>
+    /// Offers an Object Type for a table a foreign key points at: the Add Object Type dialog, with that table chosen.
+    /// </summary>
+    private Task AddSuggestedObjectTypeAsync(SqlObjectTypeSuggestion suggestion) =>
+        AddObjectTypeFromAsync(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName);
+
+    /// <summary>
+    /// Opens the Add Object Type dialog and adds what it builds as an expanded card, where the Delta Import
+    /// fields and any problems are waiting.
+    /// </summary>
+    private async Task AddObjectTypeFromAsync(string? schema, string? table)
+    {
+        if (_model == null)
+            return;
+
+        var objectType = await SqlAddObjectTypeDialog.ShowAsync(
+            DialogService,
+            _model.ObjectTypes,
+            schema,
+            table,
+            Catalogue == null ? null : CatalogueObjectsWhenReadAsync,
+            Catalogue == null ? null : TableWhenReadAsync,
+            Catalogue == null ? null : StatementWhenReadAsync,
+            DeltaImportMode);
+
+        if (objectType == null)
+            return;
+
+        // Only the new card is left open, so it is where the administrator's eye lands rather than a scroll away.
+        var index = _model.AddObjectType(objectType);
+        _expanded.Clear();
+        _expanded.Add(_model.ObjectTypes[index]);
+        await WriteBackAsync();
+    }
+
+    private async Task RemoveObjectTypeAsync(SqlObjectTypeDocument objectType)
+    {
+        if (_model == null)
+            return;
+
+        var index = _model.ObjectTypes.IndexOf(objectType);
+        if (index < 0)
+            return;
+
+        // A card with nothing on it loses nothing, so it goes without asking: typically one just added by mistake.
+        if (!SqlObjectTypesEditorModel.IsBlank(objectType))
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync("Remove Object Type?", RemovalMessage(objectType.Name, _model.ReferencesTo(index)),
+                yesText: "Remove", cancelText: "Cancel");
+            if (confirmed != true)
+                return;
+        }
+
+        _model.RemoveObjectType(index);
+        _expanded.Remove(objectType);
+        await WriteBackAsync();
+    }
+
+    /// <summary>
+    /// What removing an Object Type takes with it, naming every reference to it so none is lost unseen. Names
+    /// are encoded: they are the administrator's own text, rendered as markup to show them as code.
+    /// </summary>
+    private static MarkupString RemovalMessage(string? name, IReadOnlyList<SqlObjectTypeReference> references)
+    {
+        static string Code(string? text) => $"<code class=\"jim-code-inline\">{WebUtility.HtmlEncode(text ?? "unnamed")}</code>";
+
+        var subject = string.IsNullOrWhiteSpace(name) ? "this Object Type" : $"Object Type <strong>{WebUtility.HtmlEncode(name)}</strong>";
+        if (references.Count == 0)
+            return new MarkupString($"Remove {subject}? Its objects stop being imported once the settings are saved.");
+
+        var items = string.Concat(references.Select(r =>
+            $"<li>{WebUtility.HtmlEncode(r.ObjectTypeName ?? "Unnamed Object Type")}: {(r.IsMultiValuedAttribute ? "multi-valued attribute" : "column")} {Code(r.Name)}</li>"));
+        return new MarkupString($"Remove {subject}? These references to it are removed with it:<ul class=\"mt-2 ml-5\">{items}</ul>");
+    }
+
+    /// <summary>
+    /// The text is the setting's value as typed; it is read back into cards only when the administrator returns
+    /// to them. The settings tab is told so its save gate follows.
+    /// </summary>
+    private async Task OnJsonChangedAsync(string text)
+    {
+        SettingValue.StringValue = text;
+        await RefreshProblemsAsync();
+        await ValueChanged.InvokeAsync();
+    }
+
+    private Task InsertExampleAsync() => OnJsonChangedAsync(SettingValue.Setting.Example ?? string.Empty);
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.StringValue ?? string.Empty);
+            Snackbar.Add($"{SettingValue.Setting.Name} copied to the clipboard.", Severity.Info);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("The browser would not copy to the clipboard. Select the text and copy it instead.", Severity.Warning);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nobody left to tell.
+        }
+    }
+
+    private async Task ToggleJsonViewAsync()
+    {
+        if (!_jsonView)
+        {
+            _jsonView = true;
+            return;
+        }
+
+        // Back to the cards from whatever was typed. The button is held while the cards cannot show the document,
+        // and a document they still cannot read keeps the JSON view open rather than dropping what it holds.
+        _expanded.Clear();
+        LoadModel();
+        _jsonView = _model == null;
+        await ValueChanged.InvokeAsync();
+    }
+}

@@ -7,7 +7,42 @@ audience: administrator
 
 # Deprovisioning
 
-Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
+Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's Metaverse Object is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)). A Metaverse Object is either in or out of an export rule's scope, and the rule acts on each change of state:
+
+```jim-diagram
+archetype: lifecycle
+title: An export rule's scope, as two states
+desc: 'A Metaverse Object is either out of or in the scope of an export Synchronisation Rule. When it enters scope, JIM provisions an account in the target Connected System, if the rule provisions. When it leaves scope, or is deleted, the rule''s Deprovisioning Action applies: Disconnect breaks the join and leaves the account in place, returning the object to out of scope, and Delete removes the account from the target system on the next export run.'
+start: {label: Metaverse Object}
+states:
+- {id: out, label: Out of scope, sub: no account owed}
+- {id: in, label: In scope, sub: 'account provisioned and kept current'}
+transitions:
+- {from: out, to: in, label: enters scope, note: provisioned if the rule provisions}
+- {from: in, to: out, label: 'leaves scope: Disconnect', note: 'join broken; account stays'}
+end: {from: in, label: 'leaves scope: Delete', state: {label: Account deleted, sub: on the next export run}}
+```
+
+What happens on leaving depends first on whether JIM ever sent the account:
+
+```jim-diagram
+archetype: decision
+title: What happens when a Metaverse Object leaves an export rule's scope
+desc: 'When a Metaverse Object leaves an export rule''s scope or is deleted, it matters first whether a Create was ever sent for its Connected System Object. If not, JIM cancels the provisioning: the unsent Create Pending Export and the Connected System Object are removed, and nothing is exported. If it was, the Deprovisioning Action decides, and Delete wins when several export rules cover the object. Disconnect, the default, breaks the join and leaves the object in place in the Connected System; Delete queues a delete that removes it on the next export run.'
+start: {label: Leaves scope or is deleted}
+questions:
+- {id: sent, label: 'Create sent?', sub: confirmed or not}
+- {id: action, label: Deprovisioning Action, sub: Delete wins across export rules}
+outcomes:
+- {id: cancelled, label: Provisioning cancelled, sub: unsent Create and object removed}
+- {id: disconnected, label: Disconnected, sub: join broken; object left in place}
+- {id: deleted, label: Delete queued, sub: removed on the next export run}
+answers:
+- {from: sent, to: cancelled, label: 'no: Pending Provisioning'}
+- {from: sent, to: action, label: 'yes'}
+- {from: action, to: disconnected, label: Disconnect (default)}
+- {from: action, to: deleted, label: Delete}
+```
 
 - **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported: a change queued for the object while it was in scope, and not yet exported, is withdrawn by the next export run rather than written to an object JIM no longer manages.
 - **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
@@ -20,9 +55,9 @@ One case sits outside the action altogether: provisioning that was **never expor
 
 Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
 
-## When a change to an export rule takes effect
+## :material-clock-outline: When a change to an export rule takes effect
 
-JIM evaluates a Metaverse Object against the export rules whenever its own values change. A change to the rule is different: it can move objects whose values have not changed at all into or out of the rule's scope, or change what happens to objects already outside it. So when you save an export rule in a way that can do either, JIM marks every Metaverse Object of the rule's object type for review:
+JIM evaluates a Metaverse Object against the export rules whenever a synchronisation changes its values. A change to the rule is different: it can move objects whose values have not changed at all into or out of the rule's scope, or change what happens to objects already outside it. So when you save an export rule in a way that can do either, JIM marks every Metaverse Object of the rule's object type for review:
 
 - creating an enabled export rule
 - enabling a disabled export rule
@@ -30,7 +65,7 @@ JIM evaluates a Metaverse Object against the export rules whenever its own value
 - changing the rule's Scoping Criteria, whether widening or narrowing them
 - changing the rule's Deprovisioning Action
 
-The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing export scope** step. It records an **Export Scope Review** execution item, named after and linking the Metaverse Object, for each object it provisioned, deprovisioned or queued an export for; an object it found already as the rule wants it gets none, so the few objects a change actually moved are not lost among the whole type. It reviews every object of the type once, so on a large population expect that run to take longer than usual.
+The next synchronisation of any Connected System reviews each marked object against the rule as it now stands, whether it is a Full or a Delta Synchronisation, and even when a Delta Synchronisation has nothing new to import. An object now in scope is provisioned (when the rule provisions), and a joined object that has left scope is deprovisioned according to the Deprovisioning Action. The review appears on that run's Activity as the **Reviewing exports** step. It records an **Export Review** execution item, named after and linking the Metaverse Object, for each object it provisioned, deprovisioned, queued an export for or delivered a changed value to; an object it found already as the rule wants it gets none, so the few objects a change actually moved are not lost among the whole type. It reviews every object of the type once, so on a large population expect that run to take longer than usual.
 
 Some changes deliberately mark nothing:
 
@@ -39,11 +74,17 @@ Some changes deliberately mark nothing:
 
 A synchronisation marks objects for the same review itself when it disconnects one from a Connected System an export rule provisions to, so an account deleted directly in the target system is provisioned again by that run (see [Projection and provisioning](synchronisation-rules.md#projection-and-provisioning)).
 
+A Metaverse Object that JIM creates or changes outside any synchronisation is marked for the same review, because no synchronisation visits it: the initial administrator created at first sign-in, a profile value refreshed at a later sign-in, and the objects [Example Data](example-data.md) generates. The next synchronisation of any Connected System, a Delta Synchronisation included, reviews each one against every export rule, so the outcome is the same whether the object or the rule came first. For an object whose values changed, the review also delivers those changes: a new or changed value is staged for the accounts the object already has, and a removed value is removed from them, exactly as if a synchronisation had made the change. A value the target system holds that JIM never managed is left alone. A change saved while a synchronisation is reviewing the object is kept for the next one. Upgrading from v0.17.0 or earlier marks every internal Metaverse Object (the initial administrator and any Example Data objects) for this review once, so the next synchronisation provisions any an export rule should already have reached. A value changed outside synchronisation on v0.17.0 or earlier reaches the accounts the object already has only when it next changes.
+
+The built-in [Temporal Scope Reconciliation](schedules.md#built-in-schedules) flags the Metaverse Objects a relative date has moved across an export rule's boundary for the same review.
+
+While objects wait, the export rule and the Metaverse Object Type's page show **Export review pending: N**, and an Administrator opening a flagged Metaverse Object sees **Awaiting export review**.
+
 A change saved while a synchronisation is already running is not lost: that run carries on with the rules as they were when it started, and leaves the review for the next one.
 
 **Changes saved on v0.16.0 or earlier.** Only changes saved on a later release are reviewed. If an export rule was created, re-enabled, switched to provisioning or re-scoped on v0.16.0 or earlier, objects it should have provisioned or deprovisioned may still be waiting for a change of their own. On a rule that provisions, switch **Provision to Connected System** off and save, then switch it on and save again: the next synchronisation reviews every object of the rule's type. On a rule that does not provision, the next change saved to its Scoping Criteria reviews them. A Deprovisioning Action switched from Delete to Disconnect on v0.16.0 or earlier leaves the deletes it queued before the switch in place; to have them withdrawn, switch it to Delete and back to Disconnect, saving each time, before the next export runs. That reaches accounts JIM still manages; a delete v0.16.0 or earlier left queued for an account it had already disconnected is still exported.
 
-## Seeing what a run has deprovisioned
+## :material-text-box-search-outline: Seeing what a run has deprovisioned
 
 Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted Metaverse Object's execution item as a **Pending Export** outcome nested beneath the **Metaverse Object deleted** outcome that caused it, naming the Connected System the account is being removed from and the export rule whose Deprovisioning Action queued it, and is counted in the Activity's Pending Exports total. Where several export rules cover the account, that is the rule whose Delete won. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, Metaverse Object deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
 
@@ -53,7 +94,7 @@ A delete queued because an object left an export rule's scope, whether its own v
 
 Where the rule's Deprovisioning Action is **Disconnect**, the account stays in the Connected System and nothing is queued, so the run reports a **Disconnected from target system** outcome instead, in the same place: on the execution item of the object that left scope, or beneath the **Metaverse Object deleted** outcome when the Metaverse Object was deleted. It names the Connected System and the export rule whose action left the account in place, and links the account that JIM no longer manages. It is not counted as a Pending Export. [Sync Preview](sync-preview.md) predicts both outcomes in the same place.
 
-## Previewing a destructive toggle change
+## :material-eye-outline: Previewing a destructive toggle change
 
 Two of a Synchronisation Rule's settings can turn a routine scope exit into something you cannot take back: the **Deprovisioning Action** above, and an import rule's **Out-of-Scope Action** (whether objects that leave import scope keep their Metaverse Object join or are disconnected). Both are single dropdowns, and before this preview existed the first sign of what one meant was the synchronisation run that acted on it.
 

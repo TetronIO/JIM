@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Utility;
 
 namespace JIM.Web.Causality;
 
@@ -133,10 +134,38 @@ public sealed class CausalityEvent
     /// </summary>
     public IReadOnlyList<CausalityEntityLink> Links { get; init; } = [];
 
+    private readonly int? _attributeRowCount;
+
     /// <summary>
-    /// Normalised attribute change rows for events that expose attribute detail; empty otherwise.
+    /// Normalised attribute change rows for events that expose attribute detail, when there are few enough to carry
+    /// with the event; empty otherwise. Compare <see cref="AttributeRowCount"/>: a change to a large group carries one
+    /// row per member, and those are read from <see cref="AttributeRowSource"/> a window at a time (#2498).
     /// </summary>
     public IReadOnlyList<CausalityAttributeRow> AttributeRows { get; init; } = [];
+
+    /// <summary>
+    /// How many attribute rows the event has in all; <see cref="AttributeRows"/>' count unless the rows were too many
+    /// to carry.
+    /// </summary>
+    public int AttributeRowCount
+    {
+        get => _attributeRowCount ?? AttributeRows.Count;
+        init => _attributeRowCount = value;
+    }
+
+    /// <summary>
+    /// The change record the rows are read from when <see cref="AttributeRows"/> does not hold them all; null when it does.
+    /// </summary>
+    public CausalityAttributeRowSource? AttributeRowSource { get; init; }
+
+    /// <summary>
+    /// What the rows amount to, where they were summarised rather than carried: how many are Sets, Adds and Removes, and
+    /// the one Synchronisation Rule they agree on.
+    /// </summary>
+    public ChangeValueSummary? AttributeRowSummary { get; init; }
+
+    /// <summary>Whether <see cref="AttributeRows"/> holds every one of the event's rows.</summary>
+    public bool HasAllAttributeRows => AttributeRows.Count >= AttributeRowCount;
 
     /// <summary>
     /// What this event's <see cref="AttributeRows"/> are, when they are not attribute changes; null for

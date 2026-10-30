@@ -2,6 +2,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Expressions
 @using JIM.Models.Logic
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -14,6 +15,10 @@
 
 @if (Mapping.Generation is { } generation)
 {
+<AttributeFlowEditorLayout ShowTryIt="true">
+<Settings>
+    @SettingsHeader
+
     <ExpressionEditor @ref="_baseExpressionEditor" Value="@BaseSource.Expression" ValueChanged="OnBaseExpressionChangedAsync" Id="generated-value-base-expression"
         Label="Base expression" Disabled="IsNumberTarget"
         Placeholder="@(IsNumberTarget ? null : "e.g. Lower(cs[\"firstName\"]) + \".\" + Lower(cs[\"lastName\"])")"
@@ -28,15 +33,7 @@
         @BaseExpressionTools(InsertIntoBaseExpressionAsync)
     }
 
-    @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
-    {
-        @* Tested as the Attribute Flow it is (#2055): typed inputs, value processing and Missing Input Behaviour, stopping
-           at the base, as a Synchronisation does. *@
-        <ExpressionTester Expression="@BaseSource.Expression" SyncRule="StagedSyncRule" Mapping="Mapping" Source="BaseSource"
-            SampleValuesChanged="OnSampleValuesChanged" />
-    }
-
-    <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">Uniqueness token</MudText>
+    <SettingsSection Title="Uniqueness token" Summary="@AttributeFlowSectionSummaries.UniquenessToken(generation.TokenKind)" Expanded="true" Class="mt-5">
     <MudRadioGroup T="GeneratedValueTokenKind" Value="generation.TokenKind" ValueChanged="OnTokenKindChangedAsync">
         <MudStack Spacing="1">
             <MudRadio Value="GeneratedValueTokenKind.OnlyIfTaken" Color="Color.Primary" Disabled="OnlyIfTakenDisabled">
@@ -191,98 +188,48 @@
             break;
     }
 
-    @* ─── Live preview (Unique Value Generation, #242, Phase 3, Work Package D2) ─── *@
-    <GeneratedValuePreviewPanel Mapping="Mapping" BaseSource="BaseSource" TargetType="TargetType" TargetName="@TargetName"
-        Direction="Direction" SyncRuleId="SyncRuleId" ConnectedSystemId="ConnectedSystemId"
-        MetaverseObjectTypeId="MetaverseObjectTypeId" TargetMetaverseAttributeId="TargetMetaverseAttributeId"
-        SampleValues="_sampleValues" BuiltValues="_builtValues" />
-
-    @* ─── When JIM generates this value (read-only) ─── *@
-    <MudPaper Outlined="true" Class="pa-3 mt-5">
-        <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
-        @if (Direction == SyncRuleDirection.Import)
-        {
-            <MudText Typo="Typo.body2">
-                1. No higher-priority source supplies @(TargetName ?? "this attribute") for the Metaverse Object. JIM
-                generates a value the first time and keeps it from then on. Like any Attribute Flow taking the
-                attribute over, it replaces a value a higher-priority source left behind when it stopped supplying one.
-            </MudText>
-        }
-        else
-        {
-            <MudText Typo="Typo.body2">
-                1. JIM generates @(TargetName ?? "the value") the first time it exports it to a Connected System
-                Object and keeps that value from then on. A value the Connected System already holds is replaced;
-                to set it only on accounts JIM creates, turn on Initial Export Only.
-            </MudText>
-        }
-        @if (BaseExpressionInputs.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Class="mt-2">2. No inputs to wait for: the base expression is empty.</MudText>
-            <MudText Typo="Typo.body2" Class="mt-2">3. Then once only.</MudText>
-        }
-        else
-        {
-            <div class="mt-2 d-flex align-center flex-wrap gap-1">
-                <MudText Typo="Typo.body2">2. Every attribute the base expression reads has a value:</MudText>
-                @foreach (var input in BaseExpressionInputs)
-                {
-                    @* The attribute name alone, per the approved mockup; the full accessor (which side of the
-                       Metaverse it reads from) is available on hover rather than crowding the chip. *@
-                    <MudTooltip Text="@input.Accessor" Arrow="true" Placement="Placement.Top">
-                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@input.AttributeName</MudChip>
-                    </MudTooltip>
-                }
-            </div>
-            <MudText Typo="Typo.body2" Class="mt-2">
-                3. Then once only. The value is kept even if these inputs later change.
-            </MudText>
-        }
-    </MudPaper>
+    </SettingsSection>
 
     @* ─── If an input has no value (Missing Input Behaviour), only meaningful with a base expression ─── *@
     @if (!string.IsNullOrWhiteSpace(BaseSource.Expression))
     {
-        <MudText Typo="Typo.subtitle2" Class="mt-5 mb-1">If an input has no value</MudText>
-        <MudRadioGroup T="MissingInputBehaviour" Value="BaseSource.MissingInputBehaviour" ValueChanged="OnMissingInputBehaviourChangedAsync">
-            <MudStack Spacing="1">
-                <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
-                    <MudText Typo="Typo.body1">Wait until every input has a value</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Recommended for generated values: a value built from a missing input would be kept for ever.
-                    </MudText>
-                </MudRadio>
-                <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
-                    <MudText Typo="Typo.body1">Evaluate anyway</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Only if the expression handles missing values itself, for example with IIF and IsNullOrEmpty.
-                    </MudText>
-                </MudRadio>
-            </MudStack>
-        </MudRadioGroup>
+        <SettingsSection @ref="_missingInputSection" Title="If an input has no value"
+                         Summary="@AttributeFlowSectionSummaries.MissingInput(BaseSource.MissingInputBehaviour, generated: true)">
+            <MudRadioGroup T="MissingInputBehaviour" Value="BaseSource.MissingInputBehaviour" ValueChanged="OnMissingInputBehaviourChangedAsync">
+                <MudStack Spacing="1">
+                    <MudRadio Value="MissingInputBehaviour.ContributeNoValue" Color="Color.Primary">
+                        <MudText Typo="Typo.body1">Wait until every input has a value</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Recommended for generated values: a value built from a missing input would be kept for ever.
+                        </MudText>
+                    </MudRadio>
+                    <MudRadio Value="MissingInputBehaviour.EvaluateAnyway" Color="Color.Primary">
+                        <MudText Typo="Typo.body1">Evaluate anyway</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            Only if the expression handles missing values itself, for example with IIF and IsNullOrEmpty.
+                        </MudText>
+                    </MudRadio>
+                </MudStack>
+            </MudRadioGroup>
+        </SettingsSection>
     }
 
     @* ─── Checked for availability in (#242, release 3): where the value is exported and how each target is checked ─── *@
-    <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" />
-
-    @* ─── Values built from it (Generated Value Forms, #2014, mock screen 2): only a value held in the Metaverse has any ─── *@
-    @if (Mapping.ResolveTargetMetaverseAttributeId().HasValue && StagedSyncRule != null)
-    {
-        <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? "this value")"
-                                        CollisionRemediation="generation.CollisionRemediation" />
-    }
+    <SettingsSection Title="Checked for availability" Summary="@AttributeFlowSectionSummaries.Availability(_participants)">
+        <GeneratedValueAvailabilityPanel Participants="_participants" Generation="generation" OnChanged="OnExclusionsChangedAsync" ShowHeading="false" />
+    </SettingsSection>
 
     @* ─── Collision Remediation (#242, release 4): what JIM does when a target rejects the value as already in use ─── *@
-    <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" />
+    <SettingsSection Title="Collision Remediation" Summary="@AttributeFlowSectionSummaries.CollisionRemediation(generation, _participants)">
+        <CollisionRemediationSwitch Generation="generation" Participants="_participants" OnChanged="NotifyChangedAsync" ShowHeading="false" />
+    </SettingsSection>
 
     @* ─── Advanced: attempt limit ─── *@
-    <MudExpansionPanels Elevation="0" Class="mt-5">
-        <MudExpansionPanel Text="Advanced">
-            <MudNumericField T="int" Value="generation.AttemptLimit" ValueChanged="OnAttemptLimitChangedAsync"
-                Label="Attempt limit" Min="1" Max="100000" Variant="Variant.Outlined" Immediate="true"
-                HelperText="Candidates tried per object per run before the object fails." />
-        </MudExpansionPanel>
-    </MudExpansionPanels>
+    <SettingsSection Title="Advanced" Summary="@($"Attempt limit {generation.AttemptLimit}")">
+        <MudNumericField T="int" Value="generation.AttemptLimit" ValueChanged="OnAttemptLimitChangedAsync"
+            Label="Attempt limit" Min="1" Max="100000" Variant="Variant.Outlined" Immediate="true"
+            HelperText="Candidates tried per object per run before the object fails." />
+    </SettingsSection>
 
     @if (ValidationErrors.Count > 0)
     {
@@ -296,6 +243,89 @@
             </ul>
         </MudAlert>
     }
+
+    @SettingsFooter
+</Settings>
+
+@* ─── Try it (#2471): the base tried as a Synchronisation would, then the candidates worked out from it, beside the
+   settings. Rendered here rather than by the dialog so the tester's values live in this component's own tree. ─── *@
+<TryIt>
+        @if (!IsNumberTarget && !string.IsNullOrWhiteSpace(BaseSource.Expression))
+        {
+            <ExpressionTester Expression="@BaseSource.Expression" SyncRule="StagedSyncRule" Mapping="Mapping" Source="BaseSource"
+                SampleValuesChanged="OnSampleValuesChanged" TriedBaseChanged="OnTriedBaseChanged"
+                MissingInputBehaviourName="@AttributeFlowSectionSummaries.MissingInput(BaseSource.MissingInputBehaviour, generated: true)"
+                OnChangeMissingInputBehaviour="RevealMissingInputSettingAsync">
+                <GeneratedResult>@GeneratedResultPanel</GeneratedResult>
+            </ExpressionTester>
+        }
+        else
+        {
+            @GeneratedResultPanel
+        }
+
+        @* ─── How it works (read-only): when JIM generates the value, and the values built from it ─── *@
+        <div class="mt-4">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @GenerationSummary
+                <MudLink Typo="Typo.body2" Class="ml-1" OnClick="@(() => _howItWorksOpen = !_howItWorksOpen)"
+                         aria-expanded="@(_howItWorksOpen ? "true" : "false")">@(_howItWorksOpen ? "Hide how it works" : "How it works")</MudLink>
+            </MudText>
+            <MudCollapse Expanded="_howItWorksOpen">
+                <MudPaper Outlined="true" Class="pa-3 mt-2">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">When JIM generates this value</MudText>
+                    @if (Direction == SyncRuleDirection.Import)
+                    {
+                        <MudText Typo="Typo.body2">
+                            1. No higher-priority source supplies @(TargetName ?? "this attribute") for the Metaverse Object. JIM
+                            generates a value the first time and keeps it from then on. Like any Attribute Flow taking the
+                            attribute over, it replaces a value a higher-priority source left behind when it stopped supplying one.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">
+                            1. JIM generates @(TargetName ?? "the value") the first time it exports it to a Connected System
+                            Object and keeps that value from then on. A value the Connected System already holds is replaced;
+                            to set it only on accounts JIM creates, turn on Initial Export Only.
+                        </MudText>
+                    }
+                    @if (BaseExpressionInputs.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-2">2. No inputs to wait for: the base expression is empty.</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-2">3. Then once only.</MudText>
+                    }
+                    else
+                    {
+                        <div class="mt-2 d-flex align-center flex-wrap gap-1">
+                            <MudText Typo="Typo.body2">2. Every attribute the base expression reads has a value:</MudText>
+                            @foreach (var input in BaseExpressionInputs)
+                            {
+                                @* The attribute name alone, per the approved mockup; the full accessor (which side of the
+                                   Metaverse it reads from) is available on hover rather than crowding the chip. *@
+                                <MudTooltip Text="@input.Accessor" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">@input.AttributeName</MudChip>
+                                </MudTooltip>
+                            }
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            3. Then once only. The value is kept even if these inputs later change.
+                        </MudText>
+                    }
+                </MudPaper>
+
+                @* ─── Values built from it (Generated Value Forms, #2014, mock screen 2): only a value held in the Metaverse has any ─── *@
+                @if (Mapping.ResolveTargetMetaverseAttributeId().HasValue && StagedSyncRule != null)
+                {
+                    <GeneratedValueBuiltValuesPanel BuiltValues="_builtValues" GeneratedAttributeName="@(TargetName ?? "this value")"
+                                                    CollisionRemediation="generation.CollisionRemediation" />
+                }
+            </MudCollapse>
+        </div>
+</TryIt>
+</AttributeFlowEditorLayout>
+
+
 }
 
 @code {
@@ -378,7 +408,34 @@
     [Parameter]
     public RenderFragment<Func<string, Task>>? BaseExpressionTools { get; set; }
 
+    /// <summary>
+    /// The dialog's own fields at the top of the settings pane (the Source Type and the target), since this editor lays
+    /// out both panes of the dialog (#2471).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? SettingsHeader { get; set; }
+
+    /// <summary>The dialog's own fields at the foot of the settings pane: Enabled.</summary>
+    [Parameter]
+    public RenderFragment? SettingsFooter { get; set; }
+
     private ExpressionEditor? _baseExpressionEditor;
+    private SettingsSection? _missingInputSection;
+    private bool _howItWorksOpen;
+
+    /// <summary>The base the tester's values give generation; null while nothing has been tried.</summary>
+    private GeneratedBaseEvaluation? _triedBase;
+
+    /// <summary>The candidates worked out from the base: the end of the Try it result.</summary>
+    private RenderFragment GeneratedResultPanel => @<GeneratedValuePreviewPanel Mapping="Mapping" BaseSource="BaseSource" TargetType="TargetType" TargetName="@TargetName"
+        Direction="Direction" SyncRuleId="SyncRuleId" ConnectedSystemId="ConnectedSystemId"
+        MetaverseObjectTypeId="MetaverseObjectTypeId" TargetMetaverseAttributeId="TargetMetaverseAttributeId"
+        SampleValues="_sampleValues" BuiltValues="_builtValues" TriedBase="_triedBase" />;
+
+    /// <summary>When JIM generates the value, in one sentence; "How it works" gives the whole statement.</summary>
+    private string GenerationSummary => BaseExpressionInputs.Count == 0
+        ? "Generated once, then kept."
+        : "Generated once, when every input has a value, then kept even if they change.";
 
     /// <summary>The "Checked for availability in" rows, for the target as it now stands; null while loading.</summary>
     private IReadOnlyList<GeneratedValueParticipant>? _participants;
@@ -395,8 +452,25 @@
     /// <summary>Discards a built values load overtaken by a newer one.</summary>
     private int _builtValuesLoad;
 
+    /// <summary>
+    /// Whether the uniqueness token still follows the base expression: a sequence number while there is none, "Only if
+    /// taken" once there is. True only for a new Generated Value, and only until the administrator picks a token.
+    /// </summary>
+    private bool _tokenFollowsBaseExpression;
+
+    protected override void OnInitialized()
+    {
+        // "Only if taken" with no base expression cannot be added or saved, so a mapping arriving in that state is a new
+        // one still on the model's default; anything else is a choice already made, and is left alone.
+        _tokenFollowsBaseExpression = Mapping.Generation is { TokenKind: GeneratedValueTokenKind.OnlyIfTaken }
+            && string.IsNullOrWhiteSpace(BaseSource.Expression);
+        FollowBaseExpression();
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        FollowBaseExpression();
+
         var target = (Mapping.ResolveTargetMetaverseAttributeId(), Mapping.ResolveTargetConnectedSystemAttributeId());
         if (_participantsTarget == target)
             return;
@@ -544,11 +618,24 @@
         else if (!hasExpression && inSources)
             Mapping.Sources.Remove(BaseSource);
 
+        FollowBaseExpression();
         await NotifyChangedAsync();
+    }
+
+    /// <summary>Moves a token that still follows the base expression to the default for the form as it now stands.</summary>
+    private void FollowBaseExpression()
+    {
+        if (!_tokenFollowsBaseExpression || Mapping.Generation is not { } generation)
+            return;
+
+        generation.TokenKind = GeneratedValueFormHelpers.DefaultTokenKind(!string.IsNullOrWhiteSpace(BaseSource.Expression), IsNumberTarget);
+        if (generation.TokenKind == GeneratedValueTokenKind.Sequence)
+            generation.NeverReuse = true;
     }
 
     private async Task OnTokenKindChangedAsync(GeneratedValueTokenKind kind)
     {
+        _tokenFollowsBaseExpression = false;
         Mapping.Generation!.TokenKind = kind;
 
         // A Sequence never reuses a value whatever the setting (#242, Phase 6), so the stored flag is put back to
@@ -643,6 +730,14 @@
         _sampleValues = sampleValues;
         await NotifyChangedAsync();
     }
+
+    private async Task OnTriedBaseChanged(GeneratedBaseEvaluation? triedBase)
+    {
+        _triedBase = triedBase;
+        await NotifyChangedAsync();
+    }
+
+    private Task RevealMissingInputSettingAsync() => _missingInputSection?.OpenAndRevealAsync() ?? Task.CompletedTask;
 
     private async Task NotifyChangedAsync()
     {

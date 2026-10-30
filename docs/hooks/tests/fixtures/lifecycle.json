@@ -1,0 +1,48 @@
+[
+  {
+    "archetype": "lifecycle",
+    "title": "The Connected System lifecycle, one cmdlet per step",
+    "desc": "New-JIMConnectedSystem creates a Connected System; imports fill it; Clear-JIMConnectedSystem empties it; Remove-JIMConnectedSystem deletes it.",
+    "start": {
+      "label": "`New-JIMConnectedSystem`"
+    },
+    "container": {
+      "label": "Connected System",
+      "note": "`Get-JIMConnectedSystem` reads it and `Set-JIMConnectedSystem` changes it, in either state"
+    },
+    "states": [
+      {
+        "id": "configured",
+        "label": "Configured",
+        "sub": "no objects yet"
+      },
+      {
+        "id": "holding",
+        "label": "Holding objects",
+        "sub": "Connector Space filled"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "configured",
+        "to": "holding",
+        "label": "imported by a Run Profile"
+      },
+      {
+        "from": "holding",
+        "to": "configured",
+        "label": "`Clear-JIMConnectedSystem`",
+        "note": "keeps configuration, schema and rules"
+      }
+    ],
+    "end": {
+      "from": "container",
+      "label": "`Remove-JIMConnectedSystem`",
+      "note": "check first with `Get-JIMConnectedSystemDeletionPreview`",
+      "state": {
+        "label": "Deleted",
+        "sub": "with all its data"
+      }
+    }
+  }
+]

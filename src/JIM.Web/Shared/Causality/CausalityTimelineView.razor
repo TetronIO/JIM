@@ -100,6 +100,13 @@
     [Parameter]
     public EventCallback<CausalityEvent?> ExpandedEventChanged { get; set; }
 
+    /// <summary>
+    /// Reads a window of an event's attribute rows where there were too many to carry (#2498); see
+    /// <see cref="CausalityAttributeDetail.LoadAttributeRows"/>.
+    /// </summary>
+    [Parameter]
+    public Func<CausalityAttributeRowSource, JIM.Models.Utility.ChangeValueRowQuery, Task<JIM.Models.Utility.RangeResultSet<CausalityAttributeRow>>>? LoadAttributeRows { get; set; }
+
     private RenderFragment RenderEvent(CausalityEvent causalityEvent, int siblingCount) => __builder =>
     {
         var expanded = ReferenceEquals(ExpandedEvent, causalityEvent);
@@ -156,7 +163,7 @@
                         }
                     </div>
                 }
-                @if (causalityEvent.AttributeRows.Count > 0)
+                @if (causalityEvent.AttributeRowCount > 0)
                 {
                     <button type="button" class="tl-expander @(expanded ? "open" : null)"
                             aria-expanded="@(expanded ? "true" : "false")"
@@ -165,7 +172,7 @@
                         @* A queued deprovision's rows identify the target rather than change it, so it says
                            what they are instead of counting them; see CausalityEvent.AttributeRowsCaption. *@
                         @(causalityEvent.AttributeRowsCaption
-                          ?? $"{causalityEvent.AttributeRows.Count} attribute{(causalityEvent.AttributeRows.Count == 1 ? "" : "s")}")
+                          ?? $"{causalityEvent.AttributeRowCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} attribute{(causalityEvent.AttributeRowCount == 1 ? "" : "s")}")
                     </button>
                     @if (expanded)
                     {
@@ -173,6 +180,9 @@
                             @* An event with a rows caption is naming what its rows are rather than counting
                                changes, so those rows carry no meaningful operation to show. *@
                             <CausalityAttributeDetail Rows="causalityEvent.AttributeRows"
+                                                      Source="causalityEvent.AttributeRowSource"
+                                                      Summary="causalityEvent.AttributeRowSummary"
+                                                      LoadAttributeRows="LoadAttributeRows"
                                                       ShowOperations="@(causalityEvent.AttributeRowsCaption == null)" />
                         </div>
                     }

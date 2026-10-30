@@ -1,6 +1,6 @@
 # MVO Deletion and Grace Period
 
-> Last updated: 2026-09-23, JIM v0.15.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
 This diagram shows the full lifecycle of Metaverse Object (MVO) deletion, from the trigger event (CSO disconnection) through deletion rule evaluation, grace period handling, mode-aware rejoin cancellation, and deferred housekeeping cleanup.
 
@@ -38,13 +38,15 @@ flowchart TD
 
     OosAction -->|RemainJoined| KeepJoin[Delete CSO<br/>Preserve MVO join state<br/>Once managed always managed<br/>No deletion evaluation]
 
-    OosAction -->|Disconnect| GetRemaining[Get joined Connected System ids<br/>one entry per remaining CSO,<br/>excluding the disconnecting CSO]
+    OosAction -->|Disconnect| SurvivorScope{Recall enabled, and a<br/>surviving contributor's scope<br/>cannot be decided? #2336}
+    SurvivorScope -->|Yes| HeldBack[Held back: RPEI ScopingCriterionFailed<br/>No Deletion Rule, no recall, join kept<br/>CSO kept marked for the next run #2343]
+    SurvivorScope -->|No| GetRemaining[Get joined Connected System ids<br/>one entry per remaining CSO,<br/>excluding the disconnecting CSO]
     GetRemaining --> EvalDeletion[ISyncEngine.EvaluateMvoDeletionRule<br/>Pure decision on MVO fate, applied now<br/>See Deletion Rule Evaluation below]
     EvalDeletion --> RemoveAttrs{RemoveContributed<br/>AttributesOnObsoletion<br/>enabled on object type, and<br/>MVO not being deleted immediately?}
     RemoveAttrs -->|Yes| RecallAttrs[Attribute Recall + re-election:<br/>Mark MVO attributes where<br/>ContributedBySystemId = this system for removal<br/>Re-elect next-priority surviving contributor<br/>Attribute with no survivor is cleared,<br/>or frozen if a deletion is pending,<br/>or preserved if no import source remains #1570]
     RemoveAttrs -->|No| BreakJoin
     RecallAttrs --> QueueRecall[Queue MVO for export evaluation<br/>with recalled + re-elected values<br/>Targets receive removals or a<br/>change-of-value to the survivor]
-    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined]
+    QueueRecall --> BreakJoin[Break CSO-MVO join<br/>Set JoinType = NotJoined<br/>Not being deleted, and an export rule<br/>provisions to this system: flag the MVO<br/>for the export scope review #2318]
 ```
 
 ## Deletion Rule Evaluation
@@ -87,9 +89,9 @@ flowchart TD
 
     CheckGrace -->|Null or TimeSpan.Zero| DedupCheck{MVO already queued<br/>for deletion<br/>in this page?}
     DedupCheck -->|Yes| Skip([Skip - prevent<br/>double-queueing])
-    DedupCheck -->|No| Immediate[Add MVO to<br/>pendingMvoDeletions batch<br/>Deleted at page boundary]
+    DedupCheck -->|No| Immediate[Add MVO to<br/>pendingMvoDeletions batch<br/>Deleted at page boundary<br/>Record the deleting RPEI:<br/>DeletingRunProfileExecutionItemId<br/>named by the Deleted change record #2460]
 
-    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Set DeletionPolicySnapshotJson<br/>at mark-time<br/>Queue MVO onto the page-flush<br/>update batch #1613, persisted by<br/>PersistPendingMetaverseObjectsAsync]
+    CheckGrace -->|> 0| Deferred[Set LastConnectorDisconnectedDate<br/>= DateTime.UtcNow<br/>Capture initiator info:<br/>DeletionInitiatedByType<br/>DeletionInitiatedById<br/>DeletionInitiatedByName<br/>Set DeletionPolicySnapshotJson<br/>at mark-time<br/>Record the scheduling RPEI:<br/>DeletionScheduledByRunProfile<br/>ExecutionItemId #1811<br/>Queue MVO onto the page-flush<br/>update batch #1613, persisted by<br/>PersistPendingMetaverseObjectsAsync]
     Deferred --> WaitForHousekeeping([Deferred to housekeeping<br/>Eligible after grace period expires])
 ```
 
@@ -145,7 +147,7 @@ flowchart TD
     BulkDelete --> BulkOk{Bulk path<br/>succeeded?}
     BulkOk -->|No| Fallback[Per-MVO fallback:<br/>EvaluateMvoDeletionAsync, then<br/>DeleteMetaverseObjectAsync per MVO<br/>A failure sets LastConnectorDisconnectedDate<br/>so housekeeping can retry later]
     BulkOk -->|Yes| Report
-    Fallback --> Report[Report on the Activity:<br/>delete Pending Exports under MvoDeleted #1044<br/>ProvisioningCancelled outcomes under<br/>MvoDeleted #1682]
+    Fallback --> Report[Report on the Activity:<br/>delete Pending Exports under MvoDeleted #1044,<br/>each naming its deprovisioning rule #1811<br/>ProvisioningCancelled outcomes under<br/>MvoDeleted #1682<br/>TargetDisconnected outcomes for accounts<br/>a Disconnect action left in place #1811]
     Report --> Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
     Recall --> Done([Done])
 ```
@@ -165,17 +167,19 @@ flowchart TD
 
     RuleCheck -->|WhenAuthoritative<br/>SourceDisconnected| Eligible[Always eligible once marked<br/>May still have target CSOs]
 
-    Eligible --> Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
+    Eligible --> CreateActivity[Create a Metaverse Object<br/>Housekeeping Activity #1020<br/>a quiet tick records none]
+    CreateActivity --> Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
     Capture --> Loop{More eligible<br/>MVOs?}
-    Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
-    Recall --> Done([Done])
+    Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs<br/>one RPEI each, caused by the deletions]
+    Recall --> Complete[Record the execution items and<br/>complete the Activity from their errors]
+    Complete --> Done([Done])
 
     Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Cancel never-exported provisioning #1681<br/>Create delete Pending Exports for remaining CSOs<br/>whose export rule action is Delete]
-    EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked<br/>Copies the mark-time<br/>DeletionPolicySnapshotJson onto<br/>the deletion record's RPEI]
+    EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked<br/>Change record linked to the Activity<br/>and the deleting RPEI #2460<br/>Copies the mark-time<br/>DeletionPolicySnapshotJson onto<br/>the deletion record's RPEI]
     DeleteMVO --> Result{Success?}
-    Result -->|Yes| RecordItem[RPEI: MvoDeleted, with its delete<br/>Pending Exports and ProvisioningCancelled<br/>outcomes nested beneath it #1682]
+    Result -->|Yes| RecordItem[RPEI: MvoDeleted, with its delete<br/>Pending Exports, ProvisioningCancelled<br/>and TargetDisconnected outcomes<br/>nested beneath it #1682 #1811<br/>Causal edge back to the RPEI that<br/>scheduled the deletion #1811]
     RecordItem --> Loop
-    Result -->|No| LogError[Log error<br/>Continue with other MVOs<br/>Will retry next cycle]
+    Result -->|No| LogError[Error RPEI: UnhandledError<br/>Continue with other MVOs<br/>Still eligible, so retried next cycle]
     LogError --> Loop
 ```
 
@@ -227,13 +231,17 @@ stateDiagram-v2
 
 - **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
+- **A grace-period deletion links back to the run that scheduled it (#1811)**<br /> Scheduling a deletion records the execution item that scheduled it on the MVO (`DeletionScheduledByRunProfileExecutionItemId`, set by `MetaverseObjectDeletionRuleApplier.RecordSchedulingItem` on the synchronisation, obsoletion and stranded-value sweep paths alike, whatever the sync outcome tracking level). The housekeeping deletion, in its own Activity days or weeks later, adds a `MetaverseObjectDeletionScheduleCausedDeletion` causal edge from that item to its `MvoDeleted` outcome, so the causality chain reads from the source change to the deletion however long the grace period. A cancelling rejoin clears it with the other markers. An immediate deletion records its deleting item instead (`DeletingRunProfileExecutionItemId`, #2460), so the Deleted change record names it and the deleted object's timeline leads to what deleted it.
+
+- **Accounts left in place are reported (#1811)**<br /> A deleted Metaverse Object's account in a target whose export Synchronisation Rule says Disconnect has its join broken and nothing exported. Both deletion paths now report each as a `TargetDisconnected` child of the `MvoDeleted` outcome, naming the rule that decided it, and each delete Pending Export they stage names its deprovisioning rule, so an Activity shows why an account is being removed or left in place.
+
 - **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths evaluate the deletion (`EvaluateMvoDeletionsAsync()` in bulk at the page flush, `EvaluateMvoDeletionAsync()` per object in the fallback and in housekeeping) before the actual deletion. This creates delete Pending Exports for every CSO matched by an export Synchronisation Rule whose `OutboundDeprovisionAction` is `Delete`, regardless of how the CSO was joined, ensuring the external system is cleaned up. CSOs with no matching rule, or whose rules say `Disconnect` (the default), are disconnected and left in place in the target system.
 
 - **Never-exported provisioning is cancelled, not deleted (#1681, #1682)**<br /> A target CSO still Pending Provisioning whose Create was never exported does not exist in the target system, so neither a Delete nor a Disconnect means anything for it. Ahead of the rules above, the deletion evaluation removes its unsent Create Pending Export and the CSO itself, and records a `ProvisioningCancelled` outcome nested beneath the `MvoDeleted` outcome that caused it (a Warning-toned outcome: nothing was destroyed anywhere, and it is not counted as a Pending Export). An object leaving an export rule's scope gets the same cancellation, recorded as a root outcome on its own item.
 
 - **Deletion Rules after a Connector Space clear (#1605)**<br /> A Connector Space clear hard-deletes CSOs without obsoleting them, so no disconnection event ever reaches the Deletion Rule. The stranded-value sweep that follows the next genuine Full Import and Full Synchronisation evaluates every Metaverse Object recorded as joined at the clear that has still not rejoined, with the cleared system as the disconnecting system, through `MetaverseObjectDeletionRuleApplier` (the same evaluation and marking the obsoletion path uses; objects already pending deletion are skipped). It then runs the state-convergent zero-join pass: every Projected Metaverse Object, metaverse-wide, with no joined CSO at all, no existing marking, and a state-convergent Deletion Rule (`WhenLastConnectorDisconnected`, or `WhenAuthoritativeSourceDisconnected` with no trigger sources or in All mode) is marked with a null triggering system and a `NoConnectorRemainsStateConvergence` policy snapshot. The pass always marks and never deletes immediately; housekeeping treats a null grace period as immediately eligible. A re-join shortfall check refuses the whole sweep first when too many recorded objects are missing. See [Full Synchronisation - CSO Processing Flow](FULL_SYNC_CSO_PROCESSING.md).
 
-- **Reference recall after deletion (#908)**<br /> Both deletion paths also stage membership-removal Pending Exports for every Metaverse Object that referenced a deleted one (for example groups whose Static Members included a deleted leaver). The referencing linkage and the deleted objects' per-system resolved reference values (for example target DNs) are captured via `CaptureReferenceRecallContextAsync()` before deletion, because `DeleteMetaverseObjectAsync()` nulls the reference FKs and `EvaluateMvoDeletionAsync()` disconnects the CSOs. After the deletions, `StageReferenceRecallExportsAsync()` evaluates each referencing object once with every reference it lost in the batch, staging Remove changes whose values are pre-resolved at staging time; export-time resolution walks MVO to joined CSO and can never succeed for a deleted object. Without this recall, targets without referential integrity would keep deleted users as group members forever, because the referencing groups' CSOs never change and the unchanged-skip means no sync re-evaluates them.
+- **Reference recall after deletion (#908)**<br /> Both deletion paths also stage membership-removal Pending Exports for every Metaverse Object that referenced a deleted one (for example groups whose Static Members included a deleted leaver). The referencing linkage and the deleted objects' per-system resolved reference values (for example target DNs) are captured via `CaptureReferenceRecallContextAsync()` before deletion, because `DeleteMetaverseObjectAsync()` nulls the reference FKs and `EvaluateMvoDeletionAsync()` disconnects the CSOs. After the deletions, `StageReferenceRecallExportsAsync()` evaluates each referencing object once with every reference it lost in the batch, staging Remove changes whose values are pre-resolved at staging time; export-time resolution walks MVO to joined CSO and can never succeed for a deleted object. Without this recall, targets without referential integrity would keep deleted users as group members forever, because the referencing groups' CSOs never change, so no Delta Synchronisation re-evaluates them.
 
 - **Fallback on failure**<br /> If immediate deletion fails (e.g., database error), the system sets `LastConnectorDisconnectedDate` as a fallback. This ensures housekeeping will pick up the MVO for retry on the next cycle, rather than losing the deletion intent.
 

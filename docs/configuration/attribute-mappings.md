@@ -9,12 +9,24 @@ audience: administrator
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
 
+```jim-diagram
+archetype: flow
+title: How an import mapping's value reaches the Metaverse
+desc: 'An import mapping takes a source attribute of the Connected System Object, or an expression over it, and produces a value; where an expression''s input has no value, its Missing Input Behaviour decides what happens. For a text target, value processing then trims, collapses and normalises the case, and treats whitespace as no value. Attribute Priority then decides which contributing rule''s value the Metaverse Object''s attribute takes: the first contributor with a value wins.'
+in: {label: Connected System Object}
+out: {label: Metaverse Object, note: the target attribute}
+steps:
+- {id: map, label: Direct or expression, sub: one per target attribute}
+- {id: process, label: Text value processing, sub: 'trim, collapse, case, whitespace'}
+- {id: priority, label: Attribute Priority, sub: first contributor with a value wins}
+```
+
 **A target attribute can be flowed to by at most one mapping per Synchronisation Rule.** JIM refuses a second mapping targeting an attribute the rule already flows to, and a disabled mapping counts too, since re-enabling it later would recreate the clash. The refusal exists because the synchronisation engine evaluates one mapping per target attribute, so a same-rule duplicate would be accepted in configuration but silently never contribute. Express the intent like this instead:
 
 - **Fall back between source attributes within one rule**<br /> Use a single [expression mapping](#expression-mappings): `Coalesce(cs["jimBadgeColour"], cs["roomNumber"])`, or the equivalent null-coalescing operator `cs["jimBadgeColour"] ?? cs["roomNumber"]`.
 - **Arbitrate between sources by priority or authority**<br /> Define the second flow on a separate, differently-scoped Synchronisation Rule and order the contributors with [Attribute Priority](../concepts/attribute-priority.md).
 
-## Direct mappings
+## :material-arrow-right-bold-outline: Direct mappings
 
 A direct mapping copies the attribute value as-is, with no transformation:
 
@@ -23,7 +35,7 @@ A direct mapping copies the attribute value as-is, with no transformation:
 | `givenName` | `First Name` |
 | `sn` | `Last Name` |
 
-## Expression mappings
+## :material-function-variant: Expression mappings
 
 An expression mapping applies a transformation using the JIM [expression language](../concepts/expressions.md). The Expression field in the Add/Edit Attribute Flow dialog highlights the expression as you type, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references coloured differently; it grows with the expression (press Enter for a new line) and scrolls once it is long.
 
@@ -39,7 +51,7 @@ To keep a check that an Attribute Flow still gives the value you expect, and run
 
 ### Missing Input Behaviour
 
-An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set beside the expression on each expression source, decides what JIM does instead:
+An expression whose input has no value on the object does not fail; it evaluates and produces a structurally broken value (`jane.@company.com`, `CN=,OU=Users,...`) that nothing downstream can tell from a good one. **Missing Input Behaviour**, set under the expression on each expression source, decides what JIM does instead:
 
 | Behaviour | Effect |
 |-----------|--------|
@@ -64,20 +76,20 @@ Disabling or removing the last enabled contributor of a Metaverse attribute that
 
 What a mapping **targets**, and whether its source is an attribute or an expression, is not editable. Retargeting revalidates against attribute types and plurality, and for an import mapping it reopens the mapping's place in the [Attribute Priority](../concepts/attribute-priority.md) order, so it is a delete and a create rather than an edit. That is deliberate: the priority position is lost either way, and an interface that hid it would lose it silently.
 
-## Multi-source mappings
+## :material-set-center: Multi-source mappings
 
 A multi-source mapping combines several source attributes into one target. This is the concept-level pattern; in practice, you typically express multi-source flows through expression mappings that reference each contributing attribute.
 
-## Multi-valued attributes
+## :material-format-list-bulleted: Multi-valued attributes
 
 Mappings support both single-valued and multi-valued attributes. A **Multi-Valued** attribute holds a list of values (group memberships, email aliases, and so on); a **Single-Valued** attribute holds at most one. How a mapping behaves depends on the plurality of the source and the target:
 
 | Source | Target | Behaviour |
 |--------|--------|-----------|
-| Single-Valued | Single-Valued | ✅ The value flows normally. |
-| Multi-Valued | Multi-Valued | ✅ Every value flows. |
-| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. On export it replaces any other values the target holds (see below). |
-| Multi-Valued | Single-Valued | ⚠️ See below. |
+| Single-Valued | Single-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } The value flows normally. |
+| Multi-Valued | Multi-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } Every value flows. |
+| Single-Valued | Multi-Valued | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } The value flows as a single-item list. On export it replaces any other values the target holds (see below). |
+| Multi-Valued | Single-Valued | :material-alert-outline:{ .jim-warn role="img" aria-label="Caution" } See below. |
 
 **Values flow as a set.** On import, JIM compares the values a Connected System Object supplies with the values the Metaverse Object holds as a set, for every data type: the order the Connected System lists them in never matters, a value supplied twice is held once, and only the values gained and lost change. Dates compare to the microsecond in UTC, so the same moment written with a different time zone or a finer fraction of a second is the same value. A Connected System Object that holds values for the attribute only under another data type, because a [schema refresh changed the attribute's type](connected-system-schema.md#moving-an-attribute-to-its-new-type) and no import has read it since, changes nothing: the Metaverse Object keeps its value, no null is asserted, and JIM logs a warning until an import reads the attribute again.
 
@@ -92,7 +104,7 @@ The Attribute Flow editor warns you at configuration time when a mapping is Mult
 
 To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`, `Min()`, `Max()`, or `Join()` to combine them (see [Multi-Valued Attributes](../concepts/expressions.md#multi-valued-attributes)). Reference attributes on import are exempt from this rule; they are resolved separately.
 
-## Standard Mapping hints
+## :material-lightbulb-outline: Standard Mapping hints
 
 Choosing which Metaverse Attribute a Connected System attribute belongs to is guesswork when the schema is unfamiliar, and the answer is usually already recorded: every built-in Metaverse Attribute documents its counterparts in the SCIM 2.0 and LDAP/Active Directory vocabularies as [Standard Mappings](metaverse.md#standard-mappings). The Attribute Flow editor shows them while you work:
 
@@ -105,9 +117,9 @@ Which vocabulary applies comes from the Connector: the LDAP Connector declares L
 
 **The hints are advisory, always.** Nothing is filtered, disabled, or chosen for you: every attribute stays selectable, and an attribute with no counterpart shows nothing, which is not an error. Standard Mappings are never consulted during synchronisation; what flows is exactly what your Attribute Flows say. Custom attributes behave identically once you record Standard Mappings against them, and JIM does not distinguish a mapping it seeded from one you authored.
 
-## Value processing (inbound)
+## :material-tune-variant: Value processing (inbound)
 
-Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping in the Attribute Flow editor. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
+Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping under **Value handling** in the Attribute Flow dialog. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
 
 Four controls are available:
 
@@ -120,7 +132,7 @@ The transforms run in a fixed order: **trim, then collapse, then case normalisat
 
 When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
 
-## Initial Export Only (outbound)
+## :material-rocket-launch-outline: Initial Export Only (outbound)
 
 Some attributes should be set once when JIM creates an object, then left alone: a one-time setup value, or any attribute the target system should own after provisioning. An initial password is not one of them: JIM sets it through the rule's [Initial Password](initial-password.md) tab, never through Attribute Flow. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
 
@@ -138,9 +150,9 @@ Two behaviours to be aware of:
 
 Initial Export Only is your choice about an attribute the Connected System would happily let JIM keep writing. Where the Connected System itself only accepts a value at creation, JIM applies the same create-once behaviour on its own, without the setting: see [Attribute writability](connected-system-attributes.md#attribute-writability).
 
-## Previewing an Attribute Flow change
+## :material-eye-check-outline: Previewing an Attribute Flow change
 
-Changing a mapping rewrites an attribute on every object the rule manages at the next Full Synchronisation (for an export mapping, the target system's, while the rule [enforces state](synchronisation-rules.md#export-outbound)), and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+Changing a mapping rewrites an attribute on every object the rule manages: an import mapping at the Connected System's next synchronisation, Delta included, and an export mapping at the target system's next Full Synchronisation, while the rule [enforces state](synchronisation-rules.md#export-outbound). Nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
 
 The **Preview Attribute Flow Impact** button, which appears beside the editor's save button once you have edited a mapping, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
 
@@ -155,13 +167,13 @@ Both directions state a true before-and-after. An **import** mapping's old value
 Three answers are deliberately negative rather than reassuring:
 
 - A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
-- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next Full Synchronisation of its Connected System, or kept if you [choose to keep them](synchronisation-rules.md#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
+- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next synchronisation of its Connected System, Delta included, or kept if you [choose to keep them](synchronisation-rules.md#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
 - The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
 
 Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.
 
 
-## Attribute Priority
+## :material-sort-variant: Attribute Priority
 
 When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the Metaverse, and does not change how the Metaverse is exported back out.
 

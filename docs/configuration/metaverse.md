@@ -15,7 +15,7 @@ The Metaverse schema is administrator-defined. JIM does not impose a fixed schem
 
 <p class="jim-diagram-caption">An illustrative Metaverse. Object Types define the Attributes their Objects carry; Objects are Metaverse Objects, joined to their Connected System Objects by connector links.<span class="jimdg-caption-motion"> Moving dots trace identity data crossing the links during synchronisation.</span></p>
 
-## Object types
+## :material-file-tree-outline: Object types
 
 **Object types** define the schema categories in the Metaverse. Typical examples are the built-in `User` and `Group`, but you can define any types your organisation needs. Each object type has its own attribute set and configurable deletion behaviour.
 
@@ -82,9 +82,10 @@ Alongside JIM's built-in `User` and `Group` types, administrators can create the
 
 - **Naming**<br /> Names and plural names are unique and compared case-insensitively; the portal validates both as you type. Names are shown exactly as you entered them.
 - **Create with attributes**<br /> When creating a type you can optionally bind existing attributes to it there and then, or add them later from the type's **Attributes** tab.
-- **Icon**<br /> An optional MudBlazor icon name (for example `Devices`) gives the type a recognisable glyph throughout the portal.
+- **Icon**<br /> An optional icon gives the type a recognisable glyph throughout the portal: the name of a [Material Design icon](https://fonts.google.com/icons?icon.set=Material+Icons) as one word with each word capitalised, such as `Devices` or `AccountCircle`. A name JIM does not recognise shows a default icon instead.
 - **Rename and re-icon**<br /> Edit a custom type's name, plural name and icon from the Edit action on its row in the Object Types tab, or from the Edit button on its detail page.
 - **Built-in protection**<br /> The `User` and `Group` types cannot be renamed, re-iconed or deleted; their deletion rules remain editable.
+- **Export review**<br /> A type's detail page shows **Export review pending: N** while N of its Metaverse Objects are flagged for review against every export Synchronisation Rule; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect). Automation reads it as `ExportReviewPendingCount` from `Get-JIMMetaverseObjectType`.
 
 Above the list, filters narrow it by Deletion Rule, whether the type has Predefined Searches, and whether it is built-in; the Attributes tab carries the equivalent filters for Type, Plurality, Built-in status and bound Object Type.
 
@@ -97,7 +98,7 @@ Deleting a custom object type has two hard blocks, because either would otherwis
 
 Once both are clear, the type can be deleted. Its softer references (its Predefined Searches, Example Data Template entries, and attribute bindings) are **cascade-removed** as a single operation behind a type-the-name confirmation; the bound attributes themselves are kept. The cascade is fully audited, with each removed reference recorded as a child Activity of the deletion.
 
-## Attributes
+## :material-tag-text-outline: Attributes
 
 **Attributes** define the fields available on Metaverse Objects. Examples include `displayName`, `mail`, and `employeeId`. Attributes can be:
 
@@ -155,23 +156,23 @@ Renaming a custom attribute is refused while an Expression reads it by its curre
 
 The REST API answers `409 Conflict` to a refused deletion, unassignment or rename. For a deletion or an unassignment the response is the evaluated impact, whose `readers` list names each piece of configuration that reads the attribute; for a rename the error message names them.
 
-## Objects
+## :material-cube-outline: Objects
 
 **Objects** are Metaverse Objects: a single `User`, `Group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the Metaverse during synchronisation.
 
 A Metaverse Object's page shows where each of its values comes from, and why it is connected to each Connected System, or not; see [Metaverse Objects](metaverse-objects.md).
 
-## Confirming a configuration change
+## :material-pencil-lock-outline: Confirming a configuration change
 
 Changing an object type's deletion behaviour, or an attribute's data type or plurality, is confirmed before it saves. Deletion settings are the one place in JIM where saving alone can make existing Metaverse Objects eligible for deletion, with no synchronisation run in between; the confirmation says so. See [Configuration changes](configuration-changes.md).
 
-## Change history
+## :material-history: Change history
 
 Schema changes are recorded in [Configuration Change History](activities.md#configuration-change-history): creating, renaming or re-iconing an Object Type, changing an Object Type's deletion rules, deleting an Object Type, creating an Attribute, updating an Attribute's definition or its Object Type associations, and deleting an Attribute all capture a versioned snapshot alongside who made the change, when, and an optional reason.
 
 Open an Object Type's history from the Changes tab on its detail page; open an Attribute's history from the history button on its row in the Schema area or on an Object Type's Attributes tab. When saving deletion rules in the admin portal, an optional "Reason for change" prompt lets you record why. Automation can pass the same reason via `-ChangeReason` on the Metaverse write cmdlets, or retrieve history with `Get-JIMConfigurationChangeHistory -Type MetaverseObjectType` / `-Type MetaverseAttribute` or the REST API.
 
-## Pending deletions
+## :material-delete-clock-outline: Pending deletions
 
 Pending deletions track Metaverse Objects awaiting final deletion: objects whose last Connector Space link has been removed, and objects scheduled for deletion by an authoritative source disconnecting (which may still hold target-system links during their grace period). The grace period (configured per object type) gives administrators time to intervene before deletion is finalised.
 
@@ -179,7 +180,7 @@ To open the Pending Deletions page, select the **Pending Deletions** card under 
 
 JIM exposes both the list of currently pending deletions and a summary view, which is useful for spotting unexpected mass-deletion events early.
 
-## Searching the Metaverse
+## :material-magnify: Searching the Metaverse
 
 The Metaverse supports filtering and a fast named-search API. The named-search API is driven by [predefined searches](predefined-searches.md), which let administrators create reusable search definitions that the portal and integrations can call by URI.
 
@@ -195,13 +196,13 @@ The filter is available with the same behaviour across all three interfaces:
 - **REST API**<br /> Add the optional `hasAttribute={attributeName}` query-string parameter to the named-search endpoint, for example `GET /api/v1/metaverse/objects/search/users?hasAttribute=costCentre`. See the [interactive API reference](../../api/reference/).
 - **PowerShell**<br /> Pass `-HasAttribute` to [`Search-JIMMetaverseObject`](../powershell/metaverse.md#search-jimmetaverseobject), for example `Search-JIMMetaverseObject -PredefinedSearchUri "users" -HasAttribute "costCentre"`.
 
-## Manage the Metaverse
+## :material-cog-outline: Manage the Metaverse
 
 - **JIM portal**<br /> Metaverse area of the admin UI for objects, object types, attributes, and pending deletions
 - **PowerShell**<br /> [Metaverse cmdlets](../powershell/metaverse.md) for Metaverse Objects (`Get-JIMMetaverseObject`, `Search-JIMMetaverseObject` and the rest), with the [Metaverse Object Type](../powershell/metaverse-object-types.md) and [Metaverse Attribute](../powershell/metaverse-attributes.md) cmdlets for the schema
 - **REST API**<br /> Metaverse endpoints in the [interactive API reference](../../api/reference/)
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Concepts: Architecture](../concepts/architecture.md): how the Metaverse fits into JIM's hub-and-spoke architecture
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md): how data flows through the Metaverse during import, sync, and export

@@ -539,6 +539,65 @@ Describe 'Get-DirectoryConfig -DirectoryType ActiveDirectory' {
     }
 }
 
+Describe 'Get-ActiveDirectoryLabFederationConfig' {
+    BeforeEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', 'JIM_AD_LAB_ADFS_PRIMARY_HOST', 'JIM_AD_LAB_ADFS_PRIMARY_VM') {
+            [System.Environment]::SetEnvironmentVariable($name, $null)
+        }
+        $env:JIM_AD_LAB_ADFS_PRIMARY_ADDRESS = '192.0.2.21'
+    }
+    AfterEach {
+        foreach ($name in 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', 'JIM_AD_LAB_ADFS_PRIMARY_HOST', 'JIM_AD_LAB_ADFS_PRIMARY_VM') {
+            [System.Environment]::SetEnvironmentVariable($name, $null)
+        }
+    }
+
+    It 'describes adfs-primary by its service name, over HTTPS, reverted to baseline' {
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config | Should -BeOfType [hashtable]
+        $config.DirectoryType | Should -Be 'ActiveDirectoryFederation'
+        $config.Instance | Should -Be 'AdfsPrimary'
+        $config.Host | Should -Be 'adfs.panoply.local'
+        $config.Address | Should -Be '192.0.2.21'
+        $config.VmName | Should -Be 'adfs-primary'
+        $config.Port | Should -Be 443
+        $config.CheckpointBaseline | Should -Be 'baseline'
+        $config.ContainsKey('ContainerName') | Should -BeTrue
+        $config.ContainerName | Should -BeNullOrEmpty
+    }
+
+    It 'gives the authority JIM signs in through and the issuers AD FS names itself by' {
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config.Authority | Should -Be 'https://adfs.panoply.local/adfs'
+        $config.DiscoveryPath | Should -Be '/adfs/.well-known/openid-configuration'
+        # The discovery document's issuer (and the ID token's) is the authority; access tokens carry the federation
+        # service identifier, which is plain HTTP whatever the endpoints are. As adfs-primary publishes them.
+        $config.Issuer | Should -Be 'https://adfs.panoply.local/adfs'
+        $config.AccessTokenIssuer | Should -Be 'http://adfs.panoply.local/adfs/services/trust'
+    }
+
+    It 'takes the host and VM name from the environment, and follows the host in the URLs' {
+        $env:JIM_AD_LAB_ADFS_PRIMARY_HOST = 'sts.example.test'
+        $env:JIM_AD_LAB_ADFS_PRIMARY_VM = 'adfs-primary-candidate'
+
+        $config = Get-ActiveDirectoryLabFederationConfig
+
+        $config.Host | Should -Be 'sts.example.test'
+        $config.VmName | Should -Be 'adfs-primary-candidate'
+        $config.Authority | Should -Be 'https://sts.example.test/adfs'
+        $config.Issuer | Should -Be 'https://sts.example.test/adfs'
+        $config.AccessTokenIssuer | Should -Be 'http://sts.example.test/adfs/services/trust'
+    }
+
+    It 'throws naming the variable when the address is unset' {
+        [System.Environment]::SetEnvironmentVariable('JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', $null)
+
+        { Get-ActiveDirectoryLabFederationConfig } | Should -Throw '*JIM_AD_LAB_ADFS_PRIMARY_ADDRESS*'
+    }
+}
+
 Describe 'Get-FirstPemCertificate' {
     It 'returns the first certificate block of s_client output, normalised to LF with a trailing newline' {
         $text = "CONNECTED(00000003)`r`n---`r`nCertificate chain`r`n 0 s:CN = dc1.panoply.local`r`n-----BEGIN CERTIFICATE-----`r`nAAAA`r`nBBBB`r`n-----END CERTIFICATE-----`r`n 1 s:CN = Issuing CA`r`n-----BEGIN CERTIFICATE-----`r`nCCCC`r`n-----END CERTIFICATE-----`r`n"
@@ -747,6 +806,20 @@ Describe 'Save-ActiveDirectoryCertificate' {
     It 'refuses a config that is not an Active Directory one' {
         { Save-ActiveDirectoryCertificate -DirectoryConfig @{ DirectoryType = 'SambaAD'; ContainerName = 'samba-ad-primary' } -CertificateDirectory $script:certDir } |
             Should -Throw '*ActiveDirectory*'
+    }
+
+    It 'fetches the AD FS server''s HTTPS certificate on 443 by its service name, saved under its VM name' {
+        $script:sanText = "X509v3 Subject Alternative Name: `n    DNS:adfs.panoply.local, DNS:adfs1.panoply.local"
+        $federation = @{
+            DirectoryType = 'ActiveDirectoryFederation'; ContainerName = $null; Host = 'adfs.panoply.local'
+            Address = '192.0.2.21'; VmName = 'adfs-primary'; Port = 443
+        }
+
+        $result = Save-ActiveDirectoryCertificate -DirectoryConfig $federation -CertificateDirectory $script:certDir
+
+        $fetch = @($script:dockerCalls | Where-Object { (@($_) -join ' ') -like '*s_client*' })
+        (@($fetch[0]) -join ' ') | Should -Match 'openssl s_client -connect 192\.0\.2\.21:443 -servername adfs\.panoply\.local -showcerts'
+        $result.Path | Should -Be (Join-Path $script:certDir 'adfs-primary.pem')
     }
 }
 
@@ -1201,6 +1274,70 @@ Describe 'Assert-ActivitySuccess -AllowedWarningMessagePattern' {
     }
 }
 
+Describe 'Assert-ActivitySuccess with a Worker memory warning' {
+    # The Worker's memory guard warns on an Activity when the host is short of memory while it runs. That says
+    # nothing about whether the run was right, and at the Scale templates a host sits close enough to the line that
+    # a gigabyte of unrelated activity decides it, so the harness reports the warning rather than failing on it.
+    BeforeAll {
+        function Get-JIMActivity { param([string]$Id, [switch]$ExecutionItems) }
+        function Get-JIMActivityStats { param([string]$ActivityId) }
+
+        $script:memoryLine = 'Memory was low while this ran: 55 GB of 64 GB in use, 35 GB of it by the Worker. At 92% the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once.'
+        $script:probeLine = "JIM couldn't probe Panoply AD for values already in use. Connecting to it failed: x. JIM chose 1 value using its own records only."
+    }
+
+    BeforeEach {
+        $script:activityWarning = $script:memoryLine
+        $script:objectErrors = 0
+        $script:warningsPath = Join-Path $TestDrive "memory-warnings-$([guid]::NewGuid().ToString('N')).log"
+        $env:JIM_MEMORY_WARNINGS_PATH = $script:warningsPath
+        Mock Get-JIMActivity -ParameterFilter { -not $ExecutionItems } {
+            [PSCustomObject]@{ id = $Id; status = 'CompleteWithWarning'; warningMessage = $script:activityWarning; errorMessage = $null; message = $null }
+        }
+        Mock Get-JIMActivity -ParameterFilter { $ExecutionItems } { @() }
+        Mock Get-JIMActivityStats { [PSCustomObject]@{ totalObjectErrors = $script:objectErrors } }
+        Mock Write-Host {}
+    }
+
+    AfterEach {
+        Remove-Item Env:JIM_MEMORY_WARNINGS_PATH -ErrorAction SilentlyContinue
+    }
+
+    It 'passes when the memory warning is the only warning and no object failed, and records it for the summary' {
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Not -Throw
+
+        $recorded = Get-Content -Path $script:warningsPath -Raw
+        $recorded | Should -Match 'Target Export'
+        $recorded | Should -Match '55 GB of 64 GB'
+    }
+
+    It 'still throws when another warning sits beside the memory warning' {
+        $script:activityWarning = "$($script:memoryLine)`n`nSomething else went wrong."
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Throw '*did not complete successfully*'
+    }
+
+    It 'still throws when an object failed beside the memory warning' {
+        $script:objectErrors = 3
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Throw '*did not complete successfully*'
+    }
+
+    It 'checks only the remaining lines against an allowed warning pattern' {
+        $script:activityWarning = "$($script:probeLine)`n`n$($script:memoryLine)"
+        $pattern = Get-UniquenessProbeWarningPattern -ConnectedSystemName 'Panoply AD'
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'HR sync' -AllowedWarningMessagePattern $pattern } | Should -Not -Throw
+    }
+
+    It 'passes without a summary file when the runner has not asked for one' {
+        Remove-Item Env:JIM_MEMORY_WARNINGS_PATH
+
+        { Assert-ActivitySuccess -ActivityId 'a1' -Name 'Target Export' } | Should -Not -Throw
+        Test-Path $script:warningsPath | Should -BeFalse
+    }
+}
+
 Describe 'Expected error declarations' {
     # A scenario step that provokes an Error line on purpose (a target refusing a value, an export JIM parks for a
     # decision) declares it, by pattern, for the duration of the step; the live error watcher and the end-of-run log
@@ -1355,6 +1492,34 @@ Describe 'Expected error declarations' {
             Assert-NoWorkerErrors -Since $script:now.AddMinutes(-1) -Containers 'jim.worker' -ExpectedErrorsPath $script:declarationsPath
 
             Should -Invoke docker -ParameterFilter { $args -contains '--timestamps' }
+        }
+    }
+
+    Context 'Assert-JimServicesNotRestarted' {
+        BeforeEach {
+            Mock Write-Host {}
+            $script:since = [datetime]::new(2026, 10, 25, 2, 0, 0, [DateTimeKind]::Utc)
+            $script:oomLine = '[Sun Oct 25 02:45:37 2026] Out of memory: Killed process 2180341 (dotnet) total-vm:320971320kB, anon-rss:45479208kB, file-rss:8kB'
+        }
+
+        It 'passes when every service started before the scenario did' {
+            Mock docker { '2026-10-24T22:00:00.000000000Z|0' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @() } } | Should -Not -Throw
+        }
+
+        It 'fails naming the service that restarted during the scenario' {
+            Mock docker { '2026-10-25T02:45:42.472854661Z|1' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @() } } |
+                Should -Throw '*jim.worker restarted during the scenario*'
+        }
+
+        It 'quotes the kernel''s out-of-memory record when it killed a JIM process' {
+            Mock docker { '2026-10-25T02:45:42.472854661Z|1' }
+
+            { Assert-JimServicesNotRestarted -Since $script:since -Containers 'jim.worker' -KernelLog { @('[Sun Oct 25 02:00:01 2026] usb 1-1: new device', $script:oomLine) } } |
+                Should -Throw '*killed by the kernel for lack of memory*Killed process 2180341 (dotnet)*'
         }
     }
 

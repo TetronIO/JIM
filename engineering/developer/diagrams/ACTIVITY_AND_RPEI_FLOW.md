@@ -1,10 +1,10 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 
-Activities arise from two distinct paths. Operational work (synchronisation, data generation, clearing, deleting or deprovisioning a Connected System, removing data after a schema refresh, recalling a deleted Synchronisation Rule's contributed values, auxiliary class discovery, Temporal Scope Reconciliation, history retention cleanup) runs on a Worker Task, so its Activity is created when the task is queued and stays `InProgress` until the task completes. Configuration changes (issue #14) take no Worker Task: the config server that mutates the entity creates and completes the Activity synchronously, in the same call, alongside a versioned configuration snapshot.
+Activities arise from two distinct paths. Operational work (synchronisation, data generation, clearing, deleting or deprovisioning a Connected System, removing data after a schema refresh, recalling a deleted Synchronisation Rule's contributed values, auxiliary class discovery, Temporal Scope Reconciliation, history retention cleanup) runs on a Worker Task, so its Activity is created when the task is queued and stays `InProgress` until the task completes. Configuration changes (issue #14) take no Worker Task: the config server that mutates the entity creates and completes the Activity synchronously, in the same call, alongside a versioned configuration snapshot. A few Activities are recorded by the service doing the work, outside both paths: a Scheduled Metaverse Object Deletion batch (`MetaverseObjectHousekeeping`, #1020), authentication events, password sets and Password Synchronisation, and `ScimRequests` (#124), one per Connected System, SCIM key and 15-minute window, counting what a SCIM client created, updated and deleted through the SCIM 2.0 Service Provider endpoint and the requests refused.
 
 Since v0.10.0, sync RPEIs are bulk-inserted per page via raw SQL (`FlushRpeisAsync`) rather than held in-memory for the full run, to keep memory bounded at 100K+ object scale. Summary statistics are accumulated incrementally during each flush. Cross-page reference resolution merges new attribute-flow rows under the existing MvoChange parent rather than creating a duplicate RPEI, resolving the previous ~2x RPEI duplication when references spanned multiple pages.
 
@@ -84,7 +84,7 @@ flowchart TD
     Success -->|No changes, skipped by<br/>content hash, or a replayed delete| NoRPEI[No RPEI kept]
 
     PerObject --> Error{Error<br/>type?}
-    Error -->|Connector flagged the object| ConnRPEI[RPEI: mapped Connector error<br/>e.g. MissingExternalIdAttributeValue]
+    Error -->|Connector flagged the object| ConnRPEI[RPEI: mapped Connector error<br/>e.g. MissingExternalIdAttributeValue<br/>An unreadable value is listed on the<br/>item and the object still imported, #2066]
     Error -->|Duplicate attributes| DupAttrRPEI[RPEI: DuplicateImportedAttributes]
     Error -->|Unknown object type| TypeRPEI[RPEI: CouldNotMatchObjectType]
     Error -->|Duplicate external ID| DupObjRPEI[RPEI: DuplicateObject]
@@ -101,9 +101,9 @@ flowchart TD
     TypeChangedRPEI --> PostPasses
     UnhandledRPEI --> PostPasses
 
-    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO,<br/>never for a CSO refused an Object Type change<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: UnresolvedReference errors]
+    PostPasses[Full Import passes after all pages:<br/>Deletion detection: RPEI Deleted with<br/>DeletionDetected outcome per newly missing CSO,<br/>never for a CSO refused an Object Type change<br/>If refused by a Run Profile limit #1618:<br/>no RPEIs, a warning and<br/>DetectedDeletionsWithheld on the Activity<br/>Unconfirmed exported Create: RPEI ExportNotConfirmed #1695<br/>Reference resolution: every unresolved or ambiguous<br/>reference counted on the object's RPEI, #959<br/>UnresolvedReference error under Error handling]
     PostPasses --> Batches[Save phase, per create and update batch:<br/>FlushImportRpeisAsync bulk-inserts that<br/>batch's RPEIs via raw SQL once its CSOs<br/>have committed, accumulates summary stats,<br/>then releases them]
-    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome,<br/>ExportNotConfirmed or<br/>ExportConfirmationFailed error<br/>A change held or released while it awaits<br/>an Initial Password adds nothing, #2039]
+    Batches --> Reconcile[Reconciliation merges onto the CSO's RPEI:<br/>ExportConfirmed outcome, or an<br/>ExportNotConfirmed error on every import<br/>that misses a change, #2119<br/>A change held or released while it awaits<br/>an Initial Password adds nothing, #2039]
     Reconcile --> FinalFlush[Flush remaining RPEIs<br/>Activity counters and message<br/>describe the whole run]
 ```
 
@@ -134,6 +134,9 @@ flowchart TD
     ExprError -->|Evaluation failed| ExprRPEI[RPEI: ExpressionEvaluationError]
     ExprError -->|Missing input, mapping<br/>set to Fail the object| MissingRPEI[RPEI: ExpressionMissingInput]
 
+    TryCatch --> ScopeError{Scoping criterion<br/>not evaluable? #2053}
+    ScopeError -->|This object's scope, or a<br/>surviving contributor's #2336| ScopeRPEI[RPEI: ScopingCriterionFailed<br/>MVO left untouched<br/>A survivor's: the object is held<br/>back and kept marked for<br/>the next run, #2343]
+
     TryCatch --> Unhandled{Unhandled<br/>exception?}
     Unhandled -->|Yes| UnhandledRPEI2[RPEI: UnhandledError<br/>+ stack trace<br/>Processing continues to next CSO]
 
@@ -143,7 +146,7 @@ flowchart TD
     ExportEval -->|Rule targets another<br/>Object Type in the system| TypeConflictRPEI[RPEI: CouldNotExportDueTo<br/>ExistingConnectedSystemObject]
 
     PerCSO --> Obsolete{CSO<br/>obsolete?}
-    Obsolete -->|Yes| ObsoleteRPEIs[One RPEI per CSO:<br/>Disconnected root outcome with<br/>CsoDeleted and any MvoDeleted or<br/>MvoDeletionScheduled children,<br/>or Deleted when it was not joined]
+    Obsolete -->|Yes| ObsoleteRPEIs[One RPEI per CSO:<br/>Disconnected root outcome with<br/>CsoDeleted and any MvoDeleted or<br/>MvoDeletionScheduled children,<br/>or Deleted when it was not joined<br/>The RPEI that schedules a deletion<br/>is recorded on the MVO, #1811]
 ```
 
 ## RPEI Accumulation During Export
@@ -162,7 +165,7 @@ flowchart TD
     Outcome -->|Unresolved reference, under<br/>Error handling| UnresolvedRPEI[RPEI: UnresolvedReference error]
     Outcome -->|Generated value already in use,<br/>corrected by Collision Remediation| CorrectedRPEI[RPEI: ObjectChangeType = PendingExport<br/>GeneratedValueRemediated outcome]
     Outcome -->|Generated value already in use,<br/>needs a decision| DecisionRPEI[RPEI: GeneratedValueCollisionUnresolved error<br/>Pending Export Parked]
-    Outcome -->|Failed| FailRPEI[RPEI: ErrorType = UnhandledError,<br/>or InvalidGeneratedExternalId,<br/>ClassMembershipRequirementsNotMet,<br/>UniqueValueAlreadyInUse or<br/>PasswordRequiredToEnableAccount<br/>Error message + retry count]
+    Outcome -->|Failed| FailRPEI[RPEI: ErrorType from the Connector's<br/>classification: AccessDenied,<br/>RejectedByConnectedSystem or<br/>OutsideManagedScope #2118,<br/>ClassMembershipRequirementsNotMet,<br/>UniqueValueAlreadyInUse,<br/>PasswordRequiredToEnableAccount,<br/>InvalidGeneratedExternalId and others<br/>Unclassified: UnhandledError<br/>Message: Export failed after N attempts<br/>Sent again at the next export run, #2119]
 ```
 
 ## Activity Status Determination
@@ -179,7 +182,7 @@ flowchart TD
     HasWarning -->|Yes| WarnActivity
     HasWarning -->|No| CompleteOk
 
-    HasErrors -->|Yes| AllErrors{ALL RPEIs have errors,<br/>and for an import, no more<br/>objects read than that?}
+    HasErrors -->|Yes| AllErrors{ALL RPEIs have errors,<br/>refused Object Type changes<br/>aside #2049, and for an import,<br/>no more objects read than that?}
     AllErrors -->|Yes| FailActivity[FailActivityWithErrorAsync<br/>Status = FailedWithError<br/>All items experienced an error]
     AllErrors -->|No, some| Unhandled{Any RPEI with<br/>UnhandledError?}
     Unhandled -->|Yes| ErrorActivity[CompleteActivityWithErrorAsync<br/>Status = CompleteWithError]
@@ -188,9 +191,11 @@ flowchart TD
     CompleteOk[CompleteActivityAsync<br/>Status = Complete]
 
     CalcStats -.->|Exception thrown<br/>during status check| SafeFail[SafeFailActivityAsync<br/>See triple fallback below]
+    TaskDone -.->|Stopped by the Worker's<br/>memory guard #2487| MemoryStop[SafeFailActivityAsync with the<br/>guard's reason: FailedWithError]
+    TaskDone -.->|Memory low while it ran,<br/>not stopped #2487| MemoryWarn[Warning added after completion:<br/>Complete becomes CompleteWithWarning]
 ```
 
-Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory, and `ActivityOutcomeEvaluator` decides the status from them. An import gives no RPEI to an object it found unchanged, so for an import "every RPEI errored" fails the run only when the import read no more objects than it recorded errors for (its `ObjectsProcessed` at completion is the whole run's count); one bad value among a hundred unchanged objects completes with a warning. Other run types keep the RPEI rule, since their counters describe their last step. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error.
+Error counts come from one database query (`GetActivityRpeiErrorCountsAsync`) rather than from RPEIs held in memory, and `ActivityOutcomeEvaluator` decides the status from them. An import gives no RPEI to an object it found unchanged, so for an import "every RPEI errored" fails the run only when the import read no more objects than it recorded errors for (its `ObjectsProcessed` at completion is the whole run's count); one bad value among a hundred unchanged objects completes with a warning. Other run types keep the RPEI rule, since their counters describe their last step. An Activity-level `WarningMessage` (a Connector warning such as a Delta Import falling back to a Full Import, withheld deletions or exports under a Run Profile limit) completes the Activity with a warning even when no RPEI has an error. An Object Type change refused at import (#2049) is left out of the every-RPEI-errored test: it is a safe, deliberate outcome that changed nothing, so it neither fails a run on its own nor decides whether one fails. The Worker's memory guard (#2487) fails a run it stopped with its reason, and adds a warning to a run that finished while memory was low, after completion so the verdict is not replaced; a completed Activity then reads `CompleteWithWarning`, and any other verdict is left as it is.
 
 After a Full Import completes, the Worker stamps `LastSuccessfulFullImportCompletedAt` on the Connected System only when `FullImportSuccessEvaluator` agrees the run genuinely succeeded: `Complete`, or `CompleteWithWarning` with no object-level errors, and no deletions withheld (#1605). The stranded-value sweep's gate reads that timestamp.
 

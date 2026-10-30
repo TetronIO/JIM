@@ -393,6 +393,7 @@ Assert-PrimaryCheckout -RepoRoot $repoRoot -Allow:$AllowWorktree -ScriptName "th
 # The Active Directory lab (-DirectoryType ActiveDirectory): control-plane calls over SSH, the LDAP
 # toolbox helpers, and the runner's checkpoint and compose decisions.
 . "$scriptRoot/utils/LDAP-Helpers.ps1"
+. "$scriptRoot/utils/Directory-Helpers.ps1"
 . "$scriptRoot/utils/Invoke-LabControl.ps1"
 . "$scriptRoot/utils/ActiveDirectoryLab-Helpers.ps1"
 . "$scriptRoot/utils/Get-ScenarioDirectoryTypes.ps1"
@@ -1414,7 +1415,8 @@ $templateIrrelevantScenarioNumbers = @(
     25,  # Active Directory Delta Import Integrity - creates and deletes its own users (Active Directory lab only)
     27,  # First Synchronisation (the tested tutorial) - the tutorial's sample data is fixed at 25 people
     28,  # SCIM Connector against Keycloak - its own HR CSV, sized to put one group over Keycloak's 100-operation PATCH cap
-    29   # JIM provisioning its own SCIM endpoint - its own small HR CSV; the question is the round trip, not the population
+    29,  # JIM provisioning its own SCIM endpoint - its own small HR CSV; the question is the round trip, not the population
+    33   # Initial Administrator Provisioning - two header-only files of its own; there is no population to size
 )
 
 function Test-TemplateRelevant {
@@ -1573,8 +1575,10 @@ if ($scenarioNumber -eq 23) {
 # One list, used at every call site, so that compose always sees the same project. An Active Directory run
 # adds the lab overlay, which gives jim.web, jim.worker and jim.scheduler extra_hosts entries for the
 # domain controllers' FQDNs (their names are in no DNS the containers can see, and their LDAPS certificates
-# name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion.
-$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs)
+# name the FQDN). Decided here, after the directory type has been chosen by parameter, menu or coercion. A
+# scenario that signs in through the lab's AD FS server adds the AD FS overlay, making it JIM's identity provider
+# (each scenario of an "All" sweep is its own invocation, so this is decided per scenario).
+$script:JimComposeArgs = Get-JimComposeArgument -DirectoryType $DirectoryType -BaseArguments (Get-JimComposeArgs) -ScenarioNumber $scenarioNumber
 
 # ---------------------------------------------------------------------------
 # Handle "-DirectoryType All": run the suite for each directory type
@@ -1814,6 +1818,27 @@ if ($DirectoryType -eq "All") {
 # a container recreation. The decisions (which machines, which checkpoint, whether to populate) are the
 # tested functions in utils/ActiveDirectoryLab-Helpers.ps1; these are the runner's thin, impure wrappers.
 
+function Wait-JimWebApiHealthy {
+    # Polls /api/v1/health until it answers 200 or the time is up; true when it did. For a wait after jim.web is
+    # recreated part-way through setup (Step 4e); the first wait (Step 4) is written out where it runs.
+    param(
+        [Parameter(Mandatory=$true)][string]$Url,
+        [Parameter(Mandatory=$true)][int]$TimeoutSeconds
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            if ((Invoke-WebRequest -Uri "$Url/api/v1/health" -Method GET -TimeoutSec 5 -ErrorAction Stop).StatusCode -eq 200) { return $true }
+        }
+        catch {
+            Write-Verbose "JIM Web API not ready yet: $($_.Exception.Message)"
+        }
+        Start-Sleep -Seconds 3
+    }
+    return $false
+}
+
 function Get-ActiveDirectoryLabRunContext {
     # The configs of the lab machines a scenario uses, and their state from the control plane. Throws, naming
     # the variable, when a JIM_AD_LAB_* variable the scenario needs is missing, and, naming the machine, when
@@ -1822,7 +1847,12 @@ function Get-ActiveDirectoryLabRunContext {
 
     $configs = @{}
     foreach ($instance in (Get-ActiveDirectoryLabInstance -ScenarioNumber $ScenarioNumber)) {
-        $configs[$instance] = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
+        $configs[$instance] = if ($instance -eq 'AdfsPrimary') {
+            Get-ActiveDirectoryLabFederationConfig
+        }
+        else {
+            Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
+        }
     }
     return @{ Configs = $configs; States = (Get-ActiveDirectoryLabState -DirectoryConfig $configs) }
 }
@@ -1878,6 +1908,16 @@ function Invoke-ActiveDirectoryLabReady {
         & "$scriptRoot/Wait-ActiveDirectoryReady.ps1" -DirectoryConfig $Configs[$instance] -TimeoutSeconds ([Math]::Max($TimeoutSeconds, 300))
         if ($LASTEXITCODE -ne 0) {
             Write-Failure "Active Directory ($($Configs[$instance].VmName)) did not become ready in time"
+            return $false
+        }
+    }
+
+    # The AD FS server, for the scenarios that sign in through it: its discovery document, verified against its
+    # own certificate and service name. AD FS is a delayed-start service, a couple of minutes after the machine
+    # answers, so the wait is never shorter than 600.
+    if ($Configs.ContainsKey("AdfsPrimary")) {
+        if (-not (Wait-ActiveDirectoryLabFederationReady -FederationConfig $Configs["AdfsPrimary"] -TimeoutSeconds ([Math]::Max($TimeoutSeconds, 600)))) {
+            Write-Failure "The AD FS server ($($Configs["AdfsPrimary"].VmName)) did not become ready in time"
             return $false
         }
     }
@@ -2092,6 +2132,14 @@ if ($Scenario -eq "All") {
     if ($unsupportedOnThisDirectory.Count -gt 0) {
         Write-Host "${YELLOW}Skipping scenario(s) not supported on ${DirectoryType}: $($unsupportedOnThisDirectory -join ', ')${NC}"
         $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $unsupportedOnThisDirectory })
+    }
+
+    # A scenario the lab workflow runs in a step of its own, and reports as a status of its own, is not run by the
+    # sweep too (Test-ScenarioRunsOnItsOwn: Scenario 031, the AD FS sign-in checks, reported as jim-ad-lab-adfs).
+    $runOnItsOwn = @($implementedScenarios | Where-Object { Test-ScenarioRunsOnItsOwn -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) })
+    if ($runOnItsOwn.Count -gt 0) {
+        Write-Host "${YELLOW}Leaving out scenario(s) run on their own: $($runOnItsOwn -join ', ')${NC}"
+        $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notin $runOnItsOwn })
     }
 
     # Directory-agnostic scenarios (011, 015, 016) don't use a directory at all. A -DirectoryType
@@ -3054,7 +3102,8 @@ if ($DirectoryType -eq "OpenLDAP") {
     # Attribute Flows) composes the same substrate and asserts on every account it provisions.
     # S010-S013 and S015-S018 are excluded because the old "*Scenario1*" wildcard excluded them; the
     # set was carried over unchanged when the runner moved to comparing numbers (#1762).
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
+    # S033 (Initial Administrator Provisioning) uses no directory at all, only two header-only files of its own.
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
         $olSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $olSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $olHash = Get-OpenLDAPSnapshotHash -Scenario $olSnapshotScenario
@@ -3154,7 +3203,7 @@ elseif ($DirectoryType -eq "DirectoryServer389") {
     # tag shape and the currency test live in one place.
     # A snapshot is only current when its base-hash label matches the base image that was just
     # verified: a snapshot baked from a stale base is stale. S026 is excluded for S023's reasons.
-    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29) {
+    if (-not $IgnoreSnapshots -and $scenarioNumber -notin 1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33) {
         $dsSnapshotScenario = if ($scenarioNumber -eq 8) { "Scenario-008" } else { "General" }
         $dsSnapshotRole = if ($scenarioNumber -eq 8) { "s8" } else { "general" }
         $dsSnapshotHash = Get-DirsrvSnapshotHash -Scenario $dsSnapshotScenario
@@ -3599,6 +3648,52 @@ elseif ($isActiveDirectoryRun) {
     }
 }
 
+# Step 4e (Active Directory, AD FS): set JIM up to sign people in through the lab's AD FS server, as a customer does
+# before turning AD FS sign-in on (#2441), for the scenarios that use it:
+#   1. register JIM on AD FS with Register-JIMIdentityProvider, from a host copy of the module checked to be this
+#      commit's. The AD FS server was reverted to a baseline with no registration, so this is a fresh one with a new
+#      client secret;
+#   2. create the account that signs in as JIM's initial administrator, jim-sso-admin in dc-primary, with a password
+#      drawn for this run;
+#   3. recreate jim.web with all of it, through this process's environment (never a file), and wait for it: the
+#      registration's oid claim matched to the built-in Object GUID attribute, and jim-sso-admin's objectGUID as the
+#      initial administrator. Both only exist once the AD FS server and dc-primary answer, after JIM first started.
+# The client secret and the password are masked in the log and removed from every artefact
+# (Protect-ActiveDirectoryLabSecret).
+if ($isActiveDirectoryRun -and $script:AdLabContext.Configs.ContainsKey("AdfsPrimary")) {
+    Write-Section "Step 4e: Setting JIM Up to Sign People In Through AD FS"
+    try {
+        Write-Step "Registering JIM on the AD FS server..."
+        $adfsRegistration = Register-ActiveDirectoryLabIdentityProvider -FederationConfig $script:AdLabContext.Configs["AdfsPrimary"] `
+            -Url (Get-ActiveDirectoryLabJimUrl) -ModuleDigest (Get-ActiveDirectoryLabModuleDigest -RepositoryRoot $repoRoot)
+        Write-Success "JIM is registered on AD FS (portal client $($adfsRegistration.ClientId))"
+
+        Write-Step "Creating the sign-in administrator in $($script:AdLabContext.Configs["Primary"].VmName)..."
+        $adfsAdministrator = New-ActiveDirectoryLabSignInAdministrator -DirectoryConfig $script:AdLabContext.Configs["Primary"]
+        Write-Success "$($adfsAdministrator.UserPrincipalName) created (objectGUID $($adfsAdministrator.ObjectGuid))"
+    }
+    catch {
+        Write-Failure "Could not set JIM up to sign people in through AD FS: $($_.Exception.Message)"
+        exit 1
+    }
+
+    Set-ActiveDirectoryLabSsoEnvironment -Registration $adfsRegistration
+    Set-ActiveDirectoryLabSignInEnvironment -Registration $adfsRegistration -Administrator $adfsAdministrator
+    Write-Step "Restarting jim.web with AD FS sign-in..."
+    $webResult = docker compose @script:JimComposeArgs --profile with-db up -d jim.web 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure "Failed to restart jim.web with AD FS sign-in"
+        Write-Host "${GRAY}$webResult${NC}"
+        exit 1
+    }
+    if (-not (Wait-JimWebApiHealthy -Url $script:Lane.JimUrl -TimeoutSeconds $TimeoutSeconds)) {
+        Write-Failure "JIM Web API did not become ready within ${TimeoutSeconds}s after restarting with AD FS sign-in"
+        Write-Host "${YELLOW}  Check logs: docker logs $($script:Lane.WebContainer)${NC}"
+        exit 1
+    }
+    Write-Success "jim.web signs people in through AD FS: $($adfsRegistration.ClaimType) matched to '$($adfsRegistration.MvAttribute)', $($adfsAdministrator.UserPrincipalName) as initial administrator"
+}
+
 # Step 4b: Prepare Samba AD for testing
 # For Scenario 001, we need a clean Corp OU - delete if exists and recreate
 # Scenario 002 uses TestUsers OU which is handled by the scenario setup script
@@ -3725,11 +3820,14 @@ if ($adPopulateEntries.Count -gt 0) {
 # Skip for S022: self-populating (Populate-OpenLDAP-Scenario-022.ps1, called by
 # Invoke-Scenario-022-OpenLdapPasswordPolicy.ps1), and its Scenario 001 substrate provisions into an
 # ou=People that must start empty; the general population would fill it.
+# Skip for S032 (Intra-type References): self-populating (Populate-OpenLDAP-Scenario-032.ps1), and it asserts on
+# everything it provisions into an empty target suffix.
 # Skip for S023 (Unique Value Generation): its substrate is Setup-Scenario-001.ps1
 # -GenerateAccountName, and every value it asserts on is generated, not sourced, so the target
 # directory must start empty exactly as it must for S001. S026 (Metaverse-Derived Attribute Flows) composes
 # the same substrate and asserts on every account it provisions, so it too needs an empty directory.
-if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29 -and -not $script:UsingRfcDirectorySnapshots) {
+# Skip for S033 (Initial Administrator Provisioning): it uses no directory, only two header-only files of its own.
+if ($isRfcDirectoryRun -and $scenarioNumber -notin 1, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 22, 23, 26, 28, 29, 32, 33 -and -not $script:UsingRfcDirectorySnapshots) {
     Write-Section "Step 4c: Populating $DirectoryType with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -DirectoryType $DirectoryType -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -4026,7 +4124,7 @@ $scenarioParams = @{
 # turn comes, which would wrongly pass SkipPopulate to the scenario and leave its directory empty, so the
 # Employee ID join finds nothing (14, 19) or the policy fixture is missing (22). Mirrors the
 # exclusions already on the snapshot-detection and general-population guards above.
-if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots -or $script:UsingAdLabCheckpoints) -and $scenarioNumber -notin 14, 19, 22) {
+if (($script:UsingSnapshots -or $script:UsingRfcDirectorySnapshots -or $script:UsingAdLabCheckpoints) -and $scenarioNumber -notin 14, 19, 22, 32) {
     $scenarioParams.SkipPopulate = $true
 }
 
@@ -4147,7 +4245,12 @@ Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
 $expectedErrorsPath = Join-Path $scriptRoot "results" "expected-errors-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').jsonl"
 Set-Content -Path $expectedErrorsPath -Value '' -NoNewline -Encoding UTF8
 $env:JIM_EXPECTED_ERRORS_PATH = $expectedErrorsPath
-$errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
+# Activities the Worker warned were short of memory are passed rather than failed (see Assert-ActivitySuccess) and
+# recorded here, so the summary can say the host was near its limit beside the verdict.
+$memoryWarningsPath = Join-Path $scriptRoot "results" "memory-warnings-$Scenario-$Template$($script:ResultNameTag)-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
+Set-Content -Path $memoryWarningsPath -Value '' -NoNewline -Encoding UTF8
+$env:JIM_MEMORY_WARNINGS_PATH = $memoryWarningsPath
+$errWatcher =Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start -ExpectedErrorsPath $expectedErrorsPath
 $env:JIM_RUNPROFILE_ABORT_SENTINEL = $errWatcherSentinel
 
 try {
@@ -4255,6 +4358,16 @@ finally {
     }
     catch {
         Write-Host "${RED}✗ Post-scenario log scan failed: $_${NC}"
+        $scenarioExitCode = 1
+    }
+
+    # A service the kernel killed for lack of memory logs nothing on its way out, so neither scan above can see it;
+    # its restart can, and the failure then names the cause.
+    try {
+        Assert-JimServicesNotRestarted -Since $step5Start
+    }
+    catch {
+        Write-Host "${RED}✗ Post-scenario restart check failed: $_${NC}"
         $scenarioExitCode = 1
     }
     Remove-Item Env:JIM_EXPECTED_ERRORS_PATH -ErrorAction SilentlyContinue
@@ -4462,6 +4575,20 @@ if ($operations) {
 
 if ($metrics.Operations.Count -eq 0) {
     Write-RunnerWarning "No performance metrics found in worker logs"
+
+    # A scenario that runs no synchronisation (an identity provider check, say) logs no timings. Its duration and
+    # domain controller builds are still saved, wall-clock only, as for the large templates above: the AD lab's run
+    # summary counts a single-scenario run from this file, and without it reports that no scenarios ran.
+    $metrics.WallClockOnly = $true
+    $hostname = [System.Net.Dns]::GetHostName()
+    $perfDir = Join-Path -Path $scriptRoot -ChildPath "results" -AdditionalChildPath "performance", $hostname
+    if (-not (Test-Path $perfDir)) {
+        New-Item -ItemType Directory -Path $perfDir -Force | Out-Null
+    }
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
+    $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json"
 }
 else {
     Write-Success "Captured $($metrics.Operations.Count) operation timings"
@@ -4635,7 +4762,8 @@ else {
 
         # Compare key operations - use parallel grouping for better performance
         $currentOps = $metrics.Operations | Group-Object -Property Name -AsHashTable -AsString
-        $baselineOps = $baseline.Operations | Group-Object -Property Name -AsHashTable -AsString
+        # A wall-clock-only baseline has no operations to compare, and grouping nothing gives $null, not a table.
+        $baselineOps = if (@($baseline.Operations).Count -gt 0) { $baseline.Operations | Group-Object -Property Name -AsHashTable -AsString } else { @{} }
 
         # Display comparison for key operations
         $keyOperations = @("FullImport", "FullSync", "Export", "ProcessConnectedSystemObjects")
@@ -4785,6 +4913,18 @@ if ($scenarioExitCode -eq 0) {
 }
 else {
     Write-Host "${RED}✗ Some tests failed. Exit code: $scenarioExitCode${NC}"
+}
+
+# Memory warnings do not fail a run, so they are repeated beside the verdict: a pass the host only just managed is
+# worth knowing about before the next, larger, run.
+$memoryWarnings = @(if ($memoryWarningsPath -and (Test-Path $memoryWarningsPath)) {
+    Get-Content -Path $memoryWarningsPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+})
+if ($memoryWarnings.Count -gt 0) {
+    Write-Host "${YELLOW}⚠ Memory was low on this host during $($memoryWarnings.Count) Activit$(if ($memoryWarnings.Count -eq 1) { 'y' } else { 'ies' }); the Worker warned rather than failed them:${NC}"
+    foreach ($memoryWarning in $memoryWarnings) {
+        Write-Host "${YELLOW}  - $memoryWarning${NC}"
+    }
 }
 
 

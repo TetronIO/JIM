@@ -9,9 +9,24 @@ audience: automation-author
 
 The Connected Systems cmdlets manage the full lifecycle of Connected Systems in JIM: creating, configuring, clearing and deleting them. The Connectors a Connected System is created from are on [Connectors](connectors.md), a server's TLS certificate on [Certificates](certificates.md), and which Connected Systems receive passwords on [Password Synchronisation](password-synchronisation.md). Importing a schema and choosing Object Types and attributes are on [Connected System Schema](connected-system-schema.md), auxiliary object classes on [Auxiliary Object Classes](connected-system-auxiliary-classes.md), partitions and containers on [Partitions and Containers](partitions-and-containers.md), the objects in the Connector Space on [Connected System Objects](connected-system-objects.md), and the changes waiting to be exported on [Pending Exports](pending-exports.md). Most cmdlets support pipeline input for scripting and automation workflows.
 
+```jim-diagram
+archetype: lifecycle
+title: A Connected System's lifecycle, one cmdlet per step
+desc: "New-JIMConnectedSystem creates a Connected System from a Connector. It starts configured but empty, with no Connected System Objects. An import Run Profile fills its Connector Space. Clear-JIMConnectedSystem empties the Connector Space again, as a queued background task, and keeps its settings, schema and Synchronisation Rules. In either state, Get-JIMConnectedSystem reads it and Set-JIMConnectedSystem changes its settings. Remove-JIMConnectedSystem deletes it from either state, with its objects, Synchronisation Rules and Run Profiles; check first what that removes with Get-JIMConnectedSystem -DeletionPreview."
+start: { label: "`New-JIMConnectedSystem`" }
+container: { label: Connected System, note: "`Get-JIMConnectedSystem` reads it and `Set-JIMConnectedSystem` changes it, in either state" }
+states:
+  - { id: empty, label: Configured, sub: no objects yet }
+  - { id: holding, label: Holding objects, sub: Connector Space filled }
+transitions:
+  - { from: empty, to: holding, label: an import Run Profile }
+  - { from: holding, to: empty, label: "`Clear-JIMConnectedSystem`", note: "keeps schema and Synchronisation Rules" }
+end: { from: container, label: "`Remove-JIMConnectedSystem`", note: "check first with `-DeletionPreview`", state: { label: Deleted, sub: "objects, Synchronisation Rules, Run Profiles" } }
+```
+
 ---
 
-## Get-JIMConnectedSystem
+## :material-server-network-outline: Get-JIMConnectedSystem
 
 Retrieves one or more Connected Systems, their object types, or a deletion impact preview.
 
@@ -44,6 +59,8 @@ Get-JIMConnectedSystem -Id <int>
 ### Output
 
 The Connected Systems, or with `-Id` the one Connected System, its Object Types or its deletion preview. A Connected System read by ID carries ConfigurationDrift: whether its configuration has changed in a way that needs a Full Synchronisation, in HasPendingChanges, IsDeterminable, NeverFullySynchronised, TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass. HasPendingChanges is also `$false` when JIM cannot tell, so test IsDeterminable first.
+
+ConfigurationDrift also carries AwaitingSynchronisation: the Object Types whose objects the next synchronisation, Delta or Full, will all process because of Synchronisation Rule or Object Matching Rule changes saved since it last did so, each with its ChangeCount, ObjectCount and the Changes behind it. Those changes are not counted in ChangeCount and do not set HasPendingChanges, as an ordinary synchronisation applies them.
 
 **By default**:
 
@@ -79,7 +96,7 @@ The Connected Systems, or with `-Id` the one Connected System, its Object Types 
 | `InitialPasswordTimeToLive` | `string` | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Empty means JIM's default of seven days, and is reported as empty rather than as the default so a caller can tell a system configured to seven days from one never configured. |
 | `RequireSecureTransport` | `bool` | Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an administrator sets by hand, and a synchronised password change. |
 | `UnresolvedReferenceHandling` | `string` | How an imported reference value that cannot be resolved to a Connected System Object is treated. The default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while still logging the occurrence. One of `Error`, `Warn` or `Ignore`. |
-| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount` and `HighestChangeClass`. |
+| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount`, `HighestChangeClass` and `AwaitingSynchronisation`. |
 | `StrandedValueSweepArmedAt` | `datetime` | When a stranded-value sweep was armed by a Connector Space clear, or empty when no sweep is armed. The sweep runs at the first Full Synchronisation of this Connected System after LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays armed and a Full Synchronisation does nothing beyond ordinary synchronisation. |
 | `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
 | `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
@@ -168,6 +185,14 @@ and Destructive changes count, so a rename never registers here.
 | `MostRecentChange` | `datetime?` | When the most recent qualifying change was recorded, or `$null` |
 | `ChangeCount` | `int` | How many qualifying changes there are |
 | `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
+| `AwaitingSynchronisation` | `object[]` | The Object Types whose objects the next synchronisation, Delta or Full, will all process because of saved import Synchronisation Rule or Object Matching Rule changes; none when nothing is waiting. These changes are not counted in `ChangeCount`, and are reported even when `IsDeterminable` is `$false` |
+
+Each `AwaitingSynchronisation` entry has `ObjectTypeName`, `ChangeCount`, `ObjectCount`, `EarliestSavedAt` and `Changes`. Each change has `Reason`, `SavedAt`, `ConfigurationChangeActivityId`, `InitiatedByName`, `AppliedAt` and `SynchronisationActivityId`. See [Changes awaiting synchronisation](../configuration/connected-systems.md#changes-awaiting-synchronisation).
+
+```powershell title="See what is waiting for a Connected System's next synchronisation"
+(Get-JIMConnectedSystem -Id 3).ConfigurationDrift.AwaitingSynchronisation |
+    Select-Object ObjectTypeName, ChangeCount, ObjectCount, EarliestSavedAt
+```
 
 #### Stranded-value sweep (ById only)
 
@@ -204,7 +229,7 @@ Get-JIMConnectedSystem -Id 3 -DeletionPreview
 
 ---
 
-## New-JIMConnectedSystem
+## :material-plus-circle-outline: New-JIMConnectedSystem
 
 Creates a new Connected System.
 
@@ -248,7 +273,7 @@ $cs = New-JIMConnectedSystem "HR Database" -ConnectorDefinitionId 2 -Description
 
 ---
 
-## Set-JIMConnectedSystem
+## :material-pencil-outline: Set-JIMConnectedSystem
 
 Updates the configuration of an existing Connected System.
 
@@ -314,7 +339,7 @@ Set-JIMConnectedSystem -Id 3 -Description "Point at DR domain controller" -Chang
 
 ---
 
-## Remove-JIMConnectedSystem
+## :material-trash-can-outline: Remove-JIMConnectedSystem
 
 Deletes a Connected System and all its associated data.
 
@@ -404,7 +429,7 @@ Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Dele
 
 ---
 
-## Get-JIMConnectedSystemCapability
+## :material-puzzle-outline: Get-JIMConnectedSystemCapability
 
 Retrieves the Connector-detected capabilities for a Connected System, e.g. an LDAP directory's type, vendor, DNS host name, and paging support. These are facts read from the target system during a previous connection and persisted by JIM; calling this cmdlet does not open a new connection.
 
@@ -447,7 +472,7 @@ Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMConnectedSystemCapabili
 
 ---
 
-## Clear-JIMConnectedSystem
+## :material-broom: Clear-JIMConnectedSystem
 
 Removes every Connected System Object and its associated data from a Connected System without deleting the system itself. The Connected System configuration, schema, and Synchronisation Rules are preserved.
 
@@ -517,7 +542,7 @@ Get-JIMConnectedSystem -Name "Staging AD" | Clear-JIMConnectedSystem -Force
 
 ---
 
-## Get-JIMConnectedSystemDeletionPreview
+## :material-delete-sweep-outline: Get-JIMConnectedSystemDeletionPreview
 
 Retrieves a preview of the impact of deleting a Connected System, including counts of affected objects and warnings.
 
@@ -564,7 +589,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](../configuration/connected-systems.md): what Connected Systems are, the Connector Space, partitions and containers, and common workflows
 - [Connected System Schema](connected-system-schema.md): import a Connected System's schema, and choose its Object Types and attributes

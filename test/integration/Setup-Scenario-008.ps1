@@ -27,6 +27,10 @@
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
 
+.PARAMETER IntraTypeReferences
+    Also flow each user's manager in and out (Scenario 032), so the Synchronisation has references within one
+    Object Type to resolve in its cross-page reference step.
+
 .EXAMPLE
     ./Setup-Scenario-008.ps1 -ApiKey "jim_abc123..."
 
@@ -52,7 +56,13 @@ param(
     [int]$MaxExportParallelism = 1,
 
     [Parameter(Mandatory=$false)]
-    [hashtable]$DirectoryConfig
+    [hashtable]$DirectoryConfig,
+
+    # Scenario 032 (Intra-type References, #2492) reuses this setup and adds references within one Object Type:
+    # each user's manager is another user, so the user rules flow manager to the Metaverse Manager attribute and
+    # back out to the target. Group nesting needs nothing extra; member already flows in both directions.
+    [Parameter(Mandatory=$false)]
+    [switch]$IntraTypeReferences
 )
 
 Set-StrictMode -Version Latest
@@ -640,6 +650,12 @@ Write-Host "  Set $externalIdAttr as External ID for all object types" -Foregrou
 
 # Attribute lists are defined at the top of the script based on directory type
 
+if ($IntraTypeReferences) {
+    $requiredUserAttributes += 'manager'
+    $userImportMappings += @{ LdapAttr = "manager"; MvAttr = "Manager" }
+    $userExportMappings += @{ MvAttr = "Manager"; LdapAttr = "manager" }
+}
+
 # Validate all required user attributes exist in the LDAP schema
 $sourceSchemaAttrNames = @($sourceUserType.attributes | ForEach-Object { $_.name })
 $missingUserAttrs = @($requiredUserAttributes | Where-Object { $_ -notin $sourceSchemaAttrNames })
@@ -760,6 +776,19 @@ if (-not $targetUserExportRule) {
         -OutboundDeprovisionAction Delete `
         -PassThru
     Write-Host "  ✓ Created: $targetUserExportRuleName" -ForegroundColor Green
+
+    # Scoped to the people the source projected, all of whom carry the matching attribute (Employee ID for the
+    # RFC directories, Account Name for Samba AD). Unscoped, the rule also covers the initial administrator: an
+    # internal Metaverse Object created by a portal sign-in, with no Account Name, whose export then fails on
+    # 'uid=,ou=People,...'. A sign-in before this rule exists gets the administrator flagged for export scope
+    # review when the rule is created, so the run's outcome otherwise depends on when someone opened the portal.
+    $userExportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $targetUserExportRule.id -Type All -PassThru
+    New-JIMScopingCriterion `
+        -SyncRuleId $targetUserExportRule.id `
+        -GroupId $userExportScopeGroup.id `
+        -MetaverseAttributeName $userMatchingMvAttr `
+        -ComparisonType HasValue | Out-Null
+    Write-Host "  ✓ Scoped '$targetUserExportRuleName' to '$userMatchingMvAttr' has a value" -ForegroundColor Green
 }
 else {
     Write-Host "  Sync rule '$targetUserExportRuleName' already exists" -ForegroundColor Gray

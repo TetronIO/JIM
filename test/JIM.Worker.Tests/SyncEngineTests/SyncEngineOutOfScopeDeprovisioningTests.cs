@@ -158,51 +158,50 @@ public class SyncEngineOutOfScopeDeprovisioningTests
     [Test]
     public void ShouldMarkLastConnectorDisconnected_LastConnectorOfAProjectedMvoWithTheDeletionRule_SaysYes()
     {
-        // The orchestrator asks AFTER removing the disconnected CSO from the MVO's collection, so the
-        // no-more-connectors state is the collection being empty.
-        var mvo = Mvo(remainingCsoCount: 0, MetaverseObjectOrigin.Projected,
+        // The orchestrator counts what is still joined once the disconnect is written; none is the last connector.
+        var mvo = Mvo(MetaverseObjectOrigin.Projected,
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
 
-        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo), Is.True);
+        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo, remainingConnectorCount: 0), Is.True);
     }
 
     [Test]
     public void ShouldMarkLastConnectorDisconnected_OtherConnectorsRemain_SaysNo()
     {
-        var mvo = Mvo(remainingCsoCount: 1, MetaverseObjectOrigin.Projected,
+        var mvo = Mvo(MetaverseObjectOrigin.Projected,
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
 
-        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo), Is.False);
+        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo, remainingConnectorCount: 1), Is.False);
     }
 
     [Test]
     public void ShouldMarkLastConnectorDisconnected_MvoWasNotProjected_SaysNo()
     {
         // An internally created MVO is not subject to automatic deletion when its connectors disconnect.
-        var mvo = Mvo(remainingCsoCount: 0, MetaverseObjectOrigin.Internal,
+        var mvo = Mvo(MetaverseObjectOrigin.Internal,
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
 
-        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo), Is.False);
+        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo, remainingConnectorCount: 0), Is.False);
     }
 
     [Test]
     public void ShouldMarkLastConnectorDisconnected_TypeDeletionRuleIsManual_SaysNo()
     {
-        var mvo = Mvo(remainingCsoCount: 0, MetaverseObjectOrigin.Projected, MetaverseObjectDeletionRule.Manual);
+        var mvo = Mvo(MetaverseObjectOrigin.Projected, MetaverseObjectDeletionRule.Manual);
 
-        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo), Is.False);
+        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo, remainingConnectorCount: 0), Is.False);
     }
 
     [Test]
     public void ShouldMarkLastConnectorDisconnected_MvoHasNoType_SaysNo()
     {
-        var mvo = Mvo(remainingCsoCount: 0, MetaverseObjectOrigin.Projected,
+        var mvo = Mvo(MetaverseObjectOrigin.Projected,
             MetaverseObjectDeletionRule.WhenLastConnectorDisconnected);
         // Type is declared non-nullable but is null-checked throughout the sync path (= null! default);
         // the braided code guarded it with ?. and the extraction must too.
         mvo.Type = null!;
 
-        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo), Is.False);
+        Assert.That(_engine.ShouldMarkLastConnectorDisconnected(mvo, remainingConnectorCount: 0), Is.False);
     }
 
     [Test]
@@ -241,19 +240,10 @@ public class SyncEngineOutOfScopeDeprovisioningTests
         OutboundDeprovisionAction = action
     };
 
-    private static MetaverseObject Mvo(
-        int remainingCsoCount, MetaverseObjectOrigin origin, MetaverseObjectDeletionRule deletionRule)
+    private static MetaverseObject Mvo(MetaverseObjectOrigin origin, MetaverseObjectDeletionRule deletionRule) => new()
     {
-        var mvo = new MetaverseObject
-        {
-            Id = Guid.NewGuid(),
-            Origin = origin,
-            Type = new MetaverseObjectType { Id = 100, Name = "User", DeletionRule = deletionRule }
-        };
-
-        for (var i = 0; i < remainingCsoCount; i++)
-            mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = i + 1 });
-
-        return mvo;
-    }
+        Id = Guid.NewGuid(),
+        Origin = origin,
+        Type = new MetaverseObjectType { Id = 100, Name = "User", DeletionRule = deletionRule }
+    };
 }

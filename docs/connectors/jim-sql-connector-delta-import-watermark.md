@@ -9,7 +9,26 @@ audience: administrator
 
 This guide sets up a Delta Import for the [JIM SQL Connector](jim-sql-connector.md) in **Watermark Column** mode. It needs nothing extra in the database beyond a column that moves when a row changes, which many application tables already carry, and it detects creates and updates only. Read [What it cannot see](#what-it-cannot-see) before choosing it.
 
-## How it works
+```jim-diagram
+archetype: decision
+title: Which rows a Watermark Column Delta Import picks up
+desc: "A Delta Import in Watermark Column mode asks two questions of each object. First, has its row been deleted, or dropped out of a view? If so, the deletion is not seen: a deleted row has no watermark left to compare, and only the next Full Import finds that it has gone. If not, has a watermark moved past the value saved last time, either the row's own or that of one of its related-table rows? If so, the object is imported whole, exactly as a Full Import would read it, and reported as an update even when it is new. If not, it is not read; a related-table row deleted outright moves no watermark, so its removal goes unseen until the next Full Import."
+start: { label: Each object }
+questions:
+  - { id: gone, label: "Row deleted?", sub: "or dropped out of a view" }
+  - { id: moved, label: "A watermark moved?", sub: "its own, or a related row's" }
+outcomes:
+  - { id: missed, label: Deletion not seen, sub: until the next Full Import }
+  - { id: imported, label: Imported whole, sub: "as an update, even when new", good: true }
+  - { id: unread, label: Not read, sub: a related row deleted outright is missed too }
+answers:
+  - { from: gone, to: missed, label: "yes" }
+  - { from: gone, to: moved, label: "no" }
+  - { from: moved, to: imported, label: "yes" }
+  - { from: moved, to: unread, label: "no" }
+```
+
+## :material-cog-outline: How it works
 
 Each Object Type's source, and each of its related tables, names a **watermark column**: a last-modified timestamp or a version number that goes up whenever the row changes. On each Delta Import, JIM:
 
@@ -17,7 +36,7 @@ Each Object Type's source, and each of its related tables, names a **watermark c
 2. Selects every row of the Object Type's source whose watermark column has moved past the value saved last time, **or** that has a related-table row whose watermark has, so a phone number replaced or a group membership added is detected as a change to the object it belongs to.
 3. Imports each selected object whole, exactly as a Full Import would. A last-modified column cannot tell a new row from a changed one, so every object is reported as an update; JIM creates the Connected System Object if it does not have one yet.
 
-## What it cannot see
+## :material-eye-off-outline: What it cannot see
 
 **Deleted rows.** A deleted row has no last-modified value left to compare, so this mode cannot see that it has gone; the same is true of a row that has dropped out of a view. Deletions are found by a **Full Import**, which reads everything and notices what is missing. Schedule a Full Import at whatever interval your deprovisioning can tolerate; in this mode it is part of the design, not a fallback.
 
@@ -25,7 +44,7 @@ The same applies to related tables. A row **removed** from a related table (a re
 
 If deletions must reach JIM promptly, use a [change-log table](jim-sql-connector-delta-import-change-log.md) instead.
 
-## 1. Choose the watermark columns
+## :material-table-column: 1. Choose the watermark columns
 
 The Object Type's table needs one, and so does **every** related table: a phone number added to a child table changes the person without touching the person's own row, so without a watermark on the child table that change could never be detected. JIM checks this when you save.
 
@@ -52,7 +71,7 @@ Index the column: JIM's query is `WHERE LAST_MODIFIED > :watermark`, and without
 !!! tip "SQL Server's rowversion"
     A `rowversion` column is maintained by SQL Server itself, is unique and increasing across the whole database, and needs no trigger, which makes it a good watermark. JIM's schema discovery records it as a Binary attribute, which is correct; as a watermark it is compared as the database compares it.
 
-## 2. Keep it moving
+## :material-update: 2. Keep it moving
 
 A default fills the column on insert. Updates need a trigger unless the application sets the column itself, and applications that do are the exception.
 
@@ -84,9 +103,17 @@ Repeat for each related table. A related table whose rows are only ever inserted
 
 Where the Object Type reads from a **view**, expose the underlying table's watermark column through the view and name that.
 
-## 3. Configure the Object Type
+## :material-tune-variant: 3. Choose the mode
 
-Add a `watermarkColumn` to every Object Type that is selected for synchronisation, and to every related table of those Object Types, in the Connected System's **Object Types** document. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs none; nothing outside JIM changes such a table, so there is nothing to detect.
+On the Connected System's **Settings** tab, set **Delta Import Mode** to **Watermark Column**. Leave saving until the next step: the Object Type cards follow the mode as it stands on screen.
+
+## :material-shape-outline: 4. Give each Object Type a watermark column, then save
+
+Every Object Type selected for synchronisation needs a watermark column, and so does every related table of those Object Types. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs none; nothing outside JIM changes such a table, so there is nothing to detect.
+
+With the mode set, each Object Type's card has a **Delta Import** section with a **Watermark column** field, chosen from the table's own columns. A related table's watermark column is in its own dialog, opened from the multi-valued attribute's edit button on the card. The card of an Object Type selected on the Schema tab counts a missing watermark column among its problems.
+
+In the Object Types document (what REST and PowerShell send, and what **View as JSON** shows), the field is `watermarkColumn`, on the Object Type and on each related table:
 
 ```json title="Object Types with watermark columns"
 {
@@ -112,25 +139,23 @@ Add a `watermarkColumn` to every Object Type that is selected for synchronisatio
 }
 ```
 
-## 4. Choose the mode and save
+Then select **Save Settings**. Any selected Object Type, or related table of one, without a watermark column is reported now, naming it. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell), so selecting one that lacks a watermark column while this mode is set is refused at that point rather than by the next Delta Import; deselect it, or give it a watermark column.
 
-On the Connected System's Settings tab, set **Delta Import Mode** to **Watermark Column** and save. Any selected Object Type, or related table of one, without a `watermarkColumn` is reported now, naming it. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell), so selecting one that lacks a watermark column while this mode is set is refused at that point rather than by the next Delta Import; deselect it, or give it a watermark column.
-
-## 5. Baseline with a Full Import
+## :material-import: 5. Baseline with a Full Import
 
 Create a **Full Import** Run Profile and a **Delta Import** Run Profile, then run the Full Import once. A Full Import records every watermark column's current high value **before it reads a single row**, so a change made during the Full Import is read by the first Delta Import rather than lost between the two. Run the Delta Import first instead and JIM performs a Full Import in its place, with a warning on the Activity saying so.
 
-## 6. Schedule both
+## :material-calendar-clock-outline: 6. Schedule both
 
 Schedule the Delta Import at the cadence the application warrants, and a Full Import at the longest interval your deprovisioning can tolerate, because the Full Import is what finds deletions. See [Schedules](../configuration/schedules.md).
 
-## Check it worked
+## :material-check-decagram-outline: Check it worked
 
 1. Change a row in one of the Object Type's tables, so its watermark column moves.
 2. Run the Delta Import.
 3. Open its Activity. It counts the object you changed, and carries no warning that it ran as a Full Import.
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 **"`Delta Import Mode` is 'Watermark Column', but Object Type 'Person' has related table attribute 'PhoneNumbers' with no 'watermarkColumn'"**<br />
 Every related table of a selected Object Type needs one. Add the column to the table (a default value is enough for a table whose rows are only ever inserted) and name it in the configuration.
@@ -147,7 +172,7 @@ This mode cannot detect deletions; see [What it cannot see](#what-it-cannot-see)
 **A row updated during a long transaction was missed**<br />
 JIM captures the highest watermark value at the start of the run. A row given a lower value inside a transaction that commits after that capture is behind the watermark and is not read until a Full Import. Keep write transactions short.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [JIM SQL Connector](jim-sql-connector.md)
 - [Delta Import with a change-log table](jim-sql-connector-delta-import-change-log.md)

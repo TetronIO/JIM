@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using JIM.Web.Middleware;
 using Microsoft.AspNetCore.Http;
@@ -163,8 +165,52 @@ public class SecurityHeadersMiddlewareTests
     }
 
     [Test]
-    public void ContentSecurityPolicy_Constant_ContainsConnectSrcForWebSockets()
+    public void ContentSecurityPolicy_Constant_RestrictsConnectSrcToJimsOwnOrigin()
     {
-        Assert.That(SecurityHeadersMiddleware.ContentSecurityPolicy, Does.Contain("connect-src 'self' wss: ws:"));
+        // 'self' covers the portal's own WebSocket over http and https alike (CSP Level 3). A bare wss: or ws:
+        // scheme source would let a page open a WebSocket to any host at all (#2603).
+        var connectSrc = SecurityHeadersMiddleware.ContentSecurityPolicy.Split(';')
+            .Select(directive => directive.Trim())
+            .Single(directive => directive.StartsWith("connect-src ", StringComparison.Ordinal));
+
+        Assert.That(connectSrc, Is.EqualTo("connect-src 'self'"));
     }
+
+    // The API reference's Try It exchanges its sign-in code at the identity provider's token endpoint from the
+    // browser (#2594), so that page alone may connect to the token endpoint's origin.
+
+    [Test]
+    public void ApiReferenceContentSecurityPolicy_TokenEndpoint_AddsOnlyItsOriginToConnectSrc()
+    {
+        var policy = SecurityHeadersMiddleware.ApiReferenceContentSecurityPolicy("https://adfs.panoply.local/adfs/oauth2/token/");
+
+        Assert.That(ConnectSrcOf(policy), Is.EqualTo("connect-src 'self' https://adfs.panoply.local"));
+    }
+
+    [Test]
+    public void ApiReferenceContentSecurityPolicy_TokenEndpoint_KeepsEveryOtherDirective()
+    {
+        var policy = SecurityHeadersMiddleware.ApiReferenceContentSecurityPolicy("https://idp.example.com:8443/realms/jim/protocol/openid-connect/token");
+
+        Assert.That(DirectivesOf(policy).Where(directive => !directive.StartsWith("connect-src ", StringComparison.Ordinal)),
+            Is.EqualTo(DirectivesOf(SecurityHeadersMiddleware.ContentSecurityPolicy).Where(directive => !directive.StartsWith("connect-src ", StringComparison.Ordinal))));
+        Assert.That(ConnectSrcOf(policy), Is.EqualTo("connect-src 'self' https://idp.example.com:8443"));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("/relative/token")]
+    [TestCase("ftp://idp.example.com/token")]
+    [TestCase("javascript:alert(1)")]
+    public void ApiReferenceContentSecurityPolicy_NoUsableTokenEndpoint_IsThePortalsPolicy(string? tokenEndpoint)
+    {
+        Assert.That(SecurityHeadersMiddleware.ApiReferenceContentSecurityPolicy(tokenEndpoint),
+            Is.EqualTo(SecurityHeadersMiddleware.ContentSecurityPolicy));
+    }
+
+    private static string[] DirectivesOf(string policy) =>
+        policy.Split(';').Select(directive => directive.Trim()).Where(directive => directive.Length > 0).ToArray();
+
+    private static string ConnectSrcOf(string policy) =>
+        DirectivesOf(policy).Single(directive => directive.StartsWith("connect-src ", StringComparison.Ordinal));
 }

@@ -21,6 +21,10 @@
          the Scalar API reference and links written in raw HTML. One such link
          (`../api/reference/` on the PowerShell System page) had been a 404 on
          the live site.
+      3. No emoji in the built site (STY-1), outside code. Test-DocsConformance.ps1
+         checks each page's Markdown; this catches what reaches a page any other
+         way, such as the changelog the build hook inserts or text inside an
+         inlined diagram.
 
     Both read the docs as Markdown sources and built HTML only, so they keep
     working whichever generator builds the site (#2058).
@@ -72,6 +76,26 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $siteFullPath = (Resolve-Path -LiteralPath $SiteDir).Path
+
+# STY-1 over the built pages. The pattern matches Test-DocsConformance.ps1's $script:EmojiRegex
+# (described there); keep the two in step. Code is exempt, so <pre> and <code> are dropped first.
+Write-Host "`nChecking the built site for emoji (STY-1)..."
+$emoji = [regex]::new('(?:(?:[\u2600-\u27BF\u2B05-\u2B07\u2B1B\u2B1C\u2B50\u2B55\u231A\u231B\u23E9-\u23FA\u2139\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB-\u25FE\u21A9\u21AA\u2934\u2935\u3030\u303D\u3297\u3299\u203C\u2049]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDEFF])\uFE0F?|[^\s\uFE0F]\uFE0F)')
+$strip = [regex]::new('<(script|style|pre|code)\b.*?</\1>', [System.Text.RegularExpressions.RegexOptions]::Singleline -bor [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+$emojiPages = 0
+foreach ($file in Get-ChildItem -LiteralPath $siteFullPath -Recurse -Filter '*.html') {
+    $text = [System.Net.WebUtility]::HtmlDecode(($strip.Replace((Get-Content -LiteralPath $file.FullName -Raw), ' ') -replace '<[^>]+>', ' '))
+    $found = @($emoji.Matches($text) | ForEach-Object Value | Select-Object -Unique)
+    if ($found.Count) {
+        $emojiPages++
+        Write-Host ("  {0}: {1}" -f [System.IO.Path]::GetRelativePath($siteFullPath, $file.FullName), ($found -join ' '))
+    }
+}
+if ($emojiPages) {
+    Write-Host "`nDocs emoji check FAILED: $emojiPages built page(s) carry emoji (STY-1). Use a Material Design icon in the page's source, or, for text a build hook inserts, strip it in the hook." -ForegroundColor Red
+    exit 1
+}
+Write-Host 'No emoji in the built site.'
 Write-Host "`nChecking every link in the built site with lychee (offline)..."
 & docker run --rm --init -v "${siteFullPath}:/site:ro" $LycheeImage --offline --no-progress --root-dir /site '/site/**/*.html'
 if ($LASTEXITCODE -ne 0) {

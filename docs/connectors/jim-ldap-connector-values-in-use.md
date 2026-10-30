@@ -9,14 +9,25 @@ audience: administrator
 
 A directory often holds values JIM is about to write: the same value already in place on the object, or a unique value already held by another. This page covers how the LDAP Connector treats each.
 
-## Values already in place
+```jim-diagram
+archetype: flow
+title: How an export lands when a value is already in place
+desc: "JIM sends a modify, attaching the Permissive Modify control where the directory advertises it, and an accepted modify is done. When the directory refuses it because a value is already in place, JIM applies it again in parts, one kind of change at a time: object classes added, replacements, values removed and re-added under a different case, values added, values removed, object classes removed. When the directory refuses a part, JIM halves it, and halves again only the halves refused, until each refused value stands alone. That value counts as done, and every other change in the export lands. A refusal for any other reason fails the export, which is retried later."
+out: { label: Every other change lands, note: a refused value counts as done }
+steps:
+  - { id: send, label: Send the modify, sub: Permissive Modify where advertised, note: "accepted: done", next: "refused: in place" }
+  - { id: parts, label: Apply in parts, sub: one kind of change at a time, next: part refused }
+  - { id: halve, label: Halve the part, sub: until each refused value stands alone }
+```
+
+## :material-format-list-checks: Values already in place
 
 An export asks the directory for a state, so adding a member who is already in the group, or removing one who has already left, is a change that is already done. A directory sees it differently: an LDAP modify is all or nothing, so a directory that finds one value already present (or already absent) refuses the whole request, along with every other change it carried. JIM makes sure those other changes still land:
 
 - **Where the directory offers Permissive Modify**<br /> When JIM opens the export connection it reads the directory's rootDSE, and where the directory advertises the Permissive Modify control (`1.2.840.113556.1.4.1413`), JIM attaches it to every modify that adds or removes values, including the extra modifies that carry a large group's members beyond the Modify Batch Size. The directory then accepts a value already in place as a success. Active Directory and Samba AD advertise it. JIM never sends the control to a directory that does not advertise it, because a directory that does not understand it refuses the whole modify.
 - **Where it does not, or the directory refuses anyway**<br /> JIM applies the refused modify again in parts: any object classes being added first, then the attributes being replaced (together, in one request), then any value removed and added again under a different case (see below), then the other values being added, then those being removed, then any object classes being removed. Each attribute's adds go as one request, and its removals as another. Where the directory refuses a part because a value in it is already in place, JIM splits that part in half and sends each half, splitting again only the halves the directory refuses again, until each value it refuses stands alone; that value counts as done, and every other value is applied. OpenLDAP and 389 Directory Server do not advertise the control, and Samba AD still refuses to remove a member the group does not hold even with it, so for those this is the path.
 
-Halving keeps the cost down on large groups. One member already in place among the Modify Batch Size's 1,000 takes about 20 requests rather than 1,000, and only about 10 of them change the group. That matters most on OpenLDAP with the accesslog recording old values (`logold`), where every change to a group rewrites the whole entry and logs its entire member list.
+Halving keeps the cost down on large groups. One member already in place among the Modify Batch Size's 1,000 takes about 20 requests rather than 1,000, and only about 10 of them change the group. That matters most on OpenLDAP, where every change to a group rewrites the whole entry, and logs its entire member list too if the accesslog records old values (`logold`), which JIM does not need.
 
 One kind of add needs more than the directory's "already present" before JIM counts it as done: **a value removed and added again under a different case**. Active Directory compares some attributes without regard to case, `proxyAddresses` among them, so when an address changes from primary (`SMTP:jane.doe@example.com`) to alias (`smtp:jane.doe@example.com`), JIM removes one spelling and adds the other. Added first, the new spelling would be skipped as already present, or accepted where the old one has already gone, and the removal would then take the address away. So JIM sends the removal and the add in one request, removal first, whether the Modify Batch Size divides the change or a modify is applied in parts. If the directory refuses that request because a value in it is already in place, JIM sends the removal, then the add. Any other add the directory reports as already present while removals of that attribute are still to come is sent again after them, and counts as done only if reported present again.
 
@@ -26,7 +37,7 @@ Nothing is lost either way, and JIM never reports a refused modify as a success.
 
 JIM recognises "already present" from attributeOrValueExists (20) and "already absent" from noSuchAttribute (16) on every directory. Active Directory and Samba AD report group membership differently, so on those JIM also recognises entryAlreadyExists (68) when adding a member, and unwillingToPerform (53) when removing one, but only where the directory says the member is not in the group (Active Directory's `00000561` code, or Samba AD's "doesn't exist for target GUID" or, for a member the group held once, "already deleted for target GUID"). unwillingToPerform for any other reason, such as removing a member from its primary group, still fails the export.
 
-## Probing for values already in use
+## :material-magnify: Probing for values already in use
 
 When a synchronisation generates a value that is exported unchanged to an attribute of this directory, such as an account name sent to `sAMAccountName` or `uid`, JIM asks the directory whether the value is already in use before choosing it. This catches accounts JIM does not import: one outside the containers in the Connected System's scope, or one created by hand. How generated values are checked, and what is and is not probed, is in [Checking availability in target systems](../configuration/generated-values-in-target-systems.md#checking-availability-in-target-systems).
 

@@ -518,13 +518,45 @@ public class CsoDetailAndPaginationTests
     public async Task GetPendingExportsAsync_WithFailingFilter_PassesToRepositoryAsync()
     {
         _mockConnectedSystemRepo.Setup(r => r.GetPendingExportHeadersAsync(
-                1, 1, 50, null, null, null, true, true))
+                1, 1, 50, null, null, null, true, true, null))
             .ReturnsAsync(new PagedResultSet<PendingExportHeader> { Results = [], TotalResults = 0, CurrentPage = 1, PageSize = 50 });
 
         await _controller.GetPendingExportsAsync(1, failing: true);
 
         _mockConnectedSystemRepo.Verify(r => r.GetPendingExportHeadersAsync(
-            1, 1, 50, null, null, null, true, true), Times.Once);
+            1, 1, 50, null, null, null, true, true, null), Times.Once);
+    }
+
+    [Test]
+    public async Task GetPendingExportsAsync_WithChangeTypeAndStatusFilters_PassesBothToRepositoryAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportHeadersAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<IEnumerable<PendingExportStatus>?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IEnumerable<PendingExportChangeType>?>()))
+            .ReturnsAsync(new PagedResultSet<PendingExportHeader> { Results = [], TotalResults = 0, CurrentPage = 1, PageSize = 50 });
+
+        await _controller.GetPendingExportsAsync(1, changeType: PendingExportChangeType.Delete, status: PendingExportStatus.Pending);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportHeadersAsync(
+            1, 1, 50,
+            It.Is<IEnumerable<PendingExportStatus>?>(s => s != null && s.SequenceEqual(new[] { PendingExportStatus.Pending })),
+            null, null, true, false,
+            It.Is<IEnumerable<PendingExportChangeType>?>(c => c != null && c.SequenceEqual(new[] { PendingExportChangeType.Delete }))),
+            Times.Once);
+    }
+
+    [Test]
+    public async Task GetPendingExportsAsync_WithNoFilters_PassesNoChangeTypeOrStatusAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetPendingExportHeadersAsync(
+                1, 1, 50, null, null, null, true, false, null))
+            .ReturnsAsync(new PagedResultSet<PendingExportHeader> { Results = [], TotalResults = 0, CurrentPage = 1, PageSize = 50 });
+
+        await _controller.GetPendingExportsAsync(1);
+
+        _mockConnectedSystemRepo.Verify(r => r.GetPendingExportHeadersAsync(
+            1, 1, 50, null, null, null, true, false, null), Times.Once);
     }
 
     [Test]

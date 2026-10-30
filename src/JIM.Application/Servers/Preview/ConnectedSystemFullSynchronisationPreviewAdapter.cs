@@ -17,7 +17,7 @@ namespace JIM.Application.Servers.Preview;
 /// The evaluation is the Sync Preview Engine's whole-system walk
 /// (<see cref="SyncPreviewServer.StreamFullSyncPreviewAsync"/>), which takes the run's semantics: what each object's
 /// own changes export, drift corrected only in the system being synchronised, obsolete objects torn down through the
-/// run's own obsoletion core, the unchanged-object optimisation, and the export scope review drained after the walk.
+/// run's own obsoletion core, and the export scope review drained after the walk.
 /// Its agreement with the run is proven per case in the fidelity tests. This adapter turns each item into rows
 /// (<see cref="FullSynchronisationPreviewDeltas"/>) and adds what the framework asks of every surface: what is refused
 /// or caveated before anything is evaluated, an estimate, and counts.
@@ -149,11 +149,6 @@ public class ConnectedSystemFullSynchronisationPreviewAdapter : IConfigurationCh
                 case FullSyncPreviewItemKind.Refused:
                     throw new InvalidOperationException("A Full Synchronisation of this Connected System would refuse to start: " +
                         string.Join(" ", item.Preview?.Errors.Select(error => error.Detail) ?? []));
-
-                case FullSyncPreviewItemKind.Unchanged:
-                    objects++;
-                    yield return FullSynchronisationPreviewDeltas.Unchanged(item, connectedSystemId);
-                    break;
 
                 case FullSyncPreviewItemKind.Evaluated:
                 case FullSyncPreviewItemKind.Obsolete:

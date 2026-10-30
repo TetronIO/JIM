@@ -4,7 +4,7 @@
 >
 > Issue [#1454](https://github.com/TetronIO/JIM/issues/1454). Design and evidence: [`PRD_PUBLIC_DOCUMENTATION_STANDARD.md`](prd/done/PRD_PUBLIC_DOCUMENTATION_STANDARD.md), [`notes/docs-audit-2026-10/`](notes/docs-audit-2026-10/README.md). Site mechanics (diagrams, the lightbox, MkDocs dependencies) stay in `docs/CLAUDE.md`.
 
-The standard applies to every page under `docs/` except `docs/reference/changelog.md` (a one-line include of `CHANGELOG.md`). Contributor material is not public documentation: it lives in `engineering/`, the contributor guides and process diagrams in `engineering/developer/` (PRD Decision 3).
+The standard applies to every page under `docs/` except the released-version entries `docs/reference/changelog.md` pulls in from `CHANGELOG.md` (through `docs/hooks/changelog.py`; the page's own front matter and introduction follow the standard). Contributor material is not public documentation: it lives in `engineering/`, the contributor guides and process diagrams in `engineering/developer/` (PRD Decision 3).
 
 ## Contents
 
@@ -18,6 +18,7 @@ The standard applies to every page under `docs/` except `docs/reference/changelo
 - [Maintaining pages](#maintaining-pages)
 - [Accuracy and links](#accuracy-and-links)
 - [Accessibility](#accessibility)
+- [Visuals](#visuals)
 - [Style conventions](#style-conventions)
 - [Priority pages and tutorials](#priority-pages-and-tutorials)
 - [Coverage](#coverage)
@@ -74,7 +75,7 @@ A rule that is wrong for one place is excused in that place, with a reason the n
 
 ### Conformant pages, priority pages, promotion
 
-- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again.
+- A page listed under `ConformantPages`, or inside a folder listed under `ConformantFolders`, has been migrated to this standard. It carries no baseline: its Ratchet findings fail outright. A page or folder is added once every page declares its type and has no baseline entries, and is never taken off again. The one exception is a Ratchet rule introduced after its pages were conformant, listed under `BaselineOnConformant`: it keeps its baseline on conformant pages too, so the pages that predate it are held at their debt while a new page must meet it from its first commit.
 - A **priority page** ([Priority pages and tutorials](#priority-pages-and-tutorials)) that is conformant is held higher still: its warnings fail too, and its size budget is 3,000 words rather than 5,000.
 - A Warn rule is promoted (to Ratchet or Block) by editing `config.psd1`, once it has run for a release without a false positive. A rule that produces a false positive it cannot be configured out of is demoted, not tolerated.
 
@@ -145,7 +146,9 @@ These rules decide how the sentences read. They are the house voice that `docs/C
 
 **VOI-4. Leave JIM's own workings out of a public page.** No GitHub issue or pull request numbers, no JIM development or test infrastructure (the devcontainer, the integration lab), no design defence ("this is deliberate", "we chose"), and no class, method, property or table name unless the reader types it. These are for engineers, and they belong in `engineering/`.
 
-**VOI-5. Prefer prose and diagrams to screenshots.** The site has none by design, and adding one costs more than it looks: it is invalidated by any change to the control it shows, it cannot be searched, it is invisible to a screen reader unless the alt text repeats it, and it is the thing nobody remembers to update. Name the control and say what it does instead. A concept diagram is different, and is the right answer where the shape of something is the point (`docs/CLAUDE.md` > Concept Diagrams); make its `<desc>` carry the same information as the picture rather than describing the picture.
+**VOI-5. Prefer prose and diagrams to screenshots.** The site has none by design, and adding one costs more than it looks: it is invalidated by any change to the control it shows, it cannot be searched, it is invisible to a screen reader unless the alt text repeats it, and it is the thing nobody remembers to update. Name the control and say what it does instead. A diagram is different: it is the right answer where the shape of something is the point, and every page has one ([Visuals](#visuals)). Make its `<desc>` carry the same information as the picture rather than describing the picture.
+
+**VOI-6. Name what the reader works with, never what JIM is built with.** No framework or library JIM is built on (the portal's UI framework, its web server, its database driver or object mapper), and none of JIM's own project names (`JIM.Web`, `JIM.Application`). They tell an administrator nothing they act on, and they date the page the day the stack changes. Say what the thing is to the reader: the portal, the REST API, the web container (`jim.web`), JIM's database. A technology stays where the reader works with it directly: PostgreSQL, which they run and back up; Docker and Podman, which they deploy on; WebSockets, which a proxy must pass; a name they type or configure (the `ASPNETCORE_*` variables); a name they will see in a log or connect a client to; a syntax JIM accepts, such as ".NET regular expressions"; and a third-party licence notice. The rule covers everything the reader sees: running text, a diagram's labels and description, an included SVG, and the API and PowerShell references, whose text comes from the XML comments and cmdlet help in the source. The mechanical half is LANG-10.
 
 **SAFE-1. Answer "is anything lost?" before the reader has to ask.** Any operation that sounds destructive, and every refusal, states what survives it in the same paragraph. "Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password" is the shape. An administrator reading about a feature that stops, refuses, expires, cancels or deletes is deciding whether to trust it with production; a page that leaves that unanswered gets read defensively, and the feature gets left switched off.
 
@@ -168,6 +171,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 | **LANG-7** | Ratchet | No minimisers ("simply", "just", "easy"). What is simple to the writer is the reader's problem. | "Simply", "straightforward", "obviously", "of course". |
 | **LANG-8** | Block | No GitHub issue or pull request numbers on a public page (VOI-4). | `#` followed by digits in running text, and links to GitHub issues, pull requests and discussions. |
 | **LANG-9** | Review | No names of competing identity products; use generic terms ("traditional ILM solutions"). Industry standards (SCIM, LDAP, OIDC) are fine. | Not checked: a check would have to list the very names this rule keeps out of the repository. |
+| **LANG-10** | Block | No names of what JIM is built with, nor of its development infrastructure (VOI-4, VOI-6). | The frameworks, libraries and project names in `InternalTermPatterns` in `docs/.conformance/config.psd1`, with the devcontainer, Codespaces and the integration lab, in running text, in a `jim-diagram` spec, in the text of an SVG a page includes, and (from `build-and-test`, which has the document) in every summary and description the OpenAPI document publishes. Code is left out, since it is what the reader types; a genuine exception takes an allow marker giving its reason. |
 
 **The product vocabulary.** The glossary (`reference/glossary.md`) is the one place each product noun is named and defined: its entry gives the canonical form and the anchor to link to. `docs/.conformance/vocabulary.psd1` adds only what the glossary cannot hold: each term's home page (HOME-1), whether it is held to Title Case (every multi-word name, and "Metaverse"; not the single words that are also ordinary English, such as "Activity", "Export" and "Schedule"), and the variants a page must not use. TERM-1 checks the two against each other both ways. The portal's term hints are checked against the glossary too (`GlossaryTermConsistencyTests`), so the portal, the glossary and the pages use one set of names. A new product noun needs a glossary entry and a vocabulary entry in the same pull request.
 
@@ -205,11 +209,30 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 | **A11Y-2** | Block | Every image has alt text, and every included concept diagram has a `<title>` and a `<desc>`. |
 | **A11Y-3** | Review | Link text says where it goes ("see [Run Profiles](...)"), never "click here" or "this page". |
 
+## Visuals
+
+A diagram gives the reader the shape of a subject (what flows where, which state follows which, what holds what) before the detail, and the shape is what they remember. Every page has at least one, specific to it. Most are a short `jim-diagram` spec written in the page, where the diagram appears: the build draws it in the house style, in both themes, with a phone layout and a text alternative, so a diagram is a few lines of text rather than a drawing. How to write one is in `docs/CLAUDE.md` > Generated diagrams; the visual language is in `engineering/DESIGN.md` > Diagrams. Screenshots are not diagrams, and the site has none (VOI-5).
+
+| ID | Tier | Rule |
+|----|------|------|
+| **VIS-1** | Block | The page has at least one diagram: a `jim-diagram` spec, a concept diagram included from `assets/diagrams/` (`--8<-- "assets/diagrams/<name>.svg"`), an inline `<svg class="jim-diagram">`, or a Mermaid diagram. One shown inside another code block, as an example of how to write one, does not count. The Changelog page is excused in place, since its entries are generated from `CHANGELOG.md`. A new page has its diagram from its first commit. |
+| **VIS-2** | Review | A section whose text describes a flow of three or more steps or components, a lifecycle of states, relationships among three or more things, a decision that branches, or a precedence or ordering, has a diagram. A list of settings, a single step, or anything a table already says better, does not need one. |
+| **VIS-3** | Review | A diagram carries information specific to its page: the page's own steps, states, objects and outcomes, named as the page names them. No decorative or generic diagrams; one that would sit as well on any other page of its section is generic. |
+| **VIS-4** | Review | What a diagram shows matches the page's text and the product: the same steps in the same order, the same names, the same outcomes, and nothing the product does not do. This is ACC-4 for pictures: check a diagram against the source as you would a sentence, and change the diagram and the text in the same edit. |
+
 ## Style conventions
 
-These carry over from `docs/CLAUDE.md` unchanged (Review tier).
+STY-1 blocks: `Test-DocsConformance.ps1` checks each page's Markdown, and `Test-DocsSite.ps1` checks the built site, which also covers text a build hook or an inlined diagram puts on a page. STY-3 blocks on where heading icons go (`Test-DocsConformance.ps1`) and is Review tier for the rest. STY-2 is Review tier.
 
-**STY-1. Use `✅` for positive and `❌` for negative indicators in tables.** Not `:material-check-bold:`, `:material-close:` or other Material icon syntax: those render as small monochrome icons, while the emoji render as clear green and red symbols in MkDocs and on GitHub.
+**STY-1. No emoji on a page; icons come from Material Design Icons, which the theme ships.** Emoji bring their own palettes and a casual register into every heading and table, and an emoji set cannot match the site's colours. A yes, no or caution in a table or list is a status mark, always with its spoken label, because a screen reader reads nothing for an unlabelled icon:
+
+| Meaning | Write |
+|---------|-------|
+| Yes, supported, allowed | `:material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" }` |
+| No, unsupported, not allowed | `:material-close-circle-outline:{ .jim-no role="img" aria-label="No" }` |
+| Caution, see below | `:material-alert-outline:{ .jim-warn role="img" aria-label="Caution" }` |
+
+The classes colour the mark green, red or amber in both themes (`custom.css`). Emoji inside code and code blocks are exempt, since they show what a reader types or sees.
 
 **STY-2. Put a term-and-description bullet's description on a new line, with `<br />`.** The first word of the description is capitalised, because it starts a new line. This applies to feature lists, capability lists and similar label-and-explanation structures, not to short flat lists of single phrases.
 
@@ -219,7 +242,7 @@ These carry over from `docs/CLAUDE.md` unchanged (Review tier).
 
 Not `- **Term** -- descriptive text` (which also breaks LANG-1).
 
-**STY-3. Use emoji purposefully, never decoratively.** Where: `✅`/`❌` in tables; one leading emoji per changelog entry (✨ new, 🐛 fix, ⚡ performance, 🔄 changed, 🗑️ removed, 🔒 security, 📦 deployment, 🖥️ UI/UX); a single emoji before a heading or card title on a feature-heavy or conceptual page, where it anchors the concept; an admonition where it reinforces the tone. Not mid-sentence, not in reference content (endpoint tables, parameter lists, code comments), never more than one per heading or table cell, and never as a checklist (use `- [ ]` / `- [x]`, which `pymdownx.tasklist` renders as styled checkboxes).
+**STY-3. Every H2 carries an icon; nothing below it does.** On every page, every H2 opens with one Material Design icon (`## :material-layers-outline: Architecture`), and every grid card opens with one (`:material-sync:{ .lg .middle }`); `custom.css` draws both as a tile in the brand colour, which marks each section break on a long page. H3 and lower stay plain, so the tile always means a section. The check fails an H2 without a Material Design icon and an icon on any other heading; the Changelog page's release headings get theirs from the build hook. Pick for the section's subject, and reuse one icon per recurring concept and heading across the site: Connected System `server-network-outline`, Metaverse `hub-outline`, Synchronisation Rule `link-variant`, Run Profile `play-circle-outline`, Schedule `calendar-clock-outline`, settings `tune-variant`, troubleshooting `wrench-outline`, "See also" and "Related" `book-open-variant-outline`, "Check it worked" `check-decagram-outline`, "Before you begin" `clipboard-list-outline`; never the status-mark icons (STY-1) on a heading. Use the `-outline` variant wherever Material Design Icons has one, so the set reads as line icons rather than a mix of line and solid shapes; a brand's own logo (`:material-microsoft:`) is the exception. Never an icon mid-sentence, and never one as a checklist (use `- [ ]` / `- [x]`, which `pymdownx.tasklist` renders as styled checkboxes). `CHANGELOG.md` keeps its leading emoji per entry (its own convention, `engineering/CLAUDE.md`), and the build hook that publishes it as the Changelog page strips them (`docs/hooks/changelog.py`).
 
 ## Priority pages and tutorials
 
@@ -274,6 +297,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | VOI-3 | Hedge only where JIM is uncertain | Review | |
 | VOI-4 | JIM's own workings stay out | Review | |
 | VOI-5 | Prose and diagrams, not screenshots | Review | |
+| VOI-6 | What the reader works with, never what JIM is built with | Review (judgement); Block through LANG-10 (the named terms) | |
 | SAFE-1 | Says what survives | Review | |
 | SAFE-2 | Names the remedy with the failure | Review | |
 | HOME-1 | One home per fact | Review | |
@@ -286,6 +310,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | LANG-7 | No minimisers | Ratchet ("simply" and its kind); Review ("just", "easy") | `Test-DocsConformance.ps1` |
 | LANG-8 | No issue or pull request numbers | Block | `Test-DocsConformance.ps1` |
 | LANG-9 | No competing products named | Review | |
+| LANG-10 | No names of what JIM is built with | Block | `Test-DocsConformance.ps1` (pages, diagrams, included SVGs); `Test-DocsCoverage.ps1 -OpenApiPath` (the API reference) |
 | MNT-1 | Integrate, don't append | Review | |
 | MNT-2 | Find what is now wrong first | Review | |
 | MNT-3 | An over-budget page cannot grow | Block | `Test-DocsConformance.ps1` |
@@ -301,7 +326,13 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | A11Y-1 | Mermaid diagrams carry accTitle and accDescr | Block | `Test-DocsConformance.ps1` |
 | A11Y-2 | Images and diagrams carry text alternatives | Block | `Test-DocsConformance.ps1` |
 | A11Y-3 | Meaningful link text | Review | |
-| STY-1 to STY-3 | Style conventions | Review | |
+| VIS-1 | At least one diagram on every page | Block | `Test-DocsConformance.ps1` |
+| VIS-2 | A diagram where a section describes a shape | Review | |
+| VIS-3 | Diagrams specific to their page, never decorative | Review | |
+| VIS-4 | Diagrams match the text and the product | Review | |
+| STY-1 | No emoji; status marks and icons from Material Design Icons | Block | `Test-DocsConformance.ps1`, `Test-DocsSite.ps1` |
+| STY-2 | Term-and-description bullets | Review | |
+| STY-3 | An icon on every H2 and grid card, and on no other heading | Block (heading placement); Review (the rest) | `Test-DocsConformance.ps1` |
 | PRI-1 | Priority pages record their last validation | Block | `Test-DocsConformance.ps1`; listed for each release by `Get-DocsDueForValidation.ps1` |
 | PRI-2 | Review findings arrive as review threads (every page's, under the Review tier) | Retired | |
 | TUT-1 | Tutorials are tested | Block | `Test-DocsConformance.ps1` (TYP-1, the scenario named); the tutorial's scenario in the pre-release suite (the steps executed) |

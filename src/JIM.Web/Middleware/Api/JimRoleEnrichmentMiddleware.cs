@@ -71,16 +71,8 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
             Log.Debug("JimRoleEnrichmentMiddleware: Looking up user with {ClaimType}={ClaimValue}",
                 serviceSettings.SSOUniqueIdentifierClaimType, uniqueIdClaimValue);
 
-            // Look up the Metaverse user
-            var userType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, false);
-            if (userType == null)
-            {
-                Log.Warning("JimRoleEnrichmentMiddleware: User object type not found.");
-                return;
-            }
-
-            var user = await jim.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
-                userType, serviceSettings.SSOUniqueIdentifierMetaverseAttribute, uniqueIdClaimValue);
+            // Look up the Metaverse user, as sign-in does (a Guid-typed identifier attribute is matched as a GUID, #2438)
+            var user = await jim.Auth.FindSsoUserAsync(uniqueIdClaimValue);
 
             if (user == null)
             {
@@ -103,9 +95,13 @@ public class JimRoleEnrichmentMiddleware(RequestDelegate next)
             // Add the Metaverse Object ID claim
             roleClaims.Add(new Claim(Constants.BuiltInClaims.MetaverseObjectId, user.Id.ToString()));
 
-            // Create a new identity with JIM claims and add it to the principal
+            // Create a new identity with JIM claims, in place of any JIM identity authentication already attached (a
+            // bearer token's validation attaches one, and the portal's cookie carries the one from sign-in), so each
+            // role appears once and a role removed since sign-in no longer applies (#2441).
             var jimIdentity = new ClaimsIdentity(roleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM.Web.Api" };
-            context.User.AddIdentity(jimIdentity);
+            context.User = new ClaimsPrincipal(context.User.Identities
+                .Where(identity => !identity.HasClaim(claim => claim.Type == Constants.BuiltInClaims.MetaverseObjectId))
+                .Append(jimIdentity));
 
             Log.Debug("JimRoleEnrichmentMiddleware: Enriched user with {RoleCount} roles: {Roles}",
                 userRoles.Count(), string.Join(", ", userRoles.Select(r => r.Name)));

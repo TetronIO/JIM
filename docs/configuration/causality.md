@@ -9,7 +9,19 @@ audience: operator
 
 Every execution item's Lineage reads beyond the run it records, in both directions: up the chain to why the change happened, and down it to what the change went on to cause in later runs. Together they answer the two questions an administrator investigating an account usually has, "why did this happen?" and "what did it lead to?", from whichever item they opened, without reconstructing the story from several Activities by hand.
 
-## Why it happened
+```jim-diagram
+archetype: flow
+title: One story across runs, as the Lineage follows it
+desc: 'A typical story runs across four runs. An import brings in a new Connected System Object; the Synchronisation that processes it decides on a change and queues it; an export applies the change to the Connected System; and the next import confirms it with an Export confirmed outcome. From whichever execution item you open, the Lineage reads up this chain to why it happened and down it, under After this run, to what it went on to cause.'
+container: {label: 'The Lineage, from any item', tag: 'up: why it happened; down: After this run'}
+steps:
+- {id: import, label: Import, sub: a new Connected System Object, next: processed by}
+- {id: sync, label: Synchronisation, sub: decides the change, next: queues}
+- {id: export, label: Export, sub: applies the change, next: confirmed by}
+- {id: confirm, label: Import, sub: Export confirmed}
+```
+
+## :material-help-circle-outline: Why it happened
 
 The Lineage's subdued cards are the item's causal chain: why this happened at all, why that happened, and so on back up the chain as far as JIM recorded it, each cause placed on the column of the object it happened to rather than listed separately.
 
@@ -43,7 +55,7 @@ Each hop links to the run that staged the change, whose own causes continue abov
 
 The queueing link is the one thing JIM cannot work out after the event, because a queued change is deleted the moment its export succeeds. It is recorded as the change is staged, so changes queued **before** you upgraded to a version carrying this show a shorter chain; once they have exported, every later export is covered. The import hop is the opposite: it is read from the Connected System Object's own history at viewing time, so it appears only while that history is still reachable, and a chain whose imports have aged out of Activity retention, or whose Connected System Object has since been removed from the Connector Space, ends at the synchronisation instead. A fully deleted account's chain therefore ends at the deletion decision, which carries the Deletion Rule context that ordered it.
 
-## What it went on to cause
+## :material-graph-outline: What it went on to cause
 
 Below each object's events, the Lineage carries on past the run under an **After this run** rule: what later runs did to that object, oldest first. An import shows the Synchronisation that processed it; a Synchronisation shows the exports it queued and the import that confirmed them. Each card names the kind of run that recorded it and when, and links that run's own execution item, so the next step can be opened directly.
 
@@ -75,17 +87,17 @@ Consequences can still be happening, so the Lineage shows a reading taken when t
 
 The summary band adds an **After this run** strip of what followed, separate from the run's own outcomes, and it shows in every view. Choosing a pill opens the Lineage, which is the one view that shows consequences; the Timeline and Table describe the run alone.
 
-## The Causality Explorer
+## :material-magnify: The Causality Explorer
 
-The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. Open it from wherever the question starts:
+The Lineage answers for one execution item. The Causality Explorer answers for an object, and lets you follow a story from object to run to object without losing your place. It is for Administrators only, like the REST API reads behind it; other users see none of the ways in. Open it from wherever the question starts:
 
-- **Explore causality** on a Connected System Object or a Metaverse Object opens that object's causal timeline.
+- **Explore causality** on a Connected System Object opens that object's causal timeline. On a Metaverse Object it sits in the **Inspect** view: at the end of the panel headed **Where this User gets its values** (named for the object's type) for the whole object, and beside **Open in Timeline** in an attribute's inspector.
 - **Open in explorer** in an execution item's causality panel opens the item's Lineage in the explorer.
 - **Queued by** on a Pending Export lists the synchronisation runs that queued the change, each with **Explore** beside it.
 
 An object's timeline lists every execution item about it, newest first: when the run happened, what kind of run it was, what it did, and **Because**, the item's nearest cause in one line ("Tina Adams was deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"). Where nothing earlier was recorded, the line says so, and it says differently where the cause has aged out of history, so a story cut short never reads as complete. Long timelines load 50 items at a time with **Show 50 more**. Choosing a row opens that item's Lineage, and any object or item named in a Lineage opens in turn, so the explorer re-centres on whatever you choose.
 
-Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button, and **Copy link** gives an address that opens the same focus with the same trail, to send to a colleague. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
+Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button. The page's address carries the focus and its trail, so a link to it opens the same view. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
 
 The trail and re-centring belong to the portal. The REST API and PowerShell read the same timelines and the same runs, and a script follows a story by passing each row's execution item to the causes and consequences reads instead (see [PowerShell: Execution Items](../powershell/execution-items.md)).
 
@@ -93,7 +105,7 @@ A deleted object stays explorable: its timeline is read through the records its 
 
 **Queued by** answers the question an export raises on its own: why is this change waiting? A Pending Export can be queued by several synchronisations before it exports, and each is listed with its own nearest cause. A Pending Export queued before your deployment recorded its queueing runs says that no run is recorded rather than showing an empty list, and runs whose records retention has removed are counted rather than listed.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Activities](activities.md): execution items and the causality panel's views.
 - [PowerShell: Execution Items](../powershell/execution-items.md): `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and `Get-JIMCausalCohortMember`, which return the same chain one row per cohort; and `-ConnectedSystemObjectId` or `-MetaverseObjectId`, which return an object's causal timeline.

@@ -15,7 +15,8 @@
 # Triggers: a push to main that changes VERSION, and workflow_dispatch. NEVER pull_request. Only a release pull
 # request changes VERSION, so merging one starts this run on the merge commit, which is the commit the release tags
 # and the one the release gate checks; nothing else may merge to main before the tag (engineering/RELEASE_PROCESS.md).
-# Dispatch it to re-run after a fix, or at any other time. Split-trust runner model (see ci.yml): a pull_request runs
+# Dispatch it to re-run after a fix, or at any other time; a dispatch runs the suite alone unless its screenshots box
+# is ticked (see jim-screenshots). Split-trust runner model (see ci.yml): a pull_request runs
 # code from anyone's fork, and this runner pauses its host's other runners and runs privileged containers, so fork
 # code must never reach it:
 #   - a push to main is merged code, and a dispatch needs write access to this repository;
@@ -39,7 +40,7 @@
 # before it gets there.
 #
 # Configuration: the suite needs none (its test credentials are throwaway and built in). The jim-screenshots job, which
-# follows a passing suite with the release's screenshots (see that job), uses the jim-automation app's JIM_AUTOMATION_*
+# follows a passing suite with the release's screenshots when a release is being prepared (see that job), uses the jim-automation app's JIM_AUTOMATION_*
 # secrets to open its pull requests on junctional.io and tetron.io.
 #
 # The release gate: release.yml's jim-pre-release-gate job and the /release skill require a `success` status from this
@@ -53,6 +54,11 @@ on:
     branches: [ "main" ]
     paths: [ "VERSION" ]
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Capture the release's screenshots too, and open their pull requests on junctional.io and tetron.io. Only when preparing a release."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -72,6 +78,9 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    # Read by jim-screenshots, which runs only when this says so.
+    outputs:
+      screenshots: ${{ steps.screenshots.outputs.capture }}
 
     steps:
       # The JIM worker container (UID 1654) writes its logs into the workspace through a bind mount, so a previous
@@ -86,6 +95,34 @@ jobs:
           fi
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      # Whether jim-screenshots runs after the suite. A push here is a release pull request merging (only one changes
+      # VERSION), so it captures; a dispatch captures only when its screenshots box is ticked. Either way, never when
+      # VERSION's tag already exists on another commit: that version has shipped, so its images would show unreleased
+      # code under an old version's name, and the site pull requests would merge at once, finding the release already
+      # out. A tag on this very commit is the release being cut while the suite ran, which still captures.
+      - name: Decide whether to capture the screenshots
+        id: screenshots
+        env:
+          REQUESTED: ${{ github.event_name == 'push' || inputs.screenshots }}
+        run: |
+          $version = 'v' + (Get-Content -LiteralPath VERSION -Raw).Trim()
+          $capture = $env:REQUESTED -eq 'true'
+          if (-not $capture) {
+            Write-Host "Screenshots not requested; tick 'screenshots' when dispatching to capture them for a release."
+          }
+          else {
+            $refs = @(git ls-remote --tags origin "refs/tags/$version" "refs/tags/$version^{}")
+            if ($LASTEXITCODE -ne 0) { throw "Could not list the tags on origin (git exit code $LASTEXITCODE)." }
+            # An annotated tag lists twice; its ^{} line is the commit it points at.
+            $line = @($refs | Where-Object { $_ -like "*`trefs/tags/$version^{}" }) + @($refs) | Select-Object -First 1
+            $tagged = if ($line) { ($line -split "`t")[0] } else { $null }
+            if ($tagged -and $tagged -ne $env:GITHUB_SHA) {
+              Write-Host "::warning::$version is already tagged on $tagged, not this commit; no screenshots are captured. Bump VERSION in a release pull request first."
+              $capture = $false
+            }
+          }
+          "capture=$($capture.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # See the header: the suite needs the host's Docker to itself. Waits for each other runner's current job to
       # finish (up to an hour), and fails rather than run beside a job it could not wait out.
@@ -228,6 +265,10 @@ jobs:
   # with the new images before anything is committed, and each pull request merges once its checks pass and the
   # release is published (release.yml's publish-screenshots job, or this job if the release came out first).
   #
+  # Only when a release is being prepared: after a release pull request merges, or a dispatch with screenshots ticked,
+  # and never for a version already tagged on another commit (the suite job's "Decide whether to capture the
+  # screenshots" step). A plain dispatch runs the suite alone.
+  #
   # A job here rather than a workflow of its own, because the jim-prerelease runner group admits exactly this file. It
   # cannot hold up a release: the gate reads the jim-pre-release commit status, which the job above has already posted.
   #
@@ -239,6 +280,9 @@ jobs:
   jim-screenshots:
     name: jim-screenshots
     needs: jim-pre-release
+    # The suite job's decision: a release pull request merging, or a dispatch with screenshots ticked, on a version
+    # not yet tagged elsewhere.
+    if: ${{ needs.jim-pre-release.outputs.screenshots == 'true' }}
     runs-on: [self-hosted, jim-prerelease]
     # Reads the repository; junctional.io is reached with the jim-automation app's own token, minted below.
     permissions:

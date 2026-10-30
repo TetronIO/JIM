@@ -9,6 +9,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
+using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Exceptions;
 using JIM.Models.Security;
 using Moq;
@@ -95,6 +96,59 @@ public class ExampleDataTemplateCrudTests
             "a duplicate-name create must persist nothing");
     }
 
+    // -- copy (#1466) ------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task CopyTemplateAsync_BuiltInSource_CreatesAnEditableCopyUnderTheNewNameAsync()
+    {
+        var source = BuildValidTemplate(TemplateId, "Users and Groups");
+        source.BuiltIn = true;
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(source);
+        ExampleDataTemplate? persisted = null;
+        _exampleRepo.Setup(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()))
+            .Callback<ExampleDataTemplate>(t => { persisted = t; t.Id = 99; })
+            .Returns(Task.CompletedTask);
+
+        var copy = await _jim.ExampleData.CopyTemplateAsync(TemplateId, "My Users and Groups", ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        Assert.That(persisted, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(copy.Id, Is.EqualTo(99));
+            Assert.That(persisted!.Name, Is.EqualTo("My Users and Groups"));
+            Assert.That(persisted!.BuiltIn, Is.False);
+            Assert.That(persisted!.ObjectTypes, Has.Count.EqualTo(1));
+            Assert.That(persisted!.ObjectTypes[0], Is.Not.SameAs(source.ObjectTypes[0]));
+            Assert.That(persisted!.ObjectTypes[0].ObjectsToCreate, Is.EqualTo(100));
+        }
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>
+            a.TargetOperationType == ActivityTargetOperationType.Create && a.TargetName == "My Users and Groups")), Times.Once);
+    }
+
+    [Test]
+    public void CopyTemplateAsync_SourceMissing_ThrowsAndRecordsNoActivity()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync((ExampleDataTemplate?)null);
+
+        Assert.That(async () => await _jim.ExampleData.CopyTemplateAsync(TemplateId, "Copy", ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<KeyNotFoundException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+    }
+
+    [Test]
+    public void CopyTemplateAsync_NameTaken_ThrowsAndPersistsNothing()
+    {
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(BuildValidTemplate(TemplateId, "Users and Groups"));
+        _exampleRepo.Setup(r => r.GetTemplateAsync("Users and Groups")).ReturnsAsync(BuildValidTemplate(TemplateId, "Users and Groups"));
+
+        Assert.That(async () => await _jim.ExampleData.CopyTemplateAsync(TemplateId, "Users and Groups", ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<InvalidOperationException>().With.Message.Contains("already exists"));
+
+        _exampleRepo.Verify(r => r.CreateTemplateAsync(It.IsAny<ExampleDataTemplate>()), Times.Never);
+    }
+
     // -- update ------------------------------------------------------------------------------------------------------
 
     [Test]
@@ -156,6 +210,69 @@ public class ExampleDataTemplateCrudTests
         await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin", replaceObjectTypes: false);
         _exampleRepo.Verify(r => r.UpdateTemplateAsync(template, false), Times.Once,
             "replaceObjectTypes: false must reach the repository");
+    }
+
+    // -- built-in protection (#2431) ---------------------------------------------------------------------------------
+
+    [Test]
+    public void UpdateTemplateAsync_BuiltInTemplate_ThrowsAndRecordsNoActivity()
+    {
+        // the incoming template claims not to be built in; the server must decide from the persisted row.
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        template.BuiltIn = false;
+        _exampleRepo.Setup(r => r.GetTemplateHeaderAsync(TemplateId))
+            .ReturnsAsync(new ExampleDataTemplateHeader { Id = TemplateId, Name = "Users and Groups", BuiltIn = true });
+
+        Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(template, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
+            "an update of a built-in template must record no Activity");
+        _exampleRepo.Verify(r => r.UpdateTemplateAsync(It.IsAny<ExampleDataTemplate>(), It.IsAny<bool>()), Times.Never,
+            "an update of a built-in template must persist nothing");
+    }
+
+    [Test]
+    public void UpdateTemplateAsync_BuiltInTemplateRenameOnly_ThrowsAndPersistsNothing()
+    {
+        var rename = new ExampleDataTemplate { Id = TemplateId, Name = "Renamed Template" };
+        _exampleRepo.Setup(r => r.GetTemplateHeaderAsync(TemplateId))
+            .ReturnsAsync(new ExampleDataTemplateHeader { Id = TemplateId, Name = "Users and Groups", BuiltIn = true });
+
+        Assert.That(async () => await _jim.ExampleData.UpdateTemplateAsync(rename, ActivityInitiatorType.User, Guid.NewGuid(), "Admin", replaceObjectTypes: false),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never);
+        _exampleRepo.Verify(r => r.UpdateTemplateAsync(It.IsAny<ExampleDataTemplate>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Test]
+    public void DeleteTemplateAsync_BuiltInTemplate_ThrowsAndDeletesNothing()
+    {
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        template.BuiltIn = true;
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(template);
+
+        Assert.That(async () => await _jim.ExampleData.DeleteTemplateAsync(TemplateId, ActivityInitiatorType.User, Guid.NewGuid(), "Admin"),
+            Throws.TypeOf<ExampleDataTemplateException>());
+
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.IsAny<Activity>()), Times.Never,
+            "a delete of a built-in template must record no Activity");
+        _exampleRepo.Verify(r => r.DeleteTemplateAsync(It.IsAny<int>()), Times.Never,
+            "a delete of a built-in template must delete nothing");
+    }
+
+    [Test]
+    public async Task DeleteTemplateAsync_CustomTemplate_DeletesAndRecordsActivityAsync()
+    {
+        var template = BuildValidTemplate(TemplateId, "Users and Groups");
+        _exampleRepo.Setup(r => r.GetTemplateAsync(TemplateId)).ReturnsAsync(template);
+
+        await _jim.ExampleData.DeleteTemplateAsync(TemplateId, ActivityInitiatorType.User, Guid.NewGuid(), "Admin");
+
+        _exampleRepo.Verify(r => r.DeleteTemplateAsync(TemplateId), Times.Once);
+        _activityRepo.Verify(r => r.CreateActivityAsync(It.Is<Activity>(a =>
+            a.TargetOperationType == ActivityTargetOperationType.Delete)), Times.Once);
     }
 
     // -- helpers -----------------------------------------------------------------------------------------------------

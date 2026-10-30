@@ -359,6 +359,61 @@ public class ServiceHealthDisplayTests
         Assert.That(banner!.Sentence, Is.EqualTo("The Worker has made no progress on Full Import: Corporate Directory for 12 minutes."));
     }
 
+    private const long Gb = 1_000_000_000;
+
+    [Test]
+    public void Banner_WorkerMemoryLow_WarnsOnceWithTheFiguresAndTheRemedy()
+    {
+        // Both Worker services share one process, so both report the same figures; the Worker is named once.
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, memory: (62, 5, 41)),
+            Derive(JimService.WorkerDelivery, 2, memory: (62, 5, 41)),
+            Derive(JimService.Scheduler, 2, memory: (62, 30, 1)));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(banner!.Severity, Is.EqualTo(Severity.Warning));
+            Assert.That(banner.Sentence, Is.EqualTo(
+                "Memory is low for the Worker: 57 GB of 62 GB in use, 41 GB of it by the Worker. " +
+                "At 92% the Worker stops its running work rather than be stopped part-way through; give JIM more memory, or run less at once."));
+        }
+    }
+
+    [Test]
+    public void Banner_SchedulerAloneMemoryLow_NamesTheSchedulerWithoutTheWorkersRemedy()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, memory: (62, 30, 4)),
+            Derive(JimService.Scheduler, 2, memory: (2, 0, 1)));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Is.EqualTo("Memory is low for the Scheduler: 2 GB of 2 GB in use, 1 GB of it by the Scheduler. Give JIM more memory."));
+    }
+
+    [Test]
+    public void Banner_StalledOutranksMemoryLow()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 2, currentWork: "Full Import: Corporate Directory", progressAgeSeconds: 12 * 60, memory: (62, 5, 41)));
+
+        Assert.That(ServiceHealthDisplay.Banner(report)!.Sentence, Does.StartWith("The Worker has made no progress"));
+    }
+
+    [Test]
+    public void Memory_Reported_SaysWhatTheProcessHoldsAndHowFullItsMemoryIs()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2, memory: (62, 21, 41))), Is.EqualTo("41 GB held · 66% of 62 GB in use"));
+            Assert.That(ServiceHealthDisplay.Memory(Derive(JimService.WorkerSync, 2)), Is.Null, "a service that did not report memory has no row");
+        }
+    }
+
     [Test]
     public void Banner_NoHeartbeatOutranksStalled()
     {
@@ -461,7 +516,8 @@ public class ServiceHealthDisplayTests
         string? currentWork = null,
         int? progressAgeSeconds = null,
         string version = "0.15.0",
-        DateTime? asOf = null)
+        DateTime? asOf = null,
+        (long TotalGb, long AvailableGb, long ProcessGb)? memory = null)
     {
         var at = asOf ?? AsOf;
         var heartbeat = new ServiceHeartbeat
@@ -474,7 +530,10 @@ public class ServiceHealthDisplayTests
             LastSeenAt = at.AddSeconds(-ageSeconds),
             CurrentWork = currentWork,
             CurrentWorkStartedAt = currentWork == null ? null : at.AddMinutes(-12),
-            LastProgressAt = progressAgeSeconds.HasValue ? at.AddSeconds(-progressAgeSeconds.Value) : null
+            LastProgressAt = progressAgeSeconds.HasValue ? at.AddSeconds(-progressAgeSeconds.Value) : null,
+            MemoryTotalBytes = memory?.TotalGb * Gb,
+            MemoryAvailableBytes = memory?.AvailableGb * Gb,
+            ProcessMemoryBytes = memory?.ProcessGb * Gb
         };
         return SystemHealthServer.Derive(service, heartbeat, at);
     }
@@ -486,4 +545,44 @@ public class ServiceHealthDisplayTests
         WebVersion = "0.15.0",
         GeneratedAt = AsOf
     };
+
+    // ─── Next Schedule (#2549) ───
+
+    // 2026-09-05 is a Saturday; the strip says when the next Schedule fires in the reader's own terms.
+    [TestCase("2026-09-05T16:30:00", "today 16:30")]
+    [TestCase("2026-09-06T02:00:00", "tomorrow 02:00")]
+    [TestCase("2026-09-09T02:00:00", "Wed 02:00")]
+    [TestCase("2026-09-20T02:00:00", "20 Sep 02:00")]
+    public void NextScheduleWhen_RelativeToToday_ReadsNaturally(string next, string expected)
+    {
+        var nextRun = DateTime.SpecifyKind(DateTime.Parse(next, System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc);
+
+        Assert.That(ServiceHealthDisplay.NextScheduleWhen(nextRun, AsOf, TimeZoneInfo.Utc), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void NextScheduleWhen_ConvertsToTheReadersTimeZone()
+    {
+        var newYork = TimeZoneInfo.CreateCustomTimeZone("Test-5", TimeSpan.FromHours(-5), "Test-5", "Test-5");
+
+        Assert.That(ServiceHealthDisplay.NextScheduleWhen(AsOf.AddHours(14), AsOf, newYork), Is.EqualTo("today 21:00"));
+    }
+
+    [Test]
+    public void NextScheduleCountdown_SaysHowLongUntilItFires()
+    {
+        Assert.That(ServiceHealthDisplay.NextScheduleCountdown(AsOf.AddHours(83), AsOf), Is.EqualTo("in 3 d"));
+    }
+
+    [Test]
+    public void NextScheduleHeaderPhrase_ScheduleDue_NamesWhenAndNoneDue_IsNothing()
+    {
+        var next = new JIM.Models.Scheduling.DTOs.NextDueSchedule { Name = "Weekly Full Reconciliation", NextRunTime = AsOf.AddDays(1).AddHours(-10) };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ServiceHealthDisplay.NextScheduleHeaderPhrase(next, AsOf, TimeZoneInfo.Utc), Is.EqualTo("next Schedule tomorrow 02:00"));
+            Assert.That(ServiceHealthDisplay.NextScheduleHeaderPhrase(null, AsOf, TimeZoneInfo.Utc), Is.Null);
+        }
+    }
 }

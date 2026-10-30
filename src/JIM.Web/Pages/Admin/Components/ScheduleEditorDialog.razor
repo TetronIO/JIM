@@ -221,9 +221,9 @@
                                     <MudSelect T="int" Value="_selectedConnectedSystemId" Label="Connected System" Variant="Variant.Outlined"
                                                ValueChanged="HandleConnectedSystemChangedAsync">
                                         <MudSelectItem Value="0">-- Select Connected System --</MudSelectItem>
-                                        @foreach (var cs in _connectedSystems)
+                                        @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
                                         {
-                                            <MudSelectItem Value="@cs.Id">@cs.Name</MudSelectItem>
+                                            <MudSelectItem Value="@id">@name</MudSelectItem>
                                         }
                                     </MudSelect>
 
@@ -261,7 +261,7 @@
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
-                                    <MudButton Variant="Variant.Outlined" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
+                                    <MudButton Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
                                 </MudStack>
                             </MudStack>
                         </MudPaper>
@@ -290,7 +290,7 @@
                             @if (!_schedule.BuiltIn)
                             {
                                 <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudButton Variant="Variant.Outlined" DropShadow="false"
+                                    <MudButton Variant="Variant.Filled" DropShadow="false"
                                                StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
                                         Add Step
                                     </MudButton>
@@ -523,7 +523,7 @@
 
     // Step editor state
     private ScheduleStep? _editingStep;
-    private List<ConnectedSystemHeader> _connectedSystems = new();
+    private Dictionary<int, string> _connectedSystemNames = new();
     private List<ConnectedSystemRunProfile>? _runProfiles;
     private int _selectedConnectedSystemId;
     private int _selectedRunProfileId;
@@ -540,7 +540,7 @@
 
         // Load Connected Systems for step configuration
         using var jim = JimFactory.Create();
-        _connectedSystems = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
 
         if (ScheduleId.HasValue)
         {
@@ -1384,8 +1384,7 @@
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)
         {
             // Look up Connected System name
-            var cs = _connectedSystems.FirstOrDefault(c => c.Id == step.ConnectedSystemId.Value);
-            var connectedSystemName = cs?.Name ?? "Unknown System";
+            var connectedSystemName = _connectedSystemNames.GetValueOrDefault(step.ConnectedSystemId.Value, "Unknown System");
 
             // Look up Run Profile name from cache
             var runProfileName = "Unknown Profile";

@@ -168,6 +168,14 @@ public interface IActivityRepository
     /// </summary>
     public Task<ActivityFilterOptions> GetWorkerTaskActivityFilterOptionsAsync();
 
+    /// <summary>
+    /// The execution durations of each requested Run Profile's most recent successful runs (Complete or
+    /// CompleteWithWarning), newest first and at most <paramref name="perRunProfile"/> each. A Run Profile with no
+    /// successful run is absent from the result. Feeds the Operations page's estimated start times (#2549).
+    /// </summary>
+    public Task<Dictionary<int, List<TimeSpan>>> GetRecentSuccessfulRunProfileDurationsAsync(
+        IReadOnlyCollection<int> runProfileIds, int perRunProfile);
+
     public Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,
         int page,
@@ -241,12 +249,18 @@ public interface IActivityRepository
     /// </summary>
     public Task FinaliseActivityRunProfileExecutionStatsAsync(Activity activity);
 
-    public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
+    /// <summary>
+    /// A Run Profile Execution Item as its portal page shows it, bounded however large the group it changed (#2498):
+    /// its own row and sync outcomes; its Connected System Object with only the attribute values that name and identify
+    /// it, the joined Metaverse Object's row and type; and its change records (its own, and each outcome's staged
+    /// snapshot) without their attribute changes, which are read a window at a time. Null when no item has the id.
+    /// </summary>
+    public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemDetailAsync(Guid id);
 
     /// <summary>
     /// One Run Profile Execution Item's own row, with no navigation loaded: its error type, message and stack trace,
     /// its snapshots and the ids of what it is about. The light counterpart of
-    /// <see cref="GetActivityRunProfileExecutionItemAsync"/>, which loads the graph the portal's detail page renders.
+    /// <see cref="GetActivityRunProfileExecutionItemDetailAsync"/>, which loads what the portal's detail page renders.
     /// Null when no item has the id.
     /// </summary>
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemCoreAsync(Guid id);
@@ -263,6 +277,13 @@ public interface IActivityRepository
     /// recorded no Joined outcome.
     /// </summary>
     public Task<ActivityRunProfileExecutionItemSyncOutcome?> GetJoinedOutcomeAsync(Guid runProfileExecutionItemId);
+
+    /// <summary>
+    /// Every outcome a Run Profile Execution Item recorded, flat and with no navigations loaded, so a caller can build
+    /// the item's outcome tree (#2033) from <c>ParentSyncOutcomeId</c> without loading the item's graph. Empty when the
+    /// item recorded none.
+    /// </summary>
+    public Task<List<ActivityRunProfileExecutionItemSyncOutcome>> GetSyncOutcomesAsync(Guid runProfileExecutionItemId);
 
     /// <summary>
     /// Loads every causal edge whose effect is one of the given Run Profile Execution Items (#1223), so the
@@ -636,6 +657,14 @@ public interface IActivityRepository
     ///
     /// Unlike the per-object configuration history queries, this deliberately does not require a captured version:
     /// deletions are recorded without one and are precisely the changes that most need surfacing.
+    ///
+    /// A change recorded as awaiting synchronisation (#2615), applied or not, is left out: the Connected System's next
+    /// synchronisation applies it, so it is not a reason to run a Full Synchronisation. Those are reported separately, as
+    /// <see cref="IConnectedSystemRepository.GetConfigurationChangesAwaitingSynchronisationAsync"/>.
+    ///
+    /// A change the save judged to need no Full Synchronisation (<see cref="Activity.ConfigurationChangeNeedsFullSynchronisation"/>
+    /// false, such as an export rule's scope change, which the export review applies) is left out too. A null judgement
+    /// counts.
     /// </summary>
     public Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass);
 

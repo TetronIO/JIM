@@ -35,10 +35,10 @@ public class FileSystemController(ILogger<FileSystemController> logger, JimAppli
     /// <remarks>
     /// Browse files and directories within the JIM Container's allowed mount points.
     /// Used when configuring file-based connectors (e.g. CSV) to select import/export paths.
-    /// Omit the path parameter to list the allowed root directories.
+    /// Omit the path parameter to list the first allowed root directory; the roots themselves are listed by GET /api/v1/filesystem/roots.
     /// Only paths within the configured allowed roots are accessible; all other paths return 403.
     /// </remarks>
-    /// <param name="path">The directory path to list. If not specified, returns the allowed root directories.</param>
+    /// <param name="path">The directory path to list. If not specified, lists the first allowed root directory.</param>
     /// <returns>A list of files and directories in the specified path.</returns>
     /// <response code="200">Returns the directory listing.</response>
     /// <response code="403">The requested path is outside allowed directories.</response>

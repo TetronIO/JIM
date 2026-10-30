@@ -67,6 +67,7 @@ public class MetaverseControllerDeletionSettingsPreviewTests
         _serviceSettingsRepo = new Mock<IServiceSettingsRepository>();
 
         _repository.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
+        _metaverseRepo.StubExportReviewReads();
         _repository.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepo.Object);
         // The deletion-rule configuration advisory (#1570) reads every Synchronisation Rule when building

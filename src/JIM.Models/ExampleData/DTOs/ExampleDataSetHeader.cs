@@ -20,7 +20,7 @@ public class ExampleDataSetHeader
     /// <summary>When the Example Data Set was created, in UTC.</summary>
     public DateTime Created { set; get; }
 
-    /// <summary>The .NET culture code the values are in, for example "en-GB".</summary>
+    /// <summary>The culture code the values are in, for example "en-GB".</summary>
     public string Culture { get; set; } = null!;
 
     /// <summary>How many values the Example Data Set holds.</summary>

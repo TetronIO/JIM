@@ -9,12 +9,29 @@ audience: automation-author
 
 Cmdlets for viewing and modifying JIM runtime configuration. Settings use dot-notation keys and control operational behaviour such as change tracking, sync page sizes, and history retention.
 
+```jim-diagram
+archetype: anatomy
+title: What a Service Setting holds, as the cmdlets return it
+desc: "Get-JIMServiceSetting returns each Service Setting with its Key, in dot notation such as Sync.PageSize; its ValueType, which says how the string value is read; its DefaultValue, the built-in default; its Value, the override Set-JIMServiceSetting writes; and its EffectiveValue, which is Value if set, otherwise DefaultValue. IsOverridden is true while Value is set and differs from the default, and is false again after Reset-JIMServiceSetting clears the override. IsReadOnly marks a setting mirrored from an environment variable, which Set-JIMServiceSetting and Reset-JIMServiceSetting both refuse to change."
+subject:
+  kind: object
+  label: "A setting, from `Get-JIMServiceSetting`"
+  parts:
+    - { label: "`Key`", detail: "dot notation, such as `Sync.PageSize`" }
+    - { label: "`ValueType`", detail: "how the string value is read" }
+    - { label: "`DefaultValue`", detail: "the built-in default" }
+    - { label: "`Value`", detail: "the override `Set-JIMServiceSetting` writes" }
+    - { label: "`EffectiveValue`", detail: "`Value` if set, otherwise `DefaultValue`" }
+    - { label: "`IsOverridden`", detail: "`$false` again after `Reset-JIMServiceSetting`" }
+    - { label: "`IsReadOnly`", detail: "mirrors an environment variable; cannot be set or reset" }
+```
+
 !!! info
     Setting values are always transmitted as strings. The server interprets the type based on the setting definition (Boolean, Integer, TimeSpan, etc.).
 
 ---
 
-## Get-JIMServiceSetting
+## :material-tune-variant: Get-JIMServiceSetting
 
 Retrieves service settings. When called without parameters, returns all settings. Specify `-Key` to retrieve a single setting by its dot-notation key.
 
@@ -73,7 +90,7 @@ Get-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent"
 
 ---
 
-## Set-JIMServiceSetting
+## :material-pencil-outline: Set-JIMServiceSetting
 
 Updates a service setting value. Read-only settings cannot be modified; attempting to do so produces a non-terminating error. Each change creates an audit activity. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -126,7 +143,7 @@ Set-JIMServiceSetting -Key "Sync.PostClearReconciliation.MaxMissingPercent" -Val
 
 ---
 
-## Reset-JIMServiceSetting
+## :material-restart: Reset-JIMServiceSetting
 
 Reverts a service setting to its default value by clearing the administrator override. Read-only settings cannot be reverted; attempting to do so produces a non-terminating error. Each reset creates an audit activity. Supports `ShouldProcess` (Medium impact); use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -171,7 +188,7 @@ Get-JIMServiceSetting | Where-Object { $_.IsOverridden } |
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Service Settings](../configuration/service-settings.md): what service settings are, default vs override behaviour, and read-only environment-mirrored settings
 - [Activities](activities.md): viewing audit activities created by setting changes

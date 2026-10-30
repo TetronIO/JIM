@@ -9,12 +9,35 @@ audience: automation-author
 
 Cmdlets for viewing and toggling JIM's [Preview features](../administration/preview-features.md). Feature flags are stored as Service Settings under the hood, but change only through these cmdlets (or the equivalent REST endpoints), never through [`Set-JIMServiceSetting`](service-settings.md).
 
+```jim-diagram
+archetype: comparison
+title: How the feature flag cmdlets treat each tier
+desc: "A Preview flag is supported with a caveat; an InDevelopment flag is never something a production administrator needs to turn on. Get-JIMFeature returns Preview flags by default, and InDevelopment flags only with -IncludeInDevelopment. Enable-JIMFeature switches a Preview flag on as it is, but an InDevelopment flag only with -AllowInDevelopment; without it the request is refused with an error naming the flag. Disable-JIMFeature switches either off, with no acknowledgement. Every change is recorded as an audit Activity, and Set-JIMServiceSetting never changes a flag."
+columns:
+  - { label: "`Preview`", sub: "supported, with a caveat" }
+  - { label: "`InDevelopment`", sub: "not for production administrators" }
+rows:
+  - label: "`Get-JIMFeature`"
+    cells:
+      - { text: returned by default }
+      - { text: "only with `-IncludeInDevelopment`" }
+  - label: "`Enable-JIMFeature`"
+    cells:
+      - { text: switches it on }
+      - { text: "needs `-AllowInDevelopment`", sub: "refused without it, with an error naming the flag" }
+  - label: "`Disable-JIMFeature`"
+    cells:
+      - { text: switches it off }
+      - { text: switches it off, sub: no acknowledgement needed }
+footer: "Each change is an audit Activity; `Set-JIMServiceSetting` never changes a flag"
+```
+
 !!! info
     A feature flag has a tier: **Preview** (returned by default, supported with a caveat) or **InDevelopment** (returned only with `-IncludeInDevelopment`, never something a production administrator needs to turn on).
 
 ---
 
-## Get-JIMFeature
+## :material-flag-outline: Get-JIMFeature
 
 Retrieves feature flags. Returns every Preview-tier flag by default; specify `-IncludeInDevelopment` to also return In Development flags, and `-Name` to filter to a single flag by key.
 
@@ -68,7 +91,7 @@ Get-JIMFeature -IncludeInDevelopment | Where-Object { $_.Enabled }
 
 ---
 
-## Enable-JIMFeature
+## :material-toggle-switch-outline: Enable-JIMFeature
 
 Switches a feature flag on. Enabling an In Development flag requires `-AllowInDevelopment`; without it, the server refuses the request. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -115,7 +138,7 @@ Enable-JIMFeature -Name "Features.SomePreviewFeature" -PassThru
 
 ---
 
-## Disable-JIMFeature
+## :material-toggle-switch-variant: Disable-JIMFeature
 
 Switches a feature flag off. Disabling never requires acknowledgement, whatever the flag's tier. Supports `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm the operation.
 
@@ -156,7 +179,7 @@ Get-JIMFeature -IncludeInDevelopment | Disable-JIMFeature
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Preview Features](../administration/preview-features.md): what a Preview feature is, and where to turn one on in the portal
 - [Service Settings](service-settings.md): the underlying store, and why the generic Service Settings cmdlets refuse feature-flag keys

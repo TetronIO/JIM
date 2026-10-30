@@ -18,12 +18,13 @@
 
     Get-ScenarioSupportedDirectoryTypes answers that question, over all four directory types
     (SambaAD, OpenLDAP, DirectoryServer389 and ActiveDirectory). The lab runs whatever Samba AD runs,
-    except the scenarios only a real domain controller can hold (024 and 025, which run there only).
+    except the scenarios only a real domain controller or its AD FS server can hold (024, 025 and 030, which run
+    there only).
     Get-ContainerDirectoryType lists the three container types, which is what -DirectoryType All and
     -PreRelease expand to (the lab needs its host, so they never include it).
 
     Test-ScenarioIsDirectoryAgnostic answers a different one: does the scenario use a directory at
-    all. Scenarios 011, 015, 016, 027, 028 and 029 accept -DirectoryConfig for runner compatibility but never
+    all. Scenarios 011, 015, 016, 027, 028, 029 and 033 accept -DirectoryConfig for runner compatibility but never
     read it (all but 011 explicitly discard it with `$null = $DirectoryConfig`), so their results are
     identical regardless of directory type; a -DirectoryType All run should execute them once, not
     once per directory type with identical results each time.
@@ -37,8 +38,8 @@ function Get-ScenarioSupportedDirectoryTypes {
 
     .DESCRIPTION
         The Active Directory lab runs whatever Samba AD runs, except the scenarios only a real domain
-        controller can hold (024 and 025), which run on the lab only. $null (the "All" scenario) has no
-        restriction.
+        controller or its AD FS server can hold (024, 025, 030 and 031), which run on the lab only. $null (the
+        "All" scenario) has no restriction.
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -56,7 +57,10 @@ function Get-ScenarioSupportedDirectoryTypes {
         # mechanism. The 389 Directory Server lab has two suffixes too, but these scenarios' fixtures
         # and assertions are written against OpenLDAP (cn=config, the ppolicy overlay, olc*
         # attributes), so it is treated like Samba AD here.
-        { $_ -in 14, 19, 22 } { return @('OpenLDAP') }
+        # Scenario 032 (Intra-type References) composes Scenario 008's OpenLDAP setup with a bespoke two-suffix
+        # dataset of its own (Populate-OpenLDAP-Scenario-032.ps1); the cross-page reference step it measures is
+        # directory-independent, so one directory covers it.
+        { $_ -in 14, 19, 22, 32 } { return @('OpenLDAP') }
 
         # Scenario 017 (Initial Password) is Active Directory family only (Samba AD and the Active
         # Directory lab): "must change at next sign-in" (its central assertion) is an Active Directory
@@ -80,7 +84,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # password policy and a Fine-Grained Password Policy; 025 asserts the Active Directory Recycle
         # Bin and the restore-from-backup behaviour of a Hyper-V checkpoint revert. A Samba AD
         # container and the OpenLDAP and 389 Directory Server labs have none of these to assert against.
-        { $_ -in 24, 25 } { return @('ActiveDirectory') }
+        # Scenarios 030 (AD FS identity provider trust) and 031 (AD FS sign-in) sign in through the lab's AD FS
+        # server, adfs-primary, which only the Active Directory lab has.
+        { $_ -in 24, 25, 30, 31 } { return @('ActiveDirectory') }
 
         # Every other scenario, including the directory-agnostic ones (see
         # Test-ScenarioIsDirectoryAgnostic below), is architecturally able to run against any of the
@@ -150,8 +156,30 @@ function Test-ScenarioIsDirectoryAgnostic {
 
     # Scenarios 011 (Scoping Criteria Matrix), 015 (SCIM Connector), 016 (JIM SQL Connector matrix),
     # 027 (the tested tutorial, which uses the File Connector only), 028 (SCIM Connector against
-    # Keycloak) and 029 (JIM provisioning its own SCIM endpoint) accept -DirectoryConfig for runner
-    # compatibility but never read it (015, 016, 027, 028 and 029 explicitly discard it with
-    # `$null = $DirectoryConfig`); their results are identical on every directory type.
-    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29
+    # Keycloak), 029 (JIM provisioning its own SCIM endpoint) and 033 (initial administrator provisioning,
+    # which uses two File Connector systems only) accept -DirectoryConfig for runner compatibility but never
+    # read it (015, 016, 027, 028, 029 and 033 explicitly discard it with `$null = $DirectoryConfig`); their
+    # results are identical on every directory type.
+    return $ScenarioNumber -in 11, 15, 16, 27, 28, 29, 33
+}
+
+function Test-ScenarioRunsOnItsOwn {
+    <#
+    .SYNOPSIS
+        $true when Scenario $ScenarioNumber is left out of -Scenario All because the lab workflow runs it in a step of
+        its own and reports it as a commit status of its own.
+    .DESCRIPTION
+        Scenario 031 (AD FS sign-in, #2441) is reported as jim-ad-lab-adfs, apart from the LDAP scenarios'
+        jim-ad-lab, so that a sign-in failure never turns the LDAP result red or the reverse: ad-lab.yml runs it after
+        the sweep (-Scenario 31), and the sweep does not run it too. It still runs by itself on request.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowNull()]
+        [Nullable[int]]$ScenarioNumber
+    )
+
+    return $ScenarioNumber -eq 31
 }

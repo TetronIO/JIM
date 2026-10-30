@@ -64,7 +64,7 @@
                 <Actions>
                     @if (ExplorerHref != null)
                     {
-                        <MudButton Variant="Variant.Outlined" DropShadow="false"
+                        <MudButton Variant="Variant.Filled" DropShadow="false"
                                    StartIcon="@Icons.Material.Filled.Hub" Href="@ExplorerHref"
                                    Class="jim-causality-open-explorer">Open in explorer</MudButton>
                     }
@@ -88,18 +88,18 @@
                                         LoadConsequenceMembers="LoadConsequenceMembers" />
                     break;
                 case CausalityView.Table when _tableModel is { } tableModel:
-                    <CausalityTableView Model="tableModel" />
+                    <CausalityTableView Model="tableModel" OnViewAllAttributeChanges="ViewAllAttributeChanges" />
                     break;
                 case CausalityView.Timeline:
                 default:
-                    <CausalityTimelineView Model="_model"
+                    <CausalityTimelineView Model="_model" LoadAttributeRows="LoadAttributeRows"
                                            @bind-ExpandedEvent="_expandedEvent" />
                     break;
             }
         </div>
 
         @* ─── Bottom drawer: attribute detail for the Lineage's selected event ─── *@
-        @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
+        @if (_view != CausalityView.Timeline && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRowCount > 0)
         {
             <div class="drawer">
                 <div class="drawer-inner">
@@ -113,6 +113,9 @@
                     @* An event with a rows caption is naming what its rows are rather than counting changes,
                        so those rows carry no meaningful operation to show. *@
                     <CausalityAttributeDetail @key="selectedEvent" Rows="selectedEvent.AttributeRows"
+                                              Source="selectedEvent.AttributeRowSource"
+                                              Summary="selectedEvent.AttributeRowSummary"
+                                              LoadAttributeRows="LoadAttributeRows"
                                               ShowOperations="@(selectedEvent.AttributeRowsCaption == null)" />
                 </div>
             </div>
@@ -207,6 +210,20 @@
     public CausalChain? Chain { get; set; }
 
     /// <summary>
+    /// The item's change values (#2498): each change record's summary and the rows of the small ones; see
+    /// <see cref="CausalityModelBuilder.Build"/>. Null for none, as with a hand-built item.
+    /// </summary>
+    [Parameter]
+    public CausalityChangeValues? ChangeValues { get; set; }
+
+    /// <summary>
+    /// Reads a window of an event's attribute rows where there were too many to carry (#2498); supplied by the host,
+    /// as <see cref="LoadConsequenceMembers"/> is, so the panel has no data access of its own.
+    /// </summary>
+    [Parameter]
+    public Func<CausalityAttributeRowSource, JIM.Models.Utility.ChangeValueRowQuery, Task<JIM.Models.Utility.RangeResultSet<CausalityAttributeRow>>>? LoadAttributeRows { get; set; }
+
+    /// <summary>
     /// The decision-time Metaverse Object deletion policy recorded on the item, where one was captured. Supplies
     /// the synthetic "Metaverse Object not deleted" event, which is the one thing a Deletion Rule's decision leaves no
     /// outcome to render.
@@ -273,6 +290,7 @@
     private CausalityPageContext? _builtContext;
     private IReadOnlySet<Guid>? _builtLivePendingExportIds;
     private CausalChain? _builtChain;
+    private CausalityChangeValues? _builtChangeValues;
     private CausalConsequences? _builtConsequences;
 
     protected override void OnParametersSet()
@@ -283,7 +301,8 @@
             && ReferenceEquals(Item, _builtItem) && ReferenceEquals(PreviewResult, _builtPreviewResult)
             && Equals(Context, _builtContext)
             && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
-            && ReferenceEquals(Chain, _builtChain))
+            && ReferenceEquals(Chain, _builtChain)
+            && ReferenceEquals(ChangeValues, _builtChangeValues))
         {
             _builtConsequences = Consequences;
             if (Item != null && _model != null && PreviewResult == null)
@@ -298,7 +317,8 @@
         if (ReferenceEquals(Item, _builtItem) && ReferenceEquals(PreviewResult, _builtPreviewResult)
             && Equals(Context, _builtContext)
             && ReferenceEquals(LivePendingExportIds, _builtLivePendingExportIds)
-            && ReferenceEquals(Chain, _builtChain))
+            && ReferenceEquals(Chain, _builtChain)
+            && ReferenceEquals(ChangeValues, _builtChangeValues))
             return;
 
         _builtItem = Item;
@@ -306,6 +326,7 @@
         _builtContext = Context;
         _builtLivePendingExportIds = LivePendingExportIds;
         _builtChain = Chain;
+        _builtChangeValues = ChangeValues;
         _builtConsequences = Consequences;
 
         if (PreviewResult != null)
@@ -320,7 +341,7 @@
         else if (Item != null)
         {
             _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
-                DeletionPolicySnapshot, IsSynchronisationRun, Chain);
+                DeletionPolicySnapshot, IsSynchronisationRun, Chain, ChangeValues);
             _summary = CausalitySummaryBuilder.Build(_model);
             _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences);
             _tableModel = CausalityTableModelBuilder.Build(_model);
@@ -379,13 +400,18 @@
         _selectedEvent = null;
     }
 
+    /// <summary>
+    /// Opens the drawer on an event the Table view summarised because it has too many attribute rows to list (#2498).
+    /// </summary>
+    private void ViewAllAttributeChanges(CausalityEvent causalityEvent) => _selectedEvent = causalityEvent;
+
     private static string GetDrawerSubtitle(CausalityEvent selectedEvent)
     {
-        var count = selectedEvent.AttributeRows.Count;
+        var count = selectedEvent.AttributeRowCount;
         // A queued deprovision's rows identify the target rather than change it, so the drawer says what
         // they are rather than calling them changes; see CausalityEvent.AttributeRowsCaption.
         var subtitle = selectedEvent.AttributeRowsCaption
-                       ?? $"{count} attribute change{(count == 1 ? "" : "s")}";
+                       ?? $"{count.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} attribute change{(count == 1 ? "" : "s")}";
         return string.IsNullOrWhiteSpace(selectedEvent.SystemName)
             ? subtitle
             : $"{subtitle} · {selectedEvent.SystemName}";

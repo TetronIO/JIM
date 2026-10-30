@@ -16,13 +16,22 @@ public class InterceptingSyncRepositoryProxy : DispatchProxy
 {
     private ISyncRepository _inner = null!;
     private string _methodName = null!;
-    private Action _before = null!;
+    private Action<object?[]> _before = null!;
 
     /// <summary>
     /// Creates a proxy over <paramref name="inner"/> that runs <paramref name="before"/> each time
     /// <paramref name="methodName"/> is called, then forwards the call unchanged.
     /// </summary>
     public static ISyncRepository Create(ISyncRepository inner, string methodName, Action before)
+        => Create(inner, methodName, _ => before());
+
+    /// <summary>
+    /// Creates a proxy over <paramref name="inner"/> that hands <paramref name="before"/> the arguments of each call to
+    /// <paramref name="methodName"/>, then forwards the call unchanged. For a test that must read what a run handed the
+    /// repository at the moment it did so: the in-memory repository stores the very instances it is given, so reading
+    /// them back afterwards cannot tell what was written from what was only changed in memory.
+    /// </summary>
+    public static ISyncRepository Create(ISyncRepository inner, string methodName, Action<object?[]> before)
     {
         var proxy = Create<ISyncRepository, InterceptingSyncRepositoryProxy>();
         var intercepting = (InterceptingSyncRepositoryProxy)(object)proxy;
@@ -39,7 +48,7 @@ public class InterceptingSyncRepositoryProxy : DispatchProxy
             throw new InvalidOperationException("DispatchProxy invoked with no target method.");
 
         if (targetMethod.Name == _methodName)
-            _before();
+            _before(args ?? []);
 
         return targetMethod.Invoke(_inner, args);
     }

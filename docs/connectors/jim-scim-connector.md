@@ -11,10 +11,27 @@ The JIM SCIM 2.0 Client Connector synchronises identities with any system that e
 
 JIM acts as the **SCIM client**: it connects out to the service provider, discovers what it can do, imports its resources, and exports provisioning changes to it. One standards-based connector therefore reaches every system that speaks SCIM, without a separate connector per product.
 
-!!! note "Direction matters"
-    This connector is for systems that **publish** a SCIM interface for JIM to call. The reverse arrangement, where an external system pushes changes into JIM, is a separate capability and is not covered here.
+```jim-diagram
+archetype: map
+title: What JIM calls, as the SCIM client
+desc: "JIM, as the SCIM client, makes every call; the service provider only answers. JIM reads the provider's features from /ServiceProviderConfig, and its schema from /Schemas and /ResourceTypes, which become the Connected System's Object Types. It imports the provider's resources and exports changes to them. With OAuth 2.0 Client Credentials, JIM first gets an access token from the token endpoint. Each part links to its section of this page."
+nodes:
+  - { id: features, label: "Provider's features", link: "#supported-service-providers", row: 0, col: 1 }
+  - { id: token, label: OAuth 2.0 token endpoint, link: "#authentication", row: 1, col: 0 }
+  - { id: jim, label: "JIM, the SCIM client", row: 1, col: 1 }
+  - { id: resources, label: "Provider's resources", link: "#features", row: 1, col: 2 }
+  - { id: schema, label: "Provider's schema", link: "#schema-discovery", row: 2, col: 1 }
+edges:
+  - { from: jim, to: features, label: "`/ServiceProviderConfig`" }
+  - { from: jim, to: token, label: gets a token }
+  - { from: jim, to: resources, label: imports and exports }
+  - { from: jim, to: schema, label: "`/Schemas`, `/ResourceTypes`" }
+```
 
-## Supported Service Providers
+!!! note "Direction matters"
+    This connector is for systems that **publish** a SCIM interface for JIM to call. For the reverse arrangement, where an identity provider pushes Users and Groups to JIM, use the [JIM SCIM 2.0 Service Provider Connector](jim-scim-service-provider-connector.md).
+
+## :material-cloud-outline: Supported Service Providers
 
 Any service provider conforming to RFC 7643 and RFC 7644. The connector adapts to what each one actually offers rather than assuming a particular implementation:
 
@@ -26,18 +43,18 @@ The connector requires no internet access of its own and adds no cloud-service d
 
 Keycloak's built-in SCIM API needs a particular setup, which [Connect the SCIM Connector to Keycloak](jim-scim-connector-keycloak.md) walks through.
 
-## Features
+## :material-star-four-points-outline: Features
 
 | Capability | Supported | Notes |
 |---|---|---|
-| Full Import | ✅ | Walks every resource type you have selected, page by page. A provider that returns an empty page while its `totalResults` says more remain fails the run, rather than having the resources it did not return treated as deleted. |
-| Delta Import | ✅ | Asks the provider for what changed since the last completed import. See [Change Detection](#change-detection). |
-| Export | ✅ | Creates, updates and deletes resources, including group membership. |
-| Paging | ✅ | The Run Profile's Page Size becomes the requested page size. |
-| Partitions and Containers | ❌ | SCIM has no partition concept; resource types are Connected System Object Types. |
-| Parallel Export | ✅ | Bounded by the provider's own rate limits, which the connector honours. |
-| Bulk Operations | ✅ | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
-| Probe | ✅ | Asks the provider whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
+| Full Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Walks every resource type you have selected, page by page. A provider that returns an empty page while its `totalResults` says more remain fails the run, rather than having the resources it did not return treated as deleted. |
+| Delta Import | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the provider for what changed since the last completed import. See [Change Detection](#change-detection). |
+| Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Creates, updates and deletes resources, including group membership. |
+| Paging | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | The Run Profile's Page Size becomes the requested page size. |
+| Partitions and Containers | :material-close-circle-outline:{ .jim-no role="img" aria-label="No" } | SCIM has no partition concept; resource types are Connected System Object Types. |
+| Parallel Export | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Bounded by the provider's own rate limits, which the connector honours. |
+| Bulk Operations | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Optional. Sends exports a batch at a time where the provider advertises `/Bulk`. See [Bulk Operations](#bulk-operations). |
+| Probe | :material-check-circle-outline:{ .jim-yes role="img" aria-label="Yes" } | Asks the provider whether a generated value is already in use before JIM chooses it. See [Probing for values already in use](#probing-for-values-already-in-use). |
 
 ### Schema Discovery
 
@@ -150,7 +167,7 @@ When a synchronisation generates a value that is exported unchanged to an attrib
 - **An address is searched across every entry**<br /> A typed slot such as `emails.work` is searched as `emails.value`, so an address held as another account's home or other email is found too.
 - **Undetermined is not a failure**<br /> A provider that cannot be reached, refuses the credential (`401` or `403`) or does not answer in time stops JIM probing it for the rest of the run. A provider that will not filter on an attribute (`400` with `invalidFilter`, or `501`), returns resources holding none of the values asked for (a filter it did not apply), or reports more matches than it returned stops JIM probing that attribute only. Each is reported once on the synchronisation's Activity as a warning naming the reason, and the run continues with JIM's own records.
 
-## Connection Settings
+## :material-lan-connect: Connection Settings
 
 ### SCIM Service Provider
 
@@ -232,14 +249,14 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 |---|---|---|
 | Use Bulk Operations | Off | Send exports in batches through the provider's `/Bulk` endpoint instead of one request per object. Only used where the provider advertises bulk support, and only within the limits it states. See [Bulk Operations](#bulk-operations). |
 
-## Security Considerations
+## :material-shield-lock-outline: Security Considerations
 
 - **HTTPS is required** for both the Base URL and, with OAuth 2.0, the Token Endpoint URL. Identity data and the Client Secret must not travel over cleartext HTTP. Plain HTTP is permitted only for loopback addresses, so that a local test provider can be used during evaluation. JIM refuses any other address when you save the settings, before it tests the connection, and again when a Run Profile starts.
 - **Secrets are encrypted at rest** and never logged, sanitised or otherwise.
 - **Least privilege.** Give the credential only the SCIM permissions the Run Profiles you have configured need: read for import, write for export. A Connected System a generated value is exported to also needs read access with filtering across the resource types it probes, including for a credential that only exports; see [Probing for values already in use](#probing-for-values-already-in-use).
 - **No cloud dependency.** The connector calls only the Base URL you configure and, with OAuth 2.0, the Token Endpoint URL, so it works unchanged in an air-gapped deployment against an on-premises provider.
 
-## Troubleshooting
+## :material-wrench-outline: Troubleshooting
 
 **"It did not answer on any SCIM discovery endpoint"**<br />
 The Base URL is probably pointing at a resource endpoint rather than the root of the service. It should be the path that `/ServiceProviderConfig` hangs off.
@@ -268,7 +285,7 @@ The warning names the reason. A refused credential needs read access to the reso
 **An attribute never receives a value**<br />
 Re-import the schema. A provider that has changed what it publishes, or one whose `/Schemas` document went missing (leaving the connector on the RFC 7643 core schemas), will offer a different attribute set.
 
-## Related
+## :material-book-open-variant-outline: Related
 
 - [Connect the SCIM Connector to Keycloak](jim-scim-connector-keycloak.md)
 - [Connectors](index.md)

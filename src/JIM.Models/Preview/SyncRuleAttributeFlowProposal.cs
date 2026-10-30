@@ -25,7 +25,7 @@ namespace JIM.Models.Preview;
 /// The target Metaverse Attribute ids whose staged mapping removal chose to KEEP the contributed values
 /// (#1537). The preview uses this to say what the removal will actually do: an attribute listed here has its
 /// values kept (provenance severed at save, never recalled); a removed attribute not listed follows the
-/// default, recall at the next Full Synchronisation of the contributing system. Advisory to the preview only;
+/// default, recall at the next synchronisation of the contributing system, Delta or Full. Advisory to the preview only;
 /// the save itself carries the authoritative choices.
 /// </param>
 public record SyncRuleAttributeFlowProposal(

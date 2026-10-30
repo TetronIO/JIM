@@ -1309,6 +1309,7 @@ public class ConfigurationSnapshotService
             AddEnum(children, "category", setting.Category, "Category");
             AddEnum(children, "type", setting.Type, "Type");
             Add(children, "description", setting.Description, "Description");
+            Add(children, "example", setting.Example, "Example");
             Add(children, "required", Render(setting.Required), "Required");
             if (setting.Type == ConnectedSystemSettingType.StringEncrypted && !string.IsNullOrEmpty(setting.DefaultStringValue))
                 children.Add(ConfigurationSnapshotNode.Secret("defaultStringValue", ComputePlaintextHash(setting.DefaultStringValue, hashKey), "Default value"));
@@ -1431,7 +1432,6 @@ public class ConfigurationSnapshotService
             Add(children, "minDate", Render(attribute.MinDate), "Minimum date");
             Add(children, "maxDate", Render(attribute.MaxDate), "Maximum date");
             Add(children, "boolTrueDistribution", Render(attribute.BoolTrueDistribution), "Boolean true distribution");
-            Add(children, "boolShouldBeRandom", Render(attribute.BoolShouldBeRandom), "Boolean random");
             Add(children, "managerDepthPercentage", Render(attribute.ManagerDepthPercentage), "Manager depth (%)");
             Add(children, "mvaRefMinAssignments", Render(attribute.MvaRefMinAssignments), "Min reference assignments");
             Add(children, "mvaRefMaxAssignments", Render(attribute.MvaRefMaxAssignments), "Max reference assignments");

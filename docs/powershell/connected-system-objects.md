@@ -9,9 +9,27 @@ audience: automation-author
 
 The Connected System Object cmdlets read what JIM holds in a Connected System's Connector Space: its Connected System Objects, their attribute values and change history, and the references among them JIM could not resolve. One sets an object's password. The changes waiting to be written to the Connected System are on [Pending Exports](pending-exports.md). What the Connector Space is, and how objects arrive in it, is covered in [Connected Systems](../configuration/connected-systems.md#the-connector-space).
 
+```jim-diagram
+archetype: anatomy
+title: What the cmdlets read and set on one Connected System Object
+desc: "For one Connected System Object, Get-JIMConnectedSystemObject -Id reads its attribute values, with each multi-valued attribute capped at ten values; -AttributeName pages through every value of a large one, such as member. Get-JIMConnectedSystemObjectChangeHistory reads its changes, most recent first. Get-JIMConnectedSystemObjectUnresolvedReference lists the reference values JIM could not link to another object, each with its likely cause and what to do. Set-JIMConnectedSystemObjectPassword sets its password, which needs the object to be joined to a Metaverse Object. Across the whole Connector Space, Get-JIMConnectedSystemObject lists objects a page at a time, or all of them with -All, and counts them with -Count; Get-JIMConnectedSystemUnresolvedReferenceCount and Get-JIMConnectedSystemUnresolvedReferenceSummary count and summarise its unresolved references."
+subject:
+  kind: object
+  label: Connected System Object
+  parts:
+    - { label: Attribute values, detail: "`Get-JIMConnectedSystemObject -Id`" }
+    - { label: Every value of a large attribute, detail: "`-AttributeName`, a page at a time" }
+    - { label: Change history, detail: "`Get-JIMConnectedSystemObjectChangeHistory`" }
+    - { label: Unresolved references, detail: "each with its likely cause and remedy" }
+    - { label: Password, detail: "`Set-JIMConnectedSystemObjectPassword`" }
+properties:
+  - { name: Password, value: needs the object joined }
+  - { name: Multi-valued, value: "ten values, unless paged" }
+```
+
 ---
 
-## Get-JIMConnectedSystemObject
+## :material-cube-outline: Get-JIMConnectedSystemObject
 
 Gets the Connected System Objects in a Connected System's Connector Space, a page at a time, and pages through the values of a large multi-valued attribute.
 
@@ -181,7 +199,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id "a1b2c3d4-..." -AttributeN
 
 ---
 
-## Get-JIMConnectedSystemObjectChangeHistory
+## :material-history: Get-JIMConnectedSystemObjectChangeHistory
 
 Gets the changes made to a Connected System Object, most recent first, each with who or what made it and the values it changed.
 
@@ -221,7 +239,8 @@ The changes, most recent first.
 | `InitiatedByName` | `string` | The name of whoever made the change. |
 | `ActivityRunProfileExecutionItemId` | `guid` | The ID of the Run Profile execution item that recorded the change, when a Run Profile made it; empty otherwise. |
 | `RunProfileName` | `string` | The name of the Run Profile that made the change; empty when none did. |
-| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality` and `ValueChanges`. |
+| `ConnectedSystemRunType` | `string` | The kind of run that recorded the change (an import, a synchronisation or an export); empty when it was not recorded by a run, or the run's Activity has since been removed. One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
+| `AttributeChanges` | `object[]` | The attributes the change touched, each with the values it added and removed. Each has `AttributeName`, `AttributeType`, `AttributePlurality`, `ValueChanges` and `ValueChangeTotal`. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectChangeHistory -->
 
 ### Examples
@@ -240,7 +259,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId 3 -Id "a1b2c3d4-...
 
 ---
 
-## Get-JIMConnectedSystemObjectAttributeValue
+## :material-list-box-outline: Get-JIMConnectedSystemObjectAttributeValue
 
 Pages through the values of one multi-valued attribute on a Connected System Object, for an attribute such as member too large to read whole.
 
@@ -295,7 +314,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 3 `
 
 ---
 
-## Set-JIMConnectedSystemObjectPassword
+## :material-form-textbox-password: Set-JIMConnectedSystemObjectPassword
 
 Sets the password on one Connected System Object.
 
@@ -381,7 +400,7 @@ ConvertFrom-SecureString -SecureString $result.GeneratedPassword -AsPlainText
 
 ---
 
-## Get-JIMConnectedSystemUnresolvedReferenceCount
+## :material-link-off: Get-JIMConnectedSystemUnresolvedReferenceCount
 
 Counts the unresolved references in a Connected System's Connector Space.
 
@@ -427,7 +446,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Get-JIMConnectedSystemUnresolvedReferenceSummary
+## :material-format-list-numbered: Get-JIMConnectedSystemUnresolvedReferenceSummary
 
 Summarises every unresolved reference across a Connected System's Connector Space: how many there are and on how many objects, how they split by likely cause, and every distinct next step with how many references and objects it addresses. It is what the portal shows as **Where they point** above the Connector Space filtered to unresolved references. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
@@ -475,7 +494,7 @@ Get-JIMConnectedSystem | ForEach-Object {
 
 ---
 
-## Get-JIMConnectedSystemObjectUnresolvedReference
+## :material-vector-polyline: Get-JIMConnectedSystemObjectUnresolvedReference
 
 Lists the reference values on a Connected System Object that could not be linked to another Connected System Object, each with its likely cause, where the fix lies, what is wrong and what to do, or summarises them with `-Summary`. Likely causes are judged against the Connected System's current Container Scope; [Finding out why a reference is unresolved](../configuration/unresolved-references.md#finding-out-why-a-reference-is-unresolved) describes each one.
 
@@ -558,7 +577,7 @@ Get-JIMConnectedSystemObjectUnresolvedReference -ConnectedSystemId 3 -Id "a1b2c3
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Connected Systems](connected-systems.md): create, change and delete the Connected Systems whose Connector Space these cmdlets read
 - [Run Profiles](run-profiles.md): run the imports that fill the Connector Space

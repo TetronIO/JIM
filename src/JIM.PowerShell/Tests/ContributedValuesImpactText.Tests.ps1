@@ -73,7 +73,7 @@ Describe 'Get-JIMContributedValuesImpactText' {
         }
     }
 
-    It 'Says a deferred recall happens at the next Full Synchronisation of the contributing system' {
+    It 'Says a deferred recall happens at the next synchronisation of the contributing system' {
         InModuleScope JIM {
             $valueSummary = [PSCustomObject]@{
                 Attributes   = @(
@@ -85,7 +85,7 @@ Describe 'Get-JIMContributedValuesImpactText' {
 
             $text = Get-JIMContributedValuesImpactText -Summary $valueSummary -DeferredRecall
 
-            $text | Should -Be '1 attribute(s) across 96 Metaverse Object(s) will be recalled at the next Full Synchronisation of the contributing system'
+            $text | Should -Be '1 attribute(s) across 96 Metaverse Object(s) will be recalled at the next synchronisation of the contributing system, Delta or Full'
         }
     }
 

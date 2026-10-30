@@ -43,6 +43,18 @@ public class SchedulingRepository : ISchedulingRepository
             .ToListAsync();
     }
 
+    public async Task<NextDueSchedule?> GetNextDueScheduleAsync()
+    {
+        // Ties on NextRunTime are broken by name so the answer is stable between polls.
+        return await Repository.Database.Schedules
+            .AsNoTracking()
+            .Where(s => s.IsEnabled && s.NextRunTime != null)
+            .OrderBy(s => s.NextRunTime)
+            .ThenBy(s => s.Name)
+            .Select(s => new NextDueSchedule { Id = s.Id, Name = s.Name, NextRunTime = s.NextRunTime!.Value })
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<PagedResultSet<ScheduleHeader>> GetScheduleHeadersAsync(
         int page,
         int pageSize,

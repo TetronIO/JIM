@@ -9,12 +9,35 @@ audience: automation-author
 
 System cmdlets provide access to JIM health checks, Service Health, version information, authentication configuration, and current user details. Health, version, and auth config cmdlets work without authentication, making them suitable for monitoring, scripting, and client bootstrapping. Service Health and user info require an active connection.
 
+```jim-diagram
+archetype: decision
+title: When Reset-JIMSystem goes ahead
+desc: "Once confirmed, Reset-JIMSystem is refused with HTTP 409 while any Activity is in progress: wait for it to finish, or cancel it. Otherwise, without -IncludeAdministrators, the reset goes ahead and keeps the administrators. With -IncludeAdministrators, it goes ahead and removes them only when JIM_SSO_INITIAL_ADMIN is set or -AcknowledgeAdministratorLockout is given; otherwise it is refused with HTTP 409, because nobody could sign in to the portal afterwards. Either way a reset records a Reset Activity and signs everyone out of the portal."
+start: { label: Factory reset confirmed }
+questions:
+  - { id: busy, label: "An Activity in progress?" }
+  - { id: admins, label: "`-IncludeAdministrators`?" }
+  - { id: guard, label: "`JIM_SSO_INITIAL_ADMIN` set?", sub: "or the lockout acknowledged" }
+outcomes:
+  - { id: busyno, label: "Refused: HTTP 409", sub: "wait for it to finish, or cancel it" }
+  - { id: kept, label: "Reset, administrators kept", sub: "everyone signs in to the portal again", good: true }
+  - { id: removed, label: "Reset, administrators removed", sub: "everyone signs in to the portal again", good: true }
+  - { id: lockout, label: "Refused: HTTP 409", sub: "nobody could sign in to the portal" }
+answers:
+  - { from: busy, to: busyno, label: "yes" }
+  - { from: busy, to: admins, label: "no" }
+  - { from: admins, to: kept, label: "no" }
+  - { from: admins, to: guard, label: "yes" }
+  - { from: guard, to: removed, label: "yes" }
+  - { from: guard, to: lockout, label: "no" }
+```
+
 !!! tip
     Health, version, and auth config cmdlets accept a `-Url` parameter for standalone use without `Connect-JIM`. When omitted, they fall back to the URL from the active session.
 
 ---
 
-## Get-JIMHealth
+## :material-heart-pulse: Get-JIMHealth
 
 Retrieves the health, readiness, or liveness status of a JIM instance. Does not require authentication.
 
@@ -77,7 +100,7 @@ Get-JIMHealth -Ready
 
 ---
 
-## Get-JIMServiceHealth
+## :material-stethoscope: Get-JIMServiceHealth
 
 Reports whether JIM's background services (the Worker and the Scheduler) are alive and what each is doing, from the heartbeat every service writes to the database every 5 seconds. This is the same report the Service Health strip on [Operations](../configuration/operations.md#service-health) shows. Requires an active `Connect-JIM` session with the **Administrator** role.
 
@@ -109,8 +132,8 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | Property | Type | Description |
 |----------|------|-------------|
 | `Service` | `string` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. One of `WorkerSync`, `WorkerDelivery` or `Scheduler`. |
-| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue or its current work has stalled) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
-| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat` or `NeverStarted`. |
+| `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue, its current work has stalled, or its memory is low) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
+| `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, MemoryLow (85% or more of the memory it can draw on is in use), NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat`, `NeverStarted` or `MemoryLow`. |
 | `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
 | `InstanceId` | `string` | The reporting instance (host name plus a per-process id), or empty when the service has never reported. |
 | `HostName` | `string` | The host the reporting instance runs on, or empty when the service has never reported. |
@@ -121,6 +144,9 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `CurrentWorkStartedAt` | `datetime` | When (UTC) the current work began, or empty when idle or never seen. |
 | `LastProgressAt` | `datetime` | When (UTC) the current work last moved forward, or empty when idle, never seen, or when the service cannot tell progress apart from liveness. |
 | `Detail` | `string` | Free text the service left beside its state (queue counts, why it is waiting), or empty. |
+| `ProcessMemoryBytes` | `long` | The memory the service's process held at its last heartbeat, in bytes, or empty when it did not report it. |
+| `MemoryTotalBytes` | `long` | The memory the service's process can draw on in all, in bytes: its container's memory limit when one is set, otherwise the host's memory. Empty when not reported. |
+| `MemoryAvailableBytes` | `long` | How much of the total memory was still available at the last heartbeat, in bytes, counting file cache the system can reclaim. Empty when not reported. |
 
 **With `-Summary`**:
 
@@ -129,7 +155,7 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `Overall` | `string` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. One of `Healthy`, `Degraded` or `Unhealthy`. |
 | `WebVersion` | `string` | The version of the web tier that answered, for comparison with each service's own version; a mismatch means a partial upgrade. |
 | `GeneratedAt` | `datetime` | When (UTC) the verdicts were derived. Every "last seen n seconds ago" reason is relative to this moment. |
-| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt` and `Detail`. |
+| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt`, `Detail`, `ProcessMemoryBytes`, `MemoryTotalBytes` and `MemoryAvailableBytes`. |
 <!-- END GENERATED: Get-JIMServiceHealth -->
 
 ### Examples
@@ -169,7 +195,7 @@ $health.Services | Where-Object { $_.Version -and $_.Version -ne $health.WebVers
 
 ---
 
-## Get-JIMVersion
+## :material-information-outline: Get-JIMVersion
 
 Retrieves the JIM application version. Does not require authentication.
 
@@ -213,7 +239,7 @@ Write-Host "JIM version: $($v.Version)"
 
 ---
 
-## Get-JIMAuthConfig
+## :material-shield-key-outline: Get-JIMAuthConfig
 
 Retrieves the OIDC/OAuth client discovery configuration. Does not require authentication. Useful for scripting SSO setup or validating configuration.
 
@@ -259,7 +285,7 @@ Write-Host "Scopes: $($config.Scopes -join ', ')"
 
 ---
 
-## Get-JIMUserInfo
+## :material-account-circle-outline: Get-JIMUserInfo
 
 Retrieves the current authenticated user's details, roles, and authorisation status. Requires an active `Connect-JIM` session.
 
@@ -317,7 +343,7 @@ if ($user.IsAdministrator) {
 
 ---
 
-## Reset-JIMSystem
+## :material-restart-alert: Reset-JIMSystem
 
 Performs a factory reset against the connected JIM instance, wiping all data and configuration while preserving the schema, seeded built-ins, and infrastructure access. By default the administrator users are preserved so you are not locked out of the portal. This operation is destructive and cannot be undone; take a database backup first.
 
@@ -396,7 +422,7 @@ $result = Reset-JIMSystem -Force
 
 ---
 
-## See also
+## :material-book-open-variant-outline: See also
 
 - [Interactive API reference](../../api/reference/): covers the system endpoints (health, readiness, liveness, version, auth config, user info, Service Health, factory reset)
 - [Operations](../configuration/operations.md): the Service Health strip these cmdlets read from, and what each state means

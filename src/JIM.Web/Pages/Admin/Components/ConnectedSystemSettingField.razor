@@ -1,5 +1,7 @@
 @using JIM.Models.Staging
 @inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -14,10 +16,9 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Divider)
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowDirectoryServerDiscovery)
 {
-    @* The one field the Discover Domain Controllers action (issue #1167) fills in, identified by the
-       connector-agnostic ConnectorSettingNames constant the parent matched against, never by display text
-       here. The field itself stays ordinary free text; only the administrator's own selection in the dialog
-       ever writes to it. *@
+    @* The one field the Discover action (issue #1167) fills in, as named by the Connector and matched by the
+       parent, never by display text here. The field itself stays ordinary free text; only the administrator's
+       own selection in the dialog ever writes to it. *@
     <div class="d-flex align-start @CssClass">
         <MudTextField T="string"
                       Label="@SettingValue.Setting.Name"
@@ -29,8 +30,8 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowD
                       HelperText="@SettingValue.Setting.Description"
                       Variant="Variant.Outlined"
                       Class="flex-grow-1" />
-        <MudTooltip Text="Enter the connectivity settings above before discovering domain controllers." Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
-            <MudButton Variant="Variant.Outlined" Class="ml-2 jim-field-action"
+        <MudTooltip Text="@($"Enter the connectivity settings above before discovering {DirectoryServerTerm}.")" Arrow="true" Placement="Placement.Top" Disabled="@DirectoryServerDiscoveryEnabled">
+            <MudButton Variant="Variant.Filled" Class="ml-2 jim-field-action"
                        StartIcon="@Icons.Material.Filled.Search"
                        Disabled="@(!DirectoryServerDiscoveryEnabled)"
                        OnClick="OpenDirectoryServerDiscoveryDialogAsync"
@@ -95,21 +96,45 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.CheckBox)
         }
     </div>
 }
+else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Text)
+{
+    @* A multi-line document the administrator writes by hand (the SQL Connector's Object Types, for one), so
+       the field is monospaced, grows with its content and does not spell-check what is code, not prose. *@
+    <div class="@CssClass">
+        <MudTextField T="string"
+                      Label="@SettingValue.Setting.Name"
+                      @bind-Value="SettingValue.StringValue"
+                      @bind-Value:after="NotifyValueChangedAsync"
+                      Immediate="@Immediate"
+                      Required="@IsRequired"
+                      RequiredError="@($"A {SettingValue.Setting.Name} is required")"
+                      HelperText="@SettingValue.Setting.Description"
+                      Lines="10"
+                      Sizing="InputSizing.Auto"
+                      MaxLines="30"
+                      Variant="Variant.Outlined"
+                      Class="jim-setting-text"
+                      UserAttributes="@(new Dictionary<string, object?> { ["spellcheck"] = "false" })" />
+        @SettingExample
+    </div>
+}
 else if (SettingValue.Setting is { Type: ConnectedSystemSettingType.DropDown, DropDownValues: not null })
 {
-    <MudSelect @bind-Value="SettingValue.StringValue"
-               @bind-Value:after="NotifyValueChangedAsync"
-               HelperText="@SettingValue.Setting.Description"
-               Label="@SettingValue.Setting.Name"
-               Variant="Variant.Outlined"
-               Class="@CssClass"
-               Required="@SettingValue.Setting.Required"
-               RequiredError="@($"A {SettingValue.Setting.Name} is required")">
-        @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
-        {
-            <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
-        }
-    </MudSelect>
+    <div class="@CssClass">
+        <MudSelect @bind-Value="SettingValue.StringValue"
+                   @bind-Value:after="NotifyValueChangedAsync"
+                   HelperText="@SettingValue.Setting.Description"
+                   Label="@SettingValue.Setting.Name"
+                   Variant="Variant.Outlined"
+                   Required="@SettingValue.Setting.Required"
+                   RequiredError="@($"A {SettingValue.Setting.Name} is required")">
+            @foreach (var dropDownValue in SettingValue.Setting.DropDownValues)
+            {
+                <MudSelectItem T="string" Value="@dropDownValue">@dropDownValue</MudSelectItem>
+            }
+        </MudSelect>
+        @SettingExample
+    </div>
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Label)
 {
@@ -184,11 +209,10 @@ else
     public EventCallback FileSelected { get; set; }
 
     /// <summary>
-    /// Whether this field is the one the Discover Domain Controllers action (issue #1167) targets, and so
-    /// should render a Discover... action beside it. The parent decides this by matching the setting's name
-    /// against <see cref="JIM.Models.Staging.ConnectorSettingNames.LdapPreferredDomainController"/> and
-    /// confirming the Connected System's Connector implements <c>IConnectorDirectoryServers</c>; this
-    /// component renders whatever it is told without knowing why.
+    /// Whether this field is the one the Discover action (issue #1167) targets, and so should render a
+    /// Discover... action beside it. The parent decides this by matching the setting's name against the target
+    /// the Connected System's Connector names through <c>IConnectorDirectoryServers</c>; this component renders
+    /// whatever it is told without knowing why.
     /// </summary>
     [Parameter]
     public bool ShowDirectoryServerDiscovery { get; set; }
@@ -202,7 +226,7 @@ else
     public bool DirectoryServerDiscoveryEnabled { get; set; }
 
     /// <summary>
-    /// The Connected System the Discover... action discovers domain controllers for. Only meaningful when
+    /// The Connected System the Discover... action discovers servers for. Only meaningful when
     /// <see cref="ShowDirectoryServerDiscovery"/> is true.
     /// </summary>
     [Parameter]
@@ -216,7 +240,58 @@ else
     [Parameter]
     public Func<IReadOnlyCollection<ConnectedSystemSettingValueDraft>>? DirectoryServerDiscoveryDraftSettings { get; set; }
 
+    /// <summary>
+    /// What the Connector calls the servers the Discover... action finds, plural and lower case (e.g. "domain
+    /// controllers"), for the tooltip and the dialog. Only meaningful when <see cref="ShowDirectoryServerDiscovery"/>
+    /// is true.
+    /// </summary>
+    [Parameter]
+    public string? DirectoryServerTerm { get; set; }
+
     private bool _passwordVisible;
+
+    /// <summary>
+    /// The setting's Example, when the Connector supplies one: shown verbatim as a code block beneath the field,
+    /// with a Copy action, so an administrator writing a document by hand has a complete one to start from.
+    /// </summary>
+    private RenderFragment SettingExample => __builder =>
+    {
+        var example = SettingValue.Setting.Example;
+        if (string.IsNullOrWhiteSpace(example))
+            return;
+
+        <div class="jim-setting-example mt-2 mx-3" data-testid="jim-setting-example">
+            <div class="d-flex align-center justify-space-between">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Example</MudText>
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ContentCopy"
+                           OnClick="CopyExampleToClipboardAsync">Copy</MudButton>
+            </div>
+            <pre class="jim-code-block"><code>@((MarkupString)(IsJson(example) ? Helpers.HighlightJson(example) : System.Net.WebUtility.HtmlEncode(example)))</code></pre>
+        </div>
+    };
+
+    private static bool IsJson(string value)
+    {
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith('{') || trimmed.StartsWith('[');
+    }
+
+    private async Task CopyExampleToClipboardAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.Setting.Example);
+            Snackbar.Add("Example copied to clipboard.", Severity.Info);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nobody left to tell.
+        }
+    }
 
     private Task NotifyValueChangedAsync()
     {
@@ -253,14 +328,14 @@ else
     }
 
     /// <summary>
-    /// Opens the Discover Domain Controllers dialog and, only if the administrator selects a domain controller,
+    /// Opens the Discover dialog and, only if the administrator selects a server,
     /// fills this field with their choice. The setting is intent and the pin JIM later records against it is
     /// fact (issue #1167): discovery only ever informs the administrator's decision here, it never writes to
     /// the field on its own, and cancelling or closing the dialog leaves the field exactly as it was.
     /// </summary>
     private async Task OpenDirectoryServerDiscoveryDialogAsync()
     {
-        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, DirectoryServerDiscoveryDraftSettings?.Invoke());
+        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, DirectoryServerTerm, DirectoryServerDiscoveryDraftSettings?.Invoke());
         if (string.IsNullOrEmpty(selectedHostName))
             return;
 

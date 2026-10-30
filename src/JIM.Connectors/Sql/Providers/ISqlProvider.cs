@@ -115,6 +115,17 @@ internal interface ISqlProvider
     void ConfigureOpenedConnection(DbConnection connection, SqlConnectionSettings settings);
 
     /// <summary>
+    /// Describes a failure to open a connection in terms an administrator can act on: the driver's own
+    /// message, unless this dialect's driver hides the cause beneath it.
+    /// <para>
+    /// Oracle Database is the case this exists for. ODP.NET reports a refused negotiation (the server
+    /// will not encrypt the way the connection requires, say) as the catch-all <c>ORA-50201</c>, which
+    /// reads as a wrong host or service name, and keeps the actual cause in an inner exception.
+    /// </para>
+    /// </summary>
+    string DescribeConnectionFailure(DbException exception);
+
+    /// <summary>
     /// Creates a command on a connection, with any dialect-specific command configuration applied.
     /// </summary>
     DbCommand CreateCommand(DbConnection connection, string commandText);
@@ -144,16 +155,19 @@ internal interface ISqlProvider
     SecureHandshakeFraming SecureHandshakeFraming { get; }
 
     /// <summary>
-    /// Whether this dialect's driver can be told to accept one specific server certificate, supplied as
-    /// a file through <see cref="SqlConnectionSettings.PinnedServerCertificatePath"/>.
+    /// Whether this dialect's driver accepts only a root certificate authority as the trust anchor JIM hands
+    /// it, and so needs the whole chain above the server's certificate rather than one certificate.
     /// <para>
-    /// That mechanism is how a certificate an administrator added in Admin &gt; Certificates becomes an
-    /// additional trust anchor: the operating system's own bundle is always tried first, and only a
-    /// certificate JIM's certificate store vouches for is ever pinned. A driver that offers no such
-    /// mechanism returns false, and its connections validate against the operating system bundle alone.
+    /// Every dialect can be told what to trust through <see cref="SqlConnectionSettings.PinnedTrustPath"/>,
+    /// which is how a certificate an administrator added in Admin &gt; Certificates becomes an additional
+    /// trust anchor: the operating system's own bundle is always tried first, and only what JIM's
+    /// certificate store vouches for is ever handed over. What differs is what the driver can be handed.
+    /// False: the server's own certificate, which the driver matches exactly (Microsoft SQL Server). True: a
+    /// wallet holding a root the store trusts and the intermediates beneath it (Oracle Database), so
+    /// trusting an intermediate or the server's own certificate cannot make the connection work.
     /// </para>
     /// </summary>
-    bool SupportsPinnedServerCertificate { get; }
+    bool TrustAnchorMustBeRoot { get; }
 
     #endregion
 

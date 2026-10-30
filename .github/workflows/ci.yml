@@ -72,7 +72,8 @@ jobs:
 
     # The docs' REST routes (ACC-3) and the API resource groups docs/api/index.md lists (COV-4) are checked
     # against the OpenAPI document, which only a build can produce, so they run here rather than with the
-    # other coverage rules in changelog-lint. Generation reuses the build above and takes seconds. So does
+    # other coverage rules in changelog-lint. So is the text the API reference publishes, for names of what
+    # JIM is built with (LANG-10). Generation reuses the build above and takes seconds. So does
     # the generated PowerShell reference (ACC-5, #1083): each cmdlet's Syntax, Parameters and Output on the
     # docs/powershell/ pages must be what Update-PowerShellReference.ps1 writes from the module, whose
     # output properties come from the OpenAPI schemas. And every property an example reads from a JIM
@@ -84,7 +85,7 @@ jobs:
         $openApi = Join-Path $env:RUNNER_TEMP 'openapi-v1.json'
         pwsh -File ./scripts/Generate-OpenApiDoc.ps1 -NoBuild -OutputPath $openApi
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        pwsh -File ./scripts/Test-DocsCoverage.ps1 -OpenApiPath $openApi -Rule ACC-3,COV-4
+        pwsh -File ./scripts/Test-DocsCoverage.ps1 -OpenApiPath $openApi -Rule ACC-3,COV-4,LANG-10
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         pwsh -File ./scripts/Update-PowerShellReference.ps1 -OpenApiPath $openApi -Check
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -98,9 +99,12 @@ jobs:
       run: pwsh -File ./scripts/Lint-CopyrightHeaders.ps1
 
     # PowerShell Pester Tests for the JIM PowerShell module
+    # Runner images can come up with no PowerShell repository registered at all ("No repository with the name
+    # 'PSGallery' was found"), so register the default one when it is missing rather than assuming it.
     - name: Install Pester
       shell: pwsh
       run: |
+        if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
         Set-PSRepository PSGallery -InstallationPolicy Trusted
         Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
     - name: Run Pester Tests
@@ -275,6 +279,152 @@ jobs:
       if: always()
       run: pwsh -File ./test/scripts/Start-SqlServerTlsTestServer.ps1 -Stop
 
+  oracle-tls-tests:
+    # Runs the RequiresOracleTls NUnit tier against a real Oracle Database TCPS listener presenting a
+    # certificate under a root and an intermediate nobody trusts (#2581). These fixtures self-skip in
+    # build-and-test (JIM_TEST_ORACLETLS_HOST unset); here the fixture script stands the listener up and
+    # exports the environment variables that flip them from Assert.Ignore to run. This is the regression
+    # net for trusting an Oracle TCPS certificate through the wallet JIM writes for the connection: it
+    # must connect with the root in the JIM certificate store, and be refused with the reason reported
+    # with nothing trusted, with only an intermediate or the server's own certificate trusted, or by a
+    # name the certificate does not carry (#2589). Only ODP.NET makes those decisions, so only a real
+    # listener shows them.
+    # Pull requests that change the SQL Connector or the certificate trust it shares, and nothing else:
+    # the Oracle image is 13.6GB unpacked, too much to pull for every change. Not a required check, so a
+    # run that decides it has nothing to test blocks nothing.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      with:
+        fetch-depth: 0  # need base..head history to see what the change touches
+    - name: Decide whether this change touches the SQL Connector's certificate trust
+      id: scope
+      run: |
+        changed=$(git diff --name-only "$BASE_SHA" HEAD)
+        if echo "$changed" | grep -qE '^(src/JIM\.Connectors/(Sql/|ServerCertificate|CertificateChainAssembler|JIM\.Connectors\.csproj|packages\.lock\.json)|src/JIM\.Utilities/CertificateStoreTrust|src/JIM\.Models/Connectors/|test/JIM\.Worker\.Tests/Connectors/OracleTls|test/scripts/Start-OracleTlsTestServer\.ps1|\.github/workflows/ci\.yml$)'; then
+          echo "run=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          echo "Nothing here touches the SQL Connector's certificate trust; the Oracle TCPS tier is not needed."
+        fi
+    # The Oracle image alone is 13.6GB unpacked, more than the runner's free disk. The Android SDK is
+    # about 9 GB, and nothing here uses it.
+    - name: Free disk space
+      if: steps.scope.outputs.run == 'true'
+      run: |
+        sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift
+        df -h /
+    - name: Setup .NET
+      if: steps.scope.outputs.run == 'true'
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet restore JIM.sln --locked-mode
+    - name: Build
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet build test/JIM.Worker.Tests/ --no-restore
+    # Pulled up front with a retry, as sql-tls-tests does, so a transient registry refusal fails here with a
+    # clear message rather than inside docker run.
+    - name: Pull Oracle Database image
+      if: steps.scope.outputs.run == 'true'
+      run: |
+        for attempt in 1 2 3; do
+          docker pull container-registry.oracle.com/database/free:23.9.0.0 && exit 0
+          sleep 30
+        done
+        echo "Failed to pull container-registry.oracle.com/database/free:23.9.0.0 after 3 attempts."
+        exit 1
+    - name: Start Oracle TCPS test server
+      if: steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/scripts/Start-OracleTlsTestServer.ps1
+    - name: Run Oracle TCPS certificate validation tests (RequiresOracleTls)
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresOracleTls" --verbosity normal
+    - name: Tear down Oracle TCPS test server
+      if: always() && steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/scripts/Start-OracleTlsTestServer.ps1 -Stop
+
+  keycloak-registration-tests:
+    # Runs Register-JIMIdentityProvider -Provider Keycloak against a real Keycloak (#2364):
+    # KeycloakRegistration.Live.Tests.ps1, which self-skips in build-and-test (JIM_TEST_KEYCLOAK_URL
+    # unset). The unit tests prove the plan; only Keycloak's admin REST API can show that the plan's
+    # calls do what it asks, and only signing a person in, through both clients with PKCE, shows that
+    # the registration works. The tests make a realm of their own and delete it. The container also
+    # imports the development realm (.devcontainer/keycloak/jim-realm.json), and the tests prove the
+    # command finds nothing to change in it, so development and CI sign in with the configuration a
+    # customer gets. The container gets a random host port and an admin password made for this run,
+    # since the self-hosted runner used on push events is shared and not ephemeral. Same image as the
+    # development Keycloak.
+    # Depends only on the commit, so the nightly run (image drift only) skips it; see the schedule trigger.
+    if: github.event_name != 'schedule'
+    runs-on: ${{ github.event_name == 'push' && 'self-hosted' || 'ubuntu-latest' }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+    # Pulled up front with a retry, as ldaps-tests does, so a transient registry
+    # refusal fails here with a clear message rather than inside docker run.
+    - name: Pull Keycloak image
+      run: |
+        for attempt in 1 2 3; do
+          docker pull quay.io/keycloak/keycloak:26.8 && exit 0
+          sleep 30
+        done
+        echo "Failed to pull quay.io/keycloak/keycloak:26.8 after 3 attempts."
+        exit 1
+    - name: Start Keycloak
+      shell: pwsh
+      run: |
+        $name = "jim-keycloak-registration-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+        $password = [guid]::NewGuid().ToString('N')
+        Write-Output "::add-mask::$password"
+        $realm = Join-Path $env:GITHUB_WORKSPACE '.devcontainer/keycloak/jim-realm.json'
+        docker run -d --name $name -p 127.0.0.1::8080 `
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e "KC_BOOTSTRAP_ADMIN_PASSWORD=$password" `
+          -v "${realm}:/opt/keycloak/data/import/jim-realm.json:ro" `
+          quay.io/keycloak/keycloak:26.8 start-dev --import-realm
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        "KEYCLOAK_CONTAINER=$name" >> $env:GITHUB_ENV
+        $port = ((docker port $name 8080/tcp) -split "`n" | Select-Object -First 1).Split(':')[-1]
+        $url = "http://localhost:$port"
+        for ($i = 0; $i -lt 60; $i++) {
+          try { $null = Invoke-RestMethod "$url/realms/jim/.well-known/openid-configuration"; break } catch { Start-Sleep -Seconds 3 }
+        }
+        if ($i -eq 60) { docker logs $name; throw "Keycloak did not start at $url with the development realm." }
+        "JIM_TEST_KEYCLOAK_URL=$url" >> $env:GITHUB_ENV
+        "JIM_TEST_KEYCLOAK_ADMIN=admin" >> $env:GITHUB_ENV
+        "JIM_TEST_KEYCLOAK_ADMIN_PASSWORD=$password" >> $env:GITHUB_ENV
+        "JIM_TEST_KEYCLOAK_DEV_REALM=jim" >> $env:GITHUB_ENV
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        # Register the default repository when the runner image has none (see the same step in build-and-test).
+        if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) { Register-PSRepository -Default }
+        Set-PSRepository PSGallery -InstallationPolicy Trusted
+        Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
+    - name: Run Keycloak registration tests
+      shell: pwsh
+      run: |
+        $config = New-PesterConfiguration
+        $config.Run.Path = './src/JIM.PowerShell/Tests/KeycloakRegistration.Live.Tests.ps1'
+        $config.Run.Exit = $true
+        $config.Output.Verbosity = 'Detailed'
+        Invoke-Pester -Configuration $config
+    # The self-hosted runner used on push events is not ephemeral; without this the
+    # container outlives the job.
+    - name: Tear down Keycloak
+      if: always()
+      run: |
+        if [ -n "${KEYCLOAK_CONTAINER:-}" ]; then
+          docker rm -f "$KEYCLOAK_CONTAINER" > /dev/null
+        fi
+
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
     # Production Dockerfiles are identified by the "# jim-compliance: production-image"
@@ -421,7 +571,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@ce5e7eeac396d720fe2d802714996c8ce561e311  # v3.39.0
+      uses: github/codeql-action/upload-sarif@4bfa242aa49c5f7c6770b98670d354a7dfac05f8  # v3.39.1
       with:
         sarif_file: trivy-results.sarif
         # Category is keyed by the JIM image name (stable across base image

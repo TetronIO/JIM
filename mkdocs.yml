@@ -4,10 +4,23 @@ repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
 # overrides/ is the theme's custom_dir, not content: without this it is also
-# published as a static file at /overrides/home.html.
+# published as a static file at /overrides/home.html. requirements.txt pins the
+# site's own toolchain and would otherwise be published at /requirements.txt.
+# hooks/ is build code, not content.
 exclude_docs: |
   CLAUDE.md
+  hooks/
   overrides/
+  requirements.txt
+
+# The changelog page publishes released versions only; see docs/hooks/changelog.py.
+# jim-diagram specs in a page are rendered to SVG; see docs/hooks/diagrams.py.
+hooks:
+  - docs/hooks/changelog.py
+  - docs/hooks/diagrams.py
+
+watch:
+  - CHANGELOG.md
 
 # Link validation (#1454). Under --strict, which changelog-lint runs on every
 # pull request that touches the docs, a warning fails the build:
@@ -130,6 +143,7 @@ nav:
       - Connected System Schema: configuration/connected-system-schema.md
       - Connected System Attributes: configuration/connected-system-attributes.md
       - Connected System Passwords: configuration/connected-system-passwords.md
+      - Export Performance: configuration/export-performance.md
       - Removing a Connected System: configuration/removing-a-connected-system.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md
@@ -147,12 +161,14 @@ nav:
       - Metaverse Objects: configuration/metaverse-objects.md
       - Predefined Searches: configuration/predefined-searches.md
       - Deleted Objects: configuration/deleted-objects.md
+      - Object Changes: configuration/object-changes.md
       - Example Data: configuration/example-data.md
       - Operations: configuration/operations.md
       - Schedules: configuration/schedules.md
       - Activities: configuration/activities.md
       - Execution Items: configuration/activity-execution-items.md
       - Live Progress: configuration/activity-progress.md
+      - Import Watermarks: configuration/import-watermarks.md
       - Causality: configuration/causality.md
       - API Keys: configuration/api-keys.md
       - Certificates: configuration/certificates.md
@@ -183,6 +199,7 @@ nav:
       - Logs: administration/logs.md
       - Troubleshooting: administration/troubleshooting.md
       - Troubleshooting Synchronisation: administration/troubleshooting-synchronisation.md
+      - Troubleshooting Worker Restarts and Memory: administration/troubleshooting-worker.md
       - Troubleshooting Podman: administration/troubleshooting-podman.md
   - Connectors:
       - connectors/index.md
@@ -201,6 +218,9 @@ nav:
       - JIM SCIM 2.0 Client Connector:
           - connectors/jim-scim-connector.md
           - Keycloak: connectors/jim-scim-connector-keycloak.md
+      - JIM SCIM 2.0 Service Provider Connector:
+          - connectors/jim-scim-service-provider-connector.md
+          - Identity Providers: connectors/jim-scim-service-provider-connector-identity-providers.md
       - JIM SQL Connector:
           - connectors/jim-sql-connector.md
           - "Delta Import: Change-Log Table": connectors/jim-sql-connector-delta-import-change-log.md
@@ -246,6 +266,7 @@ nav:
       - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md
+      - Identity Providers: powershell/identity-providers.md
       - Service Settings: powershell/service-settings.md
       - Feature Flags: powershell/feature-flags.md
       - Security: powershell/security.md
@@ -267,8 +288,16 @@ extra_css:
 
 extra_javascript:
   - assets/javascripts/diagram-zoom.js
+  - assets/javascripts/docs-layout.js
 
 extra:
+  # Visitor analytics and session recorder; rendered by
+  # docs/overrides/partials/integrations/analytics/custom.html.
+  analytics:
+    provider: custom
+    host: https://m.docs.junctional.io
+    website_id: 302e531d-a0f1-4114-af08-c175bc9fc2c4
+    domains: docs.junctional.io
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/TetronIO/JIM
