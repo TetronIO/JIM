@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phase 0 complete; option A2 approved; Phase 1a next)
+- **Status:** Doing (Phases 0 and 1a complete; Phase 1b next, on the AD lab through Remote Control)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -102,18 +102,17 @@ Operators do not mount a `krb5.conf`. JIM generates one from the settings of eve
 - Answer Q0. If a candidate passes, present the comparison and stop for the user's dependency decision before writing protocol code.
 - Read MS-WSMV, MS-PSRP and the WinRM message encryption details. Note which sections the minimal subset needs.
 
-### Phase 1a: Sandbox harness (days 2 to 4)
+### Phase 1a: Sandbox harness (days 2 to 4) ✅
 
-Runs entirely in a Claude Code on the web sandbox, and in CI. The sandbox runs Docker, builds JIM's images (with the proxy CA passed in, per root `CLAUDE.md`) and builds the repository's Samba AD image. What it cannot run is a Windows host, so this phase proves our code, not Windows' behaviour.
+Runs entirely in a Claude Code on the web sandbox, and is set up to run in CI. What it cannot run is a Windows host, so this phase proves our code against an independent implementation, not Windows' behaviour. Everything lives in `test/integration/remoting-harness/`, started by `Start-RemotingHarness.ps1`.
 
-- **KDC:** the Samba AD image from `test/integration/docker/samba-ad-prebuilt/`, with a service principal `HTTP/winrm-harness` and a keytab exported for the stand-in.
-- **Stand-in WinRM server:** a small ASP.NET Core test host in `test/integration/remoting-harness/`.
-  - It accepts Kerberos (Negotiate authentication with the keytab) and decrypts and encrypts the `HTTP-Kerberos-session-encrypted` payload with the same GSSAPI calls, so both directions of the framing are exercised. An HTTPS listener with a test CA covers Q3.
-  - It implements the WS-Management shell operations.
-  - It pipes the PSRP payload to and from `pwsh -s`, PowerShell's own out-of-process PSRP server.
-- **Client:** the transport under hosted `System.Management.Automation`, running in the **Worker image**, with a generated `krb5.conf` pointing at the Samba realm (Q1, Q2).
-- **Exit:** a remote runspace opens; `Get-Date` and a failing command return output and an error record; the connection refuses an untrusted certificate and a wrong SPN.
-- **Known limit:** the stand-in is ours, so it can share our reading of MS-WSMV. Phase 1b on a real Windows host is what proves conformance.
+- **KDC:** Samba AD (the public `diegogslomp/samba-ad-dc` image, digest-pinned) as a self-contained `HARNESS.TEST` realm, with a client account `svc-winrm` and an `HTTP/winrm-harness.harness.test` service principal whose keytab is exported for the stand-in.
+- **Stand-in WinRM server:** a Python server (`winrm-server/winrm_server.py`).
+  - Kerberos and WinRM message encryption through **pyspnego** (decision 6), an implementation independent of ours, so the framing is checked against code already proven against Windows.
+  - The WS-Management shell operations, with the PSRP payload passed to and from `pwsh -s`, PowerShell's own out-of-process server.
+  - An HTTPS listener with a harness test CA for Q3.
+- **Client:** the transport under hosted `System.Management.Automation` 7.6.7, with a generated `krb5.conf` pointing at the harness realm (Q1, Q2). It ran natively on the sandbox's Ubuntu 24.04, which has the same MIT `libgssapi-krb5-2` as the Worker image, not yet inside the Worker image itself.
+- **Known limit:** our client and the stand-in's framing and WS-Management code share an author, so they can share a misreading of MS-WSMV. pyspnego covers the Kerberos layer independently; Phase 1b on a real Windows host is what proves the rest.
 
 ### Phase 1b: Real Windows WinRM (days 5 to 6)
 
@@ -201,8 +200,38 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
    - **What it costs:** `gss_wrap_iov` interop is now required, not a reserve.
    - **Security:** approved as a documented exception to TLS in transit (`engineering/COMPLIANCE_MAPPING.md`, SC-8).
 5. **Sandbox harness (2026-10-21):** Phase 1a is added, using a Samba KDC and a `pwsh -s` stand-in WinRM server, so most transport work is built and debugged without the lab.
+6. **Stand-in server on pyspnego (2026-10-30):** the harness's stand-in WinRM server uses pyspnego for Kerberos and WinRM message encryption, so our client is tested against an independent implementation rather than against itself. These are test-only dependencies, approved under dependency governance and never shipped:
+   - pyspnego 0.12.4 and krb5 0.10.0 from PyPI. krb5 publishes no Linux wheels, so it is compiled from hash-pinned source with hash-pinned Cython and setuptools in a build stage.
+   - python3-gssapi and python3-cryptography from Ubuntu.
+
+   Everything is version-pinned.
+7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 1a: sandbox harness (2026-10-30)
+
+**Q1 and Q2 pass against the harness: PowerShell remoting runs from Linux through our transport, Kerberos-authenticated and Kerberos-encrypted.** `Tetron.PowerShellRemoting.Tests` passes 72 of 72 with the harness up (about 6 seconds), and skips the 26 harness tests without it.
+
+| Proven | How |
+|---|---|
+| Kerberos from a username and password, no keytab, with a generated `krb5.conf` and an in-memory credential cache (Q1) | `KerberosClientContext` against the Samba KDC; a wrong password fails with GSSAPI's own explanation and never echoes the password |
+| WinRM message encryption both ways (Q2) | Our `gss_wrap_iov` / `gss_unwrap_iov` against a test acceptor, and then against **pyspnego** in the stand-in server, which decrypts our requests and whose encrypted replies we decrypt |
+| Refusal of anything unencrypted | Our decoder refuses unencrypted replies; the stand-in refuses unencrypted requests once authenticated, as `AllowUnencrypted=false` does |
+| PSRP through the custom transport (Q2) | A remote runspace opens; `Get-Date` with bound parameters returns typed output; a failing `Get-Item` returns its error record; three commands run in turn on one runspace |
+| HTTPS (Q3, harness side) | A command runs over TLS with the harness CA supplied; without it the connection is refused for the certificate |
+
+The faults the harness found were all in the stand-in server, and all are fixed:
+- it read pwsh's `<DataAck/>` as `<Data>`, which stalled every command 30 seconds;
+- it dispatched unknown actions before looking up the shell;
+- it demanded message encryption on its TLS listener.
+
+None was in the client. That is weak evidence: the stand-in and the client share an author for everything above the Kerberos layer, which is exactly what Phase 1b exists to test.
+
+**Not yet done, carried forward:**
+- **Running the client inside the Worker image** rather than natively. The sandbox has the same libraries, but it should be proven in the image.
+- **A CI job for the harness.** The tests skip without it today.
+- **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
 ### Phase 0: prior-art survey (2026-10-21)
 
