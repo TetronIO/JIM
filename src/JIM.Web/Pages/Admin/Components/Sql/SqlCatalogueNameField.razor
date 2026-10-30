@@ -11,7 +11,9 @@
    - Enter, on key-up, by which time the autocomplete has applied its highlighted name;
    - leaving the field (Tab, or a click elsewhere), which takes what was typed. A blur that is the start of a click on
      the list is not one of these: the click passes on the name clicked;
-   - the clear button, which passes on no name at once. *@
+   - the clear button, which passes on no name at once.
+   SelectOnActivation is off because highlighting the text on focus is a round trip to the browser: a key typed before
+   it lands is highlighted with the rest and replaced by the next key, so clicking in and typing HR left R (#2627). *@
 <MudAutocomplete @ref="_autocomplete"
                  T="string"
                  Label="@Label"
@@ -21,6 +23,7 @@
                  OnKeyUp="OnKeyUpAsync"
                  SearchFunc="SearchAsync"
                  CoerceValue="true"
+                 SelectOnActivation="false"
                  ResetValueOnEmptyText="true"
                  MaxItems="50"
                  ListItemClass="jim-sql-catalogue-item"

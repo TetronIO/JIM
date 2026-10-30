@@ -144,4 +144,16 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
 
         Assert.That(committed, Is.EqualTo(new string?[] { null }), "an emptied field holding its old name until the next blur would save the old name");
     }
+
+    [Test]
+    public void FocusingTheField_DoesNotHighlightItsText()
+    {
+        // Highlighting on focus is a round trip to the browser: a key typed before it lands is highlighted with the
+        // rest and replaced by the next key, so clicking into the field and typing HR left R.
+        var cut = Render<SqlCatalogueNameField>(p => p
+            .Add(c => c.Label, "Schema")
+            .Add(c => c.Options, ["HR"]));
+
+        Assert.That(cut.FindComponent<MudBlazor.MudAutocomplete<string>>().Instance.SelectOnActivation, Is.False);
+    }
 }
