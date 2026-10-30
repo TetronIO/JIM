@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -187,7 +188,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void Click_PreviewSyncButton_RaisesOnPreviewWithTheRow()
+    public async Task Click_PreviewSyncButton_RaisesOnPreviewWithTheRowAsync()
     {
         var connection = BuildConnection(ConnectedSystemObjectConnectionState.InSync);
         MetaverseObjectConnection? previewed = null;
@@ -197,7 +198,7 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
             .Add(c => c.Connections, [connection])
             .Add(c => c.OnPreview, (MetaverseObjectConnection c) => previewed = c));
 
-        cut.Find("[data-testid='jim-mvo-connection-preview']").Click();
+        await cut.Find("[data-testid='jim-mvo-connection-preview']").ClickAsync();
 
         Assert.That(previewed, Is.SameAs(connection));
     }
@@ -247,13 +248,13 @@ public class MetaverseObjectConnectionsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void Click_Expand_ShowsHowTheConnectionJoinedAndItsScoping()
+    public async Task Click_Expand_ShowsHowTheConnectionJoinedAndItsScopingAsync()
     {
         var connection = HrSystem();
         var expanded = new HashSet<Guid>();
         var cut = RenderExplained(connection, expanded);
 
-        cut.Find("[data-testid='jim-mvo-connection-expand']").Click();
+        await cut.Find("[data-testid='jim-mvo-connection-expand']").ClickAsync();
 
         var detail = cut.Find("[data-testid='jim-mvo-connection-detail']");
         using (Assert.EnterMultipleScope())

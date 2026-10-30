@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Expressions;
@@ -171,35 +172,35 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void TryIt_ExpressionWithASample_ShowsTheValueItWouldMatchOnAndItsType()
+    public async Task TryIt_ExpressionWithASample_ShowsTheValueItWouldMatchOnAndItsTypeAsync()
     {
         var draft = new ObjectMatchingRuleDraft { SourceKind = ObjectMatchingRuleSourceKind.Expression, TargetAttribute = _employeeId };
         var cut = RenderEditor(draft);
         TypeExpression(cut, "\"E\" + Trim(cs[\"employeeId\"])");
 
         var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"employeeId\"]");
-        cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync(" 1007 "));
-        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+        await cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync(" 1007 "));
+        await cut.Find("[data-testid='jim-matching-rule-try-it'] button").ClickAsync();
 
         var output = cut.WaitForElement("[data-testid='jim-matching-rule-try-it-result']");
         Assert.That(output.TextContent, Does.Contain("E1007").And.Contain("Text"));
     }
 
     [Test]
-    public void TryIt_NoValue_SaysTheNextRuleWouldBeTried()
+    public async Task TryIt_NoValue_SaysTheNextRuleWouldBeTriedAsync()
     {
         var draft = new ObjectMatchingRuleDraft { SourceKind = ObjectMatchingRuleSourceKind.Expression, TargetAttribute = _employeeId };
         var cut = RenderEditor(draft);
         TypeExpression(cut, "Trim(cs[\"employeeId\"])");
 
-        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+        await cut.Find("[data-testid='jim-matching-rule-try-it'] button").ClickAsync();
 
         var output = cut.WaitForElement("[data-testid='jim-matching-rule-try-it-result']");
         Assert.That(output.TextContent, Does.Contain("next rule"));
     }
 
     [Test]
-    public void TryIt_SampleThatIsNotItsAttributesType_ShowsTheInputErrorInsteadOfAResult()
+    public async Task TryIt_SampleThatIsNotItsAttributesType_ShowsTheInputErrorInsteadOfAResultAsync()
     {
         _objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute { Id = 104, Name = "hireDate", Type = AttributeDataType.DateTime, Selected = true });
         var draft = new ObjectMatchingRuleDraft { SourceKind = ObjectMatchingRuleSourceKind.Expression, TargetAttribute = _employeeId };
@@ -207,8 +208,8 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
         TypeExpression(cut, "FormatDate((DateTime)cs[\"hireDate\"], \"yyyy\")");
 
         var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"hireDate\"]");
-        cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("soon"));
-        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+        await cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("soon"));
+        await cut.Find("[data-testid='jim-matching-rule-try-it'] button").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -226,7 +227,7 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void TryIt_LookUp_ShowsTheMetaverseObjectASynchronisationWouldJoin()
+    public async Task TryIt_LookUp_ShowsTheMetaverseObjectASynchronisationWouldJoinAsync()
     {
         var person = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" };
         var identity = new MetaverseObject { Id = Guid.NewGuid(), Type = person };
@@ -239,8 +240,8 @@ public class ObjectMatchingRuleEditorTests : JimComponentTestContext
             lookupType: person);
 
         var input = cut.FindComponents<MudTextField<string>>().Single(f => f.Instance.Label == "cs[\"employeeId\"]");
-        cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("E1007"));
-        cut.Find("[data-testid='jim-matching-rule-try-it'] button").Click();
+        await cut.InvokeAsync(() => input.Instance.ValueChanged.InvokeAsync("E1007"));
+        await cut.Find("[data-testid='jim-matching-rule-try-it'] button").ClickAsync();
 
         var lookup = cut.WaitForElement("[data-testid='jim-matching-rule-try-it-lookup']");
         Assert.That(lookup.TextContent, Does.Contain("Would join").And.Contain("would join this object"));

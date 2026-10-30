@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -110,7 +111,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void DetailsTable_RowClicked_RaisesOnAttributeSelectedWithTheAttributeId()
+    public async Task DetailsTable_RowClicked_RaisesOnAttributeSelectedWithTheAttributeIdAsync()
     {
         var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
         int? selected = null;
@@ -120,13 +121,13 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.ObjectTypeName, "User")
             .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
 
-        cut.Find("tr.jim-inspect-row").Click();
+        await cut.Find("tr.jim-inspect-row").ClickAsync();
 
         Assert.That(selected, Is.EqualTo(7));
     }
 
     [Test]
-    public void DetailsTable_AttributeNameButton_ClickedRaisesOnAttributeSelected()
+    public async Task DetailsTable_AttributeNameButton_ClickedRaisesOnAttributeSelectedAsync()
     {
         var mvo = BuildObject(TextValue(7, "Job Title", "Engineer"));
         int? selected = null;
@@ -136,7 +137,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.ObjectTypeName, "User")
             .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
 
-        cut.Find("button.jim-attr-name-button").Click();
+        await cut.Find("button.jim-attr-name-button").ClickAsync();
 
         Assert.That(selected, Is.EqualTo(7));
     }
@@ -162,7 +163,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void DetailsTable_SourceCell_HasNoLinksAndOpensTheInspectorWhenClicked()
+    public async Task DetailsTable_SourceCell_HasNoLinksAndOpensTheInspectorWhenClickedAsync()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
         var provenance = BuildProvenance((1, "Job Title", HrOrigin));
@@ -181,13 +182,13 @@ public class MvoDetailsTableTests : JimComponentTestContext
             Assert.That(sourceCell.QuerySelectorAll("a"), Is.Empty, "the row's source leaves its links to the inspector");
         }
 
-        sourceCell.Click();
+        await sourceCell.ClickAsync();
 
         Assert.That(selected, Is.EqualTo(1), "a click on the linkless Source cell opens the inspector like the rest of the row");
     }
 
     [Test]
-    public void DetailsTable_PlainValueCell_OpensTheInspectorWhenClicked()
+    public async Task DetailsTable_PlainValueCell_OpensTheInspectorWhenClickedAsync()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
         int? selected = null;
@@ -198,13 +199,13 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.Provenance, BuildProvenance((1, "Job Title", HrOrigin)))
             .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
 
-        cut.Find(".jim-inspect-value").Click();
+        await cut.Find(".jim-inspect-value").ClickAsync();
 
         Assert.That(selected, Is.EqualTo(1), "a value with no link of its own opens the inspector like the rest of the row");
     }
 
     [Test]
-    public void DetailsTable_LinkedValue_FollowsItsLinkWithoutOpeningTheInspector()
+    public async Task DetailsTable_LinkedValue_FollowsItsLinkWithoutOpeningTheInspectorAsync()
     {
         var mvo = BuildObject(TextValue(1, Constants.BuiltInAttributes.Email, "jo@example.com"));
         int? selected = null;
@@ -215,13 +216,13 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.Provenance, BuildProvenance((1, Constants.BuiltInAttributes.Email, HrOrigin)))
             .Add(c => c.OnAttributeSelected, EventCallback.Factory.Create<int>(this, id => selected = id)));
 
-        cut.Find("a[href^='mailto:']").Click();
+        await cut.Find("a[href^='mailto:']").ClickAsync();
 
         Assert.That(selected, Is.Null, "a click on the email address is the link's, not the row's");
     }
 
     [Test]
-    public void DetailsTable_GroupByToggle_RaisesOnGroupByChangedWithTheChosenOption()
+    public async Task DetailsTable_GroupByToggle_RaisesOnGroupByChangedWithTheChosenOptionAsync()
     {
         var mvo = BuildObject(TextValue(1, "Job Title", "Engineer"));
         string? raised = null;
@@ -233,7 +234,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
             .Add(c => c.OnGroupByChanged, EventCallback.Factory.Create<string>(this, g => raised = g)));
 
         var control = cut.FindComponent<SegmentedToggle<string>>();
-        cut.FindAll(".jim-seg > button").Single(b => b.TextContent.Trim() == "Category").Click();
+        await cut.FindAll(".jim-seg > button").Single(b => b.TextContent.Trim() == "Category").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

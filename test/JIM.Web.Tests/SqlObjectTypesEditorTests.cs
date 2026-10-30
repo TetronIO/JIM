@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Connectors.Sql;
 using JIM.Models.Staging;
@@ -37,7 +38,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
         """;
 
     [Test]
-    public void AcceptingAForeignKeySuggestion_WritesADocumentTheConnectorAcceptsToTheSetting()
+    public async Task AcceptingAForeignKeySuggestion_WritesADocumentTheConnectorAcceptsToTheSettingAsync()
     {
         var catalogue = new FakeCatalogueSource();
         catalogue.Tables["HR.GROUPS"] = new ConnectorCatalogueObjectDetail
@@ -66,8 +67,8 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.Catalogue, catalogue)
             .Add(c => c.ValueChanged, () => changes++));
 
-        cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[1].Click();
-        cut.WaitForElement("[data-testid=jim-sql-reference-suggestion-accept]").Click();
+        await cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[1].ClickAsync();
+        await cut.WaitForElement("[data-testid=jim-sql-reference-suggestion-accept]").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -80,15 +81,15 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void RemovingABlankObjectType_RemovesItWithoutAsking()
+    public async Task RemovingABlankObjectType_RemovesItWithoutAskingAsync()
     {
         const string withABlankObjectType = """
             { "objectTypes": [ { "name": "Person", "table": "EMPLOYEES", "anchorColumns": ["EMPLOYEE_ID"] }, { "name": "Group", "table": "GROUPS", "anchorColumns": ["GROUP_ID"] }, {} ] }
             """;
         var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, ObjectTypesSetting(withABlankObjectType)));
-        cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[2].Click();
+        await cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[2].ClickAsync();
 
-        cut.Find("[data-testid=jim-sql-object-type-remove]").Click();
+        await cut.Find("[data-testid=jim-sql-object-type-remove]").ClickAsync();
 
         Assert.That(cut.FindComponents<SqlObjectTypeCard>(), Has.Count.EqualTo(2), "a card with nothing on it loses nothing, so there is nothing to confirm");
     }
@@ -126,7 +127,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void CatalogueUnreadable_SaysWhyAndKeepsEveryObjectTypeEditable()
+    public async Task CatalogueUnreadable_SaysWhyAndKeepsEveryObjectTypeEditableAsync()
     {
         var catalogue = new FakeCatalogueSource { ObjectsFailure = "Login failed for user 'jim'." };
 
@@ -141,13 +142,13 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             Assert.That(cut.FindComponents<SqlObjectTypeCard>(), Has.Count.EqualTo(2), "the configuration is still there to view and change");
         }
 
-        cut.Find("[data-testid=jim-sql-catalogue-retry]").Click();
+        await cut.Find("[data-testid=jim-sql-catalogue-retry]").ClickAsync();
 
         Assert.That(catalogue.ObjectReads, Is.EqualTo(2), "Retry reads the catalogue again");
     }
 
     [Test]
-    public void CatalogueUnreadable_ExpandingACard_DoesNotTryToReadItsTableAgain()
+    public async Task CatalogueUnreadable_ExpandingACard_DoesNotTryToReadItsTableAgainAsync()
     {
         var catalogue = new FakeCatalogueSource { ObjectsFailure = "Login failed for user 'jim'." };
         var cut = Render<SqlObjectTypesEditor>(p => p
@@ -155,7 +156,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.Catalogue, catalogue));
         cut.WaitForElement("[data-testid=jim-sql-catalogue-unavailable]");
 
-        cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[0].Click();
+        await cut.FindAll("[data-testid=jim-sql-object-type-card-header]")[0].ClickAsync();
 
         Assert.That(catalogue.TableReads, Is.Zero, "each read would wait out the same connection timeout to report the same failure");
     }
@@ -211,7 +212,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     #region JSON view
 
     [Test]
-    public void JsonView_APastedMisspeltField_MarksItsLineAndBlocksTheCardsAndSaving()
+    public async Task JsonView_APastedMisspeltField_MarksItsLineAndBlocksTheCardsAndSavingAsync()
     {
         // PRD Scenario 4: 'anchorColumn' on line 7.
         const string pasted = """
@@ -231,9 +232,9 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
         var cut = Render<SqlObjectTypesEditor>(p => p
             .Add(c => c.SettingValue, settingValue)
             .Add(c => c.HasProblemsChanged, (bool value) => hasProblems.Add(value)));
-        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+        await cut.Find("[data-testid=jim-sql-object-types-json-toggle]").ClickAsync();
 
-        cut.Find("[data-testid=jim-sql-json-input]").Input(pasted);
+        await cut.Find("[data-testid=jim-sql-json-input]").InputAsync(pasted);
 
         using (Assert.EnterMultipleScope())
         {
@@ -247,14 +248,14 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void JsonView_ProblemFixed_ReleasesTheCardsAndSaving()
+    public async Task JsonView_ProblemFixed_ReleasesTheCardsAndSavingAsync()
     {
         var hasProblems = new List<bool>();
         var cut = Render<SqlObjectTypesEditor>(p => p
             .Add(c => c.SettingValue, ObjectTypesSetting("{ \"objectTypes\": [ { \"anchorColumn\": [\"ID\"] } ] }"))
             .Add(c => c.HasProblemsChanged, (bool value) => hasProblems.Add(value)));
 
-        cut.Find("[data-testid=jim-sql-json-input]").Input(PersonOnly);
+        await cut.Find("[data-testid=jim-sql-json-input]").InputAsync(PersonOnly);
 
         using (Assert.EnterMultipleScope())
         {
@@ -266,7 +267,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void JsonView_AProblemWithWhatTheDocumentSays_IsMarkedButTheCardsCanStillShowIt()
+    public async Task JsonView_AProblemWithWhatTheDocumentSays_IsMarkedButTheCardsCanStillShowItAsync()
     {
         const string missingAnchor = """
             {
@@ -276,9 +277,9 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             }
             """;
         var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, ObjectTypesSetting(PersonOnly)));
-        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+        await cut.Find("[data-testid=jim-sql-object-types-json-toggle]").ClickAsync();
 
-        cut.Find("[data-testid=jim-sql-json-input]").Input(missingAnchor);
+        await cut.Find("[data-testid=jim-sql-json-input]").InputAsync(missingAnchor);
 
         using (Assert.EnterMultipleScope())
         {
@@ -289,14 +290,14 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void JsonView_AnEmptyDocument_OffersTheExampleToStartFrom()
+    public async Task JsonView_AnEmptyDocument_OffersTheExampleToStartFromAsync()
     {
         var settingValue = ObjectTypesSetting("");
         settingValue.Setting.Example = PersonOnly;
         var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, settingValue));
-        cut.Find("[data-testid=jim-sql-object-types-json-toggle]").Click();
+        await cut.Find("[data-testid=jim-sql-object-types-json-toggle]").ClickAsync();
 
-        cut.Find("[data-testid=jim-sql-json-insert-example]").Click();
+        await cut.Find("[data-testid=jim-sql-json-insert-example]").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -310,7 +311,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     #region Add Object Type dialog
 
     [Test]
-    public void AddObjectType_TheFirstOfAConnectedSystem_WritesTheDocumentAHandWrittenOneWouldBe()
+    public async Task AddObjectType_TheFirstOfAConnectedSystem_WritesTheDocumentAHandWrittenOneWouldBeAsync()
     {
         // PRD Scenario 1: choose HR.EMPLOYEES, accept the primary key JIM preselects, finish.
         var catalogue = new FakeCatalogueSource();
@@ -321,15 +322,17 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.SettingValue, settingValue)
             .Add(c => c.Catalogue, catalogue));
 
-        cut.Find("[data-testid=jim-sql-object-types-add]").Click();
+        // The Add handler waits for the dialog's result, so its click completes only once the dialog closes
+        var adding = cut.Find("[data-testid=jim-sql-object-types-add]").ClickAsync();
         provider.WaitForElement("[data-testid=jim-sql-add-next]");
         SetText(provider, "jim-sql-add-name", "Person");
         Choose(provider, "jim-sql-add-schema", "HR");
         Choose(provider, "jim-sql-add-table", "EMPLOYEES");
-        provider.Find("[data-testid=jim-sql-add-next]").Click();
+        await provider.Find("[data-testid=jim-sql-add-next]").ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.Find("[data-testid=jim-sql-add-anchor-reason]").TextContent, Does.Contain("primary key")));
-        provider.Find("[data-testid=jim-sql-add-finish]").Click();
+        await provider.Find("[data-testid=jim-sql-add-finish]").ClickAsync();
+        await adding;
 
         var handWritten = SqlObjectTypesDocument.FromJson(
             """{"objectTypes":[{"name":"Person","schema":"HR","table":"EMPLOYEES","anchorColumns":["EMPLOYEE_ID"]}]}""").ToJson();
@@ -338,7 +341,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddObjectType_OpenedWhileTheCatalogueIsStillLoading_ReadsTheTableOnceItHasLoaded()
+    public async Task AddObjectType_OpenedWhileTheCatalogueIsStillLoading_ReadsTheTableOnceItHasLoadedAsync()
     {
         var catalogue = new FakeCatalogueSource { ObjectsGate = new TaskCompletionSource() };
         catalogue.Tables["HR.EMPLOYEES"] = Employees();
@@ -348,20 +351,21 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.Catalogue, catalogue));
         cut.WaitForElement("[data-testid=jim-sql-catalogue-loading]");
 
-        cut.Find("[data-testid=jim-sql-object-types-add]").Click();
+        // Not awaited: the Add handler waits for the dialog's result, and this test leaves the dialog open
+        _ = cut.Find("[data-testid=jim-sql-object-types-add]").ClickAsync();
         provider.WaitForElement("[data-testid=jim-sql-add-next]");
-        cut.InvokeAsync(() => catalogue.ObjectsGate.SetResult());
+        await cut.InvokeAsync(() => catalogue.ObjectsGate.SetResult());
         SetText(provider, "jim-sql-add-name", "Person");
         Choose(provider, "jim-sql-add-schema", "HR");
         Choose(provider, "jim-sql-add-table", "EMPLOYEES");
-        provider.Find("[data-testid=jim-sql-add-next]").Click();
+        await provider.Find("[data-testid=jim-sql-add-next]").ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.Find("[data-testid=jim-sql-add-anchor-reason]").TextContent, Does.Contain("primary key"),
             "a dialog opened a moment too soon must not leave the administrator to type every column name"));
     }
 
     [Test]
-    public void AddObjectType_Added_IsTheOnlyCardLeftOpen()
+    public async Task AddObjectType_Added_IsTheOnlyCardLeftOpenAsync()
     {
         var catalogue = new FakeCatalogueSource();
         catalogue.Tables["HR.DEPARTMENTS"] = new ConnectorCatalogueObjectDetail
@@ -378,14 +382,16 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.Catalogue, catalogue));
         Assert.That(cut.FindComponents<SqlObjectTypeCard>().Single().Instance.Expanded, Is.True, "a lone Object Type opens by itself");
 
-        cut.Find("[data-testid=jim-sql-object-types-add]").Click();
+        // The Add handler waits for the dialog's result, so its click completes only once the dialog closes
+        var adding = cut.Find("[data-testid=jim-sql-object-types-add]").ClickAsync();
         provider.WaitForElement("[data-testid=jim-sql-add-next]");
         SetText(provider, "jim-sql-add-name", "Department");
         Choose(provider, "jim-sql-add-schema", "HR");
         Choose(provider, "jim-sql-add-table", "DEPARTMENTS");
-        provider.Find("[data-testid=jim-sql-add-next]").Click();
+        await provider.Find("[data-testid=jim-sql-add-next]").ClickAsync();
         provider.WaitForElement("[data-testid=jim-sql-add-anchor-reason]");
-        provider.Find("[data-testid=jim-sql-add-finish]").Click();
+        await provider.Find("[data-testid=jim-sql-add-finish]").ClickAsync();
+        await adding;
 
         cut.WaitForAssertion(() => Assert.That(
             cut.FindComponents<SqlObjectTypeCard>().Select(c => c.Instance.Expanded),
@@ -394,14 +400,16 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddObjectType_Cancelled_AddsNothing()
+    public async Task AddObjectType_Cancelled_AddsNothingAsync()
     {
         var settingValue = ObjectTypesSetting(PersonOnly);
         var provider = Render<MudDialogProvider>();
         var cut = Render<SqlObjectTypesEditor>(p => p.Add(c => c.SettingValue, settingValue));
 
-        cut.Find("[data-testid=jim-sql-object-types-add]").Click();
-        provider.WaitForElement("[data-testid=jim-sql-add-cancel]").Click();
+        // The Add handler waits for the dialog's result, so its click completes only once the dialog closes
+        var adding = cut.Find("[data-testid=jim-sql-object-types-add]").ClickAsync();
+        await provider.WaitForElement("[data-testid=jim-sql-add-cancel]").ClickAsync();
+        await adding;
 
         using (Assert.EnterMultipleScope())
         {
@@ -411,7 +419,7 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void AForeignKeyToATableNoObjectTypeReads_OpensAddObjectTypeWithThatTableChosen()
+    public async Task AForeignKeyToATableNoObjectTypeReads_OpensAddObjectTypeWithThatTableChosenAsync()
     {
         var catalogue = new FakeCatalogueSource();
         var employees = Employees();
@@ -432,7 +440,8 @@ public class SqlObjectTypesEditorTests : JimComponentTestContext
             .Add(c => c.SettingValue, ObjectTypesSetting(PersonOnly))
             .Add(c => c.Catalogue, catalogue));
 
-        cut.WaitForElement("[data-testid=jim-sql-add-object-type-suggestion-accept]").Click();
+        // Not awaited: accepting the suggestion opens Add Object Type and waits for its result, which this test leaves open
+        _ = cut.WaitForElement("[data-testid=jim-sql-add-object-type-suggestion-accept]").ClickAsync();
 
         provider.WaitForElement("[data-testid=jim-sql-add-next]");
         var table = provider.FindComponents<SqlCatalogueNameField>().Single(f => f.Instance.TestId == "jim-sql-add-table");

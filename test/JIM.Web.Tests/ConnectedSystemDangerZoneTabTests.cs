@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -112,7 +113,7 @@ public class ConnectedSystemDangerZoneTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DangerZone_PreviewDeletionImpact_StartsADeletionPreviewOfThisSystemAndShowsIt()
+    public async Task DangerZone_PreviewDeletionImpact_StartsADeletionPreviewOfThisSystemAndShowsItAsync()
     {
         var started = Guid.CreateVersion7();
         ConfigurationChangePreviewRequest? request = null;
@@ -121,7 +122,7 @@ public class ConnectedSystemDangerZoneTabTests : JimComponentTestContext
             .ReturnsAsync(started);
         var cut = RenderTab();
 
-        cut.Find($"[data-testid='{PreviewButtonMarker}']").Click();
+        await cut.Find($"[data-testid='{PreviewButtonMarker}']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -133,12 +134,12 @@ public class ConnectedSystemDangerZoneTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DangerZone_SizeQuestionDeclined_ShowsNoPanel()
+    public async Task DangerZone_SizeQuestionDeclined_ShowsNoPanelAsync()
     {
         _mockStarter.Setup(s => s.StartAsync(It.IsAny<ConfigurationChangePreviewRequest>())).ReturnsAsync((Guid?)null);
         var cut = RenderTab();
 
-        cut.Find($"[data-testid='{PreviewButtonMarker}']").Click();
+        await cut.Find($"[data-testid='{PreviewButtonMarker}']").ClickAsync();
 
         Assert.That(cut.FindAll($"[data-testid='{PanelStubMarker}']"), Is.Empty);
     }

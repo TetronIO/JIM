@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Logic.DTOs;
 using JIM.Web.Pages.Admin.Components;
@@ -71,7 +72,7 @@ public class DependentDerivedFlowsDialogTests : JimComponentTestContext
     {
         var (provider, result) = Show();
 
-        provider.Find("[data-testid='jim-dependent-derived-flows-confirm']").Click();
+        await provider.Find("[data-testid='jim-dependent-derived-flows-confirm']").ClickAsync();
 
         Assert.That(await result, Is.True);
     }
@@ -81,7 +82,7 @@ public class DependentDerivedFlowsDialogTests : JimComponentTestContext
     {
         var (provider, result) = Show();
 
-        provider.Find("[data-testid='jim-dependent-derived-flows-cancel']").Click();
+        await provider.Find("[data-testid='jim-dependent-derived-flows-cancel']").ClickAsync();
 
         Assert.That(await result, Is.False);
     }

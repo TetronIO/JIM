@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Core.DTOs;
 using JIM.Web.Shared;
@@ -254,7 +255,7 @@ public class MvoContributionBarTests : JimComponentTestContext
     }
 
     [Test]
-    public void ContributionBar_LegendItemClicked_RaisesOnFilterChangedWithTheGroupKey()
+    public async Task ContributionBar_LegendItemClicked_RaisesOnFilterChangedWithTheGroupKeyAsync()
     {
         var provenance = new MetaverseObjectProvenance
         {
@@ -267,13 +268,13 @@ public class MvoContributionBarTests : JimComponentTestContext
             .Add(c => c.ObjectTypeName, "User")
             .Add(c => c.OnFilterChanged, EventCallback.Factory.Create<string?>(this, key => raised = key)));
 
-        cut.FindAll(".jim-contribution-legend-item")[0].Click();
+        await cut.FindAll(".jim-contribution-legend-item")[0].ClickAsync();
 
         Assert.That(raised, Is.EqualTo(ValueOriginGrouping.KeyFor(Attribute(1, HrOrigin))));
     }
 
     [Test]
-    public void ContributionBar_ActiveFilterClickedAgain_RaisesNullToClearIt()
+    public async Task ContributionBar_ActiveFilterClickedAgain_RaisesNullToClearItAsync()
     {
         var provenance = new MetaverseObjectProvenance
         {
@@ -290,7 +291,7 @@ public class MvoContributionBarTests : JimComponentTestContext
 
         var pressedItem = cut.FindAll(".jim-contribution-legend-item")
             .First(e => e.GetAttribute("aria-pressed") == "true");
-        pressedItem.Click();
+        await pressedItem.ClickAsync();
 
         Assert.That(raised, Is.Null);
     }

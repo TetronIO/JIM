@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
@@ -85,7 +86,7 @@ public class AwaitingSynchronisationNoticeTests : JimComponentTestContext
     }
 
     [Test]
-    public void RunNow_Clicked_RaisesOnRunNowOnce()
+    public async Task RunNow_Clicked_RaisesOnRunNowOnceAsync()
     {
         var raised = 0;
         var cut = Render<AwaitingSynchronisationNotice>(p => p
@@ -93,7 +94,7 @@ public class AwaitingSynchronisationNoticeTests : JimComponentTestContext
             .Add(c => c.RunProfile, RunProfile(ConnectedSystemRunType.DeltaSynchronisation))
             .Add(c => c.OnRunNow, () => raised++));
 
-        cut.Find(RunNow).Click();
+        await cut.Find(RunNow).ClickAsync();
 
         Assert.That(raised, Is.EqualTo(1));
     }

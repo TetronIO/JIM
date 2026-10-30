@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
@@ -162,12 +163,12 @@ public class OneLineCellTests : JimComponentTestContext
     /// opens, rendered with the call site's own template rather than as bare text.
     /// </summary>
     [Test]
-    public void OverflowList_Affordance_OpensADialogHoldingEveryItem()
+    public async Task OverflowList_Affordance_OpensADialogHoldingEveryItemAsync()
     {
         var provider = Render<MudDialogProvider>();
         var cut = RenderOverflowList(["Administrator", "Operator", "Auditor"]);
 
-        cut.Find(".jim-attr-expand-link").Click();
+        await cut.Find(".jim-attr-expand-link").ClickAsync();
 
         provider.WaitForAssertion(() =>
         {

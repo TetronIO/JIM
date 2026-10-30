@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Expressions;
@@ -35,10 +36,10 @@ public class SyncRuleMatchingTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddDialog_UnworkableExpression_KeepsAddMatchingRuleOff()
+    public async Task AddDialog_UnworkableExpression_KeepsAddMatchingRuleOffAsync()
     {
         var syncRule = AdvancedModeImportRule();
-        var (provider, _) = OpenAddDialog(syncRule);
+        var (provider, _) = await OpenAddDialogAsync(syncRule);
 
         ComposeExpressionRule(provider, "Trim(mv[\"Department\"])");
 
@@ -46,15 +47,15 @@ public class SyncRuleMatchingTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddDialog_WorkableExpression_AddsAnExpressionRuleToTheSynchronisationRule()
+    public async Task AddDialog_WorkableExpression_AddsAnExpressionRuleToTheSynchronisationRuleAsync()
     {
         var syncRule = AdvancedModeImportRule();
-        var (provider, tab) = OpenAddDialog(syncRule);
+        var (provider, tab) = await OpenAddDialogAsync(syncRule);
 
         ComposeExpressionRule(provider, "\"E\" + Trim(cs[\"employeeId\"])");
         var add = AddButton(provider);
         Assert.That(add.Instance.Disabled, Is.False);
-        provider.InvokeAsync(() => add.Find("button").Click());
+        await add.Find("button").ClickAsync();
 
         var rule = syncRule.ObjectMatchingRules.Single();
         using (Assert.EnterMultipleScope())
@@ -71,11 +72,11 @@ public class SyncRuleMatchingTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddDialog_OffersMultiValuedMetaverseAttributes()
+    public async Task AddDialog_OffersMultiValuedMetaverseAttributesAsync()
     {
         // Every value is looked up now, so the single-valued restriction advanced mode carried is gone.
         var syncRule = AdvancedModeImportRule();
-        var (provider, _) = OpenAddDialog(syncRule);
+        var (provider, _) = await OpenAddDialogAsync(syncRule);
 
         var targets = provider.FindComponents<MudSelect<MetaverseAttribute>>().Single()
             .FindComponents<MudSelectItem<MetaverseAttribute>>().Select(i => i.Instance.Value!.Name);
@@ -83,11 +84,11 @@ public class SyncRuleMatchingTabTests : JimComponentTestContext
         Assert.That(targets, Does.Contain("Proxy Addresses"));
     }
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleMatchingTab> Tab) OpenAddDialog(SyncRule syncRule)
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleMatchingTab> Tab)> OpenAddDialogAsync(SyncRule syncRule)
     {
         var provider = Render<MudDialogProvider>();
         var tab = Render<SyncRuleMatchingTab>(p => p.Add(c => c.SyncRule, syncRule));
-        tab.FindComponents<MudButton>().Single(b => b.Markup.Contains("Add Matching")).Find("button").Click();
+        await tab.FindComponents<MudButton>().Single(b => b.Markup.Contains("Add Matching")).Find("button").ClickAsync();
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<ObjectMatchingRuleEditor>(), Is.True));
         return (provider, tab);
     }

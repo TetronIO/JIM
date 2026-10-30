@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -55,14 +56,14 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
     }
 
     [Test]
-    public void SwitchingToAdvanced_ShowsTheScopeCurrentlyInForce()
+    public async Task SwitchingToAdvanced_ShowsTheScopeCurrentlyInForceAsync()
     {
         var connectedSystem = ConnectedSystemWithHierarchy();
         Container(connectedSystem, "Corp").Selected = true;
         Container(connectedSystem, "Service Accounts").Excluded = true;
 
         var cut = Render(connectedSystem);
-        SwitchToAdvanced(cut);
+        await SwitchToAdvancedAsync(cut);
 
         Assert.That(cut.Find("textarea[data-testid='jim-scope-text']").GetAttribute("value"), Is.EqualTo(
             """
@@ -72,14 +73,14 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
     }
 
     [Test]
-    public void ApplyingText_EditsTheSelectionTheTreeShows()
+    public async Task ApplyingText_EditsTheSelectionTheTreeShowsAsync()
     {
         var connectedSystem = ConnectedSystemWithHierarchy();
         var cut = Render(connectedSystem);
-        SwitchToAdvanced(cut);
+        await SwitchToAdvancedAsync(cut);
 
-        SetText(cut, "include OU=Corp,DC=example,DC=com");
-        cut.Find("[data-testid='jim-scope-text-apply']").Click();
+        await SetTextAsync(cut, "include OU=Corp,DC=example,DC=com");
+        await cut.Find("[data-testid='jim-scope-text-apply']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -91,18 +92,18 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
     }
 
     [Test]
-    public void ApplyingTextThatNamesNoContainer_ChangesNothingAndSaysWhichLine()
+    public async Task ApplyingTextThatNamesNoContainer_ChangesNothingAndSaysWhichLineAsync()
     {
         var connectedSystem = ConnectedSystemWithHierarchy();
         var cut = Render(connectedSystem);
-        SwitchToAdvanced(cut);
+        await SwitchToAdvancedAsync(cut);
 
-        SetText(cut,
+        await SetTextAsync(cut,
             """
             include OU=Corp,DC=example,DC=com
             exclude OU=Contractors,OU=Corp,DC=example,DC=com
             """);
-        cut.Find("[data-testid='jim-scope-text-apply']").Click();
+        await cut.Find("[data-testid='jim-scope-text-apply']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -113,14 +114,14 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
     }
 
     [Test]
-    public void LeavingAdvancedMode_AppliesTheTextRatherThanDiscardingIt()
+    public async Task LeavingAdvancedMode_AppliesTheTextRatherThanDiscardingItAsync()
     {
         var connectedSystem = ConnectedSystemWithHierarchy();
         var cut = Render(connectedSystem);
-        SwitchToAdvanced(cut);
+        await SwitchToAdvancedAsync(cut);
 
-        SetText(cut, "include OU=Corp,DC=example,DC=com");
-        SwitchToSimple(cut);
+        await SetTextAsync(cut, "include OU=Corp,DC=example,DC=com");
+        await SwitchToSimpleAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -131,14 +132,14 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
     }
 
     [Test]
-    public void LeavingAdvancedModeWithTextThatCannotBeApplied_StaysPutAndShowsWhy()
+    public async Task LeavingAdvancedModeWithTextThatCannotBeApplied_StaysPutAndShowsWhyAsync()
     {
         var connectedSystem = ConnectedSystemWithHierarchy();
         var cut = Render(connectedSystem);
-        SwitchToAdvanced(cut);
+        await SwitchToAdvancedAsync(cut);
 
-        SetText(cut, "include OU=Contractors,DC=example,DC=com");
-        SwitchToSimple(cut);
+        await SetTextAsync(cut, "include OU=Contractors,DC=example,DC=com");
+        await SwitchToSimpleAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -156,15 +157,15 @@ public class ConnectedSystemPartitionsTabAdvancedModeTests : JimComponentTestCon
             .Add(p => p.PartitionsAndHierarchiesText, "partitions and containers")
             .Add(p => p.PartitionAndHierarchyText, "partition and container"));
 
-    private static void SwitchToAdvanced(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
-        cut.Find("[data-testid='jim-scope-mode-advanced']").Click();
+    private static async Task SwitchToAdvancedAsync(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
+        await cut.Find("[data-testid='jim-scope-mode-advanced']").ClickAsync();
 
-    private static void SwitchToSimple(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
-        cut.Find("[data-testid='jim-scope-mode-simple']").Click();
+    private static async Task SwitchToSimpleAsync(IRenderedComponent<ConnectedSystemPartitionsTab> cut) =>
+        await cut.Find("[data-testid='jim-scope-mode-simple']").ClickAsync();
 
-    private static void SetText(IRenderedComponent<ConnectedSystemPartitionsTab> cut, string text) =>
+    private static async Task SetTextAsync(IRenderedComponent<ConnectedSystemPartitionsTab> cut, string text) =>
         // Immediate="true", so the field commits on input rather than on blur.
-        cut.Find("textarea[data-testid='jim-scope-text']").Input(text);
+        await cut.Find("textarea[data-testid='jim-scope-text']").InputAsync(text);
 
     private static ConnectedSystemContainer Container(ConnectedSystem connectedSystem, string name) =>
         ContainerSelectionEditor.Flatten(connectedSystem.Partitions![0]).Single(c => c.Name == name);

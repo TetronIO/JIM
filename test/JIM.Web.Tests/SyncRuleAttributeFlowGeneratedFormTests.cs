@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Reflection;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Expressions;
@@ -65,9 +66,9 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     }
 
     [Test]
-    public void SelectingGenerated_ShowsAssignTheValueToTargetPicker()
+    public async Task SelectingGenerated_ShowsAssignTheValueToTargetPickerAsync()
     {
-        var (provider, _, _) = OpenAddDialogWithGeneratedSourceType();
+        var (provider, _, _) = await OpenAddDialogWithGeneratedSourceTypeAsync();
 
         var targetPicker = provider.FindComponents<MudSelect<MetaverseAttribute>>()
             .SingleOrDefault(s => s.Instance.Label == "Assign the value to");
@@ -76,9 +77,9 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     }
 
     [Test]
-    public void SelectingGenerated_CreatesGenerationWithModelDefaults()
+    public async Task SelectingGenerated_CreatesGenerationWithModelDefaultsAsync()
     {
-        var (_, tab, mapping) = OpenAddDialogWithGeneratedSourceType();
+        var (_, tab, mapping) = await OpenAddDialogWithGeneratedSourceTypeAsync();
         _ = tab;
 
         Assert.That(mapping().Generation, Is.Not.Null);
@@ -87,9 +88,9 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     }
 
     [Test]
-    public void SwitchingAwayFromGenerated_RemovesGeneration()
+    public async Task SwitchingAwayFromGenerated_RemovesGenerationAsync()
     {
-        var (provider, tab, mapping) = OpenAddDialogWithGeneratedSourceType();
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedSourceTypeAsync();
         Assert.That(mapping().Generation, Is.Not.Null, "precondition");
 
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
@@ -100,9 +101,9 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
     }
 
     [Test]
-    public void SelectingExpression_RendersExpressionEditorBoundToTheMappingSource()
+    public async Task SelectingExpression_RendersExpressionEditorBoundToTheMappingSourceAsync()
     {
-        var (provider, tab, _) = OpenAddDialogWithGeneratedSourceType();
+        var (provider, tab, _) = await OpenAddDialogWithGeneratedSourceTypeAsync();
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
         provider.InvokeAsync(() => sourceTypePicker.Instance.ValueChanged.InvokeAsync("Expression")).GetAwaiter().GetResult();
         tab.Render();
@@ -438,19 +439,19 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         tab.Render();
     }
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)
-        OpenAddDialogWithGeneratedSourceType()
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)>
+        OpenAddDialogWithGeneratedSourceTypeAsync()
     {
-        return OpenAddDialogWithGeneratedSourceType(BuildRule());
+        return await OpenAddDialogWithGeneratedSourceTypeAsync(BuildRule());
     }
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)
-        OpenAddDialogWithGeneratedSourceType(SyncRule rule)
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab, Func<SyncRuleMapping> Mapping)>
+        OpenAddDialogWithGeneratedSourceTypeAsync(SyncRule rule)
     {
         var provider = Render<MudDialogProvider>();
         var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, rule));
 
-        tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).Click();
+        await tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<MudSelect<string>>(), Is.True));
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
@@ -464,7 +465,7 @@ public class SyncRuleAttributeFlowGeneratedFormTests : JimComponentTestContext
         OpenAddDialogWithGeneratedTargetSelectedAsync(AttributeDataType targetType)
     {
         var rule = BuildRule();
-        var (provider, tab, mapping) = OpenAddDialogWithGeneratedSourceType(rule);
+        var (provider, tab, mapping) = await OpenAddDialogWithGeneratedSourceTypeAsync(rule);
 
         var targetPicker = provider.FindComponents<MudSelect<MetaverseAttribute>>().Single(s => s.Instance.Label == "Assign the value to");
         var target = rule.MetaverseObjectType!.Attributes.Single(a => a.Type == targetType);

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application.Expressions;
 using JIM.Models.Core;
@@ -32,9 +33,9 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddCriteria_ExpressionThatDoesNotParse_KeepsAddOff()
+    public async Task AddCriteria_ExpressionThatDoesNotParse_KeepsAddOffAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
 
         ComposeExpression(provider, "Lower(cs[\"department\"]", SearchComparisonType.StartsWith, "fin");
 
@@ -42,9 +43,9 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddCriteria_ExpressionReadingTheOtherSide_KeepsAddOffAndSaysWhy()
+    public async Task AddCriteria_ExpressionReadingTheOtherSide_KeepsAddOffAndSaysWhyAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
 
         ComposeExpression(provider, "Lower(mv[\"Department\"])", SearchComparisonType.StartsWith, "fin");
 
@@ -56,14 +57,14 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddCriteria_WorkableExpression_AddsAnExpressionCriterionComparedAsText()
+    public async Task AddCriteria_WorkableExpression_AddsAnExpressionCriterionComparedAsTextAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out var root));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out var root));
 
         ComposeExpression(provider, DepartmentExpression, SearchComparisonType.StartsWith, "fin");
         var add = AddButton(provider);
         Assert.That(add.Instance.Disabled, Is.False);
-        provider.InvokeAsync(() => add.Find("button").Click());
+        await add.Find("button").ClickAsync();
 
         var criterion = root.Criteria.Single();
         using (Assert.EnterMultipleScope())
@@ -78,13 +79,13 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddCriteria_CompareAsChanged_ClearsAnOperatorTheNewTypeDoesNotOffer()
+    public async Task AddCriteria_CompareAsChanged_ClearsAnOperatorTheNewTypeDoesNotOfferAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
         ComposeExpression(provider, DepartmentExpression, SearchComparisonType.StartsWith, "fin");
 
         var compareAs = provider.FindComponents<MudSelect<AttributeDataType>>().Single();
-        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.Number));
+        await provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.Number));
 
         // MudSelect keeps Value as a plain parameter (no GetState accessor), so the analyser's rule does not apply.
 #pragma warning disable MUD0012
@@ -98,43 +99,43 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddCriteria_ExpressionAgainstARelativeDate_SaysItCostsAFullPass()
+    public async Task AddCriteria_ExpressionAgainstARelativeDate_SaysItCostsAFullPassAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
         ComposeExpression(provider, "ToDate(cs[\"leaveDate\"])", null, null);
 
         var compareAs = provider.FindComponents<MudSelect<AttributeDataType>>().Single();
-        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.DateTime));
+        await provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.DateTime));
         var mode = provider.FindComponents<MudRadioGroup<DateCriteriaValueMode>>().Single();
-        provider.InvokeAsync(() => mode.Instance.ValueChanged.InvokeAsync(DateCriteriaValueMode.Relative));
+        await provider.InvokeAsync(() => mode.Instance.ValueChanged.InvokeAsync(DateCriteriaValueMode.Relative));
 
         Assert.That(provider.Find("[data-testid='jim-scoping-criterion-full-pass']").TextContent,
             Does.Contain(SyncRuleScopingCriteria.FullReconciliationPassNotice));
     }
 
     [Test]
-    public void AddCriteria_CompareAsMovedOffDateAfterChoosingARelativeDate_DropsTheRelativeDateAndItsNotice()
+    public async Task AddCriteria_CompareAsMovedOffDateAfterChoosingARelativeDate_DropsTheRelativeDateAndItsNoticeAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
         ComposeExpression(provider, DepartmentExpression, null, null);
         var compareAs = provider.FindComponents<MudSelect<AttributeDataType>>().Single();
-        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.DateTime));
+        await provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.DateTime));
         var mode = provider.FindComponents<MudRadioGroup<DateCriteriaValueMode>>().Single();
-        provider.InvokeAsync(() => mode.Instance.ValueChanged.InvokeAsync(DateCriteriaValueMode.Relative));
+        await provider.InvokeAsync(() => mode.Instance.ValueChanged.InvokeAsync(DateCriteriaValueMode.Relative));
 
-        provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.Text));
+        await provider.InvokeAsync(() => compareAs.Instance.ValueChanged.InvokeAsync(AttributeDataType.Text));
 
         Assert.That(provider.FindAll("[data-testid='jim-scoping-criterion-full-pass']"), Is.Empty);
     }
 
     [Test]
-    public void AddCriteria_SwitchingBackToAttribute_DropsTheExpression()
+    public async Task AddCriteria_SwitchingBackToAttribute_DropsTheExpressionAsync()
     {
-        var (provider, _) = OpenAddDialog(ImportRule(out _));
+        var (provider, _) = await OpenAddDialogAsync(ImportRule(out _));
         ComposeExpression(provider, DepartmentExpression, null, null);
 
         var toggle = provider.FindComponent<SegmentedToggle<bool>>();
-        provider.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(false));
+        await provider.InvokeAsync(() => toggle.Instance.ValueChanged.InvokeAsync(false));
 
         using (Assert.EnterMultipleScope())
         {
@@ -191,7 +192,7 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
         }
     }
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleDetailScopingCriteriaGroup> Group) OpenAddDialog(SyncRule syncRule)
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleDetailScopingCriteriaGroup> Group)> OpenAddDialogAsync(SyncRule syncRule)
     {
         var provider = Render<MudDialogProvider>();
         Render<MudPopoverProvider>();
@@ -199,7 +200,7 @@ public class SyncRuleScopingCriteriaDialogTests : JimComponentTestContext
         var group = Render<SyncRuleDetailScopingCriteriaGroup>(p => p
             .Add(c => c.SyncRule, syncRule)
             .Add(c => c.SyncRuleScopingCriteriaGroup, root));
-        group.FindComponents<MudButton>().Single(b => b.Markup.Contains(">Add Criteria<")).Find("button").Click();
+        await group.FindComponents<MudButton>().Single(b => b.Markup.Contains(">Add Criteria<")).Find("button").ClickAsync();
         provider.WaitForAssertion(() => Assert.That(provider.FindComponents<MudButton>().Any(b => b.Markup.Contains("Add Criteria")), Is.True));
         return (provider, group);
     }

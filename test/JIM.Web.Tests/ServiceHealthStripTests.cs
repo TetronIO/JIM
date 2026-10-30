@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using AngleSharp.Dom;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application.Servers;
 using JIM.Models.Operations;
@@ -162,7 +163,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
     /// the others alone; each value can be copied without selecting it by hand.
     /// </summary>
     [Test]
-    public void ServiceHealthStrip_Details_AreClosedByDefaultAndOpenToShowCopyableHostAndVersion()
+    public async Task ServiceHealthStrip_Details_AreClosedByDefaultAndOpenToShowCopyableHostAndVersionAsync()
     {
         // The panel wraps the whole grid in a collapse of its own; the per-card details are the collapses that do
         // not contain the grid.
@@ -181,7 +182,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
             Assert.That(Toggle(card).GetAttribute("aria-label"), Is.EqualTo("Details"));
         }
 
-        Toggle(card).Click();
+        await Toggle(card).ClickAsync();
 
         card = Card(cut, JimService.WorkerSync);
         var details = card.QuerySelector(".jim-service-health-details")!;
@@ -235,13 +236,13 @@ public class ServiceHealthStripTests : JimComponentTestContext
     /// administrator pasting a container id into a shell knows the copy happened.
     /// </summary>
     [Test]
-    public void ServiceHealthStrip_CopyHost_WritesTheHostToTheClipboardAndSaysSo()
+    public async Task ServiceHealthStrip_CopyHost_WritesTheHostToTheClipboardAndSaysSoAsync()
     {
         var copy = JSInterop.Setup<bool>("jimInterop.copyToClipboard", "jim-worker-1").SetResult(true);
         var cut = RenderStrip(HealthyReport());
 
-        Toggle(Card(cut, JimService.WorkerSync)).Click();
-        Card(cut, JimService.WorkerSync).QuerySelector("button[aria-label='Copy host']")!.Click();
+        await Toggle(Card(cut, JimService.WorkerSync)).ClickAsync();
+        await Card(cut, JimService.WorkerSync).QuerySelector("button[aria-label='Copy host']")!.ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -395,7 +396,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
         cut.Find("[data-testid='service-health-collapse-toggle']");
 
     [Test]
-    public void ServiceHealthStrip_CollapseToggle_HidesTheCardsAndKeepsTheHeaderInView()
+    public async Task ServiceHealthStrip_CollapseToggle_HidesTheCardsAndKeepsTheHeaderInViewAsync()
     {
         var cut = RenderStrip(HealthyReport());
 
@@ -405,7 +406,7 @@ public class ServiceHealthStripTests : JimComponentTestContext
             Assert.That(Strip(cut).GetAttribute("data-collapsed"), Is.EqualTo("false"));
         }
 
-        CollapseToggle(cut).Click();
+        await CollapseToggle(cut).ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -418,15 +419,15 @@ public class ServiceHealthStripTests : JimComponentTestContext
     }
 
     [Test]
-    public void ServiceHealthStrip_CollapseToggle_RaisesCollapsedChanged()
+    public async Task ServiceHealthStrip_CollapseToggle_RaisesCollapsedChangedAsync()
     {
         var raised = new List<bool>();
         var cut = Render<ServiceHealthStrip>(p => p
             .Add(c => c.Report, HealthyReport())
             .Add(c => c.CollapsedChanged, (bool collapsed) => raised.Add(collapsed)));
 
-        CollapseToggle(cut).Click();
-        CollapseToggle(cut).Click();
+        await CollapseToggle(cut).ClickAsync();
+        await CollapseToggle(cut).ClickAsync();
 
         Assert.That(raised, Is.EqualTo(new[] { true, false }));
     }

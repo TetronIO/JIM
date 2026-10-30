@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Core;
 using JIM.Web.Shared;
@@ -64,11 +65,11 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     /// Selects the keep radio. MudRadio's input commits on click rather than change, so a click on the keep
     /// input is what selecting it produces.
     /// </summary>
-    private static void ChooseKeep(IRenderedComponent<MudDialogProvider> provider)
+    private static async Task ChooseKeepAsync(IRenderedComponent<MudDialogProvider> provider)
     {
         var radios = provider.FindAll("input[type='radio']");
         Assert.That(radios, Has.Count.EqualTo(2), "expected exactly the recall and keep radios");
-        radios[1].Click();
+        await radios[1].ClickAsync();
     }
 
     #region Rule delete variant
@@ -101,11 +102,11 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void ContributedValuesChoiceDialog_RuleDelete_ChoosingKeepRevealsWarning()
+    public async Task ContributedValuesChoiceDialog_RuleDelete_ChoosingKeepRevealsWarningAsync()
     {
         var (provider, _) = ShowRuleDialog();
 
-        ChooseKeep(provider);
+        await ChooseKeepAsync(provider);
 
         var warning = provider.WaitForElement($"[data-testid='{KeepWarningMarker}']");
         Assert.That(warning.TextContent, Does.Contain("Kept values become permanently unmanaged. This cannot be reversed once the rule is deleted."));
@@ -125,7 +126,7 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     {
         var (provider, result) = ShowRuleDialog();
 
-        provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
+        await provider.Find($"[data-testid='{ConfirmButtonMarker}']").ClickAsync();
 
         var outcome = await result;
         using (Assert.EnterMultipleScope())
@@ -140,8 +141,8 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     {
         var (provider, result) = ShowRuleDialog();
 
-        ChooseKeep(provider);
-        provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
+        await ChooseKeepAsync(provider);
+        await provider.Find($"[data-testid='{ConfirmButtonMarker}']").ClickAsync();
 
         var outcome = await result;
         using (Assert.EnterMultipleScope())
@@ -156,7 +157,7 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     {
         var (provider, result) = ShowRuleDialog();
 
-        provider.Find($"[data-testid='{CancelButtonMarker}']").Click();
+        await provider.Find($"[data-testid='{CancelButtonMarker}']").ClickAsync();
 
         var outcome = await result;
         Assert.That(outcome.Cancelled, Is.True);
@@ -193,11 +194,11 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void ContributedValuesChoiceDialog_MappingRemoval_ChoosingKeepRevealsMappingWordedWarning()
+    public async Task ContributedValuesChoiceDialog_MappingRemoval_ChoosingKeepRevealsMappingWordedWarningAsync()
     {
         var (provider, _) = ShowMappingDialog();
 
-        ChooseKeep(provider);
+        await ChooseKeepAsync(provider);
 
         var warning = provider.WaitForElement($"[data-testid='{KeepWarningMarker}']");
         Assert.That(warning.TextContent, Does.Contain("Kept values become permanently unmanaged. This cannot be reversed once the mapping is removed."));
@@ -217,8 +218,8 @@ public class ContributedValuesChoiceDialogTests : JimComponentTestContext
     {
         var (provider, result) = ShowMappingDialog();
 
-        ChooseKeep(provider);
-        provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
+        await ChooseKeepAsync(provider);
+        await provider.Find($"[data-testid='{ConfirmButtonMarker}']").ClickAsync();
 
         var outcome = await result;
         using (Assert.EnterMultipleScope())
