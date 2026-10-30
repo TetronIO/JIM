@@ -11,6 +11,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Tetron.PowerShellRemoting</RootNamespace>
+    <!-- GSSAPI interop passes IOV buffer arrays and pinned spans to libgssapi_krb5. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tetron.PowerShellRemoting.Tests" />
+  </ItemGroup>
 
 </Project>

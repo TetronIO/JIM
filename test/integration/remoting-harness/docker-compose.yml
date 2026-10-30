@@ -1,0 +1,41 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# The Remote PowerShell harness for Tetron.PowerShellRemoting (#2021, spike Phase 1a): a Kerberos realm and a
+# stand-in WinRM server, so the transport can be built and tested without a Windows host. It proves our code
+# against an independent implementation, not Windows' behaviour; the AD lab does that (Phase 1b).
+#
+# Self-contained: its own network and volumes, nothing shared with the JIM stack or the integration lab.
+
+name: jim-remoting-harness
+
+services:
+  kdc:
+    # Samba AD as the KDC, so tickets look like Active Directory's (AES, a PAC, SPNs on accounts).
+    image: diegogslomp/samba-ad-dc:latest@sha256:9606e448ddd6d63a5707275e802bdc4f27e5eff1e3abbca2876f87001d1dcf40
+    container_name: remoting-harness-kdc
+    hostname: dc1
+    domainname: harness.test
+    privileged: true
+    environment:
+      - REALM=HARNESS.TEST
+      - DOMAIN=HARNESS
+      - ADMIN_PASS=Harness@123!
+      - DNS_FORWARDER=127.0.0.11
+    volumes:
+      - kdc-var:/usr/local/samba/var
+      - kdc-private:/usr/local/samba/private
+      - kdc-etc:/usr/local/samba/etc
+    networks:
+      harness:
+        aliases:
+          - dc1.harness.test
+
+volumes:
+  kdc-var:
+  kdc-private:
+  kdc-etc:
+
+networks:
+  harness:
+    name: jim-remoting-harness
