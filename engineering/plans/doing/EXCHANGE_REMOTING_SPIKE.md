@@ -211,7 +211,7 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 
 ### Phase 1a: sandbox harness (2026-10-30)
 
-**Q1 and Q2 pass against the harness: PowerShell remoting runs from Linux through our transport, Kerberos-authenticated and Kerberos-encrypted.** `Tetron.PowerShellRemoting.Tests` passes 72 of 72 with the harness up (about 6 seconds), and skips the 26 harness tests without it.
+**Q1 and Q2 pass against the harness: PowerShell remoting runs from Linux through our transport, Kerberos-authenticated and Kerberos-encrypted.** `Tetron.PowerShellRemoting.Tests` passes 72 of 72 with the harness up (about 6 seconds), and skips its 15 harness tests without it.
 
 | Proven | How |
 |---|---|
