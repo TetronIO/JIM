@@ -169,6 +169,96 @@ public class SchemaRefreshDisableDependentsTests
     }
 
     [Test]
+    public async Task ApplyConnectedSystemSchemaRefreshAsync_WithADisablePlanDisablingAMapping_RecordsTheImportRulesObjectTypeAsAwaitingSynchronisationAsync()
+    {
+        // A disabled Attribute Flow stops flowing for the objects that already exist, so the rule's Object Type is
+        // processed at the next synchronisation (#2615). Configuration change tracking is off here, so the capture cannot
+        // say what changed and the change is recorded rather than dropped.
+        var settings = new Mock<IServiceSettingsRepository>();
+        settings.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+                DisplayName = "Track configuration changes",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "false"
+            });
+        _repository.Setup(r => r.ServiceSettings).Returns(settings.Object);
+        _userRule.ConnectedSystemId = 1;
+        _connectedSystemRepository.Setup(r => r.GetSyncRuleAsync(11)).ReturnsAsync(_userRule);
+        ConfigurationChangeSynchronisation? recorded = null;
+        _connectedSystemRepository.Setup(r => r.CreateConfigurationChangeSynchronisationAsync(It.IsAny<ConfigurationChangeSynchronisation>()))
+            .Callback<ConfigurationChangeSynchronisation>(c => recorded = c)
+            .Returns(Task.CompletedTask);
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var previewResult = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+        var plan = new SchemaRefreshDependents();
+        plan.InvalidatedMappings.Add(new SchemaRefreshDependentMapping
+        {
+            MappingId = 102,
+            SyncRuleId = 11,
+            SyncRuleName = "HR Users Inbound",
+            Description = "faxNumber → Fax Number",
+            Reason = "Attribute 'faxNumber' is no longer reported by the Connected System (schema refresh of 21 Aug 2026)."
+        });
+
+        await _jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, plan, NewInitiator());
+
+        Assert.That(recorded, Is.Not.Null, "the disabled Attribute Flow is carried to the objects of its rule's type");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded!.ConnectedSystemId, Is.EqualTo(1));
+            Assert.That(recorded.ConnectedSystemObjectTypeId, Is.EqualTo(1));
+            Assert.That(recorded.SyncRuleId, Is.EqualTo(11));
+            Assert.That(recorded.ConfigurationChangeActivityId, Is.EqualTo(_createdActivities.Single(a => a.TargetType == ActivityTargetType.SynchronisationRule).Id),
+                "named by the child Activity the disable was recorded under");
+        }
+    }
+
+    [Test]
+    public async Task ApplyConnectedSystemSchemaRefreshAsync_WithADisablePlanDisablingARule_RecordsTheRulesObjectTypeAsAwaitingSynchronisationAsync()
+    {
+        // The whole rule is switched off, which changes what its type's existing objects produce just as a disabled
+        // Attribute Flow does (#2615).
+        var settings = new Mock<IServiceSettingsRepository>();
+        settings.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+                DisplayName = "Track configuration changes",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "false"
+            });
+        _repository.Setup(r => r.ServiceSettings).Returns(settings.Object);
+        _computerRule.ConnectedSystemId = 1;
+        _connectedSystemRepository.Setup(r => r.GetSyncRuleAsync(10)).ReturnsAsync(_computerRule);
+        ConfigurationChangeSynchronisation? recorded = null;
+        _connectedSystemRepository.Setup(r => r.CreateConfigurationChangeSynchronisationAsync(It.IsAny<ConfigurationChangeSynchronisation>()))
+            .Callback<ConfigurationChangeSynchronisation>(c => recorded = c)
+            .Returns(Task.CompletedTask);
+        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var previewResult = await _jim.ConnectedSystems.PreviewConnectedSystemSchemaRefreshAsync(connectedSystem);
+        var plan = new SchemaRefreshDependents();
+        plan.InvalidatedSyncRules.Add(new SchemaRefreshDependentRule
+        {
+            SyncRuleId = 10,
+            SyncRuleName = "Directory Computers Inbound",
+            ObjectTypeName = "computer",
+            MappingCount = 0,
+            Reason = "Object Type 'computer' is no longer reported by the Connected System (schema refresh of 21 Aug 2026)."
+        });
+
+        await _jim.ConnectedSystems.ApplyConnectedSystemSchemaRefreshAsync(connectedSystem, previewResult, plan, NewInitiator());
+
+        Assert.That(recorded, Is.Not.Null, "the disabled rule is carried to the objects of its type");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorded!.ConnectedSystemObjectTypeId, Is.EqualTo(2));
+            Assert.That(recorded.SyncRuleId, Is.EqualTo(10));
+        }
+    }
+
+    [Test]
     public async Task ApplyConnectedSystemSchemaRefreshAsync_WithADisablePlan_ChecksTheExportQueueForChangesLeftWithoutAuthorityAsync()
     {
         // A change queued by an Attribute Flow or Synchronisation Rule the refresh has just disabled has nothing left to

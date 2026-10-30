@@ -4,6 +4,7 @@
 using JIM.Models.Core.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -36,14 +37,26 @@ public class SyncRuleSaveResponse : SyncRuleHeader
     public string? DeletionSourceWarning { get; set; }
 
     /// <summary>
+    /// The Connected System Object Types this save recorded as awaiting synchronisation. For each, the Connected System's
+    /// next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives
+    /// the Connected System and Object Type, how many objects that is, and about how long it takes at the speed of the
+    /// Connected System's last Full Synchronisation (empty when it has never completed one). Always present; empty when
+    /// the save recorded nothing: a change that needs no synchronisation, a rule that is switched off, and an export rule,
+    /// whose change reaches existing objects through the review it flags instead.
+    /// </summary>
+    public List<AwaitingSynchronisationEstimate> AwaitingSynchronisation { get; set; } = new();
+
+    /// <summary>
     /// Builds the response from the rule as saved (reloaded) and the instance the save was performed on, which carries
     /// the save's transient warnings and dependants.
     /// </summary>
     /// <param name="saved">The rule as stored after the save.</param>
     /// <param name="savedInstance">The instance handed to the save.</param>
     /// <param name="deletionSourceWarning">The deletion source warning for the save, if any (#1256).</param>
+    /// <param name="awaitingSynchronisation">What the save recorded as awaiting synchronisation, with its cost (#2615).</param>
     public static SyncRuleSaveResponse FromSave(SyncRule saved, SyncRule savedInstance,
-        SyncRuleDeletionSourceWarning? deletionSourceWarning = null)
+        SyncRuleDeletionSourceWarning? deletionSourceWarning = null,
+        IEnumerable<AwaitingSynchronisationEstimate>? awaitingSynchronisation = null)
     {
         ArgumentNullException.ThrowIfNull(saved);
         ArgumentNullException.ThrowIfNull(savedInstance);
@@ -53,7 +66,8 @@ public class SyncRuleSaveResponse : SyncRuleHeader
         {
             Warnings = savedInstance.SaveWarnings.ToList(),
             DependentDerivedFlows = savedInstance.SaveDependentDerivedFlows.ToList(),
-            DeletionSourceWarning = deletionSourceWarning?.Message
+            DeletionSourceWarning = deletionSourceWarning?.Message,
+            AwaitingSynchronisation = awaitingSynchronisation?.ToList() ?? []
         };
 
         // Copy every header property, so a field added to the header later reaches this response without anyone

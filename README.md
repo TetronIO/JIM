@@ -22,16 +22,19 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Built-in scheduler that supports parallel operations
 - Validated at 500,000-user scale (with tens of thousands of groups of up to 495,000 members)
 - Transform data using expressions with extensive built-in functions for common identity operations
-- Built-in LDAP, File, SCIM 2.0 and SQL (MS SQL Server, Oracle Database) connectors (more coming)
+- Built-in LDAP, File, SQL (Microsoft SQL Server, Oracle Database) and SCIM 2.0 Client connectors, plus a [SCIM 2.0 Service Provider Connector](https://docs.junctional.io/connectors/jim-scim-service-provider-connector/) (Preview) that lets identity providers push Users and Groups to JIM (more coming)
+- [Generated Values](https://docs.junctional.io/configuration/generated-values/): unique account names, employee numbers and badge codes, checked against the target systems before they are issued and never reissued to someone new
 - [Passwords](https://docs.junctional.io/concepts/passwords/): initial passwords for newly provisioned objects, on-demand password setting, and Password Synchronisation to every configured Connected System, queued, encrypted at rest and retried
 - Preview before you commit: a [Configuration Change Preview](https://docs.junctional.io/configuration/configuration-changes/) shows which objects a proposed edit would affect, and [Sync Preview](https://docs.junctional.io/configuration/sync-preview/) shows what synchronising one object would do, changing nothing
 - [Run Profile Safeguards](https://docs.junctional.io/configuration/run-profiles/#safeguards): cap how many creates, updates, deletes and detected deletions a single run may attempt, so one bad filter cannot become a mass change
-- [Service Health](https://docs.junctional.io/configuration/operations/#service-health): see at a glance whether the Worker and Scheduler are alive, and what each is doing
+- [Service Health](https://docs.junctional.io/configuration/operations/#service-health): see at a glance whether the Worker and Scheduler are alive, what each is doing, and whether JIM is running short of memory, before it fails
+- Explain any outcome: the [Inspect view](https://docs.junctional.io/configuration/metaverse-objects/#where-a-value-comes-from) shows where each Metaverse Object value came from and why it won, the [Causality Explorer](https://docs.junctional.io/configuration/causality/) follows a change across objects and runs, and [Object Changes](https://docs.junctional.io/configuration/object-changes/) searches every change by attribute and value
+- Test configuration before it runs: try Attribute Flows, Scoping Criteria, Object Matching Rules and Generated Values against sample values or real objects, and save [configuration test cases](https://docs.junctional.io/configuration/configuration-tests/) that catch a breaking change when you save
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Real-time activity monitoring, pushed from the database rather than polled
 - [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types
-- Single Sign-On (SSO) using OpenID Connect
+- [Single Sign-On (SSO)](https://docs.junctional.io/administration/sso-setup/) using OpenID Connect, with one-command registration for AD FS and Keycloak, and identity providers whose certificates come from your own certificate authority
 - Dark/Light mode
 
 <picture>
@@ -90,9 +93,9 @@ JIM is a container-based distributed application implementing the metaverse patt
 </a>
 
 **Components:**
-- **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/`, with interactive [Scalar](https://scalar.com/) API documentation at `/api/reference`.
+- **JIM.Web** - A website with integrated REST API, built using [ASP.NET](https://asp.net/) Blazor Server. The API is available at `/api/`, with interactive [Scalar](https://scalar.com/) API documentation at `/api/reference`. It also serves the SCIM 2.0 endpoint at `/scim/v2/` that identity providers push Users and Groups to (Preview).
 - **JIM.Scheduler** - A background service that triggers synchronisation runs using cron or interval-based schedules, with multi-step sequential and parallel execution
-- **JIM.Worker** - A background service that processes import, sync, and export tasks with crash recovery and parallel execution support
+- **JIM.Worker** - A background service that processes import, sync, and export tasks with crash recovery and parallel execution support, delivers queued passwords, and stops its work before it runs out of memory, recording why
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
@@ -137,7 +140,7 @@ JIM includes a cross-platform [PowerShell module](https://docs.junctional.io/pow
 ## State of Development
 JIM is working towards its v1.0 milestone: Identity Lifecycle Complete. The core identity lifecycle is fully functional today:
 
-- **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files)
+- **Import** identities from source systems (LDAP directories, SQL databases, SCIM 2.0 services, CSV files), or receive them from identity providers over SCIM 2.0
 - **Sync** to reconcile identities in the central metaverse
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers

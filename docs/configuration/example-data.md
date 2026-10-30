@@ -65,6 +65,8 @@ Each attribute's rules decide its values:
 
 Cancelling the Worker Task stops generation, but objects already written stay in the Metaverse.
 
+Generated objects are reviewed against the export rules at the next synchronisation of any Connected System, so an export rule that provisions their Object Type creates their accounts without anything else having to change (see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect)).
+
 ## :material-database-cog-outline: Example Data Sets
 
 An Example Data Set is a named list of values that templates draw on. JIM ships thirteen, all in English: **Firstnames Male**, **Firstnames Female**, **Lastnames**, **Companies**, **Departments**, **Teams**, **Job Titles**, **User Statuses**, **Group Statuses**, **Adjectives**, **Colours**, **Words** and **Group Name Endings**. The **Data Sets** page lists them with how many values each holds, and opening one shows its values.

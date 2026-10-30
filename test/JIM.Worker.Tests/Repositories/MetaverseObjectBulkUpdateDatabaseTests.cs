@@ -274,6 +274,46 @@ public class MetaverseObjectBulkUpdateDatabaseTests
     }
 
     /// <summary>
+    /// A write outside synchronisation (a sign-in, a portal edit) flags the object and records what it changed (#2615),
+    /// from its own context, while a synchronisation may already hold the object as it loaded it, without the record.
+    /// That synchronisation's update must leave the record as the write left it: the record is the only thing that
+    /// carries the changed values to the target systems, and a bulk update of the loaded copy would erase it.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectsAsync_UnsynchronisedChangesRecordedAfterLoad_KeepsTheRecordAsync()
+    {
+        var ids = await SeedTypeAsync();
+
+        await using var syncCtx = NewContext();
+        var syncRepo = new PostgresDataRepository(syncCtx);
+        var personType = await syncCtx.MetaverseObjectTypes.FindAsync(ids.PersonTypeId);
+        var mvo = new MetaverseObject { Type = personType!, AttributeValues = { TextValue(ids.DepartmentId, "Sales") } };
+        await syncRepo.Sync.CreateMetaverseObjectsAsync(new[] { mvo });
+
+        var recorded = new MetaverseObjectUnsynchronisedChanges();
+        recorded.Record(null, [new MetaverseObjectAttributeValue { AttributeId = ids.DepartmentId, StringValue = "Sales" }]);
+        await using (var signInCtx = NewContext())
+        {
+            var tracked = await signInCtx.MetaverseObjects.AsTracking().SingleAsync(o => o.Id == mvo.Id);
+            tracked.ScopeReviewPending = true;
+            tracked.UnsynchronisedChangesJson = recorded.ToJson();
+            await new PostgresDataRepository(signInCtx).Metaverse.UpdateMetaverseObjectAsync(tracked);
+        }
+
+        mvo.AttributeValues.Add(TextValue(ids.JobTitleId, "Engineer"));
+        await syncRepo.Sync.UpdateMetaverseObjectsAsync(new[] { mvo });
+
+        await using var verifyCtx = NewContext();
+        var persisted = await verifyCtx.MetaverseObjects.AsNoTracking().SingleAsync(o => o.Id == mvo.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.ScopeReviewPending, Is.True);
+            Assert.That(MetaverseObjectUnsynchronisedChanges.FromJson(persisted.UnsynchronisedChangesJson)?.Removals, Is.EqualTo(recorded.Removals),
+                "the synchronisation wrote back the null it loaded, erasing the change the write recorded");
+        }
+    }
+
+    /// <summary>
     /// The Temporal Scope Reconciler (#892) flags an object and advances its LastScopeEvaluatedAt from its own context,
     /// on its own schedule, so it can do so while a synchronisation holds the object as it loaded it. The
     /// synchronisation's update must leave both columns as the reconciler wrote them.

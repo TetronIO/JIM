@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
 using JIM.Models.Staging;
 using Moq;
@@ -44,6 +45,11 @@ public class ObjectMatchingModeTests
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMvRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+
+        // Which Object Types an enabled import rule covers, read when a mode switch is recorded as awaiting
+        // synchronisation (#2615): none here, as these tests are about the rules the switch moves.
+        IList<SyncRuleHeader> noImportRules = [];
+        _mockCsRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(noImportRules);
 
         // Setup activity repository to handle activity creation
         _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))

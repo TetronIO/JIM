@@ -156,9 +156,17 @@ GRANT SELECT ON HR.IDM_CHANGE_LOG TO jim_sync;
 GRANT SELECT ON HR.IDM_CHANGE_LOG TO jim_sync;
 ```
 
-## :material-shape-outline: 4. Configure the Object Type
+## :material-tune-variant: 4. Choose the mode
 
-Add a `changeLog` to **every Object Type that is selected for synchronisation** in the Connected System's **Object Types** document. If a selected Object Type has no `changeLog` when this mode is chosen, saving is refused and the message names the Object Type; otherwise a Delta Import could report success while that Object Type's changes went unread. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs no change log.
+On the Connected System's **Settings** tab, set **Delta Import Mode** to **Change-Log Table**. Leave saving until the next step: the Object Type cards follow the mode as it stands on screen.
+
+## :material-shape-outline: 5. Give each Object Type its change log, then save
+
+**Every Object Type that is selected for synchronisation** needs a change log. Without one, saving is refused and the message names the Object Type; otherwise a Delta Import could report success while that Object Type's changes went unread. An Object Type that is not selected (a table JIM only exports to, say) takes no part in a Delta Import and needs no change log.
+
+With the mode set, each Object Type's card has a **Delta Import** section. Select **Add change-log table**, then fill in the fields below; the table and its columns are chosen from the database. The card of an Object Type selected on the Schema tab counts a missing change log among its problems.
+
+In the Object Types document (what REST and PowerShell send, and what **View as JSON** shows), the change log is the Object Type's `changeLog`:
 
 ```json title="Object Types with a change log"
 {
@@ -192,20 +200,18 @@ Add a `changeLog` to **every Object Type that is selected for synchronisation** 
 }
 ```
 
-| Field | Meaning |
-|-------|---------|
-| `table` / `schema` | The change-log table or view. |
-| `anchorColumns` | The change log's columns carrying the changed object's anchor: one per anchor column of the Object Type, in the same order. |
-| `sequenceColumn` | The column that orders the changes. It becomes the watermark. |
-| `changeTypeColumn` | The column saying what kind of change a row records. |
-| `createValues` / `updateValues` | Your own values meaning "created" and "updated". At least one of the two lists is required. |
-| `deleteValues` | Your values meaning "deleted". Required: observing deletions is what a change-log table is for, and a database that cannot record them should use [Watermark Column mode](jim-sql-connector-delta-import-watermark.md) instead. |
+| On the card | In the document | Meaning |
+|-------------|-----------------|---------|
+| **Change-log table**, **Change-log schema** | `table` / `schema` | The change-log table or view. |
+| **Column holding** each anchor column | `anchorColumns` | The change log's columns carrying the changed object's anchor: one per anchor column of the Object Type, in the same order. |
+| **Sequence column** | `sequenceColumn` | The column that orders the changes. It becomes the watermark. |
+| **Change type column** | `changeTypeColumn` | The column saying what kind of change a row records. |
+| **Created when**, **Updated when** | `createValues` / `updateValues` | Your own values meaning "created" and "updated". At least one of the two is required. |
+| **Deleted when** | `deleteValues` | Your values meaning "deleted". Required: observing deletions is what a change-log table is for, and a database that cannot record them should use [Watermark Column mode](jim-sql-connector-delta-import-watermark.md) instead. |
 
-A value may appear in only one list, and no value may be blank. Where your application records finer-grained codes (say `INSERT`, `MERGE`, `RESTORE` for things that leave a row present), list them all under `createValues` or `updateValues`; the two are treated the same way, since JIM reads the row as it stands either way.
+On the card, each list is typed with its values separated by commas. A value may appear in only one list, and no value may be blank. Where your application records finer-grained codes (say `INSERT`, `MERGE`, `RESTORE` for things that leave a row present), list them all under `createValues` or `updateValues`; the two are treated the same way, since JIM reads the row as it stands either way.
 
-## :material-content-save-check-outline: 5. Choose the mode and save
-
-On the Connected System's Settings tab, set **Delta Import Mode** to **Change-Log Table** and save. The configuration is checked as you save: a selected Object Type without a `changeLog`, a change-type value listed under two kinds of change, or a missing field is reported immediately. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell): selecting one that has no `changeLog` while this mode is set is refused there and then, so give it a change log first, or leave it unselected.
+Then select **Save Settings**. The configuration is checked as you save: a selected Object Type without a change log, a change-type value listed under two kinds of change, or a missing field is reported immediately. The same check runs when you select an Object Type on the Schema tab (or through the REST API or PowerShell): selecting one that has no change log while this mode is set is refused there and then, so give it a change log first, or leave it unselected.
 
 ## :material-import: 6. Baseline with a Full Import
 

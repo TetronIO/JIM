@@ -152,7 +152,7 @@ Initial Export Only is your choice about an attribute the Connected System would
 
 ## :material-eye-check-outline: Previewing an Attribute Flow change
 
-Changing a mapping rewrites an attribute on every object the rule manages at the next Full Synchronisation (for an export mapping, the target system's, while the rule [enforces state](synchronisation-rules.md#export-outbound)), and nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
+Changing a mapping rewrites an attribute on every object the rule manages: an import mapping at the Connected System's next synchronisation, Delta included, and an export mapping at the target system's next Full Synchronisation, while the rule [enforces state](synchronisation-rules.md#export-outbound). Nothing on the editor says what the values become. An Expression edit that malforms one case in a thousand (`ada.@corp.local` for a person with no surname) is invisible until it has flowed.
 
 The **Preview Attribute Flow Impact** button, which appears beside the editor's save button once you have edited a mapping, starts a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) of the mappings as they stand on the form, evaluated against the rule's saved mappings, changing nothing. It reports, per object and per attribute:
 
@@ -167,7 +167,7 @@ Both directions state a true before-and-after. An **import** mapping's old value
 Three answers are deliberately negative rather than reassuring:
 
 - A proposed mapping that would **lose Attribute Priority** to another contributing rule is called out: a synchronisation would evaluate it and then write nothing, so reporting the values it produces would describe a write that never happens.
-- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next Full Synchronisation of its Connected System, or kept if you [choose to keep them](synchronisation-rules.md#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
+- **Removing a mapping outright is not counted as a value change.** The values it contributed are withdrawn at the next synchronisation of its Connected System, Delta included, or kept if you [choose to keep them](synchronisation-rules.md#deleting-a-synchronisation-rule) when you remove it, so the preview states which rather than counting a change the save itself does not make.
 - The preview covers **this Connected System only**. Where another Connected System's rule also writes the attribute, that rule takes its turn on its own next synchronisation, so what it would write instead is named rather than guessed at.
 
 Saving with a current preview on screen states its counts on the confirmation and records the preview against the change's [Activity](activities.md); edit the mappings afterwards and the preview is marked stale and contributes nothing. Automation gets the same evaluation through [`New-JIMConfigurationChangePreview -AttributeFlowMapping`](../powershell/previews.md) and the REST API's `POST sync-rules/{id}/mappings/preview` endpoint.

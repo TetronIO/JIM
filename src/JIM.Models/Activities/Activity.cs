@@ -643,6 +643,21 @@ public class Activity
     public ConfigurationChangeClass ConfigurationChangeClass { get; set; } = ConfigurationChangeClass.NotClassified;
 
     /// <summary>
+    /// Whether anything in this configuration change reaches the objects that already exist only at a Full Synchronisation,
+    /// judged when the change was saved (#2615). False when synchronisation applies the whole change by itself: an import rule
+    /// or Object Matching Rule change records its Object Type as awaiting synchronisation, which the next Delta or Full
+    /// processes in full, and an export rule's scope or Deprovisioning Action change is applied by the review the save
+    /// flags, at the next synchronisation of any Connected System. True when some consequential part is applied by neither,
+    /// such as an export Attribute Flow edit, so a Full Synchronisation is still called for. The changed-since-last-Full-
+    /// Synchronisation indicator counts only changes where this is not false.
+    ///
+    /// Null where no judgement was made: for non-configuration activities, for creates and unchanged saves, for a capture
+    /// that did not run or could not compare, for configuration objects other than a Synchronisation Rule, and for changes
+    /// captured before the column existed. A null is counted as it always was.
+    /// </summary>
+    public bool? ConfigurationChangeNeedsFullSynchronisation { get; set; }
+
+    /// <summary>
     /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting
     /// the target type's own column (see the target-column block above). A column already set at activity-creation
     /// time (e.g. by a granular sub-entity endpoint) is preserved. This is the single forward mapping of target type

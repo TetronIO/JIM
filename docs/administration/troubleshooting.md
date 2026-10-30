@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Fix a JIM installation that will not start, serve HTTPS or let you sign in, by the message it shows.
 type: troubleshooting
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Troubleshooting
@@ -54,7 +54,7 @@ Where the name resolves, the line also gives the address it led to on that attem
 1. Check that PostgreSQL is running: for the bundled database, `jim.database` should be listed as running in `docker compose ps` (remember the `--profile with-db` flag), or on Podman `jim-database-postgres` in `sudo podman ps` (see [Operating JIM](podman.md#operating-jim)); for an external server, ask whoever runs it.
 2. Check that `JIM_DB_HOSTNAME` in `.env` (on Podman, `jim-config.yaml`) names that server, with `:port` appended if it does not listen on 5432 (see [Configuration](configuration.md)). `Name or service not known` means the name does not resolve; `Connection refused` means nothing is listening at that address and port. For the bundled database, compare the address in the line with the database's own (`sudo podman inspect jim-database-postgres --format '{{.NetworkSettings.Networks.jim.IPAddress}}'` on Podman): a different address means the name still points at a database that has since moved.
 3. `No route to host` means nothing answered for the address, or something on the way refused the connection. For an external server, check that a firewall allows the JIM host to reach it. For the bundled database on rootful Podman, check that the database is still plugged into JIM's network: `sudo bridge link` lists one interface per pod on the network's bridge (`sudo podman network inspect jim` names the bridge, such as `podman1`), so a JIM and its database show two. With one missing, and `nmcli device` showing NetworkManager connecting an interface named `veth…`, NetworkManager unplugged the database: tell it to leave Podman's interfaces alone (see [Firewall, SELinux, AppArmor and NetworkManager](podman.md#firewall-selinux-and-apparmor)), then restart JIM and its database, as step 4 shows.
-4. On a rootful Podman host running firewalld, a firewalld reload also removes the rules Podman adds for JIM's network, unless `netavark-firewalld-reload.service` is enabled to put them back; JIM's services then log `No route to host` or, where they can no longer resolve names on their network, `Resource temporarily unavailable`. Restart JIM and its database to bring them back: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`.
+4. On a rootful Podman host running firewalld, a firewalld reload also removes the rules Podman adds for JIM's network, unless `netavark-firewalld-reload.service` is enabled to put them back; JIM's services then log `No route to host` or, where they can no longer resolve names on their network, `Resource temporarily unavailable`. Restart JIM and its database to bring them back: `sudo systemctl stop jim.service jim-database.service && sudo systemctl start jim-database.service jim.service`. To stop it happening again, enable the service, which the installer does: `sudo systemctl enable --now netavark-firewalld-reload.service`.
 
 A service waits for five minutes. Then it logs one final line, `The database was not reachable within 300s (…); stopping so that the service is restarted`, and stops with exit code 1; Docker's restart policy, or Podman's, starts it again, which begins a fresh five-minute wait. On Podman the restarted service keeps its pod's network, so a fault in that network outlasts the restart: restart JIM and its database, as step 4 shows.
 
@@ -185,6 +185,20 @@ Connect-JIM -Url https://jim.example.com -ApiKey $env:JIM_INFRASTRUCTURE_API_KEY
 ```
 
 `Get-JIMSignInDiagnostic` also shows the redirect URIs JIM sends your identity provider when reached at the address you connected to. When sign-in stops on the identity provider's own error page about a redirect URI, compare them with the ones registered for the portal's client: JIM never sees that error, because the identity provider does not send the browser back.
+
+### Opening JIM shows **Sign-in is unavailable**
+
+The page says why, with the fix filled in, and the `jim.web` log records a warning beginning `Sign-in is unavailable`.
+
+**What it means.** JIM cannot sign anyone in: it does not trust your identity provider's HTTPS certificate, usually because your organisation's own certificate authority issued it, or it cannot reach the identity provider at all. JIM keeps running: synchronisation, Schedules and API keys carry on.
+
+**How to fix.** For a certificate JIM does not trust, trust it for sign-in, as [Trust Your Identity Provider's Certificate](sso-setup/trusting-your-identity-provider.md) shows; before anyone can sign in, that needs the [infrastructure API key](configuration.md#infrastructure-api-key). For an identity provider JIM cannot reach, check `JIM_SSO_AUTHORITY`, and that the JIM host can reach it over HTTPS.
+
+### A script's API key is refused with `401 Unauthorized`
+
+**What it means.** JIM reads an API key only from the `Authorization` header, as `Bearer jim_ak_...`, so a key sent anywhere else, such as in the `X-API-Key` header the PowerShell module of v0.16.0 or earlier sends, is refused. So is a key JIM has no record of, or one that is disabled or has expired; `Connect-JIM -ApiKey` then stops with `JIM rejected the API key`. A refused request changes nothing.
+
+**How to fix.** Send the key as a bearer token ([API Keys](../api/authentication.md#api-keys)), and keep the PowerShell module at JIM's own version. Check the key under **Admin > API Keys**; an expired infrastructure key is renewed when JIM restarts with `JIM_INFRASTRUCTURE_API_KEY` still set.
 
 ### `Invalid parameter: redirect_uri` when running `Connect-JIM` interactively
 

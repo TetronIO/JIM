@@ -21,9 +21,15 @@ namespace JIM.Application.Servers.Preview;
 /// The toggles change no object's scope; they change what happens to an object whose scope membership is already
 /// decided. The preview therefore answers two different questions and keeps them apart:
 ///
-/// - **Imminent tier:** objects the next synchronisation would already act on (a joined target object whose
-///   Metaverse Object is out of the export rule's scope; a joined Connected System Object out of import scope or
-///   already obsoleted), whose fate the proposal changes now. This is the count an administrator consents to.
+/// - **Imminent tier:** objects the next synchronisation would already act on, whose fate the proposal changes now.
+///   This is the count an administrator consents to. For an export rule these are the joined target objects whose
+///   Metaverse Object is out of the rule's scope: saving flags the rule's Metaverse Objects for review, and the next
+///   synchronisation of any Connected System carries it out. For an import rule they are the joined Connected System
+///   Objects out of import scope or already obsoleted: saving an enabled rule records the change as awaiting
+///   synchronisation, so the next synchronisation of its Connected System, Delta or Full, processes every object of the
+///   type and acts on them. (Before that was recorded a Delta skipped objects that had not changed, so only a Full
+///   Synchronisation reached them.) A disabled rule acts on nothing until it is enabled, and enabling it is recorded in
+///   the same way.
 /// - **Exposure tier** (outbound only): objects nothing happens to on save, but whose fate on every *future*
 ///   scope exit changes with the proposed action. This is what makes "3,400 objects in this system move from
 ///   Disconnect to Delete" readable at a glance without overstating what the save itself does.
@@ -345,7 +351,9 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     /// <summary>
     /// The inbound walk: every joined object of the import rule's type, classified by whether the next
     /// synchronisation would apply the Out-of-Scope Action to it (already obsoleted, or out of scope of every
-    /// import rule), and whether the governing action actually changes for that path under the proposal.
+    /// import rule), and whether the governing action actually changes for that path under the proposal. The next
+    /// synchronisation is the Connected System's next Delta or Full, because saving the change records the type as
+    /// awaiting synchronisation and that run then processes every object of it.
     /// </summary>
     private async IAsyncEnumerable<PreviewDelta> EvaluateInboundAsync(SyncRule rule, int csoTypeId,
         SyncRuleDestructiveToggleProposal proposal, [EnumeratorCancellation] CancellationToken cancellationToken)

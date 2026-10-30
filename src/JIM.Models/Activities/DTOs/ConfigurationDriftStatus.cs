@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Staging.DTOs;
+
 namespace JIM.Models.Activities.DTOs;
 
 /// <summary>
@@ -71,4 +73,21 @@ public class ConfigurationDriftStatus
     /// when there are none.
     /// </summary>
     public ConfigurationChangeClass HighestChangeClass { get; init; }
+
+    /// <summary>
+    /// The Object Types whose objects this system's next synchronisation will all process, because Synchronisation Rule or
+    /// Object Matching Rule changes saved since it last did so can change what they produce (#2615). Longest waiting first.
+    /// Empty when nothing is waiting.
+    /// <para>
+    /// These are not part of the drift counted above: an ordinary Delta or Full Synchronisation applies them, so no Full
+    /// Synchronisation is called for. They are reported whether or not drift itself can be determined, because the
+    /// changes are real either way.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ObjectTypeAwaitingSynchronisation> AwaitingSynchronisation { get; init; } = [];
+
+    /// <summary>
+    /// True when at least one Object Type is waiting for the system's next synchronisation to process it in full.
+    /// </summary>
+    public bool HasChangesAwaitingSynchronisation => AwaitingSynchronisation.Count > 0;
 }

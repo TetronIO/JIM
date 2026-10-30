@@ -45,6 +45,10 @@ public class ConfigurationChangePreflightServiceTests
         _serviceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.ServiceSettings).Returns(_serviceSettingsRepo.Object);
+        // The preflight also states what the save will do (#2615), which reads the Connected System and Metaverse
+        // repositories for the counts and names it gives; these tests are about the classification, so they stay empty.
+        _repo.Setup(r => r.ConnectedSystems).Returns(new Mock<IConnectedSystemRepository>().Object);
+        _repo.Setup(r => r.Metaverse).Returns(new Mock<IMetaverseRepository>().Object);
 
         SetChangeTrackingEnabled(true);
         SetHashKey();

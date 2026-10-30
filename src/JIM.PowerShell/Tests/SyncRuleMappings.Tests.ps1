@@ -598,7 +598,7 @@ Describe 'Remove-JIMSyncRuleMapping' {
             }
         }
 
-        It 'Uses the deferred-recall wording, because a mapping recall happens at the next Full Synchronisation' {
+        It 'Uses the deferred-recall wording, because a mapping recall happens at the next synchronisation' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
                 Mock Invoke-JIMApi {

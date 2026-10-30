@@ -28,7 +28,9 @@ function Get-JIMMetaverseObjectType {
 
     .OUTPUTS
         By default, one page of Object Types, each in summary. With -Id or -Name, the Object Type in full, with its
-        deletion settings and any warning about them.
+        deletion settings and any warning about them. The full form also carries ExportReviewPendingCount: the
+        Metaverse Objects of the type flagged for review against every export Synchronisation Rule at the next
+        synchronisation of any Connected System.
 
     .EXAMPLE
         Get-JIMMetaverseObjectType

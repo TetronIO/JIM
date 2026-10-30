@@ -3,7 +3,7 @@ title: Backup & Disaster Recovery
 description: Back up JIM's database and encryption keys as a matched pair, and restore them so every stored secret still decrypts.
 type: how-to
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Backup & Disaster Recovery

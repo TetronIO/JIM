@@ -2,7 +2,8 @@
 <!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
 <!-- Inside the Worker Service (C4 level 3, simplified for customer docs): -->
 <!-- the task processors, the Sync Engine, the Password Delivery Service -->
-<!-- that runs alongside them, and the Connectors the Worker hosts. -->
+<!-- that runs alongside them, and the Connectors the Worker hosts. The -->
+<!-- Connector chips are sized to their names, 18 units apart. -->
 <!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
 <!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
 <!-- Visual language: engineering/DESIGN.md > Diagrams. -->
@@ -10,7 +11,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 810" role="img" aria-labelledby="jimdg-wk-title jimdg-wk-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-wk-title">Inside the Worker Service</title>
-  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. Alongside the Worker Host, the Password Delivery Service runs as a separate loop in the same process, woken by changes to the password queue rather than dispatched as a task, and delivers initial and synchronised passwords through the Connectors. The Connectors layer hosts the LDAP, File/CSV, SQL and SCIM 2.0 connectors.</desc>
+  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export, and its memory guard stops the running work before the Worker runs out of memory, recording why on the Activity; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. Alongside the Worker Host, the Password Delivery Service runs as a separate loop in the same process, woken by changes to the password queue rather than dispatched as a task, and delivers initial and synchronised passwords through the Connectors. The Connectors layer hosts the LDAP, File/CSV, SQL, SCIM 2.0 Client and SCIM 2.0 Service Provider connectors; the SCIM 2.0 Service Provider Connector imports what identity providers have pushed to JIM's SCIM endpoint, kept in the same database, rather than reaching out to a system.</desc>
   <defs>
     <mask id="jimdg-wk-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="810">
       <rect x="0" y="0" width="1160" height="810" fill="#ffffff"/>
@@ -34,7 +35,7 @@
   <g id="jimdg-wk-host">
     <rect class="jimdg-stage" x="340" y="104" width="770" height="64" rx="8"/>
     <text class="jimdg-stage-label" x="725" y="131">Worker Host</text>
-    <text class="jimdg-system-sub" x="725" y="153">polls the task queue · dispatches processors</text>
+    <text class="jimdg-system-sub" x="725" y="153">polls the task queue · dispatches processors · memory guard</text>
   </g>
   <g id="jimdg-wk-processors">
     <rect class="jimdg-stage" x="350" y="228" width="230" height="84" rx="8"/>
@@ -62,14 +63,16 @@
   <g id="jimdg-wk-connectors">
     <rect class="jimdg-layer" x="340" y="626" width="770" height="96" rx="8"/>
     <text class="jimdg-layer-title" x="725" y="652">Connectors</text>
-    <rect class="jimdg-chip" x="356" y="666" width="160" height="44" rx="8"/>
-    <text class="jimdg-chip-label" x="436" y="693">LDAP</text>
-    <rect class="jimdg-chip" x="549" y="666" width="160" height="44" rx="8"/>
-    <text class="jimdg-chip-label" x="629" y="693">File / CSV</text>
-    <rect class="jimdg-chip" x="741" y="666" width="160" height="44" rx="8"/>
-    <text class="jimdg-chip-label" x="821" y="693">SQL</text>
-    <rect class="jimdg-chip" x="934" y="666" width="160" height="44" rx="8"/>
-    <text class="jimdg-chip-label" x="1014" y="693">SCIM 2.0</text>
+    <rect class="jimdg-chip" x="356" y="666" width="110" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="411" y="693">LDAP</text>
+    <rect class="jimdg-chip" x="484" y="666" width="110" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="539" y="693">File / CSV</text>
+    <rect class="jimdg-chip" x="612" y="666" width="110" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="667" y="693">SQL</text>
+    <rect class="jimdg-chip" x="740" y="666" width="140" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="810" y="693">SCIM 2.0 Client</text>
+    <rect class="jimdg-chip" x="898" y="666" width="196" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="996" y="693">SCIM 2.0 Service Provider</text>
   </g>
   <g mask="url(#jimdg-wk-labelcut)">
   <g id="jimdg-wk-flows">

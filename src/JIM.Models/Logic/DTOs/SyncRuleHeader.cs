@@ -103,6 +103,19 @@ public class SyncRuleHeader
     public InboundOutOfScopeAction InboundOutOfScopeAction { get; set; }
 
     /// <summary>
+    /// For an import rule, how many saved changes (to this rule or to others on the same Connected System Object Type) are
+    /// waiting for the Connected System's next synchronisation, which will then process every object of the rule's
+    /// Connected System Object Type. Zero when none are, and for an export rule.
+    /// </summary>
+    public int AwaitingSynchronisationChangeCount { get; set; }
+
+    /// <summary>
+    /// For an export rule, how many Metaverse Objects of the rule's Metaverse Object Type are flagged for review against
+    /// every export rule at the next synchronisation of any Connected System. Zero when none are, and for an import rule.
+    /// </summary>
+    public int ExportReviewPendingCount { get; set; }
+
+    /// <summary>
     /// Creates a header from a SyncRule entity.
     /// </summary>
     public static SyncRuleHeader FromEntity(SyncRule entity)

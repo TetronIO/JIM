@@ -2313,8 +2313,20 @@ public partial class ActivityRepository : IActivityRepository
 
     public async Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass)
     {
+        // A change recorded as awaiting synchronisation, applied or not, is left out (#2615). The Connected System's next
+        // synchronisation carries it to the objects that already exist, so it is neither a reason to run a Full
+        // Synchronisation nor, once applied, anything still to do. The recorded row names the Activity that saved the
+        // change, which is how the two are matched; the drift indicator reports the waiting ones separately. Every change
+        // JIM does not apply by itself (an export Attribute Flow edit, a Metaverse Attribute change) has no row and stays.
+        //
+        // Nor is a change the save judged to need no Full Synchronisation (#2615): an export rule's scope or Deprovisioning
+        // Action change is applied by the review the save flags, at the next synchronisation of any Connected System, and has
+        // no row to match. The judgement is on the Activity, and only an explicit false leaves a change out: a null is a change
+        // captured before it was recorded, or one the save could not judge, and counts as it always did.
         return await Repository.Database.Activities
-            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass)
+            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass
+                        && a.ConfigurationChangeNeedsFullSynchronisation != false
+                        && !Repository.Database.ConfigurationChangeSynchronisations.Any(c => c.ConfigurationChangeActivityId == a.Id))
             .Select(a => new ConfigurationChangeImpactData
             {
                 When = a.Created,

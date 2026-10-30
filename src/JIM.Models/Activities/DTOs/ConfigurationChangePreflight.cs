@@ -56,6 +56,25 @@ public class ConfigurationChangePreflight
         Items.Where(i => i.Class == ConfigurationChangeClass.Destructive);
 
     /// <summary>
+    /// When the change reaches existing objects, as the save will treat it (#2615). Null where the surface does not
+    /// evaluate that (only a Synchronisation Rule does today), so the acknowledgement falls back to its general reminder
+    /// that a Full Synchronisation applies a change.
+    /// </summary>
+    public ConfigurationChangeEffect? Effect { get; init; }
+
+    /// <summary>
+    /// A copy of this preflight carrying <paramref name="effect"/>. The shared <see cref="None"/> and
+    /// <see cref="Unknown"/> results are never given one, so a result stays what it says it is wherever it is used.
+    /// </summary>
+    public ConfigurationChangePreflight WithEffect(ConfigurationChangeEffect effect) => new()
+    {
+        HighestClass = HighestClass,
+        Items = Items,
+        BaselineUnavailable = BaselineUnavailable,
+        Effect = effect
+    };
+
+    /// <summary>
     /// The result for a save that needs no acknowledgement: nothing changed, nothing is known to have changed, or the
     /// change is a create (which has no prior state, so nothing existing is at risk).
     /// </summary>

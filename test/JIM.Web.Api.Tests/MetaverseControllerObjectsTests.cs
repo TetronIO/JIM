@@ -589,6 +589,24 @@ public class MetaverseControllerObjectsTests
         }
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task GetObjectAsync_ScopeReviewFlag_IsReportedAsExportReviewPendingAsync(bool flagged)
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(new MetaverseObject
+        {
+            Id = id,
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = [],
+            ScopeReviewPending = flagged
+        });
+
+        var dto = (MetaverseObjectDto)((OkObjectResult)await _controller.GetObjectAsync(id)).Value!;
+
+        Assert.That(dto.ExportReviewPending, Is.EqualTo(flagged));
+    }
+
     [Test]
     public async Task GetObjectAsync_NoChangeHistory_LeavesCreatedByAndLastUpdatedByEmptyAsync()
     {

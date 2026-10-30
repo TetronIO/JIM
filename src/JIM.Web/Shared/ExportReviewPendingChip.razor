@@ -1,0 +1,34 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* How many Metaverse Objects of a type are flagged for review against every export rule (#2615). The review happens at the
+   next synchronisation of any Connected System, whichever one it is, which the tooltip says. Renders nothing for a count
+   of zero: silence is the reward for a type with nothing waiting. Shared by the Synchronisation Rule page's identity strip
+   and the Metaverse Object Type page, so the two say it the same way. *@
+@if (Count > 0)
+{
+    <MudTooltip Arrow="true" Placement="Placement.Top">
+        <TooltipContent>
+            <TooltipText Text="Reviewed against every export rule at the next synchronisation of any Connected System." />
+        </TooltipContent>
+        <ChildContent>
+            <MudChip T="string" Color="Color.Info" Variant="Variant.Text" Class="@Class" data-testid="jim-export-review-pending-chip">
+                Export review pending: @Count.ToString("N0")
+            </MudChip>
+        </ChildContent>
+    </MudTooltip>
+}
+
+@code {
+    /// <summary>
+    /// How many Metaverse Objects of the type are flagged for review. Zero renders nothing.
+    /// </summary>
+    [Parameter]
+    public int Count { get; set; }
+
+    /// <summary>
+    /// Classes for the surrounding geometry (margins), never for restyling the chip.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+}

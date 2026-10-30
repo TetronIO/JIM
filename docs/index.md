@@ -3,7 +3,7 @@ title: Junctional Identity Manager Docs
 description: A modern, self-hosted Identity Management system for organisations with complex identity synchronisation requirements.
 type: landing
 audience: evaluator
-validated: v0.16.0
+validated: v0.17.0
 template: home.html
 hide:
   - navigation
@@ -60,11 +60,11 @@ hide:
 
     Fully functional without internet connectivity. No cloud dependencies; designed for sensitive and high-assurance environments.
 
--   :material-puzzle-outline:{ .lg .middle } **[Extensible Connectors](connectors/index.md)**
+-   :material-puzzle-outline:{ .lg .middle } **[Built-in Connectors](connectors/index.md)**
 
     ---
 
-    Built-in LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors, with a framework for developing custom connectors for bespoke scenarios.
+    LDAP, File, SCIM 2.0 and SQL (Microsoft SQL Server, Oracle Database) connectors ship with JIM, with nothing extra to install, and every one synchronises through the same Metaverse.
 
 -   :material-sort:{ .lg .middle } **[Attribute Priority](concepts/attribute-priority.md)**
 

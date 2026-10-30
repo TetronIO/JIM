@@ -14,6 +14,7 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -331,6 +332,20 @@ else if (_drift is { TrackingDisabled: true })
     </MudAlert>
 }
 
+@* ─── Changes awaiting synchronisation (#2615) ─── *@
+@* One notice per Object Type the next synchronisation will process in full. Reported whether or not drift can be
+   determined (the changes are real either way), and separate from the drift notice above, which never counts them: an
+   ordinary Delta or Full Synchronisation applies them, so no Full Synchronisation is called for. *@
+@if (_drift is { HasChangesAwaitingSynchronisation: true })
+{
+    var awaitingRunProfile = AwaitingSynchronisationRunProfile.Preferred(_connectedSystem?.RunProfiles);
+    foreach (var awaiting in _drift.AwaitingSynchronisation)
+    {
+        <AwaitingSynchronisationNotice @key="awaiting.ConnectedSystemObjectTypeId" Entry="awaiting" RunProfile="awaitingRunProfile"
+                                       OnRunNow="RunAwaitingSynchronisationNowAsync" Class="mt-2 mb-6" />
+    }
+}
+
 @if (_connectedSystem != null)
 {
     <NavigableMudTabs TabPanelsClass="pt-6" Class="mt-2">
@@ -455,6 +470,17 @@ else if (_drift is { TrackingDisabled: true })
     {
         _fullSynchronisationPreviewRequest = new FullSynchronisationPreviewRequest(Guid.NewGuid(), runProfileId);
         NavManager.NavigateTo($"/admin/connected-systems/{Id}");
+    }
+
+    /// <summary>
+    /// "Run now" on a notice of changes awaiting synchronisation (#2615): opens the queue dialog on this Connected System with
+    /// the Run Profile that applies them chosen. The dialog queues the run and says so; the notices stay until the run has
+    /// applied the changes, so the page is reloaded to follow it when a run was queued.
+    /// </summary>
+    private async Task RunAwaitingSynchronisationNowAsync()
+    {
+        if (await QueueRunProfileDialog.ShowAsync(DialogService, Id))
+            await ReloadConnectedSystemAsync();
     }
 
     private void OnFullSynchronisationPreviewRequestHandled(Guid requestId)

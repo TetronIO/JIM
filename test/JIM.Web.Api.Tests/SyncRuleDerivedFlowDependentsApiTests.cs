@@ -64,6 +64,8 @@ public class SyncRuleDerivedFlowDependentsApiTests
         // Saves read the configuration test cases covering what they save (the save gate, #2055 Phase 4b).
         _mockRepository.Setup(r => r.ConfigurationTests).Returns(new EmptyConfigurationTestRepository());
         _mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
+        mockMetaverseRepo.StubExportReviewReads();
+        _mockConnectedSystemRepo.StubConfigurationChangeSynchronisationReads();
         _mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(mockApiKeyRepo.Object);
         _mockRepository.Setup(r => r.Tasking).Returns(new Mock<ITaskingRepository>().Object);

@@ -559,7 +559,7 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
                 .ToList();
 
             // Since #1533/#1536 a removed mapping's contributed values ARE withdrawn: the orphan recall runs at
-            // the next Full Synchronisation of the contributing system, re-electing a surviving contributor or
+            // the next synchronisation of the contributing system, Delta or Full, re-electing a surviving contributor or
             // clearing the attribute. The exception is a removal whose deletion-time choice (#1537) kept the
             // values: their provenance is severed at save, so nothing ever recalls them. Say whichever the
             // proposal carries; the deltas below count neither, because the recall belongs to that later
@@ -591,8 +591,8 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
                 findings.Add(new PreviewValidationFinding(
                     PreviewValidationSeverity.Warning,
                     $"The proposal removes this Synchronisation Rule's Attribute Flow to '{attributeName}'. The " +
-                    "values it contributed are recalled at the next Full Synchronisation of the contributing " +
-                    "Connected System: where another Attribute Flow also contributes the attribute its value " +
+                    "values it contributed are recalled at the next synchronisation of the contributing " +
+                    "Connected System, Delta or Full: where another Attribute Flow also contributes the attribute its value " +
                     "takes over, otherwise the attribute is cleared. No value change is counted below for them, " +
                     "because the recall happens in that synchronisation rather than in this save.",
                     nameof(SyncRule.AttributeFlowRules),

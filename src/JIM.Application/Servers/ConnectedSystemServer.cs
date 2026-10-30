@@ -81,17 +81,17 @@ public partial class ConnectedSystemServer
     // type-specific snapshot builders.
     // -----------------------------------------------------------------------------------------------------------------
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.ConnectedSystem, connectedSystem.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(connectedSystem, hashKey),
             $"Connected System {connectedSystem.Id}");
     }
 
-    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    private async Task<ConfigurationChangeCaptureOutcome> CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+        return await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
             ActivityTargetType.SynchronisationRule, syncRule.Id,
             async hashKey => await Application.ConfigurationSnapshots.CreateSnapshotAsync(syncRule, hashKey),
             $"Synchronisation Rule {syncRule.Id}");
@@ -102,14 +102,30 @@ public partial class ConnectedSystemServer
     // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
     // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
     // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
-    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    //
+    // The change is also recorded as awaiting synchronisation (#2615) when it can change what an import produces, which
+    // covers every granular endpoint that routes through here: an Attribute Flow mapping, an Advanced Mode Object
+    // Matching Rule, a schema refresh disabling a flow. A caller whose change cannot affect a synchronisation says so
+    // with recordsAwaitingSynchronisation: false (a configuration test case is the one such caller). Defaulting to
+    // recording is the safe way round: a new caller that forgets the flag processes a type needlessly rather than
+    // leaving its objects wrong.
+    internal async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId, bool recordsAwaitingSynchronisation = true)
     {
         if (syncRuleId <= 0)
             return;
 
         var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
-        if (rule != null)
-            await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (rule == null)
+            return;
+
+        var outcome = await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+        if (recordsAwaitingSynchronisation)
+        {
+            // A granular endpoint flags no export review (only a whole-rule save can move a rule's scope), so an export
+            // Attribute Flow edit made here is left for a Full Synchronisation.
+            RecordWhetherFullSynchronisationIsNeeded(activity, rule, outcome, flaggedExportReview: false);
+            await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, rule, outcome, isNew: false);
+        }
     }
 
     // A configuration change can take away the reason a queued Pending Export change exists: an export Synchronisation
@@ -149,17 +165,13 @@ public partial class ConnectedSystemServer
     // System provisions and deprovisions them against the rule as it now stands (#1925, #1970). Disabling a rule or
     // switching provisioning off flags nothing: neither destroys what already exists. A save that leaves scope and the
     // Deprovisioning Action alone (a rename, an Attribute Flow edit) flags nothing either; a changed Attribute Flow
-    // reaches existing objects through the target's drift detection instead.
-    private async Task FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
+    // reaches existing objects through the target's drift detection instead. Returns whether it flagged, which the save
+    // records with the change for the drift indicator (what the review carries is not left for a Full Synchronisation).
+    private async Task<bool> FlagExportScopeReviewAsync(SyncRule syncRule, bool isNewRule, SyncRuleScopeState? storedState)
     {
-        if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
-            return;
-
-        // A stored state that cannot be read (the rule vanished between the read and the save) is treated as a
-        // change: a needless review costs time, a missed one leaves objects wrongly provisioned.
-        if (!isNewRule && storedState != null && !storedState.ExportScopeMovedBy(syncRule) &&
-            !storedState.DeprovisioningActionChangedBy(syncRule))
-            return;
+        // The decision is the policy's, which the acknowledgement before the save asks too, so the two cannot disagree.
+        if (!ConfigurationChangeSynchronisationPolicy.FlagsExportReview(syncRule, isNewRule, storedState))
+            return false;
 
         var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
         var newlyFlagged = await Application.SyncRepo.FlagMetaverseObjectsOfTypeForScopeReviewAsync(metaverseObjectTypeId);
@@ -167,19 +179,28 @@ public partial class ConnectedSystemServer
             "or what it does to those leaving its scope; flagged {Count} Metaverse Object(s) of type {TypeId} for export scope review " +
             "at the next synchronisation (#1925, #1970)",
             syncRule.Id, LogSanitiser.Sanitise(syncRule.Name), newlyFlagged, metaverseObjectTypeId);
+        return true;
     }
+
+    // Records on the save's Activity whether anything in the change is left for a Full Synchronisation (#2615): the
+    // judgement the acknowledgement before the save stated, asked of the policy with the same outcome and the same two
+    // decisions, kept where the drift indicator reads it so a change synchronisation applies by itself is not counted as
+    // drift. Nothing is recorded when the capture compared nothing, and the Activity then counts as it always did.
+    private static void RecordWhetherFullSynchronisationIsNeeded(
+        Activity activity, SyncRule syncRule, ConfigurationChangeCaptureOutcome outcome, bool flaggedExportReview) =>
+        activity.ConfigurationChangeNeedsFullSynchronisation = ConfigurationChangeSynchronisationPolicy.NeedsFullSynchronisation(
+            outcome, ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(syncRule, outcome), flaggedExportReview);
 
     // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
     // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
     // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
-    internal async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    internal async Task<ConfigurationChangeCaptureOutcome?> CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
     {
         if (connectedSystemId <= 0)
-            return;
+            return null;
 
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-        if (connectedSystem != null)
-            await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        return connectedSystem == null ? null : await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
     }
 
     // Routes an Object Matching Rule change to the configuration history of whichever object owns the rule: the
@@ -202,8 +223,16 @@ public partial class ConnectedSystemServer
             connectedSystemId = objectType?.ConnectedSystemId;
         }
 
-        if (connectedSystemId is > 0)
-            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+        if (connectedSystemId is not > 0)
+            return;
+
+        var outcome = await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
+
+        // The capture above is of the whole Connected System and names no Object Type, so the type the rule is on is
+        // carried through here for the change awaiting synchronisation (#2615).
+        var objectTypeId = rule.ConnectedSystemObjectTypeId ?? rule.ConnectedSystemObjectType?.Id;
+        if (outcome != null && objectTypeId is > 0)
+            await RecordSimpleModeMatchingRuleChangeAwaitingSynchronisationAsync(activity, connectedSystemId.Value, objectTypeId.Value, outcome);
     }
 
     /// <summary>
@@ -978,7 +1007,8 @@ public partial class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
-        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+        await RecordMatchingModeSwitchAwaitingSynchronisationAsync(activity, connectedSystem, newMode, captureOutcome);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -7773,7 +7803,10 @@ public partial class ConnectedSystemServer
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
-        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        var renumbered = await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        // The other contributors the renumbering rewrote get their own configuration version (#2630); done as soon as
+        // the renumbering is persisted so nothing below can leave it unrecorded.
+        await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRuleId, activity.TargetContext);
         // A brand new generated Sequence mapping can still skip the counter ahead: the counter outlives any
         // one flow (plan decision 3), so an earlier, now-deleted generated mapping on the same attribute may
         // have already advanced it.
@@ -7828,7 +7861,10 @@ public partial class ConnectedSystemServer
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
-        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        var renumbered = await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
+        // The other contributors the renumbering rewrote get their own configuration version (#2630); see the
+        // user-initiated overload above.
+        await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRuleId, activity.TargetContext);
         if (mapping.Generation != null)
             mapping.Generation.SequenceSkippedAhead = await Application.UniqueValues.RaiseSequenceStartIfHigherAsync(mapping);
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
@@ -8161,7 +8197,7 @@ public partial class ConnectedSystemServer
     /// <param name="parentActivityId">An optional parent Activity when the deletion is part of a larger decision.</param>
     /// <param name="keepContributedValues">True to keep the values the mapping contributed (their provenance is
     /// severed before the row deletion, permanently exempting them from the orphan recall); false (the default
-    /// on every surface) to leave them to be recalled at the next Full Synchronisation of the contributing system.</param>
+    /// on every surface) to leave them to be recalled at the next synchronisation of the contributing system, Delta or Full.</param>
     public Task<SyncRuleMappingDeletionResult> DeleteSyncRuleMappingAsync(SyncRuleMapping mapping, MetaverseObject? initiatedBy, Guid? parentActivityId = null, bool keepContributedValues = false)
         => DeleteSyncRuleMappingCoreAsync(mapping, initiatedBy, initiatedByApiKey: null, parentActivityId, keepContributedValues);
 
@@ -8179,8 +8215,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// The shared heart of an Attribute Flow mapping deletion (#1537). The default (recall) is exactly the
     /// long-shipped behaviour: nothing queues, the deletion stamps the configuration watermark, and the orphan
-    /// recall withdraws the mapping's contributed values at the next Full Synchronisation of the contributing
-    /// system. Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
+    /// recall withdraws the mapping's contributed values at the next synchronisation of the contributing
+    /// system, Delta or Full (the deletion records the rule's Object Type as awaiting synchronisation). Choosing keep severs the values' Synchronisation Rule provenance BEFORE the row is deleted
     /// (null-provenance values are never recalled, so the exemption is permanent) and records the choice on
     /// the deletion Activity. Only meaningful for import mappings: an export mapping, or one with no target
     /// Metaverse attribute, has contributed nothing and there is nothing to sever.
@@ -8268,7 +8304,11 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
-            await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+        {
+            var renumbered = await ReconcileAttributePriorityAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
+            // The remaining contributors the renumbering rewrote get their own configuration version (#2630).
+            await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRuleId, activity.TargetContext);
+        }
 
         await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await WithdrawQueuedExportChangesAsync(syncRuleId);
@@ -8389,23 +8429,28 @@ public partial class ConnectedSystemServer
     /// <param name="metaverseObjectTypeId">The object type that scopes the priority list (from the mapping's
     /// Synchronisation Rule). When null the attribute's priority list cannot be scoped, so the mapping is left at the
     /// safe-addition sentinel.</param>
-    private async Task AutoAssignImportMappingPriorityAsync(SyncRuleMapping mapping, int? metaverseObjectTypeId)
+    /// <returns>The mappings whose priority was rewritten, which include the new mapping itself and usually the
+    /// other contributors', so the caller can give the Synchronisation Rules they belong to a configuration version
+    /// (<see cref="CaptureAttributePriorityRenumberingOnOtherRulesAsync"/>). Empty when nothing was rewritten.</returns>
+    private async Task<List<SyncRuleMapping>> AutoAssignImportMappingPriorityAsync(SyncRuleMapping mapping, int? metaverseObjectTypeId)
     {
         // Export mappings do not participate in attribute priority; only import mappings target a Metaverse attribute.
         if (!mapping.TargetMetaverseAttributeId.HasValue || !metaverseObjectTypeId.HasValue)
-            return;
+            return [];
 
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId.Value, mapping.TargetMetaverseAttributeId.Value);
 
         // Sole contributor: priority is meaningless, so leave the safe-addition sentinel untouched.
         if (contributors.Count <= 1)
-            return;
+            return [];
 
         var snapshot = SnapshotPriorityState(contributors);
         var changed = RenumberAndCollectChanges(contributors, snapshot);
         if (changed.Count > 0)
             await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        return changed;
     }
 
     /// <summary>
@@ -8423,13 +8468,16 @@ public partial class ConnectedSystemServer
     /// <param name="mappingIdsToPlaceLast">Mappings that must land at the bottom of the list: ones joining it from
     /// elsewhere (a retargeted mapping), or ones whose Synchronisation Rule has just had its deletion queued (#1597).
     /// Omit where nothing is moving, such as a completed deletion.</param>
-    private async Task ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? mappingIdsToPlaceLast = null)
+    /// <returns>The mappings whose priority was rewritten, so the caller can give the Synchronisation Rules they belong
+    /// to a configuration version (<see cref="CaptureAttributePriorityRenumberingOnOtherRulesAsync"/>). Empty when
+    /// nothing was rewritten.</returns>
+    private async Task<List<SyncRuleMapping>> ReconcileAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlySet<int>? mappingIdsToPlaceLast = null)
     {
         var contributors = await Application.Repository.ConnectedSystems
             .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
 
         if (contributors.Count == 0)
-            return;
+            return [];
 
         // An arriving contribution must land last, and its stored priority cannot put it there. The query orders by
         // (Priority asc, Id asc), so while every contributor is still at the sentinel the tie-break is the mapping id,
@@ -8446,19 +8494,20 @@ public partial class ConnectedSystemServer
             // Sole remaining contributor: reset to the safe-addition sentinel (explicit priorities exist only when an
             // attribute has more than one contributor).
             var sole = contributors[0];
-            if (sole.Priority != int.MaxValue)
-            {
-                sole.Priority = int.MaxValue;
-                await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync([sole]);
-            }
+            if (sole.Priority == int.MaxValue)
+                return [];
 
-            return;
+            sole.Priority = int.MaxValue;
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync([sole]);
+            return [sole];
         }
 
         var snapshot = SnapshotPriorityState(contributors);
         var changed = RenumberAndCollectChanges(contributors, snapshot);
         if (changed.Count > 0)
             await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        return changed;
     }
 
     /// <summary>
@@ -8661,14 +8710,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
     {
-        var affectedRuleIds = changed
-            // An unsaved mapping carries only the navigation (the scalar is still default); a persisted one
-            // always carries the scalar, which is required (#1550).
-            .Select(m => m.SyncRuleId != 0 ? m.SyncRuleId : m.SyncRule?.Id ?? 0)
-            .Where(id => id != 0)
-            .Distinct();
-
-        foreach (var ruleId in affectedRuleIds)
+        foreach (var ruleId in GetAffectedSyncRuleIds(changed))
         {
             var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
             if (rule == null)
@@ -8684,9 +8726,106 @@ public partial class ConnectedSystemServer
                 Message = parentActivity.TargetName
             };
             await createChildActivityAsync(childActivity);
-            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            var captureOutcome = await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+
+            // A reorder changes which import rule wins an attribute for the objects of every rule it touches, so each
+            // affected rule's type is recorded as awaiting synchronisation (#2615). If a row cannot be recorded the
+            // child has failed itself; the reorder it belongs to must not be left in progress behind it.
+            try
+            {
+                RecordWhetherFullSynchronisationIsNeeded(childActivity, rule, captureOutcome, flaggedExportReview: false);
+                await RecordConfigurationChangeAwaitingSynchronisationAsync(childActivity, rule, captureOutcome, isNew: false);
+            }
+            catch (ConfigurationChangeSynchronisationNotRecordedException ex)
+            {
+                await FailActivityOfUnrecordedChangeAsync(parentActivity, ex);
+                throw;
+            }
+
             await Application.Activities.CompleteActivityAsync(childActivity);
         }
+    }
+
+    /// <summary>
+    /// The distinct Synchronisation Rules the given mappings belong to.
+    /// </summary>
+    private static IEnumerable<int> GetAffectedSyncRuleIds(IEnumerable<SyncRuleMapping> mappings) =>
+        mappings
+            // An unsaved mapping carries only the navigation (the scalar is still default); a persisted one
+            // always carries the scalar, which is required (#1550).
+            .Select(m => m.SyncRuleId != 0 ? m.SyncRuleId : m.SyncRule?.Id ?? 0)
+            .Where(id => id != 0)
+            .Distinct();
+
+    /// <summary>
+    /// Gives every Synchronisation Rule whose Attribute Flow was renumbered as a side effect of another rule's change
+    /// (#2630) a configuration version for it, on a child Activity of the Activity that caused it. A rule starting or
+    /// ceasing to contribute to a Metaverse Attribute makes JIM renumber every contributor's <c>Priority</c> to keep
+    /// the list dense (or reset a sole remaining contributor to the "no explicit priority" sentinel). Those numbers are
+    /// part of the other rules' configuration, but the caller versions only the rule it is editing, so the next
+    /// unrelated edit of an affected rule used to show a Priority change nobody made in it ("not set to 1").
+    /// <para>
+    /// Unlike an explicit reorder (<see cref="CaptureAttributePriorityChangeOnAffectedRulesAsync"/>), which changes
+    /// which rule wins and so records each rule's Object Type as awaiting synchronisation, this records nothing
+    /// awaiting synchronisation and judges that no Full Synchronisation is needed
+    /// (<see cref="Activity.ConfigurationChangeNeedsFullSynchronisation"/> false, set explicitly: a null would be counted
+    /// by the configuration drift indicator, and a Priority edit is graded Sync-affecting). That is because the
+    /// renumbering is order-preserving. It rewrites the numbers of the list as it stands in the order the engine
+    /// resolves by (Priority, then mapping id), so no rule's precedence over another rule changes and no value changes.
+    /// This holds for every caller: an added or removed contribution only inserts into or deletes from that order, an
+    /// arriving contribution (a new or retargeted flow) is the edited rule's own and is placed below the rest, and a
+    /// rule whose deletion is queued is already disabled, so its flows take no part in resolution wherever they sit.
+    /// </para>
+    /// <para>
+    /// The child Activity carries the parent's initiator (user, API key or system) through the initiator triad, which
+    /// is all a caller holding only an Activity has, such as the final step of a queued rule deletion on the Worker.
+    /// The edited rule is excluded: its own Activity versions it, with the priorities it ends up with.
+    /// </para>
+    /// </summary>
+    /// <param name="parentActivity">The Activity of the change that caused the renumbering, already created.</param>
+    /// <param name="renumbered">The mappings whose priority the change rewrote. May include the edited rule's own.</param>
+    /// <param name="editedSyncRuleId">The Synchronisation Rule the change was made to, which is not versioned here.</param>
+    /// <param name="editedSyncRuleName">The name of that rule, for the child's message.</param>
+    private async Task CaptureAttributePriorityRenumberingOnOtherRulesAsync(
+        Activity parentActivity, IReadOnlyCollection<SyncRuleMapping> renumbered, int editedSyncRuleId, string? editedSyncRuleName)
+    {
+        if (renumbered.Count == 0)
+            return;
+
+        var versionedRuleCount = 0;
+        foreach (var ruleId in GetAffectedSyncRuleIds(renumbered).Where(id => id != editedSyncRuleId))
+        {
+            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+            if (rule == null)
+            {
+                Log.Debug("CaptureAttributePriorityRenumberingOnOtherRulesAsync: Synchronisation Rule {RuleId} no longer exists; " +
+                    "nothing to version for the renumbering made by Activity {ActivityId}", ruleId, parentActivity.Id);
+                continue;
+            }
+
+            var childActivity = new Activity
+            {
+                TargetName = rule.Name,
+                TargetType = ActivityTargetType.SynchronisationRule,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                SyncRuleId = ruleId,
+                ParentActivityId = parentActivity.Id,
+                Message = $"Attribute priority numbers were renumbered by a change to Synchronisation Rule '{editedSyncRuleName}'. " +
+                          "The order in which Synchronisation Rules contribute to the Metaverse Attribute is unchanged."
+            };
+            await Application.Activities.CreateActivityWithTriadAsync(
+                childActivity, parentActivity.InitiatedByType, parentActivity.InitiatedById, parentActivity.InitiatedByName);
+
+            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+
+            // Explicitly false, never left null (see above): the numbers changed, the precedence did not.
+            childActivity.ConfigurationChangeNeedsFullSynchronisation = false;
+            await Application.Activities.CompleteActivityAsync(childActivity);
+            versionedRuleCount++;
+        }
+
+        Log.Debug("CaptureAttributePriorityRenumberingOnOtherRulesAsync: Activity {ActivityId} renumbered {MappingCount} Attribute Flow(s); " +
+            "gave {RuleCount} other Synchronisation Rule(s) a configuration version for it", parentActivity.Id, renumbered.Count, versionedRuleCount);
     }
 
     /// <summary>
@@ -9961,14 +10100,23 @@ public partial class ConnectedSystemServer
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
         // so the snapshot records the priorities as they end up (#1199).
-        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
+        var renumbered = await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
+        // The other contributors the renumbering rewrote get their own configuration version (#2630); the saved rule's
+        // own is captured below, with the priorities it ends up with.
+        await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRule.Id, syncRule.Name);
 
         // Cases whose new result the save accepted expect it from now on: written before the capture, so they are in
         // this change's Configuration History version.
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, initiatedBy, null);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -10192,12 +10340,21 @@ public partial class ConnectedSystemServer
         // The contributor set may have changed, so bring each affected attribute's priority list back to a dense
         // 1..N. Runs after the write so the query sees the resulting contributors, and before the change capture
         // so the snapshot records the priorities as they end up (#1199).
-        await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
+        var renumbered = await ReconcileAttributePriorityAfterRuleSaveAsync(syncRule, previousImportTargets);
+        // The other contributors the renumbering rewrote get their own configuration version (#2630); the saved rule's
+        // own is captured below, with the priorities it ends up with.
+        await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRule.Id, syncRule.Name);
 
         await Application.ConfigurationTests.ApplyAcceptedResultsAsync(configurationTestGateOutcome, null, initiatedByApiKey);
-        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
+        var captureOutcome = await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await WithdrawQueuedExportChangesAsync(syncRule);
-        await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        var flaggedExportReview = await FlagExportScopeReviewAsync(syncRule, isNewRule, storedScopeState);
+        RecordWhetherFullSynchronisationIsNeeded(activity, syncRule, captureOutcome, flaggedExportReview);
+        // Last, and after the rule has been written: a change recorded as awaiting synchronisation is claimed by the next
+        // synchronisation as soon as it is committed, and that claim assumes the rule it describes is already stored. This
+        // is the portal's and the REST API's whole-rule save, so it also covers enabling and disabling, projection, the
+        // Inbound Out-of-Scope Action and every Scoping Criteria endpoint (#2615).
+        await RecordConfigurationChangeAwaitingSynchronisationAsync(activity, syncRule, captureOutcome, isNewRule);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -10279,7 +10436,7 @@ public partial class ConnectedSystemServer
             // survivors hold positions 1..N for every read, the portal and a positional move, and an administrator
             // tidying the order to them is never working against a rule they have already deleted. Disabled, its
             // mappings take no part in resolution, so dropping them to the bottom changes no value.
-            await PlaceSyncRuleContributionsLastAsync(syncRule);
+            var placedLast = await PlaceSyncRuleContributionsLastAsync(syncRule);
 
             DeleteSyncRuleWorkerTask recallTask;
             if (initiatedByApiKey != null)
@@ -10299,6 +10456,11 @@ public partial class ConnectedSystemServer
             }
             recallTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(recallTask);
+
+            // The other contributors that moved up to close the gap get their own configuration version (#2630), on
+            // children of the recall task's Activity, which exists only now. The renumbering is persisted above, before the
+            // task is queued, so the worker never runs against the order it replaces.
+            await CaptureAttributePriorityRenumberingOnOtherRulesAsync(recallTask.Activity, placedLast, syncRule.Id, syncRule.Name);
 
             Log.Information(
                 "DeleteSyncRuleAsync: Synchronisation Rule {SyncRuleId} contributes {ValueCount} value(s) across {ObjectCount} object(s); disabled the rule and queued recall task {TaskId} (Activity {ActivityId}).",
@@ -10364,8 +10526,13 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await WithdrawQueuedExportChangesAsync(syncRule);
 
+        var renumbered = new List<SyncRuleMapping>();
         foreach (var attributeId in affectedAttributeIds)
-            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId);
+            renumbered.AddRange(await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId));
+
+        // The remaining contributors the renumbering rewrote get their own configuration version (#2630), on children
+        // of this Activity, which carries the initiator on the recall task's final step as much as on a direct delete.
+        await CaptureAttributePriorityRenumberingOnOtherRulesAsync(activity, renumbered, syncRule.Id, syncRule.Name);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -10409,7 +10576,7 @@ public partial class ConnectedSystemServer
     /// pair contributed values, their Synchronisation Rule provenance is severed FIRST (permanently exempting
     /// them from the orphan recall) and the choice is recorded on the save's Activity; then the mapping row and
     /// its sources are deleted properly. Without a keep, provenance stays intact and the shipped orphan recall
-    /// withdraws the values at the next Full Synchronisation of the contributing system.
+    /// withdraws the values at the next synchronisation of the contributing system, Delta or Full.
     /// <para>
     /// A staged removal NOT named in the choices still deletes its row: the mapping's Synchronisation Rule
     /// foreign key is required (#1550), so severing the relationship deletes the orphaned row at save. What the
@@ -10444,7 +10611,8 @@ public partial class ConnectedSystemServer
 
         // The rows themselves are NOT deleted here: the required foreign key guarantees the save's own flush
         // deletes every severed row (and cascades its sources), and the rule save advances the configuration
-        // watermark, so the #1536 orphan recall re-evaluates every object at the next Full Synchronisation.
+        // watermark, so the #1536 orphan recall re-evaluates every object at the next synchronisation (the save records the
+        // rule's Object Type as awaiting synchronisation, so a Delta processes the whole type).
         var keepMessages = new List<string>();
         foreach (var (choice, removedMapping) in removedMappings)
         {
@@ -10522,10 +10690,11 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <param name="syncRule">The just-saved rule. Its mappings now carry database-assigned ids.</param>
     /// <param name="previousTargets">The pre-save state from <see cref="CaptureImportPriorityStateBeforeSaveAsync"/>.</param>
-    private async Task ReconcileAttributePriorityAfterRuleSaveAsync(SyncRule syncRule, Dictionary<int, int> previousTargets)
+    /// <returns>Every mapping whose priority was rewritten, across all the reconciled attributes; empty when none was.</returns>
+    private async Task<List<SyncRuleMapping>> ReconcileAttributePriorityAfterRuleSaveAsync(SyncRule syncRule, Dictionary<int, int> previousTargets)
     {
         if (syncRule.Direction != SyncRuleDirection.Import)
-            return;
+            return [];
 
         var currentTargets = syncRule.AttributeFlowRules
             .Where(m => GetTargetMetaverseAttributeId(m).HasValue)
@@ -10554,9 +10723,12 @@ public partial class ConnectedSystemServer
                      .Where(p => !currentTargets.TryGetValue(p.Key, out var current) || current != p.Value))
             affectedAttributeIds.Add(previous.Value);
 
+        var renumbered = new List<SyncRuleMapping>();
         foreach (var attributeId in affectedAttributeIds)
-            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId,
-                arrivalsByAttribute.GetValueOrDefault(attributeId));
+            renumbered.AddRange(await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId,
+                arrivalsByAttribute.GetValueOrDefault(attributeId)));
+
+        return renumbered;
     }
 
     /// <summary>
@@ -10580,18 +10752,22 @@ public partial class ConnectedSystemServer
     /// when the recall lands. The rule must already be disabled: a disabled rule's mappings take no part in priority
     /// resolution, which is what makes the move change no value. A no-op for export rules.
     /// </summary>
-    private async Task PlaceSyncRuleContributionsLastAsync(SyncRule syncRule)
+    /// <returns>Every mapping whose priority was rewritten, across all the rule's attributes; empty when none was.</returns>
+    private async Task<List<SyncRuleMapping>> PlaceSyncRuleContributionsLastAsync(SyncRule syncRule)
     {
         if (syncRule.Direction != SyncRuleDirection.Import)
-            return;
+            return [];
 
         var mappingIdsByAttribute = syncRule.AttributeFlowRules
             .Where(m => m.TargetMetaverseAttributeId.HasValue)
             .GroupBy(m => m.TargetMetaverseAttributeId!.Value)
             .ToDictionary(g => g.Key, g => (IReadOnlySet<int>)g.Select(m => m.Id).ToHashSet());
 
+        var renumbered = new List<SyncRuleMapping>();
         foreach (var (attributeId, mappingIds) in mappingIdsByAttribute)
-            await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId, mappingIds);
+            renumbered.AddRange(await ReconcileAttributePriorityAsync(syncRule.MetaverseObjectTypeId, attributeId, mappingIds));
+
+        return renumbered;
     }
     #endregion
 

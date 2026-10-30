@@ -579,7 +579,8 @@ public class SyncPreviewServer
     /// <summary>
     /// The export scope review (#892, #1925), previewed as the run drains it (<c>SyncTaskProcessorBase.
     /// ProcessScopeReviewPendingMetaverseObjectsAsync</c>): every Metaverse Object flagged <c>ScopeReviewPending</c>,
-    /// whatever its type and wherever it is joined, evaluated for export scope alone against every target. An object the
+    /// whatever its type and wherever it is joined, evaluated for export scope against every target, with the attribute
+    /// values a write outside synchronisation changed when it records any (#2615). An object the
     /// walk already reviewed is skipped, so its exports are proposed once; the run's second evaluation of it finds the
     /// first one's exports already staged and adds nothing.
     /// </summary>
@@ -597,6 +598,9 @@ public class SyncPreviewServer
             .Where(id => !context.ScopeReviewedMetaverseObjectIds.Contains(id))
             .ToList();
 
+        // The attributes that exist, to read what each object records as changed outside synchronisation (#2615) as the run does.
+        var existingAttributeIds = (await guardedRepository.GetMetaverseAttributeNamesAsync()).Keys;
+
         foreach (var batch in flaggedIds.Chunk(options.PageSize))
         {
             await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, batch.ToList());
@@ -610,8 +614,9 @@ public class SyncPreviewServer
                 }
 
                 var reviewed = new SyncPreviewResult();
+                var unsynchronisedChanges = UnsynchronisedChangeEvaluation.Read(mvo, existingAttributeIds);
                 ComposeOutbound(reviewed, await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([mvo], context.Cache,
-                    synchronisationChanges: ([], null)));
+                    synchronisationChanges: (unsynchronisedChanges.ChangedAttributes, unsynchronisedChanges.RemovedAttributes)));
                 yield return new FullSyncPreviewItem
                 {
                     Kind = FullSyncPreviewItemKind.ExportScopeReview,
@@ -1536,7 +1541,7 @@ public class SyncPreviewServer
     /// <remarks>
     /// The recall is made only as the run would. The configuration change previews ask the other question of a baseline
     /// and a proposal, and a proposal removing a mapping would recall its values on one side only, which those previews
-    /// deliberately leave to the next Full Synchronisation rather than count against the save; nor can a proposal carry
+    /// deliberately leave to the synchronisation that recalls them rather than count against the save; nor can a proposal carry
     /// the keep-the-values choice that severs the provenance the recall reads (<c>SyncRuleAttributeFlowPreviewAdapter</c>).
     /// The re-election follows whatever the ordinary pass withdrew on either path, because it is the same
     /// synchronisation's answer to the same change. Survivors are re-flowed against the working copy and left as they

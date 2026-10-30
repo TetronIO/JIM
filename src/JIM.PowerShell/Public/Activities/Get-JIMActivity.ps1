@@ -84,6 +84,12 @@ function Get-JIMActivity {
         Activity's Run Profile Execution Items. -Follow shows progress while it follows, then returns the Activity
         in full.
 
+        An Activity read in full carries ConfigurationChangeSynchronisations. For a configuration change Activity
+        it has one entry per Object Type the change affects, saying whether a synchronisation has applied the
+        change yet. For a synchronisation run it has one entry per Object Type the run processed in full because of
+        changes saved before it started, with the ObjectCount processed and whether it applied them. It is empty
+        for every other Activity.
+
     .EXAMPLE
         Get-JIMActivity
 

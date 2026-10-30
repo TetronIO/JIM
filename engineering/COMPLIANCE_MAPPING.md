@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Version** | 1.4 |
-| **Last Updated** | 2026-09-23 |
+| **Version** | 1.5 |
+| **Last Updated** | 2026-10-29 |
 | **Status** | Active |
 
 ---
@@ -60,7 +60,7 @@ Tetron currently runs small, focused development teams on JIM. The security and 
 
 - **Branch protection ruleset ("Protect Main")**: all changes to `main` must land via a pull request, all required status checks must pass before merge, branches must be up to date with `main`, and all review comment threads must be resolved. Direct pushes and force-pushes are blocked. See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) section 7 for the full ruleset specification.
 - **Automated baseline review**: every pull request receives automated review before it can be merged, regardless of author: CodeQL static analysis (three required `Analyze` checks) posts review comments on the diff via the github-code-quality integration, and unresolved review threads block the merge. An additional AI-assisted review can be requested on demand by commenting `@claude review this PR` on any pull request.
-- **CI-enforced quality gates**: build and test success (including the real-PostgreSQL `database-tests` tier, the `ldaps-tests` tier, which proves LDAPS certificate validation against real directory servers, the `sql-tls-tests` tier, which proves the SQL Connector's certificate validation against a real Microsoft SQL Server, and the SCIM 2.0 Client Connector's certificate validation, proven over a real TLS handshake within `build-and-test` itself), CodeQL static analysis, OpenAPI document generation, production base image digest-pinning, vulnerability scanning of every built production image, and changelog lint are all required status checks in the branch protection ruleset. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
+- **CI-enforced quality gates**: build and test success (including the real-PostgreSQL `database-tests` tier, the `ldaps-tests` tier, which proves LDAPS certificate validation against real directory servers, the `sql-tls-tests` tier, which proves the SQL Connector's certificate validation against a real Microsoft SQL Server, and the SCIM 2.0 Client Connector's certificate validation, proven over a real TLS handshake within `build-and-test` itself), CodeQL static analysis, OpenAPI document generation, production base image digest-pinning, vulnerability scanning of every built production image, and changelog lint are all required status checks in the branch protection ruleset. The Oracle Database TCPS tier, `oracle-tls-tests`, which proves the SQL Connector's Oracle certificate trust against a real TCPS listener, runs on pull requests that change it but is not a required check. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
 - **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally, and the branch protection ruleset's `required_signatures` rule enforces it server-side: an unsigned commit cannot be merged to `main`.
 - **Scalable human review**: additional reviewer requirements can be layered onto the branch protection ruleset as team composition supports them. The current configuration is designed to extend cleanly; no restructuring is needed to add reviewer requirements.
 
@@ -93,7 +93,7 @@ This directly supports NIST SP 800-53 SI-7 (Software, Firmware, and Information 
 
 | CSF Control | JIM Feature / Practice | Status |
 |-------------|------------------------|--------|
-| PR.AA - Identity Management, Authentication, Access Control | SSO/OIDC mandatory, RBAC, API key auth, JWT Bearer | Implemented |
+| PR.AA - Identity Management, Authentication, Access Control | SSO/OIDC mandatory, RBAC, API key auth, JWT Bearer; API keys scoped to one Connected System for SCIM 2.0 clients (see AC-6) | Implemented |
 | PR.AT - Awareness and Training | Security development guidelines in CLAUDE.md | Implemented |
 | PR.DS - Data Security | AES-256-GCM encryption at rest, TLS in transit, parameterised queries. Passwords JIM delivers to Connected Systems are encrypted at rest under their own key purpose, retained only for a configurable period, and refused on any transport JIM cannot confirm is encrypted (see SC-8 and SC-28) | Implemented |
 | PR.PS - Platform Security | Docker containerisation, minimal base images, non-root execution | Implemented |
@@ -103,7 +103,7 @@ This directly supports NIST SP 800-53 SI-7 (Software, Firmware, and Information 
 
 | CSF Control | JIM Feature / Practice | Status |
 |-------------|------------------------|--------|
-| DE.CM - Continuous Monitoring | Activity logging, structured logging via Serilog, OpenTelemetry-ready | Implemented |
+| DE.CM - Continuous Monitoring | Activity logging, structured logging via Serilog, OpenTelemetry-ready. Every service's heartbeat records its memory and the memory it can draw on, and Service Health reports a service running short of memory before it fails; the Worker stops its running work near exhaustion and records why on each Activity, rather than being killed with nothing recorded | Implemented |
 | DE.AE - Adverse Event Analysis | Activity/RPEI error tracking, UnhandledError detection | Implemented |
 
 ### RESPOND (RS) - Act regarding detected cybersecurity incidents
@@ -187,17 +187,17 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 |---------|-------------|-------------------|
 | AC-2 | Account Management | Metaverse identity lifecycle (join, provision, deprovision) |
 | AC-3 | Access Enforcement | RBAC via claims-based authorisation |
-| AC-6 | Least Privilege | Role-based access, API scopes |
+| AC-6 | Least Privilege | Role-based access, API scopes. The SCIM 2.0 Service Provider accepts only an API key scoped to the one Connected System it pushes to: a scoped key carries no role claims and is refused on every other path, an unscoped Administrator key is refused on `/scim`, and at most two are active per Connected System, for rotation. The REST API refuses an administrator's removal of themselves from the Administrator role |
 | AC-7 | Unsuccessful Logon Attempts | Delegated to OIDC identity provider |
-| AC-14 | Permitted Actions Without Identification | No unauthenticated access permitted |
+| AC-14 | Permitted Actions Without Identification | Anonymous access on the REST API is limited to what a caller needs before it can authenticate (the health probes, version, sign-in configuration and the identity provider's trust status), which the OpenAPI document declares endpoint by endpoint; the portal's anonymous pages only explain why sign-in failed or is unavailable. The readiness check returns status and reason only, never the error behind a failure, which could carry database connection details (the cause is logged instead). The SCIM 2.0 Service Provider's discovery endpoints require authentication like the rest of `/scim` |
 | AC-17 | Remote Access | OIDC/SSO with PKCE for all remote access |
 
 ### AU - Audit and Accountability
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| AU-2 | Event Logging | Activity logging for all sync operations and admin actions |
-| AU-3 | Content of Audit Records | Structured logging with Serilog (timestamp, user, action, outcome) |
+| AU-2 | Event Logging | Activity logging for all sync operations and admin actions. Failed authentications (API keys, SSO sign-ins and refused SSO access tokens) are recorded in the security audit log. Every write a SCIM client makes to the SCIM 2.0 Service Provider is journalled in the same transaction (resource, operation, the attributes changed and ignored, by name, the API key and the client address), with a summary Activity per key every 15 minutes counting creates, updates, deletes and refused requests |
+| AU-3 | Content of Audit Records | Structured logging with Serilog (timestamp, user, action, outcome). A REST write whose caller cannot be attributed to an API key or a Metaverse Object is refused before it changes anything, so no Activity is recorded against nobody |
 | AU-6 | Audit Record Review | Activity history UI, API for programmatic access |
 | AU-12 | Audit Record Generation | Automatic logging via Serilog, Activity/RPEI system |
 
@@ -205,16 +205,16 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| IA-2 | Identification and Authentication (Users) | SSO/OIDC mandatory with PKCE |
-| IA-5 | Authenticator Management | API keys: cryptographically random; credentials: AES-256-GCM encrypted. Passwords JIM sets on accounts: generated Initial Passwords are produced at the moment they are set and stored nowhere; a static Initial Password and queued Password Synchronisation changes are stored encrypted. Attributes holding credential material (such as `unicodePwd`, `userPassword`) cannot be imported, managed or used in an Attribute Flow. The PowerShell module keeps its API key, passwords and other credential values out of its debug output |
-| IA-8 | Identification and Authentication (Non-Org Users) | JWT Bearer tokens for API access |
+| IA-2 | Identification and Authentication (Users) | SSO/OIDC mandatory with PKCE. A token signed by a key the identity provider has retired is refused at once, rather than accepted for up to an hour after a rollover, while a key published without notice is fetched and accepted on first use |
+| IA-5 | Authenticator Management | API keys: cryptographically random; credentials: AES-256-GCM encrypted. Passwords JIM sets on accounts: generated Initial Passwords are produced at the moment they are set and stored nowhere; a static Initial Password and queued Password Synchronisation changes are stored encrypted. Attributes holding credential material (such as `unicodePwd`, `userPassword`, and an attribute named `password` on any Connector) cannot be imported, managed or used in an Attribute Flow, and export evaluation never stages one. API keys scoped for SCIM must expire: 365 days by default, 730 at most. The SCIM 2.0 Service Provider refuses a pushed password and stores none. The PowerShell module keeps its API key, passwords and other credential values out of its debug output |
+| IA-8 | Identification and Authentication (Non-Org Users) | JWT Bearer tokens for API access; API keys are sent as bearer tokens too (`Authorization: Bearer`), and no custom key header is accepted |
 
 ### SC - System and Communications Protection
 
 | Control | Description | JIM Implementation |
 |---------|-------------|-------------------|
-| SC-8 | Transmission Confidentiality | TLS enforced for all communications. REST endpoints that accept a password refuse the request unless JIM can confirm the transport is encrypted (a build-time test fails if a new one lacks the guard). A Connected System's **Only send passwords over an encrypted connection** setting governs every password JIM sends to it (Initial Passwords, administrator-set and synchronised). The SCIM 2.0 Client Connector refuses plain HTTP to anything but a loopback address, for both its Base URL and its OAuth Token Endpoint URL (which receives the Client Secret), at configuration validation and again when a client is built; the SQL Connector encrypts by default (TLS for SQL Server, Native Network Encryption or TCPS for Oracle Database). The LDAP Connector does not chase referrals, so it never opens an unauthenticated connection to a server it was not configured for |
-| SC-17 | Public Key Infrastructure Certificates | Server certificates for LDAPS, SCIM and SQL Server connections are always validated (issuer chain, validity period, host name) against the operating system's trust anchors plus the JIM certificate store (Admin > Certificates), which adds trust and never replaces it; there is no option to skip validation. A refused certificate is shown to the administrator, and trusting it from that failure re-reads it from the server and confirms it is unchanged before adding it |
+| SC-8 | Transmission Confidentiality | TLS enforced for all communications. REST endpoints that accept a password refuse the request unless JIM can confirm the transport is encrypted (a build-time test fails if a new one lacks the guard). A Connected System's **Only send passwords over an encrypted connection** setting governs every password JIM sends to it (Initial Passwords, administrator-set and synchronised). The SCIM 2.0 Client Connector refuses plain HTTP to anything but a loopback address, for both its Base URL and its OAuth Token Endpoint URL (which receives the Client Secret), at configuration validation and again when a client is built; the SCIM 2.0 Service Provider refuses a request over a connection JIM cannot confirm is encrypted, before authentication reads its key; the SQL Connector encrypts by default (TLS for SQL Server, Native Network Encryption or TCPS for Oracle Database). The LDAP Connector does not chase referrals, so it never opens an unauthenticated connection to a server it was not configured for |
+| SC-17 | Public Key Infrastructure Certificates | Server certificates for LDAPS, SCIM and SQL Server connections are always validated (issuer chain, validity period, host name) against the operating system's trust anchors plus the JIM certificate store (Admin > Certificates), which adds trust and never replaces it; there is no option to skip validation. An Oracle Database TCPS connection checks the certificate names the host JIM connects to, and trusts a root from the JIM certificate store through a wallet written for that connection alone. Sign-in reaches the identity provider the same way: a chain the operating system trusts, or one a certificate trusted for sign-in vouches for, never with a host name mismatch waived; each Trusted Certificate is trusted for Connectors, for sign-in, or both. A refused certificate is shown to the administrator, and trusting it from that failure re-reads it from the server and confirms it is unchanged before adding it |
 | SC-12 | Cryptographic Key Management | ASP.NET Core Data Protection API, automatic key rotation |
 | SC-13 | Cryptographic Protection | AES-256-GCM (NIST approved), HMAC-SHA256 |
 | SC-28 | Protection of Information at Rest | Credential encryption via Data Protection API. Queued Password Synchronisation changes are encrypted under a separate Data Protection purpose, so code that can decrypt configuration credentials cannot decrypt a queued password; terminal queue rows are removed by the `History.PasswordEventRetentionPeriod` retention period, which bounds how long JIM holds a password it can no longer use |
@@ -226,7 +226,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | SI-2 | Flaw Remediation | Vulnerability disclosure policy, dependency scanning |
 | SI-3 | Malicious Code Protection | Every production container image built and scanned (Trivy) on every push/PR with results in GitHub code scanning; dependency vulnerability checks via Dependabot |
 | SI-7 | Software Integrity | SHA256 checksums on releases, signed commits |
-| SI-10 | Information Input Validation | Input validation at all API boundaries, DTO annotations |
+| SI-10 | Information Input Validation | Input validation at all API boundaries, DTO annotations. Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when saved as well as when run, so no expression can hold a type, assembly or method (see [`EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md)) |
 
 ### SA - System and Services Acquisition
 
@@ -260,7 +260,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Application Control | Not directly applicable (infrastructure control) | N/A |
 | Patch Applications | Dependency management, vulnerability scanning | Aligned |
 | Configure Microsoft Office Macro Settings | Not applicable | N/A |
-| User Application Hardening | Content Security Policy, MIME-sniffing protection (`X-Content-Type-Options`), clickjacking denial (`X-Frame-Options` + `frame-ancestors`), Referrer-Policy, Permissions-Policy | Aligned |
+| User Application Hardening | Content Security Policy (connections, WebSockets included, to JIM's own origin only, so script injected into the portal cannot send data to another host; the API reference page alone may also reach the identity provider's token endpoint, for its Try It sign-in), MIME-sniffing protection (`X-Content-Type-Options`), clickjacking denial (`X-Frame-Options` + `frame-ancestors`), Referrer-Policy, Permissions-Policy | Aligned |
 | Restrict Administrative Privileges | RBAC, claims-based authorisation, least privilege | Aligned |
 | Patch Operating Systems | Docker base image updates, .NET runtime updates | Aligned |
 | Multi-Factor Authentication | SSO/OIDC with PKCE (MFA via identity provider) | Aligned |
@@ -311,9 +311,9 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Requirement | JIM Alignment | Status |
 |-------------|---------------|--------|
 | Data protection by design (Article 25) | Encryption at rest, access controls, audit logging | Aligned |
-| Data protection by default (Article 25) | Secure defaults, minimal data exposure; credential attributes cannot be imported or flowed, and each class of history (general, configuration change, security event, password) has its own retention period | Aligned |
+| Data protection by default (Article 25) | Secure defaults, minimal data exposure; credential attributes cannot be imported or flowed, the SCIM journal records attribute names and never values, and each class of history (general, configuration change, security event, password) has its own retention period | Aligned |
 | Security of processing (Article 32) | AES-256-GCM encryption, access controls, pseudonymisation support | Aligned |
-| Records of processing activities (Article 30) | Activity logging, sync operation audit trail | Aligned |
+| Records of processing activities (Article 30) | Activity logging, sync operation audit trail; every change a SCIM client pushes is journalled with who sent it and from where, and linked from the Connected System Object change it caused | Aligned |
 | Data portability (Article 20) | API access to metaverse data, export capabilities | Aligned |
 
 ---

@@ -136,7 +136,7 @@ public class GeneratedValuePreviewHelpersTests
     {
         var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1, "Account Name");
 
-        Assert.That(result, Is.EqualTo("1 existing Metaverse Object has no Account Name and would receive one on the next full synchronisation."));
+        Assert.That(result, Is.EqualTo("1 existing Metaverse Object has no Account Name and would receive one at the next synchronisation."));
     }
 
     [Test]
@@ -144,7 +144,7 @@ public class GeneratedValuePreviewHelpersTests
     {
         var result = GeneratedValuePreviewHelpers.DescribeExistingObjectCount(1245, "Account Name");
 
-        Assert.That(result, Is.EqualTo("1,245 existing Metaverse Objects have no Account Name and would receive one on the next full synchronisation."));
+        Assert.That(result, Is.EqualTo("1,245 existing Metaverse Objects have no Account Name and would receive one at the next synchronisation."));
     }
 
     [TestCase(SyncRuleDirection.Import, 1, 5, true)]

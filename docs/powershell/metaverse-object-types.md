@@ -68,7 +68,7 @@ Get-JIMMetaverseObjectType -Name <string> [-IncludeChildObjects]
 
 ### Output
 
-By default, one page of Object Types, each in summary. With `-Id` or `-Name`, the Object Type in full, with its deletion settings and any warning about them.
+By default, one page of Object Types, each in summary. With `-Id` or `-Name`, the Object Type in full, with its deletion settings and any warning about them. The full form also carries ExportReviewPendingCount: the Metaverse Objects of the type flagged for review against every export Synchronisation Rule at the next synchronisation of any Connected System.
 
 **By default**:
 
@@ -103,6 +103,7 @@ By default, one page of Object Types, each in summary. With `-Id` or `-Name`, th
 | `Attributes` | `object[]` | The attributes bound to the Object Type. Listed only when the request includes child objects, so empty in the result of creating or changing an Object Type. Each has `Id`, `Name`, `Type`, `AttributePlurality` and `BuiltIn`. |
 | `DeletionRuleAdvisory` | `string` | A warning about the deletion rule, or empty when there is none. It is set when the rule is WhenLastConnectorDisconnected and enabled export Synchronisation Rules provision objects of this type: a provisioned account counts as a connector, so an object outlives its last source and keeps that source's values. Use WhenAuthoritativeSourceDisconnected if objects should be deprovisioned when their source of record leaves. |
 | `DeletionSourceWarnings` | `object[]` | The Connected Systems that project into this type without being one of its selected authoritative sources, filled in only under the WhenAuthoritativeSourceDisconnected rule. Objects such a system creates that no selected source also holds are never deleted automatically, and objects it shares with a selected source are deleted when that source disconnects. Systems that only join are never listed. Always present, and empty when there is nothing to warn about. Each has `ConnectedSystemId` and `ConnectedSystemName`. |
+| `ExportReviewPendingCount` | `int` | How many Metaverse Objects of this type are flagged for review against every export Synchronisation Rule, which the next synchronisation of any Connected System carries out. Zero when none are. |
 <!-- END GENERATED: Get-JIMMetaverseObjectType -->
 
 ### Examples

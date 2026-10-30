@@ -778,7 +778,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => $"{typeName} Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Changes",
-            ObjectChangeType.ExportScopeReview => $"{typeName} Reviewed Against Export Scope",
+            ObjectChangeType.ExportScopeReview => $"{typeName} Export Review",
             _ => "Synchronisation Complete"
         };
     }
@@ -944,7 +944,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => "The Connected System Object was deprovisioned from the target system.",
             // Other
             ObjectChangeType.NoChange => "The Connected System Object was already up to date.",
-            ObjectChangeType.ExportScopeReview => "A change to an export Synchronisation Rule had this Metaverse Object reviewed against the rule's scope during this synchronisation. The outcomes below show what the review did.",
+            ObjectChangeType.ExportScopeReview => "This Metaverse Object was reviewed against the export Synchronisation Rules during this synchronisation, because an export rule changed or the object was created or changed outside synchronisation. The outcomes below show what the review did: provisioned it, deprovisioned it, or delivered values changed outside synchronisation.",
             _ => "Synchronisation completed for the Connected System Object."
         };
     }
@@ -972,7 +972,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ObjectChangeType.Deprovisioned => "Deprovisioned",
             // Other
             ObjectChangeType.NoChange => "No Change",
-            ObjectChangeType.ExportScopeReview => "Export Scope Review",
+            ObjectChangeType.ExportScopeReview => "Export Review",
             _ => _activityRunProfileExecutionItem?.ObjectChangeType.ToString()?.SplitOnCapitalLetters() ?? "Unknown"
         };
     }
