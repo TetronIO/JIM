@@ -985,7 +985,9 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           VERSION_TAG: ${{ github.ref_name }}
           OWNER: ${{ github.repository_owner }}
+        # Called in this PowerShell, not through pwsh -File: -File hands every argument over as a plain string, so
+        # the two sites never become a list and the script stops before merging anything (as v0.17.0's did).
         run: |
-          pwsh -File ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
+          ./scripts/screenshots/Merge-ReleaseScreenshots.ps1 -Version $env:VERSION_TAG `
             -Repository "$env:OWNER/junctional.io", "$env:OWNER/tetron.io"
           exit $LASTEXITCODE

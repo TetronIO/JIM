@@ -59,3 +59,34 @@ Describe 'the air-gapped bundle in release.yml' {
         Get-WorkflowJob 'publish-powershell' | Should -Match "-Exclude 'Tests', 'CLAUDE\.md'"
     }
 }
+
+Describe 'publishing the screenshots in release.yml' {
+
+    # v0.17.0's step ran the script with pwsh -File, which hands each argument over as a string, so the two sites never
+    # became a list and the script stopped before merging either pull request (#582). The step's own run block is run
+    # here as Actions runs it, against a stand-in script that records what it was given.
+    It 'hands the merge script both sites and the release tag' {
+        $step = [regex]::Match((Get-WorkflowJob 'publish-screenshots'),
+            '(?ms)^      - name: Merge the screenshot pull requests\s*$.*?^        run: \|\s*$\n(?<run>(?:^          .*\n?)+)').Groups['run'].Value
+        $step | Should -Not -BeNullOrEmpty
+        $run = ($step -split "`n" | ForEach-Object { if ($_.Length -ge 10) { $_.Substring(10) } else { $_ } }) -join "`n"
+
+        $record = Join-Path $TestDrive 'received.json'
+        $stub = Join-Path $TestDrive 'Merge-ReleaseScreenshots.ps1'
+        Set-Content -LiteralPath $stub -Value @"
+param([string]`$Version, [string[]]`$Repository)
+@{ Version = `$Version; Repository = `$Repository } | ConvertTo-Json | Set-Content -LiteralPath '$record'
+"@
+        $script = Join-Path $TestDrive 'step.ps1'
+        Set-Content -LiteralPath $script -Value ($run.Replace('./scripts/screenshots/Merge-ReleaseScreenshots.ps1', $stub))
+
+        $env:VERSION_TAG = 'v0.17.0'; $env:OWNER = 'TetronIO'
+        try { & pwsh -NoProfile -NonInteractive -Command ". '$script'" 2>&1 | Out-Null }
+        finally { Remove-Item Env:VERSION_TAG, Env:OWNER }
+
+        $LASTEXITCODE | Should -Be 0
+        $received = Get-Content -LiteralPath $record -Raw | ConvertFrom-Json
+        $received.Version | Should -Be 'v0.17.0'
+        @($received.Repository) | Should -Be @('TetronIO/junctional.io', 'TetronIO/tetron.io')
+    }
+}
