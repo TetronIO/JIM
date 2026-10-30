@@ -185,12 +185,12 @@
                 </TitleContent>
                 <ChildContent>
                     <MudText Class="mud-text-secondary mb-5">
-                        These settings control how JIM processes exports, independently of connector-specific settings above.
+                        Controls how quickly JIM sends changes to this Connected System during an export.
                     </MudText>
                     <MudTextField T="int?"
                                   Label="Max Export Parallelism"
                                   @bind-Value="ConnectedSystem.MaxExportParallelism"
-                                  HelperText="Number of export batches to process concurrently (1 = sequential). Each parallel batch uses its own database connection and connector instance."
+                                  HelperText="How many batches of changes JIM sends to this system at once. Leave empty to use the Connector's recommended value, or set 1 to send one batch at a time. Higher values finish large exports faster but put more load on the target system."
                                   InputType="InputType.Number"
                                   Variant="Variant.Outlined" />
                 </ChildContent>
