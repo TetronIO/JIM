@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Exchange (and other Windows) Remote PowerShell from Linux: a WinRM transport and Kerberos authentication beneath
+    PowerShell's own remoting engine (System.Management.Automation), through its public custom transport API.
+    This library must never reference JIM.*; a test in Tetron.PowerShellRemoting.Tests enforces it, so the library can
+    later be split out on its own (#2021).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Tetron.PowerShellRemoting</RootNamespace>
+  </PropertyGroup>
+
+</Project>
