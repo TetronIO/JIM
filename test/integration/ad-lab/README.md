@@ -15,6 +15,10 @@ A fourth VM, `adfs-primary`, is an AD FS server joined to PANOPLY.LOCAL (`adfs1.
 `https://adfs.panoply.local/adfs`), so JIM's single sign-on is tested against a real AD FS before a release (#2355). See
 [The AD FS server](#the-ad-fs-server).
 
+`exchange-primary` is an Exchange Server SE Mailbox server joined to PANOPLY.LOCAL (`ex1.panoply.local`), so JIM's
+Exchange recipient provisioning (#2021) and GAL sync (#944) meet a real Exchange server. A second, `exchange-source` in
+RESURGAM.LOCAL, follows for two-way GAL sync. See [The Exchange servers](#the-exchange-servers).
+
 Each forest is at the Windows Server 2016 functional level. Every domain controller carries the same directory content
 as the Samba images (`test/integration/docker/samba-ad-prebuilt/post-provision.sh`): the OUs `Corp`, `Users` and
 `Groups` under it, `TestUsers`, `TestGroups` and `Services`; the `svc-jim` account in the `JIM Connectors` group; the
@@ -28,7 +32,8 @@ than for 5 minutes after, as on Samba (#2287). `Configure` sets it, `Verify` che
 Each forest also carries the **full Exchange organisation**, as an Exchange customer's forest does: Exchange's schema
 (all of its classes and attributes, `extensionAttribute1`-`15` among them), an organisation named after the forest
 (`PANOPLY`, `RESURGAM`, `GENTIAN`) and the domain prepared, made by Exchange Setup itself (`/PrepareSchema`,
-`/PrepareAD`, `/PrepareAllDomains`), the only supported way. No Exchange server is installed. The Samba images carry
+`/PrepareAD`, `/PrepareAllDomains`), the only supported way. The domain controller's build does this; an Exchange
+server added later joins the organisation that is already there and never prepares a forest itself. The Samba images carry
 only a hand-written `extensionAttribute1`-`15`, so scenarios that need more of Exchange's schema run on this lab only.
 Products that extend a forest are listed in `settings.json` `directoryExtensions`; Exchange is the first, and another
 (Skype for Business, say) is added as a new entry and a handler in the `Extend` phase.
@@ -52,6 +57,10 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `guest/Initialize-LabFederationServer.ps1` | Guest | The AD FS server's build phases: `License`, `Prepare`, `Join`, `Farm`, `Verify` |
 | `guest/LabFederationServer.psm1` | Both | The AD FS server's pure functions (tested) |
 | `LabFederationServer.Tests.ps1` | CI (any OS) | Pester tests for `LabFederationServer.psm1` |
+| `host/New-LabExchangeServer.ps1` | Hyper-V host | Builds an Exchange server, a member of a domain controller's forest, and takes the `baseline` checkpoint of both; see [The Exchange servers](#the-exchange-servers) |
+| `guest/Initialize-LabExchangeServer.ps1` | Guest | An Exchange server's build phases: `License`, `Prepare`, `Join`, `Prerequisites`, `Install`, `Configure`, `Verify` |
+| `guest/LabExchangeServer.psm1` | Both | The Exchange servers' pure functions (tested) |
+| `LabExchangeServer.Tests.ps1` | CI (any OS) | Pester tests for `LabExchangeServer.psm1` |
 | `LabDomainController.Tests.ps1` | CI (any OS) | Pester tests for every pure function, the rebuild planning included |
 | `LabDnsForwarder.Tests.ps1` | CI (any OS) | Pester tests for the optional DNS forwarder of the build scripts |
 | `Install-LabScripts.Tests.ps1` | CI (any OS) | Pester tests for the deployment layout and the settings example |
@@ -90,11 +99,27 @@ The hypervisor host needs, once:
    That is the only point at which the conversion is supported, so `Promote` refuses an evaluation edition and `Verify`
    checks the result is `ServerDatacenter`.
 6. **Exchange Server media** for the Exchange organisation: the Exchange Server SE ISO (`ExchangeServerSE-x64.iso`,
-   a free download from the Microsoft Download Center). Only Setup's preparation steps run from it; no Exchange server
-   is installed and no product key is used, but Setup's licence terms are accepted. The schema version the forests
+   a free download from the Microsoft Download Center). The domain controllers' builds run Setup's preparation steps from
+   it, and the Exchange servers install from the same media. No product key is used (an Exchange server runs
+   unlicensed, as a 180-day trial; once the monthly rebuild rebuilds the Exchange servers (#2412), it reinstalls them
+   well inside that period, and until then each must be rebuilt by hand within 180 days of its build), but Setup's licence
+   terms are accepted. The schema version the forests
    get is read from the media (`Setup\Data\SchemaVersion.ldf`), so newer media needs no code change. Microsoft requires
    a Windows Server 2025 schema master to have the November 2025 update (build 26100.7171) or later before Exchange
    extends the schema; the `Extend` phase refuses an older one.
+7. **The Exchange prerequisites that are not on its media**, for the Exchange servers only, downloaded once into one
+   folder (`settings.json` `exchangePrerequisiteDirectory`) under these names, because the lab network has no route out:
+
+   | File | Download | What it is |
+   |------|----------|------------|
+   | `vcredist_2012_x64.exe` | <https://download.microsoft.com/download/1/6/B/16B06F60-3B20-4FF2-B699-5E9B7962F9AE/VSU_4/vcredist_x64.exe> | Visual C++ 2012 Update 4 runtime (x64) |
+   | `vcredist_2013_x64.exe` | <https://aka.ms/highdpimfc2013x64enu> | Visual C++ 2013 runtime (x64) |
+   | `rewrite_amd64_en-US.msi` | <https://download.microsoft.com/download/1/2/8/128E2E22-C1B9-44A4-BE2A-5859ED1D4592/rewrite_amd64_en-US.msi> | IIS URL Rewrite Module 2.1 (x64) |
+
+   These are the ones Microsoft lists for a Mailbox server
+   ([Exchange Server 2019 and SE prerequisites](https://learn.microsoft.com/exchange/plan-and-deploy/prerequisites)) and
+   `Get-LabExchangePrerequisite` names; the fourth, UCMA 4.0, is on the Exchange media, and .NET Framework 4.8.1 is part
+   of Windows Server 2025. The build refuses any file without a valid Microsoft Corporation signature.
 
 Preparing the host is the ci-runners repository's job (its `docs/hyperv-host.md`). Then deploy the scripts with
 `Install-LabScripts.ps1`, described in "Deploying to the host" below: the runner calls
@@ -165,6 +190,8 @@ the first build below is easiest when it is driven from the same values:
 | `directoryExtensions` | The products extending every forest, in the order applied: `[{ "product": "Exchange", "isoPath": "<Exchange Server SE ISO>" }]`. Empty or absent builds plain forests |
 | `domainControllers` | Per virtual machine (`dc-primary`, `dc-source`, `dc-target`): `domain`, `ipAddress`, `prefixLength`, `gateway` (also the host's address on `Lab`, which leads nowhere by design: the switch has no uplink), `enableRecycleBin` |
 | `federationServers` | Per AD FS server (`adfs-primary`): `domainController` (the VM whose forest it joins; its domain and address come from there), `ipAddress`, `prefixLength`, `gateway`, and optionally `computerName` (default `adfs1`) and `serviceName` (default `adfs`) |
+| `exchangeServers` | Per Exchange server (`exchange-primary`): `domainController` (the VM whose forest it joins; its domain and address come from there), `ipAddress`, `prefixLength`, `gateway`, and optionally `computerName` (default `ex1`). It installs from the `directoryExtensions` Exchange media |
+| `exchangePrerequisiteDirectory` | The folder holding the Exchange prerequisites that are not on its media (host prerequisite 7) |
 
 There is no `dnsForwarder`: the lab network has no uplink, so a domain controller has nothing to forward DNS to and
 resolves through itself.
@@ -387,6 +414,74 @@ The runner does not give JIM the certificate: the scenario trusts it the way an 
 The run needs the variable `JIM_AD_LAB_ADFS_PRIMARY_ADDRESS` (10.99.0.21 in the example settings) in the `jim-ad-lab`
 environment. `JIM_AD_LAB_ADFS_PRIMARY_HOST` (default `adfs.panoply.local`) and `JIM_AD_LAB_ADFS_PRIMARY_VM` (default
 `adfs-primary`) are optional.
+
+## The Exchange servers
+
+`exchange-primary` is a Windows Server 2025 member server running Exchange Server SE with the Mailbox role, joined to
+PANOPLY.LOCAL as `ex1.panoply.local`, so JIM's Exchange recipient provisioning (#2021) and GAL sync (#944) meet a real
+Exchange server (#2412). `exchange-source`, the same in RESURGAM.LOCAL, follows as a settings change for two-way GAL
+sync. GENTIAN.LOCAL stays without one. Each is built like the AD FS server (the same media, unattended install and AVMA
+licensing) by `host/New-LabExchangeServer.ps1`, which drives `guest/Initialize-LabExchangeServer.ps1` through these
+phases:
+
+| Phase | What it does |
+|-------|--------------|
+| `License` | As for the domain controllers: converts evaluation media to full Datacenter |
+| `Prepare` | Renames the computer `ex1`, sets its static address, resolves through its domain controller, switches automatic Windows Update off, stops the machine account password changing (as on the AD FS server), sets Remote Registry to Automatic (Exchange requires it) and fixes the page file at a quarter of memory (Exchange's system requirements) |
+| `Join` | Joins the forest as its Administrator |
+| `Prerequisites` | Installs the Windows features Microsoft lists for a Mailbox server, then the Visual C++ 2012 and 2013 runtimes and IIS URL Rewrite (copied in by the host after checking their signatures) and UCMA 4.0 (from the Exchange media, attached for this phase and `Install` only) |
+| `Install` | Runs Exchange Setup unattended (`/Mode:Install /Roles:Mailbox`), joining the forest's existing organisation (`PANOPLY`) and naming the first database `MDB01`. It first refuses a forest whose Exchange schema is not this media's, or whose organisation is not the forest's own: the domain controller's build prepares forests, not this one |
+| `Configure` | Through Exchange Remote PowerShell: the second database, `MDB02`, excluded from automatic mailbox distribution so #2021 can prove Exchange honours that; `svc-jim` in **Recipient Management**; the GAL sync contacts OU, `OU=GALSync,OU=Corp`; and Exchange's own certificate for `ex1.panoply.local`, exported as `exchange-primary-ca.cer` (as the LDAPS certificates are) and trusted on the server. The `/PowerShell` virtual directory keeps its default authentication (Kerberos), because that is what JIM must handle |
+| `Verify` | Everything above read back, Exchange's services (`Test-ServiceHealth`), then the cmdlets JIM will drive: a mailbox enabled on a throwaway user (landing in `MDB01`, the only database open to distribution) and removed with `-Permanent`, a mail contact enabled in `OU=GALSync` and removed, no disconnected mailbox left behind, a new Remote PowerShell session over HTTP with Kerberos at `http://ex1.panoply.local/PowerShell/` (Microsoft's documented connection: Kerberos encrypts the payload), and a Kerberos challenge from `https://ex1.panoply.local/PowerShell/` with a trusted certificate. It does not open a WinRM session over HTTPS: with Exchange's default `/PowerShell` settings the Windows WinRM client loops on 401 and 200 there and never connects; which transport JIM uses is #2021's question. It reports how long after boot Remote PowerShell answered and the services were healthy |
+
+Nothing about JIM is configured here, beyond `svc-jim`'s role group: #2021 sets JIM up the way customers will.
+
+**It is a pair with its domain controller**, like the AD FS server, but more tightly. Exchange keeps its configuration
+and every recipient in the directory, and the mailboxes on the server, so reverting one without the other would leave
+mailboxes whose users no longer exist:
+
+- Building a new Exchange server first reverts its domain controller to `baseline`. When the server is built, the script
+  takes `baseline` of both, and removes the domain controller's `populated-*` checkpoints (the runner takes them again).
+- The two are reverted together, each to its own baseline, before any scenario that creates or changes recipients in
+  that forest. LDAP scenarios that never touch Exchange leave the Exchange server off and are unaffected by it.
+- It never changes its machine account password (`DisablePasswordChange=1`), for the same reason as the AD FS server.
+
+Build it after its domain controller, with nothing else running against the lab, from the values in `settings.json`:
+
+```powershell
+$settings = Get-Content C:\jim-ad-lab\settings.json -Raw | ConvertFrom-Json
+Import-Module C:\jim-ad-lab\guest\LabExchangeServer.psm1
+$exchange = ConvertFrom-LabExchangeSetting -Settings $settings -Name 'exchange-primary'
+$admin = Read-Host 'Administrator password' -AsSecureString
+
+$arguments = @{
+    Name = $exchange.Name; DomainControllerName = $exchange.DomainControllerName; IsoPath = $settings.isoPath
+    ExchangeIsoPath = $exchange.ExchangeIsoPath; PrerequisiteDirectory = $exchange.PrerequisiteDirectory
+    VhdDirectory = $settings.vhdDirectory; SwitchName = $settings.switchName
+    IPAddress = $exchange.IPAddress; PrefixLength = $exchange.PrefixLength; Gateway = $exchange.Gateway
+    ComputerName = $exchange.ComputerName; AdministratorPassword = $admin
+}
+$update = Get-ChildItem $settings.cumulativeUpdateDirectory -Filter *.msu -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+if ($update) { $arguments.CumulativeUpdatePath = $update.FullName }
+
+C:\jim-ad-lab\New-LabExchangeServer.ps1 @arguments
+```
+
+It is safe to re-run after a failure; an interrupted Exchange Setup resumes. When it has finished it shuts the server
+down (`-LeaveRunning` keeps it up), because the lab starts it only for the scenarios that use Exchange.
+
+**Its cost.** Each server takes 12 GB of static memory (Microsoft does not support Dynamic Memory for Exchange), 4
+vCPUs and a 150 GB dynamically expanding disk. The host has 64 GB and 8 logical processors, so one Exchange server fits
+beside everything else; with both running, `dc-target` and `adfs-primary` are stopped. CPU is the tighter limit: the
+VMs already have twice as many vCPUs as the host has logical processors, so the build reports how long each phase took
+and the host's CPU use during `Install` and `Verify`, and longer run times are accepted until the host's CPU is
+upgraded.
+
+**Not yet wired in** (#2412): the runner does not yet start the Exchange servers for Exchange scenarios, revert them
+with their domain controllers, or refuse to start them when the host's memory is short; and the
+[monthly rebuild](#monthly-rebuild) does not yet rebuild them. Until it does, a rebuild of `dc-primary` leaves
+`exchange-primary` joined to the forest it replaced, and the server has to be rebuilt by hand afterwards
+(`Remove-LabDomainController.ps1 -Name exchange-primary -Force`, then the build above).
 
 ## Checkpoint lifecycle
 

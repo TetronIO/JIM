@@ -215,6 +215,13 @@ function Get-LabSettingsExample {
         federationServers         = [ordered]@{
             'adfs-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.21'; prefixLength = 24; gateway = '10.99.0.1' }
         }
+        # The Exchange Mailbox servers, each a member of its domain controller's forest (New-LabExchangeServer.ps1),
+        # installed from the directoryExtensions Exchange media. computerName may be added; it defaults to ex1.
+        exchangeServers           = [ordered]@{
+            'exchange-primary' = [ordered]@{ domainController = 'dc-primary'; ipAddress = '10.99.0.31'; prefixLength = 24; gateway = '10.99.0.1' }
+        }
+        # The Exchange prerequisites that are not on its media, downloaded once (README.md, Exchange servers).
+        exchangePrerequisiteDirectory = 'D:\media\exchange-prerequisites'
     }
 
     return ($settings | ConvertTo-Json -Depth 5)
