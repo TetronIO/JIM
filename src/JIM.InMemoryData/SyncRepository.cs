@@ -2729,6 +2729,11 @@ public class SyncRepository : ISyncRepository
         // No-op — no EF change tracker in memory
     }
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+    {
+        // No-op: no EF change tracker in memory
+    }
+
     public int GetChangeTrackerEntityCount() => 0; // No EF change tracker in memory
 
     public void DetachSchemaEntitiesFromTracker()

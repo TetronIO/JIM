@@ -168,7 +168,10 @@ public partial class ConnectedSystemServer
             }
             finally
             {
-                Application.SyncRepo.ClearChangeTracker();
+                // The task and its Activity stay tracked through the clear: the next checkpoint save reloads the task with
+                // its Activity, which after a plain clear would track second instances of both, and the Worker completing
+                // its own instance of the Activity would then collide (Scenario 014).
+                Application.SyncRepo.ClearChangeTrackerRetaining(task, activity);
                 Application.SyncRepo.SetAutoDetectChangesEnabled(true);
             }
         }

@@ -551,6 +551,16 @@ public partial class SyncRepository : ISyncRepository
     public void ClearChangeTracker()
         => _repo.ClearChangeTracker();
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+    {
+        _repo.ClearChangeTracker();
+
+        // Entry().State attaches the one entity and traverses nothing, so none of a retained entity's navigations comes
+        // back with it.
+        foreach (var entity in retained)
+            _context.Entry(entity).State = EntityState.Unchanged;
+    }
+
     public int GetChangeTrackerEntityCount()
     {
         // Use AutoDetectChangesEnabled=false to prevent Entries() from triggering DetectChanges(),

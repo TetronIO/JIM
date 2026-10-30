@@ -297,6 +297,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public void ClearChangeTracker()
         => _inner.ClearChangeTracker();
 
+    public void ClearChangeTrackerRetaining(params object[] retained)
+        => _inner.ClearChangeTrackerRetaining(retained);
+
     public int GetChangeTrackerEntityCount()
         => _inner.GetChangeTrackerEntityCount();
 

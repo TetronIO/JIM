@@ -1411,6 +1411,14 @@ public interface ISyncRepository
     void ClearChangeTracker();
 
     /// <summary>
+    /// Clears the change tracker, then tracks <paramref name="retained"/> again as unchanged, each on its own, without
+    /// the graphs hanging off them (#2598). For a run that must drop what a pass loaded but keeps saving its own task
+    /// and Activity: cleared with everything else, a later load that reached either would track a second instance of it,
+    /// and saving the run's own instance would then collide. In the in-memory test implementation, this is a no-op.
+    /// </summary>
+    void ClearChangeTrackerRetaining(params object[] retained);
+
+    /// <summary>
     /// Returns the number of entities currently tracked by the change tracker.
     /// Used for diagnostics to detect entity accumulation across pages.
     /// </summary>
