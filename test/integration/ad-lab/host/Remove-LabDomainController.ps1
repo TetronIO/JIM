@@ -81,26 +81,22 @@ try {
     $disks = @(Get-VMHardDiskDrive -VMName $Name | ForEach-Object { $_.Path })
     Remove-VM -Name $Name -Force
 
-    # The VM is gone whatever happens to its files, so a file that cannot be deleted is reported, not fatal. It is
-    # named so that it is not left behind unseen: the disk alone is tens of GB.
+    # The VM is gone whatever happens to its files, so the deletes are best effort: everything that can go goes, and
+    # each file that cannot is named, so that it is not left behind unseen (the disk alone is tens of GB).
     $leftovers = [System.Collections.Generic.List[string]]::new()
     foreach ($disk in $disks) {
         if (-not (Test-Path -LiteralPath $disk)) { continue }
-        try {
-            Remove-Item -LiteralPath $disk -Force
-        }
-        catch {
-            $leftovers.Add("$disk ($($_.Exception.Message))")
+        Remove-Item -LiteralPath $disk -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+        foreach ($failure in $removeErrors) {
+            $leftovers.Add("$($failure.TargetObject) ($($failure.Exception.Message))")
         }
     }
 
     # The VM's own folder, only when it is named for the VM (this lab always creates it so).
     if ($vmPath -and (Test-Path -LiteralPath $vmPath) -and ((Split-Path $vmPath -Leaf) -eq $Name)) {
-        try {
-            Remove-Item -LiteralPath $vmPath -Recurse -Force
-        }
-        catch {
-            $leftovers.Add("$vmPath ($($_.Exception.Message))")
+        Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+        foreach ($failure in $removeErrors) {
+            $leftovers.Add("$($failure.TargetObject) ($($failure.Exception.Message))")
         }
     }
     if ($leftovers.Count -gt 0) {

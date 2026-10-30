@@ -407,13 +407,15 @@ if ($null -ne $hostSettings) {
         Write-Host "  skipped        folders: vhdDirectory '$vhdDirectory' does not exist"
     }
     else {
-        $plan = ConvertFrom-LabRebuildSetting -Settings $hostSettings -NamesOnly
-        $folderNames = @($plan.Roles | ForEach-Object { $_.LiveName; $_.CandidateName; $_.PrevName })
-        $vms = @(Get-VM | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Path = $_.Path } })
-        $directories = @(Get-ChildItem -LiteralPath $vhdDirectory -Directory | ForEach-Object { $_.Name })
-        $folders = @(Get-LabControlFolder -Root $vhdDirectory -Vm $vms -FolderName $folderNames -Directory $directories)
-        if ($folders.Count -eq 0) {
-            Write-Host "  none           folders: no lab VM folder beneath $vhdDirectory yet"
+        # Planning is a step of its own, so a setting it cannot read fails only this, not the media steps below.
+        $folders = @()
+        Invoke-HostAccessStep -Name "finding the lab VM folders beneath $vhdDirectory" -Action {
+            $plan = ConvertFrom-LabRebuildSetting -Settings $hostSettings -NamesOnly
+            $folderNames = @($plan.Roles | ForEach-Object { $_.LiveName; $_.CandidateName; $_.PrevName })
+            $vms = @(Get-VM | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Path = $_.Path } })
+            $directories = @(Get-ChildItem -LiteralPath $vhdDirectory -Directory | ForEach-Object { $_.Name })
+            $script:folders = @(Get-LabControlFolder -Root $vhdDirectory -Vm $vms -FolderName $folderNames -Directory $directories)
+            "Found $($script:folders.Count)"
         }
         foreach ($folder in $folders) {
             Invoke-HostAccessStep -Name "$ControlAccount may modify $folder" -Action {
@@ -422,11 +424,15 @@ if ($null -ne $hostSettings) {
         }
     }
 
-    # Hyper-V's worker processes may read the media.
+    # Hyper-V's worker processes may read the media. A directoryExtensions entry that fails validation fails only the
+    # extension media, not the Windows media or its record.
     $media = @()
     if ($isoPath) { $media += $isoPath }
     if ($hostSettings.PSObject.Properties['directoryExtensions']) {
-        $media += @(ConvertFrom-LabDirectoryExtensionSetting -Value $hostSettings.directoryExtensions | ForEach-Object { $_.IsoPath })
+        Invoke-HostAccessStep -Name 'reading directoryExtensions' -Action {
+            $script:media += @(ConvertFrom-LabDirectoryExtensionSetting -Value $hostSettings.directoryExtensions | ForEach-Object { $_.IsoPath })
+            'Read'
+        }
     }
     foreach ($file in $media) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
@@ -456,7 +462,10 @@ if ($null -ne $hostSettings) {
             $image = Get-LabInstallImage -IsoPath $file.FullName
             $record = ConvertTo-LabInstallImageRecord -Path $file.FullName -Length $file.Length -LastWriteTimeUtc $file.LastWriteTimeUtc -Image $image
             $json = ConvertTo-LabInstallImageRecordJson -Record @(Merge-LabInstallImageRecord -Record $records -NewRecord $record)
-            Set-Content -LiteralPath $recordPath -Value $json -Encoding utf8
+            # Written beside it, then moved over it, so a build reading it never sees a half-written file.
+            $partial = "$recordPath.tmp"
+            Set-Content -LiteralPath $partial -Value $json -Encoding utf8
+            Move-Item -LiteralPath $partial -Destination $recordPath -Force
             return "Recorded ($($image.ImageName))"
         }
     }

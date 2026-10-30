@@ -738,6 +738,12 @@ Describe 'The install image record (ConvertTo-, Find-, Merge-LabInstallImageReco
         @(ConvertFrom-LabInstallImageRecordJson -Json '{}').Count | Should -Be 0
     }
 
+    It 'reads a half-written file as no records, with a warning, so it is recorded again rather than stuck' {
+        @(ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [ { "path": "C:\\media\\Windows' -WarningAction SilentlyContinue).Count | Should -Be 0
+        $null = ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [' -WarningVariable warned -WarningAction SilentlyContinue
+        $warned | Should -Not -BeNullOrEmpty
+    }
+
     It 'replaces the record of the same media and keeps the records of other media' {
         $other = ConvertTo-LabInstallImageRecord -Path 'C:\media\other.iso' -Length 1 -LastWriteTimeUtc $script:Written -Image $script:Image
         $newer = ConvertTo-LabInstallImageRecord -Path 'c:\MEDIA\WindowsServer2025-eval.iso' -Length 2 -LastWriteTimeUtc $script:Written -Image $script:Image
@@ -818,6 +824,10 @@ Describe 'Test-LabAccessRuleGranted' {
 
     It 'ignores an inherit-only rule, which does not apply to the object itself' {
         Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 2) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+    }
+
+    It 'does not count a rule that reaches only the direct children as inheritable, since it misses what is deeper' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 1) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
     }
 }
 

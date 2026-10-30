@@ -312,11 +312,10 @@ function Get-RebuildAdapter {
             if ($vmPath -and $script:VhdRoot -and (Test-LabOwnedVmFolder -Path $vmPath -Root $script:VhdRoot -Name $script:FolderName) -and (Test-Path -LiteralPath $vmPath)) {
                 $disks = @(Get-ChildItem -LiteralPath $vmPath -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.vhdx', '.avhdx', '.vhd', '.avhd' })
                 if ($disks.Count -eq 0) {
-                    try {
-                        Remove-Item -LiteralPath $vmPath -Recurse -Force
-                    }
-                    catch {
-                        Write-RebuildLog "Removed $Name, but could not delete its folder $vmPath ($($_.Exception.Message)); an administrator must delete it."
+                    # Best effort: everything that can go goes, and each file that cannot is named.
+                    Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+                    foreach ($failure in $removeErrors) {
+                        Write-RebuildLog "Removed $Name, but could not delete $($failure.TargetObject) ($($failure.Exception.Message)); an administrator must delete it."
                     }
                 }
             }

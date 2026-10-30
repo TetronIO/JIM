@@ -1252,7 +1252,13 @@ function ConvertTo-LabInstallImageRecordJson {
 function ConvertFrom-LabInstallImageRecordJson {
     <#
     .SYNOPSIS
-        The records in the text of media.json; nothing for empty text or a file without images.
+        The records in the text of media.json; nothing for empty text, a file without images, or text that does not
+        parse.
+
+    .DESCRIPTION
+        Unparsable text is warned about and read as no records rather than thrown, so that host setup records the image
+        again (a file that stayed corrupt would otherwise fail every hourly run), and a build without a record reaches
+        the refusal that names the fix.
     #>
     [CmdletBinding()]
     [OutputType([object[]])]
@@ -1265,7 +1271,13 @@ function ConvertFrom-LabInstallImageRecordJson {
     if ([string]::IsNullOrWhiteSpace($Json)) {
         return
     }
-    $document = $Json | ConvertFrom-Json
+    try {
+        $document = $Json | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "The install image records do not parse, so they are read as none: $($_.Exception.Message)"
+        return
+    }
     if ($null -eq $document -or $null -eq $document.PSObject.Properties['images']) {
         return
     }
@@ -1380,7 +1392,9 @@ function Test-LabAccessRuleGranted {
         Each rule carries IdentityReference (the SID, as GetAccessRules with [SecurityIdentifier] gives it),
         FileSystemRights, AccessControlType, InheritanceFlags and PropagationFlags, as enums or their numbers. An
         inherited rule counts, so a folder beneath a granted one needs nothing of its own; an inherit-only rule does
-        not, since it does not apply to the object itself.
+        not, since it does not apply to the object itself. With -Inheritable, a rule must propagate without limit: one
+        that reaches only the direct children (NoPropagateInherit) misses what is deeper, such as a Snapshots folder's
+        contents.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -1408,6 +1422,7 @@ function Test-LabAccessRuleGranted {
         if (([long]$entry.FileSystemRights -band $Rights) -ne $Rights) { continue }
         if (([int]$entry.PropagationFlags -band $inheritOnly) -ne 0) { continue }
         if ($Inheritable -and (([int]$entry.InheritanceFlags -band $containerAndObject) -ne $containerAndObject)) { continue }
+        if ($Inheritable -and ([int]$entry.PropagationFlags -ne 0)) { continue }
         return $true
     }
     return $false
