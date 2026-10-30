@@ -14,6 +14,7 @@ using JIM.Models.Utility;
 using JIM.Web.Causality;
 using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using NUnit.Framework;
 using static JIM.Web.Tests.CausalityConsequenceTestData;
 
@@ -43,7 +44,7 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
     }
 
     [Test]
-    public void Render_Confirmation_IsFoldedUntilShown()
+    public async Task Render_Confirmation_IsFoldedUntilShownAsync()
     {
         var cut = RenderLineage(BuildImportLineage(CompleteCascade()));
 
@@ -51,7 +52,7 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
         Assert.That(fold.TextContent, Does.Contain("Confirmed by the next import"));
         Assert.That(fold.QuerySelector(".evt-card"), Is.Null);
 
-        fold.QuerySelector(".ln-fold-toggle")!.Click();
+        await fold.QuerySelector(".ln-fold-toggle")!.ClickAsync(new MouseEventArgs());
 
         var card = cut.FindAll(".ln-fold")[0].QuerySelector(".evt-card");
         Assert.That(card, Is.Not.Null);
@@ -115,10 +116,10 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
             return Task.FromResult<PagedResultSet<CausalConsequenceMember>?>(Page(page, 120, $"Group {page}"));
         });
 
-        cut.Find(".ln-members-toggle").Click();
+        await cut.Find(".ln-members-toggle").ClickAsync(new MouseEventArgs());
         Assert.That(cut.FindAll(".ln-member"), Has.Count.EqualTo(50), "the walk's first page, with no request");
 
-        await cut.Find(".ln-members-more").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        await cut.Find(".ln-members-more").ClickAsync(new MouseEventArgs());
 
         using (Assert.EnterMultipleScope())
         {
@@ -138,7 +139,7 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
             requests.Add((key, page, search));
             return Task.FromResult<PagedResultSet<CausalConsequenceMember>?>(Page(page, 1, "Project-Pulse"));
         });
-        cut.Find(".ln-members-toggle").Click();
+        await cut.Find(".ln-members-toggle").ClickAsync(new MouseEventArgs());
 
         var search = cut.FindComponent<SearchField>();
         await cut.InvokeAsync(() => search.Instance.ValueChanged.InvokeAsync("pulse"));
@@ -152,7 +153,7 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
     }
 
     [Test]
-    public void Render_Footer_OffersCheckAgainWhileABranchWaits()
+    public async Task Render_Footer_OffersCheckAgainWhileABranchWaitsAsync()
     {
         var checkedAgain = false;
         var lineage = BuildImportLineage(Consequences(endings: [Ending(CausalConsequenceEnding.WaitingForSynchronisation, Yellowstone, "Yellowstone APAC")]));
@@ -162,7 +163,7 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
         Assert.That(footer.TextContent, Does.Contain("1 branch is waiting on a Synchronisation of Yellowstone APAC."));
         Assert.That(footer.TextContent, Does.Contain("Checked at"));
 
-        cut.Find(".ln-check-again").Click();
+        await cut.Find(".ln-check-again").ClickAsync(new MouseEventArgs());
 
         Assert.That(checkedAgain, Is.True);
     }

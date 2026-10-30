@@ -8,6 +8,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -49,7 +50,7 @@ public class CausalitySummaryBandTests
         var strip = cut.Find(".after-strip");
         Assert.That(strip.TextContent, Does.Contain("After this run").And.Contain("Metaverse Object deleted"));
 
-        strip.QuerySelector(".mud-chip")!.Click();
+        await strip.QuerySelector(".mud-chip")!.ClickAsync(new MouseEventArgs());
 
         Assert.That(selected, Is.EqualTo(1));
     }

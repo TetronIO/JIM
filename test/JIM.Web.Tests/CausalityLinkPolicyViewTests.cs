@@ -2,11 +2,13 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Linq;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Enums;
 using JIM.Web.Causality;
 using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using NUnit.Framework;
 using static JIM.Web.Tests.CausalityConsequenceTestData;
 
@@ -37,13 +39,13 @@ public class CausalityLinkPolicyViewTests : JimComponentTestContext
     }
 
     [Test]
-    public void Render_LaterRunsAndACohortsMembers_LinkThroughThePolicy()
+    public async Task Render_LaterRunsAndACohortsMembers_LinkThroughThePolicyAsync()
     {
         var lineage = BuildImportLineage(CompleteCascade(), links: TestCausalityLinks.Instance);
         var cut = Render<CausalityLineageView>(ps => ps.Add(c => c.Model, lineage));
 
         foreach (var toggle in cut.FindAll(".ln-members-toggle").ToList())
-            toggle.Click();
+            await toggle.ClickAsync(new MouseEventArgs());
 
         var itemLinks = cut.FindAll("a.ln-link").Where(a => a.TextContent.Trim() != "View Pending Export"
                                                             && a.TextContent.Trim() != "View Pending Exports").ToList();

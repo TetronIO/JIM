@@ -13,6 +13,7 @@ using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 using NUnit.Framework;
 
@@ -298,13 +299,13 @@ public class CausalityTimelineViewTests
         Assert.That(expanders[0].TextContent, Does.Contain("3 attributes"));
         Assert.That(cut.FindAll(".tl-inline-detail"), Is.Empty);
 
-        cut.Find(".tl-expander").Click();
+        await cut.Find(".tl-expander").ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".tl-inline-detail"), Has.Count.EqualTo(1));
         Assert.That(AttributeRowCount(cut.FindAll(".tl-inline-detail tbody tr")), Is.EqualTo(3));
         Assert.That(cut.Find(".tl-expander").ClassList, Does.Contain("open"));
 
-        cut.Find(".tl-expander").Click();
+        await cut.Find(".tl-expander").ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".tl-inline-detail"), Is.Empty);
     }

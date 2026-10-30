@@ -77,14 +77,14 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_SelectingAnObject_FiltersRowsToItAndDropsTheObjectColumn()
+    public async Task Render_SelectingAnObject_FiltersRowsToItAndDropsTheObjectColumnAsync()
     {
         var cut = Render(NewJoinerTableModel());
 
         var identityButton = cut.FindAll(".tv-nav-btn").Single(b => b.TextContent.Contains("Identity") == false
             && b.QuerySelector(".tv-nav-name")!.TextContent.Trim() == "Liam Allen"
             && b.QuerySelector(".tv-nav-sub")?.TextContent.Trim() == "Person");
-        identityButton.Click();
+        await identityButton.ClickAsync(new MouseEventArgs());
 
         using (Assert.EnterMultipleScope())
         {
@@ -97,12 +97,12 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_DestructiveFilter_ShowsOnlyDestructiveRows()
+    public async Task Render_DestructiveFilter_ShowsOnlyDestructiveRowsAsync()
     {
         var model = CausalityModelBuilder.Build(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
         var cut = Render(CausalityTableModelBuilder.Build(model));
 
-        cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Destructive").Click();
+        await cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Destructive").ClickAsync(new MouseEventArgs());
 
         var rows = cut.FindAll("tbody tr");
         using (Assert.EnterMultipleScope())
@@ -114,11 +114,11 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_AttributeChangesFilter_ShowsOnlyAttributeRows()
+    public async Task Render_AttributeChangesFilter_ShowsOnlyAttributeRowsAsync()
     {
         var cut = Render(NewJoinerTableModel());
 
-        cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Attribute changes").Click();
+        await cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Attribute changes").ClickAsync(new MouseEventArgs());
 
         var rows = cut.FindAll("tbody tr");
         using (Assert.EnterMultipleScope())
@@ -129,11 +129,11 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_ScopeAndJoinFilter_ExcludesEverythingElse()
+    public async Task Render_ScopeAndJoinFilter_ExcludesEverythingElseAsync()
     {
         var cut = Render(NewJoinerTableModel());
 
-        cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Scope & Join").Click();
+        await cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim() == "Scope & Join").ClickAsync(new MouseEventArgs());
 
         var rows = cut.FindAll("tbody tr");
         Assert.That(rows, Has.Count.EqualTo(1));
@@ -351,17 +351,17 @@ public class CausalityTableViewTests
     // ─── Deterministic order with a way back (#1519 Table view fix 9) ───
 
     [Test]
-    public void Render_ClickingAHeaderThreeTimes_RestoresTheOriginalRowOrder()
+    public async Task Render_ClickingAHeaderThreeTimes_RestoresTheOriginalRowOrderAsync()
     {
         var cut = Render(NewJoinerTableModel());
         var originalOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
 
         // Re-queried before each click: a click re-renders, and a handler id captured from the previous
         // render tree is stale.
-        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // ascending
-        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // descending
+        await cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").ClickAsync(new MouseEventArgs()); // ascending
+        await cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").ClickAsync(new MouseEventArgs()); // descending
         var sortedOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
-        cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").Click(); // off: back to the model's own causal order
+        await cut.FindAll(".tv-sort").Single(h => h.TextContent.Trim() == "Change").ClickAsync(new MouseEventArgs()); // off: back to the model's own causal order
 
         var restoredOrder = cut.FindAll("tbody tr").Select(r => r.TextContent).ToList();
         using (Assert.EnterMultipleScope())
@@ -496,12 +496,12 @@ public class CausalityTableViewTests
 
     // ─── Resizable columns (#1519 Table view fix 10) ───
 
-    private static IElement SelectIdentityObject(IRenderedComponent<CausalityTableView> cut)
+    private static async Task<IElement> SelectIdentityObjectAsync(IRenderedComponent<CausalityTableView> cut)
     {
         var identityButton = cut.FindAll(".tv-nav-btn").Single(b =>
             b.QuerySelector(".tv-nav-name")!.TextContent.Trim() == "Liam Allen"
             && b.QuerySelector(".tv-nav-sub")?.TextContent.Trim() == "Person");
-        identityButton.Click();
+        await identityButton.ClickAsync(new MouseEventArgs());
         return identityButton;
     }
 
@@ -535,10 +535,10 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_SingleObjectSelected_SixHeaderCellsAndNoObjectGrip()
+    public async Task Render_SingleObjectSelected_SixHeaderCellsAndNoObjectGripAsync()
     {
         var cut = Render(NewJoinerTableModel());
-        SelectIdentityObject(cut);
+        await SelectIdentityObjectAsync(cut);
 
         var headers = cut.FindAll("thead th");
         using (Assert.EnterMultipleScope())
@@ -558,34 +558,34 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_SingleObjectSelected_ColgroupColCountMatchesHeaderCount()
+    public async Task Render_SingleObjectSelected_ColgroupColCountMatchesHeaderCountAsync()
     {
         var cut = Render(NewJoinerTableModel());
-        SelectIdentityObject(cut);
+        await SelectIdentityObjectAsync(cut);
 
         Assert.That(cut.FindAll("colgroup col"), Has.Count.EqualTo(cut.FindAll("thead th").Count));
     }
 
     [Test]
-    public void Render_ArrowRightOnAColumnGrip_InvokesColumnResizerNudge()
+    public async Task Render_ArrowRightOnAColumnGrip_InvokesColumnResizerNudgeAsync()
     {
         var cut = Render(NewJoinerTableModel());
 
         var attributeGrip = cut.FindAll("thead th").Single(h => h.TextContent.Trim() == "Attribute")
             .QuerySelector(".tv-col-grip")!;
-        attributeGrip.KeyDown(new KeyboardEventArgs { Key = "ArrowRight" });
+        await attributeGrip.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowRight" });
 
         Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.nudge"), Is.True);
     }
 
     [Test]
-    public void Render_ArrowUpOnAColumnGrip_DoesNotInvokeColumnResizerNudge()
+    public async Task Render_ArrowUpOnAColumnGrip_DoesNotInvokeColumnResizerNudgeAsync()
     {
         var cut = Render(NewJoinerTableModel());
 
         var attributeGrip = cut.FindAll("thead th").Single(h => h.TextContent.Trim() == "Attribute")
             .QuerySelector(".tv-col-grip")!;
-        attributeGrip.KeyDown(new KeyboardEventArgs { Key = "ArrowUp" });
+        await attributeGrip.KeyDownAsync(new KeyboardEventArgs { Key = "ArrowUp" });
 
         Assert.That(_context.JSInterop.Invocations.Any(i => i.Identifier == "jimTableViewColumnResizer.nudge"), Is.False);
     }
@@ -699,7 +699,7 @@ public class CausalityTableViewTests
     }
 
     [Test]
-    public void Render_EventWithTooManyAttributeRows_ShowsOneRowWithItsCountsAndAViewAllAction()
+    public async Task Render_EventWithTooManyAttributeRows_ShowsOneRowWithItsCountsAndAViewAllActionAsync()
     {
         CausalityEvent? viewed = null;
         var model = LargeExportTableModel();
@@ -710,7 +710,7 @@ public class CausalityTableViewTests
         var summary = cut.Find(".tv-summary");
         Assert.That(summary.TextContent, Does.Contain("600,000 added").And.Contain("6 removed").And.Contain("1 set"));
 
-        cut.Find(".tv-summary-view-all").Click();
+        await cut.Find(".tv-summary-view-all").ClickAsync(new MouseEventArgs());
 
         Assert.That(viewed, Is.SameAs(model.Rows.Single(r => r.SummarisedRowCount > 0).SummarisedEvent),
             "View all opens the event's own drawer, which reads the rows a window at a time");
