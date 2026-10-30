@@ -10,7 +10,7 @@ Exchange recipient provisioning (#2021) depends on JIM calling Exchange Server c
 
 **Decided after Phase 0 (2026-10-21): option A2.**
 - JIM hosts `System.Management.Automation` 7.6.x (Microsoft) for PSRP, runspaces and serialisation, through PowerShell's public custom transport API. Dependency governance is approved.
-- JIM writes only the WinRM transport and Kerberos authentication, HTTPS first.
+- JIM writes only the WinRM transport and Kerberos authentication. The default is **HTTP with Kerberos message encryption**, as Microsoft documents for Exchange; HTTPS is optional (decided 2026-10-30, see Decisions).
 
 This spike proves that architecture end to end and measures its cost. It is time-boxed to **two weeks of effort**. It ends with a go / no-go decision recorded in this document, not with a shippable feature.
 
@@ -26,8 +26,8 @@ This spike proves that architecture end to end and measures its cost. It is time
 |---|---|---|
 | Q0 | Is there a mature managed .NET client we could adopt instead? | **Answered in Phase 0:** no, but PowerShell's custom transport API removes the need to write PSRP. See Spike Results. |
 | Q1 | Can the Worker container authenticate to an `HTTP/<host>` SPN with Kerberos using .NET `NegotiateAuthentication`? It must work from a username and password (no keytab), with the `libgssapi-krb5-2` already in the image and a `krb5.conf` that JIM generates (see "Kerberos configuration" below). | A passing authentication from the Worker image, using only a generated `krb5.conf` and an in-memory credential cache. First against the sandbox's Samba KDC (Phase 1a), then the lab DC. |
-| Q2 | Does PowerShell's PSRP run over our transport with HTTPS and Kerberos (TLS 1.2 minimum, certificate validation on)? Can it open a remote runspace, run one command with bound parameters, and return output and error records? | `Get-Date`, `Get-Service -Name WinRM` and a deliberately failing command, first against the sandbox stand-in (Phase 1a), then the lab DC's default `Microsoft.PowerShell` endpoint over HTTPS. |
-| Q3 | Is HTTP with Kerberos message encryption (`application/HTTP-Kerberos-session-encrypted`) needed, and does it work? It needs `gss_wrap_iov` interop, which `NegotiateAuthentication` does not expose. | Only if Q2 or Phase 3 shows HTTPS is impractical for Exchange's `/PowerShell`. Otherwise it is recorded as deferred. |
+| Q2 | Does PowerShell's PSRP run over our transport with Kerberos authentication **and Kerberos message encryption over HTTP** (`multipart/encrypted`, `application/HTTP-Kerberos-session-encrypted`)? Encryption goes through P/Invoke to `gss_wrap_iov` and `gss_unwrap_iov` in the image's MIT `libgssapi_krb5`, because `NegotiateAuthentication` has no IOV equivalent. Can it open a remote runspace, run one command with bound parameters, and return output and error records? | `Get-Date`, `Get-Service -Name WinRM` and a deliberately failing command, first against the sandbox stand-in (Phase 1a), then the lab DC's default `Microsoft.PowerShell` endpoint on 5985. The transport must refuse a session that would not be encrypted. |
+| Q3 | Does the optional HTTPS path work where the server accepts it (TLS 1.2 minimum, certificate validation on, Kerberos authentication through `NegotiateAuthentication`)? Why did a Kerberos session over HTTPS to a newly installed Exchange SE loop on 401 and 200 in the lab ([#2021 comment](https://github.com/TetronIO/JIM/issues/2021#issuecomment-6520532342))? | Against the lab DC's 5986 listener, then `exchange-primary` from the Worker image. At minimum, the transport must detect a 401/200 loop and fail fast with a clear error rather than retry for hours. |
 | Q4 | Does the same client work against Exchange's `Microsoft.Exchange` endpoint, including Exchange's restricted (no-language) runspace and its serialisation payload signing (on by default since the November 2023 SU)? | Against the lab Exchange SE server, each with `-DomainController`: `Get-Recipient`, `Get-MailboxDatabase`, `Enable-Mailbox` (with and without `-Database`, and with `-Shared`), `Set-Mailbox -Type Shared`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`, and `Disable-Mailbox`. |
 | Q5 | What do the failures look like? | Captured error records, each mapped to a proposed RPEI error type and to retry or no-retry, for: object not found (replication lag), already enabled, non-universal group passed to `Enable-DistributionGroup`, insufficient RBAC, bad credentials, an untrusted Exchange certificate, clock skew, and Exchange PowerShell throttling (`PowerShellMaxConcurrency`). |
 | Q6 | What does it cost at run time? | Session set-up time, per-cmdlet latency, whether one runspace can serve a whole export batch, safe concurrency against Exchange's default throttling policy, and the Worker image size increase from hosting PowerShell. |
@@ -48,6 +48,7 @@ The prototype is written where the real library would live, so that a "go" keeps
 ```
 src/Tetron.PowerShellRemoting/            # standalone library, no JIM.* references
   Authentication/                         # NegotiateAuthentication wrapper (Kerberos), krb5.conf generation
+  Encryption/                             # gss_wrap_iov / gss_unwrap_iov P/Invoke, HTTP-Kerberos-session-encrypted framing
   WsMan/                                  # SOAP envelopes: Create/Command/Send/Receive/Signal/Delete
   Transport/                              # RunspaceConnectionInfo + ClientSessionTransportManagerBase over WsMan
   RemoteSessionFactory.cs                 # public entry point: opens a remote Runspace over the transport
@@ -60,10 +61,10 @@ PowerShell supplies everything above the transport, so the public surface is Pow
 ```csharp
 using var runspace = await RemoteSessionFactory.OpenAsync(new RemoteSessionOptions
 {
-    ConnectionUri = new Uri("https://ex1.panoply.local/PowerShell/"),
+    ConnectionUri = new Uri("http://ex1.panoply.local/PowerShell/"),   // Kerberos-encrypted payload, as Microsoft documents
     ConfigurationName = "Microsoft.Exchange",
     Credential = credential,                      // Kerberos via NegotiateAuthentication
-    TrustedCaCertificates = caCertificates
+    MessageEncryption = MessageEncryption.Required  // never an unencrypted session
 }, cancellationToken);
 
 using var ps = PowerShell.Create(runspace);
@@ -90,7 +91,7 @@ Operators do not mount a `krb5.conf`. JIM generates one from the settings of eve
 
 - Any LDAP connector, JIM model, UI, REST API or PowerShell module changes. The Exchange cmdlet façade, the recipient types, GAL sync and the staged Exchange step are #2021's first-release phase.
 - NTLM, CredSSP, Basic and certificate authentication.
-- HTTP with message encryption, unless Q3 is triggered.
+- HTTPS beyond Q3's checks (it is optional, not the default).
 - PowerShell host calls (`Read-Host` and so on). The transport rejects them.
 - Disconnected or reconnected sessions, and file copy.
 
@@ -107,7 +108,7 @@ Runs entirely in a Claude Code on the web sandbox, and in CI. The sandbox runs D
 
 - **KDC:** the Samba AD image from `test/integration/docker/samba-ad-prebuilt/`, with a service principal `HTTP/winrm-harness` and a keytab exported for the stand-in.
 - **Stand-in WinRM server:** a small ASP.NET Core test host in `test/integration/remoting-harness/`.
-  - It accepts Kerberos (Negotiate authentication with the keytab) over HTTPS, using a test CA.
+  - It accepts Kerberos (Negotiate authentication with the keytab) and decrypts and encrypts the `HTTP-Kerberos-session-encrypted` payload with the same GSSAPI calls, so both directions of the framing are exercised. An HTTPS listener with a test CA covers Q3.
   - It implements the WS-Management shell operations.
   - It pipes the PSRP payload to and from `pwsh -s`, PowerShell's own out-of-process PSRP server.
 - **Client:** the transport under hosted `System.Management.Automation`, running in the **Worker image**, with a generated `krb5.conf` pointing at the Samba realm (Q1, Q2).
@@ -117,7 +118,8 @@ Runs entirely in a Claude Code on the web sandbox, and in CI. The sandbox runs D
 ### Phase 1b: Real Windows WinRM (days 5 to 6)
 
 Runs on the lab's Linux runner VM, which reaches the lab network.
-- Repeat Q1 and Q2 against `dc1.panoply.local`'s WinRM over HTTPS (5986), from the Worker image.
+- Repeat Q1 and Q2 against `dc1.panoply.local`'s WinRM over HTTP (5985) with message encryption, from the Worker image, then Q3 over HTTPS (5986).
+- Prove the framing against Windows' real implementation: AES256 payloads of several sizes, including ones that span WinRM's 16 KB encryption chunks.
 - Capture the real WinRM exchanges as recorded fixtures for the unit tests.
 
 ### Phase 2: Hardening probes (day 7)
@@ -130,8 +132,8 @@ Runs on the lab's Linux runner VM, which reaches the lab network.
 
 **Prerequisite:** the lab's Exchange Server SE mailbox server, `exchange-primary` (`ex1.panoply.local`), built by [#2412](https://github.com/TetronIO/JIM/issues/2412).
 
-- Run Q4's cmdlets against `Microsoft.Exchange` over HTTPS, including with serialisation payload signing on.
-- Decide Q3: whether HTTPS on `/PowerShell` is practical as JIM's default.
+- Run Q4's cmdlets against `Microsoft.Exchange` over HTTP with Kerberos message encryption, including with serialisation payload signing on.
+- Answer Q3 against Exchange: whether HTTPS works from the Worker image, and if not, that the transport fails fast with a clear error.
 - Collect Q5's Exchange-side failure catalogue and Q6's timings.
 
 ### Phase 4: Decision and write-up (day 10)
@@ -147,12 +149,12 @@ The spike is a **go** for option A2 when all of these hold:
 1. Q1 and Q2 pass from the Worker container image, in the sandbox harness and against the lab DC.
 2. Q4 passes against the lab Exchange SE server for at least `Get-Recipient`, `Enable-Mailbox`, `Set-Mailbox -Type Shared` and `Enable-MailContact`, including with serialisation payload signing on.
 3. The estimated effort to harden the prototype into a production library is no more than **three further weeks**. That covers tests, error mapping, logging without secrets, cancellation and session reuse; it's down from four now that PSRP is Microsoft's.
-4. No finding requires weakening JIM's security baseline: Kerberos only, TLS 1.2+ (or message encryption) always, certificate validation on, and no secrets in logs.
+4. No finding requires weakening JIM's security baseline beyond the one documented exception: Kerberos only, Kerberos AES message encryption on HTTP or TLS 1.2+ on HTTPS (never neither), certificate validation on for HTTPS, and no secrets in logs.
 
 It is a **no-go** in any of these cases:
 - PowerShell's custom transport cannot carry Exchange's endpoint.
 - Serialisation payload signing blocks the hosted client.
-- Neither HTTPS nor message encryption can be made to work against Exchange's `/PowerShell`.
+- Kerberos message encryption cannot be made to interoperate with Windows from the Worker image.
 - The hardening estimate exceeds the threshold.
 
 In that case, the write-up compares option A1 (own PSRP), option B (Windows-side relay) and option C (SSH to a Windows management host) with the evidence gathered.
@@ -182,7 +184,8 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 | Hosting PowerShell enlarges the Worker image and its scan surface | Measure the size increase (Q6). Every transitive package passes the normal Trivy and pinning process. Allow remote runspaces only, never local ones. |
 | PowerShell's major version is tied to .NET's | A .NET upgrade includes the matching `System.Management.Automation` upgrade; the CI harness catches breakage. |
 | Exchange serialisation payload signing rejects the hosted client | Test it explicitly in Phase 3. If it blocks, it is a no-go trigger, not something to work around. |
-| Customers' Exchange `/PowerShell` is only usable over HTTP | Q3 is held in reserve: `gss_wrap_iov` interop against the image's MIT Kerberos, following PSWSMan's approach. |
+| Native GSSAPI interop is ours to get right (buffer handling, IOV layout, MIT versus Heimdal differences) | MIT only, as shipped in the Worker image. Follow PSWSMan's proven IOV approach. Fuzz the framing parser. Test against real Windows in Phase 1b and record fixtures. |
+| Kerberos message encryption is not TLS, which JIM's baseline otherwise requires | A documented, scoped exception in `engineering/COMPLIANCE_MAPPING.md` (SC-8). The transport refuses an unencrypted session and never falls back to one. |
 | The stand-in server agrees with our own misreading of MS-WSMV | Phase 1b against real Windows is mandatory before the decision. Its recorded exchanges become unit fixtures. |
 | The lab Exchange server (#2412) is not ready for Phase 3 | Phases 0 to 2 still answer most of the risk. Phase 3 slips until Exchange is in the lab; the decision waits for it. |
 | Microsoft changes or retires on-premises Remote PowerShell | The cmdlet façade (command plus parameters) has the same shape as the Exchange Online Admin API, so a future REST transport could sit behind the same interface. |
@@ -192,7 +195,11 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 1. **Exchange in the lab:** the AD lab gains two Exchange Server SE mailbox servers, `exchange-primary` in PANOPLY.LOCAL and `exchange-source` in RESURGAM.LOCAL ([#2412](https://github.com/TetronIO/JIM/issues/2412); #2021 is blocked by it). The spike uses `exchange-primary`; the second server exists for #2021's two-way GAL sync tests.
 2. **Kerberos configuration:** JIM generates `krb5.conf` from Connected System settings; operators never mount one. See "Kerberos configuration" above.
 3. **Client architecture (2026-10-21):** option A2. JIM hosts `System.Management.Automation` 7.6.x and writes only the WinRM transport and Kerberos authentication. The dependency is approved under dependency governance.
-4. **Transport security (2026-10-21):** HTTPS first. HTTP with message encryption only if Q3 shows it is needed.
+4. **Transport security (2026-10-30, replacing the 2026-10-21 HTTPS-first decision):**
+   - **The default is HTTP with Kerberos message encryption;** HTTPS is optional.
+   - **Why:** building `exchange-primary`, a Kerberos session over HTTPS looped on 401/200 for hours while HTTP connected at once ([#2021 comment](https://github.com/TetronIO/JIM/issues/2021#issuecomment-6520532342)). Microsoft documents HTTP for Exchange Remote PowerShell, and changing the `/PowerShell` virtual directory is unsupported without its support team.
+   - **What it costs:** `gss_wrap_iov` interop is now required, not a reserve.
+   - **Security:** approved as a documented exception to TLS in transit (`engineering/COMPLIANCE_MAPPING.md`, SC-8).
 5. **Sandbox harness (2026-10-21):** Phase 1a is added, using a Samba KDC and a `pwsh -s` stand-in WinRM server, so most transport work is built and debugged without the lab.
 
 ## Spike Results
@@ -246,4 +253,4 @@ Points to weigh:
 | Ties | None | PowerShell's major version is tied to .NET's |
 | Later open-source split | Clean | Clean. The library would depend on `System.Management.Automation`, which is fine for a public package. |
 
-**Recommendation: A2, HTTPS-first.** The Phase 1 spike should start with HTTPS plus Kerberos through `NegotiateAuthentication`, under PowerShell's PSRP, against the lab DC. HTTP with message encryption over `gss_wrap_iov` follows only if HTTPS turns out to be impractical. **Approved 2026-10-21**, including `System.Management.Automation` under dependency governance (see Decisions).
+**Recommendation: A2, HTTPS-first** (superseded on 2026-10-30 by HTTP with Kerberos message encryption as the default; see Decisions). The Phase 1 spike should start with HTTPS plus Kerberos through `NegotiateAuthentication`, under PowerShell's PSRP, against the lab DC. HTTP with message encryption over `gss_wrap_iov` follows only if HTTPS turns out to be impractical. **Approved 2026-10-21**, including `System.Management.Automation` under dependency governance (see Decisions).
