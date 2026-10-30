@@ -146,6 +146,7 @@ internal static class MetaverseObjectRawReader
             case "CachedDisplayName": mvo.CachedDisplayName = isNull ? null : reader.GetString(ordinal); break;
             case "ScopeReviewPending": mvo.ScopeReviewPending = reader.GetBoolean(ordinal); break;
             case "LastScopeEvaluatedAt": mvo.LastScopeEvaluatedAt = isNull ? null : reader.GetDateTime(ordinal); break;
+            case "UnsynchronisedChangesJson": mvo.UnsynchronisedChangesJson = isNull ? null : reader.GetString(ordinal); break;
             default: throw new InvalidOperationException($"MetaverseObjectRawReader: MetaverseObjects column '{column}' is not read; map it in {nameof(SetMetaverseObjectColumn)}.");
         }
     }
