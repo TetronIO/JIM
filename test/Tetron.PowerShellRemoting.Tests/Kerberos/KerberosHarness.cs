@@ -2,7 +2,6 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Runtime.InteropServices;
-using Tetron.PowerShellRemoting.Kerberos;
 
 namespace Tetron.PowerShellRemoting.Tests.Kerberos;
 
@@ -45,9 +44,7 @@ internal static partial class KerberosHarness
             if (_configured)
                 return;
 
-            var path = Path.Combine(Path.GetTempPath(), $"tetron-remoting-tests-{Environment.ProcessId}.krb5.conf");
-            Krb5Configuration.WriteAsync(path, [new KerberosRealm(Realm, [Kdc!])]).GetAwaiter().GetResult();
-            KerberosEnvironment.UseConfiguration(path);
+            TestKerberosConfiguration.Apply();
             if (SetNativeEnvironmentVariable("KRB5_KTNAME", $"FILE:{Keytab}", 1) != 0)
                 throw new InvalidOperationException("Could not set KRB5_KTNAME.");
             _configured = true;

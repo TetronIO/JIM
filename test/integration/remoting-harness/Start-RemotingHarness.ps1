@@ -38,6 +38,9 @@ $ErrorActionPreference = 'Stop'
 $composeFile = Join-Path $PSScriptRoot 'docker-compose.yml'
 $container = 'remoting-harness-kdc'
 
+# docker-compose.yml requires this for every command, not only the one that starts the stand-in server.
+$env:JIM_REMOTING_HARNESS_DIR = $OutputDirectory
+
 function Invoke-Samba {
     param([Parameter(Mandatory)][string]$Command)
     $output = docker exec $container bash -c "export PATH=/usr/local/samba/bin:`$PATH; $Command" 2>&1
@@ -68,7 +71,8 @@ if ($Down) {
     return
 }
 
-docker compose -f $composeFile up -d kdc | Out-Null
+docker compose -f $composeFile up -d kdc
+if ($LASTEXITCODE -ne 0) { throw 'Could not start the KDC.' }
 
 Write-Host 'Waiting for the KDC to finish provisioning...'
 $deadline = (Get-Date).AddMinutes(20)
@@ -150,7 +154,6 @@ if (-not (Test-Path $tlsCertificate)) {
     Remove-Item $request, $extensions
 }
 
-$env:JIM_REMOTING_HARNESS_DIR = $OutputDirectory
 docker compose -f $composeFile up -d --build winrm-server
 if ($LASTEXITCODE -ne 0) { throw 'Could not build or start the stand-in WinRM server.' }
 
