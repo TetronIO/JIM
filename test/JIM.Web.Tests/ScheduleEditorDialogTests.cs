@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -181,12 +182,12 @@ public class ScheduleEditorDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddStep_NewStep_FollowsTheScheduleAndSaysWhatThatCurrentlyMeans()
+    public async Task AddStep_NewStep_FollowsTheScheduleAndSaysWhatThatCurrentlyMeansAsync()
     {
         _schedule = NightlyHrSync(ScheduleFailureBehaviour.Continue, false, Step(0, 1, 11, ScheduleStepFailureBehaviour.FollowSchedule));
         var provider = OpenStepsTab();
 
-        provider.FindAll("button").First(b => b.TextContent.Contains("Add Step")).Click();
+        await provider.FindAll("button").First(b => b.TextContent.Contains("Add Step")).ClickAsync();
         provider.WaitForState(() => provider.FindComponents<MudSelect<ScheduleStepFailureBehaviour>>().Count > 0);
 
         var stepSelect = provider.FindComponent<MudSelect<ScheduleStepFailureBehaviour>>();

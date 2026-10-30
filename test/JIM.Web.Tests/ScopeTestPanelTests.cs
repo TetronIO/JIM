@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -86,8 +87,8 @@ public class ScopeTestPanelTests : JimComponentTestContext
         await cut.InvokeAsync(() => cut.FindComponents<MudTextField<string>>()
             .Single(f => f.Instance.Label == label).Instance.ValueChanged.InvokeAsync(value));
 
-    private static void ClickRunTest(IRenderedComponent<ScopeTestPanel> cut) =>
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Run test")).Click();
+    private static async Task ClickRunTestAsync(IRenderedComponent<ScopeTestPanel> cut) =>
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Run test")).ClickAsync();
 
     private static ScopingExplanation Explanation(IRenderedComponent<ScopeTestPanel> cut) =>
         cut.FindComponent<ScopingExplanationView>().Instance.Explanation;
@@ -102,11 +103,11 @@ public class ScopeTestPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void ScopeTestPanel_UntouchedInputs_AreTestedWithNoValue()
+    public async Task ScopeTestPanel_UntouchedInputs_AreTestedWithNoValueAsync()
     {
         var cut = RenderPanel(ImportRule());
 
-        ClickRunTest(cut);
+        await ClickRunTestAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -123,7 +124,7 @@ public class ScopeTestPanelTests : JimComponentTestContext
 
         await EnterAsync(cut, "department", "Finance");
         await EnterAsync(cut, "leaveDate", leaveDate.ToString("yyyy-MM-dd"));
-        ClickRunTest(cut);
+        await ClickRunTestAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -141,7 +142,7 @@ public class ScopeTestPanelTests : JimComponentTestContext
 
         var asOf = new DateTime(2027, 1, 31, 0, 0, 0, DateTimeKind.Utc);
         await cut.InvokeAsync(() => cut.FindComponent<RunAsOfPicker>().Instance.ValueChanged.InvokeAsync(asOf));
-        ClickRunTest(cut);
+        await ClickRunTestAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -156,7 +157,7 @@ public class ScopeTestPanelTests : JimComponentTestContext
         var cut = RenderPanel(ImportRule());
 
         await EnterAsync(cut, "leaveDate", "soon");
-        ClickRunTest(cut);
+        await ClickRunTestAsync(cut);
 
         using (Assert.EnterMultipleScope())
         {
@@ -178,8 +179,8 @@ public class ScopeTestPanelTests : JimComponentTestContext
 
         await cut.InvokeAsync(() => cut.FindComponent<SegmentedToggle<bool>>().Instance.ValueChanged.InvokeAsync(true));
         await cut.InvokeAsync(() => cut.FindComponent<SearchField>().Instance.ValueChanged.InvokeAsync("Priya"));
-        cut.FindAll("button").Single(b => b.GetAttribute("aria-label") == "Load values from Priya Shah").Click();
-        ClickRunTest(cut);
+        await cut.FindAll("button").Single(b => b.GetAttribute("aria-label") == "Load values from Priya Shah").ClickAsync();
+        await ClickRunTestAsync(cut);
 
         Assert.That(Explanation(cut).Groups.Single().Criteria[0].Outcome, Is.EqualTo(ScopingCriterionOutcome.Met));
     }

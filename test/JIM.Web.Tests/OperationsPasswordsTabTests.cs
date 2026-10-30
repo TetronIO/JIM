@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Security.Claims;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -221,7 +222,7 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsPasswordsTab_ShowingTheWholeQueue_DropsTheIdentityFromTheUrl()
+    public async Task OperationsPasswordsTab_ShowingTheWholeQueue_DropsTheIdentityFromTheUrlAsync()
     {
         // A tab is re-created each time the reader comes back to it and reads the query string afresh, so a
         // filter cleared only in memory would return on the next visit. The URL has to forget it too, and the
@@ -231,7 +232,7 @@ public class OperationsPasswordsTabTests : JimComponentTestContext
         var cut = Render<OperationsPasswordsTab>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Show the whole queue")));
 
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Show the whole queue")).Click();
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Show the whole queue")).ClickAsync();
 
         cut.WaitForAssertion(() =>
         {

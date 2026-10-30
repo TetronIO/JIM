@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -162,7 +163,7 @@ public class OperationsActivityTabTests : JimComponentTestContext
         var cut = Render<OperationsActivityTab>();
         Assert.That(cut.HasComponent<MudSelect<ActivityStatus>>(), Is.False, "closed until asked for");
 
-        await cut.InvokeAsync(() => cut.Find("[data-testid='toggle-filters']").Click());
+        await cut.Find("[data-testid='toggle-filters']").ClickAsync();
 
         cut.WaitForAssertion(() => Assert.That(cut.HasComponent<MudSelect<ActivityStatus>>(), Is.True));
     }
@@ -172,7 +173,7 @@ public class OperationsActivityTabTests : JimComponentTestContext
     {
         _navigation.NavigateTo("/admin/operations?t=activity");
         var cut = Render<OperationsActivityTab>();
-        await cut.InvokeAsync(() => cut.Find("[data-testid='toggle-filters']").Click());
+        await cut.Find("[data-testid='toggle-filters']").ClickAsync();
         var scheduledOnly = cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Scheduled only");
 
         await cut.InvokeAsync(() => scheduledOnly.Instance.ValueChanged.InvokeAsync(true));
@@ -219,7 +220,7 @@ public class OperationsActivityTabTests : JimComponentTestContext
         var cut = Render<OperationsActivityTab>();
         cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='clear-filters']"), Has.Count.EqualTo(1)));
 
-        await cut.InvokeAsync(() => cut.Find("[data-testid='clear-filters']").Click());
+        await cut.Find("[data-testid='clear-filters']").ClickAsync();
 
         var update = JSInterop.Invocations
             .Where(i => i.Identifier == "jimInterop.updateQueryString")
@@ -240,7 +241,7 @@ public class OperationsActivityTabTests : JimComponentTestContext
         var cut = Render<OperationsActivityTab>();
         cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='activity-completed'] [aria-expanded]"), Has.Count.EqualTo(1)));
 
-        await cut.InvokeAsync(() => cut.Find("[data-testid='activity-completed'] [aria-expanded]").Click());
+        await cut.Find("[data-testid='activity-completed'] [aria-expanded]").ClickAsync();
 
         var update = (IReadOnlyDictionary<string, string[]?>)JSInterop.Invocations
             .Last(i => i.Identifier == "jimInterop.updateQueryString").Arguments[0]!;

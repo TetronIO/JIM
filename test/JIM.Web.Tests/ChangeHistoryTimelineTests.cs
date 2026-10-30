@@ -68,14 +68,14 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     /// The dialog is an inline one, so its content renders inside the dialog provider rather than inside the
     /// timeline; the provider is what the returned component searches, and the timeline is only clicked.
     /// </summary>
-    private IRenderedComponent<MudDialogProvider> RenderTimelineWithDialogOpen()
+    private async Task<IRenderedComponent<MudDialogProvider>> RenderTimelineWithDialogOpenAsync()
     {
         var provider = Render<MudDialogProvider>();
 
         var timeline = Render<ChangeHistoryTimeline>(p => p
             .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { BuildChangeGroup() }));
 
-        timeline.Find(".cursor-pointer").Click();
+        await timeline.Find(".cursor-pointer").ClickAsync();
         provider.WaitForAssertion(() =>
             Assert.That(provider.HasComponent<VirtualisedDataGrid<ChangeHistoryTimeline.AttributeChangeDisplay>>(), Is.True));
 
@@ -108,7 +108,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     /// SCIM requests behind an imported one (#124), rendered for the change that was opened.
     /// </summary>
     [Test]
-    public void ChangeHistoryTimeline_ChangeDetailExtra_RenderedForTheOpenedChange()
+    public async Task ChangeHistoryTimeline_ChangeDetailExtra_RenderedForTheOpenedChangeAsync()
     {
         var provider = Render<MudDialogProvider>();
         var change = BuildChangeGroup();
@@ -117,15 +117,15 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
         var timeline = Render<ChangeHistoryTimeline>(p => p
             .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { change })
             .Add(c => c.ChangeDetailExtra, opened => builder => builder.AddMarkupContent(0, $"<p class=\"extra\">{opened.ChangeId}</p>")));
-        timeline.Find(".cursor-pointer").Click();
+        await timeline.Find(".cursor-pointer").ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.Find(".extra").TextContent, Is.EqualTo("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")));
     }
 
     [Test]
-    public void ChangeHistoryTimeline_ChangeDetails_ShowsTheAttributeChangesInAVirtualisedGrid()
+    public async Task ChangeHistoryTimeline_ChangeDetails_ShowsTheAttributeChangesInAVirtualisedGridAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -141,9 +141,9 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     /// it writes a search and scroll position into an address bar that no deep link can reopen the dialog from.
     /// </summary>
     [Test]
-    public void ChangeHistoryTimeline_ChangeDetailsGrid_StatesItsOwnHeightAndKeepsItsStateOutOfTheUrl()
+    public async Task ChangeHistoryTimeline_ChangeDetailsGrid_StatesItsOwnHeightAndKeepsItsStateOutOfTheUrlAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
 
         var grid = Grid(cut);
 
@@ -157,7 +157,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     [Test]
     public async Task ChangeHistoryTimeline_ChangeDetails_SearchNarrowsTheChangesAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
 
         var window = await LoadWindowAsync(cut, searchText: "Department");
 
@@ -171,7 +171,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     [Test]
     public async Task ChangeHistoryTimeline_ChangeDetails_AttributeFilterNarrowsTheChangesAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
         var attributeFilter = ToolbarFilter(cut, "Attribute");
 
         await cut.InvokeAsync(() => attributeFilter.Instance.ValueChanged.InvokeAsync("Static Members"));
@@ -184,7 +184,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     [Test]
     public async Task ChangeHistoryTimeline_ChangeDetails_ChangeTypeFilterNarrowsTheChangesAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
         var changeTypeFilter = ToolbarFilter(cut, "Change type");
 
         await cut.InvokeAsync(() => changeTypeFilter.Instance.ValueChanged.InvokeAsync("Remove"));
@@ -205,7 +205,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     [Test]
     public async Task ChangeHistoryTimeline_ChangeDetails_FilterMatchingNothing_OffersTheWayOutOfItAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
         var attributeFilter = ToolbarFilter(cut, "Attribute");
 
         await cut.InvokeAsync(() => attributeFilter.Instance.ValueChanged.InvokeAsync("Static Members"));
@@ -261,7 +261,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
         var provider = Render<MudDialogProvider>();
         var timeline = Render<ChangeHistoryTimeline>(p => p
             .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { changeGroup }));
-        timeline.Find(".cursor-pointer").Click();
+        await timeline.Find(".cursor-pointer").ClickAsync();
         provider.WaitForAssertion(() =>
             Assert.That(provider.HasComponent<VirtualisedDataGrid<ChangeHistoryTimeline.AttributeChangeDisplay>>(), Is.True));
 
@@ -296,7 +296,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     [Test]
     public async Task ChangeHistoryTimeline_ChangeDetails_ChangeWithNoOrigin_LeavesOriginAndHrefNullAsync()
     {
-        var cut = RenderTimelineWithDialogOpen();
+        var cut = await RenderTimelineWithDialogOpenAsync();
 
         var window = await LoadWindowAsync(cut);
 
@@ -346,7 +346,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     }
 
     [Test]
-    public void ChangeHistoryTimeline_ChangeDetails_InitiatedByNamesThePrincipalNotTheRule()
+    public async Task ChangeHistoryTimeline_ChangeDetails_InitiatedByNamesThePrincipalNotTheRuleAsync()
     {
         // The dialog separates who (the principal that started the run) from how (the mechanism).
         var changeGroup = BuildChangeGroup();
@@ -358,7 +358,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
 
         var provider = Render<MudDialogProvider>();
         var timeline = Render<ChangeHistoryTimeline>(p => p.Add(c => c.Changes, [changeGroup]));
-        timeline.Find(".cursor-pointer").Click();
+        await timeline.Find(".cursor-pointer").ClickAsync();
 
         provider.WaitForAssertion(() =>
             Assert.That(provider.FindAll("[data-testid=jim-initiator-api-key]"), Has.Count.EqualTo(1)));
@@ -395,7 +395,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
     }
 
     [Test]
-    public void Dialog_ChangeLoadedWithOnlyItsFirstValues_ReadsItsValuesThroughTheHostsReader()
+    public async Task Dialog_ChangeLoadedWithOnlyItsFirstValues_ReadsItsValuesThroughTheHostsReaderAsync()
     {
         var group = BuildCappedChangeGroup();
         var reader = new RecordingReader();
@@ -404,7 +404,7 @@ public class ChangeHistoryTimelineTests : JimComponentTestContext
             .Add(c => c.Changes, new List<ChangeHistoryTimeline.ChangeGroup> { group })
             .Add(c => c.ValueReader, reader));
 
-        timeline.Find(".cursor-pointer").Click();
+        await timeline.Find(".cursor-pointer").ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(reader.Queries, Is.Not.Empty));
         using (Assert.EnterMultipleScope())

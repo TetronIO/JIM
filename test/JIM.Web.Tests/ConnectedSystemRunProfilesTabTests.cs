@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Security.Claims;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -80,7 +81,7 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void RunProfilesTab_PreviewAction_IsOfferedOnFullSynchronisationRunProfilesOnly()
+    public async Task RunProfilesTab_PreviewAction_IsOfferedOnFullSynchronisationRunProfilesOnlyAsync()
     {
         ConnectedSystemRunProfile? requested = null;
 
@@ -91,16 +92,16 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
 
         var previews = cut.FindAll($"[data-testid='{PreviewMarker}']");
         Assert.That(previews, Has.Count.EqualTo(1), "one Full Synchronisation Run Profile among four");
-        previews[0].Click();
+        await previews[0].ClickAsync();
         Assert.That(requested?.RunType, Is.EqualTo(ConnectedSystemRunType.FullSynchronisation));
     }
 
     // ─── Allow Object Type Changes: when it is offered ───
 
     [Test]
-    public void CreateDialog_FullImportWhereTheConnectorVouchesForExternalIds_OffersAllowObjectTypeChanges()
+    public async Task CreateDialog_FullImportWhereTheConnectorVouchesForExternalIds_OffersAllowObjectTypeChangesAsync()
     {
-        var (provider, _) = OpenCreateDialog(DirectorySystem());
+        var (provider, _) = await OpenCreateDialogAsync(DirectorySystem());
 
         ChooseRunType(provider, ConnectedSystemRunType.FullImport);
 
@@ -113,9 +114,9 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void CreateDialog_FullImportWhereTheConnectorDoesNotVouchForExternalIds_DoesNotOfferAllowObjectTypeChanges()
+    public async Task CreateDialog_FullImportWhereTheConnectorDoesNotVouchForExternalIds_DoesNotOfferAllowObjectTypeChangesAsync()
     {
-        var (provider, _) = OpenCreateDialog(TableSystem());
+        var (provider, _) = await OpenCreateDialogAsync(TableSystem());
 
         ChooseRunType(provider, ConnectedSystemRunType.FullImport);
 
@@ -128,9 +129,9 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     [TestCase(ConnectedSystemRunType.DeltaImport)]
     [TestCase(ConnectedSystemRunType.Export)]
     [TestCase(ConnectedSystemRunType.FullSynchronisation)]
-    public void CreateDialog_RunTypeChangedAwayFromFullImport_WithdrawsAllowObjectTypeChanges(ConnectedSystemRunType runType)
+    public async Task CreateDialog_RunTypeChangedAwayFromFullImport_WithdrawsAllowObjectTypeChangesAsync(ConnectedSystemRunType runType)
     {
-        var (provider, _) = OpenCreateDialog(DirectorySystem());
+        var (provider, _) = await OpenCreateDialogAsync(DirectorySystem());
         ChooseRunType(provider, ConnectedSystemRunType.FullImport);
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
 
@@ -140,29 +141,29 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_FullImportWhereTheConnectorVouchesForExternalIds_OffersAllowObjectTypeChanges()
+    public async Task EditDialog_FullImportWhereTheConnectorVouchesForExternalIds_OffersAllowObjectTypeChangesAsync()
     {
-        var provider = OpenEditDialog(DirectorySystem(FullImport(allowObjectTypeChanges: false)));
+        var provider = await OpenEditDialogAsync(DirectorySystem(FullImport(allowObjectTypeChanges: false)));
 
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         Assert.That(FindAllowObjectTypeChanges(provider)!.Instance.GetState(x => x.Value), Is.False);
     }
 
     [Test]
-    public void EditDialog_FullImportWhereTheConnectorDoesNotVouchForExternalIds_DoesNotOfferAllowObjectTypeChanges()
+    public async Task EditDialog_FullImportWhereTheConnectorDoesNotVouchForExternalIds_DoesNotOfferAllowObjectTypeChangesAsync()
     {
-        var provider = OpenEditDialog(TableSystem(FullImport(allowObjectTypeChanges: false)));
+        var provider = await OpenEditDialogAsync(TableSystem(FullImport(allowObjectTypeChanges: false)));
 
         provider.WaitForAssertion(() => Assert.That(provider.FindComponents<MudCheckBox<bool>>(), Is.Not.Empty));
         Assert.That(FindAllowObjectTypeChanges(provider), Is.Null);
     }
 
     [Test]
-    public void EditDialog_RunProfileAlreadyAllowingObjectTypeChanges_ShowsTheSettingWhereTheConnectorDoesNotVouch()
+    public async Task EditDialog_RunProfileAlreadyAllowingObjectTypeChanges_ShowsTheSettingWhereTheConnectorDoesNotVouchAsync()
     {
         // Set through the API on a Connector that cannot honour it: it has no effect, but hiding it would leave the
         // administrator unable to see, or clear, a value the Run Profile holds.
-        var provider = OpenEditDialog(TableSystem(FullImport(allowObjectTypeChanges: true)));
+        var provider = await OpenEditDialogAsync(TableSystem(FullImport(allowObjectTypeChanges: true)));
 
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         using (Assert.EnterMultipleScope())
@@ -173,9 +174,9 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_SettingClearedWhereTheConnectorDoesNotVouch_StaysOnScreenUntilSaved()
+    public async Task EditDialog_SettingClearedWhereTheConnectorDoesNotVouch_StaysOnScreenUntilSavedAsync()
     {
-        var provider = OpenEditDialog(TableSystem(FullImport(allowObjectTypeChanges: true)));
+        var provider = await OpenEditDialogAsync(TableSystem(FullImport(allowObjectTypeChanges: true)));
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
 
         SetAllowObjectTypeChanges(provider, false);
@@ -187,10 +188,10 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     // ─── Allow Object Type Changes: what is saved ───
 
     [Test]
-    public void CreateDialog_FullImportWithTheSettingTicked_SavesItOn()
+    public async Task CreateDialog_FullImportWithTheSettingTicked_SavesItOnAsync()
     {
         var system = DirectorySystem();
-        var (provider, _) = OpenCreateDialog(system);
+        var (provider, _) = await OpenCreateDialogAsync(system);
         ChooseRunType(provider, ConnectedSystemRunType.FullImport);
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         SetAllowObjectTypeChanges(provider, true);
@@ -202,12 +203,12 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void CreateDialog_SettingTickedThenRunTypeChangedAwayFromFullImport_SavesItOff()
+    public async Task CreateDialog_SettingTickedThenRunTypeChangedAwayFromFullImport_SavesItOffAsync()
     {
         // The box disappears with the Full Import block, but the value it held must not travel with the Run Profile:
         // the setting means nothing outside a Full Import, and the server refuses it there.
         var system = DirectorySystem();
-        var (provider, _) = OpenCreateDialog(system);
+        var (provider, _) = await OpenCreateDialogAsync(system);
         ChooseRunType(provider, ConnectedSystemRunType.FullImport);
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         SetAllowObjectTypeChanges(provider, true);
@@ -221,10 +222,10 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_SettingTicked_SavesItOn()
+    public async Task EditDialog_SettingTicked_SavesItOnAsync()
     {
         var runProfile = FullImport(allowObjectTypeChanges: false);
-        var provider = OpenEditDialog(DirectorySystem(runProfile));
+        var provider = await OpenEditDialogAsync(DirectorySystem(runProfile));
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         SetAllowObjectTypeChanges(provider, true);
 
@@ -235,10 +236,10 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_SettingCleared_SavesItOff()
+    public async Task EditDialog_SettingCleared_SavesItOffAsync()
     {
         var runProfile = FullImport(allowObjectTypeChanges: true);
-        var provider = OpenEditDialog(DirectorySystem(runProfile));
+        var provider = await OpenEditDialogAsync(DirectorySystem(runProfile));
         provider.WaitForAssertion(() => Assert.That(FindAllowObjectTypeChanges(provider), Is.Not.Null));
         SetAllowObjectTypeChanges(provider, false);
 
@@ -249,7 +250,7 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void EditDialog_NonFullImportRunProfileHoldingTheSetting_SavesItOff()
+    public async Task EditDialog_NonFullImportRunProfileHoldingTheSetting_SavesItOffAsync()
     {
         // No valid path leaves a Delta Import holding the setting, but a save from the portal must never send it on
         // one: the server would refuse the whole update, leaving the Run Profile impossible to edit.
@@ -257,7 +258,7 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
         {
             Id = 11, Name = "Delta Import", RunType = ConnectedSystemRunType.DeltaImport, ConnectedSystemId = 9, AllowObjectTypeChanges = true
         };
-        var provider = OpenEditDialog(DirectorySystem(runProfile));
+        var provider = await OpenEditDialogAsync(DirectorySystem(runProfile));
         provider.WaitForAssertion(() => Assert.That(FindByMarker(provider, EditSubmitMarker), Is.Not.Null));
 
         Submit(provider, EditSubmitMarker);
@@ -283,22 +284,22 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
 
     // ─── Helpers ───
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<ConnectedSystemRunProfilesTab> Tab) OpenCreateDialog(ConnectedSystem system)
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<ConnectedSystemRunProfilesTab> Tab)> OpenCreateDialogAsync(ConnectedSystem system)
     {
         _serverConnectedSystem = system;
         var provider = Render<MudDialogProvider>();
         var tab = Render<ConnectedSystemRunProfilesTab>(p => p.Add(x => x.ConnectedSystem, system));
-        tab.WaitForElement($"[data-testid='{CreateButtonMarker}']").Click();
+        await tab.WaitForElement($"[data-testid='{CreateButtonMarker}']").ClickAsync();
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<MudSelect<ConnectedSystemRunType>>(), Is.True));
         return (provider, tab);
     }
 
-    private IRenderedComponent<MudDialogProvider> OpenEditDialog(ConnectedSystem system)
+    private async Task<IRenderedComponent<MudDialogProvider>> OpenEditDialogAsync(ConnectedSystem system)
     {
         _serverConnectedSystem = system;
         var provider = Render<MudDialogProvider>();
         var tab = Render<ConnectedSystemRunProfilesTab>(p => p.Add(x => x.ConnectedSystem, system));
-        tab.WaitForElement($"[data-testid='{EditButtonMarker}']").Click();
+        await tab.WaitForElement($"[data-testid='{EditButtonMarker}']").ClickAsync();
         provider.WaitForAssertion(() => Assert.That(FindByMarker(provider, EditSubmitMarker), Is.Not.Null));
         return provider;
     }

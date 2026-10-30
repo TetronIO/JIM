@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -78,11 +79,11 @@ public class ConnectedSystemSchemaTabInternalTypeTests : JimComponentTestContext
     }
 
     [Test]
-    public void SchemaTab_WhenInternalObjectTypesAreAskedFor_DrawsThemAll()
+    public async Task SchemaTab_WhenInternalObjectTypesAreAskedFor_DrawsThemAllAsync()
     {
         var component = RenderSchemaTab(ConnectedSystemWithDiscoveredSchema());
 
-        component.Find("button:contains('Show internal object types')").Click();
+        await component.Find("button:contains('Show internal object types')").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

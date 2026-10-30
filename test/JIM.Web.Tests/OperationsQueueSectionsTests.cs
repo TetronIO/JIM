@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -362,7 +363,7 @@ public class OperationsQueueSectionsTests : JimComponentTestContext
         var cut = Render<OperationsQueueSections>(p => p.Add(c => c.ToggleRequested, section => toggled = section));
         cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='activity-queued'] [aria-expanded]"), Has.Count.EqualTo(1)));
 
-        await cut.InvokeAsync(() => cut.Find("[data-testid='activity-queued'] [aria-expanded]").Click());
+        await cut.Find("[data-testid='activity-queued'] [aria-expanded]").ClickAsync();
 
         Assert.That(toggled, Is.EqualTo(ActivitySection.Queued));
     }

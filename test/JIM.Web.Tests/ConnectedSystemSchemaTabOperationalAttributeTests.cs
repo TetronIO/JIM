@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -59,11 +60,11 @@ public class ConnectedSystemSchemaTabOperationalAttributeTests : JimComponentTes
     }
 
     [Test]
-    public void SchemaTab_WhenOperationalAttributesAreAskedFor_ListsThemAll()
+    public async Task SchemaTab_WhenOperationalAttributesAreAskedFor_ListsThemAllAsync()
     {
         var component = RenderSchemaTab(ConnectedSystemWith(InetOrgPerson()));
 
-        component.Find("button:contains('Show operational attributes')").Click();
+        await component.Find("button:contains('Show operational attributes')").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

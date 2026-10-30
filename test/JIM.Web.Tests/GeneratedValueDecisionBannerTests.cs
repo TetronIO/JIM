@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
@@ -54,7 +55,7 @@ public class GeneratedValueDecisionBannerTests : JimComponentTestContext
     }
 
     [Test]
-    public void TryAgain_Pressed_HandsThePageTheValueItWasPressedFor()
+    public async Task TryAgain_Pressed_HandsThePageTheValueItWasPressedForAsync()
     {
         var held = Decision("Account Name", GeneratedValueDecisionStatus.NeedsDecision);
         GeneratedValueDecisionHeader? pressed = null;
@@ -62,7 +63,7 @@ public class GeneratedValueDecisionBannerTests : JimComponentTestContext
             .Add(c => c.Decisions, [held])
             .Add(c => c.OnTryAgain, d => pressed = d));
 
-        cut.Find("[data-testid='generated-value-try-again']").Click();
+        await cut.Find("[data-testid='generated-value-try-again']").ClickAsync();
 
         Assert.That(pressed, Is.SameAs(held));
     }

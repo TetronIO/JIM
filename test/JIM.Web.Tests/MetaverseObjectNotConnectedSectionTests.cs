@@ -4,6 +4,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using AngleSharp.Dom;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Shared;
@@ -53,7 +54,7 @@ public class MetaverseObjectNotConnectedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void Click_Toggle_OpensTheSectionAndRaisesOpenChanged()
+    public async Task Click_Toggle_OpensTheSectionAndRaisesOpenChangedAsync()
     {
         bool? opened = null;
         var cut = Render<MetaverseObjectNotConnectedSection>(p => p
@@ -61,7 +62,7 @@ public class MetaverseObjectNotConnectedSectionTests : JimComponentTestContext
             .Add(c => c.ExpandedRuleIds, new HashSet<int>())
             .Add(c => c.OpenChanged, (bool value) => opened = value));
 
-        cut.Find("[data-testid='jim-not-connected-toggle']").Click();
+        await cut.Find("[data-testid='jim-not-connected-toggle']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -112,12 +113,12 @@ public class MetaverseObjectNotConnectedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void Click_ExpandOnANotInScopeEntry_ShowsItsBulletsAndScopingTree()
+    public async Task Click_ExpandOnANotInScopeEntry_ShowsItsBulletsAndScopingTreeAsync()
     {
         var expanded = new HashSet<int>();
         var cut = RenderSection([FinanceApp()], open: true, expandedRuleIds: expanded);
 
-        cut.Find("[data-testid='jim-not-connected-expand']").Click();
+        await cut.Find("[data-testid='jim-not-connected-expand']").ClickAsync();
 
         var detail = cut.Find("[data-testid='jim-not-connected-detail']");
         using (Assert.EnterMultipleScope())
@@ -161,12 +162,12 @@ public class MetaverseObjectNotConnectedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void Click_CopySummary_CopiesTheServersSummaryWithoutExpandingAndSaysSo()
+    public async Task Click_CopySummary_CopiesTheServersSummaryWithoutExpandingAndSaysSoAsync()
     {
         var copy = JSInterop.Setup<bool>(CopyToClipboard, FinanceAppSummary).SetResult(true);
         var cut = RenderSection([FinanceApp()], open: true);
 
-        cut.Find("[data-testid='jim-not-connected-copy']").Click();
+        await cut.Find("[data-testid='jim-not-connected-copy']").ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -181,13 +182,13 @@ public class MetaverseObjectNotConnectedSectionTests : JimComponentTestContext
     /// dialog, ready to select.
     /// </summary>
     [Test]
-    public void Click_CopySummaryWhenTheClipboardIsUnavailable_OffersTheSummaryInADialog()
+    public async Task Click_CopySummaryWhenTheClipboardIsUnavailable_OffersTheSummaryInADialogAsync()
     {
         JSInterop.Setup<bool>(CopyToClipboard, FinanceAppSummary).SetResult(false);
         var provider = Render<MudDialogProvider>();
         var cut = RenderSection([FinanceApp()], open: true);
 
-        cut.Find("[data-testid='jim-not-connected-copy']").Click();
+        await cut.Find("[data-testid='jim-not-connected-copy']").ClickAsync();
 
         provider.WaitForAssertion(() =>
             Assert.That(provider.Find("[data-testid='jim-copy-text-fallback']").GetAttribute("value") ??

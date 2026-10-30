@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging;
 using JIM.Utilities;
@@ -84,7 +85,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_ChoosingThisLevel_NarrowsTheContainerAndReleasesItsChildren()
+    public async Task Picker_ChoosingThisLevel_NarrowsTheContainerAndReleasesItsChildrenAsync()
     {
         var sales = Container("Sales", "OU=Sales,OU=Corp,DC=example,DC=com");
         var corp = Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [sales]);
@@ -92,7 +93,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
         ContainerSelectionEditor.RecalculateCoverage(partition);
         var cut = Render(partition);
 
-        cut.Find("[data-testid='jim-picker-scope-onelevel']").Click();
+        await cut.Find("[data-testid='jim-picker-scope-onelevel']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -102,39 +103,39 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_ChoosingTheScopeAlreadyInEffect_ChangesNothing()
+    public async Task Picker_ChoosingTheScopeAlreadyInEffect_ChangesNothingAsync()
     {
         // The control is two segments, not a toggle: clicking the active one must not flip to the other.
         var corp = Container("Corp", "OU=Corp,DC=example,DC=com", selected: true);
         var partition = PartitionWith(corp);
         var cut = Render(partition);
 
-        cut.Find("[data-testid='jim-picker-scope-subtree']").Click();
+        await cut.Find("[data-testid='jim-picker-scope-subtree']").ClickAsync();
 
         Assert.That(corp.Scope, Is.EqualTo(ConnectedSystemContainerScope.Subtree));
     }
 
     [Test]
-    public void Picker_EditingTheSelection_RaisesOnChanged()
+    public async Task Picker_EditingTheSelection_RaisesOnChangedAsync()
     {
         var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true));
         var raised = 0;
         var cut = Render(partition, () => raised++);
 
-        cut.Find("[data-testid='jim-picker-scope-onelevel']").Click();
+        await cut.Find("[data-testid='jim-picker-scope-onelevel']").ClickAsync();
 
         Assert.That(raised, Is.EqualTo(1), "the host gates its save button and its stale-preview notice on this");
     }
 
     [Test]
-    public void Picker_Clear_DeselectsEveryContainer()
+    public async Task Picker_Clear_DeselectsEveryContainerAsync()
     {
         var partition = PartitionWith(
             Container("Corp", "OU=Corp,DC=example,DC=com", selected: true),
             Container("Groups", "OU=Groups,DC=example,DC=com", selected: true));
         var cut = Render(partition);
 
-        cut.Find("[data-testid='jim-picker-clear']").Click();
+        await cut.Find("[data-testid='jim-picker-clear']").ClickAsync();
 
         Assert.That(ContainerSelectionEditor.CountSelected(partition), Is.Zero);
     }
@@ -217,14 +218,14 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_ExcludingAContainer_CarvesItOutAndSaysWhichSelectionItLeft()
+    public async Task Picker_ExcludingAContainer_CarvesItOutAndSaysWhichSelectionItLeftAsync()
     {
         var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com");
         var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
         ContainerSelectionEditor.RecalculateCoverage(partition);
         var cut = Render(partition);
 
-        cut.Find("[data-testid='jim-picker-exclude']").Click();
+        await cut.Find("[data-testid='jim-picker-exclude']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -234,14 +235,14 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_ForAnExcludedContainer_OffersToIncludeItAgain()
+    public async Task Picker_ForAnExcludedContainer_OffersToIncludeItAgainAsync()
     {
         var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com", excluded: true);
         var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true, children: [serviceAccounts]));
         ContainerSelectionEditor.RecalculateCoverage(partition);
         var cut = Render(partition);
 
-        cut.Find("[data-testid='jim-picker-include']").Click();
+        await cut.Find("[data-testid='jim-picker-include']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -290,7 +291,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_SelectingAContainerInsideAnExclusion_BringsThatBranchBackIntoScope()
+    public async Task Picker_SelectingAContainerInsideAnExclusion_BringsThatBranchBackIntoScopeAsync()
     {
         var app1 = Container("App1", "OU=App1,OU=Service Accounts,OU=Corp,DC=example,DC=com");
         var serviceAccounts = Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com",
@@ -301,7 +302,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
 
         var row = cut.FindAll("[data-testid='jim-picker-row']")
             .Single(r => r.GetAttribute("data-container-name") == "App1");
-        row.QuerySelector("input[type=checkbox]")!.Change(true);
+        await row.QuerySelector("input[type=checkbox]")!.ChangeAsync(true);
 
         using (Assert.EnterMultipleScope())
         {
@@ -311,7 +312,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
     }
 
     [Test]
-    public void Picker_ExcludingAContainer_RaisesOnChanged()
+    public async Task Picker_ExcludingAContainer_RaisesOnChangedAsync()
     {
         var partition = PartitionWith(Container("Corp", "OU=Corp,DC=example,DC=com", selected: true,
             children: [Container("Service Accounts", "OU=Service Accounts,OU=Corp,DC=example,DC=com")]));
@@ -319,7 +320,7 @@ public class ScopedHierarchyPickerTests : JimComponentTestContext
         var raised = 0;
         var cut = Render(partition, () => raised++);
 
-        cut.Find("[data-testid='jim-picker-exclude']").Click();
+        await cut.Find("[data-testid='jim-picker-exclude']").ClickAsync();
 
         Assert.That(raised, Is.EqualTo(1), "the host gates its save button and its stale-preview notice on this");
     }

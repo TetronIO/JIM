@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -143,11 +144,11 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void GeneratedValueStartAgainDialog_CounterAlreadyAtStartAt_TypingPhraseStillDoesNotEnableConfirm()
+    public async Task GeneratedValueStartAgainDialog_CounterAlreadyAtStartAt_TypingPhraseStillDoesNotEnableConfirmAsync()
     {
         var provider = ShowDialog(configuredStart: 101701L);
 
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(AttributeName);
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync(AttributeName);
 
         var confirmButton = provider.Find($"[data-testid='{ConfirmButtonMarker}']");
         Assert.That(confirmButton.HasAttribute("disabled"), Is.True);
@@ -163,22 +164,22 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void GeneratedValueStartAgainDialog_WrongPhraseTyped_DisablesConfirm()
+    public async Task GeneratedValueStartAgainDialog_WrongPhraseTyped_DisablesConfirmAsync()
     {
         var provider = ShowDialog();
 
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input("Employee Numbe");
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync("Employee Numbe");
 
         var confirmButton = provider.Find($"[data-testid='{ConfirmButtonMarker}']");
         Assert.That(confirmButton.HasAttribute("disabled"), Is.True);
     }
 
     [Test]
-    public void GeneratedValueStartAgainDialog_ExactAttributeNameTyped_EnablesConfirm()
+    public async Task GeneratedValueStartAgainDialog_ExactAttributeNameTyped_EnablesConfirmAsync()
     {
         var provider = ShowDialog();
 
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(AttributeName);
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync(AttributeName);
 
         provider.WaitForAssertion(() =>
         {
@@ -218,14 +219,14 @@ public class GeneratedValueStartAgainDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void GeneratedValueStartAgainDialog_CounterAtStartAtButRetiredValuesToForget_IsNotANoOp()
+    public async Task GeneratedValueStartAgainDialog_CounterAtStartAtButRetiredValuesToForget_IsNotANoOpAsync()
     {
         _retiredValueCount = 2;
 
         var provider = ShowDialog(configuredStart: 101701L);
         provider.WaitForAssertion(() => Assert.That(provider.FindAll("[data-testid='jim-start-again-forgotten']"), Is.Not.Empty));
 
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(AttributeName);
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync(AttributeName);
 
         provider.WaitForAssertion(() =>
         {

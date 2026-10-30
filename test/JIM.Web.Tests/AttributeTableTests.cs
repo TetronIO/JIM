@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
@@ -152,10 +153,10 @@ public class AttributeTableTests : JimComponentTestContext
     }
 
     [Test]
-    public void AttributeTable_SearchThatMatchesNothing_SaysSoAndClearingItBringsTheRowsBack()
+    public async Task AttributeTable_SearchThatMatchesNothing_SaysSoAndClearingItBringsTheRowsBackAsync()
     {
         var cut = RenderTable(Rows(3));
-        cut.InvokeAsync(() => cut.Instance.SetSearchAsync("nothing-matches-this"));
+        await cut.InvokeAsync(() => cut.Instance.SetSearchAsync("nothing-matches-this"));
 
         using (Assert.EnterMultipleScope())
         {
@@ -164,7 +165,7 @@ public class AttributeTableTests : JimComponentTestContext
                 "the object has attributes; saying it has none would be false");
         }
 
-        cut.FindAll("button").Single(b => b.TextContent.Contains("Clear Search")).Click();
+        await cut.FindAll("button").Single(b => b.TextContent.Contains("Clear Search")).ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging;
 using JIM.Web.Pages.Admin.Components;
@@ -67,13 +68,13 @@ public class ConnectedSystemSettingFieldTests : JimComponentTestContext
     }
 
     [Test]
-    public void Change_TextSetting_WritesTheTypedDocumentToTheStringValue()
+    public async Task Change_TextSetting_WritesTheTypedDocumentToTheStringValueAsync()
     {
         var settingValue = TextSettingValue();
         const string document = "{\n  \"objectTypes\": []\n}";
 
         var cut = RenderField(settingValue);
-        cut.Find("textarea").Change(document);
+        await cut.Find("textarea").ChangeAsync(document);
 
         Assert.That(settingValue.StringValue, Is.EqualTo(document));
     }

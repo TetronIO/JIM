@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using AngleSharp.Dom;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
@@ -152,7 +153,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// without them; and the remedy is beside the sentence rather than three panels down.
     /// </summary>
     [Test]
-    public void Panel_WithAParkedChange_LeadsWithAnAttentionStripOfferingRetry()
+    public async Task Panel_WithAParkedChange_LeadsWithAnAttentionStripOfferingRetryAsync()
     {
         var retried = new List<int>();
         var cut = RenderPanel(
@@ -162,7 +163,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         var strip = Find(cut, AttentionMarker);
         Assert.That(strip.TextContent, Does.Contain("1 password change is parked. Corporate Directory refused it (policy rejection) and JIM has stopped trying."));
 
-        Find(cut, AttentionRetryMarker).Click();
+        await Find(cut, AttentionRetryMarker).ClickAsync();
 
         Assert.That(retried, Is.EqualTo(new[] { 4 }), "retry is for that Connected System alone");
     }
@@ -218,7 +219,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// or not on the same fact rather than appearing and then turning out to be unavailable once open.
     /// </summary>
     [Test]
-    public void Panel_SetPasswordCard_CountsTheAccountsThatCanTakeAPassword()
+    public async Task Panel_SetPasswordCard_CountsTheAccountsThatCanTakeAPasswordAsync()
     {
         var raised = 0;
         var cut = RenderPanel(
@@ -227,7 +228,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
 
         Assert.That(Find(cut, CoverageMarker).TextContent.Trim(), Is.EqualTo("3 of 4 Connected System Objects can take a password"));
 
-        Find(cut, SetMarker).Click();
+        await Find(cut, SetMarker).ClickAsync();
 
         Assert.That(raised, Is.EqualTo(1));
     }
@@ -291,7 +292,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// JIM will next try, so nobody has to work that out from an attempt count.
     /// </summary>
     [Test]
-    public void Panel_WithSomethingStillQueued_ShowsItSeparatelyFromHistoryWithItsActions()
+    public async Task Panel_WithSomethingStillQueued_ShowsItSeparatelyFromHistoryWithItsActionsAsync()
     {
         var retried = new List<int>();
         var stopped = new List<int>();
@@ -320,8 +321,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
         }
 
         // Re-queried between clicks: each click re-renders, and a handler id from the previous tree is stale.
-        Find(cut, QueuedRetryMarker).Click();
-        Find(cut, QueuedStopMarker).Click();
+        await Find(cut, QueuedRetryMarker).ClickAsync();
+        await Find(cut, QueuedStopMarker).ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -483,7 +484,7 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
     /// still retrying, each raising the panel's callback for that Connected System alone.
     /// </summary>
     [Test]
-    public void Panel_DetailLines_OfferRetryForParkedAndStopTryingForRetrying()
+    public async Task Panel_DetailLines_OfferRetryForParkedAndStopTryingForRetryingAsync()
     {
         var retried = new List<int>();
         var stopped = new List<int>();
@@ -508,8 +509,8 @@ public class MetaverseObjectPasswordPanelTests : JimComponentTestContext
             Assert.That(details[1].TextContent, Does.Contain("Badge System:").And.Contain("Next attempt"));
         }
 
-        Find(cut, HistoryRetryMarker).Click();
-        Find(cut, HistoryStopMarker).Click();
+        await Find(cut, HistoryRetryMarker).ClickAsync();
+        await Find(cut, HistoryStopMarker).ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

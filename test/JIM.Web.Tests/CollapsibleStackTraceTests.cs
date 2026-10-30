@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using NUnit.Framework;
@@ -47,11 +48,11 @@ public class CollapsibleStackTraceTests : JimComponentTestContext
     }
 
     [Test]
-    public void CollapsibleStackTrace_WhenShown_RendersTheStackTrace()
+    public async Task CollapsibleStackTrace_WhenShown_RendersTheStackTraceAsync()
     {
         var cut = Render<CollapsibleStackTrace>(p => p.Add(c => c.StackTrace, Trace));
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -61,12 +62,12 @@ public class CollapsibleStackTraceTests : JimComponentTestContext
     }
 
     [Test]
-    public void CollapsibleStackTrace_WhenHiddenAgain_DropsTheStackTrace()
+    public async Task CollapsibleStackTrace_WhenHiddenAgain_DropsTheStackTraceAsync()
     {
         var cut = Render<CollapsibleStackTrace>(p => p.Add(c => c.StackTrace, Trace));
 
-        cut.Find("button").Click();
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
+        await cut.Find("button").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

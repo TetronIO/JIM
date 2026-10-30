@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using MudBlazor;
@@ -41,7 +42,7 @@ public class SegmentedToggleTests : JimComponentTestContext
     }
 
     [Test]
-    public void SegmentedToggle_ClickingAnotherOption_RaisesValueChangedWithIt()
+    public async Task SegmentedToggle_ClickingAnotherOption_RaisesValueChangedWithItAsync()
     {
         string? raised = null;
         var cut = Render<SegmentedToggle<string>>(p => p
@@ -50,13 +51,13 @@ public class SegmentedToggleTests : JimComponentTestContext
             .Add(c => c.AriaLabel, "Group by")
             .Add(c => c.ValueChanged, (string v) => raised = v));
 
-        cut.FindAll(".jim-seg > button")[2].Click();
+        await cut.FindAll(".jim-seg > button")[2].ClickAsync();
 
         Assert.That(raised, Is.EqualTo("category"));
     }
 
     [Test]
-    public void SegmentedToggle_ClickingTheSelectedOption_RaisesNothing()
+    public async Task SegmentedToggle_ClickingTheSelectedOption_RaisesNothingAsync()
     {
         var raised = false;
         var cut = Render<SegmentedToggle<string>>(p => p
@@ -65,7 +66,7 @@ public class SegmentedToggleTests : JimComponentTestContext
             .Add(c => c.AriaLabel, "Group by")
             .Add(c => c.ValueChanged, (string _) => raised = true));
 
-        cut.FindAll(".jim-seg > button")[0].Click();
+        await cut.FindAll(".jim-seg > button")[0].ClickAsync();
 
         Assert.That(raised, Is.False);
     }
@@ -121,7 +122,7 @@ public class SegmentedToggleTests : JimComponentTestContext
     }
 
     [Test]
-    public void SegmentedToggle_ClickingAnOptionWithATooltip_StillRaisesValueChanged()
+    public async Task SegmentedToggle_ClickingAnOptionWithATooltip_StillRaisesValueChangedAsync()
     {
         string? raised = null;
         IReadOnlyList<SegmentedToggleOption<string>> views =
@@ -136,7 +137,7 @@ public class SegmentedToggleTests : JimComponentTestContext
             .Add(c => c.AriaLabel, "Details view")
             .Add(c => c.ValueChanged, (string v) => raised = v));
 
-        cut.FindAll(".jim-seg button")[1].Click();
+        await cut.FindAll(".jim-seg button")[1].ClickAsync();
 
         Assert.That(raised, Is.EqualTo("table"));
     }
