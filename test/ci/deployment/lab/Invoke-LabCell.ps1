@@ -151,8 +151,9 @@ function Get-DocumentedCommand {
 function Invoke-Documented {
     # Runs a command the documentation gives, as written, as root on the VM, in bash. For a rootless JIM it is
     # rewritten as Running on Podman says (jim-systemctl and jim-podman), with those helpers defined as that page
-    # defines them, unless -Rootful (a change to the host itself). Returns the exit code; output goes to cell.log.
-    param([string]$Command, [string]$WorkingDirectory = '/root', [string]$Title, [switch]$Rootful)
+    # defines them, unless -Rootful (a change to the host itself). -Environment gives it settings, as an administrator
+    # exports them first. Returns the exit code; output goes to cell.log.
+    param([string]$Command, [string]$WorkingDirectory = '/root', [string]$Title, [switch]$Rootful, [hashtable]$Environment = @{})
     $script = $Command
     if ($rootless -and -not $Rootful) {
         $helpers = Get-DocumentedCommand -Page 'podman.md' -Heading 'Rootless commands'
@@ -160,7 +161,7 @@ function Invoke-Documented {
     }
     Write-CellLog "running $Title, as documented:"
     $Command -split "`n" | ForEach-Object { Write-CellLog "    $_" }
-    Invoke-LabVm -Name $vm -Command @('bash', '-ec', $script) -WorkingDirectory $WorkingDirectory -AllowFailure -LogPath $log | Out-Null
+    Invoke-LabVm -Name $vm -Command @('bash', '-ec', $script) -WorkingDirectory $WorkingDirectory -Environment $Environment -AllowFailure -LogPath $log | Out-Null
     $LASTEXITCODE
 }
 
@@ -329,7 +330,7 @@ function Invoke-DocumentedStart {
 try {
     Write-CellLog "== $CellName ($($cell.Os), $($cell.Runtime)$(if ($rootless) { ' rootless' }), $($cell.Network), $($cell.Scenario)), bundle $bundleName$(if ($PreviousBundlePath) { ", from $(Split-Path $PreviousBundlePath -Leaf)" })"
 
-    # 1. A fresh VM; on the air-gapped network, proof that it is.
+    # 1. A fresh VM; on the air-gapped network, proof that it is, and on the online network, that it is not.
     New-LabVm -Name $vm -Image $matrix.Images[$cell.Image].Image -Profile @($lab.BaseProfile, $network.Profile) `
         -MemoryGiB $cell.MemoryGiB
     $address = Get-LabVmAddress -Name $vm -Gateway $network.Gateway
@@ -338,20 +339,28 @@ try {
         Invoke-LabVm -Name $vm -Command @('curl', '-sS', '--max-time', '5', '-o', '/dev/null', 'https://github.com') -AllowFailure | Out-Null
         Add-Check 'no route out: github.com unreachable from the VM' ($LASTEXITCODE -ne 0)
     }
-
-    # 2. The bundle under test, checked as the installation guide says.
-    $bundleFolder = Copy-Bundle $BundlePath
-    $published = "$BundlePath.sha256"
-    if (Test-Path $published) {
-        Copy-LabFile -Source $published -Destination "${vm}:/root/$bundleName.sha256"
-        $verified = Invoke-LabVm -Name $vm -WorkingDirectory /root -Command @('sha256sum', '-c', "$bundleName.sha256") -AllowFailure
-        Add-Check 'the archive matches its published checksum' ($LASTEXITCODE -eq 0) "$verified"
-    }
     else {
-        Add-Check 'the archive matches its published checksum' $false "no $bundleName.sha256 beside the archive"
+        Invoke-LabVm -Name $vm -Command @('curl', '-sS', '--max-time', '10', '-o', '/dev/null', 'https://github.com') -AllowFailure | Out-Null
+        Add-Check 'online: github.com reachable from the VM' ($LASTEXITCODE -eq 0)
     }
-    $contents = Invoke-LabVm -Name $vm -WorkingDirectory $bundleFolder -Command @('sha256sum', '-c', '--quiet', 'checksums.sha256') -AllowFailure
-    Add-Check 'every file in the bundle matches checksums.sha256' ($LASTEXITCODE -eq 0) "$($contents | Select-Object -First 3)"
+
+    # 2. The bundle under test, checked as the installation guide says. An online cell downloads its release instead,
+    # as the installer does, so it carries no bundle in.
+    $bundleFolder = $null
+    if ($cell.Network -eq 'airgap') {
+        $bundleFolder = Copy-Bundle $BundlePath
+        $published = "$BundlePath.sha256"
+        if (Test-Path $published) {
+            Copy-LabFile -Source $published -Destination "${vm}:/root/$bundleName.sha256"
+            $verified = Invoke-LabVm -Name $vm -WorkingDirectory /root -Command @('sha256sum', '-c', "$bundleName.sha256") -AllowFailure
+            Add-Check 'the archive matches its published checksum' ($LASTEXITCODE -eq 0) "$verified"
+        }
+        else {
+            Add-Check 'the archive matches its published checksum' $false "no $bundleName.sha256 beside the archive"
+        }
+        $contents = Invoke-LabVm -Name $vm -WorkingDirectory $bundleFolder -Command @('sha256sum', '-c', '--quiet', 'checksums.sha256') -AllowFailure
+        Add-Check 'every file in the bundle matches checksums.sha256' ($LASTEXITCODE -eq 0) "$($contents | Select-Object -First 3)"
+    }
 
     # 3. PowerShell, and the repository's deployment checks with the documentation they read.
     Copy-LabFile -Source $PowerShellPath -Destination "${vm}:/root/powershell.tar.gz"

@@ -48,5 +48,18 @@
         @{ Name = 'u24-docker-ctrd-extdb'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'docker', 'ubuntu') }
         @{ Name = 'alma9-podrf-extdb'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Soak'; MemoryGiB = 6; Tags = @('soak', 'airgap', 'podman', 'rhel') }
+
+        # Online, as a customer with internet access installs and upgrades: the installation guide's one-line install
+        # of the latest published release, and an upgrade to it from the release before it by the guide's connected
+        # steps, downloading from GitHub and ghcr.io. They test what is published, not the commit, so a run takes them
+        # only when asked for with the online tag: release.yml does, once a release is published.
+        @{ Name = 'u24-docker-ctrd-on'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'online'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'online', 'docker', 'ubuntu') }
+        @{ Name = 'u24-docker-classic-on'; Image = 'u24-docker-classic'; Runtime = 'docker'; Network = 'online'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'online', 'docker', 'ubuntu') }
+        @{ Name = 'alma9-podrf-on'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'online'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'online', 'podman', 'rhel') }
+        @{ Name = 'u24-podrl-on'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'online'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'online', 'podman', 'ubuntu') }
+        @{ Name = 'u24-docker-ctrd-on-up'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'online'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'online', 'docker', 'ubuntu') }
+        @{ Name = 'u24-docker-classic-on-up'; Image = 'u24-docker-classic'; Runtime = 'docker'; Network = 'online'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'online', 'docker', 'ubuntu') }
+        @{ Name = 'alma9-podrf-on-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'online'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'online', 'podman', 'rhel') }
+        @{ Name = 'u24-podrl-on-up'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'online'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'online', 'podman', 'ubuntu') }
     )
 }

@@ -8,8 +8,9 @@
 # 2. Builds, scans, smoke-tests, and pushes Docker images to ghcr.io
 # 3. Publishes PowerShell module to PSGallery
 # 4. Creates an air-gapped release bundle
-# 5. Creates a GitHub Release with all assets
+# 5. Checks every image can be pulled without signing in, then creates a GitHub Release with all assets
 # 6. Publishes the release's screenshots to junctional.io and tetron.io (stable releases only)
+# 7. Starts the deployment lab's online cells against the published release (stable releases only)
 
 name: Release
 
@@ -788,11 +789,34 @@ jobs:
           path: ./release-output/jim-release-${{ steps.version.outputs.VERSION }}/checksums.sha256
           retention-days: 5
 
+  # Every image this release pushed must be pullable without signing in, as the installer and the installation guide
+  # pull them. A new package on ghcr.io starts private, and build-containers pushes and smoke-tests signed in, so
+  # nothing else would notice; v0.17.0 shipped with all three private, failing every online install (#1876). Checked
+  # before the GitHub Release is created, so a release with a private image is never published: make the package
+  # public (the error says how) and re-run this job.
+  check-images-public:
+    name: Check the images can be pulled anonymously
+    runs-on: self-hosted
+    needs: build-containers
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Pull each image's manifest anonymously
+        shell: pwsh
+        run: |
+          $prefix = 'ghcr.io/${{ github.repository_owner }}'.ToLowerInvariant()
+          $version = '${{ github.ref_name }}' -replace '^v', ''
+          ./scripts/Test-PublicImage.ps1 -Version $version -Image "$prefix/jim-web", "$prefix/jim-worker", "$prefix/jim-scheduler"
+          exit $LASTEXITCODE
+
   # Job 5: Create GitHub Release
   create-release:
     name: Create GitHub Release
     runs-on: self-hosted
-    needs: [build-containers, publish-powershell, create-bundle]
+    needs: [build-containers, check-images-public, publish-powershell, create-bundle]
 
     steps:
       - name: Checkout
@@ -944,6 +968,27 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           repository: ${{ github.repository_owner }}/junctional.io
           event-type: jim-release
+
+  # The deployment lab's online cells (#1876), once the release is published: the installation guide's one-line install
+  # of the latest release on Docker and Podman, and an upgrade to it from the release before it by the guide's connected
+  # steps, downloading from GitHub and ghcr.io as a customer with internet access does. They test what was just
+  # published, so they cannot run before it, and the release gate's run (the air-gapped cells, on the release commit)
+  # does not take them. This dispatches deploy-lab.yml on main with the online tag; its result is the
+  # `jim-deploy-lab-online` status and the run's summary. The release is out by now, so a failure here holds nothing
+  # back: it is red to be seen.
+  deploy-lab-online:
+    name: Start the deployment lab's online cells
+    runs-on: self-hosted
+    needs: create-release
+    if: ${{ !contains(github.ref, '-') }}
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch deploy-lab.yml with the online cells
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run deploy-lab.yml --ref main -f tags=online
 
   # The release's screenshots on junctional.io and tetron.io (#582). pre-release.yml's jim-screenshots job captured them
   # and opened a pull request on each site; merging them here means the sites change the moment the release is

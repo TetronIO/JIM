@@ -13,6 +13,12 @@
 # JIM_DEPLOY_LAB_GATE_ENFORCED is `true` (set after the lab's first green run here); from then on there is no
 # override, so the remedy for a red run is a fix and a dispatched run.
 #
+# The online cells (tag `online`) are the exception: they install the latest published release from GitHub and ghcr.io,
+# and upgrade to it from the release before it, so they test what is published rather than the commit. A run takes them
+# only when dispatched with tags `online`, which release.yml's deploy-lab-online job does once a stable release is out,
+# and posts their result as a status of its own, `jim-deploy-lab-online`, which no gate reads. A run of some cells, by
+# name or tag, posts no status at all: only a run of every cell has tested the commit.
+#
 # Triggers: nightly on main, a push to main that changes VERSION (the release pull request's merge, so the release
 # commit is tested by itself, as pre-release.yml does), and workflow_dispatch. NEVER pull_request. Split-trust runner
 # model (see ci.yml): a pull_request runs code from anyone's fork, and the lab runner's account is in the host's lxd
@@ -165,7 +171,8 @@ jobs:
 
       # The commit status the release gate reads. Posted on the SHA that was tested (every trigger checks out
       # github.sha), from the run's outcome: success only when every cell passed. A cancelled run posts nothing, so it
-      # can neither open the gate nor close it on a commit it did not finish testing.
+      # can neither open the gate nor close it on a commit it did not finish testing; nor does a run of some cells, which
+      # did not test it all. The online cells' run posts under its own context, which the gate never reads.
       - name: Post the jim-deploy-lab commit status
         if: ${{ always() && job.status != 'cancelled' }}
         env:
@@ -176,7 +183,15 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           LAB_OUTCOME: ${{ steps.lab.outcome }}
           SUMMARY_DESCRIPTION: ${{ steps.summary.outputs.description }}
+          CELLS: ${{ inputs.cells }}
+          TAGS: ${{ inputs.tags }}
         run: |
+          if (-not $env:CELLS -and -not $env:TAGS) { $context = 'jim-deploy-lab' }
+          elseif (-not $env:CELLS -and "$env:TAGS".Trim() -eq 'online') { $context = 'jim-deploy-lab-online' }
+          else {
+            Write-Host 'A run of some cells: no commit status posted, as it has not tested the commit.'
+            exit 0
+          }
           $state = 'success'
           if ($env:JOB_STATUS -ne 'success') {
             # failure: cells ran and at least one failed; error: the run never got as far as a report.
@@ -184,7 +199,7 @@ jobs:
           }
           $description = $env:SUMMARY_DESCRIPTION
           if (-not $description) { $description = 'the run stopped before the lab reported' }
-          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context='jim-deploy-lab' -f description="$description" -f target_url="$env:RUN_URL"
+          gh api "repos/$env:REPOSITORY/statuses/$env:TESTED_SHA" -f state="$state" -f context="$context" -f description="$description" -f target_url="$env:RUN_URL"
           exit $LASTEXITCODE
 
       # The runner is not ephemeral: a run that failed or timed out can leave its VMs. The first step refused to start

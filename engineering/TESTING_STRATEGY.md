@@ -388,7 +388,7 @@ Beside the seven tiers, which test JIM's code, one check tests how JIM is deploy
 
 **Running locally**: on the lab host, `Invoke-DeploymentLab.ps1` (see the README's "Running it").
 
-**Not yet covered**: online installs and online upgrades, which download from GitHub Releases and ghcr.io and so need two published releases with `setup.sh --upgrade`; they follow the next release (#1876).
+**Online cells**: eight more cells (tag `online`) install the latest published release with the installation guide's one-line installer, and upgrade to it from the release before it by the guide's connected steps, downloading from GitHub and ghcr.io. They test what is published rather than the commit, so the nightly run and the release gate leave them out; `release.yml` dispatches them once a stable release is out, and they post `jim-deploy-lab-online`, which no gate reads. Their first run found JIM's images private on ghcr.io, failing every online install; `release.yml` now checks every image can be pulled anonymously before it publishes a release (#1876).
 
 ## The Watermark Bug: A Case Study
 

@@ -222,8 +222,25 @@ Describe 'the gate in the workflows' {
         $gateJob | Should -Match "(?ms)if: vars\.JIM_DEPLOY_LAB_GATE_ENFORCED != 'true'.*?::warning"
     }
 
-    It 'reads the context deploy-lab.yml posts' {
-        $script:DeployLab | Should -Match "context='$([regex]::Escape($script:DeployLabContext))'"
+    It 'reads the context deploy-lab.yml posts, which only a run of every cell posts' {
+        # A run of some cells, chosen by name or tag, has not tested the commit, so it must not open the gate.
+        $script:DeployLab | Should -Match "(?ms)if \(-not \`$env:CELLS -and -not \`$env:TAGS\)\s*\{\s*\`$context = '$([regex]::Escape($script:DeployLabContext))'"
+        $script:DeployLab | Should -Match '-f context="\$context"'
+    }
+
+    It 'posts the online cells under a context of their own, which the gate never reads' {
+        # The online cells test the published release, not the commit their run checked out.
+        $script:DeployLab | Should -Match "(?m)\`$context = 'jim-deploy-lab-online'"
+        'jim-deploy-lab-online' | Should -Not -Be $script:DeployLabContext
+    }
+
+    It 'has release.yml start the online cells once a stable release is published' {
+        $job = [regex]::Match($script:Release, '(?ms)^  deploy-lab-online:.*?(?=^  \S|\z)').Value
+        $job | Should -Not -BeNullOrEmpty
+        $job | Should -Match '(?m)^    needs: \[?[^\n]*\bcreate-release\b'
+        $job | Should -Match "(?m)^    if: \$\{\{ !contains\(github\.ref, '-'\) \}\}"
+        $job | Should -Match '(?m)^      actions: write'
+        $job | Should -Match 'gh workflow run deploy-lab\.yml --ref main -f tags=online'
     }
 
     It 'has deploy-lab.yml start by itself when a change to VERSION reaches main, and nightly' {

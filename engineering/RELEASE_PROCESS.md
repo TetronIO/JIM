@@ -8,10 +8,11 @@ JIM uses a tag-based release workflow. When we push a tag like `v0.2.0`, the Git
 
 1. Refuses to continue unless the tagged commit has a green `jim-ad-lab` commit status (the Active Directory lab gate, below), a green `jim-ad-lab-adfs` commit status (its AD FS gate, below), a green `jim-pre-release` commit status (the pre-release integration gate, below) and a green `jim-deploy-lab` commit status (the deployment lab gate, below)
 2. Validates the build and runs all tests
-3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io)
+3. Builds and pushes Docker images to GitHub Container Registry (ghcr.io), then checks each can be pulled without signing in (`scripts/Test-PublicImage.ps1`), as the installer pulls them: a new package on ghcr.io starts private, which fails every online install (v0.17.0 shipped that way). A private image holds back the GitHub Release; make the package public (organisation Settings, Packages, the package's settings, Change visibility) and re-run the job
 4. Publishes the PowerShell module to PSGallery
 5. Creates an air-gapped deployment bundle
 6. Creates a GitHub Release with all assets
+7. Starts the deployment lab's online cells against the published release (stable releases only; see the deployment lab gate, below)
 
 ## The Active Directory Lab Gate
 
