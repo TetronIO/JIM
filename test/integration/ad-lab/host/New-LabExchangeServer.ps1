@@ -527,7 +527,7 @@ try {
     }
 
     Write-Heading 'Done'
-    Write-Ok "$Name is built: $($info.Fqdn) at $IPAddress, Remote PowerShell $($info.PowerShellUri), OS build $($build.buildString)."
+    Write-Ok "$Name is built: $($info.Fqdn) at $IPAddress, Remote PowerShell $($info.ManagementUri) (and $($info.PowerShellUri)), OS build $($build.buildString)."
     Write-Ok ('Took {0:N0} minutes: {1}' -f $buildClock.Elapsed.TotalMinutes, ($script:Timings -join '; '))
     Write-Ok "From now on revert $DomainControllerName and $Name together, each to its own baseline."
 }
