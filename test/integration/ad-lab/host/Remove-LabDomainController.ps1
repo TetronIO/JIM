@@ -80,15 +80,31 @@ try {
 
     $disks = @(Get-VMHardDiskDrive -VMName $Name | ForEach-Object { $_.Path })
     Remove-VM -Name $Name -Force
+
+    # The VM is gone whatever happens to its files, so the deletes are best effort: everything that can go goes, and
+    # each file that cannot is named, so that it is not left behind unseen (the disk alone is tens of GB).
+    $leftovers = [System.Collections.Generic.List[string]]::new()
     foreach ($disk in $disks) {
-        Remove-Item -LiteralPath $disk -Force -ErrorAction SilentlyContinue
+        if (-not (Test-Path -LiteralPath $disk)) { continue }
+        Remove-Item -LiteralPath $disk -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+        foreach ($failure in $removeErrors) {
+            $leftovers.Add("$($failure.TargetObject) ($($failure.Exception.Message))")
+        }
     }
 
     # The VM's own folder, only when it is named for the VM (this lab always creates it so).
     if ($vmPath -and (Test-Path -LiteralPath $vmPath) -and ((Split-Path $vmPath -Leaf) -eq $Name)) {
-        Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+        foreach ($failure in $removeErrors) {
+            $leftovers.Add("$($failure.TargetObject) ($($failure.Exception.Message))")
+        }
     }
-    Write-Host "Removed $Name, its checkpoints and its disk." -ForegroundColor Green
+    if ($leftovers.Count -gt 0) {
+        Write-Host "Removed $Name and its checkpoints, but could not delete: $($leftovers -join '; '). An administrator must delete them; Install-LabScripts.ps1 (elevated, and its hourly task) lets the control account modify the lab VMs' folders, so that it can." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "Removed $Name, its checkpoints and its disk." -ForegroundColor Green
+    }
 }
 catch {
     [Console]::Error.WriteLine("Remove-LabDomainController failed: $($_.Exception.Message)")

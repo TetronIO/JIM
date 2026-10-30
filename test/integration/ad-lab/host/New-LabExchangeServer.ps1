@@ -425,7 +425,7 @@ try {
     # --- The VM ---------------------------------------------------------------------------------
     $installPending = $false
     if ($null -eq $vm) {
-        $image = Get-LabInstallImage -IsoPath $IsoPath
+        $image = Get-LabInstallImage -IsoPath $IsoPath -RecordPath (Get-LabInstallImageRecordPath -Root $PSScriptRoot)
         Write-Ok "Installation image: $($image.ImageName)$(if ($image.Evaluation) { ' (evaluation media: converted to full Datacenter by the License phase)' })"
         $null = New-Item -ItemType Directory -Path (Join-Path $VhdDirectory $Name) -Force
         New-LabUnattendIso -TemplatePath (Join-Path $guestDirectory 'autounattend.xml') -Image $image -Password $adminSecret `
