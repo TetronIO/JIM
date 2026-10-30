@@ -27,7 +27,7 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 
 ## The matrix
 
-All cells are air-gapped: their VMs sit on a bridge with no route out, and each cell proves it cannot reach
+Every cell a run takes by default is air-gapped: its VM sits on a bridge with no route out, and proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
 some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`), and one is the Soak cell
 (`alma9-podrf-soak`).
@@ -40,6 +40,19 @@ some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-e
 | `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
 | `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
+
+The online cells install and upgrade as a customer with internet access does, downloading from GitHub and ghcr.io, so
+they test the **latest published release**, not the bundle or commit under test. A run takes them only when asked for
+with `-Tag online` (they need no build, so a run of only online cells builds nothing): `release.yml` starts one once a
+stable release is published. Each is an Install cell (`-on`) and an Upgrade cell (`-on-up`), one per row of #1876's
+table:
+
+| Cells | Operating system | Runtime |
+|-------|------------------|---------|
+| `u24-docker-ctrd-on`, `-on-up` | Ubuntu 24.04 | Docker, containerd image store |
+| `u24-docker-classic-on`, `-on-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
+| `alma9-podrf-on`, `-on-up` | AlmaLinux 9 | Podman, rootful |
+| `u24-podrl-on`, `-on-up` | Ubuntu 24.04 | Podman, rootless |
 
 AlmaLinux stands in for Red Hat Enterprise Linux 9. The images are each distribution's cloud image with only the
 container runtime added, so they are as bare as a customer's new host.
@@ -64,6 +77,12 @@ container runtime added, so they are as bare as a customer's new host.
 6. **Nothing crashed quietly**: no container has restarted, and the kernel has logged no fault or AppArmor denial of a
    container since the reboot. A crashing service is restarted and soon looks healthy again, so readiness alone
    cannot show it (#1953).
+
+An online Install cell proves instead that its VM reaches `github.com`, and carries no bundle in: in place of steps 2
+and 3 it runs the installation guide's one-line install (`curl -fsSL https://junctional.io/get | bash`, read from the
+page, with the same answers given in advance), then checks that JIM reports the latest release's version, and carries
+on at step 4. What the deployment-boot check covers beyond that is the same however the release arrived, and the
+air-gapped cells check it.
 
 ## What an Upgrade cell checks
 
@@ -98,6 +117,13 @@ previous release running; and refuse an upgrade over a compose file edited by ha
 records its compose files as installed. After upgrading, the same upgrade again must report nothing to upgrade, and the
 previous release's installer must refuse to downgrade. Each refusal must leave every file of the installation and every
 container exactly as they were.
+
+An online Upgrade cell upgrades from the release before the latest to the latest. It installs the earlier release with
+that release's own `setup.sh`, downloaded from its release and pointed at it (`ConvertTo-LabPinnedInstaller`), as it
+installed while it was the latest, and upgrades by the guide's connected steps: on Docker,
+`curl -fsSL https://junctional.io/get | bash -s -- --upgrade`; on Podman, the release's pod files downloaded, with the
+guide's example version replaced by the release's, and its images pulled. The refusals and re-runs above are the same
+online, so only the air-gapped cells check them.
 
 The release upgraded from is the latest published one, fetched from GitHub once, or `-PreviousBundlePath`. A build from
 a commit whose `VERSION` is not newer reports the next patch version, so that the installer takes it as an upgrade.
@@ -206,8 +232,10 @@ host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 a runner group of that name): nightly on `main`, by itself when a change to `VERSION` reaches `main` (the release pull
 request's merge), and on dispatch, with optional cells and tags. It posts a `jim-deploy-lab` commit status on the
 commit it tested, which the release gate (`scripts/Test-DeployLabReleaseGate.ps1`, a job of `release.yml`) requires
-once `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`. The report is the job's summary, and every cell's folder is an artefact
-for 30 days.
+once `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`. Only a run of every cell posts it; a run of some cells posts no status.
+The online cells' run, which `release.yml` dispatches once a stable release is published (`-f tags=online`), posts
+`jim-deploy-lab-online` instead, which no gate reads. The report is the job's summary, and every cell's folder is an
+artefact for 30 days.
 
 A run by hand on the host and a run in Actions would collide (the same VM names, the same memory), so the workflow
 refuses to start while any `jl-` VM exists, and deletes every one when it finishes. Run by hand only when no workflow

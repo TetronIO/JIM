@@ -29,7 +29,9 @@
 
 .PARAMETER Tag
     Run only the cells carrying every one of these tags (Cells.psd1 tags each cell, e.g. install, airgap, podman,
-    rhel).
+    rhel). The online cells run only when this includes online: they install the latest published release from
+    GitHub and ghcr.io, as a customer with internet access does, and upgrade to it from the release before it, so they
+    test what is published rather than the bundle or commit given (which a run of only online cells does not build).
 
 .PARAMETER OutputPath
     Where each cell's folder and the report go. Default ./deployment-lab-<date and time>.
@@ -109,14 +111,29 @@ New-Item -ItemType Directory -Path $OutputPath -Force | Out-Null
 $OutputPath = (Resolve-Path $OutputPath).Path
 $cachePath = $lab.CachePath -replace '^~', $HOME
 
-$upgrades = @($cells | Where-Object { $_.Scenario -eq 'Upgrade' }).Count -gt 0
+# The online cells' releases: the latest published one, and the one before it, which their upgrades start from.
+$onlineCells = @($cells | Where-Object { $_.Network -eq 'online' })
+$offlineCells = @($cells | Where-Object { $_.Network -ne 'online' })
+if ($onlineCells) {
+    $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/TetronIO/JIM/releases?per_page=30' -Headers @{ Accept = 'application/vnd.github+json' }
+    $OnlineBundlePath = Get-LabReleaseBundle -CachePath $cachePath -Tag (Select-LabReleaseTag -Release $releases)
+    $OnlinePreviousBundlePath = if ($onlineCells | Where-Object { $_.Scenario -eq 'Upgrade' }) {
+        Get-LabReleaseBundle -CachePath $cachePath -Tag (Select-LabReleaseTag -Release $releases -Skip 1)
+    }
+}
+
+$upgrades = @($offlineCells | Where-Object { $_.Scenario -eq 'Upgrade' }).Count -gt 0
 if ($upgrades) {
     if (-not $PreviousBundlePath) {
         $PreviousBundlePath = Get-LabReleaseBundle -CachePath $cachePath
     }
     $PreviousBundlePath = (Resolve-Path $PreviousBundlePath).Path
 }
-if ($Commit) {
+if (-not $offlineCells) {
+    # Only online cells: nothing of the commit's to build or install.
+    $BundlePath = $OnlineBundlePath
+}
+elseif ($Commit) {
     $build = @{ Commit = $Commit; OutputPath = (Join-Path $OutputPath 'bundle') }
     if ($upgrades) {
         $previousVersion = (Split-Path $PreviousBundlePath -Leaf) -replace '^jim-release-', '' -replace '\.tar\.gz$', ''
@@ -160,10 +177,11 @@ function Start-Cell {
     # Through bash for its redirections: the cell's output goes to its own log, and its standard input is closed, as
     # lxc needs (see Invoke-LabLxc).
     $start = [System.Diagnostics.ProcessStartInfo]::new('bash')
+    $bundle, $previous = if ($Cell.Network -eq 'online') { $OnlineBundlePath, $OnlinePreviousBundlePath } else { $BundlePath, $PreviousBundlePath }
     foreach ($argument in @('-c', 'exec "$@" < /dev/null > "$0" 2>&1', (Join-Path $cellPath 'runner.log'), $pwshPath,
-            '-NoProfile', '-File', $cellScript, '-CellName', $Cell.Name, '-BundlePath', $BundlePath,
+            '-NoProfile', '-File', $cellScript, '-CellName', $Cell.Name, '-BundlePath', $bundle,
             '-PayloadPath', $payloadPath, '-PowerShellPath', $powerShellPath, '-OutputPath', $cellPath, '-KeepVm', $KeepVm) +
-        $(if ($Cell.Scenario -eq 'Upgrade') { @('-PreviousBundlePath', $PreviousBundlePath) } else { @() })) {
+        $(if ($Cell.Scenario -eq 'Upgrade') { @('-PreviousBundlePath', $previous) } else { @() })) {
         $start.ArgumentList.Add($argument)
     }
     $start.UseShellExecute = $false
@@ -223,7 +241,14 @@ finally {
 }
 
 $ordered = foreach ($cell in $cells) { $results | Where-Object { $_.Cell.Name -eq $cell.Name } }
-$title = "Deployment lab: $(Split-Path $BundlePath -Leaf)$(if ($upgrades) { " (upgrades from $(Split-Path $PreviousBundlePath -Leaf))" }), $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($([math]::Round(((Get-Date) - $runStarted).TotalMinutes)) min)"
+$under = @()
+if ($offlineCells) {
+    $under += "$(Split-Path $BundlePath -Leaf)$(if ($upgrades) { " (upgrades from $(Split-Path $PreviousBundlePath -Leaf))" })"
+}
+if ($onlineCells) {
+    $under += "online: $(Split-Path $OnlineBundlePath -Leaf)$(if ($OnlinePreviousBundlePath) { " (upgrades from $(Split-Path $OnlinePreviousBundlePath -Leaf))" }) as published"
+}
+$title = "Deployment lab: $($under -join '; '), $(Get-Date -Format 'yyyy-MM-dd HH:mm') ($([math]::Round(((Get-Date) - $runStarted).TotalMinutes)) min)"
 $report = Format-LabReport -Result @($ordered) -Title $title
 $report | Set-Content (Join-Path $OutputPath 'report.md')
 $ordered | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $OutputPath 'results.json')

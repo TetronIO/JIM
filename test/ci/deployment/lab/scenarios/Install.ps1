@@ -2,16 +2,33 @@
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 # The Install scenario, dot-sourced by Invoke-LabCell.ps1 once the VM is up and the bundle checked: the
-# deployment-boot check on the cell's operating system, then from another machine, then across a host reboot. See
-# README.md, "What an Install cell checks".
+# deployment-boot check on the cell's operating system (online, the installation guide's one-line install instead),
+# then from another machine, then across a host reboot. See README.md, "What an Install cell checks".
 
-# The deployment-boot check, on this cell's operating system: it installs JIM with the bundle's setup.sh and checks
-# everything the deployment-boot job in CI does.
-$boot = @('pwsh', '-NoProfile', '-File', '/root/jim/test/ci/deployment/Invoke-DeploymentBoot.ps1',
-    '-BundlePath', $bundleFolder, '-Runtime', $cell.Runtime, '-Authority', $authority, '-HostName', $hostName,
-    '-OpenFirewall', '-KeepRunning', '-OutputPath', '/root/boot')
-if ($rootless) {
-    $boot += '-Rootless'
+if ($cell.Network -eq 'online') {
+    # As the installation guide gives it, as root already (so without sudo), answering its questions in advance: it
+    # downloads the latest release from GitHub and its images from ghcr.io.
+    $release = Get-BundleVersion $BundlePath
+    $install = (Get-DocumentedCommand -Page 'deployment.md' -Heading 'With the Installer (Recommended)') -replace '\bsudo\s+', ''
+    $installed = Invoke-Documented -Rootful -Command $install -Environment (New-SetupSettings) -Title 'the online install'
+    Add-Check 'installed online with the one-line installer' ($installed -eq 0) "exit $installed"
+    if ($installed -ne 0) {
+        throw 'stopped: the online install failed'
+    }
+    Copy-LabFile -Source "${vm}:/opt/jim/tls/ca.crt" -Destination $caPath
+    if (Test-ReadyCheck 'installed') {
+        Test-VersionCheck 'installed' $release
+        Test-SignInCheck 'installed'
+    }
+}
+else {
+    # The deployment-boot check, on this cell's operating system: it installs JIM with the bundle's setup.sh and checks
+    # everything the deployment-boot job in CI does.
+    $boot = @('pwsh', '-NoProfile', '-File', '/root/jim/test/ci/deployment/Invoke-DeploymentBoot.ps1',
+        '-BundlePath', $bundleFolder, '-Runtime', $cell.Runtime, '-Authority', $authority, '-HostName', $hostName,
+        '-OpenFirewall', '-KeepRunning', '-OutputPath', '/root/boot')
+    if ($rootless) {
+        $boot += '-Rootless'
 }
 Write-CellLog 'running the deployment-boot check on the VM (boot.log)'
 $bootOutput = Invoke-LabVm -Name $vm -Command $boot -Environment @{ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT = '1'; NO_COLOR = '1' } `
@@ -30,6 +47,7 @@ $leg = if ($cell.Runtime -eq 'docker') { 'docker' } elseif ($rootless) { 'podman
 Copy-LabFile -Source "${vm}:/opt/jim-$leg/tls/ca.crt" -Destination $caPath
 if (Test-ReadyCheck 'installed') {
     Test-SignInCheck 'installed'
+}
 }
 
 # A host reboot.

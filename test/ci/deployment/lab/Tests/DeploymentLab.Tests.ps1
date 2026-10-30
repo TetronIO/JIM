@@ -478,3 +478,94 @@ Describe 'Compare-LabFingerprint' {
         Compare-LabFingerprint -Before @() -After @('x') | Should -Be @('+ x')
     }
 }
+
+Describe 'Online cells' {
+    BeforeAll {
+        function New-OnlineMatrix {
+            $matrix = New-TestMatrix
+            $matrix.Cells += @{ Name = 'u24-docker-on'; Image = 'u24-docker'; Runtime = 'docker'; Network = 'online'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('docker', 'install', 'online') }
+            $matrix
+        }
+    }
+
+    It 'accepts an online install or upgrade cell tagged online' {
+        $matrix = New-OnlineMatrix
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+        $matrix.Cells[2].Scenario = 'Upgrade'
+        $matrix.Cells[2].MemoryGiB = 12
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'names an online cell without the online tag, which no run would take' {
+        $matrix = New-OnlineMatrix
+        $matrix.Cells[2].Tags = @('docker', 'install')
+        Test-LabMatrix -Matrix $matrix | Should -Match "^u24-docker-on: .*online"
+    }
+
+    It 'names an air-gapped cell with the online tag' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Tags += 'online'
+        Test-LabMatrix -Matrix $matrix | Should -Match "^u24-docker-ag: .*online"
+    }
+
+    It 'names an online cell whose scenario is not Install or Upgrade' {
+        $matrix = New-OnlineMatrix
+        $matrix.Cells[2].Scenario = 'Soak'
+        Test-LabMatrix -Matrix $matrix | Should -Match "^u24-docker-on: .*Install or Upgrade"
+    }
+
+    It 'leaves online cells out of a run that does not ask for them, by name or wildcard' {
+        $cells = (New-OnlineMatrix).Cells
+        (Select-LabCell -Cell $cells).Name | Should -Be @('u24-docker-ag', 'alma-podrl-ag')
+        (Select-LabCell -Cell $cells -Name 'u24-*').Name | Should -Be @('u24-docker-ag')
+        (Select-LabCell -Cell $cells -Tag 'docker').Name | Should -Be @('u24-docker-ag')
+    }
+
+    It 'takes online cells when the online tag is given' {
+        $cells = (New-OnlineMatrix).Cells
+        (Select-LabCell -Cell $cells -Tag 'online').Name | Should -Be @('u24-docker-on')
+        (Select-LabCell -Cell $cells -Tag 'online', 'docker').Name | Should -Be @('u24-docker-on')
+    }
+}
+
+Describe 'Select-LabReleaseTag' {
+    BeforeAll {
+        $script:releases = @(
+            [pscustomobject]@{ tag_name = 'v0.18.0-rc.1'; draft = $false; prerelease = $true; published_at = '2026-11-02T00:00:00Z' }
+            [pscustomobject]@{ tag_name = 'v0.16.0'; draft = $false; prerelease = $false; published_at = '2026-09-30T09:23:56Z' }
+            [pscustomobject]@{ tag_name = 'v0.18.0'; draft = $true; prerelease = $false; published_at = $null }
+            [pscustomobject]@{ tag_name = 'v0.17.0'; draft = $false; prerelease = $false; published_at = '2026-10-29T18:55:11Z' }
+            [pscustomobject]@{ tag_name = 'v0.15.0'; draft = $false; prerelease = $false; published_at = '2026-09-23T10:58:16Z' }
+        )
+    }
+
+    It 'returns the latest published release, ignoring drafts and pre-releases' {
+        Select-LabReleaseTag -Release $releases | Should -Be 'v0.17.0'
+    }
+
+    It 'returns the release before it with -Skip 1' {
+        Select-LabReleaseTag -Release $releases -Skip 1 | Should -Be 'v0.16.0'
+    }
+
+    It 'fails when there are not enough releases' {
+        { Select-LabReleaseTag -Release $releases -Skip 3 } | Should -Throw '*3 published releases*'
+    }
+}
+
+Describe 'ConvertTo-LabPinnedInstaller' {
+    It 'points an installer that downloads the latest release at its own release instead' {
+        $script = @(
+            'GITHUB_REPO="TetronIO/JIM"'
+            'GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"'
+            'RELEASE_DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/latest/download"'
+        ) -join "`n"
+        $pinned = ConvertTo-LabPinnedInstaller -Script $script -Tag 'v0.16.0'
+        $pinned | Should -Match ([regex]::Escape('GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v0.16.0"'))
+        $pinned | Should -Match ([regex]::Escape('RELEASE_DOWNLOAD_BASE="https://github.com/${GITHUB_REPO}/releases/download/v0.16.0"'))
+        $pinned | Should -Not -Match 'latest'
+    }
+
+    It 'fails on an installer it cannot pin, rather than installing the latest release unnoticed' {
+        { ConvertTo-LabPinnedInstaller -Script 'echo nothing to pin' -Tag 'v0.16.0' } | Should -Throw '*GITHUB_API_URL*'
+    }
+}

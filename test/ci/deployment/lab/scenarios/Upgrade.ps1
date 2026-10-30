@@ -5,11 +5,14 @@
 # previous release with its own installer, give it real data, upgrade to the bundle under test by the Upgrading guide,
 # check, reboot and check again, then roll back by the guide and check the previous release is back with the data it
 # had. Every step the guide gives a command for runs that command, read from the documentation (Get-DocumentedCommand);
-# see README.md, "What an Upgrade cell checks".
+# see README.md, "What an Upgrade cell checks". An online cell installs the release before the latest one with its own
+# installer, downloading it as that installer did while it was the latest, and upgrades to the latest by the guide's
+# connected steps; the installer's refusals and re-runs, which are the same online, are left to the air-gapped cells.
 
 $previousVersion = Get-BundleVersion $PreviousBundlePath
 $newVersion = Get-BundleVersion $BundlePath
-$previousFolder = Copy-Bundle $PreviousBundlePath
+$online = $cell.Network -eq 'online'
+$previousFolder = if ($online) { '/root/setup-previous' } else { Copy-Bundle $PreviousBundlePath }
 $fromSixteenOrEarlier = Test-LabVersionAtMost -Version $previousVersion -Limit '0.16.0'
 $installPath = '/opt/jim'
 $tab = if ($cell.Runtime -eq 'docker') { 'Docker' } else { 'Podman' }
@@ -98,6 +101,19 @@ if ($cell.Runtime -eq 'podman' -and -not $rootless -and -not $ubuntu -and $fromS
         throw 'Could not tell NetworkManager to leave Podman''s interfaces alone'
     }
 }
+if ($online) {
+    # The previous release's own installer, from its release, pinned to that release.
+    $previousInstaller = Join-Path $OutputPath "setup-$previousVersion.sh"
+    $script = (Invoke-WebRequest -Uri "https://github.com/TetronIO/JIM/releases/download/v$previousVersion/setup.sh").Content
+    if ($script -is [byte[]]) {
+        $script = [System.Text.Encoding]::UTF8.GetString($script)
+    }
+    ConvertTo-LabPinnedInstaller -Script $script -Tag "v$previousVersion" | Set-Content -LiteralPath $previousInstaller -NoNewline
+    Invoke-LabVm -Name $vm -Command @('mkdir', '-p', $previousFolder) | Out-Null
+    Copy-LabFile -Source $previousInstaller -Destination "${vm}:$previousFolder/setup.sh"
+    Invoke-LabVm -Name $vm -Command @('chmod', '755', "$previousFolder/setup.sh") | Out-Null
+    Write-CellLog "$previousVersion's setup.sh from its release, pinned to v$previousVersion as it was while that was the latest release"
+}
 $installed =(Invoke-Setup -Folder $previousFolder -Settings (New-SetupSettings @{ JIM_INFRASTRUCTURE_API_KEY = $apiKey }) `
         -Log "install-$previousVersion.log").ExitCode -eq 0
 Add-Check "$previousVersion installed with its own installer" $installed $(if (-not $installed) { "see install-$previousVersion.log" })
@@ -143,7 +159,7 @@ if (-not $seeded) {
 }
 Test-SignInCheck $previousVersion
 
-if ($cell.Runtime -eq 'docker') {
+if ($cell.Runtime -eq 'docker' -and -not $online) {
     # The installer's refusals, each of which must leave the installation exactly as it was, still running.
     $before = Get-Fingerprint
     $declined = Invoke-Setup -Folder $bundleFolder -Argument '--upgrade' -Answer 'n' -Log 'upgrade-declined.log'
@@ -208,9 +224,9 @@ if ($cell.Runtime -eq 'docker') {
     # (#2299).
     $previousDatabaseImage = "$(Invoke-LabVm -Name $vm -Command @('docker', 'inspect', '--format', '{{.Image}}', 'jim.database'))".Trim()
     # Run as root already: without sudo, which would drop the backup confirmation given in advance.
-    $upgrade = (Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading with the installer' -Tab 'Air-gapped') -replace '(?m)^sudo\s+', ''
+    $upgrade = (Get-DocumentedCommand -Page 'upgrading.md' -Heading 'Upgrading with the installer' -Tab $(if ($online) { 'Connected' } else { 'Air-gapped' })) -replace '\bsudo\s+', ''
     $upgradeCommand = "export JIM_SETUP_BACKUP_CONFIRMED=true`n$upgrade"
-    $upgraded = Invoke-Documented -Command $upgradeCommand -WorkingDirectory $bundleFolder -Title 'the upgrade, with the installer'
+    $upgraded = Invoke-Documented -Command $upgradeCommand -WorkingDirectory $(if ($online) { '/root' } else { $bundleFolder }) -Title 'the upgrade, with the installer'
     Add-Check "upgraded to $newVersion with setup.sh --upgrade" ($upgraded -eq 0)
     $kept = "$(Invoke-LabVm -Name $vm -AllowFailure -Command @('docker', 'image', 'inspect', '--format', '{{.Id}}', 'docker.io/library/postgres:jim-previous'))".Trim()
     Add-Check "$previousVersion's PostgreSQL image kept as postgres:jim-previous, for rolling back" ($kept -eq $previousDatabaseImage) `
@@ -221,9 +237,22 @@ else {
     $heading = 'Upgrading on Podman'
     Add-Check '2. the current pod files kept, for rolling back' ((Invoke-Documented -Title 'keeping the pod files' -WorkingDirectory $installPath `
                 -Command (Get-DocumentedCommand -Page $page -Heading $heading -Step 'Keep the current pod files')) -eq 0)
-    Add-Check "3. $newVersion's images loaded and its files put in place, air-gapped" ((Invoke-Documented -Title 'the new release''s files and images' `
-                -WorkingDirectory $bundleFolder -Command (Get-DocumentedCommand -Page $page -Heading $heading `
-                    -Step 'Put the new release''s files in place, and its images.' -Block 2)) -eq 0)
+    if ($online) {
+        # Connected: the release's files downloaded and its images pulled, with the guide's example version replaced by
+        # the release's own, as the administrator does.
+        $put = Get-DocumentedCommand -Page $page -Heading $heading -Step 'Put the new release''s files in place, and its images.'
+        $putRelease = $put -replace '/releases/download/v\d+\.\d+\.\d+/', "/releases/download/v$newVersion/"
+        if ($putRelease -eq $put) {
+            throw 'Upgrading on Podman no longer downloads from a versioned release URL, to name the release in'
+        }
+        Add-Check "3. $newVersion's files downloaded and its images pulled, online" ((Invoke-Documented -Title 'the new release''s files and images' `
+                    -WorkingDirectory $installPath -Command $putRelease) -eq 0)
+    }
+    else {
+        Add-Check "3. $newVersion's images loaded and its files put in place, air-gapped" ((Invoke-Documented -Title 'the new release''s files and images' `
+                    -WorkingDirectory $bundleFolder -Command (Get-DocumentedCommand -Page $page -Heading $heading `
+                        -Step 'Put the new release''s files in place, and its images.' -Block 2)) -eq 0)
+    }
     $restartServer = $false
     if ($fromSixteenOrEarlier) {
         # The guide's notes for upgrading from v0.16.0 or earlier.
@@ -259,7 +288,7 @@ else {
 
 # 4. Verified, then again after a reboot.
 Test-RunningRelease 'upgraded' $newVersion -Sizing
-if ($cell.Runtime -eq 'docker') {
+if ($cell.Runtime -eq 'docker' -and -not $online) {
     # Running the installer again, or the previous release's, changes nothing.
     $before = Get-Fingerprint
     $same = Invoke-Setup -Folder $bundleFolder -Argument '--upgrade' -Settings @{ JIM_SETUP_BACKUP_CONFIRMED = 'true' } -Log 'upgrade-same.log'

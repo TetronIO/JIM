@@ -72,6 +72,18 @@ function Test-LabMatrix {
         elseif ($cell.Scenario -ne 'ExternalDatabase' -and $cell.ContainsKey('DatabaseMemoryGiB')) {
             "${name}: DatabaseMemoryGiB is for ExternalDatabase cells only"
         }
+        # Online cells test what is published, not the commit, so a run takes them only when asked for by their tag
+        # (Select-LabCell); the tag and the network must agree for that to hold.
+        $taggedOnline = 'online' -in @($cell.Tags)
+        if ($cell.Network -eq 'online' -and -not $taggedOnline) {
+            "${name}: an online cell must carry the online tag, which is how a run asks for it"
+        }
+        elseif ($cell.Network -ne 'online' -and $taggedOnline) {
+            "${name}: only a cell on the online network may carry the online tag"
+        }
+        if ($cell.Network -eq 'online' -and $cell.Scenario -notin @('Install', 'Upgrade')) {
+            "${name}: an online cell's scenario must be Install or Upgrade"
+        }
     }
 }
 
@@ -94,7 +106,9 @@ function Select-LabCell {
     <#
     .SYNOPSIS
         Returns the cells a run takes: those matching any of the names given (wildcards allowed) and carrying every
-        tag given, in the matrix's order.
+        tag given, in the matrix's order. Online cells only when the online tag is given: they install the latest
+        published release from GitHub, not the commit under test, so they run after a release rather than in the
+        nightly run or the release gate.
     #>
     [CmdletBinding()]
     param(
@@ -112,6 +126,9 @@ function Select-LabCell {
             continue
         }
         if ($Tag -and ($Tag | Where-Object { $_ -notin @($candidate.Tags) })) {
+            continue
+        }
+        if ($candidate.Network -eq 'online' -and 'online' -notin @($Tag)) {
             continue
         }
         $candidate
@@ -936,6 +953,55 @@ function Get-LabPowerShellArchive {
     $path
 }
 
+function Select-LabReleaseTag {
+    <#
+    .SYNOPSIS
+        Returns the tag of the latest published release in a list from GitHub's releases API, leaving out drafts and
+        pre-releases, or with -Skip, of one before it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [object[]]$Release,
+
+        [int]$Skip = 0
+    )
+
+    $published = @($Release | Where-Object { -not $_.draft -and -not $_.prerelease } |
+            Sort-Object { [datetime]$_.published_at } -Descending)
+    if ($published.Count -le $Skip) {
+        throw "Wanted the release $Skip before the latest, but there are only $($published.Count) published releases"
+    }
+    $published[$Skip].tag_name
+}
+
+function ConvertTo-LabPinnedInstaller {
+    <#
+    .SYNOPSIS
+        Returns an installer script that downloads its own release instead of the latest one: what it would have done
+        while its release was the latest, which is how an online upgrade cell installs the release it upgrades from.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Script,
+
+        [Parameter(Mandatory)]
+        [string]$Tag
+    )
+
+    $pinned = $Script -replace '(?m)^(GITHUB_API_URL=".*?/releases/)latest"', "`${1}tags/$Tag`"" `
+        -replace '(?m)^(RELEASE_DOWNLOAD_BASE=".*?/releases/)latest/download"', "`${1}download/$Tag`""
+    foreach ($variable in 'GITHUB_API_URL', 'RELEASE_DOWNLOAD_BASE') {
+        if ($pinned -notmatch "(?m)^$variable=`".*/$([regex]::Escape($Tag))[/`"]") {
+            throw "Could not pin the installer to ${Tag}: no $variable naming the latest release to replace"
+        }
+    }
+    $pinned
+}
+
 function Get-LabReleaseBundle {
     <#
     .SYNOPSIS
@@ -997,4 +1063,4 @@ Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabCellMemory,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
-    Invoke-LabSignIn, Get-LabPowerShellArchive, Get-LabReleaseBundle
+    Invoke-LabSignIn, Get-LabPowerShellArchive, Get-LabReleaseBundle, Select-LabReleaseTag, ConvertTo-LabPinnedInstaller
