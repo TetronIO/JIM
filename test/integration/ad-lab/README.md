@@ -441,7 +441,9 @@ and every recipient in the directory, and the mailboxes on the server, so revert
 mailboxes whose users no longer exist:
 
 - Building a new Exchange server first reverts its domain controller to `baseline`. When the server is built, the script
-  takes `baseline` of both, and removes the domain controller's `populated-*` checkpoints (the runner takes them again).
+  shuts it down and takes `baseline` of both, the server first, so nothing Exchange writes to the directory after its
+  own checkpoint is in the domain controller's. It then removes the domain controller's `populated-*` checkpoints (the
+  runner takes them again).
 - The two are reverted together, each to its own baseline, before any scenario that creates or changes recipients in
   that forest. LDAP scenarios that never touch Exchange leave the Exchange server off and are unaffected by it.
 - It never changes its machine account password (`DisablePasswordChange=1`), for the same reason as the AD FS server.

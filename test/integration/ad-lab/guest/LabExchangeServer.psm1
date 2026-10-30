@@ -502,6 +502,28 @@ function Test-LabKerberosChallenge {
     return ($StatusCode -eq 401) -and (@($schemes | Where-Object { $_ -in 'Kerberos', 'Negotiate' }).Count -gt 0)
 }
 
+function Get-LabExchangeFeatureGap {
+    <#
+    .SYNOPSIS
+        From one Get-WindowsFeature result, the wanted features Windows knows but has not installed (Missing), and
+        those it does not know at all (Unknown).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Wanted,
+
+        [AllowEmptyCollection()]
+        [object[]]$Feature = @()
+    )
+
+    $known = @($Feature | ForEach-Object { [string]$_.Name })
+    return [pscustomobject]@{
+        Missing = @($Feature | Where-Object { -not $_.Installed } | ForEach-Object { [string]$_.Name })
+        Unknown = @($Wanted | Where-Object { $_ -notin $known })
+    }
+}
+
 function Get-LabExchangeUserRemoval {
     <#
     .SYNOPSIS
@@ -541,6 +563,6 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
     'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
-    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeUserRemoval',
+    'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeFeatureGap', 'Get-LabExchangeUserRemoval',
     'ConvertTo-LabDispatchWaitNanosecond'
 )

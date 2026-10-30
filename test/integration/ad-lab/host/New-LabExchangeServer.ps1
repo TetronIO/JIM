@@ -9,9 +9,10 @@
 .DESCRIPTION
     Creates the VM and installs Windows exactly as New-LabFederationServer.ps1 does (Generation 2, production
     checkpoints only, the AVMA key), then drives the guest through Initialize-LabExchangeServer.ps1 over PowerShell
-    Direct: License, Prepare, Join, Prerequisites, Install, Configure and Verify. Finally it takes the 'baseline'
-    checkpoint of both VMs and, unless -LeaveRunning, shuts the server down: the lab runs it only for the scenarios
-    that use Exchange.
+    Direct: License, Prepare, Join, Prerequisites, Install, Configure and Verify. Finally it shuts the server down and
+    takes the 'baseline' checkpoint of both VMs, the server first, so nothing Exchange writes to the directory after
+    its own checkpoint is in the domain controller's. The server stays off unless -LeaveRunning: the lab runs it only
+    for the scenarios that use Exchange.
 
     The forest must already carry the Exchange organisation, prepared by its domain controller's build
     (settings.json directoryExtensions) from the same media this server installs from. This build never prepares a
@@ -110,7 +111,7 @@
     Build and verify, but take no checkpoint of either VM.
 
 .PARAMETER LeaveRunning
-    Leave the server running after its baseline is taken, rather than shut it down.
+    Start the server again after its baseline is taken, rather than leave it off.
 
 .EXAMPLE
     $admin = Read-Host 'Administrator password' -AsSecureString
@@ -509,7 +510,10 @@ try {
     }
     else {
         Write-Heading "Taking the baseline checkpoints of $Name and $DomainControllerName"
-        Start-Sleep -Seconds 30
+        # Exchange writes to the directory while it runs, so it is shut down before either checkpoint: nothing it
+        # writes after its own checkpoint can then reach the domain controller's, and the two stay a matching pair.
+        Stop-VM -Name $Name -Force
+        Write-Ok "Shut $Name down, so the pair of checkpoints matches"
         Invoke-Checkpoint -VmName $Name
         Invoke-Checkpoint -VmName $DomainControllerName
 
@@ -520,9 +524,17 @@ try {
         }
     }
 
-    if (-not $LeaveRunning) {
+    if ($LeaveRunning) {
+        if ((Get-VM -Name $Name).State -ne 'Running') {
+            Start-VM -Name $Name
+            Write-Ok "Started $Name again, as -LeaveRunning asks"
+        }
+    }
+    elseif ((Get-VM -Name $Name).State -ne 'Off') {
         Stop-VM -Name $Name -Force
-        Write-Ok "Shut $Name down; the lab starts it only for the scenarios that use Exchange"
+    }
+    if (-not $LeaveRunning) {
+        Write-Ok "$Name is off; the lab starts it only for the scenarios that use Exchange"
     }
 
     Write-Heading 'Done'

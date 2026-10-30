@@ -460,6 +460,33 @@ Describe 'Get-LabExchangeUserRemoval' {
     }
 }
 
+Describe 'Get-LabExchangeFeatureGap' {
+    BeforeAll {
+        function Get-TestFeature {
+            param([string]$Name, [bool]$Installed)
+            return [pscustomobject]@{ Name = $Name; Installed = $Installed }
+        }
+    }
+
+    It 'lists the features Windows knows but has not installed' {
+        $gap = Get-LabExchangeFeatureGap -Wanted @('Web-Server', 'RSAT-ADDS') -Feature @((Get-TestFeature 'Web-Server' $true), (Get-TestFeature 'RSAT-ADDS' $false))
+        @($gap.Missing) | Should -Be @('RSAT-ADDS')
+        @($gap.Unknown).Count | Should -Be 0
+    }
+
+    It 'lists the features Windows does not know at all' {
+        $gap = Get-LabExchangeFeatureGap -Wanted @('Web-Server', 'Not-A-Feature') -Feature @((Get-TestFeature 'Web-Server' $true))
+        @($gap.Unknown) | Should -Be @('Not-A-Feature')
+        @($gap.Missing).Count | Should -Be 0
+    }
+
+    It 'finds nothing to do when every feature is installed' {
+        $gap = Get-LabExchangeFeatureGap -Wanted @('Web-Server') -Feature @((Get-TestFeature 'Web-Server' $true))
+        @($gap.Missing).Count | Should -Be 0
+        @($gap.Unknown).Count | Should -Be 0
+    }
+}
+
 Describe 'ConvertTo-LabDispatchWaitNanosecond' {
     It 'reads the counter''s cooked value, which carries the display-as-percent flag, as hundredths of a nanosecond' {
         ConvertTo-LabDispatchWaitNanosecond -CookedValue 15580 | Should -Be 155.8
