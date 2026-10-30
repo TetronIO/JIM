@@ -8,6 +8,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 using NUnit.Framework;
 
@@ -127,18 +128,18 @@ public class CausalityEventCardTests
         Assert.That(card.GetAttribute("role"), Is.EqualTo("button"));
         Assert.That(card.GetAttribute("tabindex"), Is.EqualTo("0"));
 
-        card.Click();
+        await card.ClickAsync(new MouseEventArgs());
         Assert.That(selectCount, Is.EqualTo(1));
         Assert.That(selectedEvent, Is.SameAs(pendingExport));
 
-        card.KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter" });
+        await card.KeyDownAsync(new KeyboardEventArgs { Key = "Enter" });
         Assert.That(selectCount, Is.EqualTo(2));
 
-        card.KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = " " });
+        await card.KeyDownAsync(new KeyboardEventArgs { Key = " " });
         Assert.That(selectCount, Is.EqualTo(3));
 
         // Other keys must not select
-        card.KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Tab" });
+        await card.KeyDownAsync(new KeyboardEventArgs { Key = "Tab" });
         Assert.That(selectCount, Is.EqualTo(3));
     }
 
@@ -343,7 +344,7 @@ public class CausalityEventCardTests
             Assert.That(card.ClassList, Does.Contain("clickable"));
         }
 
-        card.Click();
+        await card.ClickAsync(new MouseEventArgs());
         Assert.That(selectedEvent, Is.SameAs(pendingExport));
     }
 }

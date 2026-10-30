@@ -13,6 +13,7 @@ using JIM.Web.Causality;
 using JIM.Web.Models;
 using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 using NUnit.Framework;
 
@@ -161,13 +162,13 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
     }
 
     [Test]
-    public void FilterChip_Click_FiltersRowsAndUpdatesTheCount()
+    public async Task FilterChip_Click_FiltersRowsAndUpdatesTheCountAsync()
     {
         var cut = RenderDetail();
         cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(6)));
 
         var addChip = cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Add", StringComparison.Ordinal));
-        addChip.Click();
+        await addChip.ClickAsync(new MouseEventArgs());
 
         cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(2)));
 
@@ -448,13 +449,13 @@ public class CausalityAttributeDetailTests : JimComponentTestContext
     }
 
     [Test]
-    public void FilterChip_Click_OnALargeChange_ReadsOnlyThatOperation()
+    public async Task FilterChip_Click_OnALargeChange_ReadsOnlyThatOperationAsync()
     {
         var queries = new List<ChangeValueRowQuery>();
         var cut = RenderLargeDetail(queries, MemberWindow);
         cut.WaitForAssertion(() => Assert.That(RenderedRowCount(cut), Is.EqualTo(3)));
 
-        cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Remove", StringComparison.Ordinal)).Click();
+        await cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Remove", StringComparison.Ordinal)).ClickAsync(new MouseEventArgs());
 
         cut.WaitForAssertion(() => Assert.That(queries[^1].Operation, Is.EqualTo(ChangeValueOperation.Remove)));
     }

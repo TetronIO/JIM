@@ -4,12 +4,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Web.Causality;
 using JIM.Web.Services;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using JIM.Web.Shared.Causality;
 using NUnit.Framework;
@@ -74,7 +76,7 @@ public class CausalityObjectTimelineTests : JimComponentTestContext
     }
 
     [Test]
-    public void Render_FewerRowsThanTheObjectHas_OffersMoreAndSaysHowManyAreShown()
+    public async Task Render_FewerRowsThanTheObjectHas_OffersMoreAndSaysHowManyAreShownAsync()
     {
         var shownMore = 0;
         var rows = Enumerable.Range(0, 3).Select(_ => Row(ObjectChangeType.Updated, "CsoUpdated:1", Cause("x"))).ToList();
@@ -86,7 +88,7 @@ public class CausalityObjectTimelineTests : JimComponentTestContext
             Assert.That(cut.Find(".jim-causality-timeline-count").TextContent, Does.Contain("3 of 120"));
         }
 
-        cut.Find("button.jim-causality-show-more").Click();
+        await cut.Find("button.jim-causality-show-more").ClickAsync(new MouseEventArgs());
         Assert.That(shownMore, Is.EqualTo(1));
     }
 

@@ -9,6 +9,7 @@ using JIM.Models.Sync;
 using JIM.Models.Transactional;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
@@ -94,13 +95,13 @@ public class CausalityPanelSpeculativeTests
     }
 
     [Test]
-    public void Render_PreviewResult_SelectingTableRendersTheTableView()
+    public async Task Render_PreviewResult_SelectingTableRendersTheTableViewAsync()
     {
         var cut = _context.Render<CausalityPanel>(ps => ps
             .Add(c => c.PreviewResult, SimplePreview())
             .Add(c => c.Context, PreviewContext()));
 
-        cut.FindAll(".seg button").Single(b => b.TextContent.Trim() == "Table").Click();
+        await cut.FindAll(".seg button").Single(b => b.TextContent.Trim() == "Table").ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".tl"), Is.Empty);
@@ -117,7 +118,7 @@ public class CausalityPanelSpeculativeTests
     }
 
     [Test]
-    public void Render_PreviewResultWithOnClose_ClickingCloseRaisesCallback()
+    public async Task Render_PreviewResultWithOnClose_ClickingCloseRaisesCallbackAsync()
     {
         var closed = false;
         var cut = _context.Render<CausalityPanel>(ps => ps
@@ -125,7 +126,7 @@ public class CausalityPanelSpeculativeTests
             .Add(c => c.Context, PreviewContext())
             .Add(c => c.OnClose, () => closed = true));
 
-        cut.Find(".preview-close").Click();
+        await cut.Find(".preview-close").ClickAsync(new MouseEventArgs());
 
         Assert.That(closed, Is.True);
     }

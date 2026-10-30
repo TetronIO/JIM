@@ -12,6 +12,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Web.Causality;
 using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 
@@ -204,11 +205,11 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void ViewSwitcher_SelectingTable_SwitchesToTheTableViewAndPersistsThePreference()
+    public async Task ViewSwitcher_SelectingTable_SwitchesToTheTableViewAndPersistsThePreferenceAsync()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.FindAll(".seg button")[2].Click();
+        await cut.FindAll(".seg button")[2].ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".tv"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
@@ -216,11 +217,11 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void ViewSwitcher_SelectingTimeline_SwitchesTheViewAndPersistsThePreference()
+    public async Task ViewSwitcher_SelectingTimeline_SwitchesTheViewAndPersistsThePreferenceAsync()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        cut.FindAll(".seg button")[1].Click();
+        await cut.FindAll(".seg button")[1].ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll(".ln-canvas"), Is.Empty);
@@ -279,14 +280,14 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void LineageCardSelection_OpensTheDrawerWithTheEventAttributeRows()
+    public async Task LineageCardSelection_OpensTheDrawerWithTheEventAttributeRowsAsync()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
 
         // Only the Export queued event carries attribute rows (its persisted CSO change snapshot)
-        cut.Find(".evt-card.clickable").Click();
+        await cut.Find(".evt-card.clickable").ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
         Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
@@ -294,26 +295,26 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void DrawerCloseButton_ClearsTheDrawerAndTheCardSelection()
+    public async Task DrawerCloseButton_ClearsTheDrawerAndTheCardSelectionAsync()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        cut.Find(".evt-card.clickable").Click();
+        await cut.Find(".evt-card.clickable").ClickAsync(new MouseEventArgs());
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
 
-        cut.Find(".drawer-close").Click();
+        await cut.Find(".drawer-close").ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
         Assert.That(cut.FindAll(".evt-card.selected"), Is.Empty);
     }
 
     [Test]
-    public void SwitchingToTimeline_ClosesTheLineageDrawer()
+    public async Task SwitchingToTimeline_ClosesTheLineageDrawerAsync()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        cut.Find(".evt-card.clickable").Click();
+        await cut.Find(".evt-card.clickable").ClickAsync(new MouseEventArgs());
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
 
-        cut.FindAll(".seg button")[1].Click();
+        await cut.FindAll(".seg button")[1].ClickAsync(new MouseEventArgs());
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
         Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));

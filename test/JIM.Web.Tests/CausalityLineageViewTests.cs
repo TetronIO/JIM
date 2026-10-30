@@ -12,6 +12,7 @@ using JIM.Models.Enums;
 using JIM.Web;
 using JIM.Web.Causality;
 using JIM.Web.Shared.Causality;
+using Microsoft.AspNetCore.Components.Web;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -655,7 +656,7 @@ public class CausalityLineageViewTests
     }
 
     [Test]
-    public void Render_PluralCohort_CollapsesToOneCardAndExpandsInPlace()
+    public async Task Render_PluralCohort_CollapsesToOneCardAndExpandsInPlaceAsync()
     {
         var cut = RenderLineage(CohortLineage());
 
@@ -663,7 +664,7 @@ public class CausalityLineageViewTests
         Assert.That(toggle.TextContent.Trim(), Is.EqualTo("Show the 10 Users"));
         Assert.That(cut.FindAll(".ln-member"), Is.Empty);
 
-        toggle.Click();
+        await toggle.ClickAsync(new MouseEventArgs());
 
         using (Assert.EnterMultipleScope())
         {
@@ -730,12 +731,12 @@ public class CausalityLineageViewTests
     }
 
     [Test]
-    public void Render_ClickingAClickableEventCard_RaisesSelectionChanged()
+    public async Task Render_ClickingAClickableEventCard_RaisesSelectionChangedAsync()
     {
         CausalityEvent? selected = null;
         var cut = RenderLineage(NewJoinerLineage(), onSelectionChanged: e => selected = e);
 
-        cut.Find(".evt-card.clickable").Click();
+        await cut.Find(".evt-card.clickable").ClickAsync(new MouseEventArgs());
 
         Assert.That(selected, Is.Not.Null);
         Assert.That(selected!.OutcomeType,
