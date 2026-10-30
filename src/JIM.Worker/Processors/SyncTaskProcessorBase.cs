@@ -4553,375 +4553,383 @@ public abstract class SyncTaskProcessorBase
         // An EF save in the resolution therefore writes only what is explicitly marked (Entry().State).
         _syncRepo.SetAutoDetectChangesEnabled(false);
 
-        // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
-        var requiredSyncRuleIds = _unresolvedCrossPageReferences
-            .SelectMany(x => x.SyncRuleIds)
-            .Distinct()
-            .ToHashSet();
-        var syncRulesById = activeSyncRules
-            .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
-            .ToDictionary(sr => sr.Id);
-
-        // Process in batches to avoid loading too many CSOs at once: at most a page of objects, and at most the value
-        // budget's worth of reference values (#2492), so a batch holding several very large groups does not hold all
-        // of them in memory together. A group larger than the budget gets a batch of its own.
-        var pageSize = await _syncServer.GetSyncPageSizeAsync();
-        var batchPlan = CrossPageReferenceBatchPlanner.Plan(
-            _unresolvedCrossPageReferences.Select(x => x.ReferenceValueCount).ToList(),
-            pageSize, CrossPageReferenceBatchPlanner.DefaultValueBudget);
-        var totalBatches = batchPlan.Count;
-
-        var resolvedCount = 0;
-        var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
-
-        // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
-        // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
-        // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
-        // the removed rows persist in the database and member removals are never exported.
-        var removedMvoAttributeValueIds = new List<Guid>();
-
-        for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
+        try
         {
-            var (batchStart, batchCount) = batchPlan[batchIndex];
-            var batch = _unresolvedCrossPageReferences.GetRange(batchStart, batchCount);
+            // Build Synchronisation Rule lookup (keyed by ID) for O(1) access
+            var requiredSyncRuleIds = _unresolvedCrossPageReferences
+                .SelectMany(x => x.SyncRuleIds)
+                .Distinct()
+                .ToHashSet();
+            var syncRulesById = activeSyncRules
+                .Where(sr => requiredSyncRuleIds.Contains(sr.Id))
+                .ToDictionary(sr => sr.Id);
 
-            // The counters carry the reference values; the message names the objects, which the counters no longer do.
-            _activity.ObjectsProcessed = resolvedCount;
-            await _syncRepo.UpdateActivityMessageAsync(_activity,
-                $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
+            // Process in batches to avoid loading too many CSOs at once: at most a page of objects, and at most the value
+            // budget's worth of reference values (#2492), so a batch holding several very large groups does not hold all
+            // of them in memory together. A group larger than the budget gets a batch of its own.
+            var pageSize = await _syncServer.GetSyncPageSizeAsync();
+            var batchPlan = CrossPageReferenceBatchPlanner.Plan(
+                _unresolvedCrossPageReferences.Select(x => x.ReferenceValueCount).ToList(),
+                pageSize, CrossPageReferenceBatchPlanner.DefaultValueBudget);
+            var totalBatches = batchPlan.Count;
 
-            // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
-            var csoIds = batch.Select(x => x.CsoId).ToList();
-            List<ConnectedSystemObject> reloadedCsos;
-            using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
+            var resolvedCount = 0;
+            var updatedExistingRpeis = new List<ActivityRunProfileExecutionItem>();
+
+            // Collect IDs of removed MVO attribute values across all batches for explicit raw SQL deletion.
+            // When ClearChangeTracker() runs between batches, EF loses knowledge of attribute values
+            // removed from MVO.AttributeValues collections (ApplyPendingAttributeChanges). Without this,
+            // the removed rows persist in the database and member removals are never exported.
+            var removedMvoAttributeValueIds = new List<Guid>();
+
+            for (var batchIndex = 0; batchIndex < totalBatches; batchIndex++)
             {
-                reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
-            }
+                var (batchStart, batchCount) = batchPlan[batchIndex];
+                var batch = _unresolvedCrossPageReferences.GetRange(batchStart, batchCount);
 
-            // Resolve every reloaded CSO's MetaverseObject navigation through the page identity map (#1612):
-            // this batch's own reload is itself a fresh database round trip, so a CSO whose MVO this batch
-            // also touches elsewhere (or a later batch after ClearChangeTracker) must land on one canonical
-            // instance, not a distinct one per reload.
-            _mvoIdentityMap.Seed(reloadedCsos);
+                // The counters carry the reference values; the message names the objects, which the counters no longer do.
+                _activity.ObjectsProcessed = resolvedCount;
+                await _syncRepo.UpdateActivityMessageAsync(_activity,
+                    $"Loading batch {batchIndex + 1} of {totalBatches} ({totalCrossPagesToResolve:N0} objects in all)");
 
-            // Index reloaded CSOs by ID for O(1) lookup
-            var csosById = reloadedCsos.ToDictionary(c => c.Id);
-
-            foreach (var (csoId, syncRuleIds, _) in batch)
-            {
-                if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
+                // Reload CSOs from DB — now all MVOs exist, so ReferenceValue.MetaverseObject will be populated
+                var csoIds = batch.Select(x => x.CsoId).ToList();
+                List<ConnectedSystemObject> reloadedCsos;
+                using (Diagnostics.Sync.StartSpan("ReloadCsosForCrossPageReferences").SetTag("count", csoIds.Count))
                 {
-                    Log.Warning("ResolveCrossPageReferences: CSO {CsoId} not found or not joined after reload, skipping",
-                        csoId);
-                    continue;
+                    reloadedCsos = await _syncRepo.GetConnectedSystemObjectsForReferenceResolutionAsync(csoIds);
                 }
 
-                var mvo = cso.MetaverseObject;
+                // Resolve every reloaded CSO's MetaverseObject navigation through the page identity map (#1612):
+                // this batch's own reload is itself a fresh database round trip, so a CSO whose MVO this batch
+                // also touches elsewhere (or a later batch after ClearChangeTracker) must land on one canonical
+                // instance, not a distinct one per reload.
+                _mvoIdentityMap.Seed(reloadedCsos);
 
-                // Resolve the Synchronisation Rules for this CSO
-                var applicableSyncRules = syncRuleIds
-                    .Where(id => syncRulesById.ContainsKey(id))
-                    .Select(id => syncRulesById[id])
-                    .ToList();
+                // Index reloaded CSOs by ID for O(1) lookup
+                var csosById = reloadedCsos.ToDictionary(c => c.Id);
 
-                var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
-                var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
-
-                // Process ONLY reference attributes. Nothing later in the run can resolve a reference still unresolved here,
-                // so isFinalReferencePass: true lets the object's removals and provenance proceed without it.
-                foreach (var syncRule in applicableSyncRules)
+                foreach (var (csoId, syncRuleIds, _) in batch)
                 {
-                    ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
-                }
-
-                var mappedRefAttributeIds = GetMappedReferenceAttributeIds(applicableSyncRules);
-                var stillUnresolvedCount = cso.AttributeValues.Count(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av));
-                if (stillUnresolvedCount > 0)
-                    RecordUnresolvableReferences(cso.Id, stillUnresolvedCount);
-
-                var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
-                var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
-
-                if (additionsCount > 0 || removalsCount > 0)
-                {
-                    Log.Debug("ResolveCrossPageReferences: CSO {CsoId} resolved {Adds} reference additions, {Removes} removals",
-                        csoId, additionsCount, removalsCount);
-
-                    // Capture changes before applying (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
-                    var refAddedAttributes = mvo.PendingAttributeValueAdditions.ToList();
-                    var refRemovedAttributesList = mvo.PendingAttributeValueRemovals.ToList();
-                    var refRemovedAttributes = refRemovedAttributesList.Count > 0
-                        ? refRemovedAttributesList.ToHashSet()
-                        : (HashSet<MetaverseObjectAttributeValue>?)null;
-
-                    // Collect IDs of removed attribute values for explicit deletion after
-                    // ClearChangeTracker (which loses EF's collection-removal knowledge).
-                    foreach (var removed in refRemovedAttributesList)
+                    if (!csosById.TryGetValue(csoId, out var cso) || cso.MetaverseObject == null)
                     {
-                        if (removed.Id != Guid.Empty)
-                            removedMvoAttributeValueIds.Add(removed.Id);
+                        Log.Warning("ResolveCrossPageReferences: CSO {CsoId} not found or not joined after reload, skipping",
+                            csoId);
+                        continue;
                     }
 
-                    // Merge into existing RPEI if one was created during initial page processing
-                    // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
-                    // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
-                    // existingMvoChangeId is set only on the merge branch — it's the id of the
-                    // already-persisted MetaverseObjectChange for this RPEI, needed so the cross-page
-                    // attribute additions are written as children of that row rather than a new one.
-                    ActivityRunProfileExecutionItem rpei;
-                    Guid? existingMvoChangeId = null;
-                    if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
-                    {
-                        rpei = existingMergeRpei.Rpei;
-                        existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
-                        rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
+                    var mvo = cso.MetaverseObject;
 
-                        // Update outcome tree: add or update the AttributeFlow child node
-                        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
-                            && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
+                    // Resolve the Synchronisation Rules for this CSO
+                    var applicableSyncRules = syncRuleIds
+                        .Where(id => syncRulesById.ContainsKey(id))
+                        .Select(id => syncRulesById[id])
+                        .ToList();
+
+                    var beforeAdditions = mvo.PendingAttributeValueAdditions.Count;
+                    var beforeRemovals = mvo.PendingAttributeValueRemovals.Count;
+
+                    // Process ONLY reference attributes. Nothing later in the run can resolve a reference still unresolved here,
+                    // so isFinalReferencePass: true lets the object's removals and provenance proceed without it.
+                    foreach (var syncRule in applicableSyncRules)
+                    {
+                        ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true, isFinalReferencePass: true);
+                    }
+
+                    var mappedRefAttributeIds = GetMappedReferenceAttributeIds(applicableSyncRules);
+                    var stillUnresolvedCount = cso.AttributeValues.Count(av => mappedRefAttributeIds.Contains(av.AttributeId) && IsUnresolvedReference(av));
+                    if (stillUnresolvedCount > 0)
+                        RecordUnresolvableReferences(cso.Id, stillUnresolvedCount);
+
+                    var additionsCount = mvo.PendingAttributeValueAdditions.Count - beforeAdditions;
+                    var removalsCount = mvo.PendingAttributeValueRemovals.Count - beforeRemovals;
+
+                    if (additionsCount > 0 || removalsCount > 0)
+                    {
+                        Log.Debug("ResolveCrossPageReferences: CSO {CsoId} resolved {Adds} reference additions, {Removes} removals",
+                            csoId, additionsCount, removalsCount);
+
+                        // Capture changes before applying (they get cleared by ApplyPendingMetaverseObjectAttributeChanges)
+                        var refAddedAttributes = mvo.PendingAttributeValueAdditions.ToList();
+                        var refRemovedAttributesList = mvo.PendingAttributeValueRemovals.ToList();
+                        var refRemovedAttributes = refRemovedAttributesList.Count > 0
+                            ? refRemovedAttributesList.ToHashSet()
+                            : (HashSet<MetaverseObjectAttributeValue>?)null;
+
+                        // Collect IDs of removed attribute values for explicit deletion after
+                        // ClearChangeTracker (which loses EF's collection-removal knowledge).
+                        foreach (var removed in refRemovedAttributesList)
                         {
-                            // This RPEI was read back from the database, so its outcomes carry the FK and
-                            // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
-                            // list but not the per-node parent navigation). IsChildOutcome reads whichever
-                            // link is populated, so the same lookup is correct on either shape.
-                            var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
-                                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                                && o.IsChildOutcome);
-                            if (attrFlowChild != null)
-                                attrFlowChild.DetailCount = rpei.AttributeFlowCount;
-                            else
+                            if (removed.Id != Guid.Empty)
+                                removedMvoAttributeValueIds.Add(removed.Id);
+                        }
+
+                        // Merge into existing RPEI if one was created during initial page processing
+                        // (e.g., Projected or Joined). This prevents duplicate RPEIs for the same CSO
+                        // which would inflate TotalAttributeFlows counts and show duplicate rows in the UI.
+                        // existingMvoChangeId is set only on the merge branch — it's the id of the
+                        // already-persisted MetaverseObjectChange for this RPEI, needed so the cross-page
+                        // attribute additions are written as children of that row rather than a new one.
+                        ActivityRunProfileExecutionItem rpei;
+                        Guid? existingMvoChangeId = null;
+                        if (existingRpeisByCsoId.TryGetValue(csoId, out var existingMergeRpei))
+                        {
+                            rpei = existingMergeRpei.Rpei;
+                            existingMvoChangeId = existingMergeRpei.ExistingMvoChangeId;
+                            rpei.AttributeFlowCount = (rpei.AttributeFlowCount ?? 0) + additionsCount + removalsCount;
+
+                            // Update outcome tree: add or update the AttributeFlow child node
+                            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                                && rpei.ObjectChangeType is ObjectChangeType.Projected or ObjectChangeType.Joined)
                             {
-                                // No child yet (e.g., initial projection had no scalar attribute changes).
-                                // Add an AttributeFlow child under the root Projected/Joined outcome.
-                                var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
-                                if (rootOutcome != null)
+                                // This RPEI was read back from the database, so its outcomes carry the FK and
+                                // not the navigation property (AsNoTracking + Include(SyncOutcomes) loads the
+                                // list but not the per-node parent navigation). IsChildOutcome reads whichever
+                                // link is populated, so the same lookup is correct on either shape.
+                                var attrFlowChild = rpei.SyncOutcomes.FirstOrDefault(o =>
+                                    o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
+                                    && o.IsChildOutcome);
+                                if (attrFlowChild != null)
+                                    attrFlowChild.DetailCount = rpei.AttributeFlowCount;
+                                else
                                 {
-                                    SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
-                                        ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                        targetEntityDescription: mvo.NameOrId,
-                                        detailCount: rpei.AttributeFlowCount);
+                                    // No child yet (e.g., initial projection had no scalar attribute changes).
+                                    // Add an AttributeFlow child under the root Projected/Joined outcome.
+                                    var rootOutcome = rpei.SyncOutcomes.FirstOrDefault(o => !o.IsChildOutcome);
+                                    if (rootOutcome != null)
+                                    {
+                                        SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                            ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                            targetEntityDescription: mvo.NameOrId,
+                                            detailCount: rpei.AttributeFlowCount);
+                                    }
                                 }
+                            }
+
+                            // Rebuild OutcomeSummary to reflect the updated Attribute Flow count
+                            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            {
+                                SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
+                                _mvoIdToRpei[mvo.Id] = rpei;
+                            }
+
+                            // Track for batch database update (already persisted, needs AttributeFlowCount
+                            // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
+                            // as that would cause FlushRpeisAsync to INSERT a duplicate row.
+                            updatedExistingRpeis.Add(rpei);
+
+                            // Re-add to the activity's in-memory collection for test environments where
+                            // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
+                            // in memory for assertions). In production, FlushRpeisAsync will skip these
+                            // because they are handled by the separate bulk update below.
+                            if (!_hasRawSqlSupport)
+                                _activity.RunProfileExecutionItems.Add(rpei);
+
+                            Log.Debug("ResolveCrossPageReferences: Merged reference Attribute Flow into existing {ChangeType} RPEI for CSO {CsoId}",
+                                rpei.ObjectChangeType, csoId);
+                        }
+                        else
+                        {
+                            // No existing RPEI (uncommon — only if the CSO had no scalar attribute changes
+                            // during initial page processing). Create a new reference-only RPEI.
+                            rpei = _activity.PrepareRunProfileExecutionItem();
+                            rpei.ConnectedSystemObject = cso;
+                            rpei.ConnectedSystemObjectId = cso.Id;
+                            rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
+                            rpei.AttributeFlowCount = additionsCount + removalsCount;
+                            _activity.RunProfileExecutionItems.Add(rpei);
+
+                            // Build outcome for the new reference-only RPEI
+                            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                            {
+                                SyncOutcomeBuilder.AddRootOutcome(rpei,
+                                    ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+                                    detailCount: additionsCount + removalsCount);
+
+                                _mvoIdToRpei[mvo.Id] = rpei;
                             }
                         }
 
-                        // Rebuild OutcomeSummary to reflect the updated Attribute Flow count
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        // Track MVO changes for change tracking. When merging into an existing
+                        // RPEI, carry the existing MvoChange id so the flush writes attribute
+                        // children under the existing parent rather than attempting to create a
+                        // new parent row (which would violate the unique-per-RPEI constraint).
+                        _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
+                            ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId, null, null));
+
+                        // Apply changes to MVO
+                        ApplyPendingMetaverseObjectAttributeChanges(mvo);
+
+                        // Queue for persistence and export evaluation
+                        QueueMvoForUpdate(mvo);
+
+                        var changedRefAttributes = mvo.AttributeValues
+                            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+                            .Cast<MetaverseObjectAttributeValue>()
+                            .ToList();
+
+                        if (refRemovedAttributes != null)
                         {
-                            SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
-                            _mvoIdToRpei[mvo.Id] = rpei;
+                            changedRefAttributes.AddRange(refRemovedAttributes);
                         }
 
-                        // Track for batch database update (already persisted, needs AttributeFlowCount
-                        // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
-                        // as that would cause FlushRpeisAsync to INSERT a duplicate row.
-                        updatedExistingRpeis.Add(rpei);
-
-                        // Re-add to the activity's in-memory collection for test environments where
-                        // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
-                        // in memory for assertions). In production, FlushRpeisAsync will skip these
-                        // because they are handled by the separate bulk update below.
-                        if (!_hasRawSqlSupport)
-                            _activity.RunProfileExecutionItems.Add(rpei);
-
-                        Log.Debug("ResolveCrossPageReferences: Merged reference Attribute Flow into existing {ChangeType} RPEI for CSO {CsoId}",
-                            rpei.ObjectChangeType, csoId);
-                    }
-                    else
-                    {
-                        // No existing RPEI (uncommon — only if the CSO had no scalar attribute changes
-                        // during initial page processing). Create a new reference-only RPEI.
-                        rpei = _activity.PrepareRunProfileExecutionItem();
-                        rpei.ConnectedSystemObject = cso;
-                        rpei.ConnectedSystemObjectId = cso.Id;
-                        rpei.ObjectChangeType = ObjectChangeType.AttributeFlow;
-                        rpei.AttributeFlowCount = additionsCount + removalsCount;
-                        _activity.RunProfileExecutionItems.Add(rpei);
-
-                        // Build outcome for the new reference-only RPEI
-                        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                        if (changedRefAttributes.Count > 0)
                         {
-                            SyncOutcomeBuilder.AddRootOutcome(rpei,
-                                ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                detailCount: additionsCount + removalsCount);
-
-                            _mvoIdToRpei[mvo.Id] = rpei;
+                            MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                         }
                     }
+                }
 
-                    // Track MVO changes for change tracking. When merging into an existing
-                    // RPEI, carry the existing MvoChange id so the flush writes attribute
-                    // children under the existing parent rather than attempting to create a
-                    // new parent row (which would violate the unique-per-RPEI constraint).
-                    _pendingMvoChanges.Add((mvo, refAddedAttributes, refRemovedAttributesList,
-                        ObjectChangeType.AttributeFlow, rpei, existingMvoChangeId, null, null));
+                // The target objects' existing Pending Exports are deliberately left in place for the
+                // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
+                // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
+                // the resolved references, an exported one has the changes appended, a pending Update is
+                // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
+                // Pending Provisioning object look like one whose Create had already been sent: the
+                // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
 
-                    // Apply changes to MVO
-                    ApplyPendingMetaverseObjectAttributeChanges(mvo);
+                for (var unitIndex = batchStart; unitIndex < batchStart + batchCount; unitIndex++)
+                    resolvedCount += progressUnits[unitIndex];
 
-                    // Queue for persistence and export evaluation
-                    QueueMvoForUpdate(mvo);
+                _activity.ObjectsProcessed = resolvedCount;
+                await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
 
-                    var changedRefAttributes = mvo.AttributeValues
-                        .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                        .Cast<MetaverseObjectAttributeValue>()
+                // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
+                // subsequent SaveChangesAsync calls (same pattern as per-page processing).
+                // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
+                // processing) are updated separately below.
+                await FlushRpeisAsync();
+
+                // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
+                // due to cross-page reference resolution merging. These RPEIs were already persisted
+                // during initial page processing; we update them in-place rather than inserting duplicates.
+                if (updatedExistingRpeis.Count > 0)
+                {
+                    // Collect any new sync outcome nodes added during merge (e.g., AttributeFlow child)
+                    var newOutcomes = updatedExistingRpeis
+                        .SelectMany(r => r.SyncOutcomes)
+                        .Where(o => o.Id == Guid.Empty)
                         .ToList();
-
-                    if (refRemovedAttributes != null)
+                    foreach (var outcome in newOutcomes)
                     {
-                        changedRefAttributes.AddRange(refRemovedAttributes);
+                        if (outcome.Id == Guid.Empty)
+                            outcome.Id = Guid.NewGuid();
                     }
 
-                    if (changedRefAttributes.Count > 0)
+                    await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
+
+                    // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
+                    // were already counted during initial page flush). New outcomes can occur when the
+                    // initial RPEI had no AttributeFlow child (Detailed mode) and cross-page resolution
+                    // adds one. In the common case, no new outcomes are added (just DetailCount updated).
+                    if (_hasRawSqlSupport && newOutcomes.Count > 0)
                     {
-                        MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
+                        _activity.TotalAttributeFlows += newOutcomes.Count(o =>
+                            o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
                     }
+
+                    Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference Attribute Flows",
+                        updatedExistingRpeis.Count);
+                    updatedExistingRpeis.Clear();
                 }
-            }
 
-            // The target objects' existing Pending Exports are deliberately left in place for the
-            // re-evaluation below. The per-object staging path finds each one itself (a lean lookup
-            // since #986) and decides what it means: an unsent Create is rebuilt as a Create carrying
-            // the resolved references, an exported one has the changes appended, a pending Update is
-            // merged. This pass once batch-deleted them first, to dodge that lookup, which made every
-            // Pending Provisioning object look like one whose Create had already been sent: the
-            // re-evaluation then staged an Update for an object that did not exist yet (Scenario 008).
+                // Flush this batch (same sequence as per-page processing)
+                await PersistPendingMetaverseObjectsAsync();
 
-            for (var unitIndex = batchStart; unitIndex < batchStart + batchCount; unitIndex++)
-                resolvedCount += progressUnits[unitIndex];
+                // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
+                // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
+                // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
+                // generated mapping never targets a Reference attribute, so nothing this pass resolves or
+                // reconciles ever has anything queued to commit or delete.
+                await FlushGeneratedValueAssignmentDeletionsAsync();
+                await CommitGeneratedValueAssignmentsAsync();
 
-            _activity.ObjectsProcessed = resolvedCount;
-            await _syncRepo.UpdateActivityMessageAsync(_activity, "Saving changes");
+                await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
+                await EvaluateQueuedDriftAsync();
 
-            // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
-            // subsequent SaveChangesAsync calls (same pattern as per-page processing).
-            // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
-            // processing) are updated separately below.
-            await FlushRpeisAsync();
-
-            // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
-            // due to cross-page reference resolution merging. These RPEIs were already persisted
-            // during initial page processing; we update them in-place rather than inserting duplicates.
-            if (updatedExistingRpeis.Count > 0)
-            {
-                // Collect any new sync outcome nodes added during merge (e.g., AttributeFlow child)
-                var newOutcomes = updatedExistingRpeis
-                    .SelectMany(r => r.SyncOutcomes)
-                    .Where(o => o.Id == Guid.Empty)
-                    .ToList();
-                foreach (var outcome in newOutcomes)
+                // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
+                // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
+                // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
+                // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
+                // batch instead, since deleting rows whose replacements were never staged would lose their changes.
+                var pendingExportBatchFlushed = false;
+                _syncRepo.BeginPendingExportBatch();
+                try
                 {
-                    if (outcome.Id == Guid.Empty)
-                        outcome.Id = Guid.NewGuid();
+                    await EvaluatePendingExportsAsync(prefetchPendingExports: true);
+                    await _syncRepo.FlushPendingExportBatchAsync();
+                    pendingExportBatchFlushed = true;
                 }
-
-                await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
-
-                // Accumulate stats ONLY for newly added outcome nodes (not the full RPEIs, which
-                // were already counted during initial page flush). New outcomes can occur when the
-                // initial RPEI had no AttributeFlow child (Detailed mode) and cross-page resolution
-                // adds one. In the common case, no new outcomes are added (just DetailCount updated).
-                if (_hasRawSqlSupport && newOutcomes.Count > 0)
+                finally
                 {
-                    _activity.TotalAttributeFlows += newOutcomes.Count(o =>
-                        o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+                    if (!pendingExportBatchFlushed)
+                        _syncRepo.AbandonPendingExportBatch();
                 }
 
-                Log.Debug("ResolveCrossPageReferences: Updated {Count} existing RPEIs with merged reference Attribute Flows",
-                    updatedExistingRpeis.Count);
-                updatedExistingRpeis.Clear();
+                await FlushPendingExportOperationsAsync();
+
+                // Flush any RPEIs generated during the flush sequence
+                await FlushRpeisAsync();
+
+                // Persist MVO change records via raw SQL before clearing the change tracker
+                await FlushPendingMvoChangesAsync();
+
+                // Update activity progress
+                await _syncRepo.UpdateActivityAsync(_activity);
+
+                // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
+                // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
+                // other entities into the tracker. Without clearing, subsequent batches encounter identity
+                // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
+                // All batch data has been fully persisted above, so clearing is safe.
+                // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
+                if (batchIndex < totalBatches - 1)
+                    ClearPageTrackingState();
             }
 
-            // Flush this batch (same sequence as per-page processing)
-            await PersistPendingMetaverseObjectsAsync();
-
-            // Unique Value Generation (#242, Phase 2 work package G): defensive, matching the per-page
-            // flush sequence, deletions before commit (#242 Scenario 023 bug fix). In practice always a
-            // no-op here: this pass is reference-attributes-only (onlyReferenceAttributes: true), and a
-            // generated mapping never targets a Reference attribute, so nothing this pass resolves or
-            // reconciles ever has anything queued to commit or delete.
-            await FlushGeneratedValueAssignmentDeletionsAsync();
-            await CommitGeneratedValueAssignmentsAsync();
-
-            await CreatePendingMvoChangeObjectsAsync(activeSyncRules);
-            await EvaluateQueuedDriftAsync();
-
-            // Every object this batch re-evaluates replaces the Pending Export the page loop staged for it. Inside
-            // a Pending Export batch those replaced rows are deleted in one statement rather than one round trip
-            // and two change-tracker passes each, which was about half the step's time (#2492). The flush runs
-            // before FlushPendingExportOperationsAsync inserts the replacements; a failed evaluation abandons the
-            // batch instead, since deleting rows whose replacements were never staged would lose their changes.
-            var pendingExportBatchFlushed = false;
-            _syncRepo.BeginPendingExportBatch();
-            try
+            // Explicitly delete removed MVO attribute values via raw SQL.
+            // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
+            // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
+            // explicit deletion, the removed rows persist in the database — member removals would
+            // never be exported to target systems.
+            if (removedMvoAttributeValueIds.Count > 0)
             {
-                await EvaluatePendingExportsAsync(prefetchPendingExports: true);
-                await _syncRepo.FlushPendingExportBatchAsync();
-                pendingExportBatchFlushed = true;
-            }
-            finally
-            {
-                if (!pendingExportBatchFlushed)
-                    _syncRepo.AbandonPendingExportBatch();
+                await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
+                Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
+                    removedMvoAttributeValueIds.Count);
             }
 
-            await FlushPendingExportOperationsAsync();
+            Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
+                totalCrossPagesToResolve);
 
-            // Flush any RPEIs generated during the flush sequence
-            await FlushRpeisAsync();
+            // Memory snapshot at phase exit, with deltas against the entry snapshot.
+            var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
+            var workingSetBytesAtEnd = Environment.WorkingSet;
+            Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
+                managedBytesAtEnd / (1024.0 * 1024.0),
+                (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
+                workingSetBytesAtEnd / (1024.0 * 1024.0),
+                (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
 
-            // Persist MVO change records via raw SQL before clearing the change tracker
-            await FlushPendingMvoChangesAsync();
-
-            // Update activity progress
-            await _syncRepo.UpdateActivityAsync(_activity);
-
-            // Clear the change tracker (and the page identity map, #1612) between batches to prevent entity
-            // tracking conflicts. Each batch loads CSOs, MVOs, MetaverseObjectType, MetaverseAttribute, and
-            // other entities into the tracker. Without clearing, subsequent batches encounter identity
-            // conflicts when the same shared entities (e.g., MetaverseObjectType) are loaded again.
-            // All batch data has been fully persisted above, so clearing is safe.
-            // The Activity entity will be re-attached by UpdateActivityAsync's detached handling.
-            if (batchIndex < totalBatches - 1)
-                ClearPageTrackingState();
+            _unresolvedCrossPageReferences.Clear();
+            _activity.ObjectsToProcess = runObjectsToProcess;
+            _activity.ObjectsProcessed = runObjectsProcessed;
         }
-
-        // Explicitly delete removed MVO attribute values via raw SQL.
-        // ClearChangeTracker between batches erases EF's knowledge of attribute values removed
-        // from MVO.AttributeValues collections (by ApplyPendingAttributeChanges). Without this
-        // explicit deletion, the removed rows persist in the database — member removals would
-        // never be exported to target systems.
-        if (removedMvoAttributeValueIds.Count > 0)
+        finally
         {
-            await _syncRepo.DeleteMetaverseObjectAttributeValuesByIdsAsync(removedMvoAttributeValueIds);
-            Log.Information("ResolveCrossPageReferences: Explicitly deleted {Count} removed MVO attribute values via raw SQL",
-                removedMvoAttributeValueIds.Count);
+            // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
+            // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
+            // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
+            // the same type/attributes create separate in-memory instances that conflict when any
+            // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
+            // so the caller's next SaveChangesAsync starts with a clean tracker.
+            // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling. In a finally
+            // (#2598): a failed batch also leaves Connected System Objects tracked over untracked Metaverse Objects, which
+            // must be gone before change detection comes back on.
+            ClearPageTrackingState();
+            _syncRepo.SetAutoDetectChangesEnabled(true);
         }
 
-        Log.Information("ResolveCrossPageReferences: Completed cross-page reference resolution for {Count} CSOs",
-            totalCrossPagesToResolve);
-
-        // Memory snapshot at phase exit, with deltas against the entry snapshot.
-        var managedBytesAtEnd = GC.GetTotalMemory(forceFullCollection: false);
-        var workingSetBytesAtEnd = Environment.WorkingSet;
-        Log.Information("ResolveCrossPageReferences: Memory at phase exit — Managed: {ManagedMb:F1} MB (Δ {ManagedDeltaMb:+0.0;-0.0;0.0} MB), WorkingSet: {WorkingSetMb:F1} MB (Δ {WorkingSetDeltaMb:+0.0;-0.0;0.0} MB)",
-            managedBytesAtEnd / (1024.0 * 1024.0),
-            (managedBytesAtEnd - managedBytesAtStart) / (1024.0 * 1024.0),
-            workingSetBytesAtEnd / (1024.0 * 1024.0),
-            (workingSetBytesAtEnd - workingSetBytesAtStart) / (1024.0 * 1024.0));
-
-        _unresolvedCrossPageReferences.Clear();
-        _activity.ObjectsToProcess = runObjectsToProcess;
-        _activity.ObjectsProcessed = runObjectsProcessed;
-
-        // Clear the change tracker (and the page identity map, #1612) after cross-page resolution completes.
-        // The tracker contains entities loaded by the cross-page CSO query with deep Include chains
-        // that bring in MetaverseAttribute and MetaverseObjectType instances. Multiple MVOs sharing
-        // the same type/attributes create separate in-memory instances that conflict when any
-        // subsequent SaveChangesAsync triggers DetectChanges. Clearing removes all tracked entities
-        // so the caller's next SaveChangesAsync starts with a clean tracker.
-        // The Activity entity will be re-attached by UpdateActivityAsync's detached entity handling.
-        ClearPageTrackingState();
-        _syncRepo.SetAutoDetectChangesEnabled(true);
         LogUnresolvableReferenceSummary();
 
         span.SetSuccess();

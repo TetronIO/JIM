@@ -402,7 +402,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         }
         finally
         {
-            // An exception in Pass 1 or 2 leaves the page before its flush restores detection.
+            // Not every load reaches a page's own tracker clear (#2598): the pager's closing sweep can load pages it hands
+            // nothing out of, and an exception in Pass 1 or 2 leaves the page before its flush. What they loaded holds
+            // Connected System Objects tracked over untracked Metaverse Objects, so it goes before detection is restored.
+            ClearPageTrackingState();
             _syncRepo.SetAutoDetectChangesEnabled(true);
         }
 

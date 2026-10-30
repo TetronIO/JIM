@@ -157,10 +157,12 @@ public class SynchronisationPendingRaceDatabaseTests
     }
 
     /// <summary>Creates the objects through the import's own create writer, created two hours ago.</summary>
-    private async Task CreateObjectsAsync(params int[] ns)
+    private Task CreateObjectsAsync(params int[] ns) => CreateObjectsCreatedAtAsync(DateTime.UtcNow.AddHours(-2), ns);
+
+    /// <summary>Creates the objects through the import's own create writer, created at <paramref name="created"/>.</summary>
+    private async Task CreateObjectsCreatedAtAsync(DateTime created, params int[] ns)
     {
         await using var ctx = NewContext();
-        var created = DateTime.UtcNow.AddHours(-2);
         var objects = ns.Select(n =>
         {
             var cso = new ConnectedSystemObject
@@ -276,6 +278,44 @@ public class SynchronisationPendingRaceDatabaseTests
     }
 
     #endregion
+
+    /// <summary>
+    /// Objects an import created just before the run are handed out by their type's walk, and then again by the closing
+    /// sweep, which drops them as already handed out (#2598). By then the run has joined them, so the sweep's load hung
+    /// their Metaverse Objects, untracked, off its tracked Connected System Objects; with nothing left to process the
+    /// loop ended without clearing them, and the run's next save attached them as Modified and failed on their row
+    /// version (Scenario 008 at Medium).
+    /// </summary>
+    [Test]
+    public async Task FullSync_SweepReloadsOnlyObjectsAlreadyHandedOut_CompletesAndSavesTheRunAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1, 2, 3);
+
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await MetaverseDisplayNameAsync(3), Is.EqualTo("Name 3"), "the run projected and flowed every object");
+            Assert.That(await WatermarkAsync(), Is.Not.Null, "the run completed and wrote its watermark");
+        }
+    }
+
+    /// <summary>
+    /// The Delta Synchronisation counterpart of the test above: its closing sweep reloads changed objects created since
+    /// the run's floor, all of them already handed out by their type's walk (#2598).
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_SweepReloadsOnlyObjectsAlreadyHandedOut_CompletesAndSavesTheRunAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1, 2, 3);
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+        foreach (var n in new[] { 1, 2, 3 })
+            await ImportDisplayNameChangeAsync(n, $"Renamed {n}", DateTime.UtcNow);
+
+        await RunAsync(ConnectedSystemRunType.DeltaSynchronisation);
+
+        Assert.That(await MetaverseDisplayNameAsync(3), Is.EqualTo("Renamed 3"), "the run processed every changed object");
+    }
 
     /// <summary>
     /// (a) A joined object the run has already processed: the import's change commits after the object's page was
