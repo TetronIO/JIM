@@ -113,6 +113,30 @@ public class AttributePriorityPendingDeletionWorkflowTests : WorkflowTestBase
         Assert.That(result.Select(m => m.Id), Is.EqualTo(new[] { ctx.PayrollMappingId, ctx.TrainingMappingId, ctx.HrMappingId }));
     }
 
+    [Test]
+    public async Task DeleteSyncRuleAsync_RecallQueued_VersionsTheOtherContributorsRulesOnChildrenOfTheRecallActivityAsync()
+    {
+        // Dropping the rule to the bottom renumbers Training (2 to 1) and Payroll (3 to 2). Their Priority columns moved,
+        // so each rule's history needs a version for it (#2630), on a child of the Activity the queued deletion runs
+        // under. The order they resolve in is unchanged, so neither is queued for synchronisation or counted as drift.
+        var ctx = await SetUpThreeContributorsAsync();
+
+        var deletion = await Jim.ConnectedSystems.DeleteSyncRuleAsync(ctx.HrRule, ctx.User);
+
+        var ruleIdsByName = DbContext.SyncRules.ToDictionary(r => r.Name, r => r.Id);
+        var children = DbContext.Activities.Where(a => a.ParentActivityId == deletion.RecallActivityId).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deletion.RecallQueued, Is.True, "precondition: the deletion must be queued behind a recall");
+            Assert.That(children.Select(c => c.SyncRuleId), Is.EquivalentTo(new int?[] { ruleIdsByName["Training Import"], ruleIdsByName["Payroll Import"] }),
+                "the survivors whose numbers moved, and not the rule being deleted, which is versioned by its own deletion");
+            Assert.That(children.Select(c => c.ConfigurationChangeNeedsFullSynchronisation), Is.All.False);
+            Assert.That(children.Select(c => c.InitiatedByType), Is.All.EqualTo(JIM.Models.Activities.ActivityInitiatorType.User));
+            Assert.That(children.Select(c => c.InitiatedById), Is.All.EqualTo(ctx.User.Id));
+            Assert.That(children.Select(c => c.Status), Is.All.EqualTo(JIM.Models.Activities.ActivityStatus.Complete));
+        }
+    }
+
     private async Task<int[]> GetPersistedOrderAsync(ThreeContributorContext ctx)
     {
         var order = await Jim.ConnectedSystems.GetAttributePriorityOrderAsync(ctx.MvTypeId, ctx.DescriptionAttributeId);
