@@ -11,6 +11,9 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
+using NpgsqlTypes;
 using Serilog;
 
 namespace JIM.PostgresData.Repositories;
@@ -710,6 +713,92 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+
+    public async Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return [];
+
+        // Only the values a name can come from: the object type's name attributes and the object's two external ids,
+        // each found through IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId, so a referenced group's member
+        // values are never read. The left join keeps an object holding none of them, which is named by its id.
+        const string sql = """
+            SELECT cso."MetaverseObjectId", cso."Id", cso."ExternalIdAttributeId", cso."SecondaryExternalIdAttributeId",
+                   v."AttributeId", v."Name", v."StringValue", v."DateTimeValue", v."IntValue", v."LongValue",
+                   v."DecimalValue", v."ByteValue", v."GuidValue", v."BoolValue", v."ReferenceValueId", v."UnresolvedReferenceValue"
+            FROM "ConnectedSystemObjects" cso
+            LEFT JOIN LATERAL (
+                SELECT av."AttributeId", attr."Name", av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue",
+                       av."DecimalValue", av."ByteValue", av."GuidValue", av."BoolValue", av."ReferenceValueId", av."UnresolvedReferenceValue"
+                FROM "ConnectedSystemAttributes" attr
+                JOIN "ConnectedSystemObjectAttributeValues" av
+                  ON av."ConnectedSystemObjectId" = cso."Id" AND av."AttributeId" = attr."Id"
+                WHERE attr."Id" = cso."ExternalIdAttributeId"
+                   OR attr."Id" = cso."SecondaryExternalIdAttributeId"
+                   OR (attr."ConnectedSystemObjectTypeId" = cso."TypeId" AND lower(attr."Name") = ANY(@nameAttributes))
+            ) v ON true
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+              AND cso."MetaverseObjectId" = ANY(@metaverseObjectIds)
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlDbType.Integer) { Value = connectedSystemId });
+        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("nameAttributes", NpgsqlDbType.Array | NpgsqlDbType.Text)
+            { Value = ObjectNaming.ConnectedSystemNameAttributes.Select(name => name.ToLowerInvariant()).ToArray() });
+
+        // Each object is rebuilt with just these values, untracked, and named by the model's own rule, so the identifier
+        // cannot drift from what the fully loaded object would give.
+        var objectsByMetaverseObjectId = new Dictionary<Guid, ConnectedSystemObject>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                var metaverseObjectId = reader.GetGuid(0);
+                if (!objectsByMetaverseObjectId.TryGetValue(metaverseObjectId, out var cso))
+                {
+                    cso = new ConnectedSystemObject
+                    {
+                        Id = reader.GetGuid(1),
+                        MetaverseObjectId = metaverseObjectId,
+                        ConnectedSystemId = connectedSystemId,
+                        ExternalIdAttributeId = reader.GetInt32(2),
+                        SecondaryExternalIdAttributeId = reader.IsDBNull(3) ? null : reader.GetInt32(3)
+                    };
+                    objectsByMetaverseObjectId[metaverseObjectId] = cso;
+                }
+
+                if (reader.IsDBNull(4))
+                    continue;
+
+                var attributeId = reader.GetInt32(4);
+                cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    AttributeId = attributeId,
+                    Attribute = new ConnectedSystemObjectTypeAttribute { Id = attributeId, Name = reader.GetString(5) },
+                    StringValue = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    IntValue = reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                    LongValue = reader.IsDBNull(9) ? null : reader.GetInt64(9),
+                    DecimalValue = reader.IsDBNull(10) ? null : reader.GetDecimal(10),
+                    ByteValue = reader.IsDBNull(11) ? null : reader.GetFieldValue<byte[]>(11),
+                    GuidValue = reader.IsDBNull(12) ? null : reader.GetGuid(12),
+                    BoolValue = reader.IsDBNull(13) ? null : reader.GetBoolean(13),
+                    ReferenceValueId = reader.IsDBNull(14) ? null : reader.GetGuid(14),
+                    ReferenceValue = reader.IsDBNull(14) ? null : new ConnectedSystemObject { Id = reader.GetGuid(14) },
+                    UnresolvedReferenceValue = reader.IsDBNull(15) ? null : reader.GetString(15)
+                });
+            }
+        }
+
+        // ExportChangeHistoryBuilder.GetCsoDisplayIdentifier's rule; ReferenceDisplayIdentifierDatabaseTests holds the two equal.
+        return objectsByMetaverseObjectId.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString());
+    }
 
     public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)

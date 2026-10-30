@@ -71,12 +71,14 @@ public static class ExportChangeHistoryBuilder
     /// used to snapshot Pending Export attribute data at sync time before the Pending Export
     /// is deleted during export confirmation.
     /// </summary>
+    /// <param name="referenceDisplayIdentifiers">Per Metaverse Object a reference names, the identifier of its object in the
+    /// target Connected System (<see cref="GetCsoDisplayIdentifier"/>); a reference not in it is recorded as its raw id.</param>
     public static ConnectedSystemObjectChange BuildFromPendingExport(
         PendingExport pendingExport,
         ActivityInitiatorType initiatedByType,
         Guid? initiatedById,
         string? initiatedByName,
-        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
+        IReadOnlyDictionary<Guid, string>? referenceDisplayIdentifiers = null)
     {
         var change = new ConnectedSystemObjectChange
         {
@@ -90,13 +92,13 @@ public static class ExportChangeHistoryBuilder
             DeletedObjectExternalId = pendingExport.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName()
         };
 
-        MapAttributeValueChanges(change, pendingExport.AttributeValueChanges, resolvedReferences);
+        MapAttributeValueChanges(change, pendingExport.AttributeValueChanges, referenceDisplayIdentifiers);
         return change;
     }
 
     /// <summary>
     /// The Metaverse Object ids that Pending Export reference changes still carry unresolved, which a snapshot resolves
-    /// to the referenced objects in the target Connected System (the <c>resolvedReferences</c> of
+    /// to the referenced objects' identifiers in the target Connected System (the <c>referenceDisplayIdentifiers</c> of
     /// <see cref="BuildFromPendingExport"/>) so the Causality Tree can name them rather than show raw ids.
     /// </summary>
     public static List<Guid> GetUnresolvedReferenceMetaverseObjectIds(IEnumerable<PendingExportAttributeValueChange> changes) =>
@@ -116,7 +118,7 @@ public static class ExportChangeHistoryBuilder
     internal static void MapAttributeValueChanges(
         ConnectedSystemObjectChange change,
         List<PendingExportAttributeValueChange> attributeValueChanges,
-        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
+        IReadOnlyDictionary<Guid, string>? referenceDisplayIdentifiers = null)
     {
         foreach (var peChange in attributeValueChanges)
         {
@@ -144,7 +146,7 @@ public static class ExportChangeHistoryBuilder
             }
 
             var valueChangeType = MapChangeType(peChange.ChangeType);
-            AddValueChange(attributeChange, peChange, valueChangeType, resolvedReferences);
+            AddValueChange(attributeChange, peChange, valueChangeType, referenceDisplayIdentifiers);
         }
     }
 
@@ -165,7 +167,7 @@ public static class ExportChangeHistoryBuilder
         ConnectedSystemObjectChangeAttribute attributeChange,
         PendingExportAttributeValueChange peChange,
         ValueChangeType valueChangeType,
-        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null)
+        IReadOnlyDictionary<Guid, string>? referenceDisplayIdentifiers = null)
     {
         var attrType = peChange.Attribute.Type;
 
@@ -241,17 +243,14 @@ public static class ExportChangeHistoryBuilder
                     });
                 break;
             case AttributeDataType.Reference when peChange.UnresolvedReferenceValue != null:
-                // Try to resolve the MVO GUID to a stub CSO in the target Connected System.
-                // If resolved, store the display identifier as a StringValue with the IsPendingExportStub
-                // flag so the UI can render it meaningfully instead of showing a broken-link icon.
-                // We deliberately avoid setting ReferenceValue (navigation property) because the stub CSO
-                // may be an in-memory entity not yet persisted, and EF's change tracker would attempt
-                // to insert it when the parent entity graph is attached during BulkInsertRpeisAsync.
-                if (resolvedReferences != null
+                // Name the MVO GUID by its object in the target Connected System where one is known: the display
+                // identifier is stored as a StringValue with the IsPendingExportStub flag, so the UI renders it
+                // meaningfully instead of showing a broken-link icon. ReferenceValue (the navigation) is deliberately
+                // never set: the object may not be persisted yet, and the change record only ever needs its name.
+                if (referenceDisplayIdentifiers != null
                     && Guid.TryParse(peChange.UnresolvedReferenceValue, out var mvoGuid)
-                    && resolvedReferences.TryGetValue(mvoGuid, out var stubCso))
+                    && referenceDisplayIdentifiers.TryGetValue(mvoGuid, out var displayName))
                 {
-                    var displayName = GetCsoDisplayIdentifier(stubCso);
                     var valueChange = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, displayName)
                     {
                         IsPendingExportStub = true,

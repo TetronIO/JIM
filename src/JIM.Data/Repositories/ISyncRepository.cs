@@ -1704,6 +1704,15 @@ public interface ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
+    /// Per Metaverse Object joined to an object in the Connected System, the identifier a change record shows for a
+    /// reference to that object: exactly what <c>ExportChangeHistoryBuilder.GetCsoDisplayIdentifier</c> gives for the
+    /// object (its name, else its external id, else its secondary external id, else its id). Summary tier (#2598): a
+    /// Pending Export's snapshot needs only this, and loading the whole object brought every member value of a
+    /// referenced group. Untracked; Metaverse Objects with no object in the system are absent.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
     /// What references to the given Metaverse Objects are written as in a Connected System: per
     /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier; used by
     /// export execution to resolve deferred references without materialising the referenced objects.
