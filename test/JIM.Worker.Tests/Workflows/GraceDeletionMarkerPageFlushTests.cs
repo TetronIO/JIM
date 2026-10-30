@@ -95,7 +95,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
 
         // Isolate the assertion to the delta sync run: reset the spy's counters so the projecting full sync
         // above (a different code path) cannot mask what the delta sync itself does.
-        _spySyncRepo.SingleMvoUpdateCallCount = 0;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
         var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
@@ -110,16 +109,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         var mvo = SyncRepo.MetaverseObjects.GetValueOrDefault(mvoId);
         using (Assert.EnterMultipleScope())
         {
-            // The interaction assertion: this is what actually distinguishes the buggy behaviour (an
-            // immediate, context-wide save mid-page) from the fix (queued onto the page-flush batch). Before
-            // the fix, MarkMvoForDeletionAsync's grace branch calls the single-entity UpdateMetaverseObjectAsync
-            // directly, so this assertion fails with a call count of 1.
-            Assert.That(_spySyncRepo.SingleMvoUpdateCallCount, Is.Zero,
-                "A grace-period deletion must never persist the Metaverse Object via the single-entity update " +
-                "path mid-page. In production that path performs Database.Update() + an immediate " +
-                "SaveChangesAsync while AutoDetectChangesEnabled is still true, which walks the tracked " +
-                "Activity's RunProfileExecutionItems collection and inserts this page's RPEIs early; the page " +
-                "flush's own raw-SQL RPEI insert then collides on the same Id.");
+            // The single-entity update cannot happen mid-page: the sync repository no longer has one (#2598).
             Assert.That(_spySyncRepo.BatchMvoUpdateIds, Does.Contain(mvoId),
                 "The Metaverse Object's deletion markers must instead be queued onto the ordinary page-flush " +
                 "batch update (PersistPendingMetaverseObjectsAsync -> UpdateMetaverseObjectsAsync).");
@@ -180,7 +170,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         var mvoId = csoA.MetaverseObjectId!.Value;
 
         // Isolate the assertion to the delta sync run below.
-        _spySyncRepo.SingleMvoUpdateCallCount = 0;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
         // Obsolete CSO A (Pass 1 will schedule the grace-period deletion) and, in the SAME page, seed a
@@ -251,7 +240,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         Assert.That(csoA.MetaverseObjectId, Is.Not.Null, "precondition: CSO A must be projected to an MVO after Full Sync");
         var mvoId = csoA.MetaverseObjectId!.Value;
 
-        _spySyncRepo.SingleMvoUpdateCallCount = 0;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
         // Obsolete CSO A (Pass 1 schedules the grace-period deletion) and, in the SAME page, seed a second
@@ -736,7 +724,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
             Is.EqualTo(HrDescription), "precondition: Description flowed from HR while in scope");
 
         // Isolate the assertion to the scope-exit run.
-        _spySyncRepo.SingleMvoUpdateCallCount = 0;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
         // Act: push HR out of scope and re-sync just HR. This drives HandleCsoOutOfScopeAsync's
@@ -750,15 +737,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         var hrCsoAfter = SyncRepo.ConnectedSystemObjects[reloadedHrCso.Id];
         using (Assert.EnterMultipleScope())
         {
-            // The interaction assertion: before the fix, HandleCsoOutOfScopeAsync's Disconnect branch
-            // called the single-entity UpdateMetaverseObjectAsync directly after ApplyPendingMetaverseObjectAttributeChanges,
-            // so this assertion fails with a call count of 1.
-            Assert.That(_spySyncRepo.SingleMvoUpdateCallCount, Is.Zero,
-                "An out-of-scope disconnect must never persist the Metaverse Object via the single-entity update " +
-                "path mid-page. In production that path performs Database.Update() + an immediate " +
-                "SaveChangesAsync while AutoDetectChangesEnabled is still true, which walks the tracked " +
-                "Activity's RunProfileExecutionItems collection and inserts this page's RPEIs early; the page " +
-                "flush's own raw-SQL RPEI insert then collides on the same Id.");
+            // The single-entity update cannot happen mid-page: the sync repository no longer has one (#2598).
             Assert.That(_spySyncRepo.BatchMvoUpdateIds, Does.Contain(mvoId),
                 "The recalled attribute changes must instead be queued onto the ordinary page-flush batch " +
                 "update (PersistPendingMetaverseObjectsAsync -> UpdateMetaverseObjectsAsync).");
@@ -820,7 +799,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         Assert.That(cso.MetaverseObjectId, Is.Not.Null, "precondition: the CSO must be joined to an MVO after Full Sync");
         var mvoId = cso.MetaverseObjectId!.Value;
 
-        _spySyncRepo.SingleMvoUpdateCallCount = 0;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
         // Act: fall out of scope. The CSO is the sole (and therefore last) connector, so the deletion
@@ -834,9 +812,6 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
         var csoAfter = SyncRepo.ConnectedSystemObjects[cso.Id];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_spySyncRepo.SingleMvoUpdateCallCount, Is.Zero,
-                "An out-of-scope disconnect that also schedules a grace-period deletion must never persist " +
-                "the Metaverse Object via the single-entity update path mid-page.");
             Assert.That(_spySyncRepo.BatchMvoUpdateIds.Count(id => id == mvoId), Is.EqualTo(1),
                 "QueueMvoForUpdate must collapse the deletion rule's enqueue and the Disconnect branch's own " +
                 "enqueue onto the SAME MVO instance silently (ReferenceEquals short-circuit): exactly one " +
@@ -1039,22 +1014,14 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Spies on both Metaverse Object update paths so the test can assert which one a grace-period
-    /// deletion actually uses, and reproduces the identity split a real EF load produces so the
-    /// SamePageJoinConflict regression coverage can drive the real two-pass page pipeline. All three base
+    /// Spies on the batch Metaverse Object update so the test can assert a grace-period deletion's markers
+    /// reach it, and reproduces the identity split a real EF load produces so the
+    /// SamePageJoinConflict regression coverage can drive the real two-pass page pipeline. Both base
     /// methods are virtual for exactly this purpose (see <c>JIM.InMemoryData.SyncRepository</c>).
     /// </summary>
     private sealed class SpySyncRepository : JIM.InMemoryData.SyncRepository
     {
-        public int SingleMvoUpdateCallCount { get; set; }
-
         public List<Guid> BatchMvoUpdateIds { get; } = [];
-
-        public override Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
-        {
-            SingleMvoUpdateCallCount++;
-            return base.UpdateMetaverseObjectAsync(metaverseObject);
-        }
 
         public override Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         {

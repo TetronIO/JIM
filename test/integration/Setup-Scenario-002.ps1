@@ -628,6 +628,16 @@ try {
             -OutboundDeprovisionAction Delete `
             -PassThru
         Write-Host "  ✓ Created export sync rule: $targetExportRuleName" -ForegroundColor Green
+
+        # Scoped to the people the source projected, all of whom carry Account Name (the matching attribute).
+        # Unscoped, the rule also covers the initial administrator, an internal Metaverse Object a portal sign-in
+        # creates: on Samba AD it would be provisioned as an extra 'CN=Admin User' account, and on the RFC
+        # directories its export would fail on 'uid=,...'. Unscoped provisioning stays covered by the Group export
+        # rules of Scenarios 008, 028 and 029.
+        $targetExportScopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $targetExportRule.id -Type All -PassThru
+        New-JIMScopingCriterion -SyncRuleId $targetExportRule.id -GroupId $targetExportScopeGroup.id `
+            -MetaverseAttributeName 'Account Name' -ComparisonType HasValue | Out-Null
+        Write-Host "  ✓ Scoped '$targetExportRuleName' to 'Account Name' has a value" -ForegroundColor Green
     }
     else {
         Write-Host "  Export sync rule '$targetExportRuleName' already exists" -ForegroundColor Gray

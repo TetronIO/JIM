@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Created** | 2026-02-22 |
-| **Last Updated** | 2026-10-22 |
+| **Last Updated** | 2026-10-29 |
 | **Status** | Active |
 
 This document describes how the JIM Worker avoids per-object database round trips when it matches imported objects to Connected System Objects (CSOs), and the other caches it keeps while a run executes.
@@ -51,6 +51,8 @@ If the Connected System has no CSOs when the import starts (`_csIsEmpty`), the p
 | Export evaluation cache (`ExportEvaluationServer.BuildExportEvaluationCacheAsync`) | One synchronisation run; CSO portions refreshed per page | Export rules by Metaverse Object Type and CSO lookups by (Metaverse Object, Connected System), so export evaluation avoids O(N x M) queries |
 | `SyncRuleNameResolverCache` (`src/JIM.Application/Services/`) | One batch | Resolves a contributing Synchronisation Rule's name for attribute value change history (#1519). Seeded with the rules the run already holds and warmed with one batched query for any others, so a batch costs at most one round trip; a deleted rule is cached as null and never re-queried |
 | `MetaverseObjectPageIdentityMap` (`src/JIM.Application/Services/`) | One sync page (cleared at each page boundary) | Resolves every load of a Metaverse Object row within a page onto one canonical instance, so a grace-period deletion marker set in one pass is seen by a rejoin in the next (#1612). Its `AbsorbedCount` is a tripwire for a load site that bypassed it |
+| `_snapshotReferenceCsos` (`SyncTaskProcessorBase`) | One sync page or cross-page reference batch (cleared with the change tracker, and once the page's provisioning objects are written) | The target CSO each referenced Metaverse Object resolved to in export change snapshots, or null where none exists, so every report of one manager and every group sharing a member stop querying the same object again (#2492). Cleared with the tracker because the CSOs it holds are tracked instances |
+| Pending Export batch scope (`SyncRepository.PendingExportBatch.cs`) | One cross-page reference batch (`BeginPendingExportBatch` to flush or abandon) | Prefetches the Pending Exports of the batch's objects in one query and queues the deletes their re-evaluation makes, executing them in one statement (#2492). Reads hide a queued row and an insert executes its object's queued delete first, so merge decisions are unchanged; any write touching a prefetched row drops it, and a failed batch is abandoned rather than flushed |
 
 ## Related Documentation
 

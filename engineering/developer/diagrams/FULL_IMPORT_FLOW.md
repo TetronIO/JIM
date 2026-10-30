@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -22,8 +22,17 @@ Since v0.16.0:
 
 - **Watermark recorded only once staged (#1868)**: the watermark a call-based Connector returns with its first page is held back until the run has staged everything it read and recorded its results. A run that fails or is cancelled before then (including a cancelled run that staged nothing) keeps the watermark it started with, so the next Delta Import re-reads what was not staged rather than skipping it. Connector data returned by `CloseImportConnection` is still persisted even when the run fails, and wins over the page watermark.
 - **Deselected Object Types leave management (#1474)**: a Full Import's deletion detection also walks each deselected Object Type that has an External ID, so its Connected System Objects are marked Obsolete (and disconnected on the next synchronisation). A deselected Object Type an enabled Synchronisation Rule is still bound to is held back, and the Activity's warning names the rules.
-- **Confirmation on import only (#1826)**: import reconciliation is now the only place Pending Exports are confirmed; synchronisation runs no longer re-check them. Reconciliation never touches an `Executing` Pending Export (one stranded by a crash is recovered at Worker startup), and clears a `Failed` one only once every change it asserts is on the Connected System Object, otherwise leaving it untouched.
+- **Confirmation on import only (#1826)**: import reconciliation is now the only place Pending Exports are confirmed; synchronisation runs no longer re-check them. Reconciliation never touches an `Executing` Pending Export (one stranded by a crash is recovered at Worker startup), and clears a `Failed` one only once every change it asserts is on the Connected System Object, otherwise leaving it untouched. (v0.17.0 removes the `Failed` status: see below.)
 - **Active Directory ranged retrieval (#1853)**: a multi-valued attribute with more values than the domain controller's MaxValRange (1,500 by default) is answered in ranges (`member;range=0-1499`, then `member;range=1500-*` and so on); the LDAP Connector reads every range before converting the attribute, so a large group imports with every member rather than failing as a configuration error. A Delta Import stopped by a changed domain controller `invocationId` now says the directory was probably restored from a backup or snapshot and that a Full Import re-establishes the baseline.
+
+Since v0.17.0:
+
+- **Unconfirmed changes are never given up on (#2119)**: reconciliation marks an unconfirmed change `ExportedNotConfirmed` and reports it on every import that misses it, however many have; there is no `Failed` status or retry limit any more, and the next export run sends it again. An exported Create a Full Import did not see is likewise retried as `ExportNotConfirmed`.
+- **A value a Connector cannot read is left as JIM held it (#2066)**: an attribute-level Connector error records every unreadable value on the item (**Attribute Values Not Imported**, with the file and row for a file), drops that attribute from the import object so the update does not read its absence as no value, and leaves the object unstamped for the next Full Import to diff honestly. An unreadable External ID skips the object, and deletion detection holds its Object Type back.
+- **Delta Import pages supersede (#2074)**: a Delta Import reads changes in order, so an object an earlier page returned and a later page returns again (a re-insert after a delete, or a change either side of a page boundary) takes the later copy, put back from what the earlier page did to it. A Full Import still rejects a cross-page repeat as a paging fault.
+- **Unresolved references, every one (#959)**: reference resolution gathers every reference value each object is left with, unresolved or ambiguous across Object Types, before reporting: the count always goes on the object's item, and under Error handling the item carries a **Reference Unresolved** error naming them, unless another error already holds it.
+- **Deletions without an Object Type (#1066)**: a deletion the Connector reports without its Object Type (an OpenLDAP accesslog entry recorded without `logold`) takes the type of the object its External ID names, before anything files objects by type; where the Connector's External IDs can name different objects in different types, it is refused as `CouldNotMatchObjectType` and nothing is deleted.
+- **Dates and Booleans in one form (#2153)**: every imported date is normalised to UTC and to the microsecond before the content hash, duplicate detection and the diff read it; dates JIM cannot keep apart, and a true or false attribute holding both values, are reported rather than one being chosen.
 
 ## Overall Import Flow
 
@@ -32,7 +41,7 @@ flowchart TD
     Start([PerformImportAsync]) --> ConnType{Connector<br/>type?}
 
     %% --- Call-based connector (e.g., LDAP) ---
-    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
+    ConnType -->|IConnectorImportUsingCalls| InjectServices[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them<br/>Refuse a Connector whose feature<br/>flag is now off; hand the SCIM 2.0<br/>Service Provider Connector its store #124]
     InjectServices --> OpenConn[OpenImportConnection<br/>with system settings]
     OpenConn --> PartFilter[GetTargetPartitions:<br/>Run Profile partition set?<br/>Use it. Otherwise all selected.]
     PartFilter --> InitPage[initialPage = true<br/>paginationTokens = empty<br/>Capture original PersistedConnectorData]
@@ -78,7 +87,7 @@ flowchart TD
     PostImport -->|No, Delta Import<br/>or 0 objects| RefResolution
 
     DeletionDetection --> RetryCreates[Retry unconfirmed exported Creates #1695<br/>Exported Create Pending Export whose<br/>Pending Provisioning CSO this run did not see:<br/>mark for retry, RPEI: ExportNotConfirmed]
-    RetryCreates --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID]
+    RetryCreates --> RefResolution[Reference Resolution<br/>Resolve unresolved reference strings<br/>into CSO links by external ID<br/>Every value an object is left with,<br/>unresolved or ambiguous, counted on<br/>its item, #959; under Error handling:<br/>RPEI UnresolvedReference]
 
     %% --- Persist via ISyncRepository ---
     RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
@@ -102,9 +111,10 @@ For each object in an import page, within `ProcessImportObjectsAsync`:
 
 ```mermaid
 flowchart TD
-    Entry([For each import object]) --> ConnErr{Connector flagged<br/>an error on it?}
+    Entry([For each import object<br/>dates and Booleans normalised, #2153<br/>untyped deletions typed, #1066<br/>repeats found for the whole page first, #2063]) --> ConnErr{Connector flagged<br/>an error on it?}
     ConnErr -->|Object-level| ConnErrSkip[RPEI: mapped Connector error<br/>Skip object]
-    ConnErr -->|Attribute-level| ConnErrKeep[RPEI carries the error<br/>Object still processed]
+    ConnErr -->|Attribute-level,<br/>External ID unreadable| ConnErrSkip
+    ConnErr -->|Attribute-level| ConnErrKeep[RPEI lists every unreadable value, #2066<br/>Those attributes dropped from the<br/>import object: left as JIM held them<br/>Object still processed, left unstamped]
     ConnErrKeep --> DupAttrs
     ConnErr -->|No| DupAttrs{Duplicate<br/>attribute names?}
     DupAttrs -->|Yes| DupAttrErr[RPEI: DuplicateImportedAttributes<br/>Skip object]
@@ -115,7 +125,9 @@ flowchart TD
 
     TypeFound -->|Yes| ExtractExtId[Extract external ID value<br/>from import attributes]
     ExtractExtId --> CrossPageDup{Returned on an<br/>earlier page?}
-    CrossPageDup -->|Yes| CrossPageErr[RPEI: DuplicateObject<br/>Cross-page duplicate detected<br/>Skip object]
+    CrossPageDup -->|Yes: a Full Import, or a<br/>Delta Import repeating it<br/>on this page too| CrossPageErr[RPEI: DuplicateObject<br/>Cross-page duplicate detected<br/>Skip object]
+    CrossPageDup -->|Yes: a Delta Import, once<br/>on this page| Supersede[This later change takes the<br/>earlier copy's place, #2074<br/>The earlier copy's item is withdrawn,<br/>the held CSO put back as it was,<br/>an object it was to create not created]
+    Supersede --> HashSkip
 
     CrossPageDup -->|No| SameBatchDup{Returned more than<br/>once on this page? #2063}
     SameBatchDup -->|Yes| BothDupErr[RPEI: DuplicateObject<br/>Every copy rejected, no random winner<br/>Object held under another<br/>Object Type is kept]
@@ -267,7 +279,7 @@ After CSOs are persisted, the import processor reconciles previously exported ch
 flowchart TD
     Start([ReconcilePendingExportsAsync]) --> LoadPE[Bulk fetch Pending Exports<br/>for updated CSOs<br/>Per page, only when it holds a change<br/>awaiting an Initial Password: read which<br/>accounts are still owed a password, #2039]
     LoadPE --> Loop{More CSOs<br/>with Pending Exports?}
-    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry / Failed /<br/>Held / Released]
+    Loop -->|No| Summary[Log reconciliation summary:<br/>Confirmed / Retry /<br/>Held / Released / Deleted]
     Summary --> Sweep[JudgeUnreconciledInitialPasswordHoldsAsync #2039:<br/>every held change whose CSO this import<br/>did not reconcile, Full and Delta Import alike<br/>One query from the partial index on the flag,<br/>one owed-password lookup for them all]
     Sweep --> SweepOwed{Password still owed<br/>to its Metaverse Object?}
     SweepOwed -->|Yes| SweepHeld[Still held: untouched]
@@ -277,22 +289,17 @@ flowchart TD
     SweepSummary --> Done([Done])
 
     Loop -->|Yes| StatusGate{Pending Export<br/>status? #1826}
-    StatusGate -->|Executing, or Pending<br/>with nothing written yet| Untouched[Left untouched<br/>Executing ones stranded by a crash<br/>are recovered at Worker startup]
+    StatusGate -->|Executing, Parked, or Pending<br/>with nothing written yet| Untouched[Left untouched<br/>Executing ones stranded by a crash<br/>are recovered at Worker startup<br/>Parked ones await a Unique Value<br/>Generation decision, #242]
     Untouched --> Loop
-    StatusGate -->|Failed| FailedCheck{Every change it<br/>asserts now on<br/>the CSO?}
-    FailedCheck -->|Yes| Delete
-    FailedCheck -->|No| Untouched
     StatusGate -->|Exported or ExportNotConfirmed,<br/>or Pending with changes already<br/>written awaiting confirmation #1398| Compare[For each attribute change<br/>awaiting confirmation:<br/>Compare expected value<br/>against CSO current value]
     Compare --> PerChange{Change<br/>confirmed?}
     PerChange -->|Yes| RemoveConfirmed[Remove the confirmed change<br/>from the Pending Export<br/>RPEI: ExportConfirmed outcome]
-    PerChange -->|No, retries remain| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Retried on the next export]
-    PerChange -->|No, max retries exceeded| PermanentFail[Status = Failed<br/>RPEI: ExportConfirmationFailed<br/>Manual intervention required]
+    PerChange -->|No| Retry[Status = ExportedNotConfirmed<br/>RPEI: ExportNotConfirmed<br/>Sent again at the next export run<br/>however many imports have missed it, #2119]
     PerChange -->|No, written with an interim value<br/>and a password still owed, #2039| Held[Held: left exactly as it is<br/>No RPEI, not retried<br/>Counted in the summary]
     PerChange -->|No, written with an interim value<br/>and no password owed any more| Released[Released: Status = Pending<br/>AwaitsInitialPassword cleared, no RPEI<br/>Written as an Update on the next export]
 
     RemoveConfirmed --> Remaining{Any changes<br/>remaining?}
     Retry --> Remaining
-    PermanentFail --> Remaining
     Held --> Remaining
     Released --> Remaining
     Remaining -->|No| Delete[Queue Pending Export<br/>for batch deletion<br/>Export fully confirmed]

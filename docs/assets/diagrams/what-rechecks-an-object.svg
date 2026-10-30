@@ -1,0 +1,39 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- What re-checks an object (Configuration > Scoping Criteria): each trigger, grouped by the synchronisation that picks it up. -->
+<!-- One layout in the generated-diagram language (docs/hooks/diagrams.py classes), inside the .jim-dg -->
+<!-- wrapper; a phone opens it whole in the lightbox, as it does the other concept diagrams. Themed by the -->
+<!-- .jimdg-* classes in docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the wrapper; it is inlined -->
+<!-- into markdown via pymdownx.snippets, and python-markdown ends the raw-HTML block at either. -->
+<div class="jim-dg jim-dg-concept">
+<svg class="jim-diagram" viewBox="0 0 800 643" role="img" aria-labelledby="jimdg-what-rechecks-an-object-w-t jimdg-what-rechecks-an-object-w-d" xmlns="http://www.w3.org/2000/svg">
+<title id="jimdg-what-rechecks-an-object-w-t">What re-checks an object, and which synchronisation does it</title>
+<desc id="jimdg-what-rechecks-an-object-w-d">A Connected System Object is re-checked by the next synchronisation of its Connected System, Delta or Full, when its data changes on import, when an import Synchronisation Rule or Object Matching Rule is saved (which re-checks every object of the Object Type), when a relative date in a scope is crossed, or when its account is deleted in the target system. A Metaverse Object is re-checked by the next synchronisation of any Connected System, Delta or Full, when an export rule's scope or Deprovisioning Action is saved (which re-checks every Metaverse Object of the type), when a relative date in a scope is crossed, or when JIM writes the object outside synchronisation. A Full Synchronisation of the Connected System re-checks the rest: an edited export Attribute Flow reaches existing objects then, and so does every other object, changed or not.</desc>
+<rect class="jimdg-hub" x="8" y="8" width="468" height="250" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="20" y="28">A Connected System Object</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="42" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="69">Its data changed on import</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="95" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="122">An import rule or Object Matching Rule was saved</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="148" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="175">A relative date was crossed</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="201" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="228">Its account was deleted in the target system</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="516" y="93.5" width="252" height="79" rx="8"/><text class="jimdg-dg-label-on" x="642" y="120.5">Next synchronisation of</text><text class="jimdg-dg-label-on" x="642" y="137.5">its Connected System</text><text class="jimdg-dg-sub-on" x="642" y="154.5">Delta or Full</text></g>
+<polyline class="jimdg-flow" fill="none" points="476,133 510,133"/>
+<polygon class="jimdg-flow-arrow" points="516,133 508,128.5 508,137.5"/>
+<rect class="jimdg-hub" x="8" y="276" width="468" height="197" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="20" y="296">A Metaverse Object</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="310" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="337">An export rule's scope or Deprovisioning Action was saved</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="363" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="390">A relative date was crossed</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="416" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="443">JIM wrote the object outside synchronisation</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="516" y="335" width="252" height="79" rx="8"/><text class="jimdg-dg-label-on" x="642" y="362">Next synchronisation of</text><text class="jimdg-dg-label-on" x="642" y="379">any Connected System</text><text class="jimdg-dg-sub-on" x="642" y="396">Delta or Full</text></g>
+<polyline class="jimdg-flow" fill="none" points="476,374.5 510,374.5"/>
+<polygon class="jimdg-flow-arrow" points="516,374.5 508,370 508,379"/>
+<rect class="jimdg-hub" x="8" y="491" width="468" height="144" rx="8"/>
+<text class="jimdg-dg-title jimdg-anchor-start" x="20" y="511">Reached by a Full Synchronisation</text>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="525" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="552">An export Attribute Flow was edited</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-stage" x="20" y="578" width="444" height="45" rx="8"/><text class="jimdg-dg-label" x="242" y="605">Every other object, changed or not</text></g>
+<g class="jimdg-dg-node"><rect class="jimdg-core" x="516" y="532" width="252" height="62" rx="8"/><text class="jimdg-dg-label-on" x="642" y="559">Next Full Synchronisation</text><text class="jimdg-dg-sub-on" x="642" y="576">of the Connected System</text></g>
+<polyline class="jimdg-flow" fill="none" points="476,563 510,563"/>
+<polygon class="jimdg-flow-arrow" points="516,563 508,558.5 508,567.5"/>
+</svg>
+</div>

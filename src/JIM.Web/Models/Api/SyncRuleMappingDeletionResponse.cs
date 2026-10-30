@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -24,8 +25,8 @@ public class SyncRuleMappingDeletionResponse
 
     /// <summary>
     /// True when <c>keepContributedValues</c> was chosen and values were present, so they were kept with no
-    /// Synchronisation Rule provenance; false when they are left to be recalled at the next Full Synchronisation of
-    /// the contributing system, or there was nothing to keep.
+    /// Synchronisation Rule provenance; false when they are left to be recalled at the next synchronisation of
+    /// the contributing system, Delta or Full, or there was nothing to keep.
     /// </summary>
     public bool ContributedValuesKept { get; set; }
 
@@ -35,4 +36,13 @@ public class SyncRuleMappingDeletionResponse
     /// regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
+
+    /// <summary>
+    /// The Connected System Object Types the deletion recorded as awaiting synchronisation. For each, the Connected System's
+    /// next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives
+    /// how many objects that is and about how long it takes at the speed of the Connected System's last Full
+    /// Synchronisation (empty when it has never completed one). Always present; empty when the deletion recorded nothing,
+    /// as for an export mapping.
+    /// </summary>
+    public List<AwaitingSynchronisationEstimate> AwaitingSynchronisation { get; set; } = new();
 }

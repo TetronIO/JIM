@@ -365,10 +365,9 @@ public class ExampleDataRepository : IExampleDataRepository
             if (changeRecords.Count > 0)
                 await syncRepo.PersistPendingMvoChangesAsync(changeRecords, []);
 
-            // The bulk persistence reattaches MVOs to the EF change tracker as Unchanged so
-            // downstream sync code can discover navigation children. Example data has no
-            // downstream EF work after persistence: drop the tracker so memory stays bounded
-            // across batches.
+            // Example data has no downstream EF work after persistence: drop whatever the batch's
+            // loads tracked (the bulk create itself leaves the objects it writes untracked) so
+            // memory stays bounded across batches.
             Repository.Database.ChangeTracker.Clear();
 
             totalPersisted += batchCount;

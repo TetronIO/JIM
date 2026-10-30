@@ -3,7 +3,7 @@ title: Troubleshooting Synchronisation
 description: What each synchronisation error and Activity message means, how to fix and check it, and what JIM keeps safe in the meantime.
 type: troubleshooting
 audience: operator
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Troubleshooting Synchronisation
@@ -41,11 +41,13 @@ A run that ended because the Worker restarted, or ran short of memory, is covere
 
 ## :material-delete-alert-outline: `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
-**What it means.** A Full Import found more objects missing from the Connected System than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
+A Delta Import's message begins `The Connected System reported ... as deleted` instead, and every Delta Import after it reports the same deletions until you act.
 
-**How to fix.** Find out why the objects are missing: check the Connected System's partitions and containers, the Connector's filters, and the source itself. If the absence is genuine, let one run through as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes, then run the Full Import again.
+**What it means.** A Full Import found more objects missing from the Connected System, or a Delta Import was told of more deletions, than the Run Profile's deletion detection limit allows, so JIM marked none of them as deleted and the run ended **Complete with warning**. The usual causes are a change of scope or filter, a connection that returned part of the data, or a file replaced by a smaller one; occasionally it is a genuine mass deletion. Nothing has been deleted: the Connected System Objects, and the Metaverse Objects they contribute to, are as they were before the run.
 
-**Check.** The next Full Import ends without the warning, and its Activity counts the deletions it detected.
+**How to fix.** Find out why the objects are missing: check the Connected System's partitions and containers, the Connector's filters, and the source itself. If the absence is genuine, let one run through as [Letting a legitimate mass change through](../configuration/run-profiles.md#letting-a-legitimate-mass-change-through) describes, then run the import again.
+
+**Check.** The next import ends without the warning, and its Activity counts the deletions it detected.
 
 ## :material-delete-clock-outline: `Max deletes is ..., but ... deletes were pending, so none were attempted`
 
@@ -63,7 +65,7 @@ The same message names creates or updates when those are what the limit holds ba
 
 **How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
 
-**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, run a Full Synchronisation, since a Delta Synchronisation processes only the objects that changed. The object's execution item records a join or a projection.
+**Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation processes every object of its Object Type. The object's execution item records a join or a projection.
 
 ## :material-vector-link: **Ambiguous Provisioning Match**: `This Metaverse Object matches ... Connected System Objects in '...' on ...`
 
@@ -162,7 +164,7 @@ When an object stops contributing to a Metaverse Object and a surviving contribu
 
 For a value held under its old data type, run a Full Import of the Connected System the rule imports from; see [Moving an attribute to its new type](../configuration/connected-system-schema.md#moving-an-attribute-to-its-new-type).
 
-**Check.** After a changed pattern, run a Full Synchronisation; otherwise the next synchronisation, Delta included, retries the object. Its execution item no longer records Synchronisation Failed.
+**Check.** The next synchronisation, Delta included, retries the object, and after a changed pattern processes every object of the rule's type. Its execution item no longer records Synchronisation Failed.
 
 ## :material-calendar-alert: **Dates Merged**: `'...' holds ... dates, but target attribute '...' on '...' holds dates to the second, where some of them become the same date, so it is sent ... distinct values`
 
@@ -171,6 +173,14 @@ For a value held under its old data type, run a Full Import of the Connected Sys
 **How to fix.** Nothing, if one value per step is what the Connected System should hold. If the dates must stay apart there, keep them further apart than its resolution at the source; if the Connected System keeps them more finely than JIM assumes, change the attribute's resolution on the Schema tab.
 
 **Check.** After the next synchronisation that changes the attribute, the object's execution item records the export with no Dates Merged item, or one naming the count you expect.
+
+## :material-timer-sand: **Failed with error**: `The change was saved, but JIM could not record that the next synchronisation of ... must process every ... object`
+
+**What it means.** An import Synchronisation Rule or Object Matching Rule change was saved, but JIM could not record that the next synchronisation must process its whole Object Type, so existing objects may miss it. The save's Activity is marked failed to warn you.
+
+**How to fix.** Run a Full Synchronisation of the Connected System named: it processes every object.
+
+**Check.** The Full Synchronisation's Activity ends **Complete**.
 
 ## :material-play-circle-outline: A run ends **Failed with error** before processing anything
 

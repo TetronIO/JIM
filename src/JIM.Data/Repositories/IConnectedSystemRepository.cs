@@ -2132,4 +2132,52 @@ public interface IConnectedSystemRepository
     /// </summary>
     Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
     #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    /// <summary>
+    /// Records a saved configuration change as awaiting synchronisation for one Connected System Object Type (#2615):
+    /// the Connected System's next synchronisation, Delta or Full, processes every object of that type and then marks
+    /// the change applied (<see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// <para>
+    /// Written only after the configuration change itself has been saved. The synchronisation's claim relies on that
+    /// order: a row that exists is a change that is already in the Synchronisation Rules the run then loads, so a
+    /// claimed change is never one the run could not see.
+    /// </para>
+    /// </summary>
+    /// <param name="change">The change to record. Its <see cref="ConfigurationChangeSynchronisation.ClaimedByActivityId"/>
+    /// and <see cref="ConfigurationChangeSynchronisation.AppliedAt"/> must be unset.</param>
+    Task CreateConfigurationChangeSynchronisationAsync(ConfigurationChangeSynchronisation change);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the Object Types whose objects its next synchronisation will all
+    /// process because of saved configuration changes that have not been applied yet, with how many changes wait behind
+    /// each and since when. Systems with nothing waiting have no entries. Backs the "changes awaiting synchronisation"
+    /// part of the configuration drift indicator, in one read however many systems are asked about.
+    /// <para>
+    /// A plain read: it claims nothing and marks nothing, so a page showing it never moves a change on.
+    /// </para>
+    /// </summary>
+    Task<List<ObjectTypeAwaitingSynchronisation>> GetConfigurationChangesAwaitingSynchronisationAsync(IList<int> connectedSystemIds);
+
+    /// <summary>
+    /// Returns the saved changes still awaiting one Connected System's next synchronisation, newest first, with the Object
+    /// Type and Connected System names and who saved each. For the page that lists what is waiting; the aggregate read
+    /// above is what a list of systems uses.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System.</param>
+    /// <param name="maxChanges">The most changes to return, so a system that has been saved to a great many times cannot
+    /// make the page heavy. The aggregate read carries the true count.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesAwaitingAsync(int connectedSystemId, int maxChanges);
+
+    /// <summary>
+    /// Returns the changes an Activity is part of (#2615): those it recorded, when it is a configuration change, and those
+    /// a synchronisation run claimed, when it is a run. Applied or not. Ordered by Object Type name, then oldest first, so
+    /// a caller can group them.
+    /// </summary>
+    /// <param name="activityId">The Activity.</param>
+    /// <param name="maxChanges">The most changes to return.</param>
+    Task<List<ConfigurationChangeSynchronisationSummary>> GetConfigurationChangeSynchronisationSummariesForActivityAsync(Guid activityId, int maxChanges);
+
+    #endregion
 }

@@ -7,8 +7,8 @@ namespace JIM.Models.Logic.DTOs;
 /// The outcome of an Attribute Flow mapping deletion (#1537): the scale of the mapping's contributed values
 /// at decision time and whether they were kept, so callers (REST responses, PowerShell output, portal
 /// messages) can describe what happened without a second query. Mapping deletion never queues work: the
-/// default recall is the shipped deferred mechanism (the next Full Synchronisation of the contributing
-/// system), and keep severs the values' provenance synchronously before the row is deleted.
+/// default recall is the shipped deferred mechanism (the next synchronisation of the contributing
+/// system, Delta or Full), and keep severs the values' provenance synchronously before the row is deleted.
 /// </summary>
 public class SyncRuleMappingDeletionResult
 {

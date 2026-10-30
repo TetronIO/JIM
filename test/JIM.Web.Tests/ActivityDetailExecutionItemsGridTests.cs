@@ -11,6 +11,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
 using JIM.Web.Pages;
 using JIM.Web.Services;
@@ -44,6 +45,10 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
     private readonly List<ExecutionItemWindowRequest> _windowRequests = [];
 
     private List<ActivityRunProfileExecutionItemHeader> _items = [];
+
+    // The configuration changes the Activity claimed or saved (#2615), read on every load and when the run ends.
+    private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
+    private List<ConfigurationChangeSynchronisationSummary> _synchronisationChanges = [];
 
     // Read on every load of the Activity, so a test can move the run on between the page's refreshes.
     private ActivityStatus _status = ActivityStatus.Complete;
@@ -133,8 +138,15 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
                 };
             });
 
+        _synchronisationChanges = [];
+        _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
+        _connectedSystemRepository.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(ActivityId, It.IsAny<int>()))
+            .ReturnsAsync(() => _synchronisationChanges.ToList());
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemObjectCountAsync(3, 7, null)).ReturnsAsync(12_500);
+
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
+        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
     }
@@ -262,6 +274,66 @@ public class ActivityDetailExecutionItemsGridTests : JimComponentTestContext
             }
         });
     }
+
+    [Test]
+    public void ActivityDetail_RunThatClaimedChanges_SaysWhichObjectTypesItProcessedInFull()
+    {
+        _synchronisationChanges = [ClaimedChange(applied: true)];
+
+        var cut = RenderActivityDetail();
+
+        cut.WaitForAssertion(() =>
+        {
+            var sections = cut.FindAll("[data-testid='jim-processed-in-full-section']");
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(sections, Has.Count.EqualTo(1));
+                Assert.That(sections[0].TextContent, Does.Contain("12,500"));
+            }
+        });
+    }
+
+    [Test]
+    public void ActivityDetail_RunThatClaimedNothing_ShowsNoSection()
+    {
+        var cut = RenderActivityDetail();
+        WaitForGrid(cut);
+
+        Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-section']"), Is.Empty);
+    }
+
+    [Test]
+    public void ActivityDetail_RunFinishesWhileOpen_ReadsAgainWhetherItAppliedTheChanges()
+    {
+        // A run applies what it claimed as it completes, so a page opened mid-run shows neither outcome and must read
+        // the changes again once the run has ended.
+        _status = ActivityStatus.InProgress;
+        _synchronisationChanges = [ClaimedChange(applied: false)];
+        var cut = RenderActivityDetail();
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-section']"), Has.Count.EqualTo(1)));
+        Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-applied']"), Is.Empty);
+
+        _synchronisationChanges = [ClaimedChange(applied: true)];
+        _status = ActivityStatus.Complete;
+        InvokeRefreshActivity(cut);
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll("[data-testid='jim-processed-in-full-applied']"), Has.Count.EqualTo(1)));
+    }
+
+    private static ConfigurationChangeSynchronisationSummary ClaimedChange(bool applied) => new()
+    {
+        Id = 1,
+        ConnectedSystemId = 3,
+        ConnectedSystemName = "HR Import",
+        ConnectedSystemObjectTypeId = 7,
+        ObjectTypeName = "user",
+        Reason = "HR Inbound: Scope changed",
+        RequestedAt = DateTime.UtcNow.AddHours(-1),
+        ClaimedByActivityId = ActivityId,
+        AppliedAt = applied ? DateTime.UtcNow : null,
+        InitiatedByType = ActivityInitiatorType.System,
+        InitiatedByName = "System"
+    };
 
     private IRenderedComponent<ActivityDetail> RenderActivityDetail()
         => Render<ActivityDetail>(parameters => parameters.Add(c => c.Id, ActivityId));

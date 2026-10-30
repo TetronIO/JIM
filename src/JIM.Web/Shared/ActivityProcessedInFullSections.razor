@@ -1,0 +1,64 @@
+@using JIM.Models.Activities
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A synchronisation run's account of the Connected System Object Types it processed in full (#2615): one section per type.
+   A Delta Synchronisation processes changed objects only, so a run that processed a whole type needs to say why: saved
+   changes to an import Synchronisation Rule or Object Matching Rule can change what every object of the type produces, and
+   these are the ones it claimed. Each section ends with where the changes stand: applied, or (for a run that failed or was
+   cancelled) not applied, and so claimed again by the next run. A run still going says neither. The count is the type's
+   object count when the page is read, not a figure the run stored. *@
+@foreach (var group in Groups)
+{
+    <div @key="group.ConnectedSystemObjectTypeId" class="mt-5" data-testid="jim-processed-in-full-section">
+        <MudText Typo="Typo.h5">Processed every @group.ObjectTypeName object</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-3">
+            @Introduction(group)
+        </MudText>
+        <AwaitingSynchronisationChangesTable Changes="@group.Changes" />
+
+        @switch (group.GetApplication(RunStatus))
+        {
+            case ConfigurationChangeApplication.Applied:
+                <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-processed-in-full-applied">Applied.</MudText>
+                break;
+            case ConfigurationChangeApplication.NotApplied:
+                <MudText Typo="Typo.body2" Class="mt-2" data-testid="jim-processed-in-full-not-applied">
+                    Not applied; the next synchronisation will claim them again.
+                </MudText>
+                break;
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The Object Types the run processed in full, with the changes it claimed for each.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ActivityObjectTypeSynchronisation> Groups { get; set; } = [];
+
+    /// <summary>
+    /// The run's status, which decides whether the changes are reported as applied, not applied or neither yet.
+    /// </summary>
+    [Parameter]
+    public ActivityStatus RunStatus { get; set; }
+
+    /// <summary>
+    /// The run's type. A Full Synchronisation processes every object whatever was saved, so its introduction says so
+    /// rather than describing a Delta Synchronisation doing more than it usually does.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystemRunType? RunType { get; set; }
+
+    private string Introduction(ActivityObjectTypeSynchronisation group)
+    {
+        var count = group.ObjectCount is { } objectCount ? $"{objectCount:N0} " : string.Empty;
+        return RunType == ConnectedSystemRunType.FullSynchronisation
+            ? $"A Full Synchronisation processes every object. This one also covers these changes, saved before it started, to all {count}{group.ObjectTypeName} objects:"
+            : $"A Delta Synchronisation processes changed objects only. This one also processed all {count}{group.ObjectTypeName} objects, because these changes were saved before it started:";
+    }
+}

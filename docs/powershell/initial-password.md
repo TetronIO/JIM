@@ -7,7 +7,7 @@ audience: automation-author
 
 # Initial Password
 
-These cmdlets read and change whether JIM sets an initial password on the Connected System Objects an export Synchronisation Rule provisions, how it generates one, and which Connected System Objects are waiting on a person because a target refused the password. No surface returns a password. What each setting does, and the rule's **Initial Password** tab, are covered in [Initial Password](../configuration/initial-password.md).
+These cmdlets read and change whether JIM sets an initial password on the Connected System Objects an export Synchronisation Rule provisions, how it generates one, and which Connected System Objects are waiting on a person because a target refused the password. No surface returns a password. What each setting does, and the rule's **Passwords** tab, are covered in [Initial Password](../configuration/initial-password.md).
 
 ```jim-diagram
 archetype: anatomy

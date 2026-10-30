@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Workflows;
@@ -89,6 +90,74 @@ public partial class SyncPreviewFidelityTests
             Assert.That(review.ObjectTypeName, Is.EqualTo("Person"));
             Assert.That(review.Preview!.Outbound.ObjectsToCreate, Is.EqualTo(1));
         }
+    }
+
+    [Test]
+    public async Task PreviewFullSyncAsync_FlaggedObjectWithAValueChangedOutsideSynchronisation_ProposesTheUpdateTheRunStagesAsync()
+    {
+        // #2615: John's account exists and is current; his name is then changed in the portal (outside any
+        // synchronisation), which flags him and records the change. The review a run of an unrelated system makes
+        // delivers it, so the preview of that run must propose it.
+        var ctx = await SetUpScopeReviewAsync();
+        // Let go of what the arranging synchronisation modified on instances shared with the DbContext, so it can save a new system.
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Modified).ToList())
+            entry.State = EntityState.Detached;
+        var unrelated = await CreateConnectedSystemAsync("Unrelated");
+        await CreateCsoTypeAsync(unrelated.Id, "user");
+        // The in-memory store knows only the Metaverse Attributes it is told of; the review skips a recorded change to one it does not know.
+        foreach (var attribute in DbContext.MetaverseAttributes.ToList())
+            SyncRepo.SeedMetaverseAttributeName(attribute.Id, attribute.Name);
+        await RunFullSyncAsync(await ReloadEntityAsync(ctx.Target));
+        ConfirmProvisionedAccounts(ctx.Target);
+        await RenameJohnOutsideSynchronisationAsync("John Smyth");
+
+        var preview = await Jim.SyncPreview.PreviewFullSyncAsync(unrelated.Id);
+        await RunFullSyncAsync(await ReloadEntityAsync(unrelated));
+
+        var realUpdates = SyncRepo.PendingExports.Values.Count(pe => pe.ConnectedSystemId == ctx.Target.Id && pe.ChangeType == PendingExportChangeType.Update);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(realUpdates, Is.EqualTo(1), "arrange: the run's review stages the new name for John's account");
+            Assert.That(preview.Counts.ObjectsToUpdate, Is.EqualTo(realUpdates), "the preview proposes the update the review stages");
+            Assert.That(preview.Counts.ExportScopeReviewed, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// The provisioning Create has been exported and confirmed: each provisioned account is a normal object holding the
+    /// values it was sent, with nothing left queued.
+    /// </summary>
+    private void ConfirmProvisionedAccounts(ConnectedSystem target)
+    {
+        foreach (var account in SyncRepo.ConnectedSystemObjects.Values.Where(c => c.ConnectedSystemId == target.Id))
+        {
+            foreach (var change in SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemObjectId == account.Id).SelectMany(pe => pe.AttributeValueChanges))
+            {
+                account.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                {
+                    Id = Guid.NewGuid(), ConnectedSystemObject = account, AttributeId = change.AttributeId, Attribute = change.Attribute,
+                    StringValue = change.StringValue, GuidValue = change.GuidValue
+                });
+            }
+
+            account.Status = ConnectedSystemObjectStatus.Normal;
+        }
+
+        SyncRepo.ClearAllPendingExports();
+    }
+
+    /// <summary>
+    /// Changes John's display name through the application layer, as the portal does. The harness holds synchronised
+    /// Metaverse Objects in the sync store by reference, so the edit's own save is routed to a no-op.
+    /// </summary>
+    private async Task RenameJohnOutsideSynchronisationAsync(string newName)
+    {
+        Jim = new JIM.Application.JimApplication(MetaverseSaveBypassingRepositoryProxy.Create(Repository), syncRepository: SyncRepo);
+        var john = SyncRepo.MetaverseObjects.Values.Single();
+        var name = john.AttributeValues.Single(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+        var removal = name.CopyFor(john);
+        name.StringValue = newName;
+        await Jim.Metaverse.UpdateMetaverseObjectAsync(john, additions: [name], removals: [removal]);
     }
 
     private sealed record ScopeReviewContext(ConnectedSystem Source, ConnectedSystem Target);

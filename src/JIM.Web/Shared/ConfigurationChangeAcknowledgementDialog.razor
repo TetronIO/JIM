@@ -6,8 +6,9 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* Thin surface over the shared ConsequenceConfirmationDialog, composing it from a configuration change      *@
-@* preflight: what is changing, what the destructive parts of it will do, and the reminder that a Full       *@
-@* Synchronisation is what makes it take effect. Every sync-affecting save surface shows this same dialog,   *@
+@* preflight: what is changing, what the destructive parts of it will do, and when it takes effect: for a    *@
+@* Synchronisation Rule what the save will actually do (#2615), for every other surface the reminder that a  *@
+@* Full Synchronisation is what makes it take effect. Every sync-affecting save surface shows this same dialog, *@
 @* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation    *@
 @* as each adapter lands. See engineering/plans/done/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).        *@
 
@@ -125,10 +126,45 @@
             </MudText>
         }
         @* Guidance rather than a warning: nothing has gone wrong, but saving alone changes nothing that already exists. *@
-        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
-            Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems
-            concerned to put it into effect.
-        </MudAlert>
+        @if (Preflight.Effect is { } effect && (effect.RecordsAwaitingSynchronisation || effect.FlagsExportReview || effect.NeedsFullSynchronisation))
+        {
+            @* A Synchronisation Rule save says what this save will do (#2615), worked out from the decisions the save makes, so
+               each part is present exactly when the save will act on it. *@
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-effect">
+                <MudText Typo="Typo.subtitle2">When this takes effect</MudText>
+                @foreach (var estimate in effect.ObjectTypesProcessedInFull)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" data-testid="jim-effect-awaiting-synchronisation">
+                        @ConfigurationChangeEffectText.ProcessedInFull(estimate)
+                    </MudText>
+                }
+                @if (effect.RecordsAwaitingSynchronisation)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" data-testid="jim-effect-until-then">@ConfigurationChangeEffectText.UntilThen</MudText>
+                }
+                @if (effect.ExportReviewMetaverseObjectTypeName is { } metaverseObjectTypeName)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" data-testid="jim-effect-export-review">
+                        @ConfigurationChangeEffectText.ExportReview(metaverseObjectTypeName)
+                    </MudText>
+                }
+                @if (effect.NeedsFullSynchronisation)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" data-testid="jim-effect-full-synchronisation">
+                        @ConfigurationChangeEffectText.FullSynchronisation(effect)
+                    </MudText>
+                }
+            </MudAlert>
+        }
+        else
+        {
+            @* A surface that does not state its effect, or a Synchronisation Rule change with nothing to state: the general
+               reminder that a Full Synchronisation is what applies a change to existing objects. *@
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" data-testid="jim-effect-general">
+                Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems
+                concerned to put it into effect.
+            </MudAlert>
+        }
     </div>;
 
     /// <summary>

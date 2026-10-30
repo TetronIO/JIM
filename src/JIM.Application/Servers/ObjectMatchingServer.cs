@@ -292,13 +292,17 @@ public class ObjectMatchingServer
                 continue;
 
             // Resolve succeeded, so the rule has a Target Metaverse Attribute.
-            var ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
-                metaverseObjectType.Id,
-                matchingRule.TargetMetaverseAttribute!.Id,
-                resolution.ValueType,
-                resolution.Values,
-                matchingRule.CaseSensitive,
-                take: ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1);
+            IReadOnlyList<Guid> ids;
+            using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.MatchLookup"))
+            {
+                ids = await repository.FindMetaverseObjectIdsByMatchValuesAsync(
+                    metaverseObjectType.Id,
+                    matchingRule.TargetMetaverseAttribute!.Id,
+                    resolution.ValueType,
+                    resolution.Values,
+                    matchingRule.CaseSensitive,
+                    take: ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded + 1);
+            }
 
             if (ids.Count == 0)
                 continue;
@@ -314,7 +318,12 @@ public class ObjectMatchingServer
                 };
             }
 
-            var mvo = await repository.GetMetaverseObjectForJoinMatchAsync(ids[0]);
+            MetaverseObject? mvo;
+            using (var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("Join.LoadMatch"))
+            {
+                mvo = await repository.GetMetaverseObjectForJoinMatchAsync(ids[0]);
+                loadSpan.SetTag("attributeValueCount", mvo?.AttributeValues.Count ?? 0);
+            }
             if (mvo == null)
             {
                 // Found by the lookup and gone by the load: deleted in between. Nothing to join to.

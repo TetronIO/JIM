@@ -9,172 +9,183 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- ✨ Configure a SQL Connected System's Object Types in the portal, one card per Object Type, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references, instead of writing a JSON document. (#2570)
-- ✨ See what a SQL Connected System's database contains before writing its Object Types: list its tables and views, or one table's columns, primary key and foreign keys, or the columns a SELECT statement would return, with `Get-JIMConnectedSystemCatalogue` or REST. (#2570)
-- ✨ When a value JIM is configured with does not match what the identity provider sends, sign-in says which: a portal sign-in stops on a page naming the setting, such as `JIM_SSO_CLIENT_ID`, the value JIM expected and the value it received, instead of **Something went wrong**. Covers the audience, issuer, client secret, scopes and the claim JIM identifies people by. An API token refused for its audience or issuer is logged the same way, and administrators see every problem with `Get-JIMSignInDiagnostic` or REST, with the redirect URIs to register. (#2443)
-- ✨ An Oracle Database connection over TCPS can now use a server certificate from your own certificate authority: trust the root of its chain from the failed connection test's certificate card, or under **Admin > Certificates**, with no change to the JIM images. (#2581)
-- ✨ Filter the Pending Exports list by change type as well as status, in the portal and in REST and `Get-JIMPendingExport -ChangeType -Status`, so a script can fetch just the deletions waiting to export without paging through the whole backlog.
-- ✨ JIM tells administrators when it is running short of memory, before it fails rather than after: the Worker stops its running work when memory is nearly exhausted, instead of being killed part-way through with nothing recorded, and its Activity says why and what to do. The Operations page shows each service's memory and a **Memory low** condition, with a banner on every page. Also via REST and `Get-JIMServiceHealth`. (#2487)
-- ✨ JIM accepts an API token from the `access_token_issuer` the identity provider's discovery document publishes, as well as from its `issuer`, so AD FS, which issues access tokens under its federation service identifier, no longer needs `JIM_SSO_VALID_ISSUERS`. A token from any other issuer is still refused. (#2440)
-- ✨ Signing in keeps **Email** current from the identity provider, as it does the other profile values: the portal now asks every provider for the `email` scope. (#2439)
-- ✨ Administrators JIM does not synchronise, such as the initial administrator, keep their profile current from the identity provider: each sign-in refreshes Display Name, First Name, Last Name and User Principal Name from the token, while values a Synchronisation Rule supplies are never touched. (#2383)
-- ✨ Values JIM sets outside synchronisation now say where they came from, instead of **Source not recorded**: a value read from a sign-in token names the claim (such as `given_name`), and a value JIM fixes itself, such as the initial administrator's Type, reads **Set by JIM**. Shown in the Inspect view, the Changes tab, REST and PowerShell (`ContributedByKind`, `ClaimType`). Existing values keep "Source not recorded" until set again. (#2472)
-- ✨ Select a change on the Object Changes page to see it in full in a panel beside the list: every attribute it changed, with old and new values, who made it and its Activity. Selecting the object itself still opens it. (#2460)
-- ✨ Sign people in by a Guid Metaverse Attribute such as `Object GUID`: set `JIM_SSO_MV_ATTRIBUTE=Object GUID`, and AD FS administrators sign in as the objects Active Directory synchronisation created. The claim may be GUID text or AD FS's base64 `objectGUID`. (#2438)
-- ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` now name the setting they fill, by id and name, so a script can discover a domain controller and set it as Preferred Domain Controller in one step. (#2456)
-- ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month: the new Object Changes page filters by time, Metaverse Object Type, name and attribute value. Also via REST and `Search-JIMMetaverseObjectChange`. (#1901)
-- ✨ Register JIM with AD FS in one command: `Register-JIMIdentityProvider -Provider ADFS` creates the Application Group the SSO guide describes and returns the `JIM_SSO_*` values. Run it again to repair drift, or with `-WhatIf` to see it. (#2364)
-- ✨ Register JIM with Keycloak in one command: `Register-JIMIdentityProvider -Provider Keycloak` creates the portal's and the PowerShell module's clients and the `jim-api` scope in your realm, through Keycloak's admin REST API from any computer, and returns the `JIM_SSO_*` values. Run it again to repair drift, such as `jim-api` offered to another client, or with `-WhatIf` to see it. Give `-Url` each address people reach JIM at. The Keycloak SSO guide leads with it. (#2364)
-- ✨ Create, edit, duplicate and delete Data Generation Templates in the portal: add Object Types and attributes, choose how each attribute's values are made, and duplicate a built-in template to customise it. Copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
-- ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and imports what arrives on its Schedule. Also via REST and `*-JIMScimKey`. (#124)
-- ✨ See what an identity provider sent: an Activity per key every 15 minutes counts its creates, updates, deletes and refused requests, and a Connected System Object's change history lists the SCIM requests behind each imported change. (#124)
-- ✨ An import's Activity page says what range a Delta Import read, or where a Full Import left the next one to start, in the Connector's own terms ("After 8, up to 15 (change sequence)"), with its recorded state a click away. Also via REST and `Get-JIMActivity`.
-- ✨ Say whether a File Connector column holds several values, separated by the Multi-Value Delimiter, on the Schema tab, via REST or `Set-JIMConnectedSystemAttribute -Plurality`; a schema refresh keeps your choice. (#2186)
-- ✨ JIM signs people in through an identity provider whose HTTPS certificate comes from your own certificate authority, such as AD FS or Keycloak run on premises: trust it for sign-in with `Add-JIMCertificate -FromIdentityProvider`, REST, or the portal, and sign-in works straight away, with no image rebuild or restart. (#2363)
-- ✨ When JIM cannot trust its identity provider, opening JIM explains why on a **Sign-in is unavailable** page with the fix filled in, and signed-in administrators see a warning before new sign-ins fail, with **Review and trust**. `Get-JIMIdentityProviderTrust` reports the same. (#2363)
-- ✨ Each Trusted Certificate is trusted for Connectors, for sign-in, or both, and removing the one sign-in depends on asks first. Existing certificates stay trusted for Connectors only; set it on the Certificates page, REST or `-TrustedFor`. (#2363)
-- ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`, as the type you choose, and explanations show what it read and computed. An object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
-- ✨ Multi-valued date attributes import every value from every Connector, such as OpenLDAP's `pwdFailureTime`. Dates JIM cannot keep apart, and a true or false attribute holding both values, are reported on the Activity rather than one being chosen. (#2153)
-- ✨ Each date attribute has a **Date Resolution**, the finest step of time its Connected System keeps (whole seconds for Active Directory); JIM exports and compares dates at it, so they never re-export forever. Adjustable on the Schema tab, REST and `-DateTimeResolution`. (#2153)
-- ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values: every value is kept, the change is audited, and single-valued targets still receive one value. (#2153)
-- ✨ LDAP schema discovery on OpenLDAP, 389 Directory Server and other RFC 4512 directories now offers operational attributes such as `pwdFailureTime`, `createTimestamp` and `memberOf` on every structural Object Type, unselected and read-only, grouped on the Schema tab and flagged `isOperational` over REST and PowerShell. (#2153)
-- ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`: `RegexReplace(cs["telephoneNumber"], "[^0-9+]", "")`. Patterns are checked and time-limited like scoping's. (#2053)
-- ✨ The expression editor suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function with what it does. (#2053)
-- ✨ Scripts can list the expression functions, with each one's signature, parameters and an example, filtered by name or category: `Get-JIMExpressionFunction -Name '*Date*'`, or REST (`/api/v1/synchronisation/expression-functions`). (#2253)
-- ✨ Expressions gain `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, with `Where` filtering by the scoping operators' own names: `Where(cs["proxyAddresses"], "starts with", "SMTP:")`. (#2053)
-- ✨ Connected System attributes now say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable by administrators (Schema tab, REST, `-CaseExact`). New Object Matching Rules on them respect case. (#2051)
-- ✨ Scoping criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. Also via REST and PowerShell. (#2053)
-- ✨ A portal page's info button now links to the documentation that explains it, and detail pages such as an Activity, a Connected System, a Connector or a Synchronisation Rule gain an info button of their own. (#1454)
-- ✨ Scripts can read what a run did to an object, outcome by outcome, and the attribute values it changed, as the execution item page shows them, even after the object is deleted: `Get-JIMActivityExecutionItem -IncludeOutcomes -IncludeChanges`, or REST. (#2033)
-- ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in, what was expected and why it was refused, with the file and row for a file. Also via REST and `Get-JIMActivityExecutionItem`. (#2066)
-- ✨ See which references an import could not link, and why: an object's page and its execution items list each with its likely cause (a Container not in scope, say), where to fix it and the next step. Also via REST and `Get-JIMConnectedSystemObjectUnresolvedReference`. (#959)
-- ✨ The Connected System page shows how many references are unresolved and opens the Connector Space filtered to the objects holding them, under "Where they point": the changes that would fix them. Also via REST and `Get-JIMConnectedSystemUnresolvedReferenceSummary`. (#959)
-- ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources. The source also appears on the Changes tab and Pending Export detail, and via REST and `Get-JIMMetaverseObjectProvenance`. (#399)
-- ✨ A refused server certificate now shows its chain and where JIM found each certificate. **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain and `rootThumbprint`. (#1914)
-- ✨ The Attribute Flow tester now runs the flow as a synchronisation does: typed inputs, value processing, Missing Input Behaviour and conversion to the target. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
-- ✨ The Attribute Flow tester takes typed and multi-valued inputs, an explicit No value, and values loaded from a real object, and traces each step and what each input's absence would do. Also via REST and `Test-JIMExpression -ConnectedSystemObjectId`. (#2055)
-- ✨ Test a Synchronisation Rule's scope before it runs: sample values or a real object, criterion by criterion, as of any date, and when the object would enter or leave scope. Also via REST and `Test-JIMScope`; the Attribute Flow tester can run as of a date too. (#2055)
-- ✨ Object Matching Rules' Try it now takes typed and multi-valued values or a real object, and can show which Metaverse Object a synchronisation would join, or why it would not. Also via REST and `Test-JIMMatchingRule`. (#2055)
-- ✨ Testing a Generated Value now runs its base expression as a synchronisation does, through typed inputs and value processing, and shows the base generation would start from. Also via REST and `Test-JIMExpression -SyncRuleId -MappingId`. (#2055)
-- ✨ Test an Example Data Template attribute's expression with sample values before generating anything, over REST or with `Test-JIMExampleDataExpression`. (#2055)
-- ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
-- ✨ Save configuration test cases: inputs, and what an Attribute Flow, Generated Value, Scope or Object Matching Rule should give, run from a Synchronisation Rule's new **Tests** tab to catch a breaking change. Also via REST and `Invoke-JIMConfigurationTest`. (#2055)
-- ✨ Saving a change that stops a configuration test case passing now asks first: keep editing, accept the new result, or save anyway, which Configuration History records. Also via REST and `-SaveAnyway` or `-AcceptNewResult`. (#2055)
-- ✨ Expressions are syntax highlighted as you type them, in an Attribute Flow's Expression and a Generated Value's base expression, with Metaverse (`mv["..."]`) and Connected System (`cs["..."]`) attribute references in colours of their own, here and in the Attribute Flow table.
-- ✨ JIM warns when a Connected System projects into an object type deleted When Authoritative Source Disconnected without being one of its sources, on the Deletion Rules panel, when saving the Synchronisation Rule, and via REST and PowerShell. (#1256)
-- ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Full Synchronisation Run Profile, the REST API or PowerShell: every change, here and in the systems it reaches, per object. A run started from it records it. (#1530)
-- ✨ Preview what deleting a Connected System would do (values taken over or cleared, identities made eligible for deletion, downstream corrections) from its Danger Zone tab, `New-JIMConfigurationChangePreview -Deletion` or REST; the deletion's Activity records the preview. (#134)
-- ✨ REST and `Get-JIMActivity -Id` now return a change's `PreviewActivityId`, so a script can read back which Configuration Change Preview informed it. (#134)
-- ✨ Scripts can now read why an object in a run failed: `Get-JIMActivityExecutionItem` and REST (`/activities/items/{id}`) return an execution item's error message and stack trace, which the item list does not carry. (#2032)
-- ✨ JIM can now generate unique values such as account names, employee numbers and badge codes: a **Generated Value** Attribute Flow adds a number only if a value is taken, or uses a forward-only sequence or a random token, and keeps each value once issued. (#242)
-- ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
-- ✨ An import Attribute Flow can now derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name; JIM evaluates them in dependency order in one synchronisation and refuses a loop when you save it. (#1750)
-- ✨ The Attribute Flow tab shows each derived flow's step, offers Metaverse attributes to insert, checks for loops as you type, and warns before a change leaves a derived flow without an input; REST and PowerShell report the same. (#1750)
-- ✨ Before choosing a generated value, JIM now asks the LDAP directories it is exported to whether it is in use, catching accounts JIM doesn't import. The Attribute Flow's **Checked for availability in** panel shows how each system is checked and lets you exclude one. (#242)
-- ✨ A generated value exported to a SCIM service or SQL database is now checked there too before JIM chooses it, catching accounts created since the last import. (#1941)
-- ✨ When a target refuses a generated value as already in use, JIM now corrects it (`joe.bloggs` becomes `joe.bloggs1`) and the next synchronisation carries the new value to every target. If another system already uses the value, the export waits for a decision instead. (#242)
-- ✨ See why a generated value is waiting for a decision, allow the rename or try again, from REST (`/generated-values/decisions`) or `Get-JIMGeneratedValueDecision`, `Approve-JIMGeneratedValueRename` and `Reset-JIMGeneratedValueDecision`; each action records who took it. (#242)
-- ✨ Collision Remediation can be switched off per generated Attribute Flow in the portal, via REST (`collisionRemediation`) and `-CollisionRemediation`, and each Connected System it is checked in now says whether it can report a value as already in use. (#242)
-- ✨ A new **Generated Values** tab under Operations lists the generated values waiting for a decision, with **Allow the rename…** and **Try again**; Synchronisation Rules, Connected Systems and Metaverse Objects flag their held values. (#242)
-- ✨ A Metaverse Object's Connections tab now explains each connection: expand a row to see how it joined, the Synchronisation Rule responsible, and whether each relevant rule's scoping still includes it. JIM records the joining rule from now on. (#348)
-- ✨ A new **Not connected** section says why a Metaverse Object has no account in each Connected System an enabled export rule targets, and what would bring it into scope, with a **Copy summary** for tickets; REST and `Get-JIMMetaverseObjectConnection` say the same. (#348)
-- ✨ REST and `Get-JIMMetaverseObject` now return a Metaverse Object's Created By and Last Updated By, as the portal's Properties tab shows. (#348)
-- ✨ The REST API and `Get-JIMActivity` now return a failed authentication's reason, client IP, attempt count and timing, as the portal shows, so a SIEM can tell a forged-token spray from one expired token. (#2108)
-- ✨ Each release now publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked after downloading it and before carrying it into the site. (#1942)
-- ✨ In a multi-domain Active Directory forest, JIM now probes `userPrincipalName`, `mail` and other forest-wide attributes through a Global Catalog, so a value used in another domain is found. Set one with the new **Global Catalog Server** setting. (#1940)
-- ✨ When JIM checks Active Directory for an email address before choosing it, it now also looks in every object's `proxyAddresses`, so an address already used as someone else's alias counts as taken. (#1940)
-- ✨ A Full Import Run Profile can now **Allow Object Type Changes**, carrying out an intended change of Object Type: the object imports under its new type and the old one is retired. Portal, REST (`allowObjectTypeChanges`) or `-AllowObjectTypeChanges`. (#2049)
-- ✨ The schema preview now warns when selecting or deselecting an overlapping Object Type would re-type objects already imported, and a schema refresh lists classes whose kind or inheritance changed. (#2049)
-- ✨ A value built from a generated value, such as an Email built from Account Name, has a **Keep unique** switch: on, a target refusing it corrects Account Name; off, it's an ordinary export error. Set it on the Attribute Flow, in REST or with `-KeepUnique`. (#2014)
-- ✨ The Attribute Flow tab's Mapping Type filter now lists derived flows under **Derived**, so you can show only derived flows, or them alongside generated values. (#2014)
-- ✨ JIM now issues a generated Account Name only when the Email and User Principal Name built from it are free too, waiting while one needs an input the person doesn't have yet. Values issued before this release are left as they are. (#2023)
-- ✨ **Deprovision queued** and **Disconnected from target system** outcomes now name the export Synchronisation Rule whose Deprovisioning Action decided them, so an Activity shows why an account is being removed or left in place. (#1811)
-- ✨ An execution item's Lineage now shows what its change went on to cause in later runs, down to the accounts and Groups it reached, and where each branch stopped or what it waits for. Check again appears only while something is still to happen. (#1811)
-- ✨ The REST API and PowerShell can read what caused an Activity's execution item and what it went on to cause, with exact counts and where each branch ended (`Get-JIMActivityExecutionItem -Causes` and `-Consequences`, `Get-JIMCausalCohortMember`). (#1811)
-- ✨ An **Ambiguous Match** now lists the Metaverse Objects it found on the Activity item, each linked, with the value it matched on and what it's joined to; REST, `Get-JIMActivityExecutionItem` and Sync Preview return them too. (#2052)
-- ✨ A connection joined by an Object Matching Rule now says which rule matched and on what value, on the Connections tab, in REST and in `Get-JIMMetaverseObjectConnection`. (#2052)
-- ✨ An object joined by an Object Matching Rule now says on its Activity item which rule matched and on what value, and Sync Preview says the same of a join it predicts; also via REST, `Get-JIMActivityExecutionItem` and the Sync Preview cmdlets. (#2052)
-- ✨ A grace-period deletion's Activity now links back to the run that scheduled it, so its causality chain reads from the source change to the deletion however long the grace period. (#1811)
-- ✨ The Causality Explorer follows one story across objects and runs: open it from any object or execution item to see every run that touched it and why, step from object to run to object with a trail back, and share the view as a link. (#2100)
-- ✨ A Pending Export shows which synchronisation runs queued it and why, and the REST API and PowerShell can read the same, plus any object's causal timeline (`Get-JIMPendingExport -QueuedBy`, `Get-JIMActivityExecutionItem -MetaverseObjectId`). (#2100)
-- ✨ Object Matching Rules can match on an expression, so identifiers that differ in format between systems still join and match: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. Compose one in the portal and **Try it**, or via REST and `-SourceExpression`. (#2052)
-- ✨ A matching preview's **Matches more than one Metaverse Object** rows now list the objects each would match, linked, so you can go straight to the conflict; REST and `Get-JIMConfigurationChangePreviewDelta` return them too. (#2052)
-- ✨ A new `ParseDate(text, format)` expression function reads a date written in any form, such as `ParseDate(cs["startDate"], "dd/MM/yyyy")`. Text that does not match the format is an error, so a source sending an unexpected form never clears the attribute. (#2153)
-- ✨ `Test-JIMExpression` and the REST expression tester now return `ResultLines`, the result exactly as the portal's tester shows it: one value per line, with dates as JIM writes them. (#2179)
+- ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
+- ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
 
 ### Changed
 
-- 🔄 A misspelt field in the SQL Connector's Object Types document is now named with the field you most likely meant ("Did you mean 'anchorColumns'?"), in the portal, REST and PowerShell alike, instead of a message naming internal types. (#2570)
-- 🔄 The Connections tab names each object by its Secondary External ID where it has one, such as an LDAP distinguished name, with its External ID beneath. REST and `Get-JIMMetaverseObjectConnection` return both, plus pending values, in place of `displayName`.
-- 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, whether or not it has changed, so it corrects anything a Delta Synchronisation missed and applies JIM upgrades to existing data. It takes longer on a large system; schedule Delta Synchronisation for routine runs. (#891)
-- 🔄 The Operations page's Queue and History tabs are now one **Activity** tab: queued, running and finished work in time order, full progress for every run including parallel Schedule steps, estimated start and finish times, and the next Schedule due. Each section's heading folds its rows, an empty section is one line, and the filters sit behind a **Filters** button with the active ones shown as chips. (#2549)
-- 🔄 **Service Health** on Administration > Operations now opens collapsed to its one line: the verdict, whether the page is updated live, and the next Schedule due. The chevron opens the cards, and the portal remembers the choice. (#1635)
-- 🔄 A Synchronisation's **Resolving cross-page references** step counts its progress in reference values rather than objects, so its rate and time remaining reflect a large group's real cost. The portal, PowerShell and the progress endpoint (`countUnit`) say so, and the message gives the number of objects. (#2492)
-- 🔄 Five built-in Metaverse attributes are named in Proper Case like the rest: **Object GUID** (was `objectGUID`), **Object SID** (`objectSid`), **SID History** (`sIDHistory`), **Street Address** (`StreetAddress`) and **Web Page** (`WebPage`). `Register-JIMIdentityProvider` and the SSO guides already named **Object GUID**, so `JIM_SSO_MV_ATTRIBUTE=Object GUID` now names the built-in attribute; before, JIM refused to start with it. JIM is pre-release, so reinstall an existing installation: upgrading it in place adds the new attributes beside the old ones.
-- 🔄 Change history, the Metaverse Object change search and an execution item's changes now return each changed attribute's first ten value changes and how many there are (`valueChangeTotal`), so a change to a group of 600,000 members no longer returns 600,000 values. Read the rest a page at a time with `Get-JIMConnectedSystemObjectChangeValue` and `Get-JIMMetaverseObjectChangeValue`, or REST (`/api/v1/history/connected-system-object-changes/{changeId}/attributes/{attributeName}/values` and its Metaverse Object sibling). (#2498)
-- 🔄 With AD FS, the portal now asks for JIM's Web API as its resource with the `allatclaims` scope, so the Web API's claim rules shape the portal's sign-in as they do the API's. Permit `allatclaims` to JIM's server application in AD FS, or sign-in is refused. (#2439)
-- 🔄 Delta Import from OpenLDAP no longer needs the accesslog to record old values (`logold`): a deletion is matched to the object JIM holds by its `entryUUID`. Turn `logold` off, as JIM's own lab now does; on directories with large groups it logged the whole member list on every membership change. (#1066)
-- 🖥️ Lists now show when a search, sort or filter is slow to answer: a progress bar, a spinner in the search box and a "Searching…" count, with the old rows faded until results arrive. Quick results appear as before, with no flicker.
-- 🔄 The Causality Explorer is for Administrators only, like the REST API reads it draws on, and other users no longer see links to it. On a Metaverse Object, **Explore causality** moves from beside the tabs into the **Inspect** view: at the end of its source panel (**Where this User gets its values**, named for the object's type), and in each attribute's inspector beside **Open in Timeline**.
-- 🔄 A Synchronisation Rule's identity strip, and the Object Type pickers that create one, read in the direction data flows: an import rule shows the Connected System Object Type then the Metaverse Object Type, and an export rule the reverse.
-- 🖥️ Ordinary buttons across the portal are filled in the theme's default colour rather than outlined, so they read clearly as buttons beside the page's one main action; outlined is kept for dangerous actions.
-- 🔄 The Attribute Flow dialog puts the settings beside a **Try it** pane, so a change and its result are seen together. The result follows as you type and as the settings change, with no **Run test** button. A Generated Value shows one result from the values tried through to the candidates, worked out from the base as a Synchronisation would type and process it. The attribute to assign the value to comes first, and rarely changed settings fold away to a line saying what they are set to. (#2471)
-- 🔄 An Activity's Target and Parent Activity are shown as chips: the Connected System, object, Run Profile, Synchronisation Rule, Schedule or API key it acted on, and the parent Activity by its type and target.
-- 🔄 In the light theme, attribute tables' Attribute column is now a neutral grey matching the header row, rather than a blue-grey.
-- 🔄 Who did something is shown as a chip for what it is, wherever the portal names it: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or JIM itself as System. On the Object Changes page, change histories, Activity lists, and Created by and Last updated by.
-- 🔄 On the Object Changes page, a deleted Metaverse Object is shown dimmed with a bin icon rather than marked "(deleted)", and a deletion lists the object's **Final values** rather than showing each value as cleared. REST and `Search-JIMMetaverseObjectChange` add `metaverseObjectDeletedAt` and `changeInitiatorType`. (#2460)
-- 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber` and `gidNumber`, as Long Number rather than Number, so values beyond 2,147,483,647 import. Map them to Long Number Metaverse Attributes. Active Directory and Samba AD are unchanged. (#2154)
-- 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or whose value an import never confirms, is attempted again at every export run, with no waiting in between, and reported on every run until the cause is fixed. Lists show **Failing Since** and **Failing only**, the Connected System page counts **Failing Exports**, and REST and `Get-JIMPendingExport -Failing` filter them. (#2119)
-- 🔄 A Delta Import from Keycloak's SCIM API now reads every resource and says why on the Activity, whatever Change Detection is set to: Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
-- 🔄 **Max detected deletions** and **Max detected deletions percent** can now be set on a Delta Import Run Profile, in the portal, REST API and PowerShell. A Delta Import whose Connected System reports more deletions than a limit marks none of them as deleted and warns, and each following Delta Import reports them again until you act. (#2089)
-- 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. Refused requests carry a `WWW-Authenticate` challenge. (#2088)
-- 🔄 Deleting, unassigning or renaming a Metaverse Attribute, and deselecting a Connected System attribute, is now refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
-- 🔄 Saving an Attribute Flow or Example Data Template now refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold, in the portal, REST API and PowerShell alike. One left unchanged only warns. (#2055)
-- 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` now defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
-- 🔄 On import, identifiers declared case-exact are told apart by case: finding the object JIM holds, spotting duplicates, and resolving and recalling references. Every other identifier ignores case, now including a Secondary External ID. (#2051)
+- 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
+- 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
+
+### Fixed
+
+- 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)
+- 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)
+- 🐛 People JIM creates or changes outside synchronisation, such as the initial administrator at first sign-in, now reach their accounts at the next synchronisation, changed and removed values included; the run's review step is now called **Export Review**. (#2615)
+- 🐛 An object that leaves an import Synchronisation Rule's scope under the Disconnect action is now actually disconnected rather than staying joined, and is no longer deprovisioned when its Metaverse Object is deleted as a result.
+- 🐛 An Activity's **CSOs Disconnected** figure now includes objects that left an import Synchronisation Rule's scope, so it agrees with the outcome counts beneath it. (#2629)
+- 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
+
+## [0.17.0] - 2026-10-29
+
+### Added
+
+#### Generated Values and derived Attribute Flows
+
+- ✨ JIM can now generate unique values such as account names, employee numbers and badge codes: a **Generated Value** Attribute Flow adds a number only if a value is taken, or uses a forward-only sequence or a random token, and keeps each value once issued. (#242)
+- ✨ Generated values are never reissued by default: a leaver's value goes into a retired values register, viewable from the Attribute Flow, REST or `Get-JIMRetiredGeneratedValue`, so it can never pass to someone new. (#242)
+- ✨ Before choosing a value, JIM checks the LDAP directories, SCIM services and SQL databases it is exported to, catching accounts it does not import or created since the last import; the Attribute Flow shows how each is checked and can exclude one. (#242, #1941)
+- ✨ In Active Directory that check also looks in every object's `proxyAddresses`, and in a multi-domain forest it reaches forest-wide attributes such as `userPrincipalName` and `mail` through the new **Global Catalog Server** setting. (#1940)
+- ✨ When a target refuses a generated value as already in use, JIM corrects it (`joe.bloggs` becomes `joe.bloggs1`) and carries the new value to every target; if another system already uses it, the export waits for a decision. Collision Remediation can be switched off. (#242)
+- ✨ The **Generated Values** tab under Operations lists values waiting for a decision, with **Allow the rename…** and **Try again**; also via REST, `Get-JIMGeneratedValueDecision`, `Approve-JIMGeneratedValueRename` and `Reset-JIMGeneratedValueDecision`. (#242)
+- ✨ A generated Account Name is issued only when the Email and User Principal Name built from it are free too, and a value built from a generated one has a **Keep unique** switch so that a target refusing it corrects the Account Name. (#2014, #2023)
+- ✨ An import Attribute Flow can derive one Metaverse attribute from others with `mv["..."]`, such as Email from Account Name: JIM evaluates them in dependency order in one synchronisation, shows each flow's step, and refuses a loop when you save. (#1750)
+
+#### Expressions
+
+- ✨ New expression functions `HasValue`, `IsMatch`, `RegexReplace` and `RegexExtract`, plus `Count`, `Min`, `Max` and `Where` for Multi-Valued attributes, and an optional `ignoreCase` on `StartsWith`, `EndsWith` and `Contains`. (#2053)
+- ✨ A new `ParseDate(text, format)` function reads a date written in any form, such as `ParseDate(cs["startDate"], "dd/MM/yyyy")`; text that does not match is an error, so an unexpected form never clears the attribute. (#2153)
+- ✨ The expression editor highlights syntax, suggests functions and attribute names as you type, explains the parameter you are on, and gains **Insert function**, a browsable list of every function. (#2053)
+- ✨ Scripts can list the expression functions, with each one's signature, parameters and an example: `Get-JIMExpressionFunction -Name '*Date*'`, or REST. (#2253)
+- ✨ `Test-JIMExpression` and the REST expression tester return `ResultLines`, the result exactly as the portal's tester shows it. (#2179)
+
+#### Scoping and Object Matching
+
+- ✨ Scoping Criteria and Predefined Searches gain **has a value** and **has no value** for every attribute type, and scoping gains **matches pattern** and **does not match pattern** for text, using a regular expression checked when you save. (#2053)
+- ✨ A Scoping Criterion can compare a value an expression computes, such as `Lower(Trim(cs["department"]))`; an object it cannot decide is left as it is with an error, never scoped on a guess. (#2054)
+- ✨ Object Matching Rules can match on an expression, so identifiers formatted differently between systems still join: `"E" + Trim(cs["employeeId"])` finds `E1007` from `1007`. (#2052)
+- ✨ A join says which Object Matching Rule matched and on what value, on the Activity item, the Connections tab and in Sync Preview, and an **Ambiguous Match** lists, and links, every Metaverse Object it found. (#2052)
+- ✨ Connected System attributes say whether their values are case-exact, discovered from LDAP, Active Directory, SCIM and SQL schemas and adjustable on the Schema tab, REST or `-CaseExact`; new Object Matching Rules on them respect case. (#2051)
+
+#### Testing configuration before it runs
+
+- ✨ The Attribute Flow, Generated Value and Object Matching Rule testers, and a new scope tester, run exactly as a synchronisation does, on typed sample values or a real object, as of any date. Also via REST, `Test-JIMExpression`, `Test-JIMScope` and `Test-JIMMatchingRule`. (#2055)
+- ✨ Save test cases on a Synchronisation Rule's new **Tests** tab: inputs, and the result an Attribute Flow, Generated Value, scope or Object Matching Rule should give. Saving a change that breaks one asks first. Also via REST and `Invoke-JIMConfigurationTest`. (#2055)
+- ✨ Test an Example Data Template attribute's expression with sample values before generating anything, via REST or `Test-JIMExampleDataExpression`. (#2055)
+- ✨ The portal now shows a Synchronisation Rule save's warnings about its Attribute Flows, as the REST API and PowerShell already did. (#2055)
+
+#### Seeing why JIM did something
+
+- ✨ The Causality Explorer follows one story across objects and runs: open it from any object or execution item to see every run that touched it and why, and share the view as a link. (#2100)
+- ✨ An execution item's Lineage shows what its change went on to cause in later runs, down to the accounts and Groups it reached and where each branch stopped; also via `Get-JIMActivityExecutionItem -Causes` and `-Consequences`, and REST. (#1811)
+- ✨ A Pending Export shows which synchronisation runs queued it and why; also via REST and `Get-JIMPendingExport -QueuedBy`. (#2100)
+- ✨ A grace-period deletion's Activity links back to the run that scheduled it, and **Deprovision queued** and **Disconnected from target system** outcomes name the export Synchronisation Rule that decided them. (#1811)
+- ✨ The Metaverse Object Table view is now **Inspect**, showing where every value came from and why it beat the other sources; also on the Changes tab, Pending Export detail, REST and `Get-JIMMetaverseObjectProvenance`. (#399)
+- ✨ Values JIM sets outside synchronisation say where they came from instead of **Source not recorded**: the sign-in token claim they were read from, such as `given_name`, or **Set by JIM**. (#2472)
+- ✨ A Metaverse Object's Connections tab explains how each connection joined and whether scoping still includes it, and a new **Not connected** section says why it has no account in a target system and what would bring it into scope. (#348)
+- ✨ Find changes across every Metaverse Object by how their attributes changed, such as everyone disabled this month, on the new Object Changes page, and select one to see it in full; also via REST and `Search-JIMMetaverseObjectChange`. (#1901, #2460)
+- ✨ See which references an import could not link and why, with the likely cause and next step, on the object and its execution items; the Connected System page counts them and shows what would fix them. Also via REST and PowerShell. (#959)
+- ✨ An import's execution item lists every value a Connector could not read under **Attribute Values Not Imported**: what came in and why it was refused. (#2066)
+- ✨ An import's Activity says what range a Delta Import read, or where a Full Import left the next one to start, in the Connector's own terms.
+- ✨ Scripts can read everything an execution item page shows, even after the object is deleted, including its error and stack trace: `Get-JIMActivityExecutionItem -IncludeOutcomes -IncludeChanges`, or REST. (#2032, #2033)
+- ✨ REST and `Get-JIMMetaverseObject` return a Metaverse Object's Created By and Last Updated By. (#348)
+
+#### Previewing changes
+
+- ✨ Preview what a Full Synchronisation of a Connected System would do, from the pending configuration notice, a Run Profile, REST or PowerShell: every change, here and in the systems it reaches, per object. (#1530)
+- ✨ Preview what deleting a Connected System would do (values taken over or cleared, identities made eligible for deletion, downstream corrections) from its Danger Zone, `New-JIMConfigurationChangePreview -Deletion` or REST; the deletion records the preview it was made from. (#134)
+- ✨ JIM warns when a Connected System projects into an Object Type deleted When Authoritative Source Disconnected without being one of its sources. (#1256)
+
+#### Sign-in and identity providers
+
+- ✨ Register JIM with AD FS or Keycloak in one command: `Register-JIMIdentityProvider` creates what the SSO guides describe and returns the `JIM_SSO_*` values; run it again to repair drift, or with `-WhatIf` to see it. (#2364)
+- ✨ JIM signs people in through an identity provider whose HTTPS certificate comes from your own certificate authority: trust it with `Add-JIMCertificate -FromIdentityProvider`, REST or the portal, with no rebuild or restart. (#2363)
+- ✨ Each Trusted Certificate is trusted for Connectors, for sign-in, or both, and removing one sign-in depends on asks first; existing certificates stay trusted for Connectors only. (#2363)
+- ✨ When JIM cannot trust its identity provider, a **Sign-in is unavailable** page explains why with the fix filled in, and signed-in administrators are warned before new sign-ins fail. (#2363)
+- ✨ When a setting does not match what the identity provider sends, sign-in names the setting, the value expected and the value received, instead of **Something went wrong**; `Get-JIMSignInDiagnostic` lists every problem. (#2443)
+- ✨ Sign people in by a Guid Metaverse Attribute such as **Object GUID**, so AD FS administrators sign in as the objects Active Directory synchronisation created. (#2438)
+- ✨ AD FS no longer needs `JIM_SSO_VALID_ISSUERS`: JIM accepts API tokens from the `access_token_issuer` the identity provider publishes as well as its `issuer`. (#2440)
+- ✨ Each sign-in keeps an administrator's Display Name, First Name, Last Name, User Principal Name and Email current from the identity provider, unless a Synchronisation Rule supplies them. (#2383, #2439)
+- ✨ The REST API and `Get-JIMActivity` return a failed authentication's reason, client IP, attempt count and timing, so a SIEM can tell a forged-token spray from one expired token. (#2108)
+
+#### Connectors
+
+- ✨ Configure a SQL Connected System's Object Types in the portal instead of writing a JSON document, choosing tables, views and columns from the database itself, with its primary and foreign keys offered as anchors and references; **View as JSON** marks each problem on its line. (#2570)
+- ✨ See what a SQL database contains (its tables and views, a table's columns and keys, or the columns a SELECT would return) with `Get-JIMConnectedSystemCatalogue` or REST. (#2570)
+- ✨ A refused server certificate shows its chain and where JIM found each certificate, and **Choose what to trust** offers any of them, recommending the root because it survives renewals; REST and `Get-JIMConnectedSystemServerCertificate` return the chain. (#1914)
+- ✨ An Oracle Database connection over TCPS can use a server certificate from your own certificate authority, trusted from the failed connection test or **Admin > Certificates**. (#2581)
+- ✨ Identity providers can push Users and Groups to JIM over SCIM 2.0 (Preview): the new JIM SCIM 2.0 Service Provider Connector gives a Connected System its own SCIM endpoint and keys, and an Activity per key every 15 minutes counts what arrived. (#124)
+- ✨ LDAP schema discovery on OpenLDAP, 389 Directory Server and other RFC 4512 directories offers operational attributes such as `pwdFailureTime`, `createTimestamp` and `memberOf`, read-only. (#2153)
+- ✨ Directory servers discovered over REST or `Get-JIMConnectedSystemDirectoryServer` name the setting they fill, so a script can set a Preferred Domain Controller in one step. (#2456)
+- ✨ A File Connector column can hold several values, separated by the Multi-Value Delimiter: set it on the Schema tab, REST or `-Plurality`. (#2186)
+- ✨ A Full Import Run Profile can **Allow Object Type Changes**, importing an object under its new Object Type and retiring the old one, and the schema preview warns when a selection would re-type objects already imported. (#2049)
+
+#### Dates and multi-valued attributes
+
+- ✨ Multi-valued date attributes import every value from every Connector, such as OpenLDAP's `pwdFailureTime`. (#2153)
+- ✨ Each date attribute has a **Date Resolution**, the finest step of time its Connected System keeps, so dates export and compare at it and never re-export forever. (#2153)
+- ✨ Widen a single-valued Metaverse Attribute to multi-valued while Metaverse Objects hold values, keeping every value. (#2153)
+
+#### Operations and administration
+
+- ✨ JIM warns when it is running short of memory: the Worker stops its running work before it would be killed part-way, its Activity says why, and the Operations page and `Get-JIMServiceHealth` show each service's memory. (#2487)
+- ✨ Filter Pending Exports by change type as well as status, in the portal, REST and `Get-JIMPendingExport -ChangeType`.
+- ✨ Create, edit, duplicate and delete Data Generation Templates in the portal, including duplicating a built-in template to customise it; copying is also via REST and `Copy-JIMExampleDataTemplate`. (#1466)
+- ✨ A portal page's info button links to the documentation that explains it, and detail pages gain one of their own. (#1454)
+- ✨ Each release publishes `jim-release-X.Y.Z.tar.gz.sha256`, so an air-gapped bundle can be checked before it is carried into the site. (#1942)
+
+### Changed
+
+- 🔄 A Full Synchronisation now evaluates every Connected System Object on every run, changed or not, correcting anything a Delta Synchronisation missed and applying JIM upgrades to existing data. It takes longer, so schedule Delta Synchronisation for routine runs. (#891)
+- 🔄 API keys are now sent as a bearer token (`Authorization: Bearer jim_ak_...`), as SSO access tokens are; `X-API-Key` is no longer accepted, so update scripts that set it and upgrade the PowerShell module with JIM. (#2088)
+- 🔄 Five built-in Metaverse attributes now use Proper Case names like the rest: **Object GUID**, **Object SID**, **SID History**, **Street Address** and **Web Page**. Reinstall rather than upgrade an existing installation, which would add the new attributes beside the old.
+- 🔄 With AD FS, the portal asks for JIM's Web API as its resource with the `allatclaims` scope, so the Web API's claim rules shape portal sign-in too: permit `allatclaims` to JIM's server application in AD FS, or sign-in is refused. (#2439)
+- 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman, or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
+- 🔄 JIM never gives up on a Pending Export: one the Connected System refuses, or that an import never confirms, is attempted again at every export run and reported until the cause is fixed, with **Failing Since** and a **Failing only** filter. (#2119)
+- 🔄 The Operations page's Queue and History tabs are now one **Activity** tab: queued, running and finished work in time order, with full progress for every run, including parallel Schedule steps, and estimated start and finish times. (#2549)
+- 🔄 The LDAP Connector discovers INTEGER attributes on OpenLDAP, 389 Directory Server and other non-Active Directory directories, such as `uidNumber`, as Long Number, so values beyond 2,147,483,647 import; map them to Long Number Metaverse Attributes. (#2154)
+- 🔄 Delta Import from OpenLDAP no longer needs the accesslog to record old values (`logold`), which on directories with large groups logged the whole member list on every membership change, so you can turn it off. (#1066)
+- 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept, instead of being imported again and the first retired, which could deprovision it everywhere. (#2049)
+- 🔄 **Max detected deletions** and **Max detected deletions percent** can be set on a Delta Import Run Profile: one that reports more deletions than a limit marks none of them deleted and warns until you act. (#2089)
+- 🔄 A Delta Import from Keycloak's SCIM API reads every resource and says why on the Activity, because Keycloak leaves a resource's last-modified date alone for most changes, so a filtered import missed them. (#2094)
+- 🔄 Deleting, unassigning or renaming a Metaverse Attribute, or deselecting a Connected System attribute, is refused while a Scoping Criterion or an Expression still reads it, naming each one; JIM no longer removes Scoping Criteria for you. (#2265)
+- 🔄 Saving an Attribute Flow or Example Data Template refuses an expression that does not parse, reads the wrong side or an unknown attribute, or returns a type its target can never hold; one left unchanged only warns. (#2055)
+- 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types, is refused with the reason. (#2052)
+- 🔄 Expressions read every value of a Multi-Valued attribute, in a fixed order: transforms apply to each value, comparisons such as `StartsWith` are true when any value is, and several values where one is needed is an error. (#2053)
+- 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` test every value, not whichever loaded first, so an object's scope no longer depends on value order. (#1923)
+- 🔄 Predefined Search *does not* operators match as Synchronisation Rule scoping does, needing a value and no match. (#1962)
+- 🔄 A criterion compared with an empty value is no longer accepted; use **has no value** or **has a value**, which existing criteria relying on an empty value have been converted to. (#2053)
+- 🔄 Example Data dependencies use scoping's operators and names: `GreaterThanOrEqual`, `LessThanOrEqual` and `Like` become `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains`, and each compares as the attribute's own type. (#2053)
+- 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object, where it read nothing; review any import expression that already reads `mv`, as it now derives a value. (#1750)
+- 🔄 Expression `StartsWith` and `EndsWith` compare character by character, as `Eq` does, so a hidden character such as a soft hyphen no longer counts as a match. (#2051)
+- 🔄 Expressions handle dates the same on every server whatever its language: dates are written as `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused rather than guessed at. (#2153)
+- 🔄 The REST API returns every date attribute value in UTC, ending in `Z`, and expressions read every date in UTC, whatever the server's time zone. (#2153)
+- 🔄 Exported dates keep their fraction of a second where the target holds one, on LDAP and SCIM; refresh existing schemas to pick up date resolutions. (#2153)
+- 🔄 A Boolean attribute is always single-valued: a schema refresh or type override makes a Boolean Connected System attribute single-valued, and SCIM no longer discovers `roles.primary` and its siblings. (#2153)
+- 🔄 On import, identifiers declared case-exact are told apart by case, and every other identifier, now including a Secondary External ID, ignores case. (#2051)
+- 🔄 Names you give JIM ignore case across the REST API and PowerShell, such as an attribute name in a filter, a Connected System or Run Profile in an Activity filter, or a Predefined Search URI. (#2051)
+- 🔄 Object Matching Rules created through the REST API or PowerShell take the portal's default: they ignore case unless a source attribute is case-exact. Existing rules are unchanged. (#2051)
+- 🔄 An object whose values match different Metaverse Objects, such as two email addresses held by two people, is now an **Ambiguous Match** instead of joining whichever value was checked first. (#2052)
 - 🔄 A password propagated to every configured system leaves Password never expires as each account has it, and the REST API and PowerShell refuse Never expires unless the accounts are named. (#2159)
-- 🔄 Setting a password without choosing to enable the account, on an account still waiting for its first password, now enables it as its Synchronisation Rule's Initial Password says, instead of leaving it as it is. (#2160)
-- 🔄 Expressions now read every value of a Multi-Valued attribute, in a fixed order, instead of whichever was stored first or last: transforms apply to each value, `StartsWith` and the other comparisons are true when any value is, and several values where one is needed are an error naming the attribute. (#2053)
-- 🔄 Example Data dependencies now use scoping's operators and names, and every one works, comparing values as the attribute's own type. `GreaterThanOrEqual`, `LessThanOrEqual` and `Like` become `GreaterThanOrEquals`, `LessThanOrEquals` and `Contains`. (#2053)
-- 🔄 A criterion compared with an empty value is no longer accepted; use **has no value** or **has a value**, which existing criteria that relied on an empty value have been converted to. (#2053)
-- 🔄 **Initiated By** reads the same on every page: a run a Schedule started names the Schedule and links its execution, and System has its own icon instead of the Schedule's clock. An execution item's **Operation** shows what was done to the object even when it failed. (#2066)
-- 🔄 An export an LDAP directory, SCIM service or SQL database refuses because a value such as an account name or email address is already in use is now recorded as **Value Already in Use**, and completes the Activity with a warning rather than as an unhandled error. (#242)
-- 🔄 A synchronisation that generates a value now contacts every Connected System it is exported to whose Connector can probe, with that system's own credentials; if one can't be reached, JIM uses its own records and records one Activity warning for that system. (#242)
-- 🔄 A run or Connected System deletion made on an out-of-date preview now records the preview and what overtook it, instead of dropping it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
-- 🔄 Reviewing export scope after a rule change now records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object, instead of a blank item for every object reviewed. (#1925)
-- 🔄 A Configuration Change Preview's summary no longer lists one row per object when each object has values of its own (five different Job Titles cleared); it shows one row for the attribute, and the drill-down names each value. (#1935)
-- 🔄 Object Matching Rules created through the REST API or PowerShell now take the portal's default: they ignore case unless a source attribute is case-exact. Existing rules are unchanged. (#2051)
-- 🔄 An object whose values match different Metaverse Objects, such as two email addresses held by two people, is now an **Ambiguous Match** instead of joining whichever value happened to be checked first. (#2052)
-- 🔄 `mv["..."]` in an import Attribute Flow expression now reads the Metaverse Object; it previously read nothing. Review any import expression that already reads `mv`, as it now derives a value. (#1750)
-- 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows now returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings alongside the rule. Scripts expecting 204 need updating.
-- 🔄 Scoping Criteria on a multi-valued attribute such as `objectClass` now test every value, not whichever loaded first: *equals* or *contains* is met by any value, *does not* by none, so an object's scope no longer depends on value order. (#1923)
-- 🔄 Predefined Search *does not* operators now match as Synchronisation Rule scoping does, needing a value and no match: *does not equal* no longer matches a multi-valued attribute holding the value, nor *does not contain* an object with no value. (#1962)
-- 🔄 The bundled PostgreSQL's memory is now set in `.env` or `jim-config.yaml` (`JIM_DB_SHARED_BUFFERS` and four more), which `setup.sh --upgrade` sizes to the host. Upgrading on Podman or by hand on a host over 4 GB, add them, or the database uses 4 GB defaults. (#1943)
-- 🔄 An LDAP object that starts importing under another Object Type is now refused as **Object Type Changed** and the existing object kept. JIM used to import a second object and retire the first, which could delete its Metaverse Object and deprovision it everywhere. (#2049)
-- 🔄 `New-JIMConfigurationChangePreview` now writes every preview's Warning-severity findings with `Write-Warning`, not `Write-Verbose`; a script running with `-WarningAction Stop` now stops on them. (#2049)
-- 🔄 When Active Directory refuses to enable an account that has no password, the export now reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
-- 🔄 An Initial Password's **Enable the Connected System Object once the password is set** now applies only where no export has written the account's enabled state by the time the password is delivered, and off leaves the account as created rather than disabling it. (#2064)
-- 🔄 An import's unresolved reference error now counts every reference the object was left with, per attribute, instead of naming the first and saying there may be more, and is headed **Reference Unresolved** rather than Synchronisation Failed. (#959)
-- 🔄 Saving an Object Matching Rule that could never match, such as one comparing attributes of different types or naming an attribute the Object Type doesn't have, is now refused with the reason, in the portal, REST and PowerShell. (#2052)
-- 🔄 Expressions handle dates the same on every server, whatever its language: `ToString()` and Text attributes write `2026-03-15 10:30:00Z`, and text is read as a date only in ISO 8601, so `03/04/2024` is refused, not guessed at. `FormatDate` also takes ISO text. (#2153)
-- 🔄 The REST API returns every date attribute value in UTC, ending in `Z`, whatever the server's time zone, and expressions read every date in UTC, so joining one to text with `+` writes `Z` rather than the server's offset. (#2153)
-- 🔄 Exported dates keep their fraction of a second where the target holds one, on LDAP and SCIM. Dates a target can only hold as one are sent once and reported as **Dates Merged**. Refresh existing schemas to pick up resolutions. (#2153)
-- 🔄 A Boolean attribute is always single-valued: no surface creates a multi-valued Boolean Metaverse Attribute, a schema refresh or type override makes a Boolean Connected System attribute single-valued, and SCIM no longer discovers `roles.primary` and its siblings. (#2153)
-- 🖥️ Buttons now say what they do by colour: purple marks a page's main action alone, every other action is a neutral outline, and red stays for destructive ones.
-- 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` now return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
-- 🔄 Expression `StartsWith` and `EndsWith` now compare character by character, as `Eq` does, so a hidden character such as a soft hyphen, or an accented letter stored a different way, no longer counts as a match. (#2051)
-- 🔄 Names you give JIM ignore case across the REST API and PowerShell: an attribute name in a filter, a Connected System or Run Profile in an Activity filter, a Predefined Search URI and an Example Data `{Attribute}` all find their match whatever the case. (#2051)
+- 🔄 Setting a password without choosing to enable the account, on an account still waiting for its first password, enables it as its Synchronisation Rule's Initial Password says. (#2160)
+- 🔄 An Initial Password's **Enable the Connected System Object once the password is set** applies only where no export has written the account's enabled state, and off leaves the account as created rather than disabling it. (#2064)
+- 🔄 When Active Directory refuses to enable an account that has no password, the export reports **Password Required** with the remedies, instead of an unhandled error. (#2039)
+- 🔄 An export refused because a value such as an account name or email address is already in use is recorded as **Value Already in Use**, and completes the Activity with a warning. (#242)
+- 🔄 An import's unresolved reference error counts every reference the object was left with, per attribute, and is headed **Reference Unresolved**. (#959)
+- 🔄 A run or Connected System deletion made on an out-of-date preview records the preview and what overtook it; the portal asks before running from one, and PowerShell and the REST API warn. (#2022)
+- 🔄 A Configuration Change Preview's summary shows one row per attribute when each object has values of its own, with each value named in the drill-down. (#1935)
+- 🔄 Reviewing export scope after a rule change records an execution item only for objects it provisions or deprovisions, named after the Metaverse Object. (#1925)
+- 🔄 `New-JIMConfigurationChangePreview` writes Warning-severity findings with `Write-Warning`, not `Write-Verbose`, so a script running with `-WarningAction Stop` stops on them. (#2049)
+- 🔄 REST: deleting a Synchronisation Rule or one of its Attribute Flows returns 200 with the affected counts instead of an empty 204, and saving a whole Synchronisation Rule returns any save warnings. Scripts expecting 204 need updating.
+- 🔄 The Connections tab names each object by its Secondary External ID where it has one, such as an LDAP distinguished name; REST and `Get-JIMMetaverseObjectConnection` return it and the External ID in place of `displayName`.
+- 🔄 A Metaverse Object Type created over the REST API or with `New-JIMMetaverseObjectType` defaults to **When Last Connector Disconnected**, as in the portal, rather than **Manual**. Existing types keep their rule.
+- 🔄 Change history returns each changed attribute's first ten value changes and a `valueChangeTotal`, rather than all 600,000 for a large group; page the rest with `Get-JIMConnectedSystemObjectChangeValue`, `Get-JIMMetaverseObjectChangeValue` or REST. (#2498)
+- 🔄 **Resolving cross-page references** counts its progress in reference values rather than objects, so its rate and time remaining reflect a large group's real cost; the progress endpoint reports this as `countUnit`. (#2492)
+- 🔄 `Start-JIMSchedule` and `Stop-JIMScheduleExecution -PassThru` return the Schedule Execution with its `StepDisplay`, as `Get-JIMScheduleExecution` does. (#1083)
+- 🔄 A misspelt field in a SQL Connector Object Types document is named with the field you most likely meant ("Did you mean 'anchorColumns'?"), instead of a message naming internal types. (#2570)
+- 🔄 The Attribute Flow dialog shows a **Try it** pane beside its settings, whose result follows as you type and as the settings change. (#2471)
+- 🔄 **Initiated By** reads the same on every page, naming and linking the Schedule that started a run, and an execution item's **Operation** shows what was done even when it failed. (#2066)
+- 🖥️ Who or what did something, and what an Activity acted on, are shown as linked chips across the portal: a Synchronisation Rule with its Connected System, a Schedule, a person as their Metaverse Object, an API key, or System.
+- 🖥️ Lists show when a search, sort or filter is slow to answer, with a progress bar and the old rows faded until results arrive.
 
 ### Removed
 
-- 🗑️ `Register-JIMIdentityProvider` no longer returns `ValidIssuers`: JIM now accepts AD FS's access token issuer without `JIM_SSO_VALID_ISSUERS`. (#2440)
-- 🗑️ The Causality Explorer no longer has a **Copy link** button; its address already carries the focus and trail, so the browser's own address bar gives the same link.
-- 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting that tuned that load is gone. (#2246)
-- 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute: schema discovery, imports and exports refuse such a file, naming the column. Put the values in one column, separated by the Multi-Value Delimiter. (#2186)
-- 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone: `maxRetries` and `nextRetryAt` are removed from the REST API and PowerShell output, and `Failed` from `-Status`. Pending Exports left Failed are queued again on upgrade. (#2119)
-- 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**: an export always writes to the file the Connected System's **File Path** names, so the field did nothing. It is gone from the portal, the REST API and `-FilePath` refuse it, and any already stored is cleared on upgrade.
-- 🗑️ Example Data Template attributes can no longer name a Connected System attribute: templates generate Metaverse Attribute values only, so it produced nothing. `-ConnectedSystemObjectTypeAttributeId` and the `ConnectedSystemObjectTypeAttributeId` hashtable key are gone from the cmdlets, and `connectedSystemObjectTypeAttributeId` from the REST API.
-- 🗑️ Data Generation Template attributes no longer take a **Boolean random** setting: it never changed what was generated, since Boolean values are already random whenever no true distribution is set. `-BoolShouldBeRandom` and the `BoolShouldBeRandom` hashtable key are gone from the cmdlets, and `boolShouldBeRandom` from the REST API. (#2436)
+- 🗑️ The Pending Export **Failed** status, its five-attempt limit and the wait between attempts are gone, as are `maxRetries`, `nextRetryAt` and `-Status Failed`; Pending Exports left Failed are queued again on upgrade. (#2119)
+- 🗑️ The Worker no longer loads every Connected System Object into memory before it takes work, so it starts sooner and holds less memory; the `JIM_CACHE_WARM_PARALLELISM` setting is gone. (#2246)
+- 🗑️ The File Connector no longer reads a repeated column header (`member,member`) as a multi-valued attribute and refuses such a file, naming the column; put the values in one column, separated by the Multi-Value Delimiter. (#2186)
+- 🗑️ Export, Full Synchronisation and Delta Synchronisation Run Profiles no longer take a **File Path**, which did nothing: an export always writes to the Connected System's **File Path**. REST and `-FilePath` refuse it, and stored values are cleared on upgrade.
+- 🗑️ Example Data Template attributes can no longer name a Connected System attribute, which produced nothing; `-ConnectedSystemObjectTypeAttributeId` and its REST field are gone.
+- 🗑️ Data Generation Template attributes no longer take a **Boolean random** setting, which never changed what was generated; `-BoolShouldBeRandom` and its REST field are gone. (#2436)
 - 🗑️ The `CollectionContains` expression function is removed: `Eq()` is now true when any value of a Multi-Valued attribute is equal, which is what it did. (#2053)
 - 🗑️ Four Service Settings that did nothing are gone, on upgrade too: **Maintenance mode**, **Credential encryption** (always on), **Verbose no-change recording** and **SSO unique identifier claim type** (**SSO claim type** is the one JIM uses). (#2101)
 
@@ -327,108 +338,212 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 History already recorded when an API key changed Schedules or Example Data Templates, ran a Schedule or performed a factory reset through the REST API, including what those runs recorded, is corrected on upgrade to name the API key, where JIM can still tell it was one. (#2066)
 - 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, now appears among the Service Settings and can be changed; until now every installation used five minutes. (#2060)
 - 🐛 An object whose import already recorded another error no longer loses its unresolved references from the Activity: every execution item now records how many it was left with, under any handling, in the portal, REST and `Get-JIMActivityExecutionItem`. (#959)
+#### Synchronisation
 
-- 🐛 A Connected System's tabs fit on one line at common laptop widths instead of scrolling with Details and Danger Zone cut off, and a Schedule's trigger writes every time the same way ("Sun at 1:00 AM", where some read "Sun at 1am").
-- 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` now create and retime Schedules from the Specific Times and Interval patterns, which the API used to refuse or ignore; a Sunday-only `New-JIMSchedule` no longer runs every day.
-- 🐛 The Schedule editor no longer saves run times at different minutes past the hour (06:00 and 18:30), which ran every time at the first time's minute (18:00, not 18:30). It now says why beside the times and keeps **Save** disabled until they share a minute, as the REST API and PowerShell already do. (#2070)
-- 🐛 A Schedule's next run now reads as a time to come ("in 14 hours") on the Home page and on Operations > Schedules, instead of "just now".
-- 🐛 An Activity now names each object it provisioned, deprovisioned or disconnected by its own type in a Connected System that takes more than one, where a user could read as "group: Alice Smith". Activities recorded before this release keep the type they recorded.
-- 🐛 A synchronisation that withdraws queued export changes because the target already holds the values now records it on the Activity, and the Sync Preview and Full Synchronisation preview show it beforehand, instead of the changes silently disappearing. (#2001)
-- 🐛 Deleting a Synchronisation Rule, deleting a Connected System through synchronisation, and the stranded value sweep now record queued export changes they withdraw on their Activity too, and the Connected System deletion preview shows them beforehand. (#2011)
-- 🐛 An Active Directory or Samba AD Delta Import now stops and asks for a Full Import when the domain controller's update sequence number has gone backwards (a restore that kept its invocationId), instead of silently missing the changes made since the restore. (#1869)
-- 🐛 A 389 Directory Server Delta Import now stops and asks for a Full Import when the changelog's newest change number is below the last import's (a restore from backup or snapshot), instead of silently missing the changes made since the restore. (#2004)
-- 🐛 An OpenLDAP Delta Import now refuses, and asks for a Full Import, when the accesslog has been purged past where the last import ended (Delta Imports paused for longer than `olcAccessLogPurge` keeps entries); the discarded changes were previously lost without an error. (#2008)
-- 🐛 A 389 Directory Server Delta Import now also catches an online restore (`dsconf backup restore`), and a restore followed by enough writes to pass the last import's change number, by reading that change back; both previously went unnoticed. (#2008)
-- 🐛 The LDAP Connector's **Connection Timeout** now applies to a directory server behind a firewall that drops traffic. Each connection waited over two minutes, so an unreachable domain controller held up a run for about nine minutes; it now fails in under a minute. (#2003)
-- 🐛 `setup.sh` now writes a `JIM_INFRASTRUCTURE_API_KEY` given to it into `.env` on Docker, as it already did into Podman's secret, so an automated Docker install gets its key; it also refuses a key JIM would not create. (#1950)
-- 🐛 `Connect-JIM -ApiKey` now stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting a connection that is authorised. (#1950)
-- 🐛 A group over Active Directory's MaxValRange (1,500 members by default) now imports its members once when the domain controller also returns an empty `member` beside `member;range=0-1499`, instead of importing that empty attribute as well. (#2041)
-- 🐛 An LDAP entry carrying two selected Object Types now imports as the more specific (an Active Directory computer as `computer`, not `user`), whatever order its classes are listed in. Refresh the schema of a Connected System with overlapping Object Types selected. (#2043)
-- 🐛 A deletion a Delta Import reads for an LDAP object JIM holds under another Object Type now retires that object, instead of being ignored until the next Full Import. (#2049)
-- 🐛 An LDAP, SCIM or SQL import that returns the same object twice in one page now rejects both copies as duplicates, as file imports do, instead of importing the first. Neither copy changes an object JIM already holds. (#2063)
-- 🐛 An LDAP export that adds a member already in the group, or removes one already gone, no longer fails, and the rest of that membership change is applied. JIM uses Permissive Modify where the directory offers it, and otherwise resends only the values the directory refused.
-- 🐛 Provisioning an enabled Active Directory account whose Synchronisation Rule has an Initial Password no longer fails with `0000052D`: JIM creates the account disabled and enables it once the password is set, so a `userAccountControl` Attribute Flow keeps working. (#2039)
-- 🐛 A Pending Export rebuilt while one of its changes awaits confirmation now keeps that change's export state and attempt count, instead of starting it again as though never sent. (#2039)
-- 🐛 Changing a Run Profile's Safeguards limits or Verification Mode is now recorded in its Connected System's configuration change history; until now these changes left no trace. (#2049)
-- 🐛 When a domain controller refuses the LDAP Connector's sign-in over plain LDAP because it requires LDAP signing (the Windows Server 2025 default), JIM now says to enable LDAPS, instead of only "Strong authentication is required for this operation". (#2042)
-- 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours: the database now drops a connection whose client has gone within two minutes. (#1980)
-- 🐛 A rootful Podman JIM now survives a firewalld reload, which left it unable to reach its database until restarted: `setup.sh` enables Podman's `netavark-firewalld-reload.service`. Upgrading from v0.16.0 or earlier, enable it as the Podman page shows. (#2009)
-- 🐛 A service waiting for its database at start-up now names the address the database's name led to, so a name pointing at a server that has moved shows in the log. (#2009)
-- 🐛 A rootful Podman JIM on RHEL-family hosts no longer stays down after a restart, logging `No route to host` for its database: `setup.sh` stops NetworkManager unplugging JIM's pods. Upgrading from v0.16.0 or earlier, add the setting as the Podman page shows. (#2009)
-- 🐛 An export scope review item's causality panel now starts from its Metaverse Object; it showed a Connected System Object that took no part in the run, as though the review had imported it. (#1982)
-- 🐛 An export scope review's execution item now reads as an **Export Scope Review** of its Metaverse Object and links it; it showed "Operation: Not Set" and said the Connected System Object had been deleted. (#1971)
-- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation, not when each next changes. Changes saved before upgrading need saving again. (#1925)
-- 🐛 Objects moved into or out of scope by a relative date are now provisioned or deprovisioned by the next Delta Synchronisation even when it has nothing new to import, and are no longer missed when two Synchronisation Rules with relative dates cover them. (#1925)
-- 🐛 A synchronisation no longer fails with a duplicate key error when it deprovisions objects a relative date has moved out of an export rule's scope. (#1925)
-- 🐛 An export scope change that lands while a synchronisation is running (a saved rule change, or a relative date being crossed) now reaches every object it affects; objects that run updated could miss it. (#1925)
-- 🐛 A delete queued because an object left an export rule's scope now shows on that object's execution item and in the run's Pending Exports total, as a provisioning does. (#1925)
-- 🐛 An object leaving an export rule's scope under a Disconnect Deprovisioning Action is now reported on its execution item as **Disconnected from target system**, in synchronisation, recall and Sync Preview; it was visible only in the service log. (#1966)
-- 🐛 Sync Preview of a Connected System Object now shows what synchronising it would do: it no longer proposes corrections to values changed in other systems, which the synchronisation leaves alone, and now shows the drift corrections the synchronisation makes where an export rule enforces state. (#1530)
-- 🐛 Sync Preview of an object leaving import scope now shows the updates its departure sends to target systems, where the values it contributed are withdrawn or handed to another source; it showed only the disconnection. (#1530)
-- 🐛 Sync Preview of an object whose Expression would fail it no longer also shows the projection and exports the synchronisation then discards; it shows the error alone, as the run records it. (#1530)
-- 🐛 Sync Preview now hands an attribute to the next source, as the synchronisation does, when the source holding it stops supplying a value, and withdraws a value whose Attribute Flow has been deleted, along with what is derived from or exported for it. It showed the attribute cleared, or the old value kept. (#1899)
-- 🐛 Switching an export rule's Deprovisioning Action from Delete to Disconnect now withdraws its queued deletes not yet exported and disconnects those objects instead; they were still deleted at the next export. (#1970)
-- 🐛 PowerShell: `-MetaverseAttributeName` now works on `New-JIMScopingCriterion`, `Set-JIMScopingCriterion`, `New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion`; it always reported the attribute as not found. (#1965)
-- 🐛 A value cleared in the Metaverse is now cleared from a File Connector file in Export Only mode; JIM did not record what it wrote there. For files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
-- 🐛 Deleting a Connected System with "Deprovision through synchronisation" no longer clears the values contributed by an Object Type whose Remove Contributed Attributes On Obsoletion setting is off; they are kept, exactly as a normal disconnection keeps them. (#134)
-- 🐛 When `setup.sh`, run again over an installation, stops before starting JIM (a refused setting, or Ctrl+C), it now puts the installation's files back; it had replaced `.env` with the template, so JIM's next start failed. A first install that stops leaves nothing behind. (#1994)
-- 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is now deprovisioned per that rule's Deprovisioning Action, as a synchronisation would, instead of left provisioned. (#134)
-- 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it. It used to linger unseen and stop the Connected System it compared ever being deleted; systems already affected can be deleted again. (#134)
-- 🐛 REST: a Connected System's deletion preview now fills in `mvosWithOtherConnectorsCount` and `mvosWithGracePeriodCount`, which always read 0. (#134)
-- 🐛 Predefined Search criteria groups nested more than two deep are now applied; the deeper groups were ignored, so such searches returned objects their criteria excluded. The portal now shows and edits groups at any depth. (#1929)
-- 🐛 PowerShell: `-MetaverseAttributeName` on the Predefined Search and scoping criterion cmdlets, and `Get-JIMHistoryCount -ConnectedSystemName`, now find what they name; they always reported it not found. `Get-JIMConnectedSystem` now lists every system, not just 25. (#1967)
-- 🐛 An export Synchronisation Rule's Attribute Flow Expression no longer suggests `cs["..."]`, which reads nothing on export; its example and Insert attribute menu now offer Metaverse attributes (`mv["..."]`) instead.
-- 🐛 Trusting an intermediate certificate authority or a server's own certificate now works for SQL Server, as for LDAPS and SCIM; it used to report "Certificate trusted." and still be refused, and the card kept saying untrusted. (#1914)
-- 🐛 SQL Connector, encrypted SQL Server connections: a certificate whose issuer is in Admin > Certificates is now accepted, and a refused one is reported with its reason instead of "Unable to connect". (#1472)
-- 🐛 Synchronisation Rule scoping criteria nested more than two groups deep are now evaluated; previously the deeper groups were ignored, so such rules could include objects their criteria excluded, and the editor dropped those groups from view after saving. (#348)
-- 🐛 Following a reference from one Metaverse Object to another now shows the new object's Changes, Connections, Password and Properties details; previously the first object's could stay on screen, and Load more could mix two objects' change history. (#348)
-- 🐛 When JIM is not ready after installing or upgrading, `setup.sh` now names each container that is not running properly, the bundled database included, with the end of its log, instead of pointing at the web and worker logs only. (#1944)
-- 🐛 `setup.sh` now stops before starting anything when given a `JIM_DB_SHARED_BUFFERS` the host cannot hold, which the bundled PostgreSQL could not start with, and warns above half the host's memory; its summary marks the sizes it was given. (#1948)
-- 🐛 The commands for operating a rootless Podman JIM now work on a minimal RHEL-family host such as AlmaLinux 9; `systemctl --user -M jim@`, which the documentation and installer gave, fails there without `systemd-container`. Use the documented `jim-systemctl` instead. (#1955)
-- 🐛 The bundled PostgreSQL now starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum and 8 GB recommendation included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
-- 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; in every earlier release it failed on every line, because each file was listed under the build machine's folders. The bundle also no longer carries a development notes file. (#1942)
-- 🐛 Running `setup.sh` again over a Docker installation now restarts `jim.web` when it has to, so JIM serves the certificate that run issued instead of the previous one. (#1956)
-- 🐛 Declining `setup.sh`'s **Start JIM now?** now prints commands that work: on Podman with systemd they no longer fail to find JIM's unit, and a JIM already running is restarted on the new settings and certificate instead of left as it was. (#1984)
-- 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart: `setup.sh` now adds the AppArmor rule letting a container's processes signal one another. Upgrading from v0.16.0 or earlier, add it as the Podman page shows and restart the server. (#1953)
-- 🐛 A Synchronisation Rule that has synchronised objects can now be deleted; it failed with a database error. Its change history is kept and still shows the rule's name. (#1990)
-- 🐛 Deleting a Metaverse Object now reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**; previously the deletion recorded nothing about those accounts, so one JIM no longer manages looked untouched. (#1811)
-- 🐛 An Object Matching Rule that can't be worked out for an object now stops it with an **Object Matching Rule Failed** error naming the rule, instead of trying the next rule and, with none left, projecting a duplicate identity or provisioning a duplicate account. (#2052)
-- 🐛 When more than one existing account matches an identity before provisioning, JIM now reports an **Ambiguous Provisioning Match** listing them for you to resolve, instead of joining whichever was created first. (#2052)
-- 🐛 Matching before provisioning now looks up every value of a multi-valued attribute, so an existing account holding the second value is joined instead of duplicated. (#2052)
-- 🐛 The warning that a Connected System could not be checked for generated values already in use now counts each value once, even when the value goes to more than one of that system's attributes. (#2023)
-- 🐛 The Attribute Flow editor now suggests SCIM counterparts for phone numbers, addresses, work email and the Enterprise User attributes, which it named in forms no SCIM Connected System has (`phoneNumbers.mobile`, not `phoneNumbers`). (#2095)
-- 🐛 SCIM `profileUrl` and `photos` now import as text: as references they never resolved, so every User carrying one failed its import. Refresh existing SCIM schemas, then run a Full Import. (#2095)
+- 🐛 A member removed from a group in a Connected System is now removed from its Metaverse Object even when the group also references an object JIM never joins, such as a contact; any such reference used to stop every removal from that group.
+- 🐛 A change an import commits while a Delta Synchronisation of the same Connected System is running, such as in the same Schedule parallel group, is now always synchronised; it could be skipped until the object changed again. (#2092)
+- 🐛 A leaver whose end date passes, or a joiner whose start date arrives, is now processed by the next Delta Synchronisation once Temporal Scope Reconciliation has flagged them, not only by a Full Synchronisation.
+- 🐛 Creating or re-enabling an export Synchronisation Rule, switching provisioning on, or changing its Scoping Criteria now reaches existing Metaverse Objects at the next synchronisation; changes saved before upgrading need saving again. (#1925)
+- 🐛 Objects moved into or out of an export rule's scope by a relative date, or by a rule change saved mid-run, are provisioned or deprovisioned by the next synchronisation, even a Delta with nothing new to import, without a duplicate key error. (#1925)
+- 🐛 A delete queued because an object left an export rule's scope shows on its execution item and in the run's Pending Exports total, and one left under a Disconnect Deprovisioning Action reads **Disconnected from target system**. (#1925, #1966)
+- 🐛 An account deleted directly in a Connected System an export Synchronisation Rule provisions to is now recreated in the same synchronisation, instead of being left without an account until something else changed. (#2318)
+- 🐛 Switching an export rule's Deprovisioning Action from Delete to Disconnect withdraws its queued deletes not yet exported and disconnects those objects instead. (#1970)
+- 🐛 Deleting a Synchronisation Rule, alone or with its Connected System, makes the next Full Synchronisation apply the change to every object, as disabling one already did. (#2309)
+- 🐛 A Synchronisation Rule that has synchronised objects can now be deleted, where it failed with a database error; its change history is kept. (#1990)
+- 🐛 A schema refresh's **Apply & Remove** could delete an attribute a Scoping Criterion still compared, deprovisioning the rule's objects; it is now refused while a Scoping Criterion or an Expression reads a removed attribute. (#2265)
+- 🐛 Values held under an attribute's old data type after a schema refresh are kept until an import reads the attribute again: synchronisation, Expressions and Drift Detection no longer clear the Metaverse Object's value or references because of them. (#2184, #2319, #2330)
+- 🐛 An Object Matching Rule or Scoping Criterion reading a value held under an attribute's old data type stops the object with an error naming it, instead of projecting a duplicate identity, provisioning a second account or disconnecting it on a guess. (#2319, #2323, #2329, #2330)
+- 🐛 When an object leaves a Metaverse Object and another contributor's Scoping Criteria cannot be evaluated, the object stops with an error, leaving the Metaverse Object as it was, and the next synchronisation finishes the change once the value is readable. (#2336, #2343)
+- 🐛 An Object Matching Rule that cannot be worked out for an object stops it with an **Object Matching Rule Failed** error, instead of trying the next rule and projecting a duplicate identity or provisioning a duplicate account. (#2052)
+- 🐛 When more than one existing account matches an identity before provisioning, JIM reports an **Ambiguous Provisioning Match** listing them, and matching looks up every value of a multi-valued attribute, instead of joining the first account found or creating a duplicate. (#2052)
+- 🐛 Scoping Criteria and Predefined Search criteria groups nested more than two deep are now applied, and the editors show and keep them; the deeper groups were ignored, so objects the criteria excluded could be included. (#348, #1929)
+- 🐛 A scoping pattern that runs past its time limit on one object stops only that object, with an error, instead of failing the whole run. (#2053)
+- 🐛 Enforce State corrects an Active Directory account's attributes while its Initial Password is still being delivered, instead of skipping the account until it arrives. (#2501)
+- 🐛 Drift Detection corrects expression-fed attributes as export writes them, no longer clears a target when its expression fails, and no longer corrects a value its own Connected System supplied when an expression names the attribute in a different case. (#2051, #2179, #2180)
+- 🐛 Expression results are stored in the target attribute's type: an unchanged number, date or true/false no longer restages every run, a value the attribute cannot hold is reported and kept rather than cleared, and lists never export as `System.String[]`. (#2179)
+- 🐛 An expression failing on a missing value or a list position is an expression error on the object rather than an unhandled one. (#2179)
+- 🐛 `==` in an expression compares an attribute's text by its characters, so `mv["Status"] == "Active"` is true when it should be rather than always false. (#2053)
+- 🐛 Import Attribute Flows compare every type's values as a set: a multi-valued date or Boolean flows every value, a reordered set changes nothing, and an object with no value of the attribute's type follows "Null is a value" and priority instead of clearing it. (#2153)
+- 🐛 When deleting a Connected System or Synchronisation Rule withdraws values an export rule's scope depends on, the downstream account is deprovisioned per that rule's Deprovisioning Action, as a synchronisation would. (#134)
+- 🐛 Deleting a Connected System with "Deprovision through synchronisation" keeps values from an Object Type whose Remove Contributed Attributes On Obsoletion is off, as a normal disconnection does. (#134)
+- 🐛 Removing a Scoping Criteria group or criterion from a Synchronisation Rule now deletes it; it lingered unseen and stopped the Connected System it compared ever being deleted. (#134)
+- 🐛 A synchronisation, Synchronisation Rule deletion or Connected System deletion that withdraws queued export changes records it on the Activity, and previews show it beforehand, instead of the changes silently disappearing. (#2001, #2011)
+- 🐛 Deleting a Metaverse Object reports each account it leaves in place under a Disconnect Deprovisioning Action as **Disconnected from target system**. (#1811)
+- 🐛 A synchronisation's Activity counts the objects it synchronised, not the reference values its cross-page reference step resolved: a run over 790,007 objects reported 4,352,113.
+- 🐛 Causality follows a change a later synchronisation merged into an export still waiting: every synchronisation that staged it reaches the export and its confirmation. (#2100)
+- 🐛 A Connected System Object deprovisioned after its Metaverse Object was deleted keeps its deletion record when the confirming import removes it, so its change history stays findable. (#2100)
+- 🐛 A run queued behind a parallel Schedule step waits for the step to finish, instead of running alongside it, such as a hand-queued Full Import beside the Schedule's Full Import of the same Connected System.
+
+#### Exports
+
+- 🐛 An export batch records its results, and each new object's External ID, before anything that can fail, and a SCIM request failing before the provider answers fails only that change, so a change already accepted is never sent again as a second copy. (#2197)
+- 🐛 A cancelled or failed export run no longer leaves its batch stuck as **Executing**, overwrites a change the next run has taken, or sends a SQL or SCIM Create twice: changes already written are recorded and the rest wait for the next run. (#2083, #2197)
+- 🐛 An export that times out is recorded as a failed export, rather than as though someone had cancelled it, and a change a Connector returns no result for is sent again instead of being recorded as written. (#2083, #2197)
+- 🐛 A container created by an export run that was cancelled or failed part-way is selected as one created by a completed run is, so objects created in it import back and later exports there are not refused. (#2197)
+- 🐛 **Max Export Parallelism** applies to every export again, not only to those waiting on references, so large provisioning runs finish sooner. (#1820)
+- 🐛 With **Create containers as needed?** on, an LDAP export no longer fails an object because a parallel batch created its new OU a moment earlier. (#1820)
+- 🐛 An export the target refused, such as access denied, a schema violation or a write outside the selected containers, is reported as **Access Denied**, **Export Rejected** or **Export Refused** with the remedy, completing with a warning. (#2118)
+- 🐛 An attribute exports as one replacement value where the target or source holds one value: a SQL update no longer fails, a SCIM clear is accepted, and a target is no longer cleared in error or left with stray values. (#2182)
+- 🐛 An export Attribute Flow expression returning text for a true or false, number or date attribute, such as `"TRUE"`, exports and confirms the attribute's own value, instead of failing the confirming import. (#2183)
+- 🐛 An unchanged true or false or GUID value is no longer exported again every time, and removing a value from a multi-valued GUID attribute is exported rather than skipped. (#2183)
+- 🐛 A DN, External ID or member reference a directory stores in its own case (`DC=PANOPLY` for `DC=panoply`) is confirmed, no longer re-exported every run, and no longer reported as drift. (#2195)
+- 🐛 When an auxiliary class attribute's value goes away before it is exported, JIM withdraws the class add queued with it, which was otherwise refused at every export. (#492)
+- 🐛 A Pending Export rebuilt while one of its changes awaits confirmation keeps that change's export state and attempt count. (#2039)
+- 🐛 Decimal values are recorded after export, so clearing or reverting a value still reaches an auto-confirmed File Connector target. (#2185)
+- 🐛 A value cleared in the Metaverse is cleared from a File Connector file in Export Only mode; for files written before this release, the File Connector page explains how to bring JIM up to date. (#1936)
+- 🐛 An export Synchronisation Rule's Attribute Flow Expression offers Metaverse attributes (`mv["..."]`) in its example and Insert attribute menu, instead of `cs["..."]`, which reads nothing on export.
+
+#### Imports and Connectors
+
+- 🐛 A value a Connector cannot read (a date that does not exist, letters in a number) no longer removes the value JIM held; the attribute is left as it was, and one such value no longer drops a SCIM object or the rest of a SQL row. (#2066)
+- 🐛 An import whose recorded objects all failed while the rest were unchanged completes with a warning instead of **Failed with error**, and its Activity counts as updated only the objects that changed. (#2066, #2129)
+- 🐛 An import no longer fails with a foreign key error when change tracking is on and an object references another object written in a later batch of the same large import. (#2492)
+- 🐛 A Delta Import that reads a deletion and a re-insert of the same object on different pages keeps the object, instead of rejecting the re-insert as a duplicate. (#2074)
+- 🐛 An LDAP, SCIM or SQL import that returns the same object twice in one page rejects both copies as duplicates, as file imports do. (#2063)
+- 🐛 **Max detected deletions percent** on a Full Import no longer counts objects already marked as deleted. (#2089)
+- 🐛 After a schema refresh changes an attribute's data type, the next import replaces the values held under the old type rather than keeping both. (#2128)
+- 🐛 A schema refresh that finds an Object Type or attribute renamed only in case, such as `Mail` for `mail`, keeps it and every Attribute Flow and Object Matching Rule using it. (#2051)
+- 🐛 An External ID or reference containing the Turkish capital `İ` is found by lookups instead of being imported again as a new object. (#2051)
+- 🐛 Delta Imports from Active Directory, Samba AD, 389 Directory Server and OpenLDAP stop and ask for a Full Import when the directory was restored from backup or its change log purged past the last import, instead of silently missing changes. (#1869, #2004, #2008)
+- 🐛 A Delta Import from OpenLDAP or 389 Directory Server reads the change log a page at a time, where it could exhaust the server's memory after a large export, and on OpenLDAP one stopped by a size limit fails rather than missing changes. (#2486)
+- 🐛 The LDAP Connector's **Connection Timeout** applies to a directory server behind a firewall that drops traffic, so an unreachable domain controller fails in under a minute rather than holding up a run for about nine. (#2003)
+- 🐛 When a domain controller requires LDAP signing (the Windows Server 2025 default), JIM says to enable LDAPS, instead of only "Strong authentication is required". (#2042)
+- 🐛 The LDAP Connector reports a value it cannot read instead of dropping or misreading it, and an `objectGUID` that is not 16 bytes no longer fails the import. (#2128)
+- 🐛 Active Directory Enumeration attributes such as `sAMAccountType` are discovered as Number attributes, not Booleans reading every value as false; after upgrading, refresh each Active Directory schema. (#2128)
+- 🐛 A group over Active Directory's MaxValRange (1,500 members by default) imports its members once when the domain controller also returns an empty `member` attribute. (#2041)
+- 🐛 An LDAP entry carrying two selected Object Types imports as the more specific one, whatever order its classes are listed in; refresh the schema of a Connected System with overlapping Object Types selected. (#2043)
+- 🐛 A deletion a Delta Import reads for an LDAP object JIM holds under another Object Type retires that object, instead of being ignored until the next Full Import. (#2049)
+- 🐛 An LDAP export that adds a member already in the group, or removes one already gone, no longer fails, and the rest of that membership change is applied.
+- 🐛 Changing only the case of a directory object's name, such as its `cn`, renames the entry in the directory. (#2051)
+- 🐛 The SCIM 2.0 Client Connector imports and exports Keycloak group membership and email addresses, and creates groups with members on Keycloak, which refuses members on a create. (#2094)
+- 🐛 SCIM exports of more than 100 changes to one object no longer fail against providers that cap a request, such as Keycloak, and a SCIM import fails rather than finishing when the provider returns an empty page early. (#2094)
+- 🐛 The SCIM 2.0 Client Connector exports every value of `roles`, `entitlements` and `x509Certificates`, sends multi-valued schema extension values as a list, and removes one value without removing the rest. (#2090, #2181, #2215)
+- 🐛 The SCIM 2.0 Client Connector always imports `meta.version` where the provider supports entity tags, so updates carry `If-Match` and cannot overwrite a change made in the provider. (#2404)
+- 🐛 SCIM `profileUrl` and `photos` import as text, where every User carrying one failed its import; refresh existing SCIM schemas, then run a Full Import. (#2095)
+- 🐛 The Attribute Flow editor suggests SCIM counterparts for phone numbers, addresses, work email and the Enterprise User attributes in forms SCIM Connected Systems actually have. (#2095)
+- 🐛 A File Connector export no longer loses rows it was not asked to change: a file JIM cannot read, or with no or duplicate External IDs, fails the export and is left untouched. (#2186)
+- 🐛 File Connector exports write every value of a multi-valued attribute, and an update adds or removes only the values that changed, instead of keeping just the last value. (#2186)
+- 🐛 File Connector imports match headers ignoring case, and fail naming a missing column instead of clearing that attribute on every object; on upgrade, add the column or deselect the attribute. (#2051)
+- 🐛 A File Connector Full Import Run Profile with no **File Path** imports the file the Connected System's **File Path** names, instead of failing. (#2117)
+- 🐛 SQL Connector imports on a collation that ignores case no longer drop a related table's values, or fail on a change-log row, when a key is written in a different case. (#2051)
+- 🐛 Trusting a certificate authority or a server's own certificate now works for encrypted SQL Server connections, as for LDAPS and SCIM, and a refused certificate is reported with its reason. (#1472, #1914)
+- 🐛 An Oracle Database connection that fails during negotiation names the cause, such as `ORA-12660`, instead of a generic "failed to parse connect string". (#2584)
+
+#### Dates
+
+- 🐛 Connectors no longer drop or pick among the values of a multi-valued date or Boolean: LDAP cleared the value JIM held, a SQL related table kept one arbitrary row, and SCIM kept the last element. (#2153)
+- 🐛 A date exported by JIM confirms on the next import and is no longer reported as drift, whatever the server's time zone. (#2153)
+- 🐛 A date with finer than microsecond precision, such as a SQL `datetime2(7)` value, no longer reads as changed on every Full Import or raises a false Verification Mode disagreement. (#2153)
+- 🐛 Removing one date from a SCIM multi-valued attribute finds it however the service provider writes it. (#2153)
+- 🐛 Saving a Metaverse Attribute's current data type and plurality while Metaverse Objects hold values succeeds as no change instead of being refused. (#2153)
+
+#### Passwords
+
+- 🐛 Provisioning an enabled Active Directory account whose Synchronisation Rule has an Initial Password no longer fails with `0000052D`: JIM creates it disabled and enables it once the password is set. (#2039)
+- 🐛 On Active Directory, an account an Attribute Flow enables while its Initial Password is queued waits disabled for it instead of failing the export, until the password expires (7 days by default). (#2158)
+- 🐛 Delivering a password to Active Directory or Samba AD no longer overrides Password never expires where a `userAccountControl` Attribute Flow sets it. (#2159)
+- 🐛 An account provisioned while the person's own password change was waiting is given that password and enabled as its Initial Password says, and a change made moments after creation is no longer overwritten by the Initial Password. (#2160, #2270)
+- 🐛 A password set where the Connected System could not apply the requested expiry, such as on OpenLDAP or 389 Directory Server, completes with a warning naming what was applied. (#2159)
+- 🐛 Setting a password through the REST API with `enableAccount: false` is refused rather than disabling the account. (#2162)
+
+#### Sync Preview and Configuration Change Previews
+
+- 🐛 Sync Preview shows what a synchronisation would actually do: drift corrections where an export rule enforces state but not values changed elsewhere, the updates an object leaving import scope sends to targets, and only the error when an Expression would fail. (#1530)
+- 🐛 Sync Preview hands an attribute to the next source when the one holding it stops supplying a value, and withdraws a value whose Attribute Flow has been deleted, as the synchronisation does. (#1899)
+- 🐛 Sync Preview shows an object that would join or project with no attribute flowing, and its joins through an Object Type's Object Matching Rules in simple mode only, as the synchronisation does. (#2176)
+- 🐛 Previews of Attribute Flow, destructive toggle and Object Matching changes no longer fail as a whole when one object's scope cannot be decided; that object is listed with the reason. (#2264)
+
+#### Sign-in, API and PowerShell
+
+- 🐛 The API reference's **Try It** signs in through your identity provider in released images, using the public client the PowerShell module uses, so it gets a token JIM accepts; `Register-JIMIdentityProvider` registers the redirect URI it needs. (#2544, #2594)
+- 🐛 When your identity provider changes its signing key without notice, the first API request and sign-in using the new key succeed, where they could fail for up to 5 minutes. (#2442)
+- 🐛 The REST API and `Connect-JIM` accept SSO access tokens when `JIM_SSO_API_SCOPE` is a bare identifier such as AD FS's `api://{client-identifier}`; every such token was refused. (#2353)
+- 🐛 `Connect-JIM` signs in with AD FS, which refused JIM's scope with MSIS9602. (#2441)
+- 🐛 An SSO user's API requests carry each JIM role once, and a role removed since they signed in no longer applies to the API calls the portal makes. (#2441)
+- 🐛 A PowerShell command refused with 403 no longer tells a known person their identity is not provisioned; it names both possible causes and, for an API key, its roles. (#2441)
+- 🐛 JIM starts when its identity provider is unreachable or its certificate is not trusted, instead of stopping after five attempts; API keys keep working while sign-in is unavailable. (#2363)
+- 🐛 The API's OpenAPI document states which endpoints need an SSO access token or API key, so tools generating clients from it send one, and the API reference lists enumerated fields' values by name. (#2088)
+- 🐛 `Export-JIMCertificate` works in a session signed in with SSO, a Trusted Certificate added by file path can be exported, and a certificate that cannot be read returns `404 Not Found` with the reason. (#2088, #2109)
+- 🐛 `Connect-JIM -ApiKey` stops with "JIM rejected the API key" when JIM does not accept the key, instead of reporting an authorised connection. (#1950)
+- 🐛 PowerShell's `-WhatIf` always previews: on cmdlets that also take `-Force`, such as `Reset-JIMSystem`, giving both carried the action out. (#2167)
+- 🐛 `-MetaverseAttributeName` on the Predefined Search and scoping criterion cmdlets, and `Get-JIMHistoryCount -ConnectedSystemName`, find what they name, and `Get-JIMConnectedSystem` lists every system, not just 25. (#1965, #1967)
+- 🐛 `Set-JIMScopingCriterion` and `Set-JIMPredefinedSearchCriterion` without `-CaseSensitive`, and their REST updates, keep a criterion's case setting. (#2051)
+- 🐛 Changing an Object Matching Rule's source over REST, `Set-JIMMatchingRule` or `Set-JIMSyncRuleMatchingRule` saves it, and updating a Synchronisation Rule's own Object Matching Rule no longer fails with a server error. (#2234)
+- 🐛 `Get-JIMSyncRule` and the REST API return an import Synchronisation Rule's out-of-scope action, which could be set but not read back.
+- 🐛 The REST API's Activity lists return each Activity's `childActivityCount`, which always read 0, so a script can tell which Activities have children. (#2346)
+- 🐛 Listing Metaverse Attributes through REST or `Get-JIMMetaverseAttribute` returns the Object Types each is bound to. (#1083)
+- 🐛 `Invoke-JIMExampleDataTemplate -Wait -PassThru` reports how the generation finished, and `Start-JIMSchedule -Wait` that times out returns the Schedule Execution as it last stood. (#1083)
+- 🐛 The REST API, `New-JIMSchedule` and `Set-JIMSchedule` create and retime Schedules from the Specific Times and Interval patterns, and a Sunday-only `New-JIMSchedule` no longer runs every day.
+
+#### Portal
+
+- 🐛 The Schedule editor no longer saves run times at different minutes past the hour, which all ran at the first time's minute; it keeps **Save** disabled until they share one. (#2070)
+- 🐛 Every Metaverse Object change links to the Activity it was made in, including deletions and data generation, and the initial administrator's creation is recorded as made by System. (#2460)
+- 🐛 Links to Metaverse Objects that led to pages that do not exist now open the object: **Deleted By**, references in a deleted object's change history, the Source Metaverse Object on Pending Exports, and Operations history. (#2066, #2146, #2151)
+- 🐛 Changes made through the REST API to Schedules and Example Data Templates, and factory resets, are recorded as the API key or person who made them; upgrade corrects history already recorded where it can. (#2066)
+- 🐛 Following a reference from one Metaverse Object to another shows the new object's details, where the first object's could stay on screen. (#348)
+- 🐛 An export scope review's execution item reads as an **Export Scope Review** of its Metaverse Object, links it, and starts its causality from it. (#1971, #1982)
+- 🐛 An Activity names each object it provisioned, deprovisioned or disconnected by its own type in a Connected System with more than one.
+- 🐛 Sorting or searching a large Activity's execution items by name no longer times out: 40,000 items sort in under a second rather than 48.
+- 🐛 A running import's Activity page fills its execution items as the run saves them, and a running Activity no longer reads "Finishing up" while objects are still being processed.
+- 🐛 Pending Export pages show true or false, Long Number, Decimal and GUID values instead of `[null]`, and every page shows a date's fraction of a second when it has one. (#2153)
+- 🐛 `%`, `_` and `\` in a Predefined Search criterion or a list's search box match themselves, so "starts with svc_" no longer also finds "svcX…". (#2053)
+- 🐛 The Pending Deletions page can be reached from **Administration** and from an Object Type's Deletion Rules panel. (#2059)
+- 🐛 Data Generation Templates honour a true-or-false attribute's share of true values (**Objects given true (%)**), which was accepted and ignored. (#877)
+- 🐛 A Data Generation Template attribute's **Population %** leaves exactly that share of objects with a value (100 of 200 at 50%, not about 124), including attributes that depend on another's value. (#2437, #2448)
+
+#### Operations and deployment
+
+- 🐛 JIM's web portal, Worker and Scheduler no longer grow in memory with every page load, request and task until restarted. (#2115)
+- 🐛 The bundled PostgreSQL starts on hosts with less than about 10 GB of memory, the documented 4 GB minimum included: the installer sizes its memory to the host, on Docker and Podman. (#1943)
+- 🐛 History retention no longer stops removing Activities when a Metaverse Object change recorded in one outlives it. (#2460)
+- 🐛 Restarting JIM renews an expired infrastructure API key (`JIM_INFRASTRUCTURE_API_KEY`) for another 24 hours, so it can recover access, such as after a Factory Reset; a disabled key stays disabled. (#2278)
+- 🐛 After the encryption keys are lost, JIM.Worker starts and configuration changes save again, so the Connected System secrets the recovery asks for can be re-entered. (#2124)
+- 🐛 The **Stale task timeout**, how long a running task may go without a heartbeat before JIM recovers it from a crashed Worker, appears among the Service Settings and can be changed. (#2060)
+- 🐛 Changing a Run Profile's Safeguards limits or Verification Mode is recorded in its Connected System's configuration change history. (#2049)
+- 🐛 JIM's logs are quieter: a query cancelled on purpose, such as by someone leaving a page, no longer logs as an error, and a reference to an object JIM never joins logs one summary per run instead of a warning per group.
+- 🐛 On Podman, stopping or restarting JIM no longer leaves its connections open on the bundled PostgreSQL for about two hours. (#1980)
+- 🐛 A rootful Podman JIM survives a firewalld reload, and on RHEL-family hosts a restart, instead of losing its database; upgrading from v0.16.0 or earlier, apply the settings the Podman page shows. (#2009)
+- 🐛 On Ubuntu 24.04, a rootful Podman JIM's services no longer crash and restart; upgrading from v0.16.0 or earlier, add the AppArmor rule the Podman page shows and restart the server. (#1953)
+- 🐛 The commands for operating a rootless Podman JIM work on a minimal RHEL-family host such as AlmaLinux 9: use the documented `jim-systemctl`. (#1955)
+- 🐛 A service waiting for its database at start-up names the address the database's name led to. (#2009)
+- 🐛 When `setup.sh`, run again over an installation, stops before starting JIM, it puts the installation's files back, and an upgrade that fails part-way on Docker no longer leaves its `.previous` files behind. (#1994, #2155)
+- 🐛 Rolling back an air-gapped upgrade on Docker's containerd image store no longer tries to download the previous PostgreSQL image. (#2299)
+- 🐛 When JIM is not ready after installing or upgrading, `setup.sh` names each container that is not running properly, with the end of its log. (#1944)
+- 🐛 `setup.sh` stops before starting anything when given a `JIM_DB_SHARED_BUFFERS` the host cannot hold, and warns above half the host's memory. (#1948)
+- 🐛 `setup.sh` writes a given `JIM_INFRASTRUCTURE_API_KEY` into `.env` on Docker, as it already did into Podman's secret, and refuses a key JIM would not create. (#1950)
+- 🐛 Running `setup.sh` again over a Docker installation restarts `jim.web` when needed, so JIM serves the certificate that run issued. (#1956)
+- 🐛 Declining `setup.sh`'s **Start JIM now?** prints commands that work, on Podman with systemd too. (#1984)
+- 🐛 `sha256sum -c checksums.sha256` in an extracted release bundle now passes; it failed on every line in every earlier release. (#1942)
 
 ### Security
 
-- 🔒 The portal's Content Security Policy allows WebSocket connections only to JIM itself. It used to let a page open one to any host, which script injected into the portal could have used to send data out. (#2603)
-- 🔒 An Oracle Database connection over TCPS now checks that the server's certificate was issued for the host JIM connects to. It used to accept a certificate issued for any host that chained to a trusted authority, which left the connection open to interception. (#2589)
-- 🔒 JIM no longer accepts tokens signed by a key your identity provider has retired. It kept accepting them for up to an hour after a rollover, even one made because the key was compromised. (#2442)
-- 🔒 The REST API now refuses to let a signed-in administrator remove themselves from the Administrator role; the check was comparing the wrong identifier and never applied. (#2152)
-- 🔒 The web, worker and scheduler images now ship .NET and ASP.NET Core 10.0.13, and the worker and scheduler's own .NET packages move to 10.0.13 with them, fixing the vulnerabilities in the 10.0.11 runtime and 10.0.12 packages they carried, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
-- 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run, so no expression can hold a type, assembly or method. (#2053)
-- 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's or an archived person's. (#2064)
-- 🔒 A password delivered to Active Directory or Samba AD at the same moment an export disables the account no longer re-enables it: JIM writes the account's flags only if they are still the ones it read, and otherwise leaves them as the export set them and tries the delivery again. (#2161)
-- 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are now recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
-- 🔒 The unauthenticated readiness check (`/api/v1/health/ready`) no longer returns the error behind a failure, which could reveal database connection details such as the host and user name; the response drops its `error` field and JIM logs the cause instead. (#2188)
-- 🔒 JIM no longer exports a `password` through an Attribute Flow on any Connector, so a SCIM User's password, or a SQL or file column of that name, is never sent or kept in cleartext. An existing flow to one exports nothing and is reported on every run, and its Synchronisation Rule cannot be saved until it is removed. Upgrading deletes the passwords JIM held in Pending Exports and Connected System Objects; see Credential errors after upgrading in the upgrade guide. (#2091)
-- 🔒 The SCIM 2.0 Client Connector now refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted, including by the connection test when you save the settings. A Connected System already saved with one fails its next Run Profile before anything is sent; change it to the authorisation server's HTTPS address. (#2093)
+- 🔒 JIM's images and its own .NET packages move to .NET and ASP.NET Core 10.0.13, fixing the vulnerabilities in the earlier runtime and packages, including CVE-2026-88092, a critical ASP.NET Core security feature bypass.
+- 🔒 JIM no longer accepts tokens signed by a key your identity provider has retired, which it did for up to an hour after a rollover, even one made because the key was compromised. (#2442)
+- 🔒 The REST API refuses to let a signed-in administrator remove themselves from the Administrator role; the check compared the wrong identifier and never applied. (#2152)
+- 🔒 The portal's Content Security Policy allows WebSocket connections only to JIM itself, where script injected into the portal could have opened one to any host to send data out. (#2603)
+- 🔒 An Oracle Database connection over TCPS checks that the server's certificate was issued for the host JIM connects to, where it accepted any certificate chaining to a trusted authority. (#2589)
+- 🔒 JIM no longer exports a `password` through an Attribute Flow on any Connector, so no password is sent or kept in cleartext; upgrading deletes those JIM held, as the upgrade guide's Credential errors after upgrading describes. (#2091)
+- 🔒 The SCIM 2.0 Client Connector refuses a plain-HTTP OAuth Token Endpoint URL except for loopback addresses, so a Client Secret is never sent unencrypted; change an existing one to HTTPS. (#2093)
+- 🔒 The unauthenticated readiness check (`/api/v1/health/ready`) no longer returns the error behind a failure, which could reveal database connection details. (#2188)
+- 🔒 Expressions refuse .NET reflection (`GetType()`, `typeof` and anything reached through them) when you save them as well as when they run. (#2053)
+- 🔒 An Initial Password no longer enables an account your `userAccountControl` Attribute Flow creates disabled, such as a pre-hire's. (#2064)
+- 🔒 A password delivered to Active Directory or Samba AD as an export disables the account no longer re-enables it. (#2161, #2173)
+- 🔒 API requests refused for an expired, mis-signed or malformed SSO access token are recorded in the security audit log, as failed API keys and sign-ins already are. (#2108)
 
 ### Performance
 
-- ⚡ A group referencing an object JIM never joins, such as a contact, now synchronises in the run's main pass instead of being redone in the cross-page reference step on every run. On 790,007 directory objects this took 11 minutes off a 26-minute repeat Full Synchronisation.
-- ⚡ Very large groups open quickly: a Metaverse Object or Connected System Object page for a group of 594,000 members now loads in under half a second, where it took 5 to 18 seconds, and the REST Connected System Object detail fell from about 5 seconds to about 0.1 seconds. Members and other referenced objects are named as before.
-- ⚡ The Connectors and Synchronisation Rules lists load once per visit instead of three times, and pages that only name Connected Systems (pickers, Schedules, Deleted Objects) no longer count every Connected System Object to do it.
-- ⚡ The Connected Systems list opens in a fraction of the time on large deployments: it now counts each system's objects once, in a single pass, where before it counted every Connected System Object up to six times per visit. With 1.5 million objects, the counting fell from about 2.5 seconds to about 80 ms.
-- ⚡ Synchronisation processes the Object Types groups refer to before the groups themselves, so group membership resolves as each group is processed instead of being worked through a second time in **Resolving cross-page references**. On a directory of 750,000 people and 40,000 groups that step took 29 minutes. For LDAP attributes that do not declare what they point at, such as `member` and `manager`, a Full Synchronisation reads which types their values point at. (#2492)
-- ⚡ Large exports no longer slow down as they progress: reading each batch of Pending Exports now costs the same at any queue size, where before every batch scanned rows already exported or still waiting. At 790,000 Pending Exports a batch read fell from about 137 ms to about 5 ms. (#2496)
-- ⚡ **Resolving cross-page references** is about four times faster per reference value, for references within one Object Type, such as managers and nested groups, which still need it. (#2492)
-- ⚡ Joining a group to its Metaverse Object no longer slows down as a Synchronisation creates more groups: matching a value now reads only the objects that hold it, where before it could read every object of the type. (#2492)
-- ⚡ An export's **Exporting deferred changes** step works through the exports waiting on references a chunk at a time, reading only what each referenced object is written as and saving only what resolution changed. Before, it loaded every one of them, every attribute value of every object they referenced, and saved every member value, before writing any: on a directory of 790,000 objects and 40,000 groups, six minutes at 0% and most of the Worker's memory.
-- ⚡ An execution item's page opens for a change to a group of any size: the page, its causality panel, and change history read a change's values a window at a time instead of loading every member, which timed a 600,000-member group's item out. In the causality Table view, an event with more than ten attribute changes is one row with its counts and **View all**. (#2498)
-- ⚡ Typing a new search in a large Connector Space now cancels the search still running, so the database works only on the latest term instead of finishing every earlier one.
-- ⚡ Configuration Change Previews that weigh up every affected object, such as deleting a Connected System or changing an Attribute Flow, now evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
-- ⚡ JIM now checks an LDAP directory for a generated value already in use with one search covering every attribute the value is bound for there (plus one of the Global Catalog for forest-wide attributes), rather than one search per attribute. (#2023)
+- ⚡ Synchronisation processes the Object Types groups refer to before the groups themselves, so membership resolves as each group is processed; on a directory of 750,000 people and 40,000 groups this removed a 29-minute **Resolving cross-page references** step. (#2492)
+- ⚡ **Resolving cross-page references**, still needed for references within one Object Type such as managers and nested groups, is about four times faster per value, and joining groups no longer slows down as a synchronisation creates more of them. (#2492)
+- ⚡ A group referencing an object JIM never joins, such as a contact, synchronises in the main pass instead of being redone every run; on 790,007 directory objects this took 11 minutes off a 26-minute repeat Full Synchronisation.
+- ⚡ Synchronising a large group is much faster: creating its Metaverse Object no longer takes time that grows with the square of its membership, which cost 211 seconds for one page of groups in a directory of 750,000 people. (#2598)
+- ⚡ Large exports no longer slow down as they progress: at 790,000 Pending Exports a batch read fell from about 137 ms to about 5 ms. (#2496)
+- ⚡ An export's **Exporting deferred changes** step works through exports waiting on references a chunk at a time and shows its progress throughout, where it sat at 0% for six minutes and used most of the Worker's memory on 790,000 objects.
+- ⚡ Very large groups open quickly: a Metaverse Object or Connected System Object page for a 594,000-member group loads in under half a second, where it took 5 to 18 seconds.
+- ⚡ An execution item's page, causality panel and change history read a change's values a window at a time, so a change to a 600,000-member group opens instead of timing out. (#2498)
+- ⚡ The Connected Systems list opens in a fraction of the time on large deployments, counting each system's objects once rather than up to six times per visit, and the Connectors and Synchronisation Rules lists load once per visit instead of three times.
+- ⚡ Typing a new search in a large Connector Space cancels the search still running, so the database works only on the latest term.
+- ⚡ Configuration Change Previews that weigh up every affected object evaluate them once rather than twice, so the full answer arrives in about half the time. (#1530)
 
 ## [0.16.0] - 2026-09-29
 
@@ -1750,7 +1865,8 @@ JIM now supports deployments of 100,000+ objects, validated by Scale100K integra
 - Air-gapped deployment bundle support
 - PowerShell Gallery publishing
 
-[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/TetronIO/JIM/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/TetronIO/JIM/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/TetronIO/JIM/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/TetronIO/JIM/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/TetronIO/JIM/compare/v0.13.0...v0.14.0

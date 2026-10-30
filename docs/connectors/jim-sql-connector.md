@@ -133,20 +133,34 @@ Where a database mixes the two meanings, leave the setting off; the columns impo
 
 ### Step 2: Describe your tables
 
-SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type**, then on its card give it a name and choose:
+SQL has no way to say which table holds which kind of object, which column identifies a row, or which child table belongs to which parent, so you tell JIM. On the Connected System's **Settings** tab, **Object Types** under **Object Type Configuration** shows one card per Object Type. Select **Add Object Type** and work through its steps:
 
-- its **Schema** and **Table or view**, or **Read from a SELECT statement instead** where you cannot create a view
-- its **Anchor**: the column or columns whose values identify a row, in key order
-- any **References to other Object Types**: columns whose values hold another object's anchor, such as a manager
-- any **Multi-valued attributes**: child tables holding one row per value, such as phone numbers or group members
+```jim-diagram
+archetype: flow
+title: The steps of Add Object Type
+desc: "Add Object Type works through four steps. Source names the Object Type and the table, view or SELECT statement it reads from (1). Anchor chooses the columns that identify a row, with the table's primary key preselected (2). References marks columns holding another Object Type's anchor (3), and Multi-valued attributes adds child tables holding one row per value (4); both are optional, so the Object Type can be added from the Anchor step on. The result is a card for the Object Type, where everything the steps set can be changed later."
+out: { label: Object Type card, note: everything stays editable }
+steps:
+  - { id: source, label: Source, sub: "table, view or SELECT", badge: 1 }
+  - { id: anchor, label: Anchor, sub: primary key preselected, badge: 2 }
+  - { id: refs, label: References, sub: optional, badge: 3 }
+  - { id: mva, label: Multi-valued attributes, sub: optional, badge: 4 }
+```
 
-Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where the database declares a primary key, the card offers it as the anchor. Where a column has a foreign key to another Object Type's anchor, the card offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it. Nothing changes until you accept. If JIM cannot reach the database, the card says why, names are typed instead, and **Retry** reads the list again.
+1. **Source**: a name for the Object Type, and its **Schema** and **Table or view**, or a **SELECT statement** where you cannot create a view.
+2. **Anchor**: the column or columns whose values identify a row, in key order. JIM preselects the table's primary key and says so; a view declares no keys, so for a view you choose.
+3. **References** (optional): columns whose values hold another object's anchor, such as a manager.
+4. **Multi-valued attributes** (optional): child tables holding one row per value, such as phone numbers or group members.
+
+The Object Type can be added from the Anchor step on; anything skipped can be added later on its card, where everything the steps set can also be changed.
+
+Names are chosen from the database's own list of tables, views and columns, read with the connection settings on screen. Where a column has a foreign key to another Object Type's anchor, JIM offers it as a reference, and a foreign key to a table no Object Type reads from yet offers to add one for it, opening **Add Object Type** with that table chosen. Nothing changes until you accept. If JIM cannot reach the database, it says why, names are typed instead, and **Retry** reads the list again.
 
 You do not list the ordinary columns; JIM discovers them. You only say what the database cannot: which table is which object, what identifies a row, which columns point at other objects, and which child tables belong to which parent. A card shows any problem with its Object Type as you work, and a collapsed card shows how many it has.
 
 #### The Object Types document
 
-Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
+Behind the cards, the setting holds a JSON document. It is what REST and PowerShell send as the setting's value, and what **View as JSON** shows, highlighted and with line numbers, so you can copy it out or paste one in. Each problem JIM finds is listed above the text and marked on its line, and **Save Settings** waits until there are none. A pasted document that is not valid JSON, or that uses a field the document does not have, has to be fixed there before **View as cards** can show it. To find the exact names to put in it, list what the database account can see with [`Get-JIMConnectedSystemCatalogue`](../powershell/connected-system-schema.md#get-jimconnectedsystemcatalogue) or the catalogue endpoints of the REST API, once the connection settings are saved. A table's primary key, which it reports in key order, is usually the right `anchorColumns`.
 
 Each entry in the document names an Object Type, the table or view it comes from, and the column or columns that identify a row. The example below describes a person whose manager is another person, with phone numbers held in a child table:
 

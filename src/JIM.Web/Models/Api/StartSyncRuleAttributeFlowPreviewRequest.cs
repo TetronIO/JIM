@@ -33,7 +33,7 @@ public class StartSyncRuleAttributeFlowPreviewRequest
     /// <summary>
     /// The target Metaverse Attribute ids whose staged mapping removal chose to keep the contributed values
     /// (#1537), so the preview states each removal's actual behaviour. Optional; omitted means every removal
-    /// follows the default (recall at the next Full Synchronisation of the contributing system).
+    /// follows the default (recall at the next synchronisation of the contributing system, Delta or Full).
     /// </summary>
     public List<int>? KeepContributedValuesAttributeIds { get; set; }
 

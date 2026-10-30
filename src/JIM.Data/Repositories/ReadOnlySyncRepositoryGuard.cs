@@ -38,6 +38,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _inner.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
+    public Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds)
+        => _inner.GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(connectedSystemId, modifiedSince, objectTypeIds);
+
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)
+        => _inner.GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(connectedSystemId);
+
+    public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
+        => _inner.GetConfigurationChangeSynchronisationIdsAwaitingAsync(connectedSystemId);
+
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
         => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
 
@@ -504,8 +513,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<int> FixupMvoReferenceValueIdsAsync(IReadOnlyList<(Guid MvoId, int AttributeId, Guid TargetMvoId)> fixups)
         => throw new PreviewWriteAttemptedException(nameof(FixupMvoReferenceValueIdsAsync));
 
-    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    public Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
         => throw new PreviewWriteAttemptedException(nameof(ClearMetaverseObjectScopeReviewPendingAsync));
+
+    public Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+        => throw new PreviewWriteAttemptedException(nameof(ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync));
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
         => throw new PreviewWriteAttemptedException(nameof(FlagMetaverseObjectsOfTypeForScopeReviewAsync));
@@ -519,8 +531,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectsAsync));
 
-    public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
-        => throw new PreviewWriteAttemptedException(nameof(UpdateMetaverseObjectAsync));
+    public Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
+        => throw new PreviewWriteAttemptedException(nameof(SetMetaverseObjectLastConnectorDisconnectedDateAsync));
 
     public Task<IReadOnlyList<GeneratedValueRetirement>> DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
         => throw new PreviewWriteAttemptedException(nameof(DeleteMetaverseObjectAsync));
@@ -752,6 +764,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<long?> ResetGeneratedValueSequenceAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId, long newValue, int syncRuleMappingId)
         => throw new PreviewWriteAttemptedException(nameof(ResetGeneratedValueSequenceAsync));
+
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
+        => throw new PreviewWriteAttemptedException(nameof(ClaimConfigurationChangeSynchronisationsAsync));
+
+    public Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId)
+        => throw new PreviewWriteAttemptedException(nameof(ApplyClaimedConfigurationChangeSynchronisationsAsync));
 
     #endregion
 }

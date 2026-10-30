@@ -15,6 +15,15 @@ namespace JIM.Application.Services;
 /// Attribution is precise rather than blanket: a Metaverse Attribute edit raises the indicator only on the systems
 /// whose Synchronisation Rules actually reference that attribute. Flagging every system on every Metaverse-side edit
 /// would make the indicator noise, and an indicator administrators learn to ignore is worse than none.
+///
+/// What a synchronisation applies by itself is not drift. An import Synchronisation Rule or Object Matching Rule change
+/// is recorded as awaiting synchronisation (#2615) and carried to existing objects by the system's next Delta or Full
+/// Synchronisation, so it is left out of the drift count and reported on its own, as the Object Types waiting to be
+/// processed. An export rule's scope or Deprovisioning Action change is applied by the review the save flags, at the next
+/// synchronisation of any Connected System, so the save judges it to need no Full Synchronisation and it is left out too
+/// (<see cref="JIM.Models.Activities.Activity.ConfigurationChangeNeedsFullSynchronisation"/>). What remains is what JIM does not apply by
+/// itself: an export Attribute Flow edit, a Metaverse Attribute or Object Type change, and a change recorded before that
+/// judgement existed.
 /// </summary>
 public class ConfigurationDriftService
 {
@@ -29,9 +38,14 @@ public class ConfigurationDriftService
     /// Determines whether one Connected System has Sync-affecting or Destructive configuration changes recorded since
     /// its last completed Full Synchronisation.
     /// </summary>
+    /// <remarks>
+    /// Unlike the batch counterpart, this lists the changes waiting behind each Object Type and counts the objects the
+    /// next synchronisation will process (#2615): the page and response that describe one system say what is waiting, not
+    /// only that something is.
+    /// </remarks>
     public async Task<ConfigurationDriftStatus> GetConnectedSystemDriftAsync(int connectedSystemId)
     {
-        var results = await GetConnectedSystemDriftAsync([connectedSystemId]);
+        var results = await GetDriftAsync([connectedSystemId], listChanges: true);
         return results[connectedSystemId];
     }
 
@@ -41,7 +55,10 @@ public class ConfigurationDriftService
     /// does not degrade into an N+1.
     /// </summary>
     /// <returns>A status for every requested system id.</returns>
-    public async Task<Dictionary<int, ConfigurationDriftStatus>> GetConnectedSystemDriftAsync(IList<int> connectedSystemIds)
+    public Task<Dictionary<int, ConfigurationDriftStatus>> GetConnectedSystemDriftAsync(IList<int> connectedSystemIds) =>
+        GetDriftAsync(connectedSystemIds, listChanges: false);
+
+    private async Task<Dictionary<int, ConfigurationDriftStatus>> GetDriftAsync(IList<int> connectedSystemIds, bool listChanges)
     {
         ArgumentNullException.ThrowIfNull(connectedSystemIds);
 
@@ -49,13 +66,30 @@ public class ConfigurationDriftService
         if (ids.Count == 0)
             return new Dictionary<int, ConfigurationDriftStatus>();
 
+        // The changes waiting for a system's next synchronisation (#2615), in one read for the whole batch. They are
+        // reported on every status below, however drift itself turns out: the changes are real whether or not JIM can say
+        // what else has moved since a Full Synchronisation.
+        var awaitingBySystem = (await Application.Repository.ConnectedSystems.GetConfigurationChangesAwaitingSynchronisationAsync(ids))
+            .GroupBy(awaiting => awaiting.ConnectedSystemId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ObjectTypeAwaitingSynchronisation>)group
+                    .OrderBy(awaiting => awaiting.EarliestRequestedAt)
+                    .ThenBy(awaiting => awaiting.ObjectTypeName, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+        if (listChanges)
+            awaitingBySystem = await ListChangesAsync(awaitingBySystem);
+        IReadOnlyList<ObjectTypeAwaitingSynchronisation> AwaitingFor(int id) =>
+            awaitingBySystem.TryGetValue(id, out var found) ? found : [];
+
         // With change tracking off nothing is recorded, so drift is unknowable. Reporting that honestly matters more
         // than reporting a comfortable answer: "no changes pending" here would be a claim JIM cannot support.
         if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
             return ids.ToDictionary(id => id, id => new ConfigurationDriftStatus
             {
                 ConnectedSystemId = id,
-                TrackingDisabled = true
+                TrackingDisabled = true,
+                AwaitingSynchronisation = AwaitingFor(id)
             });
 
         var lastFullSyncs = await Application.Repository.Activity.GetLastFullSynchronisationStartsAsync(ids);
@@ -65,7 +99,8 @@ public class ConfigurationDriftService
             .ToDictionary(id => id, id => new ConfigurationDriftStatus
             {
                 ConnectedSystemId = id,
-                NeverFullySynchronised = true
+                NeverFullySynchronised = true,
+                AwaitingSynchronisation = AwaitingFor(id)
             });
 
         if (synchronisedIds.Count == 0)
@@ -103,11 +138,47 @@ public class ConfigurationDriftService
                 ChangeCount = qualifying.Count,
                 HighestChangeClass = qualifying.Count > 0
                     ? qualifying.Max(i => i.Class)
-                    : ConfigurationChangeClass.NotClassified
+                    : ConfigurationChangeClass.NotClassified,
+                AwaitingSynchronisation = AwaitingFor(id)
             };
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Adds to each waiting Object Type the changes behind it and the number of objects the next synchronisation will
+    /// process. Per system, because the page that wants this describes one system; a list of systems never asks.
+    /// </summary>
+    private async Task<Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>>> ListChangesAsync(
+        Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>> awaitingBySystem)
+    {
+        var listed = new Dictionary<int, IReadOnlyList<ObjectTypeAwaitingSynchronisation>>();
+        foreach (var (connectedSystemId, awaiting) in awaitingBySystem)
+        {
+            var changes = await Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesAwaitingAsync(
+                connectedSystemId, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+
+            var entries = new List<ObjectTypeAwaitingSynchronisation>();
+            foreach (var entry in awaiting)
+            {
+                entries.Add(new ObjectTypeAwaitingSynchronisation
+                {
+                    ConnectedSystemId = entry.ConnectedSystemId,
+                    ConnectedSystemObjectTypeId = entry.ConnectedSystemObjectTypeId,
+                    ObjectTypeName = entry.ObjectTypeName,
+                    ChangeCount = entry.ChangeCount,
+                    EarliestRequestedAt = entry.EarliestRequestedAt,
+                    ObjectCount = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(
+                        connectedSystemId, entry.ConnectedSystemObjectTypeId, null),
+                    Changes = changes.Where(change => change.ConnectedSystemObjectTypeId == entry.ConnectedSystemObjectTypeId).ToList()
+                });
+            }
+
+            listed[connectedSystemId] = entries;
+        }
+
+        return listed;
     }
 
     /// <summary>

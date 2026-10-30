@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -136,6 +137,15 @@ public class SyncRuleMappingDto
     /// flow's Missing Input Behaviour decides what it contributes. Empty on a read.
     /// </summary>
     public List<DependentDerivedFlow> DependentDerivedFlows { get; set; } = new();
+
+    /// <summary>
+    /// On the response to a create or update of an Attribute Flow on an import rule: the Connected System Object Types the
+    /// save recorded as awaiting synchronisation. For each, the Connected System's next synchronisation, Delta or Full,
+    /// processes every object of the type, not only the changed ones; the entry gives how many objects that is and about
+    /// how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never
+    /// completed one). Empty on a read, and when the save recorded nothing.
+    /// </summary>
+    public List<AwaitingSynchronisationEstimate> AwaitingSynchronisation { get; set; } = new();
 
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
     {

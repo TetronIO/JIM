@@ -1280,8 +1280,12 @@ public partial class MetaverseRepository : IMetaverseRepository
     public async Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
     {
         // One statement over the type's objects (#1925), on a configuration change rather than on any synchronisation
-        // path. Rows already flagged are left untouched: the flag is a boolean and nothing reads its row version, so
-        // rewriting them would cost a tuple each and say nothing new.
+        // path. Rows already flagged are left untouched: the flag is a boolean, so rewriting them would cost a tuple each
+        // and say nothing new. That is safe against a drain that holds some of these rows flagged and goes on to clear
+        // them, because the drain's clear looks at the export rules again once it has cleared (see
+        // FlagClearedAgainIfExportRulesChangedAsync): the rule this save follows is committed before this statement
+        // runs, so a clear that looks after the rule committed re-flags what it cleared, and a clear that looked before
+        // it has committed its clear before the rule did, so this statement finds those rows unflagged and flags them.
         var newlyFlagged = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = true
               WHERE ""TypeId"" = {0} AND NOT ""ScopeReviewPending""",
@@ -1321,12 +1325,16 @@ public partial class MetaverseRepository : IMetaverseRepository
             return 0;
 
         // One narrow statement per synchronisation page (#2318), over the objects the page disconnected from a system
-        // an export rule provisions to. Rows already flagged are left untouched, as for the type-wide flag above. The
-        // rows written report their new row version: unlike the type-wide flag, this runs on the worker's context,
-        // which may hold these objects tracked, and the xmin concurrency token must move with the row (below).
+        // an export rule provisions to. Unlike the type-wide flag above, a row already flagged is rewritten rather than
+        // skipped (#2615): this runs on a synchronisation page, where the drain at the end of the run, or another run's
+        // drain, may already hold the object flagged at some row version and be about to clear it. The flag would not
+        // change, so a skipped row keeps its version, and the drain's guarded clear (which decides by version) would
+        // clear a flag whose new reason the review it ran never saw. Rewriting moves the version, so that clear keeps
+        // the flag. The rows written report their new row version: this runs on the worker's context, which may hold
+        // these objects tracked, and the xmin concurrency token must move with the row (below).
         const string sql = """
             UPDATE "MetaverseObjects" SET "ScopeReviewPending" = true
-            WHERE "Id" = ANY(@ids) AND NOT "ScopeReviewPending"
+            WHERE "Id" = ANY(@ids)
             RETURNING "Id", xmin
             """;
 
@@ -1380,44 +1388,297 @@ public partial class MetaverseRepository : IMetaverseRepository
         return newRowVersions.Count;
     }
 
-    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    /// <summary>
+    /// The CTE every export-rule watermark check shares: whether any export Synchronisation Rule was created or updated
+    /// after the instant the run read its rules (<c>@watermark</c>; null when the run read none, in which case any
+    /// export rule at all counts). Needs the <c>export</c> and <c>watermark</c> parameters
+    /// (<see cref="AddExportRulesChangedParameters"/>).
+    /// </summary>
+    private const string ExportRulesChangedCte = """
+        changed AS (
+            SELECT EXISTS (
+                SELECT 1 FROM "SyncRules"
+                WHERE "Direction" = @export
+                  AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
+            ) AS "Changed"
+        )
+        """;
+
+    private static void AddExportRulesChangedParameters(NpgsqlCommand command, DateTime? exportRulesReadWatermark)
     {
-        if (ids.Count == 0)
+        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
+        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
+        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
+            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
+    }
+
+    public async Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
+    {
+        if (seenRowVersions.Count == 0)
             return true;
 
         // Clear once the sync engine has re-evaluated these objects' export scope (#892), unless an export rule was
         // created or updated after the run read its rules (#1925): the run evaluated against rules that no longer
         // stand, and the save that replaced them flagged these objects for review against the new ones. The check and
         // the clear are one statement, so a rule saved at any moment is either seen here (nothing is cleared) or
-        // commits after it, and its own flagging then sets the flags again. A data-modifying CTE always runs, whether
-        // or not the outer query reads it.
-        const string sql = """
-            WITH changed AS (
-                SELECT EXISTS (
-                    SELECT 1 FROM "SyncRules"
-                    WHERE "Direction" = @export
-                      AND (@watermark IS NULL OR COALESCE("LastUpdated", "Created") > @watermark)
-                ) AS "Changed"
+        // commits after it. A data-modifying CTE always runs, whether or not the outer query reads it.
+        //
+        // "Commits after it" is not enough on its own, because the statement checks on the snapshot it took when it
+        // started: a rule can commit after that snapshot and before this statement commits, and the rule's own flagging
+        // statement skips an object that is still flagged. The clear would then take the flag the rule meant to leave.
+        // So a clear that cleared anything looks again once it has committed (FlagClearedAgainIfExportRulesChangedAsync).
+        //
+        // Each object is cleared only where its xmin still equals the version the run read when it loaded it (#2615). A
+        // row whose xmin has moved was written since: a sign-in refreshing a person's profile, say, which flags the
+        // object again and records what it changed, none of which this run's evaluation saw. Leaving that row flagged
+        // is fail-safe; the next run reviews it. The flag and the record of what changed outside synchronisation are
+        // cleared together, because the review has delivered both. The clear never waits for a row lock (SKIP LOCKED):
+        // a row another transaction holds is being written, which will move its row version, so skipping it is the
+        // guard's own outcome, and waiting could deadlock against a concurrent synchronisation's bulk update. Locking in
+        // Id order keeps the statement's own lock order deterministic.
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            c AS (
+                SELECT * FROM unnest(@ids, @seenRowVersions) AS c("Id", "SeenRowVersion")
+            ),
+            locked AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                JOIN c ON mvo."Id" = c."Id"
+                WHERE mvo.xmin = c."SeenRowVersion"
+                  AND NOT (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo SKIP LOCKED
             ),
             cleared AS (
-                UPDATE "MetaverseObjects" SET "ScopeReviewPending" = false
-                WHERE "Id" = ANY(@ids) AND NOT (SELECT "Changed" FROM changed)
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = false, "UnsynchronisedChangesJson" = NULL
+                FROM locked
+                WHERE mvo."Id" = locked."Id"
+                RETURNING mvo."Id", mvo.xmin
             )
-            SELECT "Changed" FROM changed
+            SELECT changed."Changed", cleared."Id", cleared.xmin
+            FROM changed LEFT JOIN cleared ON true
             """;
 
         var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
-        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var changed = false;
+        var clearedRowVersions = new Dictionary<Guid, uint>();
+        var reflaggedRowVersions = new Dictionary<Guid, uint>();
+        await using (var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection))
+        {
+            await using (var command = new NpgsqlCommand(sql, connection,
+                (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction()))
+            {
+                AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = seenRowVersions.Keys.ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("seenRowVersions", NpgsqlDbType.Array | NpgsqlDbType.Xid) { Value = seenRowVersions.Values.ToArray() });
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    changed = reader.GetBoolean(0);
+                    if (!reader.IsDBNull(1))
+                        clearedRowVersions[reader.GetGuid(1)] = reader.GetFieldValue<uint>(2);
+                }
+            }
+
+            if (!changed && clearedRowVersions.Count > 0)
+                (changed, reflaggedRowVersions) = await FlagClearedAgainIfExportRulesChangedAsync(
+                    connection, clearedRowVersions.Keys.ToArray(), exportRulesReadWatermark);
+        }
+
+        AlignTrackedMetaverseObjectsWithScopeReviewClear(clearedRowVersions, reflaggedRowVersions);
+        return !changed;
+    }
+
+    public async Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+    {
+        // One statement over every flagged object whose type no enabled export rule covers (#2615), guarded as the
+        // batch clear above is: nothing is cleared once an export rule has been created or updated since the run read
+        // its rules, because that change flagged the objects for review against the rules as they now stand and may be
+        // the rule that covers their type; and a clear that cleared anything looks again once it has committed, for the
+        // reason given there (FlagClearedAgainIfExportRulesChangedAsync). The partial index on ScopeReviewPending keeps
+        // the scan O(flagged). The record of what changed outside synchronisation goes with the flag: with no enabled
+        // export rule covering the object, there is nothing to deliver it to.
+        //
+        // Locks are taken in Id order and never waited for (SKIP LOCKED), as in the batch clear: a row another
+        // transaction holds is being written, and a skipped flag is simply cleared by a later run. The cleared rows are
+        // returned with their new row versions, for the second look and for any tracked instance.
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            locked AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                WHERE mvo."ScopeReviewPending"
+                  AND NOT (mvo."TypeId" = ANY(@coveredTypeIds))
+                  AND NOT (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo SKIP LOCKED
+            ),
+            cleared AS (
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = false, "UnsynchronisedChangesJson" = NULL
+                FROM locked
+                WHERE mvo."Id" = locked."Id"
+                RETURNING mvo."Id", mvo.xmin
+            )
+            SELECT "Id", xmin FROM cleared
+            """;
+
+        var connection = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        var clearedRowVersions = new Dictionary<Guid, uint>();
+        var reflaggedRowVersions = new Dictionary<Guid, uint>();
+        var changed = false;
+        await using (var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection))
+        {
+            await using (var command = new NpgsqlCommand(sql, connection,
+                (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction()))
+            {
+                AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+                command.Parameters.Add(new NpgsqlParameter("coveredTypeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer)
+                    { Value = coveredMetaverseObjectTypeIds.ToArray() });
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    clearedRowVersions[reader.GetGuid(0)] = reader.GetFieldValue<uint>(1);
+            }
+
+            if (clearedRowVersions.Count > 0)
+                (changed, reflaggedRowVersions) = await FlagClearedAgainIfExportRulesChangedAsync(
+                    connection, clearedRowVersions.Keys.ToArray(), exportRulesReadWatermark);
+        }
+
+        AlignTrackedMetaverseObjectsWithScopeReviewClear(clearedRowVersions, reflaggedRowVersions);
+
+        // What is left cleared: everything the clear cleared, unless the second look found an export rule saved under
+        // it, in which case every one of those objects was flagged again.
+        return changed ? 0 : clearedRowVersions.Count;
+    }
+
+    /// <summary>
+    /// The second look both clears take once their clearing statement has committed (#2615): checks the export rules
+    /// against the same watermark again and, if a rule has been created or updated since the run read its rules,
+    /// flags exactly the objects just cleared again. The clearing statement checked on the snapshot it took when it
+    /// started, so a rule committed after that snapshot and before the statement committed was invisible to it, and
+    /// that rule's own flagging statement (which skips an object still flagged) cannot have flagged these objects
+    /// either. Without this look the clear would lose the flag the rule meant to leave.
+    /// <para>
+    /// Complete because the rule's save commits the rule first and flags second. If the rule committed before this
+    /// statement's snapshot, this look sees it and flags the objects again. If it committed after, its own flagging
+    /// statement runs later still, so it runs after the clear committed and finds these objects unflagged, so it flags
+    /// them. Either way the objects end flagged, whichever side of this look the rule lands on.
+    /// </para>
+    /// <para>
+    /// Only the flag is restored; the record of what changed outside synchronisation stays cleared, because the review
+    /// that ran delivered it (the clear is exactly the claim that the review is done). The next run reviews the
+    /// objects against the rule as it now stands. Unlike the clears, this statement waits for any row lock rather than
+    /// skipping the row: a re-flag that skipped an object would silently lose its review. Locks are taken in Id order,
+    /// as the clears take them, to keep the wait short of a deadlock; a deadlock, if one still came, fails the run
+    /// loudly rather than losing a flag.
+    /// </para>
+    /// </summary>
+    /// <param name="connection">The open connection the clear ran on.</param>
+    /// <param name="clearedIds">The objects the clear cleared; the statement never touches any other.</param>
+    /// <param name="exportRulesReadWatermark">The same watermark the clear checked.</param>
+    /// <returns>
+    /// Whether an export rule has changed since the watermark, and, when it has, each object flagged again with the
+    /// row version it now has.
+    /// </returns>
+    private async Task<(bool Changed, Dictionary<Guid, uint> RowVersions)> FlagClearedAgainIfExportRulesChangedAsync(
+        NpgsqlConnection connection, IReadOnlyCollection<Guid> clearedIds, DateTime? exportRulesReadWatermark)
+    {
+        const string sql = "WITH " + ExportRulesChangedCte + """
+            ,
+            targets AS (
+                SELECT mvo."Id"
+                FROM "MetaverseObjects" AS mvo
+                WHERE mvo."Id" = ANY(@clearedIds)
+                  AND (SELECT "Changed" FROM changed)
+                ORDER BY mvo."Id"
+                FOR NO KEY UPDATE OF mvo
+            ),
+            reflagged AS (
+                UPDATE "MetaverseObjects" AS mvo
+                SET "ScopeReviewPending" = true
+                FROM targets
+                WHERE mvo."Id" = targets."Id"
+                RETURNING mvo."Id", mvo.xmin
+            )
+            SELECT changed."Changed", reflagged."Id", reflagged.xmin
+            FROM changed LEFT JOIN reflagged ON true
+            """;
+
+        var changed = false;
+        var rowVersions = new Dictionary<Guid, uint>();
         await using var command = new NpgsqlCommand(sql, connection,
             (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction());
-        command.Parameters.Add(new NpgsqlParameter("export", NpgsqlDbType.Integer) { Value = (int)SyncRuleDirection.Export });
-        // Typed, so a null watermark (the run read no export rule) still binds: see src/CLAUDE.md on nullable parameters.
-        command.Parameters.Add(new NpgsqlParameter("watermark", NpgsqlDbType.TimestampTz)
-            { Value = exportRulesReadWatermark.HasValue ? exportRulesReadWatermark.Value : DBNull.Value });
-        command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ids.ToArray() });
+        AddExportRulesChangedParameters(command, exportRulesReadWatermark);
+        command.Parameters.Add(new NpgsqlParameter("clearedIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = clearedIds.ToArray() });
 
-        var changed = (bool)(await command.ExecuteScalarAsync() ?? false);
-        return !changed;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            changed = reader.GetBoolean(0);
+            if (!reader.IsDBNull(1))
+                rowVersions[reader.GetGuid(1)] = reader.GetFieldValue<uint>(2);
+        }
+
+        return (changed, rowVersions);
+    }
+
+    /// <summary>
+    /// Brings tracked Metaverse Objects into line with a raw clear (src/CLAUDE.md, "Raw SQL Writes Must Fix Up or Detach
+    /// Tracked Instances"), as persisted rather than as pending changes: the flag and the record of unsynchronised
+    /// changes, so a later whole-entity save cannot write them back, and the row version, so that save's xmin check
+    /// still matches the row the clear (or the second look that flagged it again) just wrote. Change detection is
+    /// suppressed while enumerating: it would attach any untracked graph hanging off a tracked navigation (see
+    /// src/CLAUDE.md, "Tracker surgery").
+    /// </summary>
+    /// <param name="clearedRowVersions">Each Metaverse Object the clear wrote, with the row version it then had.</param>
+    /// <param name="reflaggedRowVersions">
+    /// Each of those the second look then flagged again, with the row version it now has; such an object is flagged and
+    /// its record of changes stays cleared.
+    /// </param>
+    private void AlignTrackedMetaverseObjectsWithScopeReviewClear(
+        IReadOnlyDictionary<Guid, uint> clearedRowVersions, IReadOnlyDictionary<Guid, uint> reflaggedRowVersions)
+    {
+        if (clearedRowVersions.Count == 0)
+            return;
+
+        var context = Repository.Database;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = context.ChangeTracker.Entries<MetaverseObject>()
+                .Where(e => e.State is EntityState.Unchanged or EntityState.Modified && clearedRowVersions.ContainsKey(e.Entity.Id))
+                .ToList();
+            foreach (var entry in entries)
+            {
+                var flaggedAgain = reflaggedRowVersions.TryGetValue(entry.Entity.Id, out var reflaggedRowVersion);
+
+                var flag = entry.Property(mvo => mvo.ScopeReviewPending);
+                flag.CurrentValue = flaggedAgain;
+                flag.OriginalValue = flaggedAgain;
+                flag.IsModified = false;
+
+                var changes = entry.Property(mvo => mvo.UnsynchronisedChangesJson);
+                changes.CurrentValue = null;
+                changes.OriginalValue = null;
+                changes.IsModified = false;
+
+                var rowVersion = flaggedAgain ? reflaggedRowVersion : clearedRowVersions[entry.Entity.Id];
+                var xmin = entry.Property(mvo => mvo.xmin);
+                xmin.CurrentValue = rowVersion;
+                xmin.OriginalValue = rowVersion;
+                xmin.IsModified = false;
+            }
+        }
+        finally
+        {
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
@@ -2503,6 +2764,22 @@ public partial class MetaverseRepository : IMetaverseRepository
     public async Task<int> GetMetaverseObjectOfTypeCountAsync(int metaverseObjectTypeId)
     {
         return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
+    }
+
+    public async Task<Dictionary<int, int>> GetExportReviewPendingCountsAsync(IReadOnlyCollection<int> metaverseObjectTypeIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectTypeIds);
+        if (metaverseObjectTypeIds.Count == 0)
+            return [];
+
+        // The flag is rare and its partial index (IX_MetaverseObjects_ScopeReviewPending) holds only the flagged rows, so
+        // the planner starts from that index and groups what it finds; the type filter is applied to those few rows.
+        var typeIds = metaverseObjectTypeIds.ToArray();
+        return await Repository.Database.MetaverseObjects
+            .Where(mvo => mvo.ScopeReviewPending && typeIds.Contains(mvo.Type.Id))
+            .GroupBy(mvo => mvo.Type.Id)
+            .Select(group => new { TypeId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(row => row.TypeId, row => row.Count);
     }
 
     /// <summary>

@@ -34,6 +34,7 @@ public class ActivitiesControllerTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<ILogger<ActivitiesController>> _mockLogger = null!;
     private Mock<IActivityEtaTracker> _mockEtaTracker = null!;
     private JimApplication _application = null!;
@@ -45,6 +46,8 @@ public class ActivitiesControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>().StubConfigurationChangeSynchronisationReads();
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockActivityRepo.Setup(r => r.GetChildActivityCountsAsync(It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync(new Dictionary<Guid, int>());
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
@@ -694,6 +697,97 @@ public class ActivitiesControllerTests
     }
 
     [Test]
+    public async Task GetActivityAsync_ConfigurationChangeActivity_ReportsItsChangesAsAwaitingUntilARunAppliesThemAsync()
+    {
+        var activityId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var appliedAt = DateTime.UtcNow.AddMinutes(-3);
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId, TargetType = ActivityTargetType.SynchronisationRule, Status = ActivityStatus.Complete
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(activityId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+                    Reason = "HR Inbound: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ConfigurationChangeActivityId = activityId,
+                    InitiatedByType = ActivityInitiatorType.User, InitiatedByName = "Alice Adams",
+                    ClaimedByActivityId = runId, AppliedAt = appliedAt
+                },
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 2, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 8, ObjectTypeName = "group",
+                    Reason = "HR Groups: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ConfigurationChangeActivityId = activityId
+                }
+            ]);
+
+        var detail = (await _controller.GetActivityAsync(activityId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        var types = detail!.ConfigurationChangeSynchronisations.ToDictionary(type => type.ObjectTypeName);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(types.Keys, Is.EquivalentTo(new[] { "user", "group" }));
+            Assert.That(types["user"].IsApplied, Is.True);
+            Assert.That(types["user"].AppliedAt, Is.EqualTo(appliedAt));
+            Assert.That(types["user"].AppliedByActivityId, Is.EqualTo(runId));
+            Assert.That(types["user"].Changes.Single().InitiatedByName, Is.EqualTo("Alice Adams"));
+            Assert.That(types["user"].ObjectCount, Is.Null, "a configuration change Activity processes no objects");
+            Assert.That(types["group"].IsApplied, Is.False);
+            Assert.That(types["group"].AppliedAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_SynchronisationRunThatClaimedChanges_ReportsTheObjectsItProcessedInFullAsync()
+    {
+        var runId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(runId)).ReturnsAsync(new Activity
+        {
+            Id = runId, TargetType = ActivityTargetType.ConnectedSystemRunProfile, ConnectedSystemId = 3,
+            ConnectedSystemRunType = ConnectedSystemRunType.DeltaSynchronisation, Status = ActivityStatus.Complete
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(runId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+                    Reason = "HR Inbound: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), ClaimedByActivityId = runId
+                }
+            ]);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(3, 7, null)).ReturnsAsync(12_500);
+
+        var detail = (await _controller.GetActivityAsync(runId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        var type = detail!.ConfigurationChangeSynchronisations.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(type.ObjectCount, Is.EqualTo(12_500));
+            Assert.That(type.IsApplied, Is.False, "claimed but not applied: the run has not completed its application");
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_ActivityThatCannotHaveSynchronisationChanges_ReadsNoneAsync()
+    {
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId, TargetType = ActivityTargetType.HistoryRetentionCleanup, Status = ActivityStatus.Complete
+        });
+
+        var detail = (await _controller.GetActivityAsync(activityId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ConfigurationChangeSynchronisations, Is.Empty);
+            _mockConnectedSystemRepo.Verify(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(It.IsAny<Guid>(), It.IsAny<int>()), Times.Never);
+        }
+    }
+
+    [Test]
     public async Task GetActivityAsync_ImportWithWatermarks_DescribesThemThroughItsConnectorAsync()
     {
         // Read parity with the portal, which says in words what range a Delta Import read rather than printing the
@@ -708,7 +802,7 @@ public class ActivitiesControllerTests
             ImportWatermarkFrom = "{\"changeSequence\":8}",
             ImportWatermarkTo = "{\"changeSequence\":10}"
         });
-        var connectedSystems = new Mock<IConnectedSystemRepository>();
+        var connectedSystems = new Mock<IConnectedSystemRepository>().StubConfigurationChangeSynchronisationReads();
         connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(7, It.IsAny<bool>())).ReturnsAsync(new ConnectedSystem
         {
             Id = 7,

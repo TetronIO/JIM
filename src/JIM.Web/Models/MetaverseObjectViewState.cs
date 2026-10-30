@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text.Json;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -57,6 +59,81 @@ public sealed class MetaverseObjectViewState(Guid objectId)
 
     /// <summary>Whether a banner action (Allow the rename, Try again) is in flight.</summary>
     public bool GeneratedValueActionRunning { get; set; }
+
+    /// <summary>
+    /// Whether this object is flagged for review against every export rule (#2615): the "Awaiting export review" banner
+    /// above the tabs. Set only for an administrator, by <see cref="ApplyExportReview"/>.
+    /// </summary>
+    public bool ExportReviewPending { get; private set; }
+
+    /// <summary>
+    /// The attributes whose values were changed outside synchronisation and not yet sent on, when the object records them;
+    /// empty otherwise. Set only for an administrator, by <see cref="ApplyExportReview"/>.
+    /// </summary>
+    public IReadOnlyList<string> ExportReviewChangedAttributeNames { get; private set; } = [];
+
+    /// <summary>
+    /// Records what the export review banner shows (#2615). Administrators only: for anyone else nothing is recorded, and
+    /// <paramref name="changedAttributeNames"/> is never called, so what it reads is not loaded for a reader who cannot see it.
+    /// </summary>
+    /// <param name="pending">Whether the object is flagged for review.</param>
+    /// <param name="isAdministrator">Whether the reader is an administrator.</param>
+    /// <param name="changedAttributeNames">
+    /// Reads the names of the attributes changed outside synchronisation, where the object records them
+    /// (<see cref="ChangedAttributeNamesFrom"/>). Called only for an administrator and only when the object is flagged.
+    /// Without it, the banner gives the shorter explanation.
+    /// </param>
+    public void ApplyExportReview(bool pending, bool isAdministrator, Func<IReadOnlyList<string>>? changedAttributeNames = null)
+    {
+        ExportReviewPending = isAdministrator && pending;
+        ExportReviewChangedAttributeNames = ExportReviewPending && changedAttributeNames != null ? changedAttributeNames() : [];
+    }
+
+    /// <summary>
+    /// The names of the attributes a Metaverse Object records as changed outside synchronisation (#2615), for the export
+    /// review banner: the attributes whose values were changed and the attributes values were removed from, each named
+    /// once, in name order.
+    /// </summary>
+    /// <remarks>
+    /// Names come from the attributes themselves, through <paramref name="attributeNameOf"/>, and never from the values the
+    /// object holds: an attribute whose only change was a removal may have no value left on the object to name it. An
+    /// attribute that cannot be named (it was deleted since the change was recorded) is left out. An unreadable record is
+    /// treated as recording nothing, the stance <c>UnsynchronisedChangeEvaluation.Read</c> takes, so the banner loses its
+    /// detail and the page does not fail over a record that is only explanatory here.
+    /// </remarks>
+    /// <param name="unsynchronisedChangesJson">The object's <see cref="MetaverseObject.UnsynchronisedChangesJson"/>.</param>
+    /// <param name="attributeNameOf">Names a Metaverse Attribute by its id, or returns null when it no longer exists.</param>
+    public static IReadOnlyList<string> ChangedAttributeNamesFrom(string? unsynchronisedChangesJson, Func<int, string?> attributeNameOf)
+    {
+        ArgumentNullException.ThrowIfNull(attributeNameOf);
+
+        MetaverseObjectUnsynchronisedChanges? changes;
+        try
+        {
+            changes = MetaverseObjectUnsynchronisedChanges.FromJson(unsynchronisedChangesJson);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        if (changes == null)
+            return [];
+
+        // Valid JSON can still carry a null list or entry where a hand-edited record left one, which deserialises as null
+        // whatever the property's declared type says.
+        var removedFromAttributeIds = (changes.Removals ?? []).Where(removal => removal != null).Select(removal => removal.AttributeId);
+
+        return (changes.AttributeIds ?? [])
+            .Concat(removedFromAttributeIds)
+            .Distinct()
+            .Select(attributeId => attributeNameOf(attributeId))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct()
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     // Inspect view (#399): the object's attribute provenance, the source filter chosen from the contribution bar,
     // and the attribute opened in the inspector.

@@ -40,7 +40,11 @@ function Get-JIMSyncRule {
         Returns only the rules that are Enabled or Disabled.
 
     .OUTPUTS
-        The matching rules, or with -Id, the one rule.
+        The matching rules, or with -Id, the one rule. Each carries what it is waiting on: an import rule's
+        AwaitingSynchronisationChangeCount is the saved changes waiting for its Connected System's next
+        synchronisation to process every object of the rule's Object Type, and an export rule's
+        ExportReviewPendingCount is the Metaverse Objects of its type flagged for review against every export rule
+        at the next synchronisation of any Connected System. Each is zero for the other direction.
 
     .EXAMPLE
         Get-JIMSyncRule

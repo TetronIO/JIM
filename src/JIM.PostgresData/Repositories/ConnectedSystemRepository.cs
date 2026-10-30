@@ -8864,6 +8864,15 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemPasswordSynchronisations"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
+        // 12c. Delete the configuration changes awaiting synchronisation (#2615), applied ones included. Both of their
+        //      ownership foreign keys cascade (from the Connected System and from the Object Types deleted next), so
+        //      this statement is not what stops the deletes below failing; it is kept because the sequence removes rows
+        //      explicitly and in a stated order rather than relying on cascades it cannot see. Their references to the
+        //      Synchronisation Rules (deleted at step 11) and to Activities are SET NULL and need no statement.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConfigurationChangeSynchronisations"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
         // 13. Delete Object Types
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjectTypes"" WHERE ""ConnectedSystemId"" = {0}",

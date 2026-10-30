@@ -603,8 +603,16 @@ public class ExampleDataServer
                 Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
                     index =>
                     {
+                        // Created outside any synchronisation, so flagged for export scope review (#2615): the next
+                        // synchronisation of any Connected System reviews each object against every export rule. The
+                        // bulk writer persists the flag as given.
                         var metaverseObject = isFirstSegment
-                            ? objectsOfType[index] = new MetaverseObject { Type = objectType.MetaverseObjectType, Origin = MetaverseObjectOrigin.Internal }
+                            ? objectsOfType[index] = new MetaverseObject
+                            {
+                                Type = objectType.MetaverseObjectType,
+                                Origin = MetaverseObjectOrigin.Internal,
+                                ScopeReviewPending = true
+                            }
                             : objectsOfType[index];
 
                         foreach (var templateAttribute in segment)

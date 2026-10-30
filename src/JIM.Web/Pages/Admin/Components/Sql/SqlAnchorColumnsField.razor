@@ -1,0 +1,66 @@
+@using JIM.Connectors.Sql
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An Object Type's anchor: its columns as removable chips in key order, and a picker that adds one. Shared by the
+   card and the Add Object Type dialog. *@
+<div class="d-flex flex-wrap align-center gap-2">
+    @foreach (var anchorColumn in AnchorColumns)
+    {
+        <MudChip T="string" Variant="Variant.Text" Color="Color.Primary" Class="my-0"
+                 OnClose="@(() => RemoveAsync(anchorColumn))">@anchorColumn</MudChip>
+    }
+    <SqlCatalogueNameField @ref="_picker" Label="Add column" Options="@ColumnOptions.Where(c => !AnchorColumns.Contains(c, StringComparer.OrdinalIgnoreCase))"
+                           ValueChanged="AddAsync" Class="jim-sql-inline-picker" TestId="jim-sql-anchor-add" />
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public SqlObjectTypeDocument ObjectType { get; set; } = null!;
+
+    /// <summary>The source's columns, or empty where they could not be read.</summary>
+    [Parameter]
+    public IEnumerable<string> ColumnOptions { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private SqlCatalogueNameField? _picker;
+
+    private List<string> AnchorColumns => [.. (ObjectType.AnchorColumns ?? []).OfType<string>()];
+
+    private async Task AddAsync(string? column)
+    {
+        if (string.IsNullOrWhiteSpace(column))
+            return;
+
+        // Where the source's columns are known, only one of them is an anchor column, in the source's own spelling;
+        // a name typed that the source does not have is left in the picker rather than added. Where they are not
+        // known, the name typed is all there is.
+        if (ColumnOptions.Any())
+        {
+            var listed = ColumnOptions.FirstOrDefault(c => string.Equals(c, column, StringComparison.OrdinalIgnoreCase));
+            if (listed == null)
+                return;
+
+            column = listed;
+        }
+
+        var anchor = ObjectType.AnchorColumns ??= [];
+        if (!anchor.Contains(column, StringComparer.OrdinalIgnoreCase))
+            anchor.Add(column);
+
+        // Emptied in place rather than replaced, so typing the next column carries straight on.
+        if (_picker != null)
+            await _picker.ClearAsync();
+
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(string column)
+    {
+        ObjectType.AnchorColumns?.RemoveAll(c => string.Equals(c, column, StringComparison.Ordinal));
+        await OnChanged.InvokeAsync();
+    }
+}

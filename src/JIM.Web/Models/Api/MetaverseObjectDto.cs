@@ -91,6 +91,12 @@ public class MetaverseObjectDto
     public bool IsPendingDeletion { get; set; }
 
     /// <summary>
+    /// Whether the Metaverse Object is flagged for review against every export Synchronisation Rule. The next synchronisation
+    /// of any Connected System carries the review out, whichever Connected System it is for.
+    /// </summary>
+    public bool ExportReviewPending { get; set; }
+
+    /// <summary>
     /// When the Metaverse Object becomes due for deletion, once its grace period ends (UTC); null when it is not
     /// pending deletion.
     /// </summary>
@@ -159,6 +165,7 @@ public class MetaverseObjectDto
             Origin = entity.Origin,
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate,
             IsPendingDeletion = entity.IsPendingDeletion,
+            ExportReviewPending = entity.ScopeReviewPending,
             DeletionEligibleDate = entity.DeletionEligibleDate,
             DeletionTriggeredBySystemName = entity.DeletionTriggeredBySystemName,
             Type = MetaverseObjectTypeDto.FromEntity(entity.Type),

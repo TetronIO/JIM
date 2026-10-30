@@ -3,6 +3,8 @@
 @using JIM.Models.Staging
 @using JIM.Web.Models
 @inject IDialogService DialogService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -30,10 +32,21 @@
             </MudText>
         </div>
         <MudSpacer />
+        @if (_jsonView)
+        {
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ContentCopy" OnClick="CopyAsync"
+                       Disabled="@string.IsNullOrEmpty(SettingValue.StringValue)" data-testid="jim-sql-json-copy">Copy</MudButton>
+        }
+        @* The cards cannot show a document that cannot be read; the problems above the text say what to fix. *@
         <MudButton Variant="Variant.Text" StartIcon="@(_jsonView ? Icons.Material.Filled.ViewAgenda : Icons.Material.Filled.DataObject)"
-                   OnClick="ToggleJsonViewAsync" data-testid="jim-sql-object-types-json-toggle">
+                   OnClick="ToggleJsonViewAsync" Disabled="@(_jsonView && !CardsCanShowTheDocument)" data-testid="jim-sql-object-types-json-toggle">
             @(_jsonView ? "View as cards" : "View as JSON")
         </MudButton>
+        @if (_jsonView && string.IsNullOrWhiteSpace(SettingValue.StringValue) && !string.IsNullOrEmpty(SettingValue.Setting.Example))
+        {
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.PostAdd" OnClick="InsertExampleAsync"
+                       data-testid="jim-sql-json-insert-example">Insert Example</MudButton>
+        }
         @if (!_jsonView)
         {
             <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" OnClick="AddObjectTypeAsync"
@@ -41,17 +54,10 @@
         }
     </div>
 
-    @if (_loadFailure != null)
-    {
-        <MudAlert Severity="Severity.Warning" Class="mt-4" data-testid="jim-sql-object-types-unloadable">
-            The document cannot be shown as cards until it is fixed: @_loadFailure
-        </MudAlert>
-    }
-
     @if (_jsonView)
     {
-        <ConnectedSystemSettingField SettingValue="@SettingValue" IsRequired="true" Immediate="true" CssClass="mt-4"
-                                     ValueChanged="OnJsonChangedAsync" />
+        <SqlObjectTypesJsonView Value="@SettingValue.StringValue" ValueChanged="OnJsonChangedAsync" Problems="@_problems"
+                                Label="@SettingValue.Setting.Name" Class="mt-4" />
     }
     else if (_model != null)
     {
@@ -130,16 +136,34 @@
     [Parameter]
     public EventCallback ValueChanged { get; set; }
 
+    /// <summary>
+    /// Raised when the document gains or loses problems the Connector would refuse it for, so the settings tab can
+    /// hold Save Settings while there are any.
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> HasProblemsChanged { get; set; }
+
     [Parameter]
     public string? Class { get; set; }
 
     private SqlObjectTypesEditorModel? _model;
-    private string? _loadFailure;
+
+    /// <summary>The parser's problems with the document as it stands, located for the JSON view.</summary>
+    private IReadOnlyList<SqlObjectTypesJsonProblem> _problems = [];
+
+    /// <summary>What <see cref="HasProblemsChanged"/> last said; the settings tab assumes none until told.</summary>
+    private bool _reportedHasProblems;
     private bool _jsonView;
     private readonly HashSet<SqlObjectTypeDocument> _expanded = [];
 
     private IReadOnlyList<ConnectorCatalogueObject> _catalogueObjects = [];
     private bool _catalogueLoading;
+
+    /// <summary>
+    /// The read of the table list in progress, or last made, so the Add Object Type dialog can wait for it when
+    /// opened before it has finished, rather than finding no catalogue.
+    /// </summary>
+    private Task _catalogueLoad = Task.CompletedTask;
     private string? _catalogueFailure;
     private bool _catalogueRequested;
 
@@ -159,12 +183,30 @@
     private string? DeltaImportMode => SettingValues
         .FirstOrDefault(sv => sv.Setting.Name == SqlConnectorConstants.SettingDeltaImportMode)?.StringValue;
 
-    protected override void OnInitialized()
+    private bool CardsCanShowTheDocument => !_problems.Any(problem => problem.StopsReading);
+
+    protected override async Task OnInitializedAsync()
     {
         LoadModel();
 
         // Opened on JSON straight away where the document cannot be shown as cards, so nothing is hidden.
         _jsonView = _model == null;
+        await RefreshProblemsAsync();
+    }
+
+    /// <summary>
+    /// Re-reads the parser's problems with the setting's value, and tells the settings tab when there come to be
+    /// some, or none, so Save Settings is held exactly while saving would be refused.
+    /// </summary>
+    private async Task RefreshProblemsAsync()
+    {
+        _problems = SqlObjectTypesJsonProblems.Locate(SettingValue.StringValue);
+        var hasProblems = _problems.Count > 0;
+        if (hasProblems == _reportedHasProblems)
+            return;
+
+        _reportedHasProblems = hasProblems;
+        await HasProblemsChanged.InvokeAsync(hasProblems);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -184,10 +226,9 @@
 
     private void LoadModel()
     {
-        if (SqlObjectTypesEditorModel.TryLoad(SettingValue.StringValue, out var model, out var failure))
+        if (SqlObjectTypesEditorModel.TryLoad(SettingValue.StringValue, out var model, out _))
         {
             _model = model;
-            _loadFailure = null;
             _model!.DeltaImportMode = DeltaImportMode;
             _model.SelectedObjectTypeNames = SelectedObjectTypeNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -198,7 +239,6 @@
         else
         {
             _model = null;
-            _loadFailure = failure;
         }
     }
 
@@ -211,10 +251,44 @@
         _catalogueFailure = null;
         StateHasChanged();
 
-        var read = await Catalogue.GetObjectsAsync();
+        _catalogueLoad = ReadCatalogueObjectsAsync(Catalogue);
+        await _catalogueLoad;
+    }
+
+    private async Task ReadCatalogueObjectsAsync(IConnectedSystemCatalogueSource catalogue)
+    {
+        var read = await catalogue.GetObjectsAsync();
         _catalogueObjects = read.Value ?? [];
         _catalogueFailure = read.Failure;
         _catalogueLoading = false;
+    }
+
+    /// <summary>The table list for the Add Object Type dialog, once any read in progress has finished.</summary>
+    private async Task<IReadOnlyList<ConnectorCatalogueObject>> CatalogueObjectsWhenReadAsync()
+    {
+        await _catalogueLoad;
+        return _catalogueObjects;
+    }
+
+    /// <summary>
+    /// A table's columns for the Add Object Type dialog, once any read of the table list has finished. Where that
+    /// read failed, its reason is the answer: reading the table would wait out the same failure.
+    /// </summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> TableWhenReadAsync(string? schema, string table)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await LoadTableAsync(schema, table);
+    }
+
+    /// <summary>A statement's columns for the Add Object Type dialog; see <see cref="TableWhenReadAsync"/>.</summary>
+    private async Task<ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>> StatementWhenReadAsync(string statement)
+    {
+        await _catalogueLoad;
+        return _catalogueFailure != null
+            ? new ConnectedSystemCatalogueRead<ConnectorCatalogueObjectDetail>(null, _catalogueFailure)
+            : await DescribeStatementAsync(statement);
     }
 
     private async Task RetryCatalogueAsync()
@@ -251,6 +325,7 @@
             return;
 
         SettingValue.StringValue = _model.ToJson();
+        await RefreshProblemsAsync();
         await ValueChanged.InvokeAsync();
     }
 
@@ -262,26 +337,39 @@
             _expanded.Remove(objectType);
     }
 
-    private async Task AddObjectTypeAsync()
-    {
-        if (_model == null)
-            return;
-
-        var index = _model.AddObjectType();
-        _expanded.Add(_model.ObjectTypes[index]);
-        await WriteBackAsync();
-    }
+    private Task AddObjectTypeAsync() => AddObjectTypeFromAsync(null, null);
 
     /// <summary>
-    /// Adds an Object Type for a table a foreign key points at, reading from that table and anchored on the
-    /// column the key points at. It still needs a name, which its card asks for.
+    /// Offers an Object Type for a table a foreign key points at: the Add Object Type dialog, with that table chosen.
     /// </summary>
-    private async Task AddSuggestedObjectTypeAsync(SqlObjectTypeSuggestion suggestion)
+    private Task AddSuggestedObjectTypeAsync(SqlObjectTypeSuggestion suggestion) =>
+        AddObjectTypeFromAsync(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName);
+
+    /// <summary>
+    /// Opens the Add Object Type dialog and adds what it builds as an expanded card, where the Delta Import
+    /// fields and any problems are waiting.
+    /// </summary>
+    private async Task AddObjectTypeFromAsync(string? schema, string? table)
     {
         if (_model == null)
             return;
 
-        var index = _model.AddObjectType(suggestion.ReferencedSchemaName, suggestion.ReferencedObjectName, [suggestion.ReferencedColumnName]);
+        var objectType = await SqlAddObjectTypeDialog.ShowAsync(
+            DialogService,
+            _model.ObjectTypes,
+            schema,
+            table,
+            Catalogue == null ? null : CatalogueObjectsWhenReadAsync,
+            Catalogue == null ? null : TableWhenReadAsync,
+            Catalogue == null ? null : StatementWhenReadAsync,
+            DeltaImportMode);
+
+        if (objectType == null)
+            return;
+
+        // Only the new card is left open, so it is where the administrator's eye lands rather than a scroll away.
+        var index = _model.AddObjectType(objectType);
+        _expanded.Clear();
         _expanded.Add(_model.ObjectTypes[index]);
         await WriteBackAsync();
     }
@@ -330,7 +418,31 @@
     /// The text is the setting's value as typed; it is read back into cards only when the administrator returns
     /// to them. The settings tab is told so its save gate follows.
     /// </summary>
-    private Task OnJsonChangedAsync() => ValueChanged.InvokeAsync();
+    private async Task OnJsonChangedAsync(string text)
+    {
+        SettingValue.StringValue = text;
+        await RefreshProblemsAsync();
+        await ValueChanged.InvokeAsync();
+    }
+
+    private Task InsertExampleAsync() => OnJsonChangedAsync(SettingValue.Setting.Example ?? string.Empty);
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", SettingValue.StringValue ?? string.Empty);
+            Snackbar.Add($"{SettingValue.Setting.Name} copied to the clipboard.", Severity.Info);
+        }
+        catch (JSException)
+        {
+            Snackbar.Add("The browser would not copy to the clipboard. Select the text and copy it instead.", Severity.Warning);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit has gone; there is nobody left to tell.
+        }
+    }
 
     private async Task ToggleJsonViewAsync()
     {
@@ -340,8 +452,8 @@
             return;
         }
 
-        // Back to the cards from whatever was typed. A document the cards cannot show keeps the JSON view open
-        // and says why, rather than dropping what it cannot represent.
+        // Back to the cards from whatever was typed. The button is held while the cards cannot show the document,
+        // and a document they still cannot read keeps the JSON view open rather than dropping what it holds.
         _expanded.Clear();
         LoadModel();
         _jsonView = _model == null;

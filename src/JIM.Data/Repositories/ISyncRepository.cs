@@ -65,6 +65,14 @@ public interface ISyncRepository
     Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince);
 
     /// <summary>
+    /// <see cref="GetConnectedSystemObjectModifiedSinceCountAsync"/> plus every object of the given Object Types: the
+    /// progress estimate of a Delta Synchronisation that processes some types in full because configuration changes are
+    /// awaiting synchronisation for them (#2615). An object that is both modified and of one of the types counts once.
+    /// An empty collection counts exactly as <see cref="GetConnectedSystemObjectModifiedSinceCountAsync"/> does.
+    /// </summary>
+    Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds);
+
+    /// <summary>
     /// Loads a page of CSOs with full attribute values for sync processing.
     /// </summary>
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
@@ -574,15 +582,44 @@ public interface ISyncRepository
     /// read its rules: the run evaluated these objects against rules that no longer stand, and the change that
     /// replaced them flagged the objects for review against the new configuration. Clearing then would lose that
     /// review, so nothing is cleared and the next run evaluates them again. The check and the clear are one
-    /// statement, so a rule saved at any moment either is seen by it or flags the objects again after it.
+    /// statement, but it checks on the snapshot it took when it started, so a clear that cleared anything checks
+    /// again once it has committed and, if a rule was saved under it, flags exactly the objects it just cleared
+    /// again. A rule saved at any moment is therefore seen by the clear, seen by that second look, or runs its own
+    /// flagging after the clear committed and finds the objects unflagged.
+    /// <para>
+    /// A flag is also kept on any object written since the run loaded it (#2615): a sign-in editing a person's
+    /// profile, say, writes the row and flags it again, and the run's evaluation never saw that edit. Each object is
+    /// cleared only while its row version (<c>xmin</c>) is still the one the run read, so the object is reviewed again
+    /// by the next run instead of the edit going unreviewed.
+    /// </para>
     /// </summary>
-    /// <param name="ids">The objects the run has re-evaluated.</param>
+    /// <param name="seenRowVersions">The objects the run has re-evaluated, each with the row version
+    /// (<c>MetaverseObject.xmin</c>) the run read when it loaded the object.</param>
     /// <param name="exportRulesReadWatermark">The newest Created or Last Updated stamp among the export
     /// Synchronisation Rules as the run read them (<c>ExportEvaluationCache.ExportRulesReadWatermark</c>); null when
     /// the run read none, in which case any export rule existing now counts as a change.</param>
-    /// <returns>False when the flags were kept because the export rules changed; true otherwise (including when
-    /// <paramref name="ids"/> is empty).</returns>
-    Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark);
+    /// <returns>False when the flags were kept, or cleared and flagged again, because the export rules changed; true
+    /// otherwise (including when <paramref name="seenRowVersions"/> is empty, and when individual flags were kept
+    /// because their object was written since it was loaded).</returns>
+    Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark);
+
+    /// <summary>
+    /// Clears, in one statement and without loading the objects, the <c>ScopeReviewPending</c> flag on every Metaverse
+    /// Object whose type none of the given types covers (#2615). A review of such an object can neither provision nor
+    /// deprovision anything, so keeping it flagged only costs the review. Guarded exactly as
+    /// <see cref="ClearMetaverseObjectScopeReviewPendingAsync"/> is: nothing is cleared when an export Synchronisation
+    /// Rule has been created or updated since the run read its rules, because that change flagged the objects for
+    /// review against the rules as they now stand, and the rule may be the one that covers their type. It takes the same
+    /// second look: once it has cleared anything it checks the rules again and, if one was saved under it, flags
+    /// everything it cleared again.
+    /// </summary>
+    /// <param name="coveredMetaverseObjectTypeIds">The Metaverse Object Types an enabled export Synchronisation Rule
+    /// covers, as the run read the rules. A disabled rule does not cover its type: it provisions and deprovisions
+    /// nothing, and re-enabling it flags the whole type again (#1925).</param>
+    /// <param name="exportRulesReadWatermark">As for <see cref="ClearMetaverseObjectScopeReviewPendingAsync"/>.</param>
+    /// <returns>How many flags were left cleared: zero when the export rules changed, including when a rule saved while
+    /// the statement ran led to everything it cleared being flagged again.</returns>
+    Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark);
 
     /// <summary>
     /// Flags every Metaverse Object of the given type <c>ScopeReviewPending</c>, so the next synchronisation of any
@@ -600,10 +637,12 @@ public interface ISyncRepository
     /// synchronisation re-evaluates each one against every export rule (issue #2318). Set when a synchronisation
     /// disconnects an object from a Connected System an export rule provisions to: the account was deleted in that
     /// system, nothing else about the person changed, and only the review can stage the provisioning Create that puts
-    /// it back, once the departed object is gone. Already-flagged objects are left as they are.
+    /// it back, once the departed object is gone. An object that is flagged already is written again, which moves its
+    /// row version: a drain that loaded it flagged and is about to clear it holds the version it read, and must find
+    /// the row changed, or it would clear a flag whose new reason its review never saw (#2615).
     /// </summary>
     /// <param name="ids">The Metaverse Objects to flag; ids that match no object are ignored.</param>
-    /// <returns>How many objects were not already flagged.</returns>
+    /// <returns>How many objects were flagged: every given id that matches an object, flagged already or not.</returns>
     Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
@@ -662,10 +701,12 @@ public interface ISyncRepository
     Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);
 
     /// <summary>
-    /// Updates a single MVO. Used for ad-hoc updates outside of batch processing
-    /// (e.g., disconnection handling).
+    /// Records when a Metaverse Object's last connector was disconnected, and writes nothing else. The per-object
+    /// deletion fallback uses it so housekeeping retries a deletion that failed. A one-column write rather than an
+    /// update of the whole object: the object is detached by then, and saving its graph would reach objects created
+    /// on the same page, which the bulk create leaves untracked (#2598).
     /// </summary>
-    Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject);
+    Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate);
 
     /// <summary>
     /// Deletes an MVO, cascading FK cleanup via raw SQL to prevent constraint violations. In the same transaction,
@@ -2046,7 +2087,7 @@ public interface ISyncRepository
     /// How many Metaverse Objects of <paramref name="metaverseObjectTypeId"/>, joined to a Connected System
     /// Object of <paramref name="connectedSystemId"/>, currently hold no value for <paramref name="metaverseAttributeId"/>
     /// (Unique Value Generation, #242, Phase 3): the count behind a generated import mapping's "N existing
-    /// objects would receive a value on the next full synchronisation" preview line. Works against a mapping
+    /// objects would receive a value at the next synchronisation" preview line. Works against a mapping
     /// that has not yet been saved (the ids are supplied directly, not resolved from a persisted mapping), so
     /// the portal can show this while an administrator is still composing the mapping.
     /// </summary>
@@ -2203,6 +2244,60 @@ public interface ISyncRepository
     /// </summary>
     /// <returns>How many values were forgotten.</returns>
     Task<int> DeleteRetiredGeneratedValuesForAttributeAsync(int? metaverseAttributeId, int? connectedSystemObjectTypeAttributeId);
+
+    #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    /// <summary>
+    /// The ids of every configuration change awaiting synchronisation for the Connected System, without claiming them.
+    /// The worker reads these first of all when it takes a synchronisation task, before it loads the Connected System,
+    /// and hands them to the run as the only rows it may claim
+    /// (<see cref="ClaimConfigurationChangeSynchronisationsAsync"/>). Also a plain read for anything that needs to know
+    /// what is waiting; it changes nothing.
+    /// </summary>
+    Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Claims, for a synchronisation run, the given configuration changes that are still awaiting synchronisation for the
+    /// Connected System, in one statement, and returns what it claimed. A synchronisation calls this first, before it
+    /// loads any Synchronisation Rule, and processes every object of the types returned.
+    /// <para>
+    /// The guarantee: every row claimed was committed before the worker read the ids it hands over here, and the worker reads
+    /// them before it loads anything the run uses (the Connected System with its Object Types and their Simple Mode Object
+    /// Matching Rules, then the Synchronisation Rules). A row is only written after the configuration change it records
+    /// has been saved, so every claimed change is already in everything the run loaded. A change saved after the ids were
+    /// read is not among them; it stays awaiting the next run, however soon after it commits.
+    /// </para>
+    /// <para>
+    /// A change claimed by an earlier run that failed or was cancelled is claimed again (the earlier claim is
+    /// overwritten), provided its id is among those handed over.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System being synchronised.</param>
+    /// <param name="eligibleIds">The ids the run may claim, as read before it loaded anything
+    /// (<see cref="GetConfigurationChangeSynchronisationIdsAwaitingAsync"/>). Rows not listed are never claimed.</param>
+    /// <param name="runActivityId">The synchronisation run's Activity: what the claimed rows are stamped with, and what
+    /// <see cref="ApplyClaimedConfigurationChangeSynchronisationsAsync"/> later applies by.</param>
+    /// <returns>One entry per claimed row; empty when nothing eligible is still awaiting synchronisation.</returns>
+    Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId);
+
+    /// <summary>
+    /// Marks applied the changes the run claimed (<see cref="ClaimConfigurationChangeSynchronisationsAsync"/>), as the
+    /// run completes. A change another run has since claimed is not the caller's to apply and is left for that run, so
+    /// the count can fall short of what the caller claimed; a run that applies nothing leaves its changes awaiting
+    /// synchronisation, for the next run to claim.
+    /// </summary>
+    /// <param name="runActivityId">The synchronisation run's Activity.</param>
+    /// <returns>How many changes were marked applied.</returns>
+    Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId);
+
+    /// <summary>
+    /// The Connected System Object Types the Connected System has configuration changes awaiting synchronisation for,
+    /// without claiming them: a read for the synchronisation preview, which must not change what a run would do. Never
+    /// call <see cref="ClaimConfigurationChangeSynchronisationsAsync"/> for this.
+    /// </summary>
+    Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId);
 
     #endregion
 }

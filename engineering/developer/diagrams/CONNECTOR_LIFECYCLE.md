@@ -1,8 +1,8 @@
 # Connector Lifecycle
 
-> Last updated: 2026-09-29, JIM v0.16.0
+> Last updated: 2026-10-29, JIM v0.17.0
 
-This diagram shows how connectors are resolved, configured, opened, used, and closed across import, export and password operations. Connectors implement capability interfaces that determine their lifecycle shape. The built-in connectors are the LDAP, File, SCIM 2.0 Client and SQL Connectors; the File Connector is the only file-based one.
+This diagram shows how connectors are resolved, configured, opened, used, and closed across import, export and password operations. Connectors implement capability interfaces that determine their lifecycle shape. The built-in connectors are the LDAP, File, SCIM 2.0 Client, SCIM 2.0 Service Provider and SQL Connectors; the File Connector is the only file-based one. The SCIM 2.0 Service Provider Connector (#124, Preview) calls nothing out: SCIM clients write to JIM's own SCIM endpoint, which keeps what they write in the Connected System's store, and the Connector imports that store, Full and Delta. It does not export.
 
 ## Connector Interface Hierarchy
 
@@ -26,7 +26,10 @@ flowchart LR
     IConnector --> IPhases[IConnectorPhases<br/>GetPhases: steps declared<br/>before a run starts, #454]
     IConnector --> IScope[IConnectorManagedScope<br/>SetManagedScope before export<br/>IConnectorContainment<br/>IsWithinContainer]
     IConnector --> IPassword[IConnectorPasswordManagement<br/>OpenPasswordConnection<br/>SetPasswordAsync<br/>ClosePasswordConnection<br/>IConnectorPasswordPolicyDiscovery]
-    IConnector --> IDiscovery[Discovery and advice<br/>IConnectorDirectoryServers<br/>IConnectorObjectClassUsage<br/>IConnectorContainerObjectCounts<br/>IConnectorDetectedCapabilities<br/>IConnectorObjectTypeSelectionValidation<br/>IConnectorRecommendedExportParallelism<br/>IConnectorSecureEndpoint]
+    IConnector --> IDiscovery[Discovery and advice<br/>IConnectorDirectoryServers<br/>IConnectorObjectClassUsage<br/>IConnectorContainerObjectCounts<br/>IConnectorDetectedCapabilities<br/>IConnectorObjectTypeSelectionValidation<br/>IConnectorRecommendedExportParallelism<br/>IConnectorSecureEndpoint<br/>IConnectorCatalogue: tables, views<br/>and columns, SQL, #2570]
+    IConnector --> IProbe[IConnectorUniquenessProbe<br/>Is a generated value in use<br/>in the target? #242]
+    IConnector --> IWatermark[IConnectorImportWatermarkDescription<br/>Describes the range an import read<br/>in the Connector's own terms]
+    IConnector --> IStore[IConnectorScimResourceStoreAware<br/>SetScimResourceStore: the SCIM<br/>Service Provider's store, #124]
 ```
 
 Every `ImportAsync` and `ExportAsync` call is handed an `IConnectorProgress` (never null), through which a connector narrates what it is doing, enters the phases it declared via `IConnectorPhases`, and states how many objects it expects and has read (#1148). A connector that declares no phases still works: its messages appear under the JIM step that hosts the call.
@@ -42,12 +45,14 @@ flowchart TD
     MatchName -->|LdapConnectorName| CreateLdap[new LdapConnector]
     MatchName -->|FileConnectorName| CreateFile[new FileConnector]
     MatchName -->|ScimClientConnectorName| CreateScim[new ScimConnector]
+    MatchName -->|ScimServiceProviderConnectorName| CreateScimSp[new ScimServiceProviderConnector]
     MatchName -->|SqlConnectorName| CreateSql[new SqlConnector]
     MatchName -->|Unknown| ThrowError[throw NotSupportedException<br/>Activity fails with error]
 
     CreateLdap --> GetRunProfile[Resolve RunProfile<br/>from ConnectedSystem.RunProfiles]
     CreateFile --> GetRunProfile
     CreateScim --> GetRunProfile
+    CreateScimSp --> GetRunProfile
     CreateSql --> GetRunProfile
 
     GetRunProfile --> DeclarePhases[ActivityPhaseReporter.StartAsync<br/>Calls IConnectorPhases.GetPhases if implemented<br/>A declaration failure is logged, never fatal]
@@ -70,8 +75,13 @@ flowchart TD
     InjectCert -->|No| InjectCred
     SetCert --> InjectCred{Implements<br/>IConnectorCredentialAware?}
     InjectCred -->|Yes| SetCred[SetCredentialProtection]
-    InjectCred -->|No| Open
-    SetCred --> Open[Connecting step<br/>OpenImportConnection<br/>with system settings]
+    InjectCred -->|No| Flag
+    SetCred --> Flag{Connector behind a<br/>feature flag that is<br/>now turned off?}
+    Flag -->|Yes| RefuseFlag([The import fails, naming the feature])
+    Flag -->|No| Store{Implements IConnectorScim<br/>ResourceStoreAware?}
+    Store -->|Yes| SetStore[SetScimResourceStore<br/>the Connected System's store, #124]
+    Store -->|No| Open
+    SetStore --> Open[Connecting step<br/>OpenImportConnection<br/>with system settings<br/>Activity records the watermark<br/>the run started from]
 
     Open --> PageLoop{More pages?<br/>initialPage OR<br/>tokens present}
     Open -->|Fails to connect, #1875| Close
@@ -86,10 +96,10 @@ flowchart TD
     PageLoop -->|No| Close[CloseImportConnection<br/>in finally block - always called]
     Close --> CloseData{Close returned<br/>connector data?}
     CloseData -->|Yes| PersistClose[Persist it now and drop the page watermark<br/>e.g. a domain controller pin<br/>the connection invalidated, #1169]
-    CloseData -->|No| Stage[Stage the run: deletions, references,<br/>CSOs, reconciliation, results]
+    CloseData -->|No| Stage[Stage the run: deletions, references,<br/>CSOs, reconciliation, results<br/>A Delta Import whose deletions a<br/>Run Profile limit withheld drops<br/>the page watermark, #2089]
     PersistClose --> Stage
     Stage --> PersistWM{Page watermark<br/>still held?}
-    PersistWM -->|Yes| UpdateCS[Update ConnectedSystem<br/>PersistedConnectorData<br/>only once staging succeeded, #1868]
+    PersistWM -->|Yes| UpdateCS[Update ConnectedSystem<br/>PersistedConnectorData<br/>only once staging succeeded, #1868<br/>Activity records the watermark reached]
     PersistWM -->|No| Done([Import complete])
     UpdateCS --> Done
 
@@ -113,7 +123,7 @@ flowchart TD
     Ready -->|No| RefuseRead[Refuse the Delta Import<br/>naming what could not be read, #1737]
     Ready -->|Yes, possibly with notes| Baseline{Last import left<br/>a watermark?}
     Baseline -->|No| Fallback[Fall back to a Full Import<br/>to establish the baseline<br/>Warning on the Activity]
-    Baseline -->|Yes| Read[ReadChangesAsync<br/>changes, deletions and renames<br/>paged across calls if needed]
+    Baseline -->|Yes| Read[ReadChangesAsync<br/>changes, deletions and renames<br/>paged across calls if needed<br/>OpenLDAP and 389 read their change<br/>log a page at a time, #2486; OpenLDAP<br/>stopped part-way by a size limit fails]
 ```
 
 A Full Import calls only `CaptureWatermarkAsync`, so it leaves the baseline the first Delta Import reads from; later Delta Import pages call only `HasBaseline` and `ReadChangesAsync`.
@@ -128,14 +138,14 @@ flowchart TD
     CheckType -->|IConnectorExportUsingCalls| ManagedScope{Implements IConnectorManagedScope<br/>and the system has container<br/>selections or exclusions?}
     ManagedScope -->|Yes| SetScope[SetManagedScope<br/>connector refuses, per object,<br/>writes outside it, #1250]
     ManagedScope -->|No| InjectCert
-    SetScope --> InjectCert[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them]
+    SetScope --> InjectCert[Inject CertificateProvider<br/>and CredentialProtection<br/>if connector supports them<br/>PrepareConnectorForExport: every<br/>worker's connector the same, #1764]
     InjectCert --> Open[OpenExportConnection<br/>with system settings]
 
     Open -->|Fails to connect, #1875| CloseExport
     Open --> SplitExports[Split exports into<br/>immediate and deferred]
-    SplitExports --> CheckParallel{MaxParallelism > 1?}
+    SplitExports --> CheckParallel{MaxParallelism > 1<br/>and more than one batch?<br/>Both passes, #1820}
 
-    CheckParallel -->|Yes| ParallelExport[Each batch gets:<br/>Own connector instance via factory<br/>Own OpenExportConnection<br/>Own DbContext]
+    CheckParallel -->|Yes| ParallelExport[Up to MaxParallelism workers<br/>Worker 0 on the main connector<br/>Each other worker: own connector<br/>via factory, opened on its first batch,<br/>kept for every batch it runs<br/>Each batch: own DbContext]
     CheckParallel -->|No| SequentialExport[Single connector<br/>processes batches sequentially]
 
     ParallelExport --> BatchLoop[connector.ExportAsync<br/>per batch, plus IConnectorProgress]
@@ -154,18 +164,19 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Main[Main connector instance<br/>OpenExportConnection] --> Factory[Connector factory creates<br/>new instances per batch]
+    Main[Main connector instance<br/>OpenExportConnection] --> W0[Worker 0<br/>runs its batches on<br/>the main connector]
+    Main --> Factory[Connector factory creates<br/>one instance per further worker]
 
-    Factory --> B1[Batch 1<br/>New LdapConnector<br/>Own OpenExportConnection<br/>Own DbContext]
-    Factory --> B2[Batch 2<br/>New LdapConnector<br/>Own OpenExportConnection<br/>Own DbContext]
-    Factory --> BN[Batch N<br/>New LdapConnector<br/>Own OpenExportConnection<br/>Own DbContext]
+    Factory --> W1[Worker 1<br/>New LdapConnector<br/>Own OpenExportConnection<br/>kept for all its batches]
+    Factory --> WN[Worker N-1<br/>New LdapConnector<br/>Own OpenExportConnection<br/>kept for all its batches]
 
-    B1 --> Close1[CloseExportConnection]
-    B2 --> Close2[CloseExportConnection]
-    BN --> CloseN[CloseExportConnection]
+    W1 -.->|A batch fails| Replace[Discard the connector:<br/>capture its containers,<br/>CloseExportConnection,<br/>open a fresh one for<br/>the worker's next batch]
 
-    Close1 --> MainClose[Main connector<br/>CloseExportConnection]
-    Close2 --> MainClose
+    W1 --> Close1[Worker done:<br/>CloseExportConnection]
+    WN --> CloseN[Worker done:<br/>CloseExportConnection]
+
+    W0 --> MainClose[Main connector<br/>CloseExportConnection]
+    Close1 --> MainClose
     CloseN --> MainClose
 ```
 
@@ -192,11 +203,11 @@ flowchart TD
 
 - **Service injection before open**<br /> Certificate and credential providers are injected before `OpenImportConnection`/`OpenExportConnection` is called. This allows connectors to decrypt passwords and load certificates during connection setup.
 
-- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page, ensuring the connector sees a consistent view across pages. The new watermark from the first page is only saved once the run has staged everything the pages returned (#1868); a run that fails or is cancelled first keeps the watermark it started with, so the next run re-reads those changes instead of skipping them.
+- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page, ensuring the connector sees a consistent view across pages. The new watermark from the first page is only saved once the run has staged everything the pages returned (#1868); a run that fails or is cancelled first keeps the watermark it started with, so the next run re-reads those changes instead of skipping them. A Delta Import whose detected deletions a Run Profile limit withheld keeps it too (#2089), so the next Delta Import reports them again. The Activity records the watermark the run started from and the one it reached (`ImportWatermarkFrom`, `ImportWatermarkTo`), which a connector implementing `IConnectorImportWatermarkDescription` describes in its own terms ("After 8, up to 15 (change sequence)").
 
-- **Parallel connector isolation**<br /> Each parallel export batch gets its own connector instance created via factory. This avoids shared connection state between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections.
+- **Parallel connector isolation (#1820)**<br /> Each parallel export worker gets its own connector instance created via factory (worker 0 uses the main one), opened on its first batch and kept for every batch it runs rather than opened and closed per batch. No connection is ever shared between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections. A connector whose batch fails is discarded, and the worker opens a fresh one for its next batch.
 
-- **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes. Each connection is opened inside the block that closes it, including a parallel export batch's own connector, so a connection that fails to open is closed too (#1875): failing to connect is exactly when a connector has state to return at close, such as a pinned domain controller the failure invalidated.
+- **Close in finally, on every channel**<br /> The export connection is always closed, even if an exception occurs during export. The import connection is too, so an import that fails part-way still releases its connection and any temporary trust directory prepared for it, and the password channel likewise. This prevents connection leaks in long-running worker processes. Each connection is opened inside the block that closes it, including a parallel export worker's own connector, so a connection that fails to open is closed too (#1875): failing to connect is exactly when a connector has state to return at close, such as a pinned domain controller the failure invalidated.
 
 - **Connector state returned at close wins**<br /> `CloseImportConnection` may return persisted connector data, persisted when the connection closes (even if the import failed) in place of the page watermark, which is then not persisted at all; the LDAP Connector uses this when using the connection invalidated a previously persisted domain controller pin (#1169). Null, the usual case, means nothing to override.
 
@@ -204,7 +215,7 @@ flowchart TD
 
 - **Settings reconciled at startup**<br /> When JIM starts, after each Connector Definition is brought into line with its Connector, every Connected System built on it gains a value for any setting the Connector has since added (carrying its default), and an unset value takes a newly declared default (`ConnectedSystemServer.ReconcileConnectedSystemSettingValuesAsync`). A Connected System that changes is saved under a System-attributed Activity recording what was added; one already in line is not written to, so an ordinary restart records nothing.
 
-- **Managed scope is the connector's knowledge (#1250)**<br /> Container selection means the scope JIM manages, not merely what it reads. Before an export JIM states the Connected System's scope-deciding containers (selections and exclusions) to a connector implementing `IConnectorManagedScope`, and the connector refuses per object to write outside them, so the rest of the run proceeds. A Connected System with no container selections states nothing and permits everything. The scope is currently stated only on the connector instance the run was resolved with: the per-batch instances a parallel export creates through the factory do not receive it.
+- **Managed scope is the connector's knowledge (#1250)**<br /> Container selection means the scope JIM manages, not merely what it reads. Before an export JIM states the Connected System's scope-deciding containers (selections and exclusions) to a connector implementing `IConnectorManagedScope`, and the connector refuses per object to write outside them, so the rest of the run proceeds. A Connected System with no container selections states nothing and permits everything. The scope is stated by `ExportExecutionServer.PrepareConnectorForExport`, the one place every export connector is prepared, so every parallel worker's connector receives it as the main one does (#1764).
 
 - **Declared phases (#454, #1148)**<br /> A connector that implements `IConnectorPhases` declares its internal steps before the run starts, and enters them through `IConnectorProgress`, so an administrator sees what the connector still has to do rather than only what it is doing now. A declaration that throws is logged and the run continues with JIM's own steps only.
 

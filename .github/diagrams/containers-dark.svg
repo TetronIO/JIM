@@ -103,10 +103,39 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
 .jim-diagram .jimdg-person-glyph { fill: var(--jimdg-sub-text); opacity: 0.9; }
 .jim-diagram .jimdg-glyph-code   { font-family: "IBM Plex Mono", Consolas, monospace; font-size: 10px; font-weight: 600; fill: var(--jimdg-sub-text); }
 .jim-diagram .jimdg-packet { fill: var(--jimdg-packet); }
+.jim-diagram .jimdg-dg-label { font-size: 13px; font-weight: 600; fill: var(--jimdg-node-text); }
+.jim-diagram .jimdg-dg-sub   { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-note  { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-edge  { font-size: 12px; font-weight: 600; fill: var(--jimdg-flow-text); }
+.jim-diagram .jimdg-dg-title { font-size: 14px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-dg-tag   { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-badge { fill: var(--jimdg-core-fill); stroke: var(--jimdg-hub-fill); stroke-width: 2; }
+.jim-diagram .jimdg-dg-badge-text { font-size: 12px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-dg-code { font-family: "IBM Plex Mono", Consolas, monospace; font-weight: 400; }
+.jim-diagram .jimdg-dg-label-on { font-size: 13px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-dg-start { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-dg-terminal { fill: var(--jimdg-muted-fill); stroke: var(--jimdg-muted-stroke); stroke-width: 2; stroke-dasharray: 5 4; }
+.jim-diagram .jimdg-dg-chip { font-size: 12px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-chip-name { font-weight: 700; fill: var(--jimdg-chip-text); }
+.jim-diagram .jimdg-dg-token-pill { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-token, .jim-diagram .jimdg-dg-token-sm { font-family: "IBM Plex Mono", Consolas, monospace; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-dg-token { font-size: 22px; }
+.jim-diagram .jimdg-dg-token-sm { font-size: 15px; }
+.jim-diagram .jimdg-dg-token-strong, .jim-diagram .jimdg-dg-token-sm-strong { font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-dg-leader { stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.jim-diagram .jimdg-dg-card { fill: var(--jimdg-node-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-row { fill: none; stroke: none; }
+.jim-diagram .jimdg-dg-question { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-sub-on { font-size: 12px; fill: var(--jimdg-core-text); opacity: 0.88; }
+.jim-diagram .jimdg-dg-dot { fill: none; stroke: var(--jimdg-node-stroke); stroke-width: 1.5; }
+.jim-diagram .jimdg-dg-dot-on { fill: var(--jimdg-core-fill); }
+.jim-diagram a.jimdg-dg-link:hover rect,
+.jim-diagram a.jimdg-dg-link:focus-visible rect { stroke: var(--jimdg-core-fill); stroke-width: 2; }
+.jim-diagram a.jimdg-dg-link:focus-visible { outline: none; }
 @media (prefers-reduced-motion: reduce) { .jimdg-packet { display: none; } }
 </style>
   <title id="jimdg-ct-title">JIM Containers</title>
-  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an Identity Provider authenticates sign-in over OIDC, and can push Users and Groups over SCIM 2.0 to the Web Application's SCIM endpoint, which keeps them in PostgreSQL for the Worker Service to import on a Schedule. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline, delivers queued passwords, and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's portal, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an Identity Provider authenticates sign-in over OIDC, and can push Users and Groups over SCIM 2.0 to the Web Application's SCIM endpoint, which keeps them in PostgreSQL for the Worker Service to import on a Schedule. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline, delivers queued passwords, and hosts the Connectors, connecting to Directory Services, HR systems, file systems, enterprise databases and cloud applications.</desc>
   <defs>
     <mask id="jimdg-ct-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="750">
       <rect x="0" y="0" width="1160" height="750" fill="#ffffff"/>

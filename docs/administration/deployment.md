@@ -3,7 +3,7 @@ title: Deployment
 description: Install JIM in production with Docker or Podman, connected or air-gapped, and prepare it for use.
 type: how-to
 audience: implementer
-validated: v0.16.0
+validated: v0.17.0
 ---
 
 # Deployment
@@ -300,7 +300,7 @@ JIM prepares its database on first start, with no manual step, and does not serv
 ## :material-rocket-launch-outline: After Installing
 
 1. **Trust the certificate authority**, if the installer created JIM's certificate: add `/opt/jim/tls/ca.crt` to the trusted root certificate authorities of every machine whose browser or tools use JIM (see [Distributing the certificate authority](tls-and-reverse-proxy.md#distributing-the-certificate-authority)). Until then, browsers warn about JIM's certificate.
-2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access.
+2. **Open JIM** at `https://jim.example.com` and sign in as the initial administrator (the claim value in `JIM_SSO_INITIAL_ADMIN`), who has full access. If JIM shows **Sign-in is unavailable** instead, it cannot reach your identity provider or does not trust its certificate; see [Troubleshooting](troubleshooting.md#opening-jim-shows-sign-in-is-unavailable).
 
 !!! warning "Always name the compose files"
     Pass the same `-f` files (and `--profile`) to every `docker compose` command for this deployment, including `stop`, `pull` and upgrades. Without `-f`, Docker Compose loads `docker-compose.yml` alone, which leaves out the production settings, and silently adds any `docker-compose.override.yml` it finds in the directory.

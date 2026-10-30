@@ -153,6 +153,7 @@ public class DeletePathForeignKeyCoverageTests
             "SyncRules",
             "ConnectedSystemAttributes",
             "ConnectedSystemPasswordSynchronisations",
+            "ConfigurationChangeSynchronisations",
             "ConnectedSystemObjectTypes",
             "ConnectedSystemSettingValues",
             "ConnectedSystemPasswordPolicies",

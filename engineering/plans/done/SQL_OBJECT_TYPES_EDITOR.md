@@ -1,9 +1,9 @@
 # SQL Connector: Object Types Editor
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Done
 - **Issue:** [#2570](https://github.com/TetronIO/JIM/issues/2570)
-- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/doing/PRD_SQL_OBJECT_TYPES_EDITOR.md)
-- **Last Updated:** 2026-10-28
+- **PRD:** [`PRD_SQL_OBJECT_TYPES_EDITOR.md`](../../prd/done/PRD_SQL_OBJECT_TYPES_EDITOR.md)
+- **Last Updated:** 2026-10-29
 
 ## Overview
 
@@ -132,20 +132,20 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 - **Tests (JIM.Web.Tests):** `SqlObjectTypesEditorModel` unit tests for every suggestion rule, summary chips, problem mapping and the reference-removal check; bUnit tests that editing a card rewrites `StringValue` with a document `Parse` accepts, that a catalogue failure leaves the configuration editable with the banner shown, and that Delta Import fields follow the mode. Presentation is not asserted (root `CLAUDE.md`).
 - **Runtime verification:** sandbox light stack against a SQL Server container (Scenario 016's setup builds a suitable schema), screenshots in both themes.
 
-### Phase 5: Add Object Type dialog
+### Phase 5: Add Object Type dialog ✅
 
 - Four steps (Source, Anchor, References, Multi-valued attributes), each skippable where the document allows; Finish adds an expanded card.
 - Anchor preselected from the primary key in key order, with the reason; a view says it declares no keys.
 - **Tests:** step logic in a plain model class; bUnit test that finishing produces the same document a hand-written one would (PRD Scenario 1).
 
-### Phase 6: JSON view
+### Phase 6: JSON view ✅
 
 - Toggle between cards and JSON. Reuses the overlay technique of `ExpressionEditor.razor` (a transparent `textarea` over a highlighted, `aria-hidden` `pre`) with `Helpers.HighlightJson`, adding a line-number gutter and a marked line for each located problem. No new dependency: a third-party code editor would need the dependency governance process for one field.
 - Problems listed above the text with their line numbers; switching to cards and saving blocked while any remain.
 - Copy and paste; the shipped example offered for an empty document.
 - **Tests:** model tests for problem-to-line mapping (JSON-level and semantic); bUnit test that an invalid document blocks switching and saving (PRD Scenario 4).
 
-### Phase 7: Documentation, changelog and lifecycle
+### Phase 7: Documentation, changelog and lifecycle ✅
 
 - `docs/connectors/jim-sql-connector.md` Step 2 rewritten around the editor, keeping the document reference for REST and PowerShell; the Delta Import pages describe the editor fields beside the document fields; new screenshots via `Capture-Screenshots.ps1`.
 - `engineering/developer/connectors.md`: `IConnectorCatalogue`.
@@ -179,13 +179,21 @@ Each phase is test-first, builds and tests clean, and is mergeable on its own. P
 | Reformatting a hand-formatted document on first editor save surprises an administrator who keeps it in source control | Formatting is canonical and stable, so it changes once; the JSON view saves text as typed for anyone who prefers it. Say so in the docs. |
 | `DescribeStatementAsync` over REST runs administrator-supplied SQL | Same trust as the `select` field already configured through the same API; the parser's `ValidateSelectStatement` runs first, `CommandBehavior.SchemaOnly` reads no rows, and the endpoint requires the same administrator authorisation as editing the setting. |
 | Large catalogues | Object list is one narrow query (schema, name); detail loads per object on demand and is cached; pickers are searchable. **Measured in Phase 4** against SQL Server 2022 with 10,006 tables: the list reads in 0.13 to 0.74 s over REST (540 KB), the editor and its catalogue are ready 1.6 s after navigating to the Settings tab, and a table search answers in 0.14 to 0.28 s. Loading per schema is not needed at this scale. |
-| Oracle catalogue differences (case, synonyms) | Covered by the existing provider abstraction; Scenario 016 runs both engines. Synonyms stay out of scope, as they are for schema discovery today. |
+| Oracle catalogue differences (case, synonyms) | Covered by the existing provider abstraction; Scenario 016 runs both engines. Synonyms stay out of scope, as they are for schema discovery today. **Verified in Phase 7:** Scenario 016's schema was configured in the portal alone (no JSON view) against SQL Server 2022 and Oracle Database 23 Free, every name chosen from the catalogue's lists, and the saved document was identical to the one `Setup-Scenario-016.ps1` writes. On Oracle the list of tables read in 1.4 s and each table's columns and keys in 1.6 to 3.1 s. |
 
 ## Deviations from the PRD
 
-- **Phase 4, JSON fallback:** until Phase 6's JSON view exists, **View as JSON** shows the setting's existing text field (with its example). A document the cards cannot show (one that is not JSON, or uses a field the document does not have) opens there with the parser's message, rather than being simplified.
-- **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog exists, accepting adds an expanded card reading from that table, anchored on the column the key points at, for the administrator to name.
+- **Phase 4, JSON fallback:** until Phase 6's JSON view existed, **View as JSON** showed the setting's existing text field (with its example). Phase 6 replaced it.
+- **Phase 6, what blocks switching to cards:** only a problem in the JSON itself (it is not JSON, or has a field the document does not). A problem with what a readable document says (a missing anchor, a reference to an undeclared Object Type) no longer blocks **View as cards**: each card shows its own problems, and a card is the better place to fix a missing anchor, since it offers the columns to choose from. Save Settings is held while the parser finds any problem, in either view, with a caption under it saying why; that matches what saving would refuse.
+- **Phase 6, locating a problem with what the document says:** it is marked on the line of the Object Type's field it concerns ('changeLog' for 'changeLog.table'), or on the line the Object Type opens on when that field is missing or the problem names none.
+- **Phase 4, offering an Object Type for a foreign key's table:** until Phase 5's dialog existed, accepting added an expanded card reading from that table. Phase 5 replaced this with the Add Object Type dialog, opened with the table chosen, as PRD requirement 6 asks.
+- **Phase 5, adding before the last step:** the dialog offers **Add Object Type** from the Anchor step on, since references and multi-valued attributes are optional; the PRD's "each step can be completed or skipped" is met by that rather than by a Skip button on each optional step.
+- **Phase 5, Delta Import fields:** the dialog's four steps match the PRD and leave out the watermark column and change log; the new card opens with them, alone, so the mode's fields are the next thing seen.
 - **Phase 4, Delta Import problems:** a missing watermark column or change log is shown on the card only for an Object Type selected on the Schema tab, matching the rule saving the Schema tab applies (#1424).
+
+- **Phase 7, screenshots:** none were added. The documentation site has no screenshots by design (`engineering/DOCUMENTATION_STANDARD.md`, VOI-5): a screenshot is invalidated by any change to the control it shows and cannot be searched or read aloud. Step 2 names each control instead, with a diagram of the Add Object Type steps, and the two Delta Import pages name the card's fields beside the document's.
+- **Phase 7, name pickers:** the Scenario 016 check found that typing into a name picker passed on every keystroke: the anchor picker added a column named after the first letter typed, and a table name read the catalogue for every prefix. A picker now passes a name on only once it is finished (chosen from the list, Enter, leaving the field, or the clear button), the list puts the name typed first, and the anchor picker accepts only the source's own columns where it knows them.
+- **Phase 7, Delta Import pages:** both pages now choose the mode before configuring the Object Types, because a card shows its Delta Import fields only once **Delta Import Mode** is set on screen.
 
 - **PRD non-functional requirement "loaded per schema":** the object list is loaded in one call rather than per schema. It is a narrow list of (schema, name, kind) and the provider queries are not schema-filtered today; one call is simpler and fast enough at the stated scale. Column detail is still per object. Revisit if the Phase 4 measurement says otherwise.
 - **PRD open question 4:** declined for this work (see Decisions).

@@ -36,8 +36,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter, uniqueValueReservations, uniquenessProbeSessionHost, configurationChangeIdsEligibleToClaim)
     {
     }
 
@@ -69,24 +70,35 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         Log.Verbose("PerformDeltaSyncAsync: Starting");
 
+        // Claim the configuration changes awaiting synchronisation before anything else: before the progress count and
+        // before any Synchronisation Rule is loaded, which is what makes the claim race-free (#2615). Every type a change
+        // is claimed for is processed in full below, so a saved import rule change reaches objects whose own data has not
+        // changed; a change saved after this point is not claimed and waits for the next run.
+        await ClaimConfigurationChangesAwaitingSynchronisationAsync("Delta Synchronisation");
+        syncSpan.SetTag("typesProcessedInFull", _objectTypeIdsToProcessInFull.Count);
+
         await _phases.EnterAsync(RunPhaseKeys.SyncPrepare, "Preparing delta sync");
 
         // Determine the watermark - when was the last successful sync?
         var lastSyncTimestamp = _connectedSystem.LastSyncCompletedAt ?? DateTime.MinValue;
         syncSpan.SetTag("lastSyncTimestamp", lastSyncTimestamp.ToString("O"));
 
-        // How many CSOs have been modified since the last sync?
+        // How many CSOs have been modified since the last sync, plus every object of the types this run processes in full?
         int totalCsosToProcess;
         using (Diagnostics.Sync.StartSpan("CountModifiedCsos"))
         {
-            totalCsosToProcess = await _syncRepo.GetConnectedSystemObjectModifiedSinceCountAsync(
-                _connectedSystem.Id,
-                lastSyncTimestamp);
+            totalCsosToProcess = _objectTypeIdsToProcessInFull.Count == 0
+                ? await _syncRepo.GetConnectedSystemObjectModifiedSinceCountAsync(_connectedSystem.Id, lastSyncTimestamp)
+                : await _syncRepo.GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(_connectedSystem.Id, lastSyncTimestamp, _objectTypeIdsToProcessInFull);
         }
 
         syncSpan.SetTag("modifiedCsoCount", totalCsosToProcess);
-        Log.Information("PerformDeltaSyncAsync: Found {Count} CSOs modified since {Timestamp}",
-            totalCsosToProcess, lastSyncTimestamp);
+        if (_objectTypeIdsToProcessInFull.Count == 0)
+            Log.Information("PerformDeltaSyncAsync: Found {Count} CSOs modified since {Timestamp}",
+                totalCsosToProcess, lastSyncTimestamp);
+        else
+            Log.Information("PerformDeltaSyncAsync: Found {Count} CSOs to process: those modified since {Timestamp}, and every object of the {ObjectTypeCount} Object Type(s) processed in full",
+                totalCsosToProcess, lastSyncTimestamp, _objectTypeIdsToProcessInFull.Count);
 
         // If no CSOs have changed, we can complete quickly, unless Metaverse Objects are waiting for an export scope
         // review (#892, #1925). Those are flagged without any Connected System Object changing (a relative-date boundary
@@ -94,7 +106,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // schedule makes most often; completing here would leave the review waiting for a Full Synchronisation.
         // The same holds for a generated value an export run corrected (#242, release 4): nothing in this system changed,
         // but the correction is waiting for whichever synchronisation runs next to reach the queued exports.
+        // And for a configuration change awaiting synchronisation (#2615), claimed above: an import rule change touches no
+        // object, and the run is the one that applies it, even to a type that holds no objects (there is then nothing to
+        // process, but the change still has to be marked applied).
         if (totalCsosToProcess == 0
+            && _objectTypeIdsToProcessInFull.Count == 0
             && (await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(1)).Count == 0
             && !await _syncRepo.AnyGeneratedValueRevisionsPendingAsync())
         {
@@ -166,7 +182,8 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
-        // Process only the modified CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
+        // Process only the modified CSOs, and every object of the types processed in full, in batches. This enables us to
+        // respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
@@ -197,10 +214,24 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // estimate only, and ObjectsProcessed may exceed it. A mark set behind a cursor mid-run is picked up by the
         // next run.
         var deltaSyncStartedAt = DateTime.UtcNow;
+
+        // A type a configuration change awaiting synchronisation was claimed for (#2615) is loaded as a Full
+        // Synchronisation loads it, every object; the others as before, modified objects only. The closing sweep names no
+        // type and stays on modified objects: an object of a type processed in full that is created mid-run is created
+        // after the watermark, which the modified-since selection already includes.
+        //
+        // A run that processes a whole type reaches the references between types as a Full Synchronisation does, so it
+        // asks the database which types the mapped reference attributes with no declared target actually point at
+        // (observeUndeclaredReferenceTargets), as Full Synchronisation does, rather than assume the few references a
+        // modified-only Delta Synchronisation defers.
+        var processedInFull = _objectTypeIdsToProcessInFull;
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
-            "Delta Synchronisation", observeUndeclaredReferenceTargets: false);
+            (afterId, objectTypeId, createdOnOrAfter) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
+                ? _syncRepo.GetConnectedSystemObjectsAsync(
+                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter)
+                : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
+                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+            "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
 
         for (var page = 1; ; page++)
         {
@@ -401,6 +432,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
             // Update the watermark to mark this sync as complete
             await UpdateDeltaSyncWatermarkAsync();
+
+            // The configuration changes this run claimed are applied: every object of their types has been processed.
+            // Reached only on completion, never on cancellation or failure, so those leave the changes awaiting
+            // synchronisation for the next run to claim again.
+            await ApplyClaimedConfigurationChangesAsync("Delta Synchronisation");
 
             // Update activity message with throughput summary
             var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +

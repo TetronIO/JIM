@@ -112,10 +112,12 @@ public abstract class SyncTaskProcessorBase
     // export rule still has the Metaverse Object in scope, keeps its Delete (#1018).
     private readonly HashSet<Guid> _deprovisionedCsoIdsThisPage = [];
 
-    // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
+    // Batch collection for deferred CSO join-state updates (MetaverseObjectId, JoinType, DateJoined and the join
+    // record): a projection, a join, and a join released by an out-of-scope Disconnect all queue the CSO here.
     // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
     // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
-    // and DateJoined stays null in the database after projection or join.
+    // and DateJoined stays null in the database after projection or join, and a released join keeps its
+    // Metaverse Object and join record.
     protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
 
     // Batch collection of CSO ids that carried the Temporal Scope Reconciler flag (ScopeReviewPending, #892) and
@@ -285,6 +287,27 @@ public abstract class SyncTaskProcessorBase
     /// unjoined referenced object could still be joined later in the run.
     /// </summary>
     protected TypeOrderedCsoPager? _csoPager;
+
+    /// <summary>
+    /// The configuration changes awaiting synchronisation that this run claimed as it started (#2615): saved changes to
+    /// an import Synchronisation Rule or an Object Matching Rule that this run must apply by processing every object of
+    /// the Object Type each names. Empty until <see cref="ClaimConfigurationChangesAwaitingSynchronisationAsync"/> runs,
+    /// and when nothing was awaiting synchronisation.
+    /// </summary>
+    private IReadOnlyList<ClaimedConfigurationChangeSynchronisation> _claimedConfigurationChanges = [];
+
+    /// <summary>
+    /// The only configuration changes awaiting synchronisation this run may claim: the ids the worker read before it
+    /// loaded anything the run uses (#2615). Empty for a processor constructed without them, which claims nothing.
+    /// </summary>
+    private readonly IReadOnlyCollection<long> _configurationChangeIdsEligibleToClaim;
+
+    /// <summary>
+    /// The Object Types whose every object this run processes because configuration changes awaiting synchronisation
+    /// were claimed for them (#2615). A Full Synchronisation processes everything anyway; a Delta Synchronisation uses
+    /// this to page these types in full and the others by modification.
+    /// </summary>
+    protected IReadOnlySet<int> _objectTypeIdsToProcessInFull = new HashSet<int>();
 
     // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
@@ -521,7 +544,8 @@ public abstract class SyncTaskProcessorBase
         CancellationTokenSource cancellationTokenSource,
         ActivityPhaseReporter? phaseReporter = null,
         UniqueValueReservationSet? uniqueValueReservations = null,
-        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null)
+        IUniquenessProbeSessionHost? uniquenessProbeSessionHost = null,
+        IReadOnlyCollection<long>? configurationChangeIdsEligibleToClaim = null)
     {
         _syncEngine = syncEngine;
         _syncServer = syncServer;
@@ -539,6 +563,7 @@ public abstract class SyncTaskProcessorBase
         // run-scoped set of its own, which is exactly as safe: nothing else shares it.
         _uniqueValueReservations = uniqueValueReservations ?? new UniqueValueReservationSet();
         _uniquenessProbeSessionHost = uniquenessProbeSessionHost;
+        _configurationChangeIdsEligibleToClaim = configurationChangeIdsEligibleToClaim ?? [];
     }
 
     /// <summary>
@@ -1078,6 +1103,64 @@ public abstract class SyncTaskProcessorBase
         _mvoIdToRpei.Clear();
         _mvoIdsChangedByExportEvaluation.Clear();
         _deferredMvoRpeiMappings.Clear();
+    }
+
+    /// <summary>
+    /// Claims the configuration changes awaiting synchronisation that the worker offered this run (#2615), and records
+    /// which Object Types the run must therefore process in full. Call it first, as the run starts: before the progress
+    /// count and before any Synchronisation Rule is loaded.
+    /// <para>
+    /// The guarantee: the worker read the ids it offers before it loaded the Connected System with its Object Types and
+    /// their Simple Mode Object Matching Rules, and this run loads the Synchronisation Rules after the claim. A change's
+    /// row is written only after the change is saved, so every change claimed here is already in all of those. A change
+    /// saved after the worker's read is not offered, however soon after it commits, and waits for the next run (see
+    /// <see cref="ISyncRepository.ClaimConfigurationChangeSynchronisationsAsync"/>).
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ClaimConfigurationChangesAwaitingSynchronisationAsync(string runKind)
+    {
+        _claimedConfigurationChanges = await _syncRepo.ClaimConfigurationChangeSynchronisationsAsync(_connectedSystem.Id, _configurationChangeIdsEligibleToClaim, _activity.Id);
+        _objectTypeIdsToProcessInFull = _claimedConfigurationChanges.Select(c => c.ConnectedSystemObjectTypeId).ToHashSet();
+
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        // Which types, and how many changes are behind each, so the run's log explains why it processed a type in full.
+        var summary = string.Join(", ", _claimedConfigurationChanges
+            .GroupBy(c => c.ConnectedSystemObjectTypeId)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{LogSanitiser.Sanitise(_connectedSystem.ObjectTypes?.FirstOrDefault(t => t.Id == g.Key)?.Name ?? g.Key.ToString(CultureInfo.InvariantCulture))} ({g.Count()})"));
+        Log.Information("{RunKind}: {Count} configuration change(s) awaiting synchronisation claimed; processing every object of {ObjectTypeCount} Object Type(s) in full, with the changes behind each in brackets: {ObjectTypes}",
+            runKind, _claimedConfigurationChanges.Count, _objectTypeIdsToProcessInFull.Count, summary);
+    }
+
+    /// <summary>
+    /// Marks the configuration changes this run claimed as applied (#2615). Call it only where the run has completed and
+    /// advanced the Delta Synchronisation watermark: a cancelled run, or one that failed, never gets here and so applies
+    /// nothing, leaving the changes for the next run to claim again.
+    /// <para>
+    /// A run that completes with errors on individual objects still applies them, consistently with the watermark
+    /// advancing: both record that the run completed, and the errors are reported on the objects' own execution items.
+    /// </para>
+    /// </summary>
+    /// <param name="runKind">The run kind, for the log line.</param>
+    protected async Task ApplyClaimedConfigurationChangesAsync(string runKind)
+    {
+        if (_claimedConfigurationChanges.Count == 0)
+            return;
+
+        var applied = await _syncRepo.ApplyClaimedConfigurationChangeSynchronisationsAsync(_activity.Id);
+        if (applied == _claimedConfigurationChanges.Count)
+        {
+            Log.Information("{RunKind}: applied {Count} configuration change(s) that were awaiting synchronisation", runKind, applied);
+            return;
+        }
+
+        // Only reachable when another synchronisation of this Connected System claimed some of them after this run did,
+        // which overwrote this run's claim. That run applies them. Safe, since this run processed the types in full too.
+        Log.Warning("{RunKind}: applied {Applied} of the {Claimed} configuration change(s) it claimed; a synchronisation of the same Connected System that overlapped this one holds the claim on the rest and applies them",
+            runKind, applied, _claimedConfigurationChanges.Count);
     }
 
     /// <summary>
@@ -3514,7 +3597,8 @@ public abstract class SyncTaskProcessorBase
             // (ProcessScopeReviewPendingMetaverseObjectsAsync) and cross-page reference resolution
             // (ResolveCrossPageReferences) all reach Pending Exports through EvaluatePendingExportsAsync, which
             // calls this method once per changed Metaverse Object.
-            await ResolveExportGeneratedValuesAsync(mvo, result);
+            using (Diagnostics.Sync.StartSpan("ResolveExportGeneratedValues"))
+                await ResolveExportGeneratedValuesAsync(mvo, result);
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
@@ -4119,9 +4203,11 @@ public abstract class SyncTaskProcessorBase
             _pendingMvoUpdateIds.Clear();
         }
 
-        // Batch update CSOs that had JoinType/DateJoined/MetaverseObjectId changed during
-        // projection or join. This must run AFTER MVO creates so that projected CSOs can
-        // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
+        // Batch update CSOs whose join state (JoinType/DateJoined/MetaverseObjectId and the join record) changed
+        // during projection, join or an out-of-scope Disconnect. This must run AFTER MVO creates so that projected
+        // CSOs can pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange), and it runs
+        // BEFORE FlushPendingMvoDeletionsAsync, so a CSO released from a Metaverse Object that is deleted in the
+        // same flush no longer references it when the delete runs.
         if (_pendingCsoJoinUpdates.Count > 0)
         {
             // Release-before-claim: obsolete CSOs that were disconnected in-memory this page (their
@@ -4145,10 +4231,9 @@ public abstract class SyncTaskProcessorBase
                 Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
             }
 
-            // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
-            // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
-            // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
-            // Ensure the FK is populated for any CSO where it's still null.
+            // For projected CSOs, MetaverseObjectId was not set at projection time, only the navigation.
+            // CreateMetaverseObjectsAsync leaves the new objects untracked (#2598), so no relationship
+            // fix-up fills the FK in: set it from the navigation for any CSO where it is still null.
             foreach (var cso in _pendingCsoJoinUpdates)
             {
                 if (cso.MetaverseObjectId == null && cso.MetaverseObject != null)
@@ -5293,14 +5378,19 @@ public abstract class SyncTaskProcessorBase
     /// per-page flow uses: provision when newly in scope, deprovision when out. Only meaningful in a sync run (the
     /// export evaluation cache is present); a no-op otherwise.
     ///
-    /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
-    /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
-    /// and deprovision is scope-driven. The export evaluation cache holds every export rule, whatever its target, so
-    /// whichever system's synchronisation runs next reviews the objects for every target.
+    /// An object flagged by a configuration change or the reconciler is evaluated with no changed attributes, which is
+    /// intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's current values for a provision (Create)
+    /// and produces no Pending Export for an unchanged in-scope object, and deprovision is scope-driven. An object
+    /// flagged by a write outside synchronisation (#2615) also carries a record of the attribute values that write
+    /// changed, and is evaluated with exactly those, so a changed value reaches the accounts the object already has,
+    /// and a removed one is removed from them, as a synchronisation-driven change would. The export evaluation cache holds
+    /// every export rule, whatever its target, so whichever system's synchronisation runs next reviews the objects for
+    /// every target.
     ///
     /// The run evaluates against the rules it read at its start. When an export rule has been created or updated
     /// since, the clear keeps the batch's flags and the drain stops: the change flagged the objects for review
-    /// against the configuration as it now stands, which the next run applies.
+    /// against the configuration as it now stands, which the next run applies. It likewise keeps the flag and the record
+    /// of any object written since the run loaded it, so the next run reviews that write too.
     /// </summary>
     protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
     {
@@ -5308,15 +5398,42 @@ public abstract class SyncTaskProcessorBase
         if (_exportEvaluationCache == null)
             return;
 
+        // A review of an object no enabled export rule covers can neither provision nor deprovision anything, so the
+        // flags (and the records of what changed outside synchronisation) of such objects are cleared in one statement
+        // rather than by loading and evaluating each one (#2615). The cache holds enabled export rules only, which is
+        // the right test: a disabled rule provisions and deprovisions nothing, and re-enabling it flags its whole type
+        // again (#1925), so its type is not covered while it is off. Guarded like the clear below: kept whole when an
+        // export rule has changed since this run read its rules.
+        var coveredTypeIds = _exportEvaluationCache.ExportRulesByMvoTypeId.Where(covered => covered.Value.Count > 0).Select(covered => covered.Key).ToList();
+        var clearedWithoutReview = await _syncRepo.ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(
+            coveredTypeIds, _exportEvaluationCache.ExportRulesReadWatermark);
+        if (clearedWithoutReview > 0)
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: cleared the export scope review flag on {Count} Metaverse Object(s) " +
+                "of types no enabled export Synchronisation Rule covers, without reviewing them (#2615)", clearedWithoutReview);
+
         const int batchSize = 500;
         var totalProcessed = 0;
         var totalChanged = 0;
+        var totalValuesDelivered = 0;
+        var unreadableRecords = 0;
+        List<Guid>? previousBatchIds = null;
 
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
             var flaggedIds = await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(batchSize);
             if (flaggedIds.Count == 0)
                 break;
+
+            // The clear keeps the flag of an object written since this drain loaded it (#2615), so the same batch coming
+            // back means the clear kept every flag in it: the rows are being written as fast as they are reviewed, or
+            // the review itself is writing the Metaverse Object, which it must never do. Either way, reviewing them
+            // again would never finish; they stay flagged for the next synchronisation.
+            if (previousBatchIds != null && flaggedIds.SequenceEqual(previousBatchIds))
+            {
+                Log.Warning("ProcessScopeReviewPendingMetaverseObjectsAsync: the {Count} Metaverse Object(s) just reviewed are still flagged, " +
+                    "having been written since they were loaded, so they are left for the next synchronisation to review", flaggedIds.Count);
+                break;
+            }
 
             // Entered here rather than above the loop so a run with nothing flagged records the step
             // skipped instead of entered-and-instantly-finished. The flagged set drains rather than
@@ -5349,7 +5466,13 @@ public abstract class SyncTaskProcessorBase
                 _mvoIdToRpei[mvo.Id] = rpei;
                 reviewItems.Add((mvo.Id, rpei));
 
-                _pendingExportEvaluations.Add((mvo, [], null));
+                // What changed outside synchronisation, when something did (#2615); otherwise only scope is reviewed.
+                var (changedAttributes, removedAttributes, recordUnreadable) = await ReadUnsynchronisedChangesAsync(mvo);
+                if (recordUnreadable)
+                    unreadableRecords++;
+                if (changedAttributes.Count > 0)
+                    totalValuesDelivered++;
+                _pendingExportEvaluations.Add((mvo, changedAttributes, removedAttributes));
             }
 
             // Reuse the per-page export flush sequence. EvaluatePendingExportsAsync refreshes the export cache for
@@ -5390,13 +5513,18 @@ public abstract class SyncTaskProcessorBase
             // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
             // the batch's writes have persisted; if a write throws, the flag stays set and the object is
             // reconsidered next sweep (fail-safe). Kept, too, when an export rule changed since this run read its
-            // rules (#1925); see the summary.
+            // rules (#1925), and for any object written since it was loaded (#2615): each is cleared only while its row
+            // version is the one read here, which is why the version is taken from the object as the drain loaded it.
+            // Reviewing an object writes nothing to its Metaverse Object row (provisioning writes Connected System
+            // Objects, deprovisioning Pending Exports and Connected System Objects), or the version would always have
+            // moved and no flag would ever clear.
             var cleared = await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(
-                flaggedIds, _exportEvaluationCache.ExportRulesReadWatermark);
+                mvos.ToDictionary(mvo => mvo.Id, mvo => mvo.xmin), _exportEvaluationCache.ExportRulesReadWatermark);
 
             ClearPageTrackingState();
             totalProcessed += mvos.Count;
             _activity.ObjectsProcessed = totalProcessed;
+            previousBatchIds = flaggedIds;
 
             if (!cleared)
             {
@@ -5411,9 +5539,60 @@ public abstract class SyncTaskProcessorBase
                 break;
         }
 
+        // An unreadable record means changes made outside synchronisation that this run could not deliver, and the record
+        // is cleared with the flag, so nothing would ever say so: one warning on the Activity, which completes with it,
+        // beside the per-object warning in the log that names each object (#2615). A record naming an attribute that no
+        // longer exists is not counted: there is no value left to deliver.
+        if (unreadableRecords > 0)
+        {
+            var warning = unreadableRecords == 1
+                ? "1 Metaverse Object recorded changes made outside synchronisation that could not be read; it was reviewed for export scope only, " +
+                  "and those changes were not delivered to Connected Systems. Edit the affected object again to deliver its values."
+                : string.Create(CultureInfo.InvariantCulture,
+                    $"{unreadableRecords} Metaverse Objects recorded changes made outside synchronisation that could not be read; they were reviewed for export scope only, and those changes were not delivered to Connected Systems. Edit the affected objects again to deliver their values.");
+            _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage) ? warning : $"{_activity.WarningMessage}\n{warning}";
+            Log.Warning("ProcessScopeReviewPendingMetaverseObjectsAsync: {Count} Metaverse Object(s) had recorded changes made outside " +
+                "synchronisation that could not be read, so they were reviewed for export scope only (Activity {ActivityId})", unreadableRecords, _activity.Id);
+        }
+
         if (totalProcessed > 0)
             Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} flagged Metaverse Object(s), " +
-                "{Changed} of which were provisioned, deprovisioned or had an export staged (#892, #1925)", totalProcessed, totalChanged);
+                "{Changed} of which were provisioned, deprovisioned or had an export staged, and {Values} of which carried attribute value " +
+                "changes made outside synchronisation to deliver (#892, #1925, #2615)", totalProcessed, totalChanged, totalValuesDelivered);
+    }
+
+    /// <summary>
+    /// The attribute values a write outside synchronisation changed on a Metaverse Object (#2615), as the changed and
+    /// removed values export evaluation takes; empty and null for an object that carries no record (flagged by an
+    /// export Synchronisation Rule's configuration change or by the Temporal Scope Reconciler), which is reviewed for
+    /// scope alone. A record that cannot be read, or that names an attribute which no longer exists, never fails the
+    /// run: the unreadable record is reviewed for scope alone and the missing attribute is left out, each with a
+    /// warning in the log naming the object. The caller counts the unreadable records, which it reports on the Activity.
+    /// </summary>
+    private async Task<(List<MetaverseObjectAttributeValue> ChangedAttributes, HashSet<MetaverseObjectAttributeValue>? RemovedAttributes, bool RecordUnreadable)> ReadUnsynchronisedChangesAsync(MetaverseObject mvo)
+    {
+        if (string.IsNullOrWhiteSpace(mvo.UnsynchronisedChangesJson))
+            return ([], null, false);
+
+        _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
+        var input = UnsynchronisedChangeEvaluation.Read(mvo, _metaverseAttributeNamesById.Keys);
+        if (input.SkippedAttributeIds.Count > 0)
+        {
+            // The names were read earlier in the run, and an attribute created and edited since would look deleted: ask
+            // again before skipping anything (a rare path, so one more read of a tiny table).
+            _metaverseAttributeNamesById = await _syncRepo.GetMetaverseAttributeNamesAsync();
+            input = UnsynchronisedChangeEvaluation.Read(mvo, _metaverseAttributeNamesById.Keys);
+        }
+
+        if (input.RecordUnreadable)
+            Log.Warning("ReadUnsynchronisedChangesAsync: the changes recorded on Metaverse Object {MvoId} cannot be read, so it is reviewed " +
+                "for export scope alone and the changed values are not delivered to Connected Systems", mvo.Id);
+
+        foreach (var attributeId in input.SkippedAttributeIds)
+            Log.Warning("ReadUnsynchronisedChangesAsync: Metaverse Object {MvoId} records a change to Metaverse Attribute {AttributeId}, which no " +
+                "longer exists, so that change is not delivered to Connected Systems", mvo.Id, attributeId);
+
+        return (input.ChangedAttributes, input.RemovedAttributes, input.RecordUnreadable);
     }
 
     /// <summary>
@@ -5658,9 +5837,10 @@ public abstract class SyncTaskProcessorBase
         if (_pendingReProvisioningReviewMvoIds.Count > 0)
         {
             var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
-            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Count} Metaverse Object(s) for an export scope review, " +
-                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); {Newly} newly flagged",
-                _pendingReProvisioningReviewMvoIds.Count, flagged);
+            Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Flagged} of {Requested} Metaverse Object(s) for an export scope review, " +
+                "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); an object flagged " +
+                "already is flagged again, so a review in progress cannot clear it",
+                flagged, _pendingReProvisioningReviewMvoIds.Count);
             _pendingReProvisioningReviewMvoIds.Clear();
         }
 
@@ -6509,7 +6689,7 @@ public abstract class SyncTaskProcessorBase
                     "ProcessMvoDeletionsIndividuallyAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
-                await _syncRepo.UpdateMetaverseObjectAsync(mvo);
+                await _syncRepo.SetMetaverseObjectLastConnectorDisconnectedDateAsync(mvo.Id, mvo.LastConnectorDisconnectedDate.Value);
             }
         }
 
@@ -6749,8 +6929,9 @@ public abstract class SyncTaskProcessorBase
         ConnectedSystemObject connectedSystemObject, MetaverseObject mvo, SyncRule? joiningSyncRule, ImportMatch match)
     {
         // MVO must not already be joined to a Connected System Object in this Connected System. Joins are 1:1.
-        var existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(
-            _connectedSystem.Id, mvo.Id);
+        int existingCsoJoinCount;
+        using (Diagnostics.Sync.StartSpan("Join.ExistingJoinCount"))
+            existingCsoJoinCount = await _syncRepo.GetConnectedSystemObjectCountByMvoAsync(_connectedSystem.Id, mvo.Id);
 
         // Account for CSOs that have been disconnected in-memory but not yet flushed to the database.
         if (existingCsoJoinCount > 0 && _pendingDisconnectedMvoIds.Contains(mvo.Id))
@@ -6922,6 +7103,9 @@ public abstract class SyncTaskProcessorBase
         if (!_csoChangeTrackingEnabled || pendingExport.AttributeValueChanges.Count == 0)
             return;
 
+        using var snapshotSpan = Diagnostics.Sync.StartSpan("SnapshotPendingExportChanges")
+            .SetTag("changeCount", pendingExport.AttributeValueChanges.Count);
+
         // Collect MVO GUIDs from reference attribute changes so we can resolve them
         // to stub CSOs in the target Connected System
         Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
@@ -6929,6 +7113,7 @@ public abstract class SyncTaskProcessorBase
 
         if (mvoGuids.Count > 0)
         {
+            using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
             // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
             // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
             // and won't be in the database when this snapshot runs.
@@ -6978,7 +7163,9 @@ public abstract class SyncTaskProcessorBase
 
             if (notYetLookedUp.Count > 0)
             {
-                var dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                Dictionary<Guid, ConnectedSystemObject> dbResolved;
+                using (Diagnostics.Sync.StartSpan("Snapshot.LoadReferencedObjects").SetTag("count", notYetLookedUp.Count))
+                    dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
                 foreach (var mvoGuid in notYetLookedUp)
                 {
                     var found = dbResolved.GetValueOrDefault(mvoGuid);
@@ -6995,6 +7182,7 @@ public abstract class SyncTaskProcessorBase
             }
         }
 
+        using var buildSpan = Diagnostics.Sync.StartSpan("Snapshot.Build");
         var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
             pendingExport,
             _activity.InitiatedByType,
@@ -7531,6 +7719,16 @@ public abstract class SyncTaskProcessorBase
                 connectedSystemObject.MetaverseObjectId = null;
                 connectedSystemObject.ClearJoinRecord();
                 Log.Verbose("HandleCsoOutOfScopeAsync: Broke join between CSO {CsoId} and MVO {MvoId}", connectedSystemObject.Id, mvoId);
+
+                // The break above is in memory only: EF does not detect CSO scalar changes at page boundaries, and
+                // the join-state batch is the only thing that writes them. Queue the CSO for it, whatever becomes of
+                // the Metaverse Object, or the Activity reports the disconnection while the row keeps its Metaverse
+                // Object and join record. An immediate deletion of the Metaverse Object does not stand in for this:
+                // it happens to clear the row of a CSO still joined to it, but only after the page's export
+                // evaluation has treated the departed CSO as a deprovisioning target of the object it just left.
+                // The flush writes the batch before the Metaverse Object is deleted, so the row is already released
+                // when the delete runs.
+                _pendingCsoJoinUpdates.Add(connectedSystemObject);
 
                 // Apply pending attribute changes and queue the MVO onto the page-flush batch update
                 // (skip when MVO is about to be deleted immediately - the update would be a wasted

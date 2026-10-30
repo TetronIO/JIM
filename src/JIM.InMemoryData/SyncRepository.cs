@@ -1752,18 +1752,45 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids, DateTime? exportRulesReadWatermark)
+    // The in-memory store does not model a Metaverse Object's row version (xmin), so, unlike the PostgreSQL statement, this
+    // clears every object it is given whatever version the run read. It has no concurrent writers either, so a rule cannot
+    // be saved between the check and the clear, and there is no second look at the export rules afterwards (the
+    // PostgreSQL clear re-flags what it cleared when one was). Both guards are proved against PostgreSQL
+    // (ScopeReviewFlagDatabaseTests). It clears the record of unsynchronised changes (#2615) with the flag.
+    public virtual Task<bool> ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyDictionary<Guid, uint> seenRowVersions, DateTime? exportRulesReadWatermark)
     {
         // Mirrors the PostgreSQL statement: nothing is cleared once an export rule has been created or updated since
         // the run read its rules (#1925).
-        var exportRulesChanged = _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
-            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
-        if (exportRulesChanged)
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
             return Task.FromResult(false);
 
-        foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
-            stored!.ScopeReviewPending = false;
+        foreach (var stored in seenRowVersions.Keys.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
+            ClearScopeReview(stored!);
         return Task.FromResult(true);
+    }
+
+    public virtual Task<int> ClearMetaverseObjectScopeReviewPendingForUncoveredTypesAsync(IReadOnlyCollection<int> coveredMetaverseObjectTypeIds, DateTime? exportRulesReadWatermark)
+    {
+        if (ExportRulesChangedSince(exportRulesReadWatermark))
+            return Task.FromResult(0);
+
+        // An object with no type loaded is left alone: nothing says no rule covers it.
+        var toClear = _mvos.Values
+            .Where(mvo => mvo.ScopeReviewPending && mvo.Type != null && !coveredMetaverseObjectTypeIds.Contains(mvo.Type.Id))
+            .ToList();
+        foreach (var mvo in toClear)
+            ClearScopeReview(mvo);
+        return Task.FromResult(toClear.Count);
+    }
+
+    private bool ExportRulesChangedSince(DateTime? exportRulesReadWatermark)
+        => _syncRules.Values.Any(rule => rule.Direction == SyncRuleDirection.Export &&
+            (exportRulesReadWatermark == null || (rule.LastUpdated ?? rule.Created) > exportRulesReadWatermark));
+
+    private static void ClearScopeReview(MetaverseObject mvo)
+    {
+        mvo.ScopeReviewPending = false;
+        mvo.UnsynchronisedChangesJson = null;
     }
 
     public Task<int> FlagMetaverseObjectsOfTypeForScopeReviewAsync(int metaverseObjectTypeId)
@@ -1774,11 +1801,13 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toFlag.Count);
     }
 
+    // Like the PostgreSQL statement, counts every given object that exists, flagged already or not (which there rewrites the
+    // row to move its row version; the in-memory store has no row versions to move).
     public Task<int> FlagMetaverseObjectsForScopeReviewAsync(IReadOnlyCollection<Guid> ids)
     {
         var toFlag = ids.Distinct()
             .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
-            .Where(mvo => mvo is { ScopeReviewPending: false })
+            .Where(mvo => mvo != null)
             .ToList();
         foreach (var mvo in toFlag)
             mvo!.ScopeReviewPending = true;
@@ -1909,13 +1938,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    // Virtual so tests can spy on the single-entity update path (the grace-deletion-marker page-flush
-    // regression coverage), matching the batch-update spy precedent above: production code must never
-    // reach this method mid-page for a grace-period deletion (see SyncTaskProcessorBase.MarkMvoForDeletionAsync).
-    public virtual Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
+    public Task SetMetaverseObjectLastConnectorDisconnectedDateAsync(Guid metaverseObjectId, DateTime lastConnectorDisconnectedDate)
     {
-        FixupMvoAttributeValues(metaverseObject);
-        _mvos[metaverseObject.Id] = metaverseObject;
+        if (_mvos.TryGetValue(metaverseObjectId, out var mvo))
+            mvo.LastConnectorDisconnectedDate = lastConnectorDisconnectedDate;
         return Task.CompletedTask;
     }
 
@@ -5305,6 +5331,90 @@ public class SyncRepository : ISyncRepository
             SyncRuleName = rule?.Name,
             SyncRuleMappingId = mapping?.Id ?? 0
         };
+    }
+
+    #endregion
+
+    #region Configuration Changes Awaiting Synchronisation (#2615)
+
+    private readonly List<ConfigurationChangeSynchronisation> _configurationChangeSynchronisations = [];
+    private long _nextConfigurationChangeSynchronisationId = 1;
+
+    /// <summary>
+    /// Every configuration change recorded as awaiting synchronisation, claimed and applied ones included, in the order
+    /// they were seeded.
+    /// </summary>
+    public IReadOnlyList<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations => _configurationChangeSynchronisations;
+
+    /// <summary>
+    /// Records a configuration change awaiting synchronisation, as the saving side does in production (there the row is
+    /// written through <c>IConnectedSystemRepository</c> to the same database; here the two sides are separate stores, so
+    /// a test seeds it). A missing <see cref="ConfigurationChangeSynchronisation.Id"/> is numbered. A test simulates a
+    /// change saved while a run is in flight by seeding from a per-object hook: the claim below sees only the rows that
+    /// existed when it ran, exactly as a READ COMMITTED statement does.
+    /// </summary>
+    public ConfigurationChangeSynchronisation SeedConfigurationChangeSynchronisation(ConfigurationChangeSynchronisation change)
+    {
+        if (change.Id == 0)
+            change.Id = _nextConfigurationChangeSynchronisationId++;
+        else if (change.Id >= _nextConfigurationChangeSynchronisationId)
+            _nextConfigurationChangeSynchronisationId = change.Id + 1;
+
+        _configurationChangeSynchronisations.Add(change);
+        return change;
+    }
+
+    public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
+    {
+        IReadOnlyList<long> ids = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.Id)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    public Task<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>> ClaimConfigurationChangeSynchronisationsAsync(int connectedSystemId, IReadOnlyCollection<long> eligibleIds, Guid runActivityId)
+    {
+        // Every eligible row still awaiting synchronisation, including one an earlier run claimed and never applied: that
+        // claim is overwritten, as the production statement does. A row seeded after the caller read the eligible ids is
+        // not among them and is left alone.
+        var claimed = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null && eligibleIds.Contains(c.Id))
+            .ToList();
+        foreach (var change in claimed)
+            change.ClaimedByActivityId = runActivityId;
+
+        return Task.FromResult<IReadOnlyList<ClaimedConfigurationChangeSynchronisation>>(
+            claimed.Select(c => new ClaimedConfigurationChangeSynchronisation(c.Id, c.ConnectedSystemObjectTypeId)).ToList());
+    }
+
+    public Task<int> ApplyClaimedConfigurationChangeSynchronisationsAsync(Guid runActivityId)
+    {
+        var applied = _configurationChangeSynchronisations
+            .Where(c => c.ClaimedByActivityId == runActivityId && c.AppliedAt == null)
+            .ToList();
+        var appliedAt = DateTime.UtcNow;
+        foreach (var change in applied)
+            change.AppliedAt = appliedAt;
+
+        return Task.FromResult(applied.Count);
+    }
+
+    public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsAwaitingSynchronisationAsync(int connectedSystemId)
+    {
+        IReadOnlySet<int> awaiting = _configurationChangeSynchronisations
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.AppliedAt == null)
+            .Select(c => c.ConnectedSystemObjectTypeId)
+            .ToHashSet();
+        return Task.FromResult(awaiting);
+    }
+
+    public Task<int> GetConnectedSystemObjectModifiedSinceOrOfTypesCountAsync(int connectedSystemId, DateTime modifiedSince, IReadOnlyCollection<int> objectTypeIds)
+    {
+        // Tests often build objects with only the Type navigation set, so read either (as the type filters do).
+        var count = GetCsosForSystem(connectedSystemId)
+            .Count(c => IsModifiedSince(c, modifiedSince) || objectTypeIds.Contains(c.TypeId != 0 ? c.TypeId : c.Type?.Id ?? 0));
+        return Task.FromResult(count);
     }
 
     #endregion
