@@ -1,6 +1,6 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phases 0 to 2 complete; Phases 1 and 2 awaiting scale measurement)
+- **Status:** Doing (Phases 0 to 3 complete; Phases 1 to 3 awaiting scale measurement)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
 - **Last Updated:** 2026-10-30
 
@@ -102,6 +102,8 @@ The target side was the unknown, and it is not the join: the target's objects we
 
 - `SnapshotPendingExportChangesAsync` loads the target system's object for every referenced member through `GetConnectedSystemObjectsByMetaverseObjectIdsAsync` (14.8 s for one group). The snapshot needs only each object's identifiers for display, so replace the load with a raw SQL Summary-tier read of those identifiers.
 - Target: under 1 s for the largest group.
+
+**As delivered (2026-10-30):** the snapshot reads only the identifiers, through `GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync`. That is raw SQL that picks each object type's name attributes and the object's two external ids, then looks up exactly those values through `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`, so a referenced group's member values are never read. Each object is rebuilt from those values alone and named by the model's own rule (`NameOrId`, else the object's id), and a `RequiresPostgres` test holds the result equal to `GetCsoDisplayIdentifier` on the fully loaded object across every naming shape. `ExportChangeHistoryBuilder` now takes the identifiers rather than the objects, so the end-of-page snapshot resolution and Synchronisation Rule deletion recall use the same read, and the provisioning objects not yet written are named directly instead of through detached copies. The portal's unresolved-reference detail keeps the full load, since it classifies by anchor. Not yet measured at scale.
 
 ### Phase 4: Remaining per-page EF reads
 

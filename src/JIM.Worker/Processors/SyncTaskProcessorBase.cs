@@ -2117,17 +2117,17 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
-        _snapshotReferenceCsos.Clear();
+        _snapshotReferenceIdentifiers.Clear();
     }
 
     /// <summary>
-    /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
-    /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
-    /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
-    /// evaluation on Scenario 032). Cleared with the change tracker, because the objects it holds are tracked ones, and
-    /// once the page's provisioning objects are written, so a lookup that found none is asked again.
+    /// The display identifier of the target Connected System Object each referenced Metaverse Object resolved to in this
+    /// page's (or cross-page batch's) export change snapshots, or null where the database held none. Every report of one
+    /// manager, and every group sharing a member, used to query the same object again (#2492: about 6 ms of each object's
+    /// export evaluation on Scenario 032). Cleared at each page boundary, and once the page's provisioning objects are
+    /// written, so a lookup that found none is asked again.
     /// </summary>
-    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];
+    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), string?> _snapshotReferenceIdentifiers = [];
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -5287,7 +5287,7 @@ public abstract class SyncTaskProcessorBase
 
             // A snapshot lookup that found no target object may have been for one just written here; the snapshots
             // the rest of the page flush takes (deletion cascades, reference recall) must see it.
-            _snapshotReferenceCsos.Clear();
+            _snapshotReferenceIdentifiers.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -7100,72 +7100,47 @@ public abstract class SyncTaskProcessorBase
         using var snapshotSpan = Diagnostics.Sync.StartSpan("SnapshotPendingExportChanges")
             .SetTag("changeCount", pendingExport.AttributeValueChanges.Count);
 
-        // Collect MVO GUIDs from reference attribute changes so we can resolve them
-        // to stub CSOs in the target Connected System
-        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
+        // Name each Metaverse Object a reference points at by its object in the target Connected System.
+        Dictionary<Guid, string>? referenceDisplayIdentifiers = null;
         var mvoGuids = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(pendingExport.AttributeValueChanges);
 
         if (mvoGuids.Count > 0)
         {
             using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
-            // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
-            // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
-            // and won't be in the database when this snapshot runs.
-            // IMPORTANT: We create detached copies to avoid EF change tracker issues — the original
-            // CSOs are tracked entities that will be inserted by FlushPendingExportOperationsAsync.
-            // If we reference them directly via the ReferenceValue navigation property, EF's
-            // SaveChangesAsync would attempt to insert them again, causing duplicate key violations.
-            resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
-            foreach (var cso in _provisioningCsosToCreate)
+            // First, the provisioning objects this page has collected for batch creation (FlushPendingExportOperationsAsync),
+            // which are not in the database yet. Only their names are taken, so nothing here can reach them.
+            referenceDisplayIdentifiers = new Dictionary<Guid, string>();
+            foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
+                         && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
+                         && mvoGuids.Contains(cso.MetaverseObjectId.Value)))
             {
-                if (cso.MetaverseObjectId.HasValue
-                    && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
-                    && mvoGuids.Contains(cso.MetaverseObjectId.Value))
-                {
-                    var detached = new ConnectedSystemObject
-                    {
-                        Id = cso.Id,
-                        MetaverseObjectId = cso.MetaverseObjectId,
-                        ConnectedSystemId = cso.ConnectedSystemId,
-                        Status = cso.Status,
-                        Type = cso.Type,
-                        TypeId = cso.TypeId,
-                        ExternalIdAttributeId = cso.ExternalIdAttributeId,
-                        SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
-                        AttributeValues = cso.AttributeValues.ToList()
-                    };
-                    resolvedReferences.TryAdd(cso.MetaverseObjectId.Value, detached);
-                }
+                referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
             }
 
-            // For any MVO GUIDs not found in the in-memory batch, query the database
-            // (these may be CSOs created in a previous page/batch or a prior sync run)
-            var unresolvedMvoGuids = mvoGuids
-                .Where(g => !resolvedReferences.ContainsKey(g))
-                .ToList();
-
-            // Answered from this page's earlier lookups first; only Metaverse Objects not looked up yet reach the database.
+            // Then this page's earlier lookups; only Metaverse Objects not looked up yet reach the database (objects created
+            // in a previous page or run).
             var connectedSystemId = pendingExport.ConnectedSystemId;
             var notYetLookedUp = new List<Guid>();
-            foreach (var mvoGuid in unresolvedMvoGuids)
+            foreach (var mvoGuid in mvoGuids.Where(g => !referenceDisplayIdentifiers.ContainsKey(g)))
             {
-                if (!_snapshotReferenceCsos.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                if (!_snapshotReferenceIdentifiers.TryGetValue((mvoGuid, connectedSystemId), out var known))
                     notYetLookedUp.Add(mvoGuid);
                 else if (known != null)
-                    resolvedReferences.TryAdd(mvoGuid, known);
+                    referenceDisplayIdentifiers.TryAdd(mvoGuid, known);
             }
 
             if (notYetLookedUp.Count > 0)
             {
-                Dictionary<Guid, ConnectedSystemObject> dbResolved;
+                // The identifiers alone, not the objects (#2598): loading a referenced group whole brought every member value.
+                Dictionary<Guid, string> found;
                 using (Diagnostics.Sync.StartSpan("Snapshot.LoadReferencedObjects").SetTag("count", notYetLookedUp.Count))
-                    dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                    found = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
                 foreach (var mvoGuid in notYetLookedUp)
                 {
-                    var found = dbResolved.GetValueOrDefault(mvoGuid);
-                    _snapshotReferenceCsos[(mvoGuid, connectedSystemId)] = found;
-                    if (found != null)
-                        resolvedReferences.TryAdd(mvoGuid, found);
+                    var identifier = found.GetValueOrDefault(mvoGuid);
+                    _snapshotReferenceIdentifiers[(mvoGuid, connectedSystemId)] = identifier;
+                    if (identifier != null)
+                        referenceDisplayIdentifiers.TryAdd(mvoGuid, identifier);
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been
@@ -7182,7 +7157,7 @@ public abstract class SyncTaskProcessorBase
             _activity.InitiatedByType,
             _activity.InitiatedById,
             _activity.InitiatedByName,
-            resolvedReferences);
+            referenceDisplayIdentifiers);
 
         // Deletion-cascade and reference-recall Pending Exports are created with the Connected System
         // Object FK only (never the navigation property), so the builder cannot infer the object the
@@ -7252,14 +7227,14 @@ public abstract class SyncTaskProcessorBase
         if (unresolvedValueChanges.Count == 0)
             return;
 
-        // Batch-resolve all MVO GUIDs per Connected System
-        var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), ConnectedSystemObject>();
+        // Batch-resolve all MVO GUIDs per Connected System, to the identifiers alone (#2598)
+        var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), string>();
         foreach (var (csId, mvoGuids) in unresolvedByCs)
         {
-            var resolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoGuids, csId);
-            foreach (var (mvoGuid, cso) in resolved)
+            var resolved = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(mvoGuids, csId);
+            foreach (var (mvoGuid, identifier) in resolved)
             {
-                resolvedLookup[(csId, mvoGuid)] = cso;
+                resolvedLookup[(csId, mvoGuid)] = identifier;
             }
         }
 
@@ -7270,9 +7245,9 @@ public abstract class SyncTaskProcessorBase
         var resolvedCount = 0;
         foreach (var (valueChange, csId, mvoGuid) in unresolvedValueChanges)
         {
-            if (resolvedLookup.TryGetValue((csId, mvoGuid), out var cso))
+            if (resolvedLookup.TryGetValue((csId, mvoGuid), out var identifier))
             {
-                valueChange.StringValue = ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso);
+                valueChange.StringValue = identifier;
                 valueChange.IsPendingExportStub = true;
                 resolvedCount++;
             }

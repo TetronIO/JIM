@@ -546,23 +546,9 @@ public class ExportChangeHistoryBuilderTests
     [Test]
     public void MapAttributeValueChanges_ReferenceWithResolvedStubCso_StoresDisplayNameWithPendingFlag()
     {
-        // Arrange — MVO GUID in UnresolvedReferenceValue, with a matching stub CSO that has a secondary external ID
+        // Arrange — MVO GUID in UnresolvedReferenceValue, with its object's display identifier known
         var mvoGuid = Guid.NewGuid();
-        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
-        var stubCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            MetaverseObjectId = mvoGuid,
-            Status = ConnectedSystemObjectStatus.PendingProvisioning,
-            SecondaryExternalIdAttributeId = 100,
-            ExternalIdAttributeId = 99,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
-            }
-        };
-
-        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid, stubCso } };
+        var resolvedReferences = new Dictionary<Guid, string> { { mvoGuid, "CN=User1,OU=Users,DC=test,DC=local" } };
 
         var change = new ConnectedSystemObjectChange();
         var peChanges = new List<PendingExportAttributeValueChange>
@@ -583,9 +569,9 @@ public class ExportChangeHistoryBuilderTests
     [Test]
     public void MapAttributeValueChanges_ReferenceWithNoResolvedCso_FallsBackToStringValue()
     {
-        // Arrange — MVO GUID with no matching stub CSO in the lookup
+        // Arrange — MVO GUID with no display identifier in the lookup
         var mvoGuid = Guid.NewGuid();
-        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
+        var resolvedReferences = new Dictionary<Guid, string>();
 
         var change = new ConnectedSystemObjectChange();
         var peChanges = new List<PendingExportAttributeValueChange>
@@ -627,7 +613,7 @@ public class ExportChangeHistoryBuilderTests
     public void MapAttributeValueChanges_ReferenceWithNonGuidUnresolvedValue_FallsBackToStringValue()
     {
         // Arrange — UnresolvedReferenceValue is a DN string, not a GUID (e.g. from an LDAP import)
-        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
+        var resolvedReferences = new Dictionary<Guid, string>();
         var change = new ConnectedSystemObjectChange();
         var peChanges = new List<PendingExportAttributeValueChange>
         {
@@ -649,21 +635,7 @@ public class ExportChangeHistoryBuilderTests
         // Arrange — two references: one resolvable, one not
         var mvoGuid1 = Guid.NewGuid();
         var mvoGuid2 = Guid.NewGuid();
-        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
-        var stubCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            MetaverseObjectId = mvoGuid1,
-            Status = ConnectedSystemObjectStatus.PendingProvisioning,
-            SecondaryExternalIdAttributeId = 100,
-            ExternalIdAttributeId = 99,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
-            }
-        };
-
-        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid1, stubCso } };
+        var resolvedReferences = new Dictionary<Guid, string> { { mvoGuid1, "CN=User1,OU=Users,DC=test,DC=local" } };
 
         var change = new ConnectedSystemObjectChange();
         var peChanges = new List<PendingExportAttributeValueChange>
@@ -692,21 +664,7 @@ public class ExportChangeHistoryBuilderTests
     {
         // Arrange
         var mvoGuid = Guid.NewGuid();
-        var secondaryIdAttr = new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "distinguishedName", Type = AttributeDataType.Text };
-        var stubCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            MetaverseObjectId = mvoGuid,
-            Status = ConnectedSystemObjectStatus.PendingProvisioning,
-            SecondaryExternalIdAttributeId = 100,
-            ExternalIdAttributeId = 99,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
-            {
-                new() { AttributeId = 100, Attribute = secondaryIdAttr, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
-            }
-        };
-
-        var resolvedReferences = new Dictionary<Guid, ConnectedSystemObject> { { mvoGuid, stubCso } };
+        var resolvedReferences = new Dictionary<Guid, string> { { mvoGuid, "CN=User1,OU=Users,DC=test,DC=local" } };
 
         var pendingExport = CreatePendingExport(
             new PendingExportAttributeValueChange
