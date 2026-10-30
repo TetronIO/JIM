@@ -1171,6 +1171,301 @@ function Resolve-LabInstallImage {
 }
 
 # ---------------------------------------------------------------------------------------------
+# What the control account may not do itself, done by host setup (pure)
+# ---------------------------------------------------------------------------------------------
+#
+# The rebuild runs as jim-lab, which is a Hyper-V administrator and nothing more. Three things it needs are refused to
+# such an account, so Install-LabScripts.ps1, which runs elevated (by the operator, and hourly as SYSTEM), does them
+# instead: reading the Windows media's image list (Mount-DiskImage and Get-WindowsImage need an administrator), letting
+# VMs read the media (VMMS grants that as its caller, who must be allowed to change the media's ACL), and letting
+# jim-lab delete the lab VMs' files (those built by an administrator, and the Snapshots folders VMMS creates as SYSTEM).
+
+function Get-LabInstallImageRecordPath {
+    <#
+    .SYNOPSIS
+        Where host setup records the image each Windows media file installs: media.json, beside settings.json.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root
+    )
+
+    return (Join-LabPathText -Root $Root -Child 'media.json')
+}
+
+function ConvertTo-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The record of the image a build installs from one Windows media file: { path, length, lastWriteTimeUtc,
+        imageIndex, imageName, evaluation }.
+
+    .DESCRIPTION
+        The length and last write time identify the file the image list was read from, so replaced media is never taken
+        for the file recorded (Find-LabInstallImageRecord). The time is written as round-trip text in UTC, which keeps
+        every tick.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [long]$Length,
+
+        [Parameter(Mandatory)]
+        [datetime]$LastWriteTimeUtc,
+
+        # As Resolve-LabInstallImage returns it: { ImageIndex, ImageName, Evaluation }.
+        [Parameter(Mandatory)]
+        [object]$Image
+    )
+
+    return [ordered]@{
+        path             = $Path
+        length           = $Length
+        lastWriteTimeUtc = $LastWriteTimeUtc.ToUniversalTime().ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+        imageIndex       = [int]$Image.ImageIndex
+        imageName        = [string]$Image.ImageName
+        evaluation       = [bool]$Image.Evaluation
+    }
+}
+
+function ConvertTo-LabInstallImageRecordJson {
+    <#
+    .SYNOPSIS
+        The text of media.json: { "images": [ record, ... ] }.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Record
+    )
+
+    return ([ordered]@{ images = @($Record) } | ConvertTo-Json -Depth 4)
+}
+
+function ConvertFrom-LabInstallImageRecordJson {
+    <#
+    .SYNOPSIS
+        The records in the text of media.json; nothing for empty text or a file without images.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Json
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Json)) {
+        return
+    }
+    $document = $Json | ConvertFrom-Json
+    if ($null -eq $document -or $null -eq $document.PSObject.Properties['images']) {
+        return
+    }
+    @($document.images | Where-Object { $null -ne $_ })
+}
+
+function ConvertTo-LabRecordTime {
+    # Internal: a recorded time as UTC. ConvertFrom-Json turns round-trip text into a DateTime itself, so either may
+    # arrive here.
+    param($Value)
+
+    if ($Value -is [datetime]) {
+        $time = $Value
+    }
+    else {
+        $time = [datetime]::Parse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+    }
+    if ($time.Kind -eq [System.DateTimeKind]::Unspecified) {
+        $time = [datetime]::SpecifyKind($time, [System.DateTimeKind]::Utc)
+    }
+    return $time.ToUniversalTime()
+}
+
+function Test-LabSamePath {
+    # Internal: whether two Windows paths name the same file, by text: either slash, any case.
+    param([string]$Left, [string]$Right)
+
+    return [string]::Equals(($Left -replace '/', '\'), ($Right -replace '/', '\'), [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Find-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The recorded image of a Windows media file, { ImageIndex, ImageName, Evaluation }, or nothing when no record
+        matches its path, length and last write time.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]]$Record,
+
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [long]$Length,
+
+        [Parameter(Mandatory)]
+        [datetime]$LastWriteTimeUtc
+    )
+
+    $wanted = $LastWriteTimeUtc.ToUniversalTime()
+    foreach ($entry in @($Record | Where-Object { $null -ne $_ })) {
+        if (-not (Test-LabSamePath -Left ([string]$entry.path) -Right $Path)) { continue }
+        if ([long]$entry.length -ne $Length) { continue }
+        if ((ConvertTo-LabRecordTime -Value $entry.lastWriteTimeUtc) -ne $wanted) { continue }
+        return [pscustomobject]@{
+            ImageIndex = [int]$entry.imageIndex
+            ImageName  = [string]$entry.imageName
+            Evaluation = [bool]$entry.evaluation
+        }
+    }
+    return $null
+}
+
+function Merge-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The records with -NewRecord in place of any earlier record of the same file; other media's records are kept.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]]$Record,
+
+        [Parameter(Mandatory)]
+        [object]$NewRecord
+    )
+
+    @($Record | Where-Object { ($null -ne $_) -and -not (Test-LabSamePath -Left ([string]$_.path) -Right ([string]$NewRecord.path)) })
+    $NewRecord
+}
+
+function Get-LabMediaCapabilitySid {
+    <#
+    .SYNOPSIS
+        The SID Hyper-V grants read on an ISO it attaches to a VM, so that the VM's worker process can open it.
+
+    .DESCRIPTION
+        The capability SID of "vmWorkerProcess" (DeriveCapabilitySidsFromName), the same on every Windows host. VMMS
+        adds it to the ISO's ACL as its caller, which jim-lab cannot do on media it does not own (VMMS event 20790,
+        "Failed to set security info ... Access is denied"). Media an administrator has attached carries it already;
+        new media does not, so host setup grants it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    return 'S-1-15-3-1024-2268835264-3721307629-241982045-173645152-1490879176-104643441-2915960892-1612460704'
+}
+
+function Test-LabAccessRuleGranted {
+    <#
+    .SYNOPSIS
+        Whether a file or folder's access rules already allow a SID every right asked for (with -Inheritable, inherited
+        by the files and folders beneath), so that host setup leaves an ACL it has granted alone.
+
+    .DESCRIPTION
+        Each rule carries IdentityReference (the SID, as GetAccessRules with [SecurityIdentifier] gives it),
+        FileSystemRights, AccessControlType, InheritanceFlags and PropagationFlags, as enums or their numbers. An
+        inherited rule counts, so a folder beneath a granted one needs nothing of its own; an inherit-only rule does
+        not, since it does not apply to the object itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Rule,
+
+        [Parameter(Mandatory)]
+        [string]$Sid,
+
+        # FileSystemRights as a number, such as 0x301BF for Modify.
+        [Parameter(Mandatory)]
+        [long]$Rights,
+
+        [switch]$Inheritable
+    )
+
+    $allow = 0
+    $inheritOnly = 2
+    $containerAndObject = 3
+    foreach ($entry in $Rule) {
+        if ([string]$entry.IdentityReference -ne $Sid) { continue }
+        if ([int]$entry.AccessControlType -ne $allow) { continue }
+        if (([long]$entry.FileSystemRights -band $Rights) -ne $Rights) { continue }
+        if (([int]$entry.PropagationFlags -band $inheritOnly) -ne 0) { continue }
+        if ($Inheritable -and (([int]$entry.InheritanceFlags -band $containerAndObject) -ne $containerAndObject)) { continue }
+        return $true
+    }
+    return $false
+}
+
+function Get-LabControlFolder {
+    <#
+    .SYNOPSIS
+        The folders host setup lets the control account modify, so the rebuild can delete what it removes: each
+        rebuild-yyyyMMdd folder directly beneath the VHD directory, and each lab VM's folder elsewhere beneath it (the
+        VMs built by an administrator).
+
+    .DESCRIPTION
+        Pure. Vm holds { Name, Path } for the host's VMs. Only a lab VM (FolderName: each role's live, candidate and
+        prev names) in a folder Test-LabOwnedVmFolder accepts counts, so the runner's own VM, which may share the VHD
+        directory, never does. A folder beneath another listed one is left out: it inherits the grant.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root,
+
+        [AllowEmptyCollection()]
+        [object[]]$Vm = @(),
+
+        [Parameter(Mandatory)]
+        [string[]]$FolderName,
+
+        # The names of the folders directly beneath Root.
+        [AllowEmptyCollection()]
+        [string[]]$Directory = @()
+    )
+
+    $folders = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in $Directory) {
+        if ($name -match '^rebuild-\d{8}$') {
+            $folders.Add((Join-LabPathText -Root $Root -Child $name))
+        }
+    }
+    foreach ($entry in $Vm) {
+        $path = ([string]$entry.Path).TrimEnd('\', '/')
+        if (($FolderName -contains [string]$entry.Name) -and (Test-LabOwnedVmFolder -Path $path -Root $Root -Name $FolderName)) {
+            $folders.Add($path)
+        }
+    }
+
+    $unique = @($folders | Sort-Object -Unique)
+    foreach ($folder in $unique) {
+        $normalised = $folder -replace '/', '\'
+        $beneath = @($unique | Where-Object { $normalised.StartsWith((($_ -replace '/', '\') + '\'), [System.StringComparison]::OrdinalIgnoreCase) })
+        if ($beneath.Count -eq 0) {
+            $folder
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------------------------
 # Guest phases: settings, arguments and results (pure)
 # ---------------------------------------------------------------------------------------------
 
@@ -3121,19 +3416,112 @@ public static class LabIsoStream
 # installed unattended from the same media. What makes it a domain controller or a federation server is its guest
 # script.
 
+function Test-LabElevated {
+    <#
+    .SYNOPSIS
+        Whether this process runs as an administrator with its full token (SYSTEM does).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    Assert-LabWindows -Feature 'Checking for an administrator'
+    $principal = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent())
+    return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Grant-LabFileSystemAccess {
+    <#
+    .SYNOPSIS
+        Allows a SID rights on a file or folder, inherited by everything beneath a folder with -Inheritable, unless its
+        ACL already does (Test-LabAccessRuleGranted). Returns AlreadyGranted or Granted.
+
+    .DESCRIPTION
+        Only the DACL is read and written, so the owner is left as it is (Set-Acl would write the owner back, which
+        fails for an owner the caller may not assign). Writing an inheritable entry on a folder propagates it to what
+        is beneath.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$Sid,
+
+        [Parameter(Mandatory)]
+        [System.Security.AccessControl.FileSystemRights]$Rights,
+
+        [switch]$Inheritable
+    )
+
+    Assert-LabWindows -Feature 'Granting access to a file or folder'
+    $item = Get-Item -LiteralPath $Path -Force
+    $access = [System.Security.AccessControl.AccessControlSections]::Access
+    if ($item -is [System.IO.DirectoryInfo]) {
+        $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.DirectoryInfo]$item, $access)
+    }
+    else {
+        $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.FileInfo]$item, $access)
+    }
+    $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+    if (Test-LabAccessRuleGranted -Rule $rules -Sid $Sid -Rights ([long]$Rights) -Inheritable:$Inheritable) {
+        return 'AlreadyGranted'
+    }
+    if (-not $PSCmdlet.ShouldProcess($Path, "Allow $Sid $Rights")) {
+        return
+    }
+
+    $inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+    if ($Inheritable) {
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    }
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new($Sid), $Rights, $inheritance,
+        [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)
+    $acl.AddAccessRule($rule)
+    if ($item -is [System.IO.DirectoryInfo]) {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.DirectoryInfo]$item, [System.Security.AccessControl.DirectorySecurity]$acl)
+    }
+    else {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.FileInfo]$item, [System.Security.AccessControl.FileSecurity]$acl)
+    }
+    return 'Granted'
+}
+
 function Get-LabInstallImage {
     <#
     .SYNOPSIS
-        Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
-        { ImageIndex, ImageName, Evaluation }.
+        The Datacenter (Desktop Experience) image to install from the media: { ImageIndex, ImageName, Evaluation }.
+
+    .DESCRIPTION
+        Taken from -RecordPath (media.json, written by host setup) when it holds a record of the file as it is now.
+        Otherwise the image names are read off the media's install.wim, which needs an administrator: Mount-DiskImage
+        and Get-WindowsImage refuse anyone else, including jim-lab, which the rebuild runs as.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$IsoPath
+        [string]$IsoPath,
+
+        [string]$RecordPath
     )
 
     Assert-LabWindows -Feature 'Reading the installation media'
+    if ($RecordPath -and (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
+        $file = Get-Item -LiteralPath $IsoPath
+        $records = @(ConvertFrom-LabInstallImageRecordJson -Json (Get-Content -LiteralPath $RecordPath -Raw))
+        $recorded = Find-LabInstallImageRecord -Record $records -Path $file.FullName -Length $file.Length -LastWriteTimeUtc $file.LastWriteTimeUtc
+        if ($null -ne $recorded) {
+            return $recorded
+        }
+    }
+    if (-not (Test-LabElevated)) {
+        $where = if ($RecordPath) { "$RecordPath holds no record of it as it is now" } else { 'no record of it was given' }
+        throw ("Reading the images on '$IsoPath' needs an administrator (Mount-DiskImage and Get-WindowsImage refuse anyone else), " +
+            "and $where. Run Install-LabScripts.ps1 elevated on the host, or wait for its hourly task (\JIM\Update AD lab scripts), which records it.")
+    }
+
     $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
     try {
         $drive = ($mounted | Get-Volume).DriveLetter
@@ -4194,5 +4582,8 @@ Export-ModuleMember -Function @(
     'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
     'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
-    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall'
+    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall',
+    'Get-LabInstallImageRecordPath', 'ConvertTo-LabInstallImageRecord', 'ConvertTo-LabInstallImageRecordJson', 'ConvertFrom-LabInstallImageRecordJson',
+    'Find-LabInstallImageRecord', 'Merge-LabInstallImageRecord', 'Get-LabMediaCapabilitySid', 'Test-LabAccessRuleGranted', 'Get-LabControlFolder',
+    'Test-LabElevated', 'Grant-LabFileSystemAccess'
 )

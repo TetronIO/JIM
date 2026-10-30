@@ -292,7 +292,7 @@ try {
     $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
     $installPending = $false
     if ($null -eq $vm) {
-        $image = Get-LabInstallImage -IsoPath $IsoPath
+        $image = Get-LabInstallImage -IsoPath $IsoPath -RecordPath (Get-LabInstallImageRecordPath -Root $PSScriptRoot)
         if ($image.Evaluation) {
             Write-Ok "Installation image: $($image.ImageName) (evaluation media: installed without a key, converted to full Datacenter by the License phase)"
         }

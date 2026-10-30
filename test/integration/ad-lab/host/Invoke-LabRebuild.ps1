@@ -312,7 +312,12 @@ function Get-RebuildAdapter {
             if ($vmPath -and $script:VhdRoot -and (Test-LabOwnedVmFolder -Path $vmPath -Root $script:VhdRoot -Name $script:FolderName) -and (Test-Path -LiteralPath $vmPath)) {
                 $disks = @(Get-ChildItem -LiteralPath $vmPath -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.vhdx', '.avhdx', '.vhd', '.avhd' })
                 if ($disks.Count -eq 0) {
-                    Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue
+                    try {
+                        Remove-Item -LiteralPath $vmPath -Recurse -Force
+                    }
+                    catch {
+                        Write-RebuildLog "Removed $Name, but could not delete its folder $vmPath ($($_.Exception.Message)); an administrator must delete it."
+                    }
                 }
             }
         }
@@ -389,7 +394,24 @@ try {
             }
         }
 
-        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName (Get-LabRebuildGenerationName -NowUtc ([datetime]::UtcNow)) -CumulativeUpdatePath $updatePath
+        $generationName = Get-LabRebuildGenerationName -NowUtc ([datetime]::UtcNow)
+        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName $generationName -CumulativeUpdatePath $updatePath
+
+        # VMMS creates each VM's Snapshots folder as SYSTEM, and this account could not delete it when a candidate is
+        # replaced. An inheritable entry of its own on the rebuild folder reaches it, and as the folder's owner it may
+        # add one. Host setup grants the same within the hour in any case.
+        $generationFolder = Join-Path $plan.VhdDirectory $generationName
+        try {
+            $null = New-Item -ItemType Directory -Path $generationFolder -Force
+            $self = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $granted = Grant-LabFileSystemAccess -Path $generationFolder -Sid $self -Rights Modify -Inheritable
+            if ($granted -eq 'Granted') {
+                Write-RebuildLog "Let this account modify everything beneath $generationFolder, including what VMMS creates there."
+            }
+        }
+        catch {
+            Write-RebuildLog "Could not let this account modify everything beneath $generationFolder ($($_.Exception.Message)); a replaced candidate may leave an empty folder behind."
+        }
     }
     else {
         # Only the names are needed to stage, promote, roll back, prune or report, and a rollback must never be

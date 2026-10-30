@@ -288,6 +288,14 @@ Describe 'Install-LabScripts.ps1 end to end' {
         $result.Text | Should -Match 'settings.json does not exist yet'
     }
 
+    It 'skips the host access step, without failing, until there is a settings.json' {
+        $result = Invoke-InstallScript -Argument @('-Destination', $script:Destination)
+        $result.ExitCode | Should -Be 0
+        $result.Text | Should -Match 'Host access for the control account'
+        $result.Text | Should -Match 'skipped: no settings.json yet'
+        (Test-Path -LiteralPath (Join-Path $script:Destination 'media.json')) | Should -BeFalse
+    }
+
     It 'leaves an existing settings.json untouched when run without -CreateSettings' {
         $null = New-Item -ItemType Directory -Path $script:Destination
         $settings = Join-Path $script:Destination 'settings.json'
