@@ -304,7 +304,11 @@ public class DriftDetectionService
             return;
         }
 
-        var corrections = staged.Where(change => !SyncEngine.IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+        // A list for a multi-valued target stages one change per value, so each is answered from one lookup of what the
+        // object holds, exactly as export staging answers it (#2645), never a scan: comparing each with every held value
+        // cost the square of a large group's membership (#2658).
+        var heldLookup = new HeldAttributeValues(heldValues);
+        var corrections = staged.Where(change => !SyncEngine.IsCsoAttributeAlreadyCurrent(change, heldLookup)).ToList();
         if (corrections.Count == 0 || IsTargetHeldOnlyUnderAnotherDataType(cso, target))
             return;
 
@@ -1027,27 +1031,30 @@ public class DriftDetectionService
 
             // Fast path: hash-based set equality. Covers the overwhelmingly common case where both
             // sets hold same-typed values (reference attributes always yield Guids on both sides) and
-            // the target has not drifted. The pairwise scan below is O(n^2); on a 20,000-member group
-            // that is 400M comparisons (~36s of CPU per group measured at Scale500k25kGroups), where
-            // this is O(n). Hash equality implies SingleValueEquals equality for every type produced
+            // the target has not drifted. A pairwise scan was O(n^2); on a 20,000-member group that was
+            // 400M comparisons (~36s of CPU per group measured at Scale500k25kGroups), where this is
+            // O(n). Hash equality implies SingleValueEquals equality for every type produced
             // by the value extractors (ordinal equality for strings, which implies equality under either
             // text comparison; value equality for Guids and numerics,
             // reference equality for byte arrays), so a true result here is always safe.
             if (expectedSet.SetEquals(actualSet))
                 return true;
 
-            // Fallback: pairwise scan preserving the cross-type semantics hash equality cannot see
-            // (Guid vs its string representation, byte array content). The O(1) hash lookup filters
-            // first, so only genuinely hash-missing values pay for a linear scan.
-            foreach (var expectedValue in expectedSet.Where(v => !actualSet.Contains(v)))
+            // Fallback for the cross-type semantics hash equality cannot see (a Guid against its text, byte array
+            // content, text an identifier compares ignoring case): each value the hash cannot find is answered from one
+            // lookup of the actual set, keyed as SingleValueEquals decides (#2658). Scanning the set for each instead
+            // cost the square of the membership whenever every value needed it, as 50,000 Guids held as text do, on
+            // every synchronisation that found them not drifted.
+            var actualValues = new DriftValueSet(actualSet, textComparer);
+            var firstMissing = expectedSet
+                .Where(expectedValue => !actualSet.Contains(expectedValue) && !actualValues.HoldsMatchForExpected(expectedValue))
+                .Take(1)
+                .ToList();
+            if (firstMissing.Count > 0)
             {
-                var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue, textComparer));
-                if (!found)
-                {
-                    Log.Debug("ValuesEqual: Expected value {ExpectedValue} not found in actual set",
-                        FormatValueForLog(expectedValue));
-                    return false;
-                }
+                Log.Debug("ValuesEqual: Expected value {ExpectedValue} not found in actual set",
+                    FormatValueForLog(firstMissing[0]));
+                return false;
             }
 
             return true;
@@ -1060,7 +1067,12 @@ public class DriftDetectionService
     /// <summary>
     /// Compares two single values for equality.
     /// </summary>
-    private static bool SingleValueEquals(object? expected, object? actual, StringComparer textComparer)
+    /// <remarks>
+    /// <see cref="DriftValueSet"/> answers the same question for a whole set by lookup, keyed exactly as this method
+    /// decides, so a change to this method needs the same change there; <c>DriftValueSetDifferentialTests</c> fails until
+    /// the two agree (#2658).
+    /// </remarks>
+    internal static bool SingleValueEquals(object? expected, object? actual, StringComparer textComparer)
     {
         if (expected == null && actual == null)
             return true;
@@ -1186,52 +1198,49 @@ public class DriftDetectionService
 
         if (isMultiValued)
         {
-            // For multi-valued attributes, compute the diff between expected and actual
+            // For multi-valued attributes, compute the diff between expected and actual. Each side is asked after from
+            // one lookup of the other, keyed as SingleValueEquals decides (#2658): comparing every expected value with
+            // every actual one, and every actual with every expected, cost a drifted group the square of its membership
+            // twice over.
             var expectedSet = drifted.ExpectedValue as HashSet<object> ?? [];
             var actualSet = drifted.ActualValue as HashSet<object> ?? [];
+            var actualValues = new DriftValueSet(actualSet, textComparer);
+            var expectedValues = new DriftValueSet(expectedSet, textComparer);
 
             // Find values to ADD (in expected but not in actual)
-            foreach (var expectedValue in expectedSet)
+            foreach (var expectedValue in expectedSet.Where(expectedValue => !actualValues.HoldsMatchForExpected(expectedValue)))
             {
-                var existsInActual = actualSet.Any(av => SingleValueEquals(expectedValue, av, textComparer));
-                if (!existsInActual)
+                var addChange = new PendingExportAttributeValueChange
                 {
-                    var addChange = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = drifted.Attribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Add,
-                        SyncRuleId = exportRule.Id,
-                        SyncRuleName = exportRule.Name
-                    };
-                    SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
-                    changes.Add(addChange);
+                    Id = Guid.NewGuid(),
+                    AttributeId = drifted.Attribute.Id,
+                    ChangeType = PendingExportAttributeChangeType.Add,
+                    SyncRuleId = exportRule.Id,
+                    SyncRuleName = exportRule.Name
+                };
+                SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
+                changes.Add(addChange);
 
-                    Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
-                        FormatValueForLog(expectedValue), drifted.Attribute.Name);
-                }
+                Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
+                    FormatValueForLog(expectedValue), drifted.Attribute.Name);
             }
 
             // Find values to REMOVE (in actual but not in expected)
-            foreach (var actualValue in actualSet)
+            foreach (var actualValue in actualSet.Where(actualValue => !expectedValues.HoldsMatchForActual(actualValue)))
             {
-                var existsInExpected = expectedSet.Any(ev => SingleValueEquals(ev, actualValue, textComparer));
-                if (!existsInExpected)
+                var removeChange = new PendingExportAttributeValueChange
                 {
-                    var removeChange = new PendingExportAttributeValueChange
-                    {
-                        Id = Guid.NewGuid(),
-                        AttributeId = drifted.Attribute.Id,
-                        ChangeType = PendingExportAttributeChangeType.Remove,
-                        SyncRuleId = exportRule.Id,
-                        SyncRuleName = exportRule.Name
-                    };
-                    SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
-                    changes.Add(removeChange);
+                    Id = Guid.NewGuid(),
+                    AttributeId = drifted.Attribute.Id,
+                    ChangeType = PendingExportAttributeChangeType.Remove,
+                    SyncRuleId = exportRule.Id,
+                    SyncRuleName = exportRule.Name
+                };
+                SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
+                changes.Add(removeChange);
 
-                    Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
-                        FormatValueForLog(actualValue), drifted.Attribute.Name);
-                }
+                Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
+                    FormatValueForLog(actualValue), drifted.Attribute.Name);
             }
         }
         else

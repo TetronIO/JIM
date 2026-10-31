@@ -243,52 +243,55 @@ public partial class SyncEngine
         PendingExport stagedPendingExport,
         List<PendingExportAttributeValueChange> newChanges)
     {
-        var replacedCount = 0;
-        var addedCount = 0;
-
         newChanges = WithOneChangePerSingleValuedAttribute(newChanges);
 
-        // Drop the staged changes this evaluation supersedes wholesale before the value-level merge below
-        // (#1199): an incoming Update or RemoveAll sets the attribute's entire value set, so any staged
-        // change for that attribute is void whatever its own value or change type, and the value-level keys
-        // cannot see that.
+        // Merge keys: single-valued attributes key by attribute id only (newest wins), multi-valued attributes key by
+        // attribute id plus value (each distinct value preserved). Every change is keyed once and the superseded staged
+        // changes leave in one pass (#2658): re-keying every staged change for each incoming one that collided, and
+        // removing them one at a time, cost the square of a large group's membership. The outcome is the one merging
+        // the incoming changes in order gives, each replacing whatever already holds its key: the staged changes left
+        // keep their order, then the incoming changes follow in theirs, a later one for the same key taking the place of
+        // an earlier one.
+        var incomingKeys = newChanges.Select(GetAttributeChangeMergeKey).ToList();
+        var lastIncomingIndexByKey = new Dictionary<string, int>(incomingKeys.Count);
+        for (var i = 0; i < incomingKeys.Count; i++)
+            lastIncomingIndexByKey[incomingKeys[i]] = i;
+
+        // The staged changes this evaluation supersedes wholesale (#1199): an incoming Update or RemoveAll sets the
+        // attribute's entire value set, so any staged change for that attribute is void whatever its own value or change
+        // type, and the value-level keys cannot see that. Such a change takes no part in the value-level merge below.
         var wholeAttributeReplacementIds = GetWholeAttributeReplacementAttributeIds(newChanges);
-        var supersededChanges = stagedPendingExport.AttributeValueChanges
-            .Where(avc => wholeAttributeReplacementIds.Contains(avc.AttributeId))
-            .ToList();
-        foreach (var superseded in supersededChanges)
-            stagedPendingExport.AttributeValueChanges.Remove(superseded);
+        var superseded = new HashSet<PendingExportAttributeValueChange>(
+            stagedPendingExport.AttributeValueChanges.Where(staged => wholeAttributeReplacementIds.Contains(staged.AttributeId)),
+            ReferenceEqualityComparer.Instance);
 
-        // Build a lookup of the remaining staged changes for deduplication. Merge keys: single-valued
-        // attributes key by attribute id only (newest wins), multi-valued attributes key by attribute id
-        // plus value (each distinct value preserved).
-        var existingChangeKeys = new HashSet<string>();
-        foreach (var existing in stagedPendingExport.AttributeValueChanges)
-            existingChangeKeys.Add(GetAttributeChangeMergeKey(existing));
-
-        foreach (var newChange in newChanges)
+        // The staged changes an incoming change replaces (same attribute, or attribute and value): export evaluation
+        // wins, because it derives from the latest Metaverse Object state. Their keys are the incoming keys already held.
+        var heldKeys = new HashSet<string>();
+        foreach (var (replacedChange, key) in stagedPendingExport.AttributeValueChanges
+                     .Where(staged => !wholeAttributeReplacementIds.Contains(staged.AttributeId))
+                     .Select(staged => (Change: staged, Key: GetAttributeChangeMergeKey(staged)))
+                     .Where(keyed => lastIncomingIndexByKey.ContainsKey(keyed.Key)))
         {
-            var key = GetAttributeChangeMergeKey(newChange);
-            if (existingChangeKeys.Contains(key))
-            {
-                // Same attribute (single-valued) or attribute+value (multi-valued) already staged: remove the
-                // staged version(s) and add the newly evaluated one (newer Metaverse Object state wins).
-                var toRemove = stagedPendingExport.AttributeValueChanges
-                    .Where(avc => GetAttributeChangeMergeKey(avc) == key)
-                    .ToList();
-                foreach (var r in toRemove)
-                    stagedPendingExport.AttributeValueChanges.Remove(r);
-                stagedPendingExport.AttributeValueChanges.Add(newChange);
-                existingChangeKeys.Remove(key);
-                existingChangeKeys.Add(GetAttributeChangeMergeKey(newChange));
-                replacedCount++;
-            }
-            else
-            {
-                stagedPendingExport.AttributeValueChanges.Add(newChange);
-                existingChangeKeys.Add(key);
+            superseded.Add(replacedChange);
+            heldKeys.Add(key);
+        }
+
+        stagedPendingExport.AttributeValueChanges.RemoveAll(superseded.Contains);
+
+        // An incoming change replaces when its key is already held, by a staged change or an earlier incoming one, and is
+        // added otherwise; only the last for each key stays.
+        var replacedCount = 0;
+        var addedCount = 0;
+        for (var i = 0; i < newChanges.Count; i++)
+        {
+            if (heldKeys.Add(incomingKeys[i]))
                 addedCount++;
-            }
+            else
+                replacedCount++;
+
+            if (lastIncomingIndexByKey[incomingKeys[i]] == i)
+                stagedPendingExport.AttributeValueChanges.Add(newChanges[i]);
         }
 
         if (newChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)))

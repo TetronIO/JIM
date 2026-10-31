@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Synchronising a group whose members are themselves large groups is faster: recording each export's change now reads only the names of the objects it references, not their members, which cost 14.8 seconds for one group in a 750,000-person directory. (#2598)
 - ⚡ Large groups load far faster during synchronisation: loading a group's members or pending membership changes no longer grows with the square of its size, taking one page with a 500,000-member group from over a minute to seconds. (#2598)
 - ⚡ Synchronising a change to a large group's membership is faster: checking which members the Connected System already holds no longer grows with the square of the group's size, which cost 50 seconds for one 50,000-member group gaining two members. (#2645)
+- ⚡ Large groups checked for drift, or with an export already queued, synchronise faster: Drift Detection, and merging a membership change into a queued Pending Export, no longer grow with the square of the group's size, which could take minutes at 50,000 members. (#2658)
 
 
 ## [0.17.0] - 2026-10-29
