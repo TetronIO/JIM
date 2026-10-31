@@ -540,7 +540,7 @@ try {
         }
         catch {
             Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue | Remove-VMSnapshot -Confirm:$false
-            throw "The baseline of $Name failed, so any baseline of it was removed and no mismatched pair is left: $($_.Exception.Message)"
+            throw "The baseline of $Name failed, so any baseline of it that could be listed was removed (the rebuild replaces, and will not stage, one its domain controller's baseline lacks): $($_.Exception.Message)"
         }
         try {
             Invoke-Checkpoint -VmName $DomainControllerName
