@@ -32,7 +32,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 ## Non-Goals
 
 - Exchange Online and hybrid remote mailboxes. A separate issue follows.
-- Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 15.
+- Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 17.
 - Mailbox permissions (Full Access, Send As, a manager's access to a leaver's mailbox), archive mailboxes, linked mailboxes, and mailbox policies (retention, address book, quotas). These come later.
 - Guided setup templates. The first release is configured with ordinary Attribute Flows; templates that generate those flows follow in their own PRD.
 - JIM-side database balancing ("least-populated database"), unless customers ask for it.
@@ -76,42 +76,50 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **The Exchange step**
 
-7. After a successful directory create or update, when an object's declared recipient state differs from its last imported state, JIM stages an Exchange step for it. The step is persisted, as Initial Password staging is, so a Worker restart loses nothing.
+7. After a successful directory create or update, when an object's declared recipient state differs from its last imported state, JIM queues a durable Exchange change for it, as the export queues an initial password today. The queued change holds the declared state and the domain controller written to, and no secret.
 8. The step names the domain controller the directory write went to (`-DomainController`). Exchange runs on its own servers and otherwise picks a domain controller for itself, which may not have the new object yet: replication takes seconds within a site and can take 15 minutes or more between sites, and Exchange then reports "object not found".
    - JIM records the domain controller it actually wrote to, from the bound connection's RootDSE `dnsHostName`, because the Connected System's host may be a domain name that any domain controller answers.
    - When Exchange cannot reach that domain controller, the step fails with an error naming both servers. It does not fall back to Exchange's own choice, which would bring back the replication failure.
 9. The step is idempotent: it reads the recipient's current state first and does only what converges it. Re-running against a recipient already in its declared state changes nothing.
-10. A failed step never rolls back or hides the directory write. It is reported on the Activity, against the object, and retried on the next export run.
-11. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
+10. A background delivery lane, like the [Password Delivery Service](../../docs/concepts/password-synchronisation.md#the-password-delivery-service), delivers each queued change within seconds of the export writing it, without waiting for another export run. It claims each change with a lease, so a Worker that stops mid-delivery cannot strand it, and it serves the whole queue over one Exchange session.
+11. Each queued change ends in one of these states, shown on the Activity and against the object:
+    - **Delivered:** Exchange has the declared state. The queued change is removed; the Activity is the history.
+    - **Retrying:** Exchange was unreachable, timed out, or could not see the object yet. JIM retries with backoff, on the Connected System's schedule.
+    - **Parked:** Exchange refused, or retries ran out. Nothing changes until a person retries it or the declared state changes. There is no time-based expiry: unlike a queued password, a declared recipient does not go stale.
+    - **Superseded:** a newer declared state for the same object replaces it, so only the latest is ever delivered.
+    - **Withdrawn:** the object, or the Synchronisation Rule that declared it, was removed first. This is not a failure.
+    - **Cancelled:** an administrator decided it should not be delivered.
+12. A failed change never rolls back or hides the directory write, and JIM never treats the recipient as existing until an import shows it.
+13. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
 
 **Lifecycle**
 
-12. A change from None to a recipient type enables the recipient (`Enable-Mailbox`, `-Shared`, `-Room` or `-Equipment`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`).
-13. A change of recipient type on an existing recipient, including to None, is not made in the first release. It is reported on the Activity against the object, and nothing changes.
-14. Alias, primary SMTP address and external address changes reach Exchange (`Set-Mailbox`, `Set-MailUser`, `Set-MailContact`, `Set-DistributionGroup`).
-15. When JIM deletes a recipient's directory object (the Delete deprovisioning action), no Exchange step runs. Exchange disconnects a deleted user's mailbox itself and keeps it for the mailbox database's deleted-mailbox retention period (30 days by default), during which an Exchange administrator can reconnect it. Other recipients are directory objects only, so they go with the object. When JIM disconnects an object instead, its recipient is left as it is.
+14. A change from None to a recipient type enables the recipient (`Enable-Mailbox`, `-Shared`, `-Room` or `-Equipment`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`).
+15. A change of recipient type on an existing recipient, including to None, is not made in the first release. It is reported on the Activity against the object, and nothing changes.
+16. Alias, primary SMTP address and external address changes reach Exchange (`Set-Mailbox`, `Set-MailUser`, `Set-MailContact`, `Set-DistributionGroup`).
+17. When JIM deletes a recipient's directory object (the Delete deprovisioning action), no Exchange step runs. Exchange disconnects a deleted user's mailbox itself and keeps it for the mailbox database's deleted-mailbox retention period (30 days by default), during which an Exchange administrator can reconnect it. Other recipients are directory objects only, so they go with the object. When JIM disconnects an object instead, its recipient is left as it is.
 
 **Database placement**
 
-16. With Exchange Database empty, Exchange's automatic mailbox distribution chooses, honouring `IsExcludedFromProvisioning` and `IsSuspendedFromProvisioning`.
-17. With Exchange Database set, typically by an expression, that database is used. A database that does not exist fails the step with a clear error.
+18. With Exchange Database empty, Exchange's automatic mailbox distribution chooses, honouring `IsExcludedFromProvisioning` and `IsSuspendedFromProvisioning`.
+19. With Exchange Database set, typically by an expression, that database is used. A database that does not exist fails the step with a clear error.
 
 **GAL synchronisation**
 
-18. A Synchronisation Rule can provision in-scope Metaverse Objects from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
-19. Each contact's `proxyAddresses` include an `X500:` address made from the source recipient's `legacyExchangeDN`, so replies to old messages and cached entries do not bounce.
-20. Contacts JIM created are never imported back and projected as people. The documented setup scopes the source Synchronisation Rules to exclude the GAL OU.
-21. Address book attributes (display name, company, department, phone numbers) flow as ordinary attributes, and a contact is deleted when its source leaves scope, under the normal deprovisioning rules.
+20. A Synchronisation Rule can provision in-scope Metaverse Objects from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
+21. Each contact's `proxyAddresses` include an `X500:` address made from the source recipient's `legacyExchangeDN`, so replies to old messages and cached entries do not bounce.
+22. Contacts JIM created are never imported back and projected as people. The documented setup scopes the source Synchronisation Rules to exclude the GAL OU.
+23. Address book attributes (display name, company, department, phone numbers) flow as ordinary attributes, and a contact is deleted when its source leaves scope, under the normal deprovisioning rules.
 
 **Import and reporting**
 
-22. The next import picks up the values Exchange stamped (`mail`, `proxyAddresses`, `legacyExchangeDN`, `homeMDB`, `msExchMailboxGuid`, `msExchRecipientTypeDetails`), so JIM's view converges with Exchange's.
-23. Exchange failures carry their own Run Profile Execution Item error types. They distinguish at least: object not found, already in the declared state, refused by Exchange (with Exchange's message), insufficient permissions, authentication failure, and unreachable or timed out (retryable).
-24. Each export run logs summary statistics for its Exchange steps: staged, succeeded, failed, retried, plus the session's Kerberos logins and connections.
+24. The next import picks up the values Exchange stamped (`mail`, `proxyAddresses`, `legacyExchangeDN`, `homeMDB`, `msExchMailboxGuid`, `msExchRecipientTypeDetails`), so JIM's view converges with Exchange's.
+25. Each failure is classified so an administrator can tell them apart: object not found, refused by Exchange (with Exchange's own message), insufficient permissions, authentication failure, and unreachable or timed out. The classification decides whether the change is Retrying or Parked.
+26. Each delivery pass logs summary statistics: changes delivered, retrying, parked and superseded, plus the session's Kerberos logins and connections.
 
 **Surface parity**
 
-25. Exchange settings, the connector-defined attributes and the new error types are available in the portal, the REST API and PowerShell, with tests and docs on each.
+27. Exchange settings, the connector-defined attributes, and the queued Exchange changes with their outcomes (including retry and cancel) are available in the portal, the REST API and PowerShell, with tests and docs on each.
 
 ### Non-Functional Requirements
 
@@ -151,7 +159,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **Given**: Dave's account was created, and the Exchange server is down
 **When**: the Exchange step runs
-**Then**: Dave's account stays created; the Activity shows a Run Profile Execution Item for Dave with the error type "Exchange unreachable (will retry)"; the next export run retries and creates his mailbox
+**Then**: Dave's account stays created, and his queued Exchange change shows as Retrying against him, with Exchange's reason. When Exchange is back, the delivery lane's next attempt creates his mailbox, without waiting for another export run.
 
 ### Scenario 6: A group that cannot be mail-enabled
 
@@ -185,11 +193,11 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 |------|--------|
 | Remoting library | Already built by the spike; moves from spike to production use |
 | LDAP Connector | Exchange settings, connector-defined attributes, the Exchange step, the `contact` Object Type |
-| Models and database | A persisted staged Exchange step (like `PendingPasswordChange`), Connected System Exchange settings, new RPEI error types; a migration |
-| Worker | Staging after directory writes and a delivery pass, mirroring Initial Password (`StageInitialPasswordsForBatchAsync`) |
+| Models and database | A durable queue of Exchange changes (like `PendingPasswordChange`), Connected System Exchange settings, the failure classifications; a migration |
+| Worker | Queueing after directory writes, and a delivery lane beside the Password Delivery Service's |
 | Application | Export execution (`ExportExecutionServer`), settings validation, the connection test |
 | API and PowerShell | Settings DTOs and endpoints; cmdlet parameters for the settings and the test |
-| Portal | An Exchange section on the LDAP Connected System; the new error types on Activities |
+| Portal | An Exchange section on the LDAP Connected System; queued Exchange changes and their outcomes on Activities and on the object, with retry and cancel |
 | Worker image | `XDG_CACHE_HOME` and `POWERSHELL_TELEMETRY_OPTOUT` |
 | Integration tests | New scenarios against the AD lab's Exchange servers, including GAL sync both ways |
 
@@ -200,7 +208,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 | `docs/connectors/jim-ldap-connector-exchange.md` (new) | How to set up Exchange provisioning: settings, recipient types, placement, lifecycle, troubleshooting |
 | `docs/connectors/jim-ldap-connector-gal-sync.md` (new) | GAL sync between forests, including the X500 proxy and loop prevention |
 | `docs/connectors/jim-ldap-connector-permissions.md` | The least-privilege Exchange RBAC role |
-| `docs/configuration/activity-execution-items.md` | The new error types |
+| `docs/configuration/activity-execution-items.md` | How queued Exchange changes and their outcomes appear on Activities |
 | `engineering/COMPLIANCE_MAPPING.md` | SC-8 moves from planned to in place |
 | `engineering/DEVELOPER_GUIDE.md` | The remoting library and its boundary |
 
@@ -234,10 +242,10 @@ Made on 2026-10-31, in review of this draft:
 - [ ] A universal group can be mail-enabled; a non-universal group is refused with a clear error.
 - [ ] Mail users and mail contacts are created with their external address.
 - [ ] GAL sync between PANOPLY and RESURGAM works both ways: contacts carry the `X500:` proxy, none is projected back as a person, and each is deleted when its source leaves scope.
-- [ ] A failed Exchange step is reported, retried on the next run, and never leaves JIM believing the recipient exists.
+- [ ] A queued Exchange change is delivered within seconds of the export, survives a Worker restart, retries what a retry can cure, parks what needs a person, and never leaves JIM believing the recipient exists.
 - [ ] Re-running against a recipient already in its declared state changes nothing.
 - [ ] Each export run logs summary statistics for its Exchange steps.
-- [ ] Settings, attributes and error types work from the portal, the REST API and PowerShell, with tests and docs.
+- [ ] Settings, attributes and queued Exchange changes work from the portal, the REST API and PowerShell, with tests and docs.
 - [ ] The Worker runs the Exchange step on its read-only root filesystem as a non-root user.
 - [ ] The remoting library has no `JIM.*` references, enforced by test.
 - [ ] Integration tests pass against the AD lab's Exchange SE servers.
@@ -249,7 +257,7 @@ Made on 2026-10-31, in review of this draft:
   2. The first release (this PRD).
   3. Guided setup: a "Mailbox provisioning" template (recipient type, alias and SMTP patterns, database placement) and a "GAL sync" template (target OU, X500 proxy, loop-prevention scoping), both generating editable Attribute Flows.
   4. Later: leaver handling in Exchange (convert to shared, hide, disable, paired with JIM's leaver actions), mailbox permissions as entitlements, archives, linked mailboxes, policies.
-- **Precedent.** Initial Password's staged follow-up step (`PendingExport.InitialPasswordFollows`, `PendingPasswordChange`, `docs/configuration/initial-password.md`) is the model for the Exchange step.
+- **Precedent.** The Password Delivery Service and its queue (`PendingPasswordChange`, its statuses and claim lease; `docs/configuration/initial-password.md`, `docs/concepts/password-synchronisation.md`) are the model for the Exchange queue. Whether the implementation generalises that lane's mechanics (claiming, backoff, parking, Activity reporting) to carry both kinds of work, or builds a parallel lane, is for the implementation plan; the password queue's secrecy invariants stay its own either way.
 - **Already in place.** The `Mail Nickname`, `Proxy Addresses` and `Hide From Address Lists?` Metaverse Attributes and their LDAP Standard Mappings exist, and hiding a leaver from the address book already works through `msExchHideFromAddressLists`.
 - **Deferred test: replication lag.** Requirement 8 (`-DomainController`) is what stops a just-created account being reported as "object not found" by a domain controller that has not replicated it yet. The AD lab has one domain controller per forest, so the integration tests prove the parameter is passed and honoured but cannot reproduce the lag itself. Proving that needs a second domain controller in PANOPLY, with JIM writing to one and Exchange's own choice being the other; not planned for now.
 - **Scenario coverage** reviewed during the spike: <https://claude.ai/artifact/DcP86jG9dQsochAdpNUCFZ>
