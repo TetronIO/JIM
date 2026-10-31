@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Synchronising a change to a large group's membership is faster: checking which members the Connected System already holds no longer grows with the square of the group's size, which cost 50 seconds for one 50,000-member group gaining two members. (#2645)
 - ⚡ Large groups checked for drift, or with an export already queued, synchronise faster: Drift Detection, and merging a membership change into a queued Pending Export, no longer grow with the square of the group's size, which could take minutes at 50,000 members. (#2658)
 - ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
+- ⚡ Removing many departed accounts in one synchronisation is faster: each page now deletes them in a few statements, rather than one per object and per value. (#2669)
 
 
 ## [0.17.0] - 2026-10-29

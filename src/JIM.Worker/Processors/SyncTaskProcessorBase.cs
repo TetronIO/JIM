@@ -5820,7 +5820,10 @@ public abstract class SyncTaskProcessorBase
         // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
+            // The objects a Metaverse Object deletion already disconnected, which the confirming import found gone: a
+            // leaver cohort's whole deletion runs here, not in the execution-item path below (#2669).
+            using (Diagnostics.Sync.StartSpan("CsoDeletionQuiet").SetTag("csoCount", _quietCsosToDelete.Count))
+                await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -5830,7 +5833,13 @@ public abstract class SyncTaskProcessorBase
         // them; a review that runs while the departed object remains simply finds it and stages nothing.
         if (_pendingReProvisioningReviewMvoIds.Count > 0)
         {
-            var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+            int flagged;
+            using (var flagSpan = Diagnostics.Sync.StartSpan("CsoDeletionFlagScopeReview")
+                .SetTag("mvoCount", _pendingReProvisioningReviewMvoIds.Count))
+            {
+                flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+                flagSpan.SetTag("flaggedCount", flagged);
+            }
             Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Flagged} of {Requested} Metaverse Object(s) for an export scope review, " +
                 "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); an object flagged " +
                 "already is flagged again, so a review in progress cannot clear it",
@@ -5842,7 +5851,9 @@ public abstract class SyncTaskProcessorBase
         if (_obsoleteCsosToDelete.Count == 0)
             return;
 
-        using var span = Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations");
+        // Named for what it covers rather than after the method: the processors wrap the whole flush in a
+        // FlushObsoleteCsoOperations span, and a span inside its namesake made the breakdown ambiguous (#2669).
+        using var span = Diagnostics.Sync.StartSpan("CsoDeletionWithExecutionItems");
         span.SetTag("deleteCount", _obsoleteCsosToDelete.Count);
 
         // Batch delete obsolete CSOs

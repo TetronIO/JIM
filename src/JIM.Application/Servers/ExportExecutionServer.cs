@@ -2270,10 +2270,8 @@ public class ExportExecutionServer
     /// Removes the Connected System Objects (and their now-superfluous Pending Exports) for Delete exports
     /// that succeeded against a Connected System Object whose provisioning was never confirmed; see
     /// <see cref="IsUnconfirmedProvisioningDeleteSuccess"/> for the rule. Deletes by id via
-    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/> rather than the tracked-graph
-    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsAsync"/>: export batches load Pending Exports
-    /// <c>AsNoTracking()</c> with the Connected System Object graph included, and attaching that untracked
-    /// graph to a tracked <c>RemoveRange</c> can throw on the duplicate-key attach.
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>: export batches load Pending Exports
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so ids are what they hold.
     /// </summary>
     /// <param name="qualifyingExports">
     /// Delete exports that satisfy <see cref="IsUnconfirmedProvisioningDeleteSuccess"/>. Each caller is
