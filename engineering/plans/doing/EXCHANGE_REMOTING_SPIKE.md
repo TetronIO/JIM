@@ -228,8 +228,12 @@ The faults the harness found were all in the stand-in server, and all are fixed:
 
 None was in the client. That is weak evidence: the stand-in and the client share an author for everything above the Kerberos layer, which is exactly what Phase 1b exists to test.
 
+**Inside the Worker image (2026-10-31): works, with one change the Worker needs.** A throwaway client ran a command through the harness from the Worker's `base` stage, with the Worker's own hardening: UID 1654, a read-only root filesystem, `/tmp` as the only writable path, all capabilities dropped and `no-new-privileges`.
+- **What breaks without the change:** `System.Management.Automation` creates its cache folder under `$HOME/.cache` (`/home/app/.cache`) the first time it runs. On the read-only root filesystem that throws, and every type that depends on it fails to initialise, so no session can open.
+- **The fix:** set `XDG_CACHE_HOME=/tmp/.cache` in the Worker image. With only that, the session opens and the command runs, and the only things written are an empty `/tmp/.cache/powershell` folder and the generated `krb5.conf` under `/tmp`. Neither `XDG_CONFIG_HOME` nor `XDG_DATA_HOME` is needed. This belongs in the #2021 implementation, in the PR where the Worker first references the library.
+- **Already in place:** the image's pinned `libgssapi-krb5-2` loads, and an in-memory credential cache needs nothing written.
+
 **Not yet done, carried forward:**
-- **Running the client inside the Worker image** rather than natively. The sandbox has the same libraries, but it should be proven in the image.
 - **A CI job for the harness.** The tests skip without it today.
 - **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
