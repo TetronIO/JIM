@@ -464,6 +464,7 @@ The attribute's priority order on that Object Type: each contributing Attribute 
 | `MetaverseAttributeId` | `int` | The unique identifier of the attribute. |
 | `MetaverseAttributeName` | `string` | The attribute's name; empty when nothing contributes to it. |
 | `Contributors` | `object[]` | The Attribute Flows that contribute a value to the attribute, highest priority first; empty when none does. Each has `MappingId`, `Priority`, `NullIsValue`, `SyncRuleId`, `SyncRuleName`, `SyncRuleEnabled`, `ConnectedSystemId` and `ConnectedSystemName`. |
+| `AwaitingSynchronisation` | `object[]` | On the response to a change of the order: the Connected System Object Types the change recorded as awaiting synchronisation, one for each enabled Synchronisation Rule whose Attribute Flow it moved or whose "Null is a value" it changed, since the change alters which value wins for that rule's objects. For each, the Connected System's next synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation (empty when it has never completed one). Empty on a read, and when the change recorded nothing. Each has `ConnectedSystemId`, `ConnectedSystemName`, `ConnectedSystemObjectTypeId`, `ObjectTypeName`, `ObjectCount` and `EstimatedDuration`. |
 <!-- END GENERATED: Get-JIMMetaverseAttributePriority -->
 
 ### Examples
@@ -503,7 +504,7 @@ Set-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -Mappin
 
 ### Output
 
-With `-PassThru`, the resulting priority order; otherwise nothing.
+With `-PassThru`, the resulting priority order; otherwise nothing. AwaitingSynchronisation lists each Connected System Object Type the reorder makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream either way.
 
 Properties as under [Get-JIMMetaverseAttributePriority](#get-jimmetaverseattributepriority).
 <!-- END GENERATED: Set-JIMMetaverseAttributePriority -->
@@ -544,7 +545,7 @@ Move-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -Mappi
 
 ### Output
 
-With `-PassThru`, the resulting priority order; otherwise nothing.
+With `-PassThru`, the resulting priority order; otherwise nothing. AwaitingSynchronisation lists each Connected System Object Type the move makes its Connected System's next synchronisation, Delta or Full, process in full, with how many objects that is and about how long it takes, and a warning saying the same is written to the warning stream either way.
 
 Properties as under [Get-JIMMetaverseAttributePriority](#get-jimmetaverseattributepriority).
 <!-- END GENERATED: Move-JIMMetaverseAttributePriority -->
