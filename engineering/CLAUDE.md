@@ -59,6 +59,7 @@ When creating the implementation plan (either appended to the PRD or as a separa
    - Link to the plan document for full details
    - Assign to appropriate milestone
    - Add relevant labels (enhancement, bug, documentation, etc.)
+   - Set the Priority and Effort issue fields (mandatory; values and commands in the root `CLAUDE.md`, "Workflow & Git")
    - Example: "See full implementation plan: [`engineering/plans/done/PROGRESS_REPORTING.md`](plans/done/PROGRESS_REPORTING.md)"
 
 3. **Add the issue number back to the plan document header:**
