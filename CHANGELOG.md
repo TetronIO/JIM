@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Large groups checked for drift, or with an export already queued, synchronise faster: Drift Detection, and merging a membership change into a queued Pending Export, no longer grow with the square of the group's size, which could take minutes at 50,000 members. (#2658)
 - ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
 - ⚡ Removing many departed accounts in one synchronisation is faster: each page now deletes them in a few statements, rather than one per object and per value. (#2669)
-- ⚡ Large multi-valued Text and Binary attributes import and synchronise faster, as does handing a large attribute over by Attribute Priority when its contributor leaves: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds to synchronise one 50,000-value Text attribute with a single value changed. (#2666)
+- ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
 
 
 ## [0.17.0] - 2026-10-29
