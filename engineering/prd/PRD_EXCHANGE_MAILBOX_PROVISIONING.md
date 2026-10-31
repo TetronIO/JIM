@@ -22,7 +22,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 - An administrator makes JIM-provisioned directory objects Exchange recipients by declaring each object's recipient type, without knowing Exchange's attributes or cmdlets.
 - Every common recipient is covered: user, shared, room and equipment mailboxes, mail users, mail-enabled groups, and mail contacts.
-- Changes after creation converge: type conversions (a leaver's mailbox to a shared mailbox, and back), address changes, and an opt-in disable.
+- Address changes after creation reach Exchange. A change of recipient type is reported rather than made, until leaver handling follows.
 - Exchange chooses the mailbox database by default, honouring the controls Exchange administrators already use; rule-based placement is possible.
 - Cross-forest GAL synchronisation works as an ordinary JIM pattern, including replies to old messages.
 - A failed Exchange step is visible on the Activity, retried, and never leaves JIM believing a recipient exists.
@@ -32,6 +32,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 ## Non-Goals
 
 - Exchange Online and hybrid remote mailboxes. A separate issue follows.
+- Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 15.
 - Mailbox permissions (Full Access, Send As, a manager's access to a leaver's mailbox), archive mailboxes, linked mailboxes, and mailbox policies (retention, address book, quotas). These come later.
 - Guided setup templates. The first release is configured with ordinary Attribute Flows; templates that generate those flows follow in their own PRD.
 - JIM-side database balancing ("least-populated database"), unless customers ask for it.
@@ -43,11 +44,10 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 1. As an identity administrator, I want a joiner provisioned into Active Directory to get a mailbox automatically, so that they can work on day one without a second ticket.
 2. As an Exchange administrator, I want new mailboxes placed by Exchange's own automatic distribution, or by a rule I define, so that databases stay balanced and I keep control of placement.
-3. As an identity administrator, I want a leaver's mailbox converted to a shared mailbox, and converted back if they are rehired, so that their manager keeps access to it without a licence-holding account.
-4. As a messaging administrator in a multi-forest organisation, I want each forest's people to appear as mail contacts in the other forests' address books, so that everyone can find and reply to everyone.
-5. As an operator, I want every failed Exchange step to show on the Activity with a clear reason and to be retried, so that no account is silently left half-provisioned.
-6. As an automation engineer, I want to configure all of this with PowerShell and the REST API, so that environments are reproducible.
-7. As a security officer, I want JIM to use a least-privilege Exchange account over an encrypted, Kerberos-authenticated connection, so that recipient management meets our security baseline.
+3. As a messaging administrator in a multi-forest organisation, I want each forest's people to appear as mail contacts in the other forests' address books, so that everyone can find and reply to everyone.
+4. As an operator, I want every failed Exchange step to show on the Activity with a clear reason and to be retried, so that no account is silently left half-provisioned.
+5. As an automation engineer, I want to configure all of this with PowerShell and the REST API, so that environments are reproducible.
+6. As a security officer, I want JIM to use a least-privilege Exchange account over an encrypted, Kerberos-authenticated connection, so that recipient management meets our security baseline.
 
 ## Requirements
 
@@ -55,7 +55,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **Configuration**
 
-1. An LDAP Connected System can be given Exchange settings: the Exchange PowerShell endpoint (default `http://<server>/PowerShell/`), the Kerberos realm and optional KDCs, a service account and password, an optional CA certificate for an `https://` endpoint, and whether disabling a recipient is allowed.
+1. An LDAP Connected System can be given Exchange settings: the Exchange PowerShell endpoint (default `http://<server>/PowerShell/`), the Kerberos realm and optional KDCs, a service account and password, and an optional CA certificate for an `https://` endpoint. One endpoint per Connected System.
 2. JIM generates the Kerberos configuration from those settings. An operator never mounts a `krb5.conf`.
 3. Settings are validated when saved, and a "Test connection" check opens a session and reports the Exchange version and any cmdlet JIM needs that the account's roles do not allow (Exchange's session lists only the cmdlets an account may run).
 
@@ -87,9 +87,9 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 **Lifecycle**
 
 12. A change from None to a recipient type enables the recipient (`Enable-Mailbox`, `-Shared`, `-Room` or `-Equipment`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`).
-13. A change between mailbox types converts the mailbox (`Set-Mailbox -Type`).
+13. A change of recipient type on an existing recipient, including to None, is not made in the first release. It is reported on the Activity against the object, and nothing changes.
 14. Alias, primary SMTP address and external address changes reach Exchange (`Set-Mailbox`, `Set-MailUser`, `Set-MailContact`, `Set-DistributionGroup`).
-15. A change to None disables the recipient only when the Connected System allows it. Otherwise it is reported and nothing changes, because `Disable-Mailbox` disconnects the mailbox and starts Exchange's retention clock.
+15. When JIM deletes a recipient's directory object (the Delete deprovisioning action), no Exchange step runs. Exchange disconnects a deleted user's mailbox itself and keeps it for the mailbox database's deleted-mailbox retention period (30 days by default), during which an Exchange administrator can reconnect it. Other recipients are directory objects only, so they go with the object. When JIM disconnects an object instead, its recipient is left as it is.
 
 **Database placement**
 
@@ -135,11 +135,11 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 **When**: an executive and an engineer join
 **Then**: the executive's mailbox is in `MDB-VIP`, and the engineer's is wherever Exchange's distribution puts it
 
-### Scenario 3: A leaver's mailbox becomes shared, and comes back on rehire
+### Scenario 3: A leaver's account is deleted
 
-**Given**: Exchange Recipient Type is flowed with `mv["Employee Status"] == "Leaver" ? "SharedMailbox" : "Mailbox"`
-**When**: Bob leaves, and is rehired a month later
-**Then**: JIM disables Bob's account and runs `Set-Mailbox -Type Shared`; on rehire it enables the account and runs `Set-Mailbox -Type Regular`. Nothing is lost in between.
+**Given**: people who leave are deprovisioned with the Delete action
+**When**: Bob leaves
+**Then**: JIM deletes Bob's account and runs no Exchange step. Exchange disconnects his mailbox and keeps it for 30 days, during which an Exchange administrator can reconnect it to an account.
 
 ### Scenario 4: GAL sync between two forests
 
@@ -164,6 +164,12 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 **Given**: Erin's mailbox already matches her declared state
 **When**: a Full Synchronisation and export run again
 **Then**: no Exchange step is staged, and Exchange is not contacted for her
+
+### Scenario 8: A recipient type change waits for leaver handling
+
+**Given**: Frank has a mailbox
+**When**: his declared Exchange Recipient Type changes to SharedMailbox
+**Then**: nothing changes in Exchange, and the Activity reports, against Frank, that changing a recipient's type is not supported in this release
 
 ## Constraints
 
@@ -203,19 +209,26 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 - The spike's go/no-go: Phases 1b and 3 against the AD lab ([plan](../plans/doing/EXCHANGE_REMOTING_SPIKE.md)).
 - The AD lab's Exchange servers (#2412): `exchange-primary` in PANOPLY exists; `exchange-source` in RESURGAM is needed for GAL sync in both directions.
 
+## Decisions
+
+Made on 2026-10-31, in review of this draft:
+
+1. **Attribute Flows are always how the configuration is persisted.** Guided experiences sit on top and configure those flows for the administrator; nothing is stored outside them.
+2. **Leaver handling in Exchange is not in the first release.** Converting to shared, hiding and disabling follow later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). The first release keeps to creation and address changes so it can ship for v1.0.0.
+3. **One Exchange endpoint per Connected System.** Failover lists and load-balanced namespaces follow later.
+4. **Parallel sessions per Connected System are set by measurement**, from spike Phase 3 and the integration tests, not chosen in advance.
+5. **Exchange's serialisation payload signing needs nothing here.** Spike Phase 3 confirms it does not affect the client.
+
 ## Open Questions
 
-1. **Where does "enable mailboxes" live?** The issue's design flows Exchange Recipient Type like any attribute, which allows per-object decisions and keeps one execution path. Initial Password, the closest precedent, is instead a setting on the Synchronisation Rule. *Recommendation:* keep the attributes as the only execution path, and let guided setup present them as a rule-level "Exchange recipient" panel that writes those flows. The first release may need raw flows, as originally accepted.
-2. **The recommended leaver default:** convert to shared, hide from the address book, or disable? All three are possible; the docs and the later template need one recommendation.
-3. **One Exchange endpoint or several?** A load-balanced namespace needs an alternate service account for Kerberos. *Recommendation:* one endpoint in the first release, with the docs covering the load-balanced case; a list with failover later if asked for.
-4. **Parallel sessions per Connected System:** *Recommendation:* default 2, configurable, capped well below `PowerShellMaxConcurrency`; confirm with spike Phase 3's measurements.
-5. **Exchange's serialisation payload signing** (on by default since November 2023): confirm in spike Phase 3 that it does not affect the hosted client.
+1. **The portal.** How Attribute Flow configuration presents mailbox provisioning, and every other UI implication, is to be mocked and reviewed before this PRD is locked.
 
 ## Acceptance Criteria
 
 - [ ] A user provisioned with Exchange Recipient Type = Mailbox has a working mailbox, and its Exchange-stamped attributes import into JIM.
 - [ ] Shared, room and equipment mailboxes are created on disabled accounts.
-- [ ] Converting a leaver's mailbox to shared, and back, works through a change to Exchange Recipient Type.
+- [ ] A change of recipient type is reported on the Activity and changes nothing in Exchange.
+- [ ] Deleting a mailbox user's account needs no Exchange step, and leaves a disconnected mailbox that Exchange can reconnect.
 - [ ] Alias, primary SMTP address and external address changes reach Exchange.
 - [ ] Exchange chooses the database when Exchange Database is empty, and the given database is used when it is set.
 - [ ] A universal group can be mail-enabled; a non-universal group is refused with a clear error.
@@ -235,7 +248,8 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
   1. The spike, ending in a go/no-go.
   2. The first release (this PRD).
   3. Guided setup: a "Mailbox provisioning" template (recipient type, alias and SMTP patterns, database placement) and a "GAL sync" template (target OU, X500 proxy, loop-prevention scoping), both generating editable Attribute Flows.
-  4. Later: mailbox permissions as entitlements, archives, linked mailboxes, policies.
+  4. Later: leaver handling in Exchange (convert to shared, hide, disable, paired with JIM's leaver actions), mailbox permissions as entitlements, archives, linked mailboxes, policies.
 - **Precedent.** Initial Password's staged follow-up step (`PendingExport.InitialPasswordFollows`, `PendingPasswordChange`, `docs/configuration/initial-password.md`) is the model for the Exchange step.
 - **Already in place.** The `Mail Nickname`, `Proxy Addresses` and `Hide From Address Lists?` Metaverse Attributes and their LDAP Standard Mappings exist, and hiding a leaver from the address book already works through `msExchHideFromAddressLists`.
+- **Deferred test: replication lag.** Requirement 8 (`-DomainController`) is what stops a just-created account being reported as "object not found" by a domain controller that has not replicated it yet. The AD lab has one domain controller per forest, so the integration tests prove the parameter is passed and honoured but cannot reproduce the lag itself. Proving that needs a second domain controller in PANOPLY, with JIM writing to one and Exchange's own choice being the other; not planned for now.
 - **Scenario coverage** reviewed during the spike: <https://claude.ai/artifact/DcP86jG9dQsochAdpNUCFZ>
