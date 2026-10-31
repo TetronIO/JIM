@@ -295,6 +295,12 @@ public partial class SyncEngine
     /// contributor, #91) as still present, so an identical surviving contribution would neither re-add the value nor
     /// take over its provenance, and the value would be silently cleared when the pending removals are applied.
     /// </summary>
+    /// <remarks>
+    /// The sequence is lazy, and each value is checked against the pending removals as they stand when it is reached, so
+    /// a caller may append to them while reading it (<see cref="ApplyTypedValueSet{TKey}"/> does). The pending removals
+    /// index themselves once they are many, so each check is a lookup rather than a scan of them: a group whose
+    /// membership is replaced wholesale reads its members with a removal pending for each (#2664).
+    /// </remarks>
     internal static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
         => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
 

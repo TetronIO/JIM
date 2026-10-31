@@ -7639,8 +7639,7 @@ public abstract class SyncTaskProcessorBase
                         // value stays marked for removal); only the leaver's non-re-elected values are unmarked.
                         var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
                         var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
-                        foreach (var frozen in frozenValues)
-                            mvo.PendingAttributeValueRemovals.Remove(frozen);
+                        mvo.PendingAttributeValueRemovals.RemoveEach(frozenValues);
 
                         // A pending deletion explains itself via the deletion outcome; the no-source
                         // preservation gets its own ValuesPreserved outcome downstream (#1570).
