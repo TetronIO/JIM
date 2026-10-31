@@ -7,8 +7,8 @@ function Write-JIMAwaitingSynchronisationWarning {
         Warns which Connected System Object Types a save made the next synchronisation process in full (#2615).
 
     .DESCRIPTION
-        Saving a change to an import Synchronisation Rule, an Attribute Flow or an Object Matching Rule can alter what an
-        import produces for objects that already exist. JIM records the change as awaiting synchronisation, and the
+        Saving a change to an import Synchronisation Rule, an Attribute Flow or an Object Matching Rule, or reordering a
+        Metaverse Attribute's priority, can alter what an import produces for objects that already exist. JIM records the change as awaiting synchronisation, and the
         Connected System's next synchronisation, Delta or Full, then processes every object of the Connected System Object
         Type rather than only the changed ones. The API lists each such type in the response's AwaitingSynchronisation, with
         how many objects that is and, where the Connected System has completed a Full Synchronisation, about how long it

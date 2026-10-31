@@ -482,6 +482,8 @@ Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
 
 Replaces a Metaverse Attribute's whole priority order on one Metaverse Object Type. List every contributing Attribute Flow once, highest priority first; an Attribute Flow whose Synchronisation Rule is still being deleted may be left out, and stays at the bottom. JIM refuses an order that misses a contributor or names a mapping that is not one, and says which. To move a single Attribute Flow, use [`Move-JIMMetaverseAttributePriority`](#move-jimmetaverseattributepriority).
 
+A new order changes which value wins for the objects of every enabled Synchronisation Rule whose Attribute Flow it moves or whose **Null is a value** it changes, so JIM records each such rule's Connected System Object Type as [awaiting synchronisation](../configuration/connected-systems.md#changes-awaiting-synchronisation). The cmdlet writes a warning for each one: the next synchronisation of that Connected System, Delta or Full, processes every object of the type, with how many objects that is and about how long it takes. With `-PassThru`, the same list is on the order's `AwaitingSynchronisation`.
+
 <!-- BEGIN GENERATED: Set-JIMMetaverseAttributePriority -->
 ### Syntax
 
@@ -520,7 +522,7 @@ Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45,
 
 ## :material-arrow-up-down: Move-JIMMetaverseAttributePriority
 
-Moves one Attribute Flow to a new position in a Metaverse Attribute's priority order, renumbering the others so the order stays without gaps.
+Moves one Attribute Flow to a new position in a Metaverse Attribute's priority order, renumbering the others so the order stays without gaps. Like [`Set-JIMMetaverseAttributePriority`](#set-jimmetaverseattributepriority), it writes a warning for each Connected System Object Type the move leaves awaiting synchronisation, and with `-PassThru` returns them on the order's `AwaitingSynchronisation`.
 
 <!-- BEGIN GENERATED: Move-JIMMetaverseAttributePriority -->
 ### Syntax
