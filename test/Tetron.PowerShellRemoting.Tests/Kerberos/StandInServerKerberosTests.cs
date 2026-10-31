@@ -21,7 +21,7 @@ public class StandInServerKerberosTests
     {
         KerberosHarness.RequireHarness();
         if (string.IsNullOrWhiteSpace(KerberosHarness.WinRM))
-            Assert.Ignore("Needs JIM_REMOTING_HARNESS_WINRM.");
+            KerberosHarness.Unavailable("Needs JIM_REMOTING_HARNESS_WINRM.");
     }
 
     [Test]

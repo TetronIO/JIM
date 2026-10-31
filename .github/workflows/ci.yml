@@ -351,6 +351,79 @@ jobs:
       if: always() && steps.scope.outputs.run == 'true'
       run: pwsh -File ./test/scripts/Start-OracleTlsTestServer.ps1 -Stop
 
+  remoting-harness-tests:
+    # Runs the RequiresRemotingHarness tier of Tetron.PowerShellRemoting (#2021): PowerShell remoting over our own
+    # WinRM transport, Kerberos-authenticated and Kerberos-encrypted, against an implementation we did not write (a
+    # Samba KDC, and a stand-in WinRM server built on pyspnego and pwsh -s). These tests self-skip in build-and-test;
+    # here the harness script stands the realm and the server up and exports the variables that run them.
+    # JIM_REMOTING_HARNESS_REQUIRED turns a missing harness into a failure, so a harness that did not come up cannot
+    # pass this job by skipping every test.
+    # Pull requests that change the remoting library, its tests or the harness, and nothing else: provisioning the
+    # realm takes several minutes. Not a required check, so a run that decides it has nothing to test blocks nothing.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      with:
+        fetch-depth: 0  # need base..head history to see what the change touches
+    - name: Decide whether this change touches PowerShell remoting
+      id: scope
+      run: |
+        changed=$(git diff --name-only "$BASE_SHA" HEAD)
+        if echo "$changed" | grep -qE '^(src/Tetron\.PowerShellRemoting/|test/Tetron\.PowerShellRemoting\.Tests/|test/integration/remoting-harness/|\.github/workflows/ci\.yml$)'; then
+          echo "run=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          echo "Nothing here touches PowerShell remoting; the harness tier is not needed."
+        fi
+    - name: Setup .NET
+      if: steps.scope.outputs.run == 'true'
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet restore test/Tetron.PowerShellRemoting.Tests/ --locked-mode
+    - name: Build
+      if: steps.scope.outputs.run == 'true'
+      run: dotnet build test/Tetron.PowerShellRemoting.Tests/ --no-restore
+    # Docker Hub rate-limits anonymous pulls, so the KDC image (the digest docker-compose.yml pins) is pulled up front
+    # with a retry rather than letting the harness script's compose up fail on a transient refusal.
+    - name: Pull the KDC image
+      if: steps.scope.outputs.run == 'true'
+      run: |
+        image='diegogslomp/samba-ad-dc:latest@sha256:9606e448ddd6d63a5707275e802bdc4f27e5eff1e3abbca2876f87001d1dcf40'
+        for attempt in 1 2 3; do
+          docker pull "$image" && exit 0
+          sleep 30
+        done
+        echo "Failed to pull $image after 3 attempts."
+        exit 1
+    - name: Start the remoting harness
+      if: steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/integration/remoting-harness/Start-RemotingHarness.ps1
+    # The HTTPS tests reach the stand-in server by the name on its certificate.
+    - name: Resolve the stand-in server's certificate name
+      if: steps.scope.outputs.run == 'true'
+      run: echo "${JIM_REMOTING_HARNESS_WINRM} winrm-harness.harness.test winrm-harness" | sudo tee -a /etc/hosts
+    - name: Run the remoting harness tests (RequiresRemotingHarness)
+      if: steps.scope.outputs.run == 'true'
+      env:
+        JIM_REMOTING_HARNESS_REQUIRED: 'true'
+      run: dotnet test test/Tetron.PowerShellRemoting.Tests/ --no-build --filter "Category=RequiresRemotingHarness" --verbosity normal
+    - name: Show the harness logs
+      if: failure() && steps.scope.outputs.run == 'true'
+      run: |
+        docker logs --tail 200 remoting-harness-winrm || true
+        docker logs --tail 100 remoting-harness-kdc || true
+    - name: Tear down the remoting harness
+      if: always() && steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/integration/remoting-harness/Start-RemotingHarness.ps1 -Down
+
   keycloak-registration-tests:
     # Runs Register-JIMIdentityProvider -Provider Keycloak against a real Keycloak (#2364):
     # KeycloakRegistration.Live.Tests.ps1, which self-skips in build-and-test (JIM_TEST_KEYCLOAK_URL

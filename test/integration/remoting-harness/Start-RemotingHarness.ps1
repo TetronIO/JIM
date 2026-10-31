@@ -15,6 +15,8 @@
       HTTP/winrm-harness.harness.test and HTTP/winrm-harness, if they do not exist.
     - Exports the service's keytab to -OutputDirectory.
 
+    In GitHub Actions it also writes the JIM_REMOTING_HARNESS_* variables to GITHUB_ENV for the steps that follow.
+
     Safe to re-run. The harness proves Tetron.PowerShellRemoting against an independent implementation, not against
     Windows; the Active Directory lab does that (#2021, spike Phase 1b).
 
@@ -165,6 +167,17 @@ while (-not (Test-TcpPort -Address $winrmAddress -Port 5985)) {
 }
 
 $address = Get-KdcAddress
+
+# In GitHub Actions, hand the settings to the steps that follow.
+if ($env:GITHUB_ENV) {
+    Add-Content -Path $env:GITHUB_ENV -Value @(
+        "JIM_REMOTING_HARNESS_KDC=$address"
+        "JIM_REMOTING_HARNESS_KEYTAB=$keytab"
+        "JIM_REMOTING_HARNESS_WINRM=$winrmAddress"
+        "JIM_REMOTING_HARNESS_CA=$caCertificate"
+    )
+}
+
 Write-Host ''
 Write-Host 'Remoting harness ready. Export these before running Tetron.PowerShellRemoting.Tests:'
 Write-Host "  JIM_REMOTING_HARNESS_KDC=$address"
