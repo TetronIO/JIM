@@ -32,7 +32,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 ## Non-Goals
 
 - Exchange Online and hybrid remote mailboxes. A separate issue follows.
-- Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 17.
+- Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 18.
 - Mailbox permissions (Full Access, Send As, a manager's access to a leaver's mailbox), archive mailboxes, linked mailboxes, and mailbox policies (retention, address book, quotas). These come later.
 - Guided setup templates. The first release is configured with ordinary Attribute Flows; templates that generate those flows follow in their own PRD.
 - JIM-side database balancing ("least-populated database"), unless customers ask for it.
@@ -90,36 +90,37 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
     - **Withdrawn:** the object, or the Synchronisation Rule that declared it, was removed first. This is not a failure.
     - **Cancelled:** an administrator decided it should not be delivered.
 12. A failed change never rolls back or hides the directory write, and JIM never treats the recipient as existing until an import shows it.
-13. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
+13. Each queued change's Activity has the export's Run Profile Execution Item for the object as its parent (#2668), so an administrator goes straight up from "Mailbox for Alice" to Alice's export, and that item's Follow-up section shows the mailbox with its current outcome. Delivery attempts are children of the change's Activity. These Activities never appear at the top level of the Activities list, and the run's own status is final: a follow-up that fails later never changes it. The causality view shows mailbox events in the object's story, presented as the mock agrees.
+14. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
 
 **Lifecycle**
 
-14. A change from None to a recipient type enables the recipient (`Enable-Mailbox`, `-Shared`, `-Room` or `-Equipment`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`).
-15. A change of recipient type on an existing recipient, including to None, is not made in the first release. It is reported on the Activity against the object, and nothing changes.
-16. Alias, primary SMTP address and external address changes reach Exchange (`Set-Mailbox`, `Set-MailUser`, `Set-MailContact`, `Set-DistributionGroup`).
-17. When JIM deletes a recipient's directory object (the Delete deprovisioning action), no Exchange step runs. Exchange disconnects a deleted user's mailbox itself and keeps it for the mailbox database's deleted-mailbox retention period (30 days by default), during which an Exchange administrator can reconnect it. Other recipients are directory objects only, so they go with the object. When JIM disconnects an object instead, its recipient is left as it is.
+15. A change from None to a recipient type enables the recipient (`Enable-Mailbox`, `-Shared`, `-Room` or `-Equipment`, `Enable-MailUser`, `Enable-MailContact`, `Enable-DistributionGroup`).
+16. A change of recipient type on an existing recipient, including to None, is not made in the first release. It is reported on the Activity against the object, and nothing changes.
+17. Alias, primary SMTP address and external address changes reach Exchange (`Set-Mailbox`, `Set-MailUser`, `Set-MailContact`, `Set-DistributionGroup`).
+18. When JIM deletes a recipient's directory object (the Delete deprovisioning action), no Exchange step runs. Exchange disconnects a deleted user's mailbox itself and keeps it for the mailbox database's deleted-mailbox retention period (30 days by default), during which an Exchange administrator can reconnect it. Other recipients are directory objects only, so they go with the object. When JIM disconnects an object instead, its recipient is left as it is.
 
 **Database placement**
 
-18. With Exchange Database empty, Exchange's automatic mailbox distribution chooses, honouring `IsExcludedFromProvisioning` and `IsSuspendedFromProvisioning`.
-19. With Exchange Database set, typically by an expression, that database is used. A database that does not exist fails the step with a clear error.
+19. With Exchange Database empty, Exchange's automatic mailbox distribution chooses, honouring `IsExcludedFromProvisioning` and `IsSuspendedFromProvisioning`.
+20. With Exchange Database set, typically by an expression, that database is used. A database that does not exist fails the step with a clear error.
 
 **GAL synchronisation**
 
-20. A Synchronisation Rule can provision in-scope Metaverse Objects from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
-21. Each contact's `proxyAddresses` include an `X500:` address made from the source recipient's `legacyExchangeDN`, so replies to old messages and cached entries do not bounce.
-22. Contacts JIM created are never imported back and projected as people. The documented setup scopes the source Synchronisation Rules to exclude the GAL OU.
-23. Address book attributes (display name, company, department, phone numbers) flow as ordinary attributes, and a contact is deleted when its source leaves scope, under the normal deprovisioning rules.
+21. A Synchronisation Rule can provision in-scope Metaverse Objects from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
+22. Each contact's `proxyAddresses` include an `X500:` address made from the source recipient's `legacyExchangeDN`, so replies to old messages and cached entries do not bounce.
+23. Contacts JIM created are never imported back and projected as people. The documented setup scopes the source Synchronisation Rules to exclude the GAL OU.
+24. Address book attributes (display name, company, department, phone numbers) flow as ordinary attributes, and a contact is deleted when its source leaves scope, under the normal deprovisioning rules.
 
 **Import and reporting**
 
-24. The next import picks up the values Exchange stamped (`mail`, `proxyAddresses`, `legacyExchangeDN`, `homeMDB`, `msExchMailboxGuid`, `msExchRecipientTypeDetails`), so JIM's view converges with Exchange's.
-25. Each failure is classified so an administrator can tell them apart: object not found, refused by Exchange (with Exchange's own message), insufficient permissions, authentication failure, and unreachable or timed out. The classification decides whether the change is Retrying or Parked.
-26. Each delivery pass logs summary statistics: changes delivered, retrying, parked and superseded, plus the session's Kerberos logins and connections.
+25. The next import picks up the values Exchange stamped (`mail`, `proxyAddresses`, `legacyExchangeDN`, `homeMDB`, `msExchMailboxGuid`, `msExchRecipientTypeDetails`), so JIM's view converges with Exchange's.
+26. Each failure is classified so an administrator can tell them apart: object not found, refused by Exchange (with Exchange's own message), insufficient permissions, authentication failure, and unreachable or timed out. The classification decides whether the change is Retrying or Parked.
+27. Each delivery pass logs summary statistics: changes delivered, retrying, parked and superseded, plus the session's Kerberos logins and connections.
 
 **Surface parity**
 
-27. Exchange settings, the connector-defined attributes, and the queued Exchange changes with their outcomes (including retry and cancel) are available in the portal, the REST API and PowerShell, with tests and docs on each.
+28. Exchange settings, the connector-defined attributes, and the queued Exchange changes with their outcomes (including retry and cancel) are available in the portal, the REST API and PowerShell, with tests and docs on each.
 
 ### Non-Functional Requirements
 
@@ -215,6 +216,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 ## Dependencies
 
 - The spike's go/no-go: Phases 1b and 3 against the AD lab ([plan](../plans/doing/EXCHANGE_REMOTING_SPIKE.md)).
+- Follow-up Activities parented by their execution item (#2668), done first for initial passwords and reused here.
 - The AD lab's Exchange servers (#2412): `exchange-primary` in PANOPLY exists; `exchange-source` in RESURGAM is needed for GAL sync in both directions.
 
 ## Decisions
@@ -229,7 +231,7 @@ Made on 2026-10-31, in review of this draft:
 
 ## Open Questions
 
-1. **The portal.** How Attribute Flow configuration presents mailbox provisioning, and every other UI implication, is to be mocked and reviewed before this PRD is locked.
+1. **The portal.** How Attribute Flow configuration presents mailbox provisioning, and every other UI implication, including how the causality view shows password and mailbox events, is to be mocked and reviewed before this PRD is locked.
 
 ## Acceptance Criteria
 
