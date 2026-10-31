@@ -3726,6 +3726,10 @@ function Stop-LabVm {
     .DESCRIPTION
         The guest shutdown runs as a job, so a guest that never answers cannot hold the caller. A VM turned off
         still gives a crash-consistent production checkpoint, which is enough for a lab baseline.
+
+        The VM reads Off before the Hyper-V module has completed that job, which it does on a thread of its own. A job
+        disposed of before then makes that thread throw PSObjectDisposedException, which ends the whole process, so
+        the job is waited for (up to a minute) and never removed; it goes when the process ends.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -3762,8 +3766,51 @@ function Stop-LabVm {
         return 'TurnedOff'
     }
     finally {
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        $null = Wait-Job -Job $job -Timeout 60
     }
+}
+
+function Wait-LabCheckpoint {
+    <#
+    .SYNOPSIS
+        Waits for a checkpoint just taken to be listed, and returns it. Throws if it is not listed within
+        -TimeoutSeconds, or if more than one checkpoint has the name.
+
+    .DESCRIPTION
+        A checkpoint of a VM that has just shut down can exist before it is listed (run 41142349653), so the listing is
+        tried again every two seconds. When it gives up, the last error the listing raised is in the message.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VMName,
+
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [ValidateRange(2, 3600)]
+        [int]$TimeoutSeconds = 60
+    )
+
+    $intervalSeconds = 2
+    $listingError = $null
+    for ($waited = 0; ; $waited += $intervalSeconds) {
+        $listingErrors = $null
+        $found = @(Get-VMSnapshot -VMName $VMName -Name $Name -ErrorAction SilentlyContinue -ErrorVariable listingErrors)
+        if ($listingErrors) { $listingError = $listingErrors[-1] }
+        if ($found.Count -gt 1) {
+            throw "$VMName has $($found.Count) checkpoints called '$Name'."
+        }
+        if ($found.Count -eq 1) {
+            return $found[0]
+        }
+        if ($waited + $intervalSeconds -gt $TimeoutSeconds) {
+            break
+        }
+        Start-Sleep -Seconds $intervalSeconds
+    }
+    $reason = if ($listingError) { " Listing it last failed with: $listingError" } else { ' Listing raised no error.' }
+    throw "The checkpoint '$Name' of $VMName was not listed within $TimeoutSeconds seconds of taking it.$reason"
 }
 
 function Wait-LabGuestReady {
@@ -4588,7 +4635,7 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeSchemaTarget', 'Get-LabExchangePreparationStep', 'Test-LabExchangeSchemaMasterBuild', 'Get-LabExchangeSetupArgument', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
-    'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
+    'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabCheckpoint', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',

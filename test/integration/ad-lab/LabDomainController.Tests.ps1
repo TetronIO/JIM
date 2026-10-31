@@ -1168,7 +1168,7 @@ Describe 'Stop-LabVm' {
         $script:turnedOff = $false
         Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:turnedOff) { 'Off' } else { 'Running' }) } }
         Mock -ModuleName LabDomainController Stop-VM { $script:turnedOff = $true } -ParameterFilter { $TurnOff }
-        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 30 } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 2 } } -ParameterFilter { $AsJob }
         Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 30 | Should -Be 'TurnedOff'
         Should -Invoke -ModuleName LabDomainController Stop-VM -Times 1 -Exactly -ParameterFilter { $TurnOff }
     }
@@ -1180,6 +1180,60 @@ Describe 'Stop-LabVm' {
         Mock -ModuleName LabDomainController Stop-VM { $job = Start-Job -ScriptBlock { throw 'The shutdown integration service did not answer.' }; $null = Wait-Job -Job $job; $job } -ParameterFilter { $AsJob }
         Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 3600 | Should -Be 'TurnedOff'
         Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+    }
+
+    It 'waits for the shutdown job to finish, and never disposes of it, since the Hyper-V module completes it on a thread of its own' {
+        # The VM reads Off before the module has completed its job; disposing of the job then makes that thread throw
+        # PSObjectDisposedException, which ends the whole process (the rebuild's Rollback, run 41142349653).
+        $script:polls = 0
+        $script:job = $null
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { $script:job = Start-Job -ScriptBlock { Start-Sleep -Seconds 2 }; $script:job } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Remove-Job {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        [string]$script:job.State | Should -Be 'Completed'
+        Should -Invoke -ModuleName LabDomainController Remove-Job -Times 0 -Exactly -Scope It
+    }
+
+    AfterEach {
+        Get-Job | Microsoft.PowerShell.Core\Remove-Job -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Describe 'Wait-LabCheckpoint' {
+    BeforeAll {
+        if (-not (Get-Command Get-VMSnapshot -ErrorAction SilentlyContinue)) {
+            function global:Get-VMSnapshot {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                param([string]$VMName, [string]$Name)
+            }
+        }
+        Mock -ModuleName LabDomainController Start-Sleep {}
+    }
+
+    It 'returns the checkpoint as soon as it is listed' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { [pscustomobject]@{ Name = 'baseline' } }
+        (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
+        Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+    }
+
+    It 'waits for a checkpoint that is listed only a moment after it is taken' {
+        # Taken of a VM just shut down, the checkpoint existed but was not listed straight away (run 41142349653).
+        $script:lists = 0
+        Mock -ModuleName LabDomainController Get-VMSnapshot { $script:lists++; if ($script:lists -ge 3) { [pscustomobject]@{ Name = 'baseline' } } }
+        (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
+        Should -Invoke -ModuleName LabDomainController Get-VMSnapshot -Times 3 -Exactly -Scope It
+    }
+
+    It 'gives up after the timeout, naming why the listing failed' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { Write-Error 'You do not have permission to perform the operation.' -ErrorAction SilentlyContinue }
+        { Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline' -TimeoutSeconds 10 } |
+            Should -Throw "*'baseline' of exchange-primary was not listed within 10 seconds*You do not have permission*"
+    }
+
+    It 'refuses more than one checkpoint of the name' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { [pscustomobject]@{ Name = 'baseline' }; [pscustomobject]@{ Name = 'baseline' } }
+        { Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline' } | Should -Throw "*2 checkpoints called 'baseline'*"
     }
 }
 
