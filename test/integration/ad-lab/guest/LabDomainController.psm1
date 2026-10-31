@@ -4672,6 +4672,45 @@ function Set-LabOldPasswordAllowedPeriod {
     return $true
 }
 
+function Get-LabDomainPasswordPolicyChange {
+    <#
+    .SYNOPSIS
+        The Set-ADDefaultDomainPasswordPolicy parameters that bring a domain's password policy to the Windows
+        defaults (complexity on, minimum length 7, history 24, minimum age 1 day, maximum age 42 days): only those
+        that differ, so an empty hashtable means the policy is right.
+
+    .DESCRIPTION
+        The Default Domain Policy carries these values, and on a domain controller Group Policy's Security extension
+        writes them onto the domain. Until it has, the domain has its starting values (minimum length 0, history 0,
+        minimum age 0), and the rebuild's candidates were checkpointed like that (JIM#2412): Scenarios 017 and 020 are
+        built on a minimum length of 7. The Configure phase therefore sets them itself, and Verify checks them all.
+
+    .PARAMETER Policy
+        The domain's policy, as Get-ADDefaultDomainPasswordPolicy reports it.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Policy
+    )
+
+    $defaults = [ordered]@{
+        ComplexityEnabled    = $true
+        MinPasswordLength    = 7
+        PasswordHistoryCount = 24
+        MinPasswordAge       = [timespan]::FromDays(1)
+        MaxPasswordAge       = [timespan]::FromDays(42)
+    }
+    $change = @{}
+    foreach ($name in $defaults.Keys) {
+        if ($Policy.$name -ne $defaults[$name]) {
+            $change[$name] = $defaults[$name]
+        }
+    }
+    return $change
+}
+
 function Get-LabOldPasswordAllowedPeriod {
     <#
     .SYNOPSIS
@@ -4709,6 +4748,7 @@ Export-ModuleMember -Function @(
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
+    'Get-LabDomainPasswordPolicyChange',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',

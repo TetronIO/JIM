@@ -24,10 +24,11 @@ as the Samba images (`test/integration/docker/samba-ad-prebuilt/post-provision.s
 `Groups` under it, `TestUsers`, `TestGroups` and `Services`; the `svc-jim` account in the `JIM Connectors` group; the
 delegation from `jim-ad-delegation.acl`, applied unchanged; read over Deleted Objects; and an LDAPS certificate with the
 same subject and names. It differs from Samba where Windows Server 2025 differs: LDAP signing is enforced (everything
-talks LDAPS on 636) and the domain password policy keeps its defaults (complexity on). One registry value departs from
-the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous password stops working as soon as it changes rather
-than for 5 minutes after, as on Samba (#2287). `Configure` sets it, `Verify` checks it, and
-`Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
+talks LDAPS on 636) and the domain password policy is at the Windows defaults (complexity on, minimum length 7,
+history 24, minimum age 1 day, maximum age 42 days), which `Configure` sets itself rather than waiting for Group Policy to
+write them (#2412). One registry value departs from the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous
+password stops working as soon as it changes rather than for 5 minutes after, as on Samba (#2287). `Configure` sets it,
+`Verify` checks it, and `Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
 
 Each forest also carries the **full Exchange organisation**, as an Exchange customer's forest does: Exchange's schema
 (all of its classes and attributes, `extensionAttribute1`-`15` among them), an organisation named after the forest

@@ -1442,6 +1442,36 @@ Describe 'Resolve-LabLayout' {
     }
 }
 
+Describe 'Get-LabDomainPasswordPolicyChange' {
+    BeforeAll {
+        # As Get-ADDefaultDomainPasswordPolicy reports it.
+        function Get-Policy {
+            param([bool]$Complexity = $true, [int]$MinLength = 7, [int]$History = 24, [timespan]$MinAge = [timespan]::FromDays(1), [timespan]$MaxAge = [timespan]::FromDays(42))
+            [pscustomobject]@{ ComplexityEnabled = $Complexity; MinPasswordLength = $MinLength; PasswordHistoryCount = $History; MinPasswordAge = $MinAge; MaxPasswordAge = $MaxAge }
+        }
+    }
+
+    It 'changes nothing on a domain at the Windows defaults' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy)
+        $change.Count | Should -Be 0
+    }
+
+    It 'restores length, history and minimum age on a domain the Default Domain Policy never reached' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy -MinLength 0 -History 0 -MinAge ([timespan]::Zero))
+        @($change.Keys | Sort-Object) | Should -Be @('MinPasswordAge', 'MinPasswordLength', 'PasswordHistoryCount')
+        $change.MinPasswordLength | Should -Be 7
+        $change.PasswordHistoryCount | Should -Be 24
+        $change.MinPasswordAge | Should -Be ([timespan]::FromDays(1))
+    }
+
+    It 'turns complexity back on and restores the maximum age' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy -Complexity $false -MaxAge ([timespan]::FromDays(90)))
+        @($change.Keys | Sort-Object) | Should -Be @('ComplexityEnabled', 'MaxPasswordAge')
+        $change.ComplexityEnabled | Should -BeTrue
+        $change.MaxPasswordAge | Should -Be ([timespan]::FromDays(42))
+    }
+}
+
 Describe 'Set-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($PSVersionTable.PSEdition -eq 'Desktop'))) {
     BeforeEach {
         $script:LsaPath = 'TestRegistry:\Lsa'
