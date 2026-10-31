@@ -24,7 +24,9 @@
                  Update off, Administrator password never expires, the OUs, svc-jim and the JIM Connectors group,
                  the delegation from jim-ad-delegation.acl (unchanged), read over Deleted Objects, the LDAPS
                  certificate, and (when asked) the Recycle Bin. Beyond post-provision.sh, it stops a previous
-                 password working after a change (OldPasswordAllowedPeriod=0), which Samba never allows anyway.
+                 password working after a change (OldPasswordAllowedPeriod=0), which Samba never allows anyway,
+                 and sets the domain password policy to the Windows defaults itself rather than waiting for
+                 Group Policy to write them.
       Verify     Read it all back, then prove the delegation as svc-jim over LDAPS, as post-provision.sh does.
                  Throws if any required check fails.
 
@@ -657,6 +659,14 @@ function Invoke-ConfigurePhase {
     # A replaced password must stop working at once, or a scenario cannot tell JIM's delivery replaced it (#2287).
     if (Set-LabOldPasswordAllowedPeriod) { Set-Changed 'Stopped the previous password working after a change (OldPasswordAllowedPeriod=0)' }
 
+    # The Windows defaults, set here rather than left to Group Policy, which may not have written them onto the
+    # domain before the baseline checkpoint (#2412). The password scenarios are built on them.
+    $policyChange = Get-LabDomainPasswordPolicyChange -Policy (Get-ADDefaultDomainPasswordPolicy -Identity $info.DnsDomain)
+    if ($policyChange.Count -gt 0) {
+        Set-ADDefaultDomainPasswordPolicy -Identity $info.DnsDomain @policyChange
+        Set-Changed "Set the domain password policy to the Windows defaults ($(@($policyChange.Keys | Sort-Object) -join ', '))"
+    }
+
     # The delegation, from the same file the Samba image and the connector documentation use, and the read over
     # Deleted Objects. The same functions Grant-LabDelegation.ps1 uses at run time.
     foreach ($container in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
@@ -714,9 +724,13 @@ function Invoke-VerifyPhase {
         [pscustomobject]@{ Passed = (($forestMode -eq 'Windows2016Forest') -and ($domainMode -eq 'Windows2016Domain')); Detail = "$forestMode, $domainMode" }
     }
 
-    Add-Check 'Domain password policy is at the Windows defaults (complexity on)' {
+    Add-Check 'Domain password policy is at the Windows defaults' {
         $policy = Get-ADDefaultDomainPasswordPolicy
-        [pscustomobject]@{ Passed = [bool]$policy.ComplexityEnabled; Detail = "complexity=$($policy.ComplexityEnabled), min length=$($policy.MinPasswordLength)" }
+        $wrong = @((Get-LabDomainPasswordPolicyChange -Policy $policy).Keys | Sort-Object)
+        [pscustomobject]@{
+            Passed = ($wrong.Count -eq 0)
+            Detail = "complexity=$($policy.ComplexityEnabled), min length=$($policy.MinPasswordLength), history=$($policy.PasswordHistoryCount), min age=$($policy.MinPasswordAge.TotalDays) day(s), max age=$($policy.MaxPasswordAge.TotalDays) day(s); not at the default: $($wrong -join ', ')"
+        }
     }
 
     Add-Check 'Recycle Bin matches the request' {
