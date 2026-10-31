@@ -29,7 +29,7 @@ end: {from: ready, label: Schedules back on, note: 'once checked; those you reco
 
 ## :material-clipboard-check-outline: Before you upgrade {#before-you-upgrade}
 
-You can upgrade from v0.16.0 or any later release straight to the latest, without installing the releases in between. An installation of v0.15.0 or earlier cannot be upgraded: install the latest release afresh, as [Deployment](deployment.md) describes, with an empty database.
+You can upgrade from v0.16.0 or any later release straight to the latest, without installing the releases in between. Upgrading an installation of v0.15.0 or earlier is not supported or tested, because those releases predate the installer and were set up by hand: install the latest release afresh, as [Deployment](deployment.md) describes, with an empty database.
 
 - [ ] **Read the release notes.** Check the `CHANGELOG.md` for the target release (on the [releases page](https://github.com/TetronIO/JIM/releases), or under `docs/` in an air-gapped bundle) for breaking changes, new configuration variables, and security fixes.
 - [ ] **Rehearse in staging** against a copy of production data where practical.
