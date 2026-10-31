@@ -20,6 +20,7 @@
     image: what a refused or interrupted installer run must leave as it was (Compare-LabFingerprint).
     DatabasePassword: the bundled database's password, where the installer keeps it: .env on Docker, the jim-secrets
     secret on Podman.
+    WebLog: jim.web's log, as its container runtime keeps it.
 
 .PARAMETER Runtime
     docker or podman.
@@ -41,7 +42,7 @@
 #>
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Sql', 'Restarts', 'Healthy', 'Fingerprint', 'DatabasePassword')]
+    [ValidateSet('Sql', 'Restarts', 'Healthy', 'Fingerprint', 'DatabasePassword', 'WebLog')]
     [string]$Action,
 
     [Parameter(Mandatory)]
@@ -97,6 +98,9 @@ function Invoke-ContainerRuntime {
 switch ($Action) {
     'Sql' {
         Invoke-ContainerRuntime @('exec', $containers[0], 'psql', '-U', 'jim', '-d', 'jim', '-v', 'ON_ERROR_STOP=1', '-Atc', $Sql)
+    }
+    'WebLog' {
+        Invoke-ContainerRuntime @('logs', $(if ($Runtime -eq 'docker') { 'jim.web' } else { 'jim-web' }))
     }
     'Restarts' {
         $total = 0

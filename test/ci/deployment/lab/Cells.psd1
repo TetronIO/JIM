@@ -49,6 +49,13 @@
         @{ Name = 'alma9-podrf-extdb'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Soak'; MemoryGiB = 6; Tags = @('soak', 'airgap', 'podman', 'rhel') }
 
+        # Behind nginx, configured from TLS and Reverse Proxy's own example: re-encrypting to JIM from a proxy on a VM
+        # of its own (the recommended way), and forwarding plain HTTP to JIM on the JIM host's loopback interface
+        # (Docker only, as the guide gives it). Not rootless, which the guide says not to run behind a proxy.
+        @{ Name = 'u24-docker-ctrd-proxy'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'alma9-podrf-proxy'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'u24-docker-ctrd-proxy-local'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Local'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
+
         # Online, as a customer with internet access installs and upgrades: the installation guide's one-line install
         # of the latest published release, and an upgrade to it from the release before it by the guide's connected
         # steps, downloading from GitHub and ghcr.io. They test what is published, not the commit, so a run takes them

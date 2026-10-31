@@ -16,29 +16,29 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 |------|---------|--------------|
 | `Invoke-DeploymentLab.ps1` | Lab host | Runs the matrix, or part of it, against one bundle, as many cells at once as the host's memory holds, and writes `report.md` |
 | `Invoke-LabCell.ps1` | Lab host | Runs one cell on its own VM; the runner starts one per cell |
-| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase` |
+| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase`, `Soak`, `ReverseProxy` |
 | `Invoke-LabUpgradeData.ps1` | Lab host | Gives an upgrade cell's JIM real data, and checks it is all there afterwards |
 | `Build-LabBundle.ps1` | Lab host | Builds a bundle from a commit, as the release workflow does, on a throwaway online VM |
 | `Cells.psd1` | | The matrix: each cell's image, runtime, network, scenario and memory |
 | `Lab.psd1` | | The lab host's fixed parts: LXD profiles, network gateways, identity provider, test directory, database server image, memory reserve |
 | `DeploymentLab.psm1` | Lab host | The matrix, scheduling, sign-in and report functions (pure, tested) and the LXD commands |
-| `guest/Invoke-LabGuestCommand.ps1` | Each VM | Database queries, restart counts, health, the installation's fingerprint and its database password, for the checks run from the host |
+| `guest/Invoke-LabGuestCommand.ps1` | Each VM | Database queries, restart counts, health, the installation's fingerprint, its database password and `jim.web`'s log, for the checks run from the host |
 | `Tests/DeploymentLab.Tests.ps1` | CI (any OS) | Pester tests for every pure function, and that `Cells.psd1` is valid |
 
 ## The matrix
 
 Every cell a run takes by default is air-gapped: its VM sits on a bridge with no route out, and proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
-some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`), and one is the Soak cell
-(`alma9-podrf-soak`).
+some are also an InstallerCases cell (`-cases`), an ExternalDatabase cell (`-extdb`) or a ReverseProxy cell (`-proxy`,
+`-proxy-local`), and one is the Soak cell (`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
-| `u24-docker-ctrd-ag`, `-up`, `-cases`, `-extdb` | Ubuntu 24.04 | Docker, containerd image store |
+| `u24-docker-ctrd-ag`, `-up`, `-cases`, `-extdb`, `-proxy`, `-proxy-local` | Ubuntu 24.04 | Docker, containerd image store |
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
 | `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-proxy`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
 
 The online cells install and upgrade as a customer with internet access does, downloading from GitHub and ghcr.io, so
@@ -172,6 +172,44 @@ As every cell does, it ends by checking that nothing crashed quietly.
 
 The database server is a second VM, `jl-<cell>-db`, given the cell's `DatabaseMemoryGiB`, and deleted with the cell's.
 
+## What a ReverseProxy cell checks
+
+JIM behind nginx, configured from TLS and Reverse Proxy's own nginx example (read from the page, with the lab's names
+in place of `jim.example.com` and `jim-app.example.com`), in the two ways the guide supports. nginx comes from Ubuntu's
+packages, fetched by a VM on the online network (`DatabaseServer`'s image in `Lab.psd1`, given the cell's
+`ProxyMemoryGiB`). Its own certificate, for `jim.jimlab.test`, comes from a CA made for the cell, and the checks trust
+only that CA, so every one of them goes through the proxy.
+
+**Re-encrypting, from a proxy of its own** (`-proxy`, `Proxy = 'Remote'`; Docker and rootful Podman):
+
+1. **nginx on a server of its own**, `jl-<cell>-proxy`, moved onto the cell's air-gapped network and deleted with the
+   cell's.
+2. **JIM installed** with `setup.sh`, its certificate naming both `jim.jimlab.test` and `jim-app.jimlab.test` (which
+   the proxy resolves to the JIM server), and `JIM_TRUSTED_PROXIES` set to the proxy's address. Ready directly.
+3. **nginx runs the guide's example**, re-encrypting to `jim-app.jimlab.test` and checking JIM's certificate against
+   the installer's CA.
+4. **Through the proxy**: JIM is ready; the administrator signs in (the lab realm accepts only the `https://`
+   callback, so this also proves JIM sent the address users type); the security audit log records the lab host's
+   address for that sign-in, not the proxy's; the portal's live connection is upgraded to a WebSocket (101 Switching
+   Protocols on `/_blazor`); and `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es)`.
+
+**Plain HTTP on the JIM host** (`-proxy-local`, `Proxy = 'Local'`; Docker only, as the guide gives it):
+
+1. **JIM installed** with `setup.sh` and ready over HTTPS, then moved onto plain HTTP by the guide's
+   `docker-compose.local-proxy.yml`, added after the other two files in the deployment guide's start command. Port
+   8080 cannot be reached from another machine.
+2. **nginx on the JIM host**, from packages the online VM fetched, running the guide's example with `proxy_pass` set to
+   `http://localhost:8080`, as the guide says to point it, and without the certificate-checking lines.
+3. **Before JIM trusts the proxy**, what the guide says goes wrong does: sign-in fails because the identity provider
+   refuses JIM's `http://` callback, and a REST request carrying a password is refused with 403.
+4. **`JIM_TRUSTED_PROXIES` set** in `.env` to the `jim-network` gateway, found with the guide's own command, and JIM
+   started again.
+5. **Through the proxy**, everything the re-encrypting cell checks, and the password request accepted (404, as the
+   Metaverse Object it names does not exist).
+
+A rootless JIM behind a proxy is not tested, as the guide says not to run one; nor is Apache httpd, or more than one
+JIM server behind a load balancer, which is not supported. Both kinds end by checking that nothing crashed quietly.
+
 ## What a Soak cell checks
 
 A fault that strikes one restart in a few passes a single restart most of the time: #2009 (NetworkManager unplugging
@@ -221,8 +259,8 @@ authority. The runner exits 1 if any cell failed. A kept VM is named `jl-<cell>`
 shell on it, and `lxc delete --force jl-<cell>` removes it. It keeps its memory until then, which the runner does not
 count, so a run that keeps several can leave too little for the cells after them.
 
-**How many cells run at once** is decided by memory: each cell's VM is given its `MemoryGiB` (and an ExternalDatabase
-cell's database server its `DatabaseMemoryGiB`), and the runner starts cells, largest first, while they fit in the
+**How many cells run at once** is decided by memory: each cell's VM is given its `MemoryGiB` (an ExternalDatabase
+cell's database server its `DatabaseMemoryGiB`, and a ReverseProxy cell's proxy its `ProxyMemoryGiB`), and the runner starts cells, largest first, while they fit in the
 host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
 `-MaxParallel` override that.
 

@@ -15,7 +15,8 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak', 'ReverseProxy')
+$script:Proxies = @('Remote', 'Local')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
@@ -72,6 +73,23 @@ function Test-LabMatrix {
         elseif ($cell.Scenario -ne 'ExternalDatabase' -and $cell.ContainsKey('DatabaseMemoryGiB')) {
             "${name}: DatabaseMemoryGiB is for ExternalDatabase cells only"
         }
+        if ($cell.Scenario -eq 'ReverseProxy') {
+            if (-not $cell.ContainsKey('Proxy') -or $cell.Proxy -notin $script:Proxies) {
+                "${name}: a ReverseProxy cell needs Proxy, Remote or Local"
+            }
+            elseif ($cell.Proxy -eq 'Local' -and $cell.Runtime -ne 'docker') {
+                "${name}: a proxy on the JIM host is for Docker only, as TLS and Reverse Proxy gives it"
+            }
+            if ($cell.ContainsKey('Rootless') -and $cell.Rootless) {
+                "${name}: a rootless JIM is not run behind a proxy, as TLS and Reverse Proxy says"
+            }
+            if (-not $cell.ContainsKey('ProxyMemoryGiB') -or $cell.ProxyMemoryGiB -lt 1) {
+                "${name}: a ReverseProxy cell needs ProxyMemoryGiB, at least 1, for the VM that brings nginx"
+            }
+        }
+        elseif ($cell.ContainsKey('Proxy') -or $cell.ContainsKey('ProxyMemoryGiB')) {
+            "${name}: Proxy and ProxyMemoryGiB are for ReverseProxy cells only"
+        }
         # Online cells test what is published, not the commit, so a run takes them only when asked for by their tag
         # (Select-LabCell); the tag and the network must agree for that to hold.
         $taggedOnline = 'online' -in @($cell.Tags)
@@ -90,7 +108,8 @@ function Test-LabMatrix {
 function Get-LabCellMemory {
     <#
     .SYNOPSIS
-        Returns the GiB of memory a cell takes while it runs: its VM's, and its database server's if it has one.
+        Returns the GiB of memory a cell takes while it runs: its VM's, and its database server's or proxy's if it
+        has one.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -99,7 +118,7 @@ function Get-LabCellMemory {
         [object]$Cell
     )
 
-    [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB')
+    [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB') + [int](Get-LabValue $Cell 'ProxyMemoryGiB')
 }
 
 function Select-LabCell {
@@ -132,6 +151,74 @@ function Select-LabCell {
             continue
         }
         $candidate
+    }
+}
+
+function ConvertTo-LabProxyConfig {
+    <#
+    .SYNOPSIS
+        Returns TLS and Reverse Proxy's nginx example with the lab's names in place of its example ones.
+
+    .DESCRIPTION
+        The example re-encrypts to JIM: users reach jim.example.com, and nginx connects to JIM at jim-app.example.com.
+        -UserName and -JimName replace those two names, everywhere they appear (so the certificate paths follow).
+        With -PlainHttp instead of -JimName, nginx forwards plain HTTP to that address, as Plain HTTP for a Proxy on
+        the Same Host says to point the proxy at, and the lines that check JIM's certificate go, as there is none to
+        check. Everything else is the guide's own: the forwarded headers, the buffers and the WebSocket headers. It
+        stops if the example no longer has the two names, so a change to the guide is noticed rather than tested
+        around.
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'ReEncrypt')]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Config,
+
+        [Parameter(Mandatory)]
+        [string]$UserName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ReEncrypt')]
+        [string]$JimName,
+
+        [Parameter(Mandatory, ParameterSetName = 'PlainHttp')]
+        [string]$PlainHttp
+    )
+
+    if ($Config -notmatch '(?m)^\s*server_name jim\.example\.com;') {
+        throw "TLS and Reverse Proxy's nginx example no longer has server_name jim.example.com;"
+    }
+    if ($Config -notmatch '(?m)^\s*proxy_pass https://jim-app\.example\.com;') {
+        throw "TLS and Reverse Proxy's nginx example no longer has proxy_pass https://jim-app.example.com;"
+    }
+    if ($PSCmdlet.ParameterSetName -eq 'PlainHttp') {
+        $Config = $Config -replace '(?m)^(\s*)proxy_pass https://jim-app\.example\.com;', "`${1}proxy_pass $PlainHttp;"
+        $Config = $Config -replace '(?m)^\s*proxy_ssl_\S+.*\r?\n', ''
+        $Config = $Config -replace '(?m)^\s*# Re-encrypt to JIM.*\r?\n', ''
+    }
+    else {
+        $Config = $Config.Replace('jim-app.example.com', $JimName)
+    }
+    $Config.Replace('jim.example.com', $UserName)
+}
+
+function Get-LabProxyFile {
+    <#
+    .SYNOPSIS
+        Returns where an nginx configuration expects its own certificate and key, and the CA it trusts JIM's
+        certificate by (none for plain HTTP).
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Config
+    )
+
+    $read = { param([string]$Directive) if ($Config -match "(?m)^\s*$Directive\s+(\S+);") { $Matches[1] } }
+    @{
+        Certificate = & $read 'ssl_certificate'
+        Key = & $read 'ssl_certificate_key'
+        TrustedCa = & $read 'proxy_ssl_trusted_certificate'
     }
 }
 
@@ -808,6 +895,23 @@ function Set-LabVmProfile {
     Wait-LabVm -Name $Name
 }
 
+function ConvertTo-LabLxcNameFilter {
+    <#
+    .SYNOPSIS
+        Returns the filter that makes lxc list show one VM: given a bare name it lists every VM whose name begins with
+        it, so jl-u24-docker-ctrd-up would also list jl-u24-docker-ctrd-up-oldest, and a cell would take the address
+        of another running beside it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    "^$([regex]::Escape($Name))$"
+}
+
 function Get-LabVmAddress {
     <#
     .SYNOPSIS
@@ -828,7 +932,7 @@ function Get-LabVmAddress {
     $prefix = [regex]::Escape(($Gateway -replace '\.\d+$', '.'))
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        $addresses = Invoke-LabLxc -Arguments @('list', $Name, '--columns', '4', '--format', 'csv') -AllowFailure
+        $addresses = Invoke-LabLxc -Arguments @('list', (ConvertTo-LabLxcNameFilter -Name $Name), '--columns', '4', '--format', 'csv') -AllowFailure
         $match = [regex]::Match("$addresses", "($prefix\d+)")
         if ($match.Success) {
             return $match.Groups[1].Value
@@ -1059,7 +1163,7 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
