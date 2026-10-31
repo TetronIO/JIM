@@ -34,7 +34,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 - Exchange Online and hybrid remote mailboxes. A separate issue follows.
 - Leaver handling in Exchange: converting a leaver's mailbox to shared, hiding them from the address book, or disabling the recipient, and converting between mailbox types generally. It follows later, paired with JIM's leaver actions (Delete, Disconnect, and Disable once that exists). In the first release, JIM's existing deprovisioning applies: see requirement 18.
 - Mailbox permissions (Full Access, Send As, a manager's access to a leaver's mailbox), archive mailboxes, linked mailboxes, and mailbox policies (retention, address book, quotas). These come later.
-- Guided setup templates. The first release is configured with ordinary Attribute Flows; templates that generate those flows follow in their own PRD.
+- Guided setup templates beyond the Exchange recipients panel (requirement 4). Templates that generate several flows at once, such as a mailbox provisioning pattern or GAL sync, follow in their own PRD.
 - JIM-side database balancing ("least-populated database"), unless customers ask for it.
 - Running script text. JIM only ever calls named cmdlets with bound parameters.
 - Managing Exchange's own configuration: databases, Email Address Policies, connectors.
@@ -47,7 +47,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 3. As a messaging administrator in a multi-forest organisation, I want each forest's people to appear as mail contacts in the other forests' address books, so that everyone can find and reply to everyone.
 4. As an operator, I want every failed Exchange step to show on the Activity with a clear reason and to be retried, so that no account is silently left half-provisioned.
 5. As an automation engineer, I want to configure all of this with PowerShell and the REST API, so that environments are reproducible.
-6. As a security officer, I want JIM to use a least-privilege Exchange account over an encrypted, Kerberos-authenticated connection, so that recipient management meets our security baseline.
+6. As a security officer, I want JIM to manage Exchange with its existing least-privilege account, over an encrypted, Kerberos-authenticated connection, so that recipient management meets our security baseline.
 
 ## Requirements
 
@@ -55,9 +55,12 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **Configuration**
 
-1. An LDAP Connected System can be given Exchange settings: the Exchange PowerShell endpoint (default `http://<server>/PowerShell/`), the Kerberos realm and optional KDCs, a service account and password, and an optional CA certificate for an `https://` endpoint. One endpoint per Connected System.
-2. JIM generates the Kerberos configuration from those settings. An operator never mounts a `krb5.conf`.
-3. Settings are validated when saved, and a "Test connection" check opens a session and reports the Exchange version and any cmdlet JIM needs that the account's roles do not allow (Exchange's session lists only the cmdlets an account may run).
+1. An LDAP Connected System connected to Active Directory can manage Exchange recipients. Its Exchange settings are LDAP Connector settings, under an Exchange heading, so only LDAP Connected Systems show them, and the REST API and PowerShell handle them as they handle any Connector setting:
+   - **Manage Exchange recipients**, a checkbox that reveals the rest. Saving it turned on is refused when the Connected System's detected directory type is not Active Directory.
+   - **Exchange server.** JIM offers the Exchange servers recorded in Active Directory's configuration partition, and accepts an endpoint instead (default `http://<server>/PowerShell/`), such as a load-balanced name or an `https://` address. One endpoint per Connected System. Reading the servers from the configuration partition is to be confirmed against the AD lab in spike Phase 1b.
+   - **CA certificate**, shown only for an `https://` endpoint.
+2. JIM signs in to Exchange with the Connected System's own credentials; there is no second account. It works out the Kerberos details itself: the principal from the credential's account (given as `DOMAIN\name`, a user principal name or a distinguished name, and resolved through the directory), the realm from the DNS name of that account's domain, and the KDC as the domain controller the Connected System is pinned to, since every domain controller is one. An operator never enters a realm or a KDC, or mounts a `krb5.conf`. Both of the LDAP Connector's authentication types, Simple and NTLM, carry the password Kerberos needs.
+3. When the Exchange settings are saved, alongside the directory connection check that already runs then, JIM opens an Exchange session. A save that cannot reach Exchange, or whose sign-in Exchange refuses, is refused with the reason. A cmdlet JIM needs that the account's Exchange roles do not allow (Exchange's session lists only the cmdlets an account may run) is reported by name, with the recipient types it affects, as a warning that does not refuse the save. The Exchange version and the Kerberos sign-in JIM worked out are shown among the Connected System's detected facts.
 
 **Declaring recipient state**
 
@@ -70,6 +73,8 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
    | Exchange Database | Mailbox types only. When empty, Exchange chooses. |
    | Exchange Primary SMTP Address | Optional. When empty, Email Address Policies apply. |
    | Exchange External Address | MailUser and MailContact: the external SMTP address |
+
+   On the Attribute Flow tab of an export Synchronisation Rule whose Connected System manages Exchange, an **Exchange recipients** panel lists these attributes, offering only those that apply to the rule's Object Type, each with the Attribute Flow that sets it or what happens without one ("Database: not set, so Exchange chooses"). With none set, the panel is the way in to setting up recipients. Set, Edit and Remove open the standard Edit Attribute Flow dialog with the attribute already chosen, and **Stop provisioning recipients** removes those flows after a confirmation that says existing recipients are left as they are (requirement 16). The panel stores nothing of its own and finds flows by their target alone, never interpreting an expression. It is a portal affordance only: everything it does is an Attribute Flow operation the REST API and PowerShell already offer.
 
 5. A recipient type that does not fit the object is refused with a clear error rather than attempted: a mailbox on a group, MailContact on anything but a `contact`, or MailEnabledGroup on a group that is not universal.
 6. The `contact` object class can be selected as an Object Type on an LDAP Connected System, so contacts can be provisioned.
@@ -125,7 +130,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 ### Non-Functional Requirements
 
 - **Transport security.** Kerberos only. By default, HTTP with Kerberos message encryption, as Microsoft documents for Exchange Remote PowerShell; the transport refuses any unencrypted session and never falls back to one. HTTPS is optional, with TLS 1.2 or later and certificate validation always on. This is a recorded exception to TLS in transit (`engineering/COMPLIANCE_MAPPING.md`, SC-8).
-- **Secrets.** The service account password is encrypted at rest (AES-256-GCM) and never logged; the remoting library cannot give it back once set. The docs recommend a least-privilege custom RBAC role covering only the cmdlets above, with Recipient Management as the simpler alternative.
+- **Secrets.** Exchange is reached with the Connected System's own credentials, which are already encrypted at rest (AES-256-GCM) and never logged; the remoting library cannot give the password back once set. The cost of one account is that it also holds an Exchange role: the docs recommend a least-privilege custom RBAC role covering only the cmdlets above, with Recipient Management as the simpler alternative.
 - **Throughput.** One session serves a whole export batch, with one Kerberos login (the spike measured 200 commands on 1 login and 3 connections). Parallel sessions per Connected System are bounded well below Exchange's default `PowerShellMaxConcurrency` of 18. Per-step cost against real Exchange is measured in spike Phase 3 and recorded there.
 - **Runs where the Worker runs.** A Linux container with a read-only root filesystem, as a non-root user, air-gapped. The spike proved this in the Worker image; it needs `XDG_CACHE_HOME=/tmp/.cache`.
 - **Exchange versions.** Exchange Server SE is lab-tested, 2019 CU15 is supported but not lab-tested, and 2016 is best effort.
@@ -194,11 +199,11 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 |------|--------|
 | Remoting library | Already built by the spike; moves from spike to production use |
 | LDAP Connector | Exchange settings, connector-defined attributes, the Exchange step, the `contact` Object Type |
-| Models and database | A durable queue of Exchange changes (like `PendingPasswordChange`), Connected System Exchange settings, the failure classifications; a migration |
+| Models and database | A durable queue of Exchange changes (like `PendingPasswordChange`) and the failure classifications; a migration. The Exchange settings are Connector settings and need no model of their own |
 | Worker | Queueing after directory writes, and a delivery lane beside the Password Delivery Service's |
-| Application | Export execution (`ExportExecutionServer`), settings validation, the connection test |
-| API and PowerShell | Settings DTOs and endpoints; cmdlet parameters for the settings and the test |
-| Portal | An Exchange section on the LDAP Connected System; queued Exchange changes and their outcomes on Activities and on the object, with retry and cancel |
+| Application | Export execution (`ExportExecutionServer`), and settings validation, which also opens an Exchange session |
+| API and PowerShell | Queued Exchange changes, with retry and cancel. The settings and the recipients panel need nothing new: they are Connector settings and Attribute Flows |
+| Portal | The Exchange settings among the LDAP Connector's settings and detected facts; the Exchange recipients panel on export Synchronisation Rules; queued Exchange changes and their outcomes on Activities, in Operations and on the object, with retry and cancel |
 | Worker image | `XDG_CACHE_HOME` and `POWERSHELL_TELEMETRY_OPTOUT` |
 | Integration tests | New scenarios against the AD lab's Exchange servers, including GAL sync both ways |
 
@@ -208,7 +213,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 |------|--------|
 | `docs/connectors/jim-ldap-connector-exchange.md` (new) | How to set up Exchange provisioning: settings, recipient types, placement, lifecycle, troubleshooting |
 | `docs/connectors/jim-ldap-connector-gal-sync.md` (new) | GAL sync between forests, including the X500 proxy and loop prevention |
-| `docs/connectors/jim-ldap-connector-permissions.md` | The least-privilege Exchange RBAC role |
+| `docs/connectors/jim-ldap-connector-permissions.md` | The least-privilege Exchange RBAC role the Connected System's account needs |
 | `docs/configuration/activity-execution-items.md` | How queued Exchange changes and their outcomes appear on Activities |
 | `engineering/COMPLIANCE_MAPPING.md` | SC-8 moves from planned to in place |
 | `engineering/DEVELOPER_GUIDE.md` | The remoting library and its boundary |
@@ -228,10 +233,13 @@ Made on 2026-10-31, in review of this draft:
 3. **One Exchange endpoint per Connected System.** Failover lists and load-balanced namespaces follow later.
 4. **Parallel sessions per Connected System are set by measurement**, from spike Phase 3 and the integration tests, not chosen in advance.
 5. **Exchange's serialisation payload signing needs nothing here.** Spike Phase 3 confirms it does not affect the client.
+6. **Exchange settings are LDAP Connector settings, not a tab of their own**, so only LDAP Connected Systems show them, and enabling them is refused unless the directory is Active Directory (requirement 1).
+7. **Exchange is managed with the Connected System's own account.** There is no second account in the first release: it would isolate little, since the account already writes the objects Exchange acts on, and an optional override can follow later without breaking anything. JIM works out the Kerberos realm and KDC from the domain (requirement 2).
+8. **The first release has one guided layer, the Exchange recipients panel** (requirement 4), over ordinary Attribute Flows. Templates follow in their own PRD.
 
 ## Open Questions
 
-1. **The portal.** How Attribute Flow configuration presents mailbox provisioning, and every other UI implication, including how the causality view shows password and mailbox events, is to be mocked and reviewed before this PRD is locked.
+1. **The portal.** The [portal mock](https://claude.ai/artifact/WJDkMng3Ji2G7iPB4BG6cR) covers every portal implication, including how the causality views show password and mailbox events. Its first review settled decisions 6 to 8. Still open: where follow-ups sit in the causality Lineage, the object timeline's granularity, what Cancel means for a queued change, the retry policy, a warning when an importing system's scope would import the GAL contacts JIM creates, and whether Exchange gets its own Operations tab.
 
 ## Acceptance Criteria
 
@@ -247,6 +255,8 @@ Made on 2026-10-31, in review of this draft:
 - [ ] A queued Exchange change is delivered within seconds of the export, survives a Worker restart, retries what a retry can cure, parks what needs a person, and never leaves JIM believing the recipient exists.
 - [ ] Re-running against a recipient already in its declared state changes nothing.
 - [ ] Each export run logs summary statistics for its Exchange steps.
+- [ ] Exchange settings appear only on an LDAP Connected System, are refused unless the directory is Active Directory, and need no realm, KDC or second account.
+- [ ] Recipient provisioning can be set up, changed and stopped from the Exchange recipients panel, and the result is ordinary Attribute Flows.
 - [ ] Settings, attributes and queued Exchange changes work from the portal, the REST API and PowerShell, with tests and docs.
 - [ ] The Worker runs the Exchange step on its read-only root filesystem as a non-root user.
 - [ ] The remoting library has no `JIM.*` references, enforced by test.
@@ -257,7 +267,7 @@ Made on 2026-10-31, in review of this draft:
 - **Phasing.**
   1. The spike, ending in a go/no-go.
   2. The first release (this PRD).
-  3. Guided setup: a "Mailbox provisioning" template (recipient type, alias and SMTP patterns, database placement) and a "GAL sync" template (target OU, X500 proxy, loop-prevention scoping), both generating editable Attribute Flows.
+  3. Guided setup templates, building on the first release's Exchange recipients panel: a "Mailbox provisioning" template (recipient type, alias and SMTP patterns, database placement) and a "GAL sync" template (target OU, X500 proxy, loop-prevention scoping), both generating editable Attribute Flows.
   4. Later: leaver handling in Exchange (convert to shared, hide, disable, paired with JIM's leaver actions), mailbox permissions as entitlements, archives, linked mailboxes, policies.
 - **Precedent.** The Password Delivery Service and its queue (`PendingPasswordChange`, its statuses and claim lease; `docs/configuration/initial-password.md`, `docs/concepts/password-synchronisation.md`) are the model for the Exchange queue. Whether the implementation generalises that lane's mechanics (claiming, backoff, parking, Activity reporting) to carry both kinds of work, or builds a parallel lane, is for the implementation plan; the password queue's secrecy invariants stay its own either way.
 - **Already in place.** The `Mail Nickname`, `Proxy Addresses` and `Hide From Address Lists?` Metaverse Attributes and their LDAP Standard Mappings exist, and hiding a leaver from the address book already works through `msExchHideFromAddressLists`.
