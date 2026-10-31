@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Synchronising into a system with large groups is faster: reading each page's Metaverse Objects no longer grows with the square of a group's membership, which cost 154 seconds for one page in a 750,000-person directory. Synchronisation and deletion previews speed up too. (#2598)
 - ⚡ Synchronising a group whose members are themselves large groups is faster: recording each export's change now reads only the names of the objects it references, not their members, which cost 14.8 seconds for one group in a 750,000-person directory. (#2598)
 - ⚡ Large groups load far faster during synchronisation: loading a group's members or pending membership changes no longer grows with the square of its size, taking one page with a 500,000-member group from over a minute to seconds. (#2598)
+- ⚡ Synchronising a change to a large group's membership is faster: checking which members the Connected System already holds no longer grows with the square of the group's size, which cost 50 seconds for one 50,000-member group gaining two members. (#2645)
 
 
 ## [0.17.0] - 2026-10-29

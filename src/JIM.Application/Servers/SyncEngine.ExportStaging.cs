@@ -586,10 +586,16 @@ public partial class SyncEngine
                     var expressionChanges = StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
                         expressionEvaluator, heldValues, flowErrors);
 
-                    // No-net-change detection for expression-based mappings
-                    var alreadyCurrent = heldValues == null
-                        ? []
-                        : expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+                    // No-net-change detection for expression-based mappings. A list for a multi-valued target stages one
+                    // change per value, so each is answered from one lookup of the held values, never a scan of them
+                    // (#2645), and the changes kept are those not found current, by identity, again without a scan.
+                    List<PendingExportAttributeValueChange> alreadyCurrent = [];
+                    if (heldValues != null)
+                    {
+                        var heldLookup = new HeldAttributeValues(heldValues);
+                        alreadyCurrent = expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldLookup)).ToList();
+                    }
+
                     foreach (var change in alreadyCurrent)
                     {
                         Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
@@ -598,7 +604,8 @@ public partial class SyncEngine
 
                     csoAlreadyCurrentCount += alreadyCurrent.Count;
                     noNetChangeSkipped?.AddRange(alreadyCurrent);
-                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrent.Contains(change)));
+                    var alreadyCurrentChanges = alreadyCurrent.ToHashSet();
+                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrentChanges.Contains(change)));
                     continue;
                 }
 
@@ -684,6 +691,12 @@ public partial class SyncEngine
                             source.MetaverseAttribute.Name);
                     }
                 }
+
+                // What the Connected System Object holds for the target attribute, gathered on the first value that needs
+                // no-net-change detection and kept for this mapping's values alone (#2645). A multi-valued attribute stages
+                // one change per value, and checking each against every held value cost the square of a large group's
+                // membership; the lookup answers each in constant time.
+                HeldAttributeValues? heldTargetValues = null;
 
                 foreach (var (mvoValue, attrChangeType) in stagedValues)
                 {
@@ -772,13 +785,13 @@ public partial class SyncEngine
                     // method now compares these properly by extracting the MVO ID from both representations.
                     if (canDetectNoNetChange)
                     {
-                        var cacheKey = (existingCso!.Id, attributeChange.AttributeId);
-                        var existingCsoValues = csoAttributeCache![cacheKey];
+                        var targetCsoId = existingCso!.Id;
+                        heldTargetValues ??= new HeldAttributeValues(csoAttributeCache![(targetCsoId, attributeChange.AttributeId)]);
 
-                        if (IsCsoAttributeAlreadyCurrent(attributeChange, existingCsoValues))
+                        if (IsCsoAttributeAlreadyCurrent(attributeChange, heldTargetValues))
                         {
                             Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (direct)",
-                                attributeChange.AttributeId, existingCso.Id);
+                                attributeChange.AttributeId, targetCsoId);
                             csoAlreadyCurrentCount++;
                             noNetChangeSkipped?.Add(attributeChange);
                             continue;
@@ -1414,6 +1427,38 @@ public partial class SyncEngine
                 // If the value exists, we need to remove it (not a no-net-change)
                 return !valuesList.Any(ev => ValuesMatch(pendingChange, ev));
 
+            default:
+                return IsCsoAttributeAlreadyCurrentAsAWhole(pendingChange, valuesList);
+        }
+    }
+
+    /// <summary>
+    /// The same answer as <see cref="IsCsoAttributeAlreadyCurrent(PendingExportAttributeValueChange, IEnumerable{ConnectedSystemObjectAttributeValue})"/>,
+    /// against values gathered once for every change staged for the attribute (#2645): a per-value Add or Remove is
+    /// answered by lookup instead of by comparing it with every value the Connected System Object holds, which for a
+    /// large group cost the square of its membership.
+    /// </summary>
+    /// <param name="pendingChange">The pending change to export.</param>
+    /// <param name="heldValues">The Connected System Object's values for the change's attribute.</param>
+    /// <returns>True if the operation is a no-net-change (should be skipped), false otherwise.</returns>
+    internal static bool IsCsoAttributeAlreadyCurrent(PendingExportAttributeValueChange pendingChange, HeldAttributeValues heldValues) =>
+        pendingChange.ChangeType switch
+        {
+            PendingExportAttributeChangeType.Add => heldValues.HoldsMatchFor(pendingChange),
+            PendingExportAttributeChangeType.Remove => !heldValues.HoldsMatchFor(pendingChange),
+            _ => IsCsoAttributeAlreadyCurrentAsAWhole(pendingChange, heldValues.Values)
+        };
+
+    /// <summary>
+    /// No-net-change detection for a change that sets, or clears, the attribute as a whole rather than adding or removing
+    /// one of its values: a RemoveAll, or an Update.
+    /// </summary>
+    private static bool IsCsoAttributeAlreadyCurrentAsAWhole(
+        PendingExportAttributeValueChange pendingChange,
+        IReadOnlyList<ConnectedSystemObjectAttributeValue> valuesList)
+    {
+        switch (pendingChange.ChangeType)
+        {
             case PendingExportAttributeChangeType.RemoveAll:
                 // For RemoveAll: skip if CSO has no values for this attribute (no-net-change)
                 // If CSO has values, we need to remove them (not a no-net-change)
@@ -1446,8 +1491,13 @@ public partial class SyncEngine
     /// - Pending Exports from sync store resolved DNs in StringValue
     /// - CSO values from AD import store DNs in UnresolvedReferenceValue
     /// This method handles cross-field comparison for these cases.
+    /// <para>
+    /// <see cref="HeldAttributeValues"/> answers the same question by lookup, keyed exactly as this method decides, so a
+    /// change to this method needs the same change there; <c>HeldAttributeValuesDifferentialTests</c> fails until the two
+    /// agree (#2645).
+    /// </para>
     /// </remarks>
-    private static bool ValuesMatch(
+    internal static bool ValuesMatch(
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue existingValue)
     {
