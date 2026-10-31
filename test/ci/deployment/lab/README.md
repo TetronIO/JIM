@@ -29,16 +29,16 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 
 Every cell a run takes by default is air-gapped: its VM sits on a bridge with no route out, and proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
-some are also an InstallerCases cell (`-cases`) or an ExternalDatabase cell (`-extdb`), and one is the Soak cell
-(`alma9-podrf-soak`).
+some are also an InstallerCases cell (`-cases`), an ExternalDatabase cell (`-extdb`), or an Upgrade cell from the oldest
+release a customer can upgrade from (`-up-oldest`), and one is the Soak cell (`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
-| `u24-docker-ctrd-ag`, `-up`, `-cases`, `-extdb` | Ubuntu 24.04 | Docker, containerd image store |
+| `u24-docker-ctrd-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb` | Ubuntu 24.04 | Docker, containerd image store |
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
-| `u24-podrl-ag`, `-up` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `u24-podrl-ag`, `-up`, `-up-oldest` | Ubuntu 24.04 | Podman, rootless |
+| `alma9-podrf-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
 
 The online cells install and upgrade as a customer with internet access does, downloading from GitHub and ghcr.io, so
@@ -127,6 +127,11 @@ online, so only the air-gapped cells check them.
 
 The release upgraded from is the latest published one, fetched from GitHub once, or `-PreviousBundlePath`. A build from
 a commit whose `VERSION` is not newer reports the next patch version, so that the installer takes it as an upgrade.
+
+The `-up-oldest` cells (`FromOldest` in `Cells.psd1`, tag `oldest`) upgrade instead from `OldestRelease`, the oldest
+release the upgrade guides say a customer can upgrade from straight to the latest, skipping every release in between,
+as a customer who upgrades now and then does. They run in every run and the release gate. When the oldest supported
+release moves, change `OldestRelease` and both guides together: a Pester test fails while they disagree.
 
 ## What an InstallerCases cell checks
 
