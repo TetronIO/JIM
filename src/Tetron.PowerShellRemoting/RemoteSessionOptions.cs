@@ -20,8 +20,11 @@ public sealed class RemoteSessionOptions
     /// <summary>The account to authenticate as, as a Kerberos principal: <c>svc-jim@PANOPLY.LOCAL</c>.</summary>
     public required string UserPrincipalName { get; init; }
 
-    /// <summary>The account's password. Used to obtain a Kerberos ticket and never sent to the server.</summary>
-    public required string Password { get; init; }
+    /// <summary>
+    /// The account's password. Used to obtain a Kerberos ticket and never sent to the server. It cannot be read back,
+    /// so logging or serialising these options never carries it.
+    /// </summary>
+    public required string Password { internal get; init; }
 
     /// <summary>
     /// The host name in the service principal (<c>HTTP/host</c>). Defaults to the endpoint's host; set it when the
@@ -37,6 +40,9 @@ public sealed class RemoteSessionOptions
 
     /// <summary>How long one HTTP request may take, including the server's <see cref="OperationTimeout"/>.</summary>
     public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>The account, endpoint and session configuration, for logs; never the password.</summary>
+    public override string ToString() => $"{UserPrincipalName} at {ConnectionUri} ({ConfigurationName})";
 
     internal string ServiceHost => ServicePrincipalHost ?? ConnectionUri.Host;
 

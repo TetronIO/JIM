@@ -72,6 +72,28 @@ public class RemoteSessionHarnessTests
     }
 
     [Test]
+    public async Task InvokeAsync_SecureStringParameter_ArrivesIntactThroughTheSessionKeyAsync()
+    {
+        // A SecureString parameter (an initial password, for New-Mailbox -Password) is encrypted again by PowerShell
+        // remoting with a session key the two ends negotiate over the transport. This proves that exchange works.
+        using var runspace = await RemoteSessionFactory.OpenAsync(Options("http", 5985));
+        using var secret = new System.Security.SecureString();
+        foreach (var character in "Initial-Passw0rd!")
+            secret.AppendChar(character);
+        secret.MakeReadOnly();
+
+        using var ps = PowerShell.Create(runspace);
+        ps.AddCommand("ConvertFrom-SecureString").AddParameter("SecureString", secret).AddParameter("AsPlainText");
+        var output = await ps.InvokeAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ps.Streams.Error, Is.Empty);
+            Assert.That(output.Single().BaseObject, Is.EqualTo("Initial-Passw0rd!"));
+        }
+    }
+
+    [Test]
     public async Task OpenAsync_OverHttpsWithTheHarnessCa_RunsACommandAsync()
     {
         using var runspace = await RemoteSessionFactory.OpenAsync(Options("https", 5986, trustHarnessCa: true));
