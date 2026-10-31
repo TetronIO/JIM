@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Utility;
 namespace JIM.Models.Staging;
 
 public class ConnectedSystemObject
@@ -55,7 +56,9 @@ public class ConnectedSystemObject
     /// </summary>
     public int? SecondaryExternalIdAttributeId { get; set; }
 
-    public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; } = new();
+    // Not a List: a group's values can number hundreds of thousands, and EF Core loads a List in time that grows with
+    // the square of its size. See ReferenceIndexedList.
+    public ReferenceIndexedList<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; } = new();
 
     /// <summary>
     /// SPEC-1082: a content hash (not an identifier) of the import object that last brought this

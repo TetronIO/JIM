@@ -43,7 +43,7 @@ public class SyncRepositoryCsoReadTests
             Created = created ?? DateTime.UtcNow,
             LastUpdated = lastUpdated,
             MetaverseObjectId = metaverseObjectId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
     }
 
@@ -288,7 +288,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectAsync(CsId, csoId);
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectAsync(CsId, csoId);
         Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
@@ -302,7 +302,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 42);
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 42);
         Assert.That(reread, Is.Not.Null);
@@ -317,7 +317,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, "john.doe");
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, "john.doe");
         Assert.That(reread, Is.Not.Null);
@@ -333,7 +333,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, guidVal);
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, guidVal);
         Assert.That(reread, Is.Not.Null);
@@ -348,7 +348,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 123456789L);
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 123456789L);
         Assert.That(reread, Is.Not.Null);
@@ -363,7 +363,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(CsId, "DN123");
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(CsId, "DN123");
         Assert.That(reread, Is.Not.Null);
@@ -410,7 +410,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAsync(CsId, ObjectTypeId, "CN=John,DC=test");
-        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated!.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAsync(CsId, ObjectTypeId, "CN=John,DC=test");
         Assert.That(reread, Is.Not.Null,
@@ -593,7 +593,7 @@ public class SyncRepositoryCsoReadTests
         var hydratedCso = hydrated.Single();
 
         // Simulate the caller releasing its working copy once it's finished with the values.
-        hydratedCso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydratedCso.AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectsByIdsAsync(CsId, new[] { cso.Id });
         Assert.That(reread.Single().AttributeValues, Has.Count.EqualTo(1),
@@ -608,7 +608,7 @@ public class SyncRepositoryCsoReadTests
         _repo.SeedConnectedSystemObject(cso);
 
         var hydrated = await _repo.GetConnectedSystemObjectsByIdsNoTrackingAsync(CsId, new[] { cso.Id });
-        hydrated.Single().AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        hydrated.Single().AttributeValues = new();
 
         var reread = await _repo.GetConnectedSystemObjectsByIdsNoTrackingAsync(CsId, new[] { cso.Id });
         Assert.That(reread.Single().AttributeValues, Has.Count.EqualTo(1));

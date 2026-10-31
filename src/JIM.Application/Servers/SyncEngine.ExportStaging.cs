@@ -1877,13 +1877,15 @@ public partial class SyncEngine
     /// creation and its password's delivery. An incoming change with a different value is a genuine change and still
     /// supersedes the held one.
     /// </summary>
+    /// <typeparam name="TChanges">The collection the changes are held in; a filtered result is a new one of the same type.</typeparam>
     /// <param name="incomingChanges">The newly evaluated export changes.</param>
     /// <param name="existingChanges">The changes on the Pending Export they are about to be merged into.</param>
     /// <returns><paramref name="incomingChanges"/> itself when nothing is held (the ordinary case, allocation-free),
     /// otherwise a new list without the restatements, in their original order.</returns>
-    internal static List<PendingExportAttributeValueChange> WithoutChangesRestatingAHeldChange(
-        List<PendingExportAttributeValueChange> incomingChanges,
+    internal static TChanges WithoutChangesRestatingAHeldChange<TChanges>(
+        TChanges incomingChanges,
         IEnumerable<PendingExportAttributeValueChange> existingChanges)
+        where TChanges : ICollection<PendingExportAttributeValueChange>, new()
     {
         ArgumentNullException.ThrowIfNull(incomingChanges);
         ArgumentNullException.ThrowIfNull(existingChanges);
@@ -1895,7 +1897,10 @@ public partial class SyncEngine
         if (heldAssertions.Count == 0)
             return incomingChanges;
 
-        return incomingChanges.Where(change => !heldAssertions.Contains(HeldChangeAssertion(change))).ToList();
+        var kept = new TChanges();
+        foreach (var change in incomingChanges.Where(change => !heldAssertions.Contains(HeldChangeAssertion(change))))
+            kept.Add(change);
+        return kept;
     }
 
     /// <summary>

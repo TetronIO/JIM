@@ -1521,7 +1521,7 @@ public class ExportExecutionParallelBatchTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             MetaverseObjectId = referencedMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
             }
@@ -1559,7 +1559,7 @@ public class ExportExecutionParallelBatchTests
             ChangeType = changeType,
             CreatedAt = createdAt,
             HasUnresolvedReferences = true,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1594,7 +1594,7 @@ public class ExportExecutionParallelBatchTests
             ConnectedSystemId = system.Id,
             Type = type,
             TypeId = type.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
     }
 
@@ -1613,7 +1613,7 @@ public class ExportExecutionParallelBatchTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {

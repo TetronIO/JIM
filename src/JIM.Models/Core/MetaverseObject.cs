@@ -6,6 +6,7 @@ using JIM.Models.Security;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Utility;
 
 namespace JIM.Models.Core;
 
@@ -20,7 +21,9 @@ public class MetaverseObject
 
     public MetaverseObjectType Type { get; set; } = null!;
 
-    public List<MetaverseObjectAttributeValue> AttributeValues { get; set; } = new();
+    // Not a List: a group's values can number hundreds of thousands, and EF Core loads a List in time that grows with
+    // the square of its size. See ReferenceIndexedList.
+    public ReferenceIndexedList<MetaverseObjectAttributeValue> AttributeValues { get; set; } = new();
 
     public List<Role> Roles { get; set; } = null!;
 

@@ -480,7 +480,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
@@ -614,7 +614,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
 
@@ -2113,7 +2113,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined, // Already joined via import
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-1),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -2252,7 +2252,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.PendingProvisioning, // Not yet exported
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
@@ -2427,7 +2427,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-30),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -2506,7 +2506,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-30),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -2577,7 +2577,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-30),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -2652,7 +2652,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-30),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -2916,7 +2916,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-1),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -3023,7 +3023,7 @@ public class ExportEvaluationTests
             JoinType = ConnectedSystemObjectJoinType.Joined,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow.AddDays(-1),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(existingCso);
         SyncRepo.SeedConnectedSystemObject(existingCso);
@@ -3156,7 +3156,7 @@ public class ExportEvaluationTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -3758,7 +3758,7 @@ public class ExportEvaluationTests
         {
             Id = Guid.NewGuid(),
             Type = mvUserType,
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -4155,7 +4155,7 @@ public class ExportEvaluationTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {

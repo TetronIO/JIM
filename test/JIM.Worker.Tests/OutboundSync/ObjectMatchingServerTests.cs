@@ -748,7 +748,7 @@ public class ObjectMatchingServerTests
             TypeId = targetUserType.Id,
             MetaverseObjectId = metaverseObjectId,
             Status = status,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -1094,7 +1094,7 @@ public class ObjectMatchingServerTests
             TypeId = targetUserType.Id,
             MetaverseObjectId = metaverseObjectId,
             Status = status,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {

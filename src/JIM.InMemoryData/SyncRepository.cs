@@ -717,7 +717,7 @@ public class SyncRepository : ISyncRepository
         PartitionId = cso.PartitionId,
         ExternalIdAttributeId = cso.ExternalIdAttributeId,
         SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
-        AttributeValues = new List<ConnectedSystemObjectAttributeValue>(cso.AttributeValues),
+        AttributeValues = new ReferenceIndexedList<ConnectedSystemObjectAttributeValue>(cso.AttributeValues),
         Status = cso.Status,
         MetaverseObject = cso.MetaverseObject,
         MetaverseObjectId = cso.MetaverseObjectId,

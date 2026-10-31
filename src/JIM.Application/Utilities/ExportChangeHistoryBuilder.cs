@@ -117,7 +117,7 @@ public static class ExportChangeHistoryBuilder
     /// </summary>
     internal static void MapAttributeValueChanges(
         ConnectedSystemObjectChange change,
-        List<PendingExportAttributeValueChange> attributeValueChanges,
+        IEnumerable<PendingExportAttributeValueChange> attributeValueChanges,
         IReadOnlyDictionary<Guid, string>? referenceDisplayIdentifiers = null)
     {
         foreach (var peChange in attributeValueChanges)

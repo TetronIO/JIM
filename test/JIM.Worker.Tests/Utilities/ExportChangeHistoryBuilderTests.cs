@@ -694,7 +694,7 @@ public class ExportChangeHistoryBuilderTests
         {
             Id = Guid.NewGuid(),
             ExternalIdAttributeId = 1,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { AttributeId = 3, Attribute = displayNameAttr, StringValue = "Benjamin Myers" },
                 new() { AttributeId = 1, Attribute = externalIdAttr, StringValue = "external-id-123" }
@@ -714,7 +714,7 @@ public class ExportChangeHistoryBuilderTests
             Id = Guid.NewGuid(),
             ExternalIdAttributeId = 1,
             SecondaryExternalIdAttributeId = 2,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { AttributeId = 1, Attribute = externalIdAttr, StringValue = "external-id-123" },
                 new() { AttributeId = 2, Attribute = secondaryIdAttr, StringValue = "CN=User,OU=Test" }
@@ -733,7 +733,7 @@ public class ExportChangeHistoryBuilderTests
             Id = Guid.NewGuid(),
             ExternalIdAttributeId = 1,
             SecondaryExternalIdAttributeId = 2,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { AttributeId = 2, Attribute = secondaryIdAttr, StringValue = "CN=User,OU=Test" }
             }
@@ -790,7 +790,7 @@ public class ExportChangeHistoryBuilderTests
             ConnectedSystemId = 10,
             ConnectedSystemObject = new ConnectedSystemObject(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = attributeChanges.ToList()
+            AttributeValueChanges = new(attributeChanges)
         };
     }
 

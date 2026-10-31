@@ -66,7 +66,7 @@ public class ConnectedSystemRepositoryPendingExportTests
             ConnectedSystemId = _connectedSystem.Id,
             Type = _objectType,
             TypeId = _objectType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         _cso2 = new ConnectedSystemObject
@@ -76,7 +76,7 @@ public class ConnectedSystemRepositoryPendingExportTests
             ConnectedSystemId = _connectedSystem.Id,
             Type = _objectType,
             TypeId = _objectType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         _pendingExportsData = new List<PendingExport>();
@@ -177,7 +177,7 @@ public class ConnectedSystemRepositoryPendingExportTests
             ConnectedSystemObjectId = cso.Id,
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>(),
+            AttributeValueChanges = new(),
             SourceMetaverseObject = null,
             CreatedAt = createdAt ?? DateTime.UtcNow
         };

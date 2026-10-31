@@ -435,7 +435,7 @@ public class ConnectedSystemRepositoryExportOptimisationTests
             ConnectedSystemId = _connectedSystem.Id,
             Type = _objectType,
             TypeId = _objectType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         return new PendingExport
@@ -448,7 +448,7 @@ public class ConnectedSystemRepositoryExportOptimisationTests
             ChangeType = PendingExportChangeType.Update,
             Status = status,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
     }
 
@@ -462,7 +462,7 @@ public class ConnectedSystemRepositoryExportOptimisationTests
             Type = _objectType,
             TypeId = _objectType.Id,
             MetaverseObjectId = metaverseObjectId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
     }
 

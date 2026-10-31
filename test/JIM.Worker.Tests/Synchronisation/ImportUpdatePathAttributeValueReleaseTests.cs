@@ -111,12 +111,12 @@ public class ImportUpdatePathAttributeValueReleaseTests
         var cso1 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue> { new() { Id = Guid.NewGuid() } }
+            AttributeValues = [new() { Id = Guid.NewGuid() }]
         };
         var cso2 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid() },
                 new() { Id = Guid.NewGuid() }
@@ -267,7 +267,7 @@ public class ImportUpdatePathAttributeValueReleaseTests
                 Type = connectedSystemObjectType,
                 ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
             };
-            cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            cso.AttributeValues = new()
             {
                 new()
                 {

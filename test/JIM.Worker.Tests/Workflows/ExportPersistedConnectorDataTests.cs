@@ -280,7 +280,7 @@ public class ExportPersistedConnectorDataTests : WorkflowTestBase
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {

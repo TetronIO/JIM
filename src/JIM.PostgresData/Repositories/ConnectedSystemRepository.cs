@@ -2255,7 +2255,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Combine and attach to entity
-        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        entity.AttributeValues = new(svaValues.Concat(cappedMvaValues));
         using (ActivitySource.StartActivity("Cso.LoadReferencedObjects"))
             await AttachReferencedConnectedSystemObjectsAsync(entity.AttributeValues);
 
@@ -5879,7 +5879,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             cappedMvaChanges.AddRange(values);
         }
 
-        entity.AttributeValueChanges = svaChanges.Concat(cappedMvaChanges).ToList();
+        entity.AttributeValueChanges = new(svaChanges.Concat(cappedMvaChanges));
 
         return new PendingExportDetailResult
         {
@@ -6299,7 +6299,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             var valueChangesByPendingExportId = valueChanges
                 .Where(avc => avc.PendingExportId.HasValue)
                 .GroupBy(avc => avc.PendingExportId!.Value)
-                .ToDictionary(g => g.Key, g => g.ToList());
+                .ToDictionary(g => g.Key, g => new ReferenceIndexedList<PendingExportAttributeValueChange>(g));
 
             foreach (var pe in page.Where(pe => valueChangesByPendingExportId.ContainsKey(pe.Id)))
                 pe.AttributeValueChanges = valueChangesByPendingExportId[pe.Id];

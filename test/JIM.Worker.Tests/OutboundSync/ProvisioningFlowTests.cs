@@ -156,7 +156,7 @@ public class ProvisioningFlowTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Assert
@@ -190,7 +190,7 @@ public class ProvisioningFlowTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Act - Simulate what ExportExecutionServer does after successful export
@@ -237,7 +237,7 @@ public class ProvisioningFlowTests
             SecondaryExternalIdAttributeId = 1001,  // distinguishedName
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Act - Simulate receiving ConnectedSystemExportResult from LDAP connector
@@ -310,7 +310,7 @@ public class ProvisioningFlowTests
             ConnectedSystemObject = null,  // No CSO yet for create
             ChangeType = PendingExportChangeType.Create,
             Status = PendingExportStatus.Pending,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -341,7 +341,7 @@ public class ProvisioningFlowTests
             Id = Guid.NewGuid(),
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Act - Simulate failed export
@@ -389,7 +389,7 @@ public class ProvisioningFlowTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Assert - CSO is properly linked to MVO

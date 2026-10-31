@@ -124,7 +124,7 @@ public class DriftDetectionTests
             Type = TargetUserType,
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>(),
+            AttributeValues = new(),
             MetaverseObject = mvo,
             MetaverseObjectId = mvo?.Id
         };
@@ -139,7 +139,7 @@ public class DriftDetectionTests
         {
             Id = Guid.NewGuid(),
             Type = MvoUserType,
-            AttributeValues = new List<MetaverseObjectAttributeValue>(),
+            AttributeValues = new(),
             ConnectedSystemObjects = new List<ConnectedSystemObject>()
         };
 

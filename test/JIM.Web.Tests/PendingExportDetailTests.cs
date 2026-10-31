@@ -92,7 +92,7 @@ public class PendingExportDetailTests : JimComponentTestContext
                     Status = PendingExportStatus.Pending,
                     SourceMetaverseObject = sourceMetaverseObject,
                     SourceMetaverseObjectId = sourceMetaverseObject?.Id,
-                    AttributeValueChanges = changes
+                    AttributeValueChanges = new(changes)
                 },
                 AttributeChangeTotalCounts = totalCounts ?? changes
                     .GroupBy(c => c.Attribute?.Name ?? $"Attribute {c.AttributeId}")

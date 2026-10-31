@@ -25,7 +25,7 @@ public class SyncRepositoryPendingExportTests
             Id = Guid.NewGuid(),
             ConnectedSystemId = connectedSystemId,
             ConnectedSystemObjectId = csoId,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
     }
 

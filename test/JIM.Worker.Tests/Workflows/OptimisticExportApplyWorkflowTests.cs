@@ -213,7 +213,7 @@ public class OptimisticExportApplyWorkflowTests
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             ExternalIdAttributeId = ObjectGuidAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         // Pre-seed the external Id: the connector-assigned-external-Id path
         // (BatchUpdateCsosAfterSuccessfulExportAsync) is pre-existing, unrelated production code,
@@ -236,7 +236,7 @@ public class OptimisticExportApplyWorkflowTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -321,7 +321,7 @@ public class OptimisticExportApplyWorkflowTests
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             ExternalIdAttributeId = ObjectGuidAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         var objectGuid = Guid.NewGuid();
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
@@ -340,7 +340,7 @@ public class OptimisticExportApplyWorkflowTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -405,7 +405,7 @@ public class OptimisticExportApplyWorkflowTests
             Status = ConnectedSystemObjectStatus.Normal,
             ExternalIdAttributeId = ObjectGuidAttr.Id,
             LastUpdated = originalLastUpdated,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -431,7 +431,7 @@ public class OptimisticExportApplyWorkflowTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -500,7 +500,7 @@ public class OptimisticExportApplyWorkflowTests
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
             ExternalIdAttributeId = ObjectGuidAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -526,7 +526,7 @@ public class OptimisticExportApplyWorkflowTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -586,7 +586,7 @@ public class OptimisticExportApplyWorkflowTests
             Type = TargetUserType,
             TypeId = TargetUserType.Id,
             MetaverseObjectId = managerMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), Attribute = ObjectGuidAttr, AttributeId = ObjectGuidAttr.Id, GuidValue = Guid.NewGuid() }
             }
@@ -601,7 +601,7 @@ public class OptimisticExportApplyWorkflowTests
             Type = TargetUserType,
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -625,7 +625,7 @@ public class OptimisticExportApplyWorkflowTests
             ChangeType = PendingExportChangeType.Update,
             HasUnresolvedReferences = true,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+            AttributeValueChanges = [managerChange]
         };
         PendingExportsData.Add(pendingExport);
 
@@ -695,7 +695,7 @@ public class OptimisticExportApplyWorkflowTests
                 ErrorCount = source.ErrorCount,
                 FailingSince = source.FailingSince,
                 LastAttemptedAt = source.LastAttemptedAt,
-                AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
+                AttributeValueChanges = new(source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
                 {
                     Id = avc.Id,
                     PendingExportId = avc.PendingExportId,
@@ -709,7 +709,7 @@ public class OptimisticExportApplyWorkflowTests
                     IntValue = avc.IntValue,
                     ExportAttemptCount = avc.ExportAttemptCount,
                     ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
-                }).ToList()
+                }))
             };
         }
     }

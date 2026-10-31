@@ -1,8 +1,8 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phases 0 to 3 complete; Phases 1 to 3 awaiting scale measurement)
+- **Status:** Doing (Phases 0 to 4 complete; Phases 1 to 3 measured at scale, Phase 4 awaiting it)
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
-- **Last Updated:** 2026-10-30
+- **Last Updated:** 2026-10-31
 
 ## Overview
 
@@ -105,9 +105,36 @@ The target side was the unknown, and it is not the join: the target's objects we
 
 **As delivered (2026-10-30):** the snapshot reads only the identifiers, through `GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync`. That is raw SQL that picks each object type's name attributes and the object's two external ids, then looks up exactly those values through `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`, so a referenced group's member values are never read. Each object is rebuilt from those values alone and named by the model's own rule (`NameOrId`, else the object's id), and a `RequiresPostgres` test holds the result equal to `GetCsoDisplayIdentifier` on the fully loaded object across every naming shape. `ExportChangeHistoryBuilder` now takes the identifiers rather than the objects, so the end-of-page snapshot resolution and Synchronisation Rule deletion recall use the same read, and the provisioning objects not yet written are named directly instead of through detached copies. The portal's unresolved-reference detail keeps the full load, since it classifies by anchor. Not yet measured at scale.
 
-### Phase 4: Remaining per-page EF reads
+### Phase 4: A large group's own page load ✅
 
-- The page's own load (`GetConnectedSystemObjectsAsync`), the other export-side reads and the cross-page reference reload, in order of measured cost; any that measure as negligible are left on EF and recorded as such. At the 2026-10-28 run none registered: the page load took 5 to 220 ms and no join ran. The join match load moved to Phase 2, where it was needed for correctness.
+- As planned: the page's own load (`GetConnectedSystemObjectsAsync`), the other export-side reads and the cross-page reference reload, in order of measured cost; any that measure as negligible are left on EF and recorded as such. At the 2026-10-28 run none registered: the page load took 5 to 220 ms and no join ran. The join match load moved to Phase 2, where it was needed for correctness.
+
+**Rescoped after Scale500k25kGroups (2026-10-30).** With Phases 1 to 3 in place the run passed with no tracker attach, a Metaverse Object page load of at most 0.66 s, a 2.0 s snapshot for a 500,000-member group and about 3 GiB of Worker memory during synchronisation. The largest remaining cost was the one the 2026-10-28 run had not shown: loading a big group's own page, 47 to 72 s per page (`Cso.Page.LoadWithAttributeValues`) on the last group pages of both Full Synchronisations, and 169 s for the Delta Synchronisation's equivalent (`LoadModifiedCsoPage`). Phase 4 became that load. The second largest, 50 s of export evaluation for one large group in a Delta Synchronisation, is a different cause (the no-net-change check is quadratic in the membership) and is tracked separately as [#2645](https://github.com/TetronIO/JIM/issues/2645).
+
+**The cause is EF Core's collection check, not tracking.** Measured on one group against real PostgreSQL:
+
+| Load | 100,000 values | 200,000 values |
+|---|---|---|
+| The page load as the Worker runs it | 10.7 s | 41 s |
+| The same EF query, tracked | 9.9 s | 45 s |
+| The same EF query, untracked | 5.2 s | 18.6 s |
+| Raw SQL, the same rows | 0.15 s | 0.3 s |
+
+Untracked was quadratic too, so loading the page untracked (and taking on the duplicate-instance hazards Phase 2 removed) would not have fixed it. A CPU profile and EF Core 10.0.14's source agree on why: before adding each entity it materialises or fixes up into a collection navigation, EF asks whether the collection already holds it, and for a `List<T>` or `Collection<T>` it answers by scanning the list itself (`ClrCollectionAccessor.Contains`). For any other collection type it asks the collection. A subclass of `List<T>` still takes the scan.
+
+**As delivered (2026-10-31):** the three value navigations that can hold a group's membership, `ConnectedSystemObject.AttributeValues`, `MetaverseObject.AttributeValues` and `PendingExport.AttributeValueChanges`, are a `ReferenceIndexedList<T>`: an ordered list, behaving as the `List<T>` it replaces, that answers membership by reference from an index once it holds more than 32 items. Tracking is unchanged, so nothing downstream had to change with it; the ripple was call sites assigning a `List<T>` to the property, and parameters narrowed to `List<T>` that now take an interface. The index is maintained only by writes, so concurrent readers are as safe as with a list, and objects with a few dozen values pay no memory for it. The Pending Export collection is on the hot path too: export evaluation prefetches a page's Pending Exports tracked, so a large group's pending membership change loaded the same way.
+
+The page load, measured on one group the same way after the change:
+
+| Values | Page load |
+|---|---|
+| 50,000 | 1.0 s |
+| 100,000 | 2.0 to 2.6 s |
+| 400,000 | 9.4 to 9.8 s |
+
+Linear now, at roughly 23 µs per value against 0.15 µs to read the row, which is EF's ordinary per-entity cost. Projected at 500,000 values that is about 12 s, against the 47 to 72 s measured. Taking the page load off EF altogether would buy the remaining factor, but it reopens Phase 2's duplicate-instance hazards across every tracked include path that reaches a page's objects, so it is not worth doing until a scale run shows the linear cost matters.
+
+Tests: `ReferenceIndexedListTests` checks list behaviour at both sizes and a 20,000-step random sequence against a plain list searched by reference. `LargeValueCollectionLoadDatabaseTests` loads each of the three collections twice on one tracking context (and the Connected System Object's values once more through fix-up) and requires every value once, tracked once and unchanged; EF relies on the collection's answer to avoid adding an entity twice, and with that answer broken all four fail. `ValueCollectionNavigationTypeTests` fails if any navigation onto a value entity is a list again; it failed on the previous code, naming all three.
 
 ### Phase 5: Scale verification
 

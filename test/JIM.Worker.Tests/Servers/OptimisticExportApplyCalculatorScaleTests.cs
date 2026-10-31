@@ -64,7 +64,7 @@ public class OptimisticExportApplyCalculatorScaleTests
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = cso,
             ConnectedSystemObjectId = cso.Id,
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
 
         var stopwatch = Stopwatch.StartNew();

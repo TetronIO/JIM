@@ -1050,7 +1050,7 @@ public class GraceDeletionMarkerPageFlushTests : WorkflowTestBase
                 Created = match.Created,
                 LastUpdated = match.LastUpdated,
                 Type = match.Type,
-                AttributeValues = new List<MetaverseObjectAttributeValue>(match.AttributeValues),
+                AttributeValues = new(match.AttributeValues),
                 Roles = match.Roles,
                 Status = match.Status,
                 Origin = match.Origin,

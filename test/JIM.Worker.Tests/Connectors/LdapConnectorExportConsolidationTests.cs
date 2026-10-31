@@ -71,7 +71,7 @@ public class LdapConnectorExportConsolidationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = StagedEmailChange.StageFor(mail)
+            AttributeValueChanges = new(StagedEmailChange.StageFor(mail))
         };
 
         var result = LdapConnectorExport.ConsolidateModifications(pendingExport, "CN=Ada,OU=Staff,DC=test,DC=local");
@@ -113,7 +113,7 @@ public class LdapConnectorExportConsolidationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new() { Attribute = displayNameAttr, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "New Name" },
                 new() { Attribute = descriptionAttr, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "New Desc" }
@@ -146,7 +146,7 @@ public class LdapConnectorExportConsolidationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new() { Attribute = dnAttr, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "CN=New,DC=test,DC=local" },
                 new() { Attribute = cnAttr, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "New" },
@@ -168,7 +168,7 @@ public class LdapConnectorExportConsolidationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new() { Attribute = null!, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "value" }
             }
@@ -304,7 +304,7 @@ public class LdapConnectorExportConsolidationTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
 
         var requests = export.BuildModifyRequests(pendingExport, "CN=Group,DC=test,DC=local");
@@ -347,7 +347,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
             ConnectedSystemObject = CreateCsoWithDn("CN=User,DC=test,DC=local"),
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new() { Attribute = displayNameAttr, ChangeType = PendingExportAttributeChangeType.Update, StringValue = "New Name" }
             }
@@ -510,7 +510,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
 
         AddRequest? capturedAddRequest = null;
@@ -720,7 +720,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
             ConnectedSystemObject = CreateCsoWithDn(groupDn),
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -761,7 +761,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Update,
             ConnectedSystemObject = CreateCsoWithDn(groupDn),
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -780,7 +780,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             Type = csoType,
             SecondaryExternalIdAttributeId = dnAttribute.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -819,7 +819,7 @@ public class LdapConnectorExportConsolidationTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 

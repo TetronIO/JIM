@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 namespace JIM.Models.Transactional;
 
 public class PendingExport
@@ -50,7 +51,9 @@ public class PendingExport
 
     public PendingExportChangeType ChangeType { get; set; }
 
-    public List<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();
+    // Not a List: a group's values can number hundreds of thousands, and EF Core loads a List in time that grows with
+    // the square of its size. See ReferenceIndexedList.
+    public ReferenceIndexedList<PendingExportAttributeValueChange> AttributeValueChanges { get; set; } = new();
 
     public PendingExportStatus Status { get; set; } = PendingExportStatus.Pending;
 

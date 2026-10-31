@@ -61,7 +61,7 @@ public class MvoDetailsTableTests : JimComponentTestContext
     {
         Id = Guid.NewGuid(),
         Type = new MetaverseObjectType { Name = "User", PluralName = "Users" },
-        AttributeValues = values.ToList()
+        AttributeValues = new(values)
     };
 
     private static MetaverseObjectProvenance BuildProvenance(params (int Id, string Name, ValueOrigin Origin)[] attrs) => new()

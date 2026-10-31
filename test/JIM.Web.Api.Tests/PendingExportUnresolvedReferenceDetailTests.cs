@@ -84,7 +84,7 @@ public class PendingExportUnresolvedReferenceDetailTests
             ConnectedSystem = new ConnectedSystem { Id = ConnectedSystemId, Name = "Accounts" },
             ChangeType = PendingExportChangeType.Update,
             HasUnresolvedReferences = changes.Any(c => c.UnresolvedReferenceValue != null),
-            AttributeValueChanges = changes.ToList()
+            AttributeValueChanges = new(changes)
         };
         _connectedSystems.Setup(r => r.GetPendingExportDetailAsync(pe.Id))
             .ReturnsAsync(new PendingExportDetailResult { PendingExport = pe });

@@ -1728,7 +1728,7 @@ public class ExportEvaluationServer
                 ChangeType = PendingExportChangeType.Update,
                 Status = PendingExportStatus.Pending,
                 SourceMetaverseObjectId = referencingMvoByCsoId[csoId],
-                AttributeValueChanges = attributeChanges,
+                AttributeValueChanges = new(attributeChanges),
                 CreatedAt = DateTime.UtcNow,
                 HasUnresolvedReferences = attributeChanges.Any(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue))
             });
@@ -2263,7 +2263,7 @@ public class ExportEvaluationServer
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
-            AttributeValueChanges = attributeChanges,
+            AttributeValueChanges = new(attributeChanges),
             CreatedAt = DateTime.UtcNow,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
@@ -2382,7 +2382,7 @@ public class ExportEvaluationServer
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
-            AttributeValueChanges = attributeChanges,
+            AttributeValueChanges = new(attributeChanges),
             CreatedAt = DateTime.UtcNow,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
@@ -2825,7 +2825,7 @@ public class ExportEvaluationServer
                     var mergeShell = new PendingExport
                     {
                         Id = dbPendingExport.Id,
-                        AttributeValueChanges = new List<PendingExportAttributeValueChange>(dbPendingExport.AttributeValueChanges)
+                        AttributeValueChanges = new(dbPendingExport.AttributeValueChanges)
                     };
                     var beforeIds = mergeShell.AttributeValueChanges.Select(avc => avc.Id).ToHashSet();
 
@@ -2973,7 +2973,7 @@ public class ExportEvaluationServer
             ChangeType = changeType,
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
-            AttributeValueChanges = attributeChanges,
+            AttributeValueChanges = new(attributeChanges),
             CreatedAt = DateTime.UtcNow,
             HasUnresolvedReferences = hasUnresolvedReferences,
             ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
@@ -3116,7 +3116,7 @@ public class ExportEvaluationServer
         };
 
         // Add to CSO in-memory
-        cso.AttributeValues ??= new List<ConnectedSystemObjectAttributeValue>();
+        cso.AttributeValues ??= [];
         cso.AttributeValues.Add(attributeValue);
 
         // SPEC-1082 D9: this writes an attribute value outside the Full Import stamp path (D6/D7).
@@ -3282,7 +3282,7 @@ public class ExportEvaluationServer
     {
         // Read before the writes below, which detach the persisted rows from the change tracker.
         var withdrawnIds = withdrawnChanges.Select(c => c.Id).ToHashSet();
-        var removed = persisted.AttributeValueChanges.TrueForAll(c => withdrawnIds.Contains(c.Id));
+        var removed = persisted.AttributeValueChanges.All(c => withdrawnIds.Contains(c.Id));
 
         if (removed)
         {

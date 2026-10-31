@@ -1203,12 +1203,12 @@ public class LdapConnectorExportDesiredStateTests
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
                 AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = dnAttribute.Id, StringValue = GroupDn }]
             },
-            AttributeValueChanges = changes.Select(change => new PendingExportAttributeValueChange
+            AttributeValueChanges = new(changes.Select(change => new PendingExportAttributeValueChange
             {
                 Attribute = AttributeNamed(change.Attribute),
                 ChangeType = change.ChangeType,
                 StringValue = change.Value
-            }).ToList()
+            }))
         };
 
         ConnectedSystemObjectTypeAttribute AttributeNamed(string name)
@@ -1254,7 +1254,7 @@ public class LdapConnectorExportDesiredStateTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = objectType },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 

@@ -40,11 +40,11 @@ internal sealed class ExampleDataDependencyCheck
     /// <summary>One attribute's generated values on an object being generated.</summary>
     private struct GeneratedValueCursor : IScopingValueCursor
     {
-        private readonly List<MetaverseObjectAttributeValue> _values;
+        private readonly IReadOnlyList<MetaverseObjectAttributeValue> _values;
         private readonly int _attributeId;
         private int _position;
 
-        public GeneratedValueCursor(List<MetaverseObjectAttributeValue> values, int attributeId)
+        public GeneratedValueCursor(IReadOnlyList<MetaverseObjectAttributeValue> values, int attributeId)
         {
             _values = values;
             _attributeId = attributeId;

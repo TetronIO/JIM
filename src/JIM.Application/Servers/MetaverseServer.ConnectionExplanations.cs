@@ -84,7 +84,7 @@ public partial class MetaverseServer
         {
             var metaverseAttributeIds = CriteriaAttributeIds(exportRulesToEvaluate, criterion => criterion.MetaverseAttribute?.Id);
             if (metaverseAttributeIds.Count > 0)
-                metaverseObject.AttributeValues = await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds);
+                metaverseObject.AttributeValues = new(await Application.Repository.Metaverse.GetMetaverseObjectAttributeValuesAsync(metaverseObjectId, metaverseAttributeIds));
         }
 
         var objectValues = await LoadConnectedSystemObjectScopingValuesAsync(importRulesByConnection);
@@ -140,7 +140,7 @@ public partial class MetaverseServer
                 : new ConnectedSystemObject
                 {
                     Id = cso.Id,
-                    AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? values : []
+                    AttributeValues = objectValues.TryGetValue(cso.Id, out var values) ? new(values) : []
                 };
             row.Scoping = importRules.Select(r => scoping.ExplainCsoForImportRule(objectForScoping, r, evaluatedAt))
                 .Concat(exportRules.Where(r => r.ConnectedSystemObjectTypeId == cso.TypeId).Select(r => exportExplanations[r.Id]))

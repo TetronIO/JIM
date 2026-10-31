@@ -2407,7 +2407,7 @@ public class SyncPreviewServer
                 ConnectedSystemId = downstreamCso.ConnectedSystemId,
                 ConnectedSystemObjectId = downstreamCso.Id,
                 SourceMetaverseObjectId = mvoId,
-                AttributeValueChanges = attributeChanges
+                AttributeValueChanges = new(attributeChanges)
             });
 
             deletionNode.Children.Add(new SyncOutcomeNode
@@ -2666,7 +2666,7 @@ public class SyncPreviewServer
                         ConnectedSystemId = entry.ConnectedSystemId,
                         ConnectedSystemObjectId = entry.WouldJoinCsoId ?? entry.ExistingTargetCsoId,
                         SourceMetaverseObjectId = entry.MetaverseObjectId,
-                        AttributeValueChanges = entry.AttributeChanges.ToList()
+                        AttributeValueChanges = new(entry.AttributeChanges)
                     });
                     break;
 

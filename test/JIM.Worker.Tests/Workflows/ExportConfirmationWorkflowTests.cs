@@ -105,7 +105,7 @@ public class ExportConfirmationWorkflowTests
             Type = TargetUserType,
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -124,7 +124,7 @@ public class ExportConfirmationWorkflowTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
