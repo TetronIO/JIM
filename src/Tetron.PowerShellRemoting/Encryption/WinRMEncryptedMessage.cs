@@ -20,10 +20,16 @@ public static class WinRMEncryptedMessage
     private const string Boundary = "Encrypted Boundary";
     private const string OriginalContentType = "application/soap+xml;charset=UTF-8";
 
+    private const string DataPartContentType = "application/octet-stream\r\n";
+
+    /// <summary>How far past the data part's boundary its header line may end.</summary>
+    private const int MaximumPartHeaderLength = 256;
+
+    /// <summary>How much of an unreadable response an error shows.</summary>
+    private const int ExcerptLength = 240;
+
     private static readonly byte[] DataPartMarker =
         Encoding.ASCII.GetBytes($"--{Boundary}\r\n\tContent-Type: application/octet-stream\r\n");
-
-    private static readonly byte[] EndMarker = Encoding.ASCII.GetBytes($"--{Boundary}--");
 
     /// <summary>Encrypts <paramref name="plaintext"/> (a SOAP envelope) into a WinRM encrypted request body.</summary>
     public static EncodedMessage Encode(ReadOnlySpan<byte> plaintext, IWinRMMessageSealer sealer)
@@ -57,27 +63,41 @@ public static class WinRMEncryptedMessage
 
     /// <summary>
     /// Decrypts a WinRM encrypted response body. Anything that is not a Kerberos-encrypted message is refused, so an
-    /// unencrypted response can never be accepted in place of an encrypted one.
+    /// unencrypted response can never be accepted in place of an encrypted one. The framing is read as WinRM servers
+    /// write it, not only as the WinRM service does: the boundary is the one the Content-Type names, and part headers
+    /// may or may not be indented.
     /// </summary>
     /// <exception cref="WinRMEncryptionException">The response is not Kerberos-encrypted, is malformed, or fails to decrypt.</exception>
     public static byte[] Decode(byte[] body, string contentType, IWinRMMessageSealer sealer)
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(sealer);
-        RequireKerberosContentType(contentType);
+        var boundary = RequireKerberosContentType(contentType);
+        if (body.Length == 0)
+            throw new WinRMEncryptionException("The encrypted WinRM response is empty: it has no body at all.");
 
-        var dataPartStart = body.AsSpan().IndexOf(DataPartMarker);
+        var span = body.AsSpan();
+        var partStart = Encoding.ASCII.GetBytes($"--{boundary}\r\n");
+        var descriptionStart = span.IndexOf(partStart);
+        var dataPartStart = descriptionStart < 0 ? -1 : IndexOfAfter(span, partStart, descriptionStart + partStart.Length);
         if (dataPartStart < 0)
-            throw new WinRMEncryptionException("The encrypted WinRM response has no data part.");
+            throw Malformed("has no data part", body);
 
-        var expectedLength = ReadOriginalLength(body.AsSpan(0, dataPartStart));
+        var expectedLength = ReadOriginalLength(span[descriptionStart..dataPartStart], body);
 
-        var payloadStart = dataPartStart + DataPartMarker.Length;
-        var payloadEnd = body.AsSpan().LastIndexOf(EndMarker);
+        // The data part's own header names application/octet-stream; the encrypted payload follows its line directly.
+        var headerStart = dataPartStart + partStart.Length;
+        var headerWindow = Encoding.Latin1.GetString(span.Slice(headerStart, Math.Min(MaximumPartHeaderLength, span.Length - headerStart)));
+        var headerEnd = headerWindow.IndexOf(DataPartContentType, StringComparison.OrdinalIgnoreCase);
+        if (headerEnd < 0)
+            throw Malformed("has no application/octet-stream data part", body);
+
+        var payloadStart = headerStart + headerEnd + DataPartContentType.Length;
+        var payloadEnd = span.LastIndexOf(Encoding.ASCII.GetBytes($"--{boundary}--"));
         if (payloadEnd < payloadStart + 4)
-            throw new WinRMEncryptionException("The encrypted WinRM response is truncated: its closing boundary is missing.");
+            throw Malformed("is truncated: its closing boundary is missing", body);
 
-        var payload = body.AsSpan(payloadStart, payloadEnd - payloadStart);
+        var payload = span[payloadStart..payloadEnd];
         var headerLength = BinaryPrimitives.ReadInt32LittleEndian(payload);
         if (headerLength < 0 || headerLength > payload.Length - 4)
             throw new WinRMEncryptionException("The encrypted WinRM response declares a token header longer than the message.");
@@ -90,28 +110,64 @@ public static class WinRMEncryptedMessage
         return plaintext;
     }
 
-    private static void RequireKerberosContentType(string contentType)
+    /// <summary>
+    /// Reports a response this client cannot read, with enough of it to see why: its length and the start of its
+    /// framing, which is plain text (the encrypted payload that may follow it is unreadable without the session key).
+    /// </summary>
+    private static WinRMEncryptionException Malformed(string problem, byte[] body) =>
+        new($"The encrypted WinRM response {problem}. It was {body.Length} bytes, beginning: {Excerpt(body)}");
+
+    private static string Excerpt(byte[] body)
+    {
+        var text = new StringBuilder();
+        foreach (var b in body.AsSpan(0, Math.Min(body.Length, ExcerptLength)))
+        {
+            text.Append(b switch
+            {
+                (byte)'\r' => "\\r",
+                (byte)'\n' => "\\n",
+                (byte)'\t' => "\\t",
+                >= 0x20 and < 0x7F => ((char)b).ToString(),
+                _ => $"\\x{b:X2}"
+            });
+        }
+
+        return body.Length > ExcerptLength ? text.Append('…').ToString() : text.ToString();
+    }
+
+    private static int IndexOfAfter(ReadOnlySpan<byte> span, ReadOnlySpan<byte> value, int from)
+    {
+        var index = span[from..].IndexOf(value);
+        return index < 0 ? -1 : from + index;
+    }
+
+    /// <returns>The boundary the Content-Type names, or WinRM's own when it names none.</returns>
+    private static string RequireKerberosContentType(string contentType)
     {
         var parts = (contentType ?? "").Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         var isMultipartEncrypted = parts.Length > 0 && parts[0].Equals("multipart/encrypted", StringComparison.OrdinalIgnoreCase);
-        var protocol = parts.Skip(1)
+        var parameters = parts.Skip(1)
             .Select(p => p.Split('=', 2))
-            .Where(kv => kv.Length == 2 && kv[0].Trim().Equals("protocol", StringComparison.OrdinalIgnoreCase))
-            .Select(kv => kv[1].Trim().Trim('"'))
-            .FirstOrDefault();
+            .Where(kv => kv.Length == 2)
+            .Select(kv => (Name: kv[0].Trim(), Value: kv[1].Trim().Trim('"')))
+            .ToList();
+        var protocol = parameters.FirstOrDefault(p => p.Name.Equals("protocol", StringComparison.OrdinalIgnoreCase)).Value;
 
         if (!isMultipartEncrypted || !KerberosProtocol.Equals(protocol, StringComparison.OrdinalIgnoreCase))
             throw new WinRMEncryptionException(
                 $"The WinRM response was not Kerberos-encrypted (Content-Type '{contentType}'); it is refused rather than read unencrypted.");
+
+        var boundary = parameters.FirstOrDefault(p => p.Name.Equals("boundary", StringComparison.OrdinalIgnoreCase)).Value;
+        return string.IsNullOrEmpty(boundary) ? Boundary : boundary;
     }
 
-    private static int ReadOriginalLength(ReadOnlySpan<byte> descriptionPart)
+    private static int ReadOriginalLength(ReadOnlySpan<byte> descriptionPart, byte[] body)
     {
         var text = Encoding.ASCII.GetString(descriptionPart);
         const string key = ";Length=";
         var start = text.IndexOf(key, StringComparison.OrdinalIgnoreCase);
         if (start < 0)
-            throw new WinRMEncryptionException("The encrypted WinRM response does not declare its original length.");
+            throw Malformed("does not declare its original length", body);
 
         start += key.Length;
         var end = start;

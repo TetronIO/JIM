@@ -79,9 +79,20 @@ internal sealed class WinRMConnection : IDisposable
                     throw new WSManFaultException((uint)response.StatusCode, "HttpError",
                         $"The WinRM server answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
 
-                return _options.UsesMessageEncryption
-                    ? WinRMEncryptedMessage.Decode(body, response.Content.Headers.ContentType?.ToString() ?? "", _context!)
-                    : body;
+                if (!_options.UsesMessageEncryption)
+                    return body;
+
+                var contentType = response.Content.Headers.ContentType?.ToString() ?? "";
+                try
+                {
+                    return WinRMEncryptedMessage.Decode(body, contentType, _context!);
+                }
+                catch (WinRMEncryptionException error)
+                {
+                    // Say which response it was: the status and Content-Type are what tell one server's framing from another's.
+                    throw new WinRMEncryptionException(
+                        $"{error.Message} (HTTP {(int)response.StatusCode} {response.ReasonPhrase}, Content-Type '{contentType}')", error);
+                }
             }
         }
         finally

@@ -89,6 +89,58 @@ public class WinRMEncryptedMessageTests
         Assert.That(decoded, Is.EqualTo("<x/>"u8.ToArray()));
     }
 
+    [Test]
+    public void Decode_PartHeadersWithoutTheLeadingTab_AreRead()
+    {
+        // Not every WinRM server indents its part headers with a tab as the WinRM service does.
+        var plaintext = "<s:Envelope/>"u8.ToArray();
+        var sealer = new FakeSealer();
+        var body = Frame(Boundary, plaintext, sealer, indent: "");
+
+        var decoded = WinRMEncryptedMessage.Decode(body, $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"{Boundary}\"", sealer);
+
+        Assert.That(decoded, Is.EqualTo(plaintext));
+    }
+
+    [Test]
+    public void Decode_BoundaryNamedInTheContentType_IsTheOneUsed()
+    {
+        var plaintext = "<s:Envelope/>"u8.ToArray();
+        var sealer = new FakeSealer();
+        var body = Frame("Another Boundary", plaintext, sealer, indent: "\t");
+
+        var decoded = WinRMEncryptedMessage.Decode(body, $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"Another Boundary\"", sealer);
+
+        Assert.That(decoded, Is.EqualTo(plaintext));
+    }
+
+    [Test]
+    public void Decode_BodyWithoutADataPart_SaysWhatArrived()
+    {
+        var body = "<html><body>Server Error in '/PowerShell' Application.</body></html>"u8.ToArray();
+
+        Assert.That(() => WinRMEncryptedMessage.Decode(body, $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"{Boundary}\"", new FakeSealer()),
+            Throws.TypeOf<WinRMEncryptionException>()
+                .With.Message.Contains($"{body.Length} bytes")
+                .And.Message.Contains("<html><body>Server Error"));
+    }
+
+    [Test]
+    public void Decode_EmptyBody_SaysTheBodyWasEmpty()
+    {
+        Assert.That(() => WinRMEncryptedMessage.Decode([], $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"{Boundary}\"", new FakeSealer()),
+            Throws.TypeOf<WinRMEncryptionException>().With.Message.Contains("empty"));
+    }
+
+    [Test]
+    public void Decode_FramingInTheExcerpt_IsShownWithItsControlCharactersEscaped()
+    {
+        var body = Encoding.ASCII.GetBytes($"--{Boundary}\r\n\tContent-Type: {Protocol}\r\n--{Boundary}--\r\n");
+
+        Assert.That(() => WinRMEncryptedMessage.Decode(body, $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"{Boundary}\"", new FakeSealer()),
+            Throws.TypeOf<WinRMEncryptionException>().With.Message.Contains($"--{Boundary}\\r\\n\\tContent-Type: {Protocol}"));
+    }
+
     [TestCase("application/soap+xml;charset=UTF-8")]
     [TestCase("multipart/encrypted;protocol=\"application/HTTP-SPNEGO-session-encrypted\";boundary=\"Encrypted Boundary\"")]
     [TestCase("")]
@@ -140,6 +192,23 @@ public class WinRMEncryptedMessageTests
     }
 
     private static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
+
+    /// <summary>A response framed as a WinRM server other than the WinRM service might frame it.</summary>
+    private static byte[] Frame(string boundary, byte[] plaintext, FakeSealer sealer, string indent)
+    {
+        var sealedMessage = sealer.Wrap(plaintext);
+        return Concat(
+            Encoding.ASCII.GetBytes(
+                $"--{boundary}\r\n" +
+                $"{indent}Content-Type: {Protocol}\r\n" +
+                $"{indent}OriginalContent: type=application/soap+xml;charset=UTF-8;Length={plaintext.Length}\r\n" +
+                $"--{boundary}\r\n" +
+                $"{indent}Content-Type: application/octet-stream\r\n"),
+            LittleEndian(sealedMessage.Header.Length),
+            sealedMessage.Header,
+            sealedMessage.Data,
+            Encoding.ASCII.GetBytes($"--{boundary}--\r\n"));
+    }
 
     private static int IndexOf(byte[] haystack, byte[] needle) => haystack.AsSpan().IndexOf(needle);
 
