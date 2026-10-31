@@ -156,7 +156,16 @@ Tests: `ReferenceIndexedListTests` checks list behaviour at both sizes and a 20,
 
 Against the success criteria below:
 
-- **Slowest group page:** not met at 500k. The slowest whole pages took 51 s, 45 s and 33 s, against 266 s at 750k on 28 October. The 51 s page is a Delta Synchronisation's single page, almost all of it the export no-net-change check (#2645). The 45 s and 33 s pages are the Source Full Synchronisation's largest groups, where the page load is now 6.1 s and 3.7 s and the rest is the page's own writes. The tracker attach is gone from every breakdown line.
+- **Slowest group page:** not met at 500k. The slowest whole pages took 51 s, 45 s and 33 s, against 266 s at 750k on 28 October. The 51 s page is a Delta Synchronisation's single page, almost all of it the export no-net-change check (#2645). The 45 s and 33 s pages are the Source Full Synchronisation's largest groups, and what remains is the page's own writes. The 45 s page, which projects a 590,000-value group, splits as:
+  - loading 7.2 s;
+  - writing the 500 new Metaverse Objects and their values 13.1 s;
+  - their change records 8.3 s;
+  - the Pending Exports 5.5 s;
+  - the execution items 5.0 s;
+  - export evaluation 4.9 s, 2.6 s of it the change snapshot;
+  - processing the objects 0.3 s.
+
+  None of that is EF's change tracker; it is the volume of rows one group writes. The tracker attach is gone from every breakdown line.
 - **Nothing tracked after a page flush:** met. The Phase 1 guard test asserts it, and Phase 2's tests extend it to the page's Metaverse Objects.
 - **Target side at least 30% faster:** met for the confirming synchronisations: the Full Synchronisation is 47% faster and the Delta Synchronisation 65% faster than after Phases 1 to 3. The joining Full Synchronisation did not change; its objects were provisioned by JIM and already joined, so no match ran and nothing in this plan applied to it.
 - **Scenario outcomes unchanged:** met. Scenarios 008 and 032 passed at Medium on OpenLDAP after every phase, and Scenario 008 passed at 500k after Phases 3 and 4.
