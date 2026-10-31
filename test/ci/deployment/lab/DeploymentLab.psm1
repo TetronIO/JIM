@@ -84,6 +84,16 @@ function Test-LabMatrix {
         if ($cell.Network -eq 'online' -and $cell.Scenario -notin @('Install', 'Upgrade')) {
             "${name}: an online cell's scenario must be Install or Upgrade"
         }
+        # An air-gapped upgrade starts from the latest release unless it says FromOldest: then from the oldest release
+        # the upgrade guides say a customer can upgrade from. Online upgrades start from the release before the latest.
+        if ($cell.ContainsKey('FromOldest') -and $cell.FromOldest) {
+            if ($cell.Scenario -ne 'Upgrade' -or $cell.Network -eq 'online') {
+                "${name}: FromOldest is for air-gapped Upgrade cells only"
+            }
+            elseif ("$($Matrix['OldestRelease'])" -notmatch '^v\d+\.\d+\.\d+$') {
+                "${name}: FromOldest needs the matrix's OldestRelease, as vX.Y.Z"
+            }
+        }
     }
 }
 

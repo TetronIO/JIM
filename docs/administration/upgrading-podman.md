@@ -8,7 +8,7 @@ validated: v0.17.0
 
 # Upgrading on Podman
 
-On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. Do the steps in [Before you upgrade](upgrading.md#before-you-upgrade) first. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
+On Podman, an upgrade replaces the pod files, which name the release's images, and restarts JIM. You can upgrade from v0.16.0 or any later release straight to the latest, without installing the releases in between. Do the steps in [Before you upgrade](upgrading.md#before-you-upgrade) first. The commands are for the default, rootful installation, run as root; for a rootless one, see [Rootless commands](podman.md#rootless-commands).
 
 ```jim-diagram
 archetype: lifecycle
