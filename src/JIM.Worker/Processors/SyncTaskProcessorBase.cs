@@ -5851,7 +5851,9 @@ public abstract class SyncTaskProcessorBase
         if (_obsoleteCsosToDelete.Count == 0)
             return;
 
-        using var span = Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations");
+        // Named for what it covers rather than after the method: the processors wrap the whole flush in a
+        // FlushObsoleteCsoOperations span, and a span inside its namesake made the breakdown ambiguous (#2669).
+        using var span = Diagnostics.Sync.StartSpan("CsoDeletionWithExecutionItems");
         span.SetTag("deleteCount", _obsoleteCsosToDelete.Count);
 
         // Batch delete obsolete CSOs

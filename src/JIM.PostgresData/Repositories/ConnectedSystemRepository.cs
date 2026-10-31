@@ -1049,135 +1049,28 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Objects
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
-        await using var ownTransaction = await BeginTransactionIfNoneAsync();
-
-        // Retire any export-mode generated values the object held before it goes (Unique Value Generation, #242,
-        // Phase 6): its assignments are removed by the deletion's foreign-key cascade.
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, [connectedSystemObject.Id]);
-        await ClearReferencesToConnectedSystemObjectsAsync([connectedSystemObject.Id]);
-        Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
-        await Repository.Database.SaveChangesAsync();
-
-        if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
-    }
-
-    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-    {
-        // A leaver cohort's deletions spend seconds a page in here (#2669), so each step is spanned; the tags say how
-        // much of the context the deletion had to consider.
-        using var deleteSpan = ActivitySource.StartActivity("Cso.Delete");
-        deleteSpan?.SetTag("csoCount", connectedSystemObjects.Count);
-        deleteSpan?.SetTag("csoAttributeValueCount", connectedSystemObjects.Sum(cso => cso.AttributeValues.Count));
-
-        await using var ownTransaction = await BeginTransactionIfNoneAsync();
-
-        var csoIds = connectedSystemObjects.Select(cso => cso.Id).ToList();
-        // Retire any export-mode generated values these objects held before they go (#242, Phase 6).
-        using (var retireSpan = ActivitySource.StartActivity("Cso.Delete.RetireGeneratedValues"))
-        {
-            var retirements = await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
-            retireSpan?.SetTag("retiredCount", retirements.Count);
-        }
-
-        var trackedAttributeValueCount = await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
-        deleteSpan?.SetTag("trackedAttributeValueCount", trackedAttributeValueCount);
-
-        using (ActivitySource.StartActivity("Cso.Delete.RemoveRange"))
-            Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
-
-        using (var saveSpan = ActivitySource.StartActivity("Cso.Delete.SaveChanges"))
-        {
-            var written = await Repository.Database.SaveChangesAsync();
-            saveSpan?.SetTag("rowsWritten", written);
-        }
-
-        if (ownTransaction != null)
-        {
-            using (ActivitySource.StartActivity("Cso.Delete.Commit"))
-                await ownTransaction.CommitAsync();
-        }
+        await ConnectedSystemObjectDeletionSql.DeleteAsync(Repository.Database, [connectedSystemObject.Id]);
     }
 
     /// <summary>
-    /// Begins a transaction on the shared context when none is open, so a deletion and the retirement written
-    /// beside it land together; returns null when the caller already holds one, which the work then joins.
+    /// Deletes the objects by id with raw SQL and brings the change tracker into line with the database's cascades
+    /// (<see cref="ConnectedSystemObjectDeletionSql"/>, shared with the Synchronisation repository's delete by id). The
+    /// objects need not be tracked, and nothing they refer to is attached.
+    /// </summary>
+    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        await ConnectedSystemObjectDeletionSql.DeleteAsync(Repository.Database, connectedSystemObjects.Select(cso => cso.Id).ToHashSet());
+    }
+
+    /// <summary>
+    /// Begins a transaction on the shared context when none is open, so writes made by separate statements land
+    /// together; returns null when the caller already holds one, which the work then joins.
     /// </summary>
     private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BeginTransactionIfNoneAsync()
     {
         return Repository.Database.Database.CurrentTransaction == null
             ? await Repository.Database.Database.BeginTransactionAsync()
             : null;
-    }
-
-    /// <summary>
-    /// Nulls reference values held by OTHER rows that point at the given CSOs, mirroring the reference
-    /// cleanup the Metaverse Object deletion path performs. Two restrict-behaviour FKs target
-    /// ConnectedSystemObjects: ConnectedSystemObjectAttributeValues.ReferenceValueId (for example a group
-    /// CSO's member values still referencing a deprovisioned user's CSO before the membership removals
-    /// are confirmed) and MetaverseObjectAttributeValues.UnresolvedReferenceValueId (an inbound reference
-    /// that never resolved to a Metaverse Object). Without this cleanup, deleting a still-referenced CSO
-    /// violates the FK constraint (PostgreSQL 23503) and fails the whole sync run. The raw reference
-    /// string (UnresolvedReferenceValue, for example the DN) is preserved on CSO rows, so the next
-    /// confirming import still reconciles the value normally.
-    /// </summary>
-    /// <remarks>
-    /// Internal rather than private so <see cref="SyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>
-    /// (JIM.PostgresData/Repositories/SyncRepository.CsOperations.cs) can reuse it ahead of its own raw-SQL
-    /// delete-by-id, instead of duplicating the restrict-FK nulling logic. Both repositories share the same
-    /// <see cref="JimDbContext"/> instance via <see cref="PostgresDataRepository"/>, so the tracked-instance
-    /// fix-up below is visible to either caller.
-    /// </remarks>
-    /// <returns>How many Connected System Object attribute values the context was tracking, all of which the fix-up
-    /// scanned; a diagnostic count for the caller's span.</returns>
-    internal async Task<int> ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
-    {
-        if (csoIds.Count == 0)
-            return 0;
-
-        var idArray = csoIds.ToArray();
-        using (var clearSpan = ActivitySource.StartActivity("Cso.Delete.ClearReferenceValues"))
-        {
-            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""ConnectedSystemObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
-                idArray);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
-        }
-
-        using (var clearSpan = ActivitySource.StartActivity("Cso.Delete.ClearUnresolvedReferenceValues"))
-        {
-            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" = ANY({0})",
-                idArray);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
-        }
-
-        // Update tracked entities to match the database state, otherwise SaveChangesAsync would try to
-        // write the stale FK value back (same pattern as DeleteMetaverseObjectAsync's CSO detach).
-        using var fixUpSpan = ActivitySource.StartActivity("Cso.Delete.FixUpTrackedReferences");
-        var deletedIds = csoIds as HashSet<Guid> ?? [.. csoIds];
-        var trackedCsoValues = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().ToList();
-        var fixedUpCount = 0;
-        foreach (var trackedValue in trackedCsoValues
-            .Where(e => e.Entity.ReferenceValueId.HasValue && deletedIds.Contains(e.Entity.ReferenceValueId.Value)))
-        {
-            trackedValue.Entity.ReferenceValueId = null;
-            trackedValue.Entity.ReferenceValue = null;
-            fixedUpCount++;
-        }
-        var trackedMvoValues = Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>().ToList();
-        foreach (var trackedValue in trackedMvoValues
-            .Where(e => e.Entity.UnresolvedReferenceValueId.HasValue && deletedIds.Contains(e.Entity.UnresolvedReferenceValueId.Value)))
-        {
-            trackedValue.Entity.UnresolvedReferenceValueId = null;
-            trackedValue.Entity.UnresolvedReferenceValue = null;
-            fixedUpCount++;
-        }
-
-        fixUpSpan?.SetTag("trackedCsoAttributeValuesScanned", trackedCsoValues.Count);
-        fixUpSpan?.SetTag("trackedMvoAttributeValuesScanned", trackedMvoValues.Count);
-        fixUpSpan?.SetTag("fixedUpCount", fixedUpCount);
-        return trackedCsoValues.Count;
     }
 
     /// <summary>

@@ -2,10 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Collections.Concurrent;
-using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
@@ -13,11 +11,9 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.PostgresData;
-using JIM.PostgresData.Repositories;
 using JIM.TestSupport;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using NpgsqlTypes;
@@ -32,10 +28,12 @@ namespace JIM.Worker.Tests.Repositories;
 /// <list type="bullet">
 /// <item>Deleting a page of obsolete Connected System Objects: 500 departed accounts of 25 values each, on a tracking
 /// context that also holds two groups' 50,000 member values referencing them and others, as the Worker holds a page
-/// (tracking, change detection off). Times today's tracked-graph deletion, the quiet deletion that wraps it (the path
-/// a leaver cohort actually takes), the raw delete by id, and a throwaway raw variant whose tracker detach is
-/// set-based; each with and without the history rows (execution items, change records and the values in them) the
-/// database clears to null when an object goes.</item>
+/// (tracking, change detection off). Times the repository deletion through each way in: the Connected System
+/// repository's, the quiet deletion that wraps it (the path a leaver cohort actually takes), the execution-item
+/// deletion, and the Synchronisation repository's delete by id; each with and without the history rows (execution
+/// items, change records and the values in them) the database clears to null when an object goes. The statement
+/// count it prints is held constant by <see cref="ConnectedSystemObjectBatchDeletionDatabaseTests"/>; this measures
+/// the time.</item>
 /// <item>Loading a modified group's page through <see cref="TypeOrderedCsoPager.NextPageAsync"/>, at several
 /// membership sizes, against a raw read of the same rows.</item>
 /// </list>
@@ -48,7 +46,7 @@ namespace JIM.Worker.Tests.Repositories;
 [TestFixture]
 [Category("RequiresPostgres")]
 [Explicit("A measurement for #2669: prints timings and statement counts rather than asserting a bound.")]
-public partial class LeaverCohortCostDatabaseTests
+public class LeaverCohortCostDatabaseTests
 {
     private const int Leavers = 500;
     private const int ValuesPerLeaver = 25;
@@ -84,7 +82,7 @@ public partial class LeaverCohortCostDatabaseTests
     [OneTimeTearDown]
     public void OneTimeTearDown() => _spans?.Dispose();
 
-    private JimDbContext NewContext(StatementCounter? counter)
+    private JimDbContext NewContext(SqlStatementCounter? counter)
     {
         var builder = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
@@ -97,7 +95,7 @@ public partial class LeaverCohortCostDatabaseTests
     /// <summary>
     /// A tracking context with change detection off, as the Worker holds it from a page's load to its tracker clear.
     /// </summary>
-    private JimDbContext NewPageContext(StatementCounter? counter)
+    private JimDbContext NewPageContext(SqlStatementCounter? counter)
     {
         var context = NewContext(counter);
         context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
@@ -105,31 +103,40 @@ public partial class LeaverCohortCostDatabaseTests
         return context;
     }
 
-    private enum DeletionPath
+    public enum DeletionPath
     {
-        TrackedGraph,
+        /// <summary><c>ConnectedSystemRepository.DeleteConnectedSystemObjectsAsync</c>, called directly.</summary>
+        ConnectedSystemRepository,
+
+        /// <summary><c>SyncServer.DeleteConnectedSystemObjectsQuietlyAsync</c>: deletion records built, the objects
+        /// deleted, the records persisted.</summary>
         QuietDeletion,
-        RawByIds,
-        RawByIdsSetBasedDetach
+
+        /// <summary><c>SyncServer.DeleteConnectedSystemObjectsAsync</c>: deletion records linked to execution items,
+        /// the objects deleted.</summary>
+        ExecutionItems,
+
+        /// <summary><c>SyncRepository.DeleteConnectedSystemObjectsByIdsAsync</c>, the export path's.</summary>
+        SyncRepositoryByIds
     }
 
-    [Test]
-    public async Task DeleteConnectedSystemObjectsAsync_LeaverPageOnLargeGroupContext_ReportsEachPathsCostAsync()
+    [TestCase(DeletionPath.ConnectedSystemRepository)]
+    [TestCase(DeletionPath.QuietDeletion)]
+    [TestCase(DeletionPath.ExecutionItems)]
+    [TestCase(DeletionPath.SyncRepositoryByIds)]
+    public async Task DeleteConnectedSystemObjectsAsync_LeaverPageOnLargeGroupContext_ReportsThePathsCostAsync(DeletionPath path)
     {
         var report = new List<string>();
         foreach (var withHistory in new[] { false, true })
         {
-            foreach (var path in Enum.GetValues<DeletionPath>())
-            {
-                // One run discarded for warm-up (JIT, EF's model and query caches), then the measured runs.
-                await MeasureDeletionAsync(path, withHistory);
-                var runs = new List<DeletionRun>();
-                for (var i = 0; i < MeasuredRuns; i++)
-                    runs.Add(await MeasureDeletionAsync(path, withHistory));
+            // One run discarded for warm-up (JIT, EF's model and query caches), then the measured runs.
+            await MeasureDeletionAsync(path, withHistory);
+            var runs = new List<DeletionRun>();
+            for (var i = 0; i < MeasuredRuns; i++)
+                runs.Add(await MeasureDeletionAsync(path, withHistory));
 
-                report.Add(DescribeDeletionRuns(path, withHistory, runs));
-                TestContext.Progress.WriteLine(report[^1]);
-            }
+            report.Add(DescribeDeletionRuns(path, withHistory, runs));
+            TestContext.Progress.WriteLine(report[^1]);
         }
 
         TestContext.Out.WriteLine(string.Join(Environment.NewLine + Environment.NewLine, report));
@@ -165,19 +172,25 @@ public partial class LeaverCohortCostDatabaseTests
 
     private sealed record DeletionRun(
         double TotalMs, Dictionary<string, double> SpanMs, Dictionary<string, string> SpanTags,
-        int Commands, Dictionary<string, int> Statements, Dictionary<string, double> StepMs);
+        int Commands, Dictionary<string, int> Statements);
 
     private async Task<DeletionRun> MeasureDeletionAsync(DeletionPath path, bool withHistory)
     {
         var seeded = await SeedLeaverPageAsync(withHistory);
-        var counter = new StatementCounter();
-        var steps = new Dictionary<string, double>(StringComparer.Ordinal);
+        var counter = new SqlStatementCounter();
 
         await using var ctx = NewPageContext(counter);
         var repository = new PostgresDataRepository(ctx);
-        // The quiet path runs through the application layer; disposing it disposes the shared context, so it lives as
-        // long as the context does.
-        using var jim = path == DeletionPath.QuietDeletion ? new JimApplication(repository, syncRepository: repository.Sync) : null;
+        // The two server paths run through the application layer; disposing it disposes the shared context, so it lives
+        // as long as the context does.
+        using var jim = path is DeletionPath.QuietDeletion or DeletionPath.ExecutionItems
+            ? new JimApplication(repository, syncRepository: repository.Sync)
+            : null;
+        var activity = new JimActivity
+        {
+            TargetName = "Target confirming synchronisation",
+            InitiatedByType = ActivityInitiatorType.System
+        };
 
         var userPage = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
             seeded.SystemId, seeded.Watermark, 1, 500, Leavers, Guid.Empty, seeded.UserTypeId, null);
@@ -193,30 +206,33 @@ public partial class LeaverCohortCostDatabaseTests
                 Is.EqualTo(Leavers * ValuesPerLeaver + 2 * (MembersPerGroup + 1)), "the page as the Worker tracks it");
         }
 
-        if (path == DeletionPath.RawByIds)
-            MeasureDetachPredicates(ctx, leaverIds, steps);
+        // The execution-item path deletes objects the obsoletion handling gave an execution item each, as the processor
+        // queues them.
+        var executionItems = leavers.Select(cso =>
+        {
+            var item = activity.PrepareRunProfileExecutionItem();
+            item.ConnectedSystemObject = cso;
+            item.ConnectedSystemObjectId = cso.Id;
+            item.ObjectChangeType = ObjectChangeType.Deleted;
+            return item;
+        }).ToList();
 
         _spans.Start();
         counter.Counting = true;
         var stopwatch = Stopwatch.StartNew();
         switch (path)
         {
-            case DeletionPath.TrackedGraph:
+            case DeletionPath.ConnectedSystemRepository:
                 await repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(leavers);
                 break;
             case DeletionPath.QuietDeletion:
-                var activity = new JimActivity
-                {
-                    TargetName = "Target confirming synchronisation",
-                    InitiatedByType = ActivityInitiatorType.System
-                };
                 await new SyncServer(jim!).DeleteConnectedSystemObjectsQuietlyAsync(leavers, activity);
                 break;
-            case DeletionPath.RawByIds:
-                await repository.Sync.DeleteConnectedSystemObjectsByIdsAsync(leaverIds);
+            case DeletionPath.ExecutionItems:
+                await new SyncServer(jim!).DeleteConnectedSystemObjectsAsync(leavers, executionItems);
                 break;
-            case DeletionPath.RawByIdsSetBasedDetach:
-                await DeleteByIdsWithSetBasedDetachAsync(ctx, repository, leaverIds, steps);
+            case DeletionPath.SyncRepositoryByIds:
+                await repository.Sync.DeleteConnectedSystemObjectsByIdsAsync(leaverIds);
                 break;
         }
         stopwatch.Stop();
@@ -227,88 +243,21 @@ public partial class LeaverCohortCostDatabaseTests
         // on the same context), so whatever a path left tracked must save cleanly.
         Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, $"{path}: the context saves after the deletion");
         await AssertDeletedAsync(path, seeded, leaverIds);
+        if (path == DeletionPath.ExecutionItems)
+        {
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(executionItems.Select(i => i.ConnectedSystemObjectId), Is.All.Null, $"{path}: no execution item still names a deleted object");
+                Assert.That(executionItems.Select(i => i.ConnectedSystemObjectChange), Is.All.Not.Null, $"{path}: every execution item carries its deletion record");
+            }
+        }
 
         return new DeletionRun(
             stopwatch.Elapsed.TotalMilliseconds,
             recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => g.Sum(s => s.Ms), StringComparer.Ordinal),
             recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => string.Join(", ", g.First().Tags.Select(t => $"{t.Key}={t.Value}")), StringComparer.Ordinal),
             counter.Commands,
-            new Dictionary<string, int>(counter.Statements, StringComparer.Ordinal),
-            steps);
-    }
-
-    /// <summary>
-    /// What <c>SyncRepository.DeleteConnectedSystemObjectsByIdsAsync</c> does, but with the attribute value detach
-    /// tested against a set, reading each entry's owner key from the entry the scan already holds.
-    /// </summary>
-    private static async Task DeleteByIdsWithSetBasedDetachAsync(
-        JimDbContext ctx, PostgresDataRepository repository, List<Guid> csoIds, Dictionary<string, double> steps)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        await using var transaction = await ctx.Database.BeginTransactionAsync();
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(ctx, csoIds);
-        steps["retire"] = Lap(stopwatch);
-
-        await ((ConnectedSystemRepository)repository.ConnectedSystems).ClearReferencesToConnectedSystemObjectsAsync(csoIds);
-        steps["clearReferences"] = Lap(stopwatch);
-
-        var ids = csoIds.ToHashSet();
-        var detectChanges = ctx.ChangeTracker.AutoDetectChangesEnabled;
-        ctx.ChangeTracker.AutoDetectChangesEnabled = false;
-        try
-        {
-            var valueEntries = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
-                .Where(e => ids.Contains(e.Property<Guid>("ConnectedSystemObjectId").CurrentValue))
-                .ToList();
-            steps["detachScanValues"] = Lap(stopwatch);
-            foreach (var entry in valueEntries)
-                entry.State = EntityState.Detached;
-            steps["detachValues"] = Lap(stopwatch);
-
-            var objectEntries = ctx.ChangeTracker.Entries<ConnectedSystemObject>()
-                .Where(e => ids.Contains(e.Entity.Id))
-                .ToList();
-            foreach (var entry in objectEntries)
-                entry.State = EntityState.Detached;
-            steps["detachObjects"] = Lap(stopwatch);
-        }
-        finally
-        {
-            ctx.ChangeTracker.AutoDetectChangesEnabled = detectChanges;
-        }
-
-        await ctx.Database.ExecuteSqlRawAsync(@"DELETE FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({0})", csoIds.ToArray());
-        steps["delete"] = Lap(stopwatch);
-        await transaction.CommitAsync();
-        steps["commit"] = Lap(stopwatch);
-    }
-
-    /// <summary>
-    /// The detach predicate of <c>DeleteConnectedSystemObjectsByIdsAsync</c>, taken apart on the loaded page, read-only:
-    /// the scan alone, the owner key read through <c>Entry()</c> and through the entry in hand, and the membership test
-    /// against the id array and against a set.
-    /// </summary>
-    private static void MeasureDetachPredicates(JimDbContext ctx, List<Guid> csoIds, Dictionary<string, double> steps)
-    {
-        var idArray = csoIds.ToArray();
-        var idSet = csoIds.ToHashSet();
-        Guid OwnerViaEntry(ConnectedSystemObjectAttributeValue av) => ctx.Entry(av).Property<Guid>("ConnectedSystemObjectId").CurrentValue;
-        static Guid OwnerViaEntryInHand(EntityEntry<ConnectedSystemObjectAttributeValue> e) => e.Property<Guid>("ConnectedSystemObjectId").CurrentValue;
-
-        var stopwatch = Stopwatch.StartNew();
-        var scanned = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count();
-        steps["predicate.scanOnly"] = Lap(stopwatch);
-        var asToday = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(e => idArray.Contains(OwnerViaEntry(e.Entity)));
-        steps["predicate.entryLookupAndArray (today)"] = Lap(stopwatch);
-        var entryLookupAndSet = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(e => idSet.Contains(OwnerViaEntry(e.Entity)));
-        steps["predicate.entryLookupAndSet"] = Lap(stopwatch);
-        var entryInHandAndArray = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(e => idArray.Contains(OwnerViaEntryInHand(e)));
-        steps["predicate.entryInHandAndArray"] = Lap(stopwatch);
-        var entryInHandAndSet = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(e => idSet.Contains(OwnerViaEntryInHand(e)));
-        steps["predicate.entryInHandAndSet"] = Lap(stopwatch);
-
-        Assert.That(new[] { asToday, entryLookupAndSet, entryInHandAndArray, entryInHandAndSet }.Distinct().Single(),
-            Is.EqualTo(Leavers * ValuesPerLeaver), $"every predicate finds the departed accounts' values among {scanned} tracked");
+            new Dictionary<string, int>(counter.Statements, StringComparer.Ordinal));
     }
 
     private async Task AssertDeletedAsync(DeletionPath path, SeededLeaverPage seeded, List<Guid> leaverIds)
@@ -346,9 +295,6 @@ public partial class LeaverCohortCostDatabaseTests
             lines.Add(string.Create(CultureInfo.InvariantCulture,
                 $"   span {name}: median {Median(runs.Select(r => r.SpanMs.GetValueOrDefault(name))):F1} ms [{last.SpanTags[name]}]"));
         }
-
-        foreach (var step in last.StepMs.Keys)
-            lines.Add(string.Create(CultureInfo.InvariantCulture, $"   step {step}: median {Median(runs.Select(r => r.StepMs.GetValueOrDefault(step))):F1} ms"));
 
         var statements = string.Join(", ", last.Statements.OrderByDescending(s => s.Value).Select(s => $"{s.Key} x{s.Value}"));
         lines.Add(string.Create(CultureInfo.InvariantCulture,
@@ -741,13 +687,6 @@ public partial class LeaverCohortCostDatabaseTests
         await writer.WriteAsync(objectId, NpgsqlDbType.Uuid);
     }
 
-    private static double Lap(Stopwatch stopwatch)
-    {
-        var ms = stopwatch.Elapsed.TotalMilliseconds;
-        stopwatch.Restart();
-        return ms;
-    }
-
     private static double Median(IEnumerable<double> values)
     {
         var sorted = values.Order().ToList();
@@ -796,75 +735,6 @@ public partial class LeaverCohortCostDatabaseTests
     }
 
     private sealed record RecordedSpan(string Name, double Ms, List<KeyValuePair<string, object?>> Tags);
-
-    /// <summary>
-    /// Counts the commands EF Core sends (each one a round trip) and the statements in them, by verb and table. Raw
-    /// Npgsql commands the repository issues on the connection itself are not seen.
-    /// </summary>
-    private sealed partial class StatementCounter : DbCommandInterceptor
-    {
-        public bool Counting { get; set; }
-
-        public int Commands { get; private set; }
-
-        public Dictionary<string, int> Statements { get; } = new(StringComparer.Ordinal);
-
-        [GeneratedRegex(@"^\s*(\w+)[^""]*""(\w+)""", RegexOptions.Singleline)]
-        private static partial Regex VerbAndTable();
-
-        private void Record(DbCommand command)
-        {
-            if (!Counting)
-                return;
-
-            Commands++;
-            foreach (var statement in command.CommandText.Split(';').Select(s => s.Trim()).Where(s => s.Length > 0))
-            {
-                var match = VerbAndTable().Match(statement);
-                var key = match.Success ? $"{match.Groups[1].Value.ToUpperInvariant()} {match.Groups[2].Value}" : statement[..Math.Min(40, statement.Length)];
-                Statements[key] = Statements.GetValueOrDefault(key) + 1;
-            }
-        }
-
-        public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-
-        public override InterceptionResult<object> ScalarExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<object> result)
-        {
-            Record(command);
-            return result;
-        }
-
-        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<object> result, CancellationToken cancellationToken = default)
-        {
-            Record(command);
-            return ValueTask.FromResult(result);
-        }
-    }
 
     #endregion
 }
