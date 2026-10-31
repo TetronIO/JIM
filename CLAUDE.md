@@ -239,6 +239,23 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
 
     In Claude Code on the web, use the GitHub MCP `issue_write` tool's `issue_fields` (`[{"field_name": "Priority", "field_option_name": "Medium"}, {"field_name": "Effort", "field_option_name": "Low"}]`), or the same REST call as plain `curl` through the relay. Either way, read the values back afterwards (`gh api repos/TetronIO/JIM/issues/<n>/issue-field-values`). (Rule added after issues filed by sessions sat with neither field set.)
 - **Before starting work on a GitHub issue, search open PRs referencing its number** (`gh pr list --search "#<n>"`, or the `search_pull_requests` MCP tool), not just the issue's own timeline. Parallel sessions work feature branches, and the stacked-PR doctrine sends a session into any issue that blocks its feature as discovered work, so an issue can already have a fix in flight that its timeline never mentions. (Rule added after two sessions independently implemented #1398's second half on the same day: the in-flight PR, #1414, was open hours before the second session's start, and only the issue's comments were checked.)
+- **When you are asked to work on an issue, set it up for tracking first, without being asked:** assign it to the user, set its milestone to the current one, and put it on the **JIM Roadmap** project with Status **In Progress**. The user tracks work by these and has been setting them by hand. Skip any step the issue already satisfies, and say in one line what you set.
+  - **The current milestone** is the earliest open one (today `v1.0-ILM-COMPLETE`; the milestones carry no due dates, so "earliest" means the lowest version). List them with `gh api "repos/TetronIO/JIM/milestones?state=open"`. If the order isn't obvious, ask.
+  - **Locally (`gh`):** `gh project` needs the `project` scope (`gh auth refresh -s project` adds it). The project, its Status field and the option are looked up by name, so nothing here goes stale:
+
+    ```bash
+    n=<issue number>
+    milestone="v1.0-ILM-COMPLETE"   # the current milestone; check it as above
+    gh issue edit "$n" --add-assignee @me --milestone "$milestone"
+    project=$(gh project list --owner TetronIO --format json --jq '.projects[] | select(.title=="JIM Roadmap") | .number')
+    project_id=$(gh project view "$project" --owner TetronIO --format json --jq .id)
+    item=$(gh project item-add "$project" --owner TetronIO --url "https://github.com/TetronIO/JIM/issues/$n" --format json --jq .id)
+    read -r field option < <(gh project field-list "$project" --owner TetronIO --format json \
+      --jq '.fields[] | select(.name=="Status") | "\(.id) \(.options[] | select(.name=="In Progress") | .id)"')
+    gh project item-edit --id "$item" --project-id "$project_id" --field-id "$field" --single-select-option-id "$option"
+    ```
+
+  - **In Claude Code on the web:** set the assignee and milestone through the GitHub MCP `issue_write` tool (`assignees`, and `milestone` as the milestone's number), or the repo-scoped REST API through the relay. The project step cannot be done there: `gh project` is GraphQL, which the relay refuses, and the organisation's Projects REST API answers 403. Say so once, in the same line as what you did set, so the user can add it to the project. (Rule added at the user's request after they set all four by hand on #2650 and #2658.)
 - **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
   - Sequencing ("must land first"): the blocked-by relationship, via REST: `gh api -X POST repos/TetronIO/JIM/issues/<blocked>/dependencies/blocked_by -F issue_id=<id>` where `<id>` is the blocking issue's database id (`gh api repos/TetronIO/JIM/issues/<n> --jq .id`). Inspect with `GET .../dependencies/blocked_by`; remove with `DELETE .../dependencies/blocked_by/<id>`.
   - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
