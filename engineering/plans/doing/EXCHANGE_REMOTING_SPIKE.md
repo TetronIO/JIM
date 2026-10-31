@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0 and 1a complete; Phase 1b next, on the AD lab through Remote Control)
+- **Status:** Doing (Phases 0, 1a and 2 complete; Phases 1b and 3 wait for an Exchange window on the AD lab)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -121,7 +121,7 @@ Runs on the lab's Linux runner VM, which reaches the lab network.
 - Prove the framing against Windows' real implementation: AES256 payloads of several sizes, including ones that span WinRM's 16 KB encryption chunks.
 - Capture the real WinRM exchanges as recorded fixtures for the unit tests.
 
-### Phase 2: Hardening probes (day 7)
+### Phase 2: Hardening probes (day 7) ✅
 
 - Cancellation, operation timeouts, and runspace reuse across many commands (Q6).
 - Logging without secrets.
@@ -208,6 +208,29 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 2: hardening probes (2026-10-31)
+
+**Everything Phase 2 set out to prove holds through the harness, after fixing six faults it found in the transport.** `Tetron.PowerShellRemoting.Tests` passes 106 of 106 with the harness up (about 50 seconds), skipping only the 6 Exchange lab tests; CI now runs the harness tier on every pull request that touches the library or the harness (`remoting-harness-tests` in `ci.yml`), and fails rather than skips if the harness does not come up.
+
+| Proven | How |
+|---|---|
+| Stopping a command (Q6) | A stopped `Start-Sleep 120` ends within seconds and the runspace carries on. A remote stop surfaces as a `RemoteException` ("The pipeline has been stopped.") with the invocation in the Stopped state, not as a local `PipelineStoppedException`; callers must judge it by the state |
+| Long commands and timeouts (Q6) | A command that outlasts the server's `OperationTimeout` still returns its output; a closed port fails at once; an endpoint that never answers fails within the request timeout; cancelling an open throws `OperationCanceledException` |
+| One runspace for a batch (Q6) | 200 commands on one runspace cost **1 Kerberos login and 3 connections** (from 202 of each before the fix); about 100 ms a command against the stand-in, which says nothing about Exchange's own cost |
+| Idle connections | When the server closes an idle connection (HTTP.sys does after 120 seconds; the harness after 5), the next request authenticates a new one and is sent again, with no new login |
+| Secrets | The library logs nothing, and no exception it raises carries the password, a token or a message body. `RemoteSessionOptions` cannot give its password back, so logging or serialising the options cannot leak it. A `SecureString` parameter, as `New-Mailbox -Password` needs, arrives intact through PowerShell's own session-key encryption |
+| Failures for reporting and retry (Q5, transport side) | `RemoteFailure` classifies each failure as Command, Stopped, Authentication, Certificate, Connection, Timeout or Protocol, with `IsTransient` for the two a retry may cure, and keeps the error ID, reason, target and Exchange's own `FailureCategory`. Each kind is checked against the real exception chain |
+
+**Faults found and fixed, all in the client:**
+- Every command's Receive opened a new connection, and every connection logged in to the KDC again with the password. A session now shares one ticket-granting ticket (a reference-counted `SafeHandle`, so closing mid-handshake cannot free it in use), renews it once if it expires, and hands finished connections to the next command.
+- A 401 after authenticating, which is what an idle connection the server has closed produces, failed the command as access denied. It now re-authenticates and sends again, once.
+- An exception while the session closed escaped the transport's own thread, **which ends the host process**: in JIM, the Worker. Nothing escapes that thread now.
+- A request timing out inside a Receive was swallowed, so the command waited for output for ever. It is now reported.
+- Per-command cancellation sources were never disposed, and every connection ever opened was kept until the session ended.
+- The harness script failed silently in a new shell and then waited 20 minutes for a KDC that had not started.
+
+**Still open:** Exchange's own error records (object not found, already enabled, insufficient RBAC, throttling) and their mapping to JIM's activity error types are Phase 3's, captured from the lab. Renewal of an expired ticket-granting ticket is classified and handled, but untested end to end; the lab's long runs will exercise it.
 
 ### Phase 1a: sandbox harness (2026-10-30)
 
