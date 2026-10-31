@@ -77,7 +77,9 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 **The Exchange step**
 
 7. After a successful directory create or update, when an object's declared recipient state differs from its last imported state, JIM stages an Exchange step for it. The step is persisted, as Initial Password staging is, so a Worker restart loses nothing.
-8. The step targets the domain controller the directory write went to, so replication lag cannot cause "object not found".
+8. The step names the domain controller the directory write went to (`-DomainController`). Exchange runs on its own servers and otherwise picks a domain controller for itself, which may not have the new object yet: replication takes seconds within a site and can take 15 minutes or more between sites, and Exchange then reports "object not found".
+   - JIM records the domain controller it actually wrote to, from the bound connection's RootDSE `dnsHostName`, because the Connected System's host may be a domain name that any domain controller answers.
+   - When Exchange cannot reach that domain controller, the step fails with an error naming both servers. It does not fall back to Exchange's own choice, which would bring back the replication failure.
 9. The step is idempotent: it reads the recipient's current state first and does only what converges it. Re-running against a recipient already in its declared state changes nothing.
 10. A failed step never rolls back or hides the directory write. It is reported on the Activity, against the object, and retried on the next export run.
 11. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
