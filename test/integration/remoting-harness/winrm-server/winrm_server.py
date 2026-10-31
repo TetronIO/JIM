@@ -62,7 +62,18 @@ BOUNDARY = b"Encrypted Boundary"
 KERBEROS_PROTOCOL = "application/HTTP-Kerberos-session-encrypted"
 
 SERVICE_HOST = os.environ.get("WINRM_SERVICE_HOST", "winrm-harness.harness.test")
+# How long a Receive waits for output when the client sends no w:OperationTimeout. WinRM honours the client's.
 RECEIVE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_RECEIVE_TIMEOUT_SECONDS", "10"))
+DURATION = re.compile(r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$")
+
+
+def operation_timeout(envelope) -> float:
+    """The client's w:OperationTimeout (an xs:duration such as PT20S), as WinRM honours it, or the default."""
+    match = DURATION.match(envelope.findtext("s:Header/w:OperationTimeout", namespaces=NS) or "")
+    if match is None or not any(match.groupdict().values()):
+        return RECEIVE_TIMEOUT_SECONDS
+    parts = {name: float(value or 0) for name, value in match.groupdict().items()}
+    return parts["d"] * 86400 + parts["h"] * 3600 + parts["m"] * 60 + parts["s"]
 
 
 # --- WinRM message encryption --------------------------------------------------------------------------------------
@@ -286,7 +297,7 @@ def handle(envelope_bytes: bytes) -> bytes:
         guid = (command_id or EMPTY_GUID).upper()
         source = shell.pwsh.queue_for(guid)
         try:
-            items = [source.get(timeout=RECEIVE_TIMEOUT_SECONDS)]
+            items = [source.get(timeout=operation_timeout(envelope))]
         except queue.Empty:
             return fault(message_id, 2150858793, "w:TimedOut",
                          "The WS-Management service cannot complete the operation within the time specified in OperationTimeout.")

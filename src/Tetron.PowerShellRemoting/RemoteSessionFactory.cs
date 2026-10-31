@@ -20,6 +20,7 @@ public static class RemoteSessionFactory
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
+        cancellationToken.ThrowIfCancellationRequested();
 
         var runspace = RunspaceFactory.CreateRunspace(new WinRMConnectionInfo(options));
         try

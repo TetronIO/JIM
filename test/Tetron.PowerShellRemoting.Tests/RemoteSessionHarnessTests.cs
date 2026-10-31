@@ -3,7 +3,6 @@
 
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
-using System.Security.Cryptography.X509Certificates;
 using Tetron.PowerShellRemoting.Tests.Kerberos;
 
 namespace Tetron.PowerShellRemoting.Tests;
@@ -107,22 +106,6 @@ public class RemoteSessionHarnessTests
             Throws.InstanceOf<Exception>().With.Message.Contains("Kerberos").And.Message.Not.Contains("not-the-password"));
     }
 
-    private static RemoteSessionOptions Options(string scheme, int port, bool trustHarnessCa = false)
-    {
-        var trusted = new X509Certificate2Collection();
-        if (trustHarnessCa)
-            trusted.Add(X509CertificateLoader.LoadCertificateFromFile(KerberosHarness.CaCertificate!));
-
-        // The endpoint is reached by address, so the certificate's name is supplied by resolving it in /etc/hosts
-        // on the test host; the SPN is given explicitly either way.
-        var host = scheme == "https" ? KerberosHarness.ServiceHost : KerberosHarness.WinRM;
-        return new RemoteSessionOptions
-        {
-            ConnectionUri = new Uri($"{scheme}://{host}:{port}/wsman"),
-            UserPrincipalName = KerberosHarness.ClientPrincipal,
-            Password = KerberosHarness.ClientPassword,
-            ServicePrincipalHost = KerberosHarness.ServiceHost,
-            TrustedCertificates = trusted
-        };
-    }
+    private static RemoteSessionOptions Options(string scheme, int port, bool trustHarnessCa = false) =>
+        KerberosHarness.SessionOptions(scheme, port, trustHarnessCa);
 }

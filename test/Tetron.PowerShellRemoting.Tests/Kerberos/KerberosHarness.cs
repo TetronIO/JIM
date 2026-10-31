@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Tetron.PowerShellRemoting.Tests.Kerberos;
 
@@ -56,6 +57,33 @@ internal static partial class KerberosHarness
                 throw new InvalidOperationException("Could not set KRB5_KTNAME.");
             _configured = true;
         }
+    }
+
+    /// <summary>
+    /// Options for a session to the stand-in WinRM server: <c>http</c> on 5985 (Kerberos-encrypted) or <c>https</c> on
+    /// 5986. HTTPS is reached by the certificate's name, which the test host resolves through /etc/hosts; the SPN is
+    /// given explicitly either way.
+    /// </summary>
+    internal static RemoteSessionOptions SessionOptions(string scheme = "http", int? port = null, bool trustHarnessCa = false,
+        TimeSpan? operationTimeout = null, TimeSpan? requestTimeout = null, string? host = null)
+    {
+        var trusted = new X509Certificate2Collection();
+        if (trustHarnessCa)
+            trusted.Add(X509CertificateLoader.LoadCertificateFromFile(CaCertificate!));
+
+        var defaults = new RemoteSessionOptions { ConnectionUri = new Uri("http://unused"), UserPrincipalName = ClientPrincipal, Password = ClientPassword };
+        host ??= scheme == "https" ? ServiceHost : WinRM;
+        port ??= scheme == "https" ? 5986 : 5985;
+        return new RemoteSessionOptions
+        {
+            ConnectionUri = new Uri($"{scheme}://{host}:{port}/wsman"),
+            UserPrincipalName = ClientPrincipal,
+            Password = ClientPassword,
+            ServicePrincipalHost = ServiceHost,
+            TrustedCertificates = trusted,
+            OperationTimeout = operationTimeout ?? defaults.OperationTimeout,
+            RequestTimeout = requestTimeout ?? defaults.RequestTimeout
+        };
     }
 
     /// <summary>Skips the calling test for want of part of the harness, or fails it when the harness is required.</summary>
