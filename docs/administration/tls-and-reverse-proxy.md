@@ -1,6 +1,6 @@
 ---
 title: TLS and Reverse Proxy
-description: Give JIM its HTTPS certificate, renew or replace it, and run JIM behind a reverse proxy or load balancer.
+description: Give JIM its HTTPS certificate, renew or replace it, and run JIM behind a reverse proxy.
 type: reference
 audience: operator
 validated: v0.17.0
@@ -149,9 +149,9 @@ On Podman, put the new files in `tls/` the same way (no `chown` needed), store t
 
 When you move away from a certificate the installer created, delete `tls/ca.key`, and remove the JIM certificate authority from the machines that trusted it.
 
-## :material-server-network-outline: Behind a Reverse Proxy or Load Balancer
+## :material-server-network-outline: Behind a Reverse Proxy
 
-JIM does not need a reverse proxy, but you may already route web applications through one, or want JIM on port 443 behind a load balancer. Two configurations are supported:
+JIM does not need a reverse proxy, but you may already route web applications through one. A load balancer in front of JIM is a reverse proxy here, set up the same way. JIM runs a single web container (`jim.web`), so spreading the portal and REST API across several JIM servers behind a load balancer is not supported. Two configurations are supported:
 
 - **Re-encrypting to JIM** (recommended)<br /> The proxy terminates the browser's HTTPS connection and opens its own HTTPS connection to JIM, checking JIM's certificate. Traffic is encrypted end to end, which regulated environments commonly require, and nothing about JIM changes. The proxy must trust the CA that issued JIM's certificate, and JIM's certificate must carry both the name users type and the name the proxy connects to: nginx checks JIM's certificate against the host name in its `proxy_pass` line, while Apache httpd, which passes the name users typed on to JIM, checks it against that.
 - **Plain HTTP on the JIM host's loopback interface**<br /> A proxy on the JIM host itself terminates TLS and forwards plain HTTP to JIM, which listens on the host's loopback interface only. See [Plain HTTP for a proxy on the same host](#plain-http-for-a-proxy-on-the-same-host).

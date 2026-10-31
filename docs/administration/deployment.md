@@ -341,7 +341,7 @@ If you need to integrate with an external system that writes to a fixed network 
 
 ## :material-certificate-outline: TLS and Reverse Proxy
 
-JIM serves HTTPS itself, with a certificate for its host name that the installer creates or that your organisation's certificate authority issues. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers the certificate, renewing and replacing it, running JIM behind a reverse proxy or load balancer, and changing its port.
+JIM serves HTTPS itself, with a certificate for its host name that the installer creates or that your organisation's certificate authority issues. [TLS and Reverse Proxy](tls-and-reverse-proxy.md) covers the certificate, renewing and replacing it, running JIM behind a reverse proxy, and changing its port.
 
 ## :material-heart-pulse: Health Monitoring
 
