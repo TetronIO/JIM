@@ -22,7 +22,8 @@
 
 .PARAMETER PreviousBundlePath
     For upgrade cells: the archive of the release to upgrade from, with its .sha256 beside it. Default: the latest
-    release's, downloaded from GitHub once into the lab's cache.
+    release's, downloaded from GitHub once into the lab's cache. Cells marked FromOldest upgrade from the matrix's
+    OldestRelease instead, whatever this says.
 
 .PARAMETER Name
     Run only the cells with these names; wildcards allowed.
@@ -129,6 +130,10 @@ if ($upgrades) {
     }
     $PreviousBundlePath = (Resolve-Path $PreviousBundlePath).Path
 }
+# The oldest release a customer can upgrade from, for the cells that upgrade from it (FromOldest).
+$OldestBundlePath = if ($offlineCells | Where-Object { $_.Scenario -eq 'Upgrade' -and $_.ContainsKey('FromOldest') -and $_.FromOldest }) {
+    Get-LabReleaseBundle -CachePath $cachePath -Tag $matrix.OldestRelease
+}
 if (-not $offlineCells) {
     # Only online cells: nothing of the commit's to build or install.
     $BundlePath = $OnlineBundlePath
@@ -161,7 +166,7 @@ if ($BudgetGiB -lt 0) {
     $BudgetGiB = Get-LabMemoryBudget -MemInfo (Get-Content /proc/meminfo) -ReserveGiB $lab.ReserveGiB
 }
 $runStarted = Get-Date
-Write-Host "Deployment lab: $($cells.Count) cells, bundle $(Split-Path $BundlePath -Leaf)$(if ($upgrades) { ", upgrading from $(Split-Path $PreviousBundlePath -Leaf)" }), $BudgetGiB GiB for VMs$(if ($MaxParallel) { ", at most $MaxParallel at once" }), results in $OutputPath"
+Write-Host "Deployment lab: $($cells.Count) cells, bundle $(Split-Path $BundlePath -Leaf)$(if ($upgrades) { ", upgrading from $(Split-Path $PreviousBundlePath -Leaf)" })$(if ($OldestBundlePath) { " (FromOldest cells from $(Split-Path $OldestBundlePath -Leaf))" }), $BudgetGiB GiB for VMs$(if ($MaxParallel) { ", at most $MaxParallel at once" }), results in $OutputPath"
 
 $pwshPath = (Get-Process -Id $PID).Path
 $cellScript = Join-Path $PSScriptRoot 'Invoke-LabCell.ps1'
@@ -177,7 +182,9 @@ function Start-Cell {
     # Through bash for its redirections: the cell's output goes to its own log, and its standard input is closed, as
     # lxc needs (see Invoke-LabLxc).
     $start = [System.Diagnostics.ProcessStartInfo]::new('bash')
-    $bundle, $previous = if ($Cell.Network -eq 'online') { $OnlineBundlePath, $OnlinePreviousBundlePath } else { $BundlePath, $PreviousBundlePath }
+    $bundle, $previous = if ($Cell.Network -eq 'online') { $OnlineBundlePath, $OnlinePreviousBundlePath }
+    elseif ($Cell.ContainsKey('FromOldest') -and $Cell.FromOldest) { $BundlePath, $OldestBundlePath }
+    else { $BundlePath, $PreviousBundlePath }
     foreach ($argument in @('-c', 'exec "$@" < /dev/null > "$0" 2>&1', (Join-Path $cellPath 'runner.log'), $pwshPath,
             '-NoProfile', '-File', $cellScript, '-CellName', $Cell.Name, '-BundlePath', $bundle,
             '-PayloadPath', $payloadPath, '-PowerShellPath', $powerShellPath, '-OutputPath', $cellPath, '-KeepVm', $KeepVm) +
@@ -243,7 +250,7 @@ finally {
 $ordered = foreach ($cell in $cells) { $results | Where-Object { $_.Cell.Name -eq $cell.Name } }
 $under = @()
 if ($offlineCells) {
-    $under += "$(Split-Path $BundlePath -Leaf)$(if ($upgrades) { " (upgrades from $(Split-Path $PreviousBundlePath -Leaf))" })"
+    $under += "$(Split-Path $BundlePath -Leaf)$(if ($upgrades) { " (upgrades from $(Split-Path $PreviousBundlePath -Leaf)$(if ($OldestBundlePath) { ", and from $(Split-Path $OldestBundlePath -Leaf)" }))" })"
 }
 if ($onlineCells) {
     $under += "online: $(Split-Path $OnlineBundlePath -Leaf)$(if ($OnlinePreviousBundlePath) { " (upgrades from $(Split-Path $OnlinePreviousBundlePath -Leaf))" }) as published"
