@@ -1195,6 +1195,25 @@ Describe 'Stop-LabVm' {
         Should -Invoke -ModuleName LabDomainController Remove-Job -Times 0 -Exactly -Scope It
     }
 
+    It 'warns when the shutdown job is still running after the wait, since the process may then report an error as it exits' {
+        $script:polls = 0
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 30 } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Wait-Job {}
+        Mock -ModuleName LabDomainController Write-Warning {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 1 -Exactly -Scope It -ParameterFilter { $Message -like '*shutdown job for exchange-primary had not finished*' }
+    }
+
+    It 'does not warn when the shutdown job finishes in the wait' {
+        $script:polls = 0
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 0 -Exactly -Scope It
+    }
+
     AfterEach {
         Get-Job | Microsoft.PowerShell.Core\Remove-Job -Force -ErrorAction SilentlyContinue
     }
@@ -1213,16 +1232,21 @@ Describe 'Wait-LabCheckpoint' {
 
     It 'returns the checkpoint as soon as it is listed' {
         Mock -ModuleName LabDomainController Get-VMSnapshot { [pscustomobject]@{ Name = 'baseline' } }
+        Mock -ModuleName LabDomainController Write-Warning {}
         (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
         Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 0 -Exactly -Scope It
     }
 
-    It 'waits for a checkpoint that is listed only a moment after it is taken' {
-        # Taken of a VM just shut down, the checkpoint existed but was not listed straight away (run 41142349653).
+    It 'waits for a checkpoint that is listed only a moment after it is taken, and says so' {
+        # Taken of a VM just shut down, the checkpoint existed but was not found straight away (run 41142349653). Saying
+        # when it turns up late lets the next rebuild confirm that, rather than a silent retry hiding it.
         $script:lists = 0
         Mock -ModuleName LabDomainController Get-VMSnapshot { $script:lists++; if ($script:lists -ge 3) { [pscustomobject]@{ Name = 'baseline' } } }
+        Mock -ModuleName LabDomainController Write-Warning {}
         (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
         Should -Invoke -ModuleName LabDomainController Get-VMSnapshot -Times 3 -Exactly -Scope It
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 1 -Exactly -Scope It -ParameterFilter { $Message -like "*'baseline' of exchange-primary was listed only after 4 s*" }
     }
 
     It 'gives up after the timeout, naming why the listing failed' {

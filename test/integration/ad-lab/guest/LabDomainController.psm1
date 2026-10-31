@@ -3729,7 +3729,8 @@ function Stop-LabVm {
 
         The VM reads Off before the Hyper-V module has completed that job, which it does on a thread of its own. A job
         disposed of before then makes that thread throw PSObjectDisposedException, which ends the whole process, so
-        the job is waited for (up to a minute) and never removed; it goes when the process ends.
+        the job is waited for (up to a minute, with a warning if it is still running then) and never removed; it goes
+        when the process ends.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -3766,7 +3767,9 @@ function Stop-LabVm {
         return 'TurnedOff'
     }
     finally {
-        $null = Wait-Job -Job $job -Timeout 60
+        if ($null -eq (Wait-Job -Job $job -Timeout 60)) {
+            Write-Warning "The shutdown job for $Name had not finished after 60 s; the process may report an error (PSObjectDisposedException) when it exits."
+        }
     }
 }
 
@@ -3778,7 +3781,8 @@ function Wait-LabCheckpoint {
 
     .DESCRIPTION
         A checkpoint of a VM that has just shut down can exist before it is listed (run 41142349653), so the listing is
-        tried again every two seconds. When it gives up, the last error the listing raised is in the message.
+        tried again every two seconds, with a warning when the checkpoint turns up only after a wait. When it gives up,
+        the last error the listing raised is in the message.
     #>
     [CmdletBinding()]
     param(
@@ -3802,6 +3806,9 @@ function Wait-LabCheckpoint {
             throw "$VMName has $($found.Count) checkpoints called '$Name'."
         }
         if ($found.Count -eq 1) {
+            if ($waited -gt 0) {
+                Write-Warning "The checkpoint '$Name' of $VMName was listed only after $waited s."
+            }
             return $found[0]
         }
         if ($waited + $intervalSeconds -gt $TimeoutSeconds) {
