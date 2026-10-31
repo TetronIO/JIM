@@ -1990,6 +1990,23 @@ Describe 'Get-LabRebuildBuildAction' {
             -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Reuse'
     }
 
+    It 'reuses a finished Exchange candidate whose domain controller''s baseline was taken after its own, as its build takes them' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-2) -CandidateHasBaseline $true `
+            -CandidateBaselineUtc $script:BuildNow.AddHours(-1) -DependencyBaselineUtc $script:BuildNow.AddHours(-1).AddSeconds(20) `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Reuse'
+    }
+
+    It 'replaces a finished <Case> whose domain controller''s baseline is older than its own, since the build stopped between the two' -TestCases @(
+        @{ Case = 'Exchange candidate'; Exchange = $true; Fresh = $false }
+        @{ Case = 'Exchange candidate, asked for a fresh one'; Exchange = $true; Fresh = $true }
+        @{ Case = 'AD FS candidate'; Exchange = $false; Fresh = $false }
+    ) {
+        param($Exchange, $Fresh)
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-2) -CandidateHasBaseline $true `
+            -CandidateBaselineUtc $script:BuildNow.AddHours(-1) -DependencyBaselineUtc $script:BuildNow.AddHours(-2).AddMinutes(-1) `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -Fresh:$Fresh -DirectoryHoldsServer:$Exchange | Should -Be 'Replace'
+    }
+
     It 'does not mind a candidate stamped slightly in the future (clock skew)' {
         Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddMinutes(5) -CandidateHasBaseline $true -NowUtc $script:BuildNow | Should -Be 'Reuse'
     }
@@ -2377,9 +2394,10 @@ Describe 'Invoke-LabRebuildPhase' {
                     $state = 'Running'
                     if ($Kind -in 'FederationServer', 'ExchangeServer') {
                         # New-LabFederationServer.ps1 and New-LabExchangeServer.ps1 join the domain controller's
-                        # candidate, which must be there.
+                        # candidate, which must be there, and take its baseline again after their own.
                         $dc = $Parameters.DomainControllerName
                         if (-not $lab.Vms.ContainsKey($dc) -or -not $lab.Vms[$dc].HasBaseline) { throw "no domain controller $dc to join" }
+                        $lab.Vms[$dc].BaselineCreatedUtc = $lab.Now
                         $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName $Parameters.ComputerName -NetBiosName 'PANOPLY' -IPAddress $Parameters.IPAddress -Role $Kind
                         # New-LabExchangeServer.ps1 shuts the server down once its baseline is taken.
                         if ($Kind -eq 'ExchangeServer') { $state = 'Off' }
@@ -2388,12 +2406,13 @@ Describe 'Invoke-LabRebuildPhase' {
                         $notes = ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress
                     }
                     $lab.Vms[$Parameters.Name] = @{
-                        Name        = $Parameters.Name
-                        State       = $state
-                        Notes       = $notes
-                        CreatedUtc  = $lab.Now
-                        HasBaseline = $true
-                        Build       = "26100.$(4000 + $lab.BuildIndex)"
+                        Name               = $Parameters.Name
+                        State              = $state
+                        Notes              = $notes
+                        CreatedUtc         = $lab.Now
+                        HasBaseline        = $true
+                        BaselineCreatedUtc = $lab.Now
+                        Build              = "26100.$(4000 + $lab.BuildIndex)"
                     }
                 }.GetNewClosure()
                 GetGuestBuild = {
@@ -2635,6 +2654,48 @@ Describe 'Invoke-LabRebuildPhase' {
 
             { Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*exchange-primary-candidate*dc-primary-candidate*'
             @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'builds the Exchange candidate again when its domain controller''s baseline is older than its own' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            # As a build leaves it when it takes the Exchange server's baseline and fails before taking its domain
+            # controller's again: that domain controller's baseline is from before the server was installed.
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc = $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc.AddHours(-1)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $results[3].action | Should -Be 'Replace'
+            (Get-CallIndex $lab 'RemoveVm exchange-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm exchange-primary-candidate')
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc | Should -Not -BeLessThan $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc
+        }
+
+        It 'refuses to stage or promote an Exchange candidate whose domain controller''s baseline is older than its own, touching nothing' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc = $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc.AddHours(-1)
+            $lab.Calls.Clear()
+
+            { Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*baseline of ''exchange-primary-candidate''*newer than that of ''dc-primary-candidate''*'
+            @($lab.Calls | Where-Object { $_ -like 'RestoreVm*' -or $_ -like 'ResetVm*' -or $_ -like 'StopVm*' }).Count | Should -Be 0
+
+            { Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*baseline of ''exchange-primary-candidate''*newer than that of ''dc-primary-candidate''*'
+            @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'promotes a pair whose baselines match, as its build takes them' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter)
+            $results[3].action | Should -Be 'Promoted'
         }
 
         It 'refuses an adapter that cannot revert a VM and leave it off' {

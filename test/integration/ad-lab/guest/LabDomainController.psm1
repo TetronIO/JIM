@@ -2355,6 +2355,42 @@ function Test-LabRebuildBuiltAfter {
     return ($CreatedUtc.ToUniversalTime() -ge $DependencyCreatedUtc.ToUniversalTime())
 }
 
+function Test-LabRebuildBaselinePaired {
+    # Internal: whether a dependent candidate's baseline and its domain controller candidate's are a pair. Its build
+    # takes the dependent's first and the domain controller's after, so the domain controller's is never older; if it
+    # is, the build stopped between the two and that baseline lacks the dependent's objects. An unknown time passes.
+    param(
+        [Nullable[datetime]]$BaselineUtc,
+
+        [Nullable[datetime]]$DependencyBaselineUtc
+    )
+
+    if (($null -eq $BaselineUtc) -or ($null -eq $DependencyBaselineUtc)) {
+        return $true
+    }
+    return (([datetime]$DependencyBaselineUtc).ToUniversalTime() -ge ([datetime]$BaselineUtc).ToUniversalTime())
+}
+
+function Get-LabRebuildBaselineUtc {
+    # Internal: when an adapter's VM record says its baseline was taken, or $null when the record does not say.
+    param(
+        [AllowNull()]
+        [object]$Vm
+    )
+
+    if ($null -eq $Vm) {
+        return $null
+    }
+    if ($Vm -is [System.Collections.IDictionary]) {
+        return $Vm['BaselineCreatedUtc']
+    }
+    $property = $Vm.PSObject.Properties['BaselineCreatedUtc']
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
 function Assert-LabRebuildPairCurrent {
     # Internal: before Stage or Promote touches anything, refuse a dependent candidate built before its domain
     # controller candidate. That domain controller's directory lacks its accounts and objects, so the pair would not
@@ -2389,6 +2425,11 @@ function Assert-LabRebuildPairCurrent {
     if (-not (Test-LabRebuildBuiltAfter -CreatedUtc ([datetime]$candidate.CreatedUtc) -DependencyCreatedUtc ([datetime]$dependency.CreatedUtc))) {
         throw "'$($Role.CandidateName)' was built before '$dependencyName', whose directory therefore does not hold its accounts and objects; build $($Role.LiveName) again (Build -Role $($Role.LiveName)) before $($Phase.ToLowerInvariant())."
     }
+    $baselineUtc = Get-LabRebuildBaselineUtc -Vm $candidate
+    $dependencyBaselineUtc = Get-LabRebuildBaselineUtc -Vm $dependency
+    if ([bool]$candidate.HasBaseline -and (-not (Test-LabRebuildBaselinePaired -BaselineUtc $baselineUtc -DependencyBaselineUtc $dependencyBaselineUtc))) {
+        throw "The baseline of '$($Role.CandidateName)' ($(([datetime]$baselineUtc).ToUniversalTime().ToString('u'))) is newer than that of '$dependencyName' ($(([datetime]$dependencyBaselineUtc).ToUniversalTime().ToString('u'))), so its build stopped between the two and that directory baseline does not hold its accounts and objects; build $($Role.LiveName) again (Build -Role $($Role.LiveName)) before $($Phase.ToLowerInvariant())."
+    }
 }
 
 function Get-LabRebuildBuildAction {
@@ -2419,6 +2460,13 @@ function Get-LabRebuildBuildAction {
 
           finished, built after its dependency,      Refuse  (build the dependency again first; the dependent is then
           and would be replaced                               older than it and is replaced)
+
+        Both builds take the dependent's baseline and then the dependency's again, so a finished pair has the
+        dependency's baseline no older than the dependent's. With both times given (-CandidateBaselineUtc and
+        -DependencyBaselineUtc), a finished dependent whose dependency's baseline is older came from a build that
+        stopped between the two checkpoints: the directory's baseline never held its objects, so it is built again.
+
+          finished, dependency's baseline older      Replace (before Refuse: that baseline does not hold the server)
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -2430,7 +2478,11 @@ function Get-LabRebuildBuildAction {
 
         [bool]$CandidateHasBaseline = $false,
 
+        [Nullable[datetime]]$CandidateBaselineUtc,
+
         [Nullable[datetime]]$DependencyCreatedUtc,
+
+        [Nullable[datetime]]$DependencyBaselineUtc,
 
         [Parameter(Mandatory)]
         [datetime]$NowUtc,
@@ -2445,6 +2497,10 @@ function Get-LabRebuildBuildAction {
 
     if (-not $CandidateExists) {
         return 'Build'
+    }
+    if (($null -ne $DependencyCreatedUtc) -and $CandidateHasBaseline -and
+        (-not (Test-LabRebuildBaselinePaired -BaselineUtc $CandidateBaselineUtc -DependencyBaselineUtc $DependencyBaselineUtc))) {
+        return 'Replace'
     }
     $builtAfterDependency = ($null -ne $DependencyCreatedUtc) -and (Test-LabRebuildBuiltAfter -CreatedUtc $CandidateCreatedUtc -DependencyCreatedUtc ([datetime]$DependencyCreatedUtc))
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
@@ -2924,7 +2980,8 @@ function Get-LabRunStatusDescription {
 # host/Invoke-LabRebuild.ps1 (and by a fake in the tests). The adapter is a hashtable of script blocks:
 #
 #   GetVm         { param($Name) }                 -> $null, or an object with Name, State ('Running', 'Off', ...),
-#                                                     Notes, CreatedUtc (datetime) and HasBaseline (bool)
+#                                                     Notes, CreatedUtc (datetime), HasBaseline (bool) and
+#                                                     BaselineCreatedUtc (datetime, or $null without a baseline)
 #   StopVm        { param($Name) }                 shut the VM down (turn it off if it will not stop)
 #   RestoreVm     { param($Name, $Checkpoint) }    apply the checkpoint, start the VM, wait until it answers
 #   RenameVm      { param($Name, $NewName) }
@@ -3028,14 +3085,17 @@ function Invoke-LabRebuildRole {
         'Build' {
             $createdUtc = [datetime]::MinValue
             $hasBaseline = $false
+            $baselineUtc = $null
             if ($null -ne $candidate) {
                 $createdUtc = [datetime]$candidate.CreatedUtc
                 $hasBaseline = [bool]$candidate.HasBaseline
+                $baselineUtc = Get-LabRebuildBaselineUtc -Vm $candidate
             }
 
             # An AD FS server joins its domain controller's candidate, so that must be built first. Checked before
             # anything is stopped, so a wrong order changes nothing.
             $dependencyCreatedUtc = $null
+            $dependencyBaselineUtc = $null
             if (-not [string]::IsNullOrEmpty($Role.DependsOn)) {
                 $dependencyName = Get-LabRebuildVmName -LiveName $Role.DependsOn -Kind Candidate
                 $dependency = & $Adapter.GetVm $dependencyName
@@ -3044,10 +3104,12 @@ function Invoke-LabRebuildRole {
                     throw "'$dependencyName' is not built yet; build $($Role.DependsOn) before $($Role.LiveName), which joins its domain."
                 }
                 $dependencyCreatedUtc = [datetime]$dependency.CreatedUtc
+                $dependencyBaselineUtc = Get-LabRebuildBaselineUtc -Vm $dependency
             }
 
             $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
-                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh `
+                -CandidateHasBaseline $hasBaseline -CandidateBaselineUtc $baselineUtc -DependencyCreatedUtc $dependencyCreatedUtc `
+                -DependencyBaselineUtc $dependencyBaselineUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh `
                 -DirectoryHoldsServer:($Role.Kind -eq 'ExchangeServer')
             if ($action -eq 'Refuse') {
                 throw "'$($Role.CandidateName)' is finished, and '$dependencyName''s baseline holds its Exchange server, so a new one cannot be installed against it. Build $($Role.DependsOn) again first (-Fresh), then $($Role.LiveName)."

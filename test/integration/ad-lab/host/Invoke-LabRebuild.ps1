@@ -39,7 +39,9 @@
     An Exchange server in settings.json exchangeServers (exchange-primary) is rebuilt last, the same way, by
     New-LabExchangeServer.ps1 from the forests' Exchange media. It is off at rest, so Stage and Rollback revert it to
     its baseline and leave it off. A finished Exchange candidate is never rebuilt on its own: its domain controller
-    candidate's baseline holds its server object, so that domain controller is built again first.
+    candidate's baseline holds its server object, so that domain controller is built again first. The exception is a
+    domain controller baseline older than the server's, left by a build that stopped between the two checkpoints:
+    that baseline never held the server, so Build builds the server again, and Stage and Promote refuse the pair.
 
     Each domain controller is built with the live one's own address (its checkpoints carry the address, so it cannot be
     changed afterwards). The live VM is therefore OFF from the start of Build until Promote or Rollback; the workflow
@@ -238,13 +240,18 @@ function Get-RebuildAdapter {
                 return $null
             }
             $vm = $found[0]
-            $baseline = @(Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue).Count -gt 0
+            $baselines = @(Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue)
+            $baselineUtc = $null
+            if ($baselines.Count -gt 0) {
+                $baselineUtc = ([datetime]($baselines | Sort-Object -Property CreationTime -Descending | Select-Object -First 1).CreationTime).ToUniversalTime()
+            }
             return [pscustomobject]@{
-                Name        = [string]$vm.Name
-                State       = [string]$vm.State
-                Notes       = [string]$vm.Notes
-                CreatedUtc  = ([datetime]$vm.CreationTime).ToUniversalTime()
-                HasBaseline = $baseline
+                Name               = [string]$vm.Name
+                State              = [string]$vm.State
+                Notes              = [string]$vm.Notes
+                CreatedUtc         = ([datetime]$vm.CreationTime).ToUniversalTime()
+                HasBaseline        = ($baselines.Count -gt 0)
+                BaselineCreatedUtc = $baselineUtc
             }
         }
 
