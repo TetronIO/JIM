@@ -95,12 +95,19 @@
         (Primary) retakes Description, restoring the inherited end-state.
 
     11. PriorityReorderPropagation - Description's priority is reordered to Secondary=1/Primary=2.
-        Delta Synchronisation of both systems, with no staged import changes, leaves Dave's
-        Description untouched (apply-only propagation: Delta Synchronisation with nothing modified
-        since the last sync processes no Connected System Objects at all). A Full Synchronisation
-        (Secondary) then re-resolves every joined object against the new order, handing Dave's
-        Description to Secondary. The order is restored to Primary=1/Secondary=2 and a Full
-        Synchronisation (Primary) retakes it, restoring the inherited end-state.
+        The reorder changes which import rule wins for the objects of both rules it renumbers, so
+        each system's inetOrgPerson Object Type is recorded as awaiting synchronisation (#2615),
+        against that system's own import rule, read back from each Connected System's
+        ConfigurationDrift. A Delta Synchronisation of each system, with no staged import changes,
+        claims its change and processes every inetOrgPerson object: Primary's run leaves Dave's
+        (S14-3) Description on Primary (a run re-evaluates only its own system's contributions, and
+        Primary still owns the value), and Secondary's run hands it to Secondary, which now outranks
+        Primary. Each run leaves nothing awaiting on its system. The order is then restored to
+        Primary=1/Secondary=2, which records both systems again; a Full Synchronisation (Primary)
+        retakes Description and a Delta Synchronisation (Secondary) applies Secondary's change, so
+        later steps inherit the same end-state with nothing awaiting synchronisation on either
+        system. Anything an earlier step left awaiting is applied first, so the counts are this
+        step's own.
 
     12. OutOfScopeNoOpinion - Erin's (S14-4) Primary entry is excluded from the Primary import
         Synchronisation Rule's scope via a Scoping Criteria Group (employeeNumber NotEquals
@@ -1839,7 +1846,7 @@ userPassword: Test@123!
     # Test 11: PriorityReorderPropagation
     # ========================================================================
     if ($Step -eq "PriorityReorderPropagation" -or $Step -eq "All") {
-        Write-TestSection "Test 11: Priority Reorder Propagation (Description: Secondary=1/Primary=2; apply-only, Delta Synchronisation no-ops, Full Synchronisation re-resolves)"
+        Write-TestSection "Test 11: Priority Reorder Propagation (Description: Secondary=1/Primary=2; awaiting synchronisation on both systems, Delta Synchronisation applies it)"
 
         $reorderSuccess = $true
         $reorderNotes = @()
@@ -1859,6 +1866,59 @@ userPassword: Test@123!
                 throw "Could not resolve the 'Description' Metaverse attribute and/or 'User' Metaverse Object Type."
             }
 
+            $primaryDeltaSync = $primaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+            $secondaryDeltaSync = $secondaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+            if (-not $primaryDeltaSync -or -not $secondaryDeltaSync) {
+                throw "Could not resolve 'Delta Synchronisation' Run Profiles. Ensure Setup-Scenario-014.ps1 completed successfully."
+            }
+
+            # The Object Types a Connected System's next synchronisation, Delta or Full, will process in full because
+            # of configuration changes saved since it last did so (#2615): one entry per Object Type.
+            function Get-Scenario14AwaitingSynchronisation {
+                param([Parameter(Mandatory=$true)] [int]$ConnectedSystemId)
+                return @((Get-JIMConnectedSystem -Id $ConnectedSystemId).configurationDrift.awaitingSynchronisation | Where-Object { $_ })
+            }
+
+            # What a reorder must leave on a system: its inetOrgPerson Object Type awaiting synchronisation, with one
+            # change behind it, recorded against that system's own import Synchronisation Rule.
+            function Assert-Scenario14ReorderAwaiting {
+                param(
+                    [Parameter(Mandatory=$true)] $System,
+                    [Parameter(Mandatory=$true)] [string]$ImportRuleName,
+                    [Parameter(Mandatory=$true)] [string]$Label
+                )
+                $awaiting = @(Get-Scenario14AwaitingSynchronisation -ConnectedSystemId $System.id)
+                Assert-Equal -Expected 1 -Actual $awaiting.Count -Message "$Label leaves one Object Type awaiting synchronisation on '$($System.name)'"
+                Assert-Equal -Expected "inetOrgPerson" -Actual $awaiting[0].objectTypeName -Message "$Label leaves inetOrgPerson awaiting synchronisation on '$($System.name)'"
+                Assert-Equal -Expected 1 -Actual $awaiting[0].changeCount -Message "$Label leaves one change behind inetOrgPerson on '$($System.name)'"
+                $reason = "$(@($awaiting[0].changes)[0].reason)"
+                Assert-Condition -Condition ($reason.StartsWith("${ImportRuleName}:", [System.StringComparison]::Ordinal)) -Message "The change awaiting synchronisation on '$($System.name)' is recorded against '$ImportRuleName' ($reason)"
+            }
+
+            function Assert-Scenario14NothingAwaiting {
+                param(
+                    [Parameter(Mandatory=$true)] $System,
+                    [Parameter(Mandatory=$true)] [string]$Label
+                )
+                $awaiting = @(Get-Scenario14AwaitingSynchronisation -ConnectedSystemId $System.id)
+                Assert-Equal -Expected 0 -Actual $awaiting.Count -Message "$Label leaves nothing awaiting synchronisation on '$($System.name)'"
+            }
+
+            # What a Delta Synchronisation that applied the reorder must show: with no staged import changes, the claimed
+            # change is the only reason it processed anything, so its Activity names inetOrgPerson as processed in full
+            # and the change as applied.
+            function Assert-Scenario14DeltaClaimedReorder {
+                param(
+                    [Parameter(Mandatory=$true)] [string]$ActivityId,
+                    [Parameter(Mandatory=$true)] [string]$Label
+                )
+                $activity = Get-JIMActivity -Id $ActivityId
+                $inFull = @($activity.configurationChangeSynchronisations | Where-Object { $_ })
+                Assert-Equal -Expected 1 -Actual $inFull.Count -Message "$Label processed one Object Type in full"
+                Assert-Equal -Expected "inetOrgPerson" -Actual $inFull[0].objectTypeName -Message "$Label processed inetOrgPerson in full"
+                Assert-Condition -Condition ($inFull[0].isApplied -eq $true) -Message "$Label applied the configuration change it claimed"
+            }
+
             $priorityBefore = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id
             $contributorsBefore = @($priorityBefore.contributors)
             $primaryMapping = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $primarySystemName }
@@ -1869,6 +1929,30 @@ userPassword: Test@123!
             if ($primaryMapping.priority -ne 1 -or $secondaryMapping.priority -ne 2) {
                 throw "Expected the inherited Primary=1/Secondary=2 order for 'Description' at the start of this step; found Primary=$($primaryMapping.priority), Secondary=$($secondaryMapping.priority). A prior step may not have restored its own configuration mutation."
             }
+
+            # Baseline: nothing awaiting synchronisation on either system, so what the reorder records below is this
+            # step's alone. An earlier step can leave a change waiting: RemovedMappingRecall (Test 10b) restores its own
+            # order with a reorder, which records BOTH systems, and synchronises Primary only. A Delta Synchronisation
+            # applies whatever is waiting; at the inherited Primary=1/Secondary=2 order it changes no value.
+            foreach ($baselineSystem in @(
+                @{ System = $primarySystem; DeltaSync = $primaryDeltaSync },
+                @{ System = $secondarySystem; DeltaSync = $secondaryDeltaSync }
+            )) {
+                $leftover = @(Get-Scenario14AwaitingSynchronisation -ConnectedSystemId $baselineSystem.System.id)
+                if ($leftover.Count -gt 0) {
+                    $leftoverReasons = @($leftover | ForEach-Object { @($_.changes) | ForEach-Object { $_.reason } }) -join "; "
+                    Write-Host "Applying the configuration change(s) an earlier step left awaiting synchronisation on '$($baselineSystem.System.name)' ($leftoverReasons)..." -ForegroundColor Yellow
+                    $baselineResult = Start-JIMRunProfile -ConnectedSystemId $baselineSystem.System.id -RunProfileId $baselineSystem.DeltaSync.id -Wait -PassThru
+                    Assert-ActivitySuccess -ActivityId $baselineResult.activityId -Name "Delta Synchronisation ($($baselineSystem.System.name)) applying changes an earlier step left awaiting synchronisation"
+                    $reorderNotes += "Baseline: applied the change(s) an earlier step left awaiting synchronisation on '$($baselineSystem.System.name)' ($leftoverReasons)"
+                }
+                Assert-Scenario14NothingAwaiting -System $baselineSystem.System -Label "Baseline"
+            }
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (baseline: Primary wins at the inherited Primary=1/Secondary=2 order)"
 
             # Reorder: Secondary=1, Primary=2. Set-JIMMetaverseAttributePriority's -MappingId array order
             # IS the priority order (highest first), exactly as Setup-Scenario-014.ps1 Step 10 and the
@@ -1886,61 +1970,64 @@ userPassword: Test@123!
             }
             Write-Host "  OK 'Description' reordered to Secondary=1, Primary=2 and verified via read-back" -ForegroundColor Green
 
-            # (a) Apply-only propagation (engineering/plans/done/ATTRIBUTE_PRIORITY.md, "Configuration
-            # Change Propagation"): changing priority configuration does not itself initiate
-            # synchronisation. SyncDeltaSyncTaskProcessor.cs:49-74 computes the delta watermark from
-            # ConnectedSystem.LastSyncCompletedAt and, when GetConnectedSystemObjectModifiedSinceCountAsync
-            # returns zero, completes immediately without processing a single Connected System Object ("No
-            # CSOs modified since last sync. Completing immediately."). No LDAP data has changed since the
-            # last Full Import/Full Synchronisation of either system in this step, so both Delta
-            # Synchronisations below touch nothing, leaving Dave's Description exactly as it was (Primary's
-            # value, Primary provenance) despite the reorder.
-            $primaryDeltaSync = $primaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
-            $secondaryDeltaSync = $secondaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
-            if (-not $primaryDeltaSync -or -not $secondaryDeltaSync) {
-                throw "Could not resolve 'Delta Synchronisation' Run Profiles. Ensure Setup-Scenario-014.ps1 completed successfully."
-            }
+            # (a) The reorder is recorded as awaiting synchronisation on BOTH systems (#2615). It renumbers both
+            # contributors (Primary 1 -> 2, Secondary 2 -> 1), which changes which import rule wins Description for the
+            # objects of each rule it touches, so ConnectedSystemServer records each affected rule's Object Type: Primary's
+            # inetOrgPerson against Primary's import rule, Secondary's inetOrgPerson against Secondary's. Nothing has run
+            # yet, so Dave's Description is still Primary's.
+            Assert-Scenario14ReorderAwaiting -System $primarySystem -ImportRuleName $primaryImportRuleName -Label "The reorder"
+            Assert-Scenario14ReorderAwaiting -System $secondarySystem -ImportRuleName $secondaryImportRuleName -Label "The reorder"
 
+            # (b) Delta Synchronisation (Primary), with no staged import changes, claims Primary's change and processes
+            # every Primary inetOrgPerson object. Dave's Description stays Primary's: a run re-evaluates only its own
+            # system's contributions, and the priority gate always lets a rule keep the value it already owns, so the
+            # hand-over to the new winner waits for the winner's own system to synchronise. Secondary's change is
+            # untouched by Primary's run.
             Write-Host "Running Delta Synchronisation (Primary) with no staged import changes..." -ForegroundColor Gray
             $deltaPrimaryResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryDeltaSync.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $deltaPrimaryResult.activityId -Name "Delta Synchronisation (Primary) after reordering 'Description'"
-
-            Write-Host "Running Delta Synchronisation (Secondary) with no staged import changes..." -ForegroundColor Gray
-            $deltaSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryDeltaSync.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $deltaSecondaryResult.activityId -Name "Delta Synchronisation (Secondary) after reordering 'Description'"
+            Assert-Scenario14DeltaClaimedReorder -ActivityId $deltaPrimaryResult.activityId -Label "Delta Synchronisation (Primary) after the reorder"
+            Assert-Scenario14NothingAwaiting -System $primarySystem -Label "Delta Synchronisation (Primary) after the reorder"
+            Assert-Scenario14ReorderAwaiting -System $secondarySystem -ImportRuleName $secondaryImportRuleName -Label "Delta Synchronisation (Primary) after the reorder"
 
             Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
                 -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
                 -ExpectedContributingSyncRuleName $primaryImportRuleName `
-                -Name "Dave's Description (unchanged: Delta Synchronisation with no staged import changes processes no Connected System Objects, apply-only)"
+                -Name "Dave's Description (after Delta Synchronisation (Primary): Primary keeps the value it owns until Secondary synchronises)"
+
+            # (c) Delta Synchronisation (Secondary), again with no staged import changes, claims Secondary's change and
+            # processes every Secondary inetOrgPerson object. Secondary now outranks the incumbent Primary (priority 1
+            # vs 2), so Dave's Description hands over to Secondary in this run: the point at which it first changes.
+            Write-Host "Running Delta Synchronisation (Secondary) with no staged import changes..." -ForegroundColor Gray
+            $deltaSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryDeltaSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $deltaSecondaryResult.activityId -Name "Delta Synchronisation (Secondary) after reordering 'Description'"
+            Assert-Scenario14DeltaClaimedReorder -ActivityId $deltaSecondaryResult.activityId -Label "Delta Synchronisation (Secondary) after the reorder"
+            Assert-Scenario14NothingAwaiting -System $secondarySystem -Label "Delta Synchronisation (Secondary) after the reorder"
+            Assert-Scenario14NothingAwaiting -System $primarySystem -Label "Delta Synchronisation (Secondary) after the reorder"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Dave's Description (Delta Synchronisation (Secondary) applies the reorder: Secondary now wins)"
 
             Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
                 -ExpectedValue "Coordinator (Primary)" `
                 -ExpectedContributingSyncRuleName $primaryImportRuleName `
                 -Name "Dave's Job Title (control: only Description's priority was reordered)"
 
-            # (b) Full Synchronisation re-resolves every joined object against the new configuration.
-            # Secondary now outranks Primary for Description (priority 1 vs 2), so Full Synchronisation
-            # (Secondary) re-evaluating Secondary's own mapping via ProcessInboundAttributeFlow flips
-            # Dave's Description over.
-            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
-            $fullSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
-            Assert-ActivitySuccess -ActivityId $fullSecondaryResult.activityId -Name "Full Synchronisation (Secondary) after reordering 'Description'"
-
-            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
-                -ExpectedValue "Secondary-sourced description for Dave Dixon (S14)" `
-                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
-                -Name "Dave's Description (Full Synchronisation re-resolves to the new priority order: Secondary now wins)"
-
             # Blast radius: reordering Description's priority affects every joined object's Description,
             # not just Dave's. Frank's and Grace's Primary-sourced Description also hand over to Secondary
-            # during this window (Carol's and Erin's are already Secondary-sourced since Phase B/C and see
-            # no change; Alice/Bob have no Primary CSO and are likewise unaffected). Job Title, Manager and
+            # during this window (Carol's and Erin's are already Secondary-sourced or absent since Phase B/C and
+            # see no change; Alice/Bob have no Primary CSO and are likewise unaffected). Job Title, Manager and
             # Other Telephones are untouched throughout, since only Description's priority order changed.
-            $reorderNotes += "Reordering 'Description' to Secondary=1/Primary=2 had no effect until a Full Synchronisation ran (apply-only): Delta Synchronisation with no staged changes left Dave's Description on Primary, Full Synchronisation (Secondary) flipped it to Secondary (Frank and Grace's Description likewise handed to Secondary; not asserted individually here)"
+            $reorderNotes += "Reordering 'Description' to Secondary=1/Primary=2 left inetOrgPerson awaiting synchronisation on both systems; Delta Synchronisation (Primary), with no staged changes, applied Primary's change and left Dave's Description on Primary, and Delta Synchronisation (Secondary) applied Secondary's and handed it to Secondary, leaving nothing awaiting (Frank and Grace's Description likewise handed to Secondary; not asserted individually here)"
 
-            # Restore Primary=1/Secondary=2 and Full Synchronisation (Primary) so the inherited end-state
-            # for any later phase is unchanged by this step.
+            # Restore Primary=1/Secondary=2 so the inherited end-state for any later phase is unchanged by this
+            # step. The restore is a reorder too, so it records both systems again, and both are synchronised:
+            # Full Synchronisation (Primary) claims Primary's change (a Full Synchronisation applies a change awaiting
+            # synchronisation exactly as a Delta Synchronisation does) and retakes Description, then Delta
+            # Synchronisation (Secondary) applies Secondary's. Later steps therefore inherit nothing awaiting
+            # synchronisation on either system, so no later synchronisation processes a type in full because of it.
             Write-Host "Restoring 'Description' priority: Primary=1, Secondary=2..." -ForegroundColor Gray
             Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id `
                 -MappingId @($primaryMapping.mappingId, $secondaryMapping.mappingId) | Out-Null
@@ -1954,16 +2041,32 @@ userPassword: Test@123!
             }
             Write-Host "  OK 'Description' restored to Primary=1, Secondary=2 and verified via read-back" -ForegroundColor Green
 
+            Assert-Scenario14ReorderAwaiting -System $primarySystem -ImportRuleName $primaryImportRuleName -Label "The restoring reorder"
+            Assert-Scenario14ReorderAwaiting -System $secondarySystem -ImportRuleName $secondaryImportRuleName -Label "The restoring reorder"
+
             Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
             $fullPrimaryResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $fullPrimaryResult.activityId -Name "Full Synchronisation (Primary) after restoring 'Description' priority"
+            Assert-Scenario14NothingAwaiting -System $primarySystem -Label "Full Synchronisation (Primary) after the restore"
 
             Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
                 -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
                 -ExpectedContributingSyncRuleName $primaryImportRuleName `
-                -Name "Dave's Description (priority order restored, Full Synchronisation retakes Primary)"
+                -Name "Dave's Description (priority order restored, Full Synchronisation (Primary) retakes Primary)"
 
-            $reorderNotes += "Restored Primary=1/Secondary=2 for 'Description' and ran Full Synchronisation (Primary); Dave's Description (and Frank/Grace's, per the same blast radius) returned to Primary's value"
+            Write-Host "Running Delta Synchronisation (Secondary) to apply the restore's change..." -ForegroundColor Gray
+            $restoreSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryDeltaSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $restoreSecondaryResult.activityId -Name "Delta Synchronisation (Secondary) after restoring 'Description' priority"
+            Assert-Scenario14DeltaClaimedReorder -ActivityId $restoreSecondaryResult.activityId -Label "Delta Synchronisation (Secondary) after the restore"
+            Assert-Scenario14NothingAwaiting -System $secondarySystem -Label "Delta Synchronisation (Secondary) after the restore"
+            Assert-Scenario14NothingAwaiting -System $primarySystem -Label "Delta Synchronisation (Secondary) after the restore"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (Delta Synchronisation (Secondary) after the restore: Secondary, now priority 2, does not take it back)"
+
+            $reorderNotes += "Restored Primary=1/Secondary=2 for 'Description', which was recorded on both systems again; Full Synchronisation (Primary) applied Primary's change and returned Dave's Description (and Frank/Grace's, per the same blast radius) to Primary's value, and Delta Synchronisation (Secondary) applied Secondary's, leaving nothing awaiting synchronisation on either system"
         }
         catch {
             $reorderSuccess = $false
