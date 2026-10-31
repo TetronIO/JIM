@@ -1222,8 +1222,10 @@ Describe 'Stop-LabVm' {
 Describe 'Wait-LabCheckpoint' {
     BeforeAll {
         if (-not (Get-Command Get-VMSnapshot -ErrorAction SilentlyContinue)) {
+            # Advanced, as the cmdlet is, so that -ErrorVariable captures what the mock writes.
             function global:Get-VMSnapshot {
                 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                [CmdletBinding()]
                 param([string]$VMName, [string]$Name)
             }
         }
