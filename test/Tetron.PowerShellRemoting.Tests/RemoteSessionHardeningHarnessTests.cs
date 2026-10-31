@@ -53,6 +53,7 @@ public class RemoteSessionHardeningHarnessTests
             {
                 Assert.That(ps.InvocationStateInfo.State, Is.EqualTo(PSInvocationState.Stopped));
                 Assert.That(ended, Is.InstanceOf<PipelineStoppedException>().Or.InstanceOf<RemoteException>());
+                Assert.That(RemoteFailure.FromException(ended!, ps.InvocationStateInfo.State).Kind, Is.EqualTo(RemoteFailureKind.Stopped));
                 Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(15)));
             }
         }
