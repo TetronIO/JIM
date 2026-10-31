@@ -85,7 +85,7 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
                     Type = new ConnectedSystemObjectType { Id = 1, Name = "User" },
                     Status = ConnectedSystemObjectStatus.Normal,
                     Created = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                    AttributeValues = values
+                    AttributeValues = new(values)
                 },
                 AttributeValueTotalCounts = totalCounts ?? values
                     .GroupBy(v => v.Attribute.Name)

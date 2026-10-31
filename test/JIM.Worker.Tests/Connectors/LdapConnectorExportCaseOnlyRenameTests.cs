@@ -131,7 +131,7 @@ public class LdapConnectorExportCaseOnlyRenameTests
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
                 AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = dnAttribute.Id, Attribute = dnAttribute, StringValue = currentDn }]
             },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
 
         var settings = new List<ConnectedSystemSettingValue>

@@ -1150,7 +1150,7 @@ public class DriftDetectionService
                 ChangeType = PendingExportChangeType.Update,
                 Status = PendingExportStatus.Pending,
                 SourceMetaverseObjectId = mvo.Id,
-                AttributeValueChanges = attributeChanges,
+                AttributeValueChanges = new(attributeChanges),
                 CreatedAt = DateTime.UtcNow,
                 HasUnresolvedReferences = hasUnresolvedReferences
             };

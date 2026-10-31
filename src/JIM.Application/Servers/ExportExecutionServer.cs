@@ -3941,7 +3941,7 @@ public class ExportExecutionServer
     /// A shallow copy of a Pending Export carrying a different set of attribute changes and sharing
     /// everything else (the Connected System Object included) with the original.
     /// </summary>
-    private static PendingExport WithChanges(PendingExport pendingExport, List<PendingExportAttributeValueChange> changes) => new()
+    private static PendingExport WithChanges(PendingExport pendingExport, IEnumerable<PendingExportAttributeValueChange> changes) => new()
     {
         Id = pendingExport.Id,
         ConnectedSystem = pendingExport.ConnectedSystem,
@@ -3962,7 +3962,7 @@ public class ExportExecutionServer
         ProvisioningSyncRuleId = pendingExport.ProvisioningSyncRuleId,
         InitialPasswordFollows = pendingExport.InitialPasswordFollows,
         CreatedAt = pendingExport.CreatedAt,
-        AttributeValueChanges = changes
+        AttributeValueChanges = new(changes)
     };
 
     /// <summary>

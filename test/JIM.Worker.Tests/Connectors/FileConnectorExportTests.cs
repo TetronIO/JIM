@@ -109,7 +109,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -218,7 +218,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -522,7 +522,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
                     new() { Id = Guid.NewGuid(), Attribute = ageAttr, AttributeId = ageAttr.Id, IntValue = 42 }
@@ -605,7 +605,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
                     new() { Id = Guid.NewGuid(), Attribute = activeAttr, AttributeId = activeAttr.Id, BoolValue = true }
@@ -641,7 +641,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
                     new() { Id = Guid.NewGuid(), Attribute = photoAttr, AttributeId = photoAttr.Id, ByteValue = photoBytes }
@@ -690,7 +690,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Update,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+                AttributeValueChanges = new()
             }
         };
 
@@ -727,7 +727,7 @@ public class FileConnectorExportTests
             Id = Guid.NewGuid(),
             Type = objectType,
             ExternalIdAttributeId = externalIdAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -754,7 +754,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Update,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+                AttributeValueChanges = new()
             }
         };
 
@@ -788,7 +788,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
                     new() { Id = Guid.NewGuid(), Attribute = hiredAtAttr, AttributeId = hiredAtAttr.Id, DateTimeValue = hiredDate }
@@ -834,7 +834,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Update,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -925,7 +925,7 @@ public class FileConnectorExportTests
             Id = Guid.NewGuid(),
             Type = objectType,
             ExternalIdAttributeId = externalIdAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -949,7 +949,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Update,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -1032,7 +1032,7 @@ public class FileConnectorExportTests
             Id = Guid.NewGuid(),
             Type = objectType,
             ExternalIdAttributeId = externalIdAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -1070,7 +1070,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -1114,7 +1114,7 @@ public class FileConnectorExportTests
             {
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Create,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
                     new() { Id = Guid.NewGuid(), Attribute = salaryAttr, AttributeId = salaryAttr.Id, DecimalValue = salary }
@@ -1145,7 +1145,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Update,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -1172,7 +1172,7 @@ public class FileConnectorExportTests
                 Id = Guid.NewGuid(),
                 ChangeType = PendingExportChangeType.Delete,
                 ConnectedSystemObject = cso,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+                AttributeValueChanges = new()
             }
         };
     }

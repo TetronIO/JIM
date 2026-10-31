@@ -1081,7 +1081,7 @@ public class ImportUpdateObjectMvaTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        user.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        user.AttributeValues = new()
         {
             new()
             {
@@ -1109,7 +1109,7 @@ public class ImportUpdateObjectMvaTests
             Type = groupObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.GROUP_UID
         };
-        group.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        group.AttributeValues = new()
         {
             new()
             {
@@ -1207,7 +1207,7 @@ public class ImportUpdateObjectMvaTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new()
             {
@@ -1249,7 +1249,7 @@ public class ImportUpdateObjectMvaTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso2.AttributeValues = new()
         {
             new()
             {
@@ -1291,7 +1291,7 @@ public class ImportUpdateObjectMvaTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso3.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso3.AttributeValues = new()
         {
             new()
             {
@@ -1333,7 +1333,7 @@ public class ImportUpdateObjectMvaTests
             Type = groupObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.GROUP_UID
         };
-        cso4.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso4.AttributeValues = new()
         {
             new()
             {

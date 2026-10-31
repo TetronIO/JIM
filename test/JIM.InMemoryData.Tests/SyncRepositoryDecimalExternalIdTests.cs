@@ -40,7 +40,7 @@ public class SyncRepositoryDecimalExternalIdTests
             TypeId = ObjectTypeId,
             ExternalIdAttributeId = AttrId,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {

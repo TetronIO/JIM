@@ -166,7 +166,7 @@ public class PartialExportUnresolvedReferencesTests
             ChangeType = changeType,
             CreatedAt = DateTime.UtcNow,
             HasUnresolvedReferences = changes.Any(c => c.UnresolvedReferenceValue != null),
-            AttributeValueChanges = changes.ToList()
+            AttributeValueChanges = new(changes)
         };
         foreach (var change in export.AttributeValueChanges)
             change.PendingExportId = export.Id;

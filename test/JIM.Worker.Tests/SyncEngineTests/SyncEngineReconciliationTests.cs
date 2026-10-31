@@ -1210,7 +1210,7 @@ public class SyncEngineReconciliationTests
             });
         }
 
-        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = changes };
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = new(changes) };
         var result = new PendingExportReconciliationResult();
 
         _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
@@ -1245,7 +1245,7 @@ public class SyncEngineReconciliationTests
             });
         }
 
-        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = changes };
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = new(changes) };
         var result = new PendingExportReconciliationResult();
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();

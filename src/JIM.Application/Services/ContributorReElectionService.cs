@@ -10,6 +10,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -105,7 +106,7 @@ public static class ContributorReElectionService
         // Each survivor as it was found before its first re-flow (one contributing through two rules is met twice), for
         // a caller that must leave the survivors as it found them.
         var survivorsAsFound = leaveSurvivorsAsFound
-            ? new Dictionary<Guid, (ConnectedSystemObject Survivor, MetaverseObject? MetaverseObject, List<ConnectedSystemObjectAttributeValue> AttributeValues, ConnectedSystemObjectType Type)>()
+            ? new Dictionary<Guid, (ConnectedSystemObject Survivor, MetaverseObject? MetaverseObject, ReferenceIndexedList<ConnectedSystemObjectAttributeValue> AttributeValues, ConnectedSystemObjectType Type)>()
             : null;
         try
         {

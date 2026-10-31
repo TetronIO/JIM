@@ -158,7 +158,7 @@ public class MetaverseRepositoryPendingDeletionListTests
             Type = type,
             LastConnectorDisconnectedDate = DateTime.UtcNow.AddDays(-1),
             ConnectedSystemObjects = new List<ConnectedSystemObject>(),
-            AttributeValues = new List<MetaverseObjectAttributeValue>()
+            AttributeValues = new()
         };
     }
 }

@@ -356,13 +356,13 @@ public class ActiveDirectoryExportProbeTests
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
                 AttributeValues = [new ConnectedSystemObjectAttributeValue { AttributeId = dnAttribute.Id, StringValue = groupDn }]
             },
-            AttributeValueChanges = changes.Select(change => new PendingExportAttributeValueChange
+            AttributeValueChanges = new(changes.Select(change => new PendingExportAttributeValueChange
             {
                 Attribute = memberAttribute,
                 AttributeId = memberAttribute.Id,
                 ChangeType = change.ChangeType,
                 UnresolvedReferenceValue = change.MemberDn
-            }).ToList()
+            }))
         };
     }
 }

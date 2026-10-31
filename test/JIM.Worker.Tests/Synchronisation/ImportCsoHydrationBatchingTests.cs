@@ -280,7 +280,7 @@ public class ImportCsoHydrationBatchingTests
                 Type = connectedSystemObjectType,
                 ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
             };
-            cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            cso.AttributeValues = new()
             {
                 new()
                 {

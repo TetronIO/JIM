@@ -165,7 +165,7 @@ public class ActivityRunProfileExecutionItemSnapshotTests
         {
             ExternalIdAttributeId = externalIdAttrId,
             Type = objectTypeName != null ? new ConnectedSystemObjectType { Name = objectTypeName } : null!,
-            AttributeValues = attributeValues
+            AttributeValues = new(attributeValues)
         };
     }
 

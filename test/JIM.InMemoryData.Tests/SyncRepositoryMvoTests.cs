@@ -29,7 +29,7 @@ public class SyncRepositoryMvoTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, StringValue = "john" }
             }
@@ -47,7 +47,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "john" }
             }
@@ -57,7 +57,7 @@ public class SyncRepositoryMvoTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, StringValue = "john" }
             }
@@ -76,7 +76,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "john" }
             }
@@ -85,7 +85,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "john" }
             }
@@ -96,7 +96,7 @@ public class SyncRepositoryMvoTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, StringValue = "john" }
             }
@@ -115,7 +115,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "JOHN" }
             }
@@ -125,7 +125,7 @@ public class SyncRepositoryMvoTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, StringValue = "john" }
             }
@@ -143,7 +143,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "JOHN" }
             }
@@ -153,7 +153,7 @@ public class SyncRepositoryMvoTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, StringValue = "john" }
             }
@@ -217,7 +217,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, StringValue = "test" }
             }
@@ -229,7 +229,7 @@ public class SyncRepositoryMvoTests
         // Verify deleted by trying to match — should not find it
         var cso = new ConnectedSystemObject
         {
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { AttributeId = 1, StringValue = "test" }
             }
@@ -253,7 +253,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 6 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id },
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = survivor.Id }
@@ -286,7 +286,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 6 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValue = member }
             }
@@ -308,7 +308,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 6 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id, StringValue = "payload" }
             }
@@ -332,7 +332,7 @@ public class SyncRepositoryMvoTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 6 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id },
                 new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, NullValue = true }

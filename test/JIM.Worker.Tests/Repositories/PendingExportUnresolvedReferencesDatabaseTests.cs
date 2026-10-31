@@ -114,7 +114,7 @@ public class PendingExportUnresolvedReferencesDatabaseTests
             Status = status,
             HasUnresolvedReferences = hasUnresolvedReferences,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {

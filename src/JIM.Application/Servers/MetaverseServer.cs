@@ -1529,8 +1529,8 @@ public partial class MetaverseServer
     /// </summary>
     internal async Task CreateMetaverseObjectChangeAsync(
         MetaverseObject metaverseObject,
-        List<MetaverseObjectAttributeValue> additions,
-        List<MetaverseObjectAttributeValue> removals,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> additions,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> removals,
         ActivityInitiatorType initiatedByType = ActivityInitiatorType.NotSet,
         Guid? initiatedById = null,
         string? initiatedByName = null,

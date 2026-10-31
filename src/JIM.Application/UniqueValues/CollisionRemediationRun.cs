@@ -499,7 +499,7 @@ internal sealed class CollisionRemediationRun
             ConnectedSystemId = account.ConnectedSystemId,
             MetaverseObjectId = metaverseObjectId,
             MetaverseObject = metaverseObject,
-            AttributeValues = account.AttributeValues.Count > 0 ? account.AttributeValues : await repository.GetCsoAttributeValuesByCsoIdsAsync([account.Id])
+            AttributeValues = account.AttributeValues.Count > 0 ? account.AttributeValues : new(await repository.GetCsoAttributeValuesByCsoIdsAsync([account.Id]))
         };
 
         var refused = attribution.ThroughDerivation && attribution.CarryingChange != null ? CarriedValue(attribution.CarryingChange) : null;

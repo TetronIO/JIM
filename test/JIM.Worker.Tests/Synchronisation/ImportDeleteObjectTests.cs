@@ -112,7 +112,7 @@ public class ImportDeleteObjectTests
             Type = connectedSystemObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new()
             {
@@ -161,7 +161,7 @@ public class ImportDeleteObjectTests
             Type = connectedSystemObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso2.AttributeValues = new()
         {
             new()
             {
@@ -303,7 +303,7 @@ public class ImportDeleteObjectTests
             Status = ConnectedSystemObjectStatus.Normal,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new()
             {
@@ -455,7 +455,7 @@ public class ImportDeleteObjectTests
             Status = ConnectedSystemObjectStatus.Obsolete,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new()
             {
@@ -570,7 +570,7 @@ public class ImportDeleteObjectTests
                 Status = heldStatus.Value,
                 ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
             };
-            held.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            held.AttributeValues = new()
             {
                 new()
                 {

@@ -545,7 +545,7 @@ public class MetaverseControllerObjectsTests
         {
             Id = id,
             Type = new MetaverseObjectType { Id = 1, Name = "User" },
-            AttributeValues = new List<MetaverseObjectAttributeValue>()
+            AttributeValues = new()
         };
         _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(mvo);
 

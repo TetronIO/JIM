@@ -3087,7 +3087,7 @@ public class SyncImportTaskProcessor
     internal static void ReleaseHydratedAttributeValues(IEnumerable<ConnectedSystemObject> csoBatch)
     {
         foreach (var cso in csoBatch)
-            cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+            cso.AttributeValues = new();
     }
 
     /// <summary>

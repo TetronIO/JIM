@@ -120,7 +120,7 @@ public class MetaverseServerAttributePaginationTests
             {
                 Id = mvoId,
                 Type = new MetaverseObjectType { Id = 1, Name = "User" },
-                AttributeValues = new List<MetaverseObjectAttributeValue>()
+                AttributeValues = new()
             },
             AttributeValueTotalCounts = new Dictionary<string, int>
             {

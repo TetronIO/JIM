@@ -594,7 +594,7 @@ public class CsoDetailAndPaginationTests
             Status = ConnectedSystemObjectStatus.Normal,
             JoinType = ConnectedSystemObjectJoinType.NotJoined,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {

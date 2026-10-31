@@ -51,7 +51,7 @@ public class SyncRepositoryDecimalMatchingTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, DecimalValue = 5.00m }
             }
@@ -61,7 +61,7 @@ public class SyncRepositoryDecimalMatchingTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 5.0m }
             }
@@ -81,7 +81,7 @@ public class SyncRepositoryDecimalMatchingTests
         {
             Id = Guid.NewGuid(),
             Type = new MetaverseObjectType { Id = 5 },
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, DecimalValue = 5.01m }
             }
@@ -91,7 +91,7 @@ public class SyncRepositoryDecimalMatchingTests
         var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 1, DecimalValue = 5.0m }
             }
@@ -111,7 +111,7 @@ public class SyncRepositoryDecimalMatchingTests
         {
             Id = Guid.NewGuid(),
             Type = mvoType,
-            AttributeValues = new List<MetaverseObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = 10, DecimalValue = 10.50m }
             }
@@ -154,7 +154,7 @@ public class SyncRepositoryDecimalMatchingTests
             ConnectedSystemId = 1,
             TypeId = 2,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), AttributeId = attribute.Id, Attribute = attribute, DecimalValue = salary }
             }
