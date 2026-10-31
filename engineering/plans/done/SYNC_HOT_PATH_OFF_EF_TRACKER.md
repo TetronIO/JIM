@@ -1,6 +1,7 @@
 # Synchronisation Hot Path Off EF Core's Change Tracker
 
-- **Status:** Doing (Phases 0 to 4 complete; Phases 1 to 3 measured at scale, Phase 4 awaiting it)
+- **Status:** Done
+- **Note:** Phase 5 measured at Scale500k25kGroups rather than Scale750k40kGroups: the available host cannot give Docker the memory 750k needs. The remaining large-group costs are separate issues: [#2645](https://github.com/TetronIO/JIM/issues/2645) (export evaluation's no-net-change check) and the linear bulk writes.
 - **Issue:** [#2598](https://github.com/TetronIO/JIM/issues/2598)
 - **Last Updated:** 2026-10-31
 
@@ -83,9 +84,9 @@ The target side was the unknown, and it is not the join: the target's objects we
 - A guard test: after a page flush, the context tracks no Metaverse Object or attribute value.
 - Target: the source side's two slowest pages lose 211 s and 136 s.
 
-**As delivered (2026-10-29):** the bulk create leaves the objects it writes untracked. Change detection is already off for the whole page flush, so the only code that still needed the new objects tracked was two saves that walk object graphs, where a tracked new object stopped the walk. Both are now raw SQL. `DeleteMetaverseObjectsAsync` was EF's `RemoveRange` on a detached deletion candidate. Through the candidate's reference values that reached a same-page new object, then saved that object's reference to the deleted one, a row the reference cleanup had already removed, and threw `DbUpdateConcurrencyException`; a `RequiresPostgres` test reproduces it. It is now a raw `DELETE`, followed by a pass over the tracker driven by the model's foreign keys, which detaches cascade children and records set-null keys as persisted. The per-object deletion fallback's `Update(mvo)` became a one-column write, and the sync repository's `UpdateMetaverseObjectAsync`, which had no other caller, is gone. The guard test asserts nothing is tracked after a create. Full solution tests pass, as do Scenarios 008 and 032 at Medium on OpenLDAP. Not yet measured at scale.
+**As delivered (2026-10-29):** the bulk create leaves the objects it writes untracked. Change detection is already off for the whole page flush, so the only code that still needed the new objects tracked was two saves that walk object graphs, where a tracked new object stopped the walk. Both are now raw SQL. `DeleteMetaverseObjectsAsync` was EF's `RemoveRange` on a detached deletion candidate. Through the candidate's reference values that reached a same-page new object, then saved that object's reference to the deleted one, a row the reference cleanup had already removed, and threw `DbUpdateConcurrencyException`; a `RequiresPostgres` test reproduces it. It is now a raw `DELETE`, followed by a pass over the tracker driven by the model's foreign keys, which detaches cascade children and records set-null keys as persisted. The per-object deletion fallback's `Update(mvo)` became a one-column write, and the sync repository's `UpdateMetaverseObjectAsync`, which had no other caller, is gone. The guard test asserts nothing is tracked after a create. Full solution tests pass, as do Scenarios 008 and 032 at Medium on OpenLDAP. Measured at scale in Phase 5.
 
-### Phase 2: Load a page's Metaverse Objects untracked
+### Phase 2: Load a page's Metaverse Objects untracked ✅
 
 - Replace the tracked `Include` in `LoadMetaverseObjectsForCsosAsync` with a raw SQL read into untracked objects, navigations assigned explicitly, and move whatever later saves those objects through EF (`UpdateMetaverseObjectsAsync` relies on them being tracked, per the method's own comment) to raw set-based writes in the same phase. Phase 1's guard test extends to cover it.
 - Tests: `RequiresPostgres` round trip asserting every field and navigation the engine reads from a loaded Metaverse Object, on a `NoTracking` context.
@@ -98,12 +99,12 @@ The target side was the unknown, and it is not the join: the target's objects we
 - **Last-connector detection counts the database**, not the object's in-memory connectors, which hold only the connectors the page happened to load.
 - **The Full Synchronisation and Synchronised Deprovisioning previews walk on their own context** (`ISyncRepository.OpenIsolatedScope`, guarded like the rest of the preview path). Their caller saves progress on the shared context during the walk with change detection on, and the page's untracked objects would otherwise ride along. The isolated context also keeps the preview's rollback-only transaction off the caller's own writes.
 
-### Phase 3: The Pending Export snapshot's referenced objects
+### Phase 3: The Pending Export snapshot's referenced objects ✅
 
 - `SnapshotPendingExportChangesAsync` loads the target system's object for every referenced member through `GetConnectedSystemObjectsByMetaverseObjectIdsAsync` (14.8 s for one group). The snapshot needs only each object's identifiers for display, so replace the load with a raw SQL Summary-tier read of those identifiers.
 - Target: under 1 s for the largest group.
 
-**As delivered (2026-10-30):** the snapshot reads only the identifiers, through `GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync`. That is raw SQL that picks each object type's name attributes and the object's two external ids, then looks up exactly those values through `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`, so a referenced group's member values are never read. Each object is rebuilt from those values alone and named by the model's own rule (`NameOrId`, else the object's id), and a `RequiresPostgres` test holds the result equal to `GetCsoDisplayIdentifier` on the fully loaded object across every naming shape. `ExportChangeHistoryBuilder` now takes the identifiers rather than the objects, so the end-of-page snapshot resolution and Synchronisation Rule deletion recall use the same read, and the provisioning objects not yet written are named directly instead of through detached copies. The portal's unresolved-reference detail keeps the full load, since it classifies by anchor. Not yet measured at scale.
+**As delivered (2026-10-30):** the snapshot reads only the identifiers, through `GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync`. That is raw SQL that picks each object type's name attributes and the object's two external ids, then looks up exactly those values through `IX_ConnectedSystemObjectAttributeValues_CsoId_AttributeId`, so a referenced group's member values are never read. Each object is rebuilt from those values alone and named by the model's own rule (`NameOrId`, else the object's id), and a `RequiresPostgres` test holds the result equal to `GetCsoDisplayIdentifier` on the fully loaded object across every naming shape. `ExportChangeHistoryBuilder` now takes the identifiers rather than the objects, so the end-of-page snapshot resolution and Synchronisation Rule deletion recall use the same read, and the provisioning objects not yet written are named directly instead of through detached copies. The portal's unresolved-reference detail keeps the full load, since it classifies by anchor. Measured at scale in Phase 5.
 
 ### Phase 4: A large group's own page load ✅
 
@@ -136,9 +137,33 @@ Linear now, at roughly 23 µs per value against 0.15 µs to read the row, which 
 
 Tests: `ReferenceIndexedListTests` checks list behaviour at both sizes and a 20,000-step random sequence against a plain list searched by reference. `LargeValueCollectionLoadDatabaseTests` loads each of the three collections twice on one tracking context (and the Connected System Object's values once more through fix-up) and requires every value once, tracked once and unchanged; EF relies on the collection's answer to avoid adding an entity twice, and with that answer broken all four fail. `ValueCollectionNavigationTypeTests` fails if any navigation onto a value entity is a list again; it failed on the previous code, naming all three.
 
-### Phase 5: Scale verification
+### Phase 5: Scale verification ✅
 
 - Scale750k40kGroups, both sides, against the baseline above; peak Worker memory no worse than 25.9 GiB.
+
+**As delivered (2026-10-31):** measured at Scale500k25kGroups instead, on OpenLDAP, because the available host cannot give Docker the memory 750k needs. Two runs of Scenario 008, both passing every step: one after Phases 1 to 3 (30 October, `a5407873d`) and one after Phase 4 (31 October, `dac0b373a`). Neither run had an `AttachToTracker` span, a `DbUpdateConcurrencyException`, a tracking conflict or an `ERR`/`FTL` line. After Phases 1 to 3, the slowest Metaverse Object page load (`Cso.LoadMetaverseObjects`, Phase 2) was 1.1 s, against 154 s at 750k on 28 October. The slowest snapshot read (`Snapshot.LoadReferencedObjects`, Phase 3) was 2.0 s, for a 500,000-member group, against a 1 s target and 14.8 s before.
+
+| Measurement | After Phases 1 to 3 | After Phase 4 |
+|---|---|---|
+| Slowest page load (`Cso.Page.LoadWithAttributeValues`) | 72 s (527,000 values) | 6.1 s (591,000 values) |
+| Delta Synchronisation page loads, Target (`LoadModifiedCsoPage`, total) | 169 s | 30.1 s (22 pages, slowest 6.6 s) |
+| Source Full Synchronisation | 1,522.5 s | 1,454.4 s |
+| Target Full Synchronisation (join) | 76.0 s | 82.0 s |
+| Target Full Synchronisation (confirming) | 318.2 s | 168.3 s |
+| Target Delta Synchronisation (confirming) | 224.6 s | 78.7 s |
+| Whole scenario | 2 h 05 m | 1 h 32 m |
+| Peak Worker memory | about 17 GiB, in the Target's confirming import | 17.5 GiB, same place |
+
+Against the success criteria below:
+
+- **Slowest group page:** not met at 500k. The slowest whole pages took 51 s, 45 s and 33 s, against 266 s at 750k on 28 October. The 51 s page is a Delta Synchronisation's single page, almost all of it the export no-net-change check (#2645). The 45 s and 33 s pages are the Source Full Synchronisation's largest groups, where the page load is now 6.1 s and 3.7 s and the rest is the page's own writes. The tracker attach is gone from every breakdown line.
+- **Nothing tracked after a page flush:** met. The Phase 1 guard test asserts it, and Phase 2's tests extend it to the page's Metaverse Objects.
+- **Target side at least 30% faster:** met for the confirming synchronisations: the Full Synchronisation is 47% faster and the Delta Synchronisation 65% faster than after Phases 1 to 3. The joining Full Synchronisation did not change; its objects were provisioned by JIM and already joined, so no match ran and nothing in this plan applied to it.
+- **Scenario outcomes unchanged:** met. Scenarios 008 and 032 passed at Medium on OpenLDAP after every phase, and Scenario 008 passed at 500k after Phases 3 and 4.
+
+The 28 October 750k baseline is not directly comparable at 500k, so it isn't in the table. Worker memory during synchronisation stays near 3 GiB; the peak belongs to the import, which this plan did not touch.
+
+What now dominates a large group's synchronisation is outside this plan. In the Source Full Synchronisation it is linear bulk writing: in the 30 October breakdown, creating Metaverse Objects took 225 s and writing execution items 247 s. In a Delta Synchronisation it is the export no-net-change check, which is quadratic in a group's membership (50 s for one 50,000-member group, [#2645](https://github.com/TetronIO/JIM/issues/2645)).
 
 ## Success Criteria
 
