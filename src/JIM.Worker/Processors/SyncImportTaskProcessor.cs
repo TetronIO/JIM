@@ -4095,14 +4095,7 @@ public class SyncImportTaskProcessor
                     }
 
                     case AttributeDataType.Binary:
-                        // find values on the cso of type byte array that aren't on the imported object and remove them first
-                        var missingByteArrayAttributeValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.ByteValue != null && !importedObjectAttribute.ByteValues.Any(i => Utilities.Utilities.AreByteArraysTheSame(i, av.ByteValue))).ToList();
-                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingByteArrayAttributeValues);
-
-                        // find imported values of type byte array that aren't on the cso and add them
-                        var newByteArrayValues = importedObjectAttribute.ByteValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.ByteValue != null && Utilities.Utilities.AreByteArraysTheSame(sv, av.ByteValue))).ToList();
-                        foreach (var newByteArrayValue in newByteArrayValues)
-                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
+                        StageBinaryValueChanges(connectedSystemObject, csoAttribute, importedObjectAttribute.ByteValues);
                         break;
 
                     case AttributeDataType.Reference:
@@ -4313,6 +4306,39 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// Stages the changes that make a Binary attribute of a Connected System Object hold what the import holds: a removal
+    /// for each held row of the attribute whose bytes no imported value has, then an addition for each imported value
+    /// whose bytes no such row has. Values are compared by content; equal bytes in distinct arrays are one value.
+    /// </summary>
+    /// <remarks>
+    /// Each side is looked up in a set of the other's values keyed by their bytes, which equates exactly the arrays
+    /// <c>AreByteArraysTheSame</c> does, rather than scanned for each of its values: Binary was the one data type #988
+    /// left diffing pairwise, so a large multi-valued attribute cost its size times the import's (#2666). Duplicates and
+    /// order are each side's own: a held row is removed once per occurrence, and an imported value added once per
+    /// occurrence the object does not hold, a null one included, as no held row's bytes equal it.
+    /// </remarks>
+    internal static void StageBinaryValueChanges(
+        ConnectedSystemObject connectedSystemObject,
+        ConnectedSystemObjectTypeAttribute csoAttribute,
+        List<byte[]> importedByteValues)
+    {
+        var csoByteAttrValues = connectedSystemObject.AttributeValues
+            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.ByteValue != null)
+            .ToList();
+        var importByteSet = new HashSet<byte[]>(importedByteValues, ByteArrayContentComparer.Instance);
+
+        // find values on the cso of type byte array that aren't on the imported object and remove them first
+        var missingByteArrayAttributeValues = csoByteAttrValues.Where(av => !importByteSet.Contains(av.ByteValue!)).ToList();
+        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingByteArrayAttributeValues);
+
+        // find imported values of type byte array that aren't on the cso and add them
+        var csoByteSet = csoByteAttrValues.Select(av => av.ByteValue!).ToHashSet(ByteArrayContentComparer.Instance);
+        var newByteArrayValues = importedByteValues.Where(bv => !csoByteSet.Contains(bv)).ToList();
+        foreach (var newByteArrayValue in newByteArrayValues)
+            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, ByteValue = newByteArrayValue });
+    }
+
+    /// <summary>
     /// Removes what an attribute holds under a data type it no longer has (#2128). A schema refresh can redefine an
     /// attribute whose Connected System Objects already hold values (Active Directory's Enumeration attributes were
     /// discovered as Boolean, and are Number), and it keeps the attribute, so those values stay in the column the old type
@@ -4451,7 +4477,10 @@ public class SyncImportTaskProcessor
             var originalBinaryCount = attr.ByteValues.Count;
             if (originalBinaryCount > 1)
             {
-                var uniqueBinaries = attr.ByteValues.Distinct(ByteArrayEqualityComparer.Instance).ToList();
+                // Keyed by every byte (#2666): the comparer this replaced hashed only the length and the first and last
+                // bytes, so values of one encoding sharing those (a Security Identifier's last byte is almost always
+                // zero) all collided, and de-duplicating them compared every pair.
+                var uniqueBinaries = attr.ByteValues.Distinct(ByteArrayContentComparer.Instance).ToList();
                 if (uniqueBinaries.Count < originalBinaryCount)
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate binary value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
@@ -4463,32 +4492,6 @@ public class SyncImportTaskProcessor
             }
 
             // Note: DateTime and Boolean are single-valued by nature, no deduplication needed
-        }
-    }
-
-    /// <summary>
-    /// Comparer for byte arrays that compares by content rather than reference.
-    /// </summary>
-    private sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
-    {
-        public static readonly ByteArrayEqualityComparer Instance = new();
-
-        public bool Equals(byte[]? x, byte[]? y)
-        {
-            if (ReferenceEquals(x, y)) return true;
-            if (x == null || y == null) return false;
-            if (x.Length != y.Length) return false;
-            return x.SequenceEqual(y);
-        }
-
-        public int GetHashCode(byte[] obj)
-        {
-            if (obj == null) return 0;
-            // Use a simple hash combining the length and first/last bytes
-            var hash = obj.Length;
-            if (obj.Length > 0) hash = (hash * 31) + obj[0];
-            if (obj.Length > 1) hash = (hash * 31) + obj[^1];
-            return hash;
         }
     }
 
