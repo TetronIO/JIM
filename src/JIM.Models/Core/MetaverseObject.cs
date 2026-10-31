@@ -166,8 +166,11 @@ public class MetaverseObject
     /// <summary>
     /// Used by JIM.Application to determine what attribute values need removing and change-tracking.
     /// </summary>
+    // Not a List: Attribute Flow and contributor re-election ask of every value an object holds whether it is pending
+    // removal, and a group whose membership is replaced wholesale has a removal pending for each member, so scanning a
+    // List for each answer cost the membership times the removals (#2664). See ReferenceIndexedList.
     [NotMapped]
-    public List<MetaverseObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
+    public ReferenceIndexedList<MetaverseObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
 
     /// <summary>
     /// Generated mappings (Unique Value Generation, #242) that won attribute priority for their target attribute

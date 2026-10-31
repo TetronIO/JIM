@@ -6911,18 +6911,19 @@ public partial class ConnectedSystemServer
             connectedSystemObject.AttributeValues.Add(pendingAttributeValueAddition);
         }
 
-        // delete attribute values to be removed and create change (if enabled)
-        foreach (var pendingAttributeValueRemoval in connectedSystemObject.PendingAttributeValueRemovals)
-        {
-            // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
-            // With EF Core, attribute values get DB-generated IDs on SaveChanges. In InMemoryData
-            // or before persistence, they remain Guid.Empty — matching by ID would incorrectly
-            // remove ALL unassigned attribute values, including ones just added above.
-            if (pendingAttributeValueRemoval.Id == Guid.Empty)
-                connectedSystemObject.AttributeValues.Remove(pendingAttributeValueRemoval);
-            else
-                connectedSystemObject.AttributeValues.RemoveAll(av => av.Id == pendingAttributeValueRemoval.Id);
-        }
+        // delete attribute values to be removed, after the additions so a removal can take back a value just added.
+        // A removal carrying an Id removes every value with that Id. One whose Id is Guid.Empty (newly created, not
+        // yet persisted) removes the first occurrence of itself, by reference: with EF Core, attribute values get
+        // DB-generated IDs on SaveChanges, but in InMemoryData or before persistence they remain Guid.Empty, and
+        // matching by ID would incorrectly remove ALL unassigned attribute values, including ones just added above.
+        // Each kind is applied in one pass, not a scan per removal, as a group whose membership is replaced stages a
+        // removal per member (#2664). The two kinds remove disjoint values, so applying one and then the other leaves
+        // what applying each removal in turn did.
+        var pendingRemovals = connectedSystemObject.PendingAttributeValueRemovals;
+        var removedIds = pendingRemovals.Where(r => r.Id != Guid.Empty).Select(r => r.Id).ToHashSet();
+        if (removedIds.Count > 0)
+            connectedSystemObject.AttributeValues.RemoveAll(av => removedIds.Contains(av.Id));
+        connectedSystemObject.AttributeValues.RemoveEach(pendingRemovals.Where(r => r.Id == Guid.Empty));
 
         // Only create change object if tracking is enabled
         if (changeTrackingEnabled)

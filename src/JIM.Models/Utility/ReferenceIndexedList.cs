@@ -111,6 +111,55 @@ public class ReferenceIndexedList<T> : IList<T>, IReadOnlyList<T> where T : clas
         return true;
     }
 
+    /// <summary>
+    /// Removes, for each of <paramref name="items"/> in turn, the first occurrence of it still held, by reference,
+    /// exactly as calling <see cref="Remove"/> for each would, but in one pass over the list. An item named twice
+    /// removes two occurrences, and an item the list does not hold removes nothing.
+    /// </summary>
+    /// <remarks>
+    /// Removing each in turn found every item by a scan, so taking most of a large list's items cost its size times the
+    /// number taken: about 2.5 billion comparisons for a 50,000-member group losing its whole membership (#2664).
+    /// </remarks>
+    /// <returns>The number of items removed.</returns>
+    public int RemoveEach(IEnumerable<T> items)
+    {
+        // How many occurrences of each named item are still to go, by reference. Nulls are counted apart, as a
+        // dictionary cannot key them. Once the list is indexed, an item it does not hold is dropped here, as Remove
+        // answers it.
+        var toRemove = new Dictionary<T, int>(ReferenceEqualityComparer.Instance);
+        var nullsToRemove = 0;
+        foreach (var item in items)
+        {
+            if (item == null)
+                nullsToRemove++;
+            else if (_occurrences == null || _occurrences.ContainsKey(item))
+                toRemove[item] = toRemove.GetValueOrDefault(item) + 1;
+        }
+        if (toRemove.Count == 0 && nullsToRemove == 0)
+            return 0;
+
+        // Walking the list from the front and taking each occurrence while its item still has some to go takes the
+        // first ones, which is what removing each in turn did; everything kept moves up in its order.
+        var kept = 0;
+        for (var i = 0; i < _items.Count; i++)
+        {
+            var item = _items[i];
+            if (!TakeOccurrence(item, toRemove, ref nullsToRemove))
+            {
+                _items[kept++] = item;
+                continue;
+            }
+            if (_occurrences != null)
+                Unindex(item);
+        }
+
+        var removed = _items.Count - kept;
+        _items.RemoveRange(kept, removed);
+        if (_occurrences != null)
+            DropIndexIfSmall();
+        return removed;
+    }
+
     public void RemoveAt(int index)
     {
         var item = _items[index];
@@ -175,6 +224,26 @@ public class ReferenceIndexedList<T> : IList<T>, IReadOnlyList<T> where T : clas
                 return i;
         }
         return -1;
+    }
+
+    // Whether this occurrence of an item is one still to remove, counting it off if it is.
+    private static bool TakeOccurrence(T? item, Dictionary<T, int> toRemove, ref int nullsToRemove)
+    {
+        if (item == null)
+        {
+            if (nullsToRemove == 0)
+                return false;
+            nullsToRemove--;
+            return true;
+        }
+
+        if (!toRemove.TryGetValue(item, out var count))
+            return false;
+        if (count == 1)
+            toRemove.Remove(item);
+        else
+            toRemove[item] = count - 1;
+        return true;
     }
 
     private void IndexIfLarge()
