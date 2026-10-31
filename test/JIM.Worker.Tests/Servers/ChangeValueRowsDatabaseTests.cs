@@ -188,6 +188,16 @@ public class ChangeValueRowsDatabaseTests
     /// object and the name attribute. Matched by attribute name through a join instead, every probe read all of the
     /// referenced object's values (every member, for a group), and a search over a 600,000-member change timed out.
     /// </summary>
+    /// <remarks>
+    /// The test asserts on what the query's predicate allows, not on the planner's cost-based choice (#2646). On tables
+    /// this small a sequential scan costs about the same as an index probe, so which one wins depends on the
+    /// statistics: analysed, the planner reads every name with a sequential scan, and left alone it plans from
+    /// whatever earlier tests left behind, which survives the reset. So the tables are analysed here, pinning the
+    /// statistics to this test's rows, and sequential scans are switched off, so a lookup is read through an index
+    /// wherever its predicate allows one. The setting and the column statistics roll back with the transaction, so the
+    /// pooled connection and the next test see neither; the table sizes ANALYZE records do not, and the next reset
+    /// clears them.
+    /// </remarks>
     [Test]
     public async Task PrepareWindowCommand_SearchText_LooksUpEachReferencedObjectsNameByObjectAndAttributeAsync()
     {
@@ -196,7 +206,20 @@ public class ChangeValueRowsDatabaseTests
         await using var ctx = NewContext();
         var connection = ctx.Database.GetDbConnection();
         await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var plannerConditions = connection.CreateCommand())
+        {
+            plannerConditions.Transaction = transaction;
+            plannerConditions.CommandText = """
+                ANALYZE "ConnectedSystemObjectChangeAttributes", "ConnectedSystemObjectChangeAttributeValues",
+                        "ConnectedSystemAttributes", "ConnectedSystemObjects", "ConnectedSystemObjectAttributeValues";
+                SET LOCAL enable_seqscan = off;
+                """;
+            await plannerConditions.ExecuteNonQueryAsync();
+        }
+
         await using var explain = connection.CreateCommand();
+        explain.Transaction = transaction;
         ChangeValueRowsSql.PrepareWindowCommand(
             explain, ChangeValueRowsSql.ConnectedSystemObject, Query(change.ChangeId, 0, 10) with { SearchText = "bob" }, 0, 10);
         explain.CommandText = "EXPLAIN " + explain.CommandText;
@@ -210,10 +233,12 @@ public class ChangeValueRowsDatabaseTests
 
         var planText = string.Join("\n", plan);
         var objectProbes = plan.Where(line => line.Contains("Index Cond:") && line.Contains("\"ConnectedSystemObjectId\" =")).ToList();
+        var valueReads = plan.Count(line => line.Contains("on \"ConnectedSystemObjectAttributeValues\""));
         using (Assert.EnterMultipleScope())
         {
             Assert.That(objectProbes, Is.Not.Empty, planText);
             Assert.That(objectProbes, Has.All.Contains("\"AttributeId\""), planText);
+            Assert.That(objectProbes, Has.Count.EqualTo(valueReads), "every read of the values is one of those probes\n" + planText);
         }
     }
 
