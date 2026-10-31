@@ -156,7 +156,8 @@ function Test-WebSocketCheck {
     $status = $null | & curl -sS --http1.1 --max-time 5 --noproxy $hostName --cacert $proxyCaPath --resolve "${hostName}:443:$proxyAddress" `
         -o /dev/null -w '%{http_code}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' `
         -H "Sec-WebSocket-Key: $key" "https://$hostName/_blazor?id=$([uri]::EscapeDataString($token))" 2>$null
-    Add-Check 'through the proxy: the portal''s live connection is a WebSocket' ("$status" -eq '101') "HTTP $status, not 101 Switching Protocols"
+    Add-Check 'through the proxy: the portal''s live connection is a WebSocket' ("$status" -eq '101') `
+        $(if ("$status" -ne '101') { "HTTP $status, not 101 Switching Protocols" })
 }
 
 function Test-ClientAddressCheck {

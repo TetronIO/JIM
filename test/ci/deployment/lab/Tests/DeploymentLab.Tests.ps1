@@ -415,6 +415,18 @@ Describe 'Get-LabLoginForm' {
     }
 }
 
+Describe 'Test-LabRedirectRefused' {
+    It 'recognises the identity provider refusing JIM''s callback address' {
+        Test-LabRedirectRefused -Html '<html><body><p id="kc-error-message">Invalid parameter: redirect_uri</p></body></html>' | Should -BeTrue
+        Test-LabRedirectRefused -Html '{"error":"invalid_redirect_uri"}' | Should -BeTrue
+    }
+
+    It 'does not mistake a login page for a refusal' {
+        Test-LabRedirectRefused -Html '<form id="kc-form-login" action="https://idp/login"></form>' | Should -BeFalse
+        Test-LabRedirectRefused -Html '' | Should -BeFalse
+    }
+}
+
 Describe 'Get-LabFormPost' {
     It 'reads the form Keycloak posts back to JIM, whatever the case of its tags' {
         # Keycloak's form_post page writes its tags in upper case.

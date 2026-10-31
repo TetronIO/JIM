@@ -549,6 +549,22 @@ function Get-LabLoginForm {
     }
 }
 
+function Test-LabRedirectRefused {
+    <#
+    .SYNOPSIS
+        Says whether a page is the identity provider refusing the callback address JIM sent it, as it does when JIM
+        sends http:// behind a proxy it does not trust.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [AllowEmptyString()]
+        [string]$Html
+    )
+
+    $Html -match 'Invalid parameter: redirect_uri|invalid_redirect_uri'
+}
+
 function Get-LabFormPost {
     <#
     .SYNOPSIS
@@ -999,7 +1015,11 @@ function Invoke-LabSignIn {
 
         # 1. JIM sends an anonymous visitor to the identity provider.
         $null = & $request -Arguments @('-L', "https://$HostName/")
-        $action = Get-LabLoginForm -Html (Get-Content -Raw $page.FullName)
+        $first = Get-Content -Raw $page.FullName
+        if (Test-LabRedirectRefused -Html $first) {
+            return & $fail "the identity provider refused JIM's redirect URI"
+        }
+        $action = Get-LabLoginForm -Html $first
         if (-not $action) {
             return & $fail 'JIM did not send an anonymous visitor to the identity provider''s login page'
         }
@@ -1017,7 +1037,7 @@ function Invoke-LabSignIn {
         if (Get-LabLoginForm -Html $html) {
             return & $fail 'the identity provider refused the sign-in'
         }
-        if ($html -match 'Invalid parameter: redirect_uri|invalid_redirect_uri') {
+        if (Test-LabRedirectRefused -Html $html) {
             return & $fail "the identity provider refused JIM's redirect URI"
         }
         $code, $url = "$outcome".Split(' ', 2)
@@ -1173,7 +1193,7 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
