@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -275,7 +276,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownOnOneOfSeveralValuePairGroups_NamesWhichOneIsOpen()
+    public async Task Panel_DrillDownOnOneOfSeveralValuePairGroups_NamesWhichOneIsOpenAsync()
     {
         // Value-pair grouping puts several rows on screen that share a transition and a population and differ only
         // in their values. A heading that names the transition alone identifies none of them.
@@ -285,7 +286,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Group(1_650, attributeName: "Email", oldValue: "@contoso.co.uk", newValue: "@fabrikam.co.uk"));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "@contoso.co.uk");
+        await OpenSummaryRowContainingAsync(panel, "@contoso.co.uk");
 
         var heading = panel.Find("[data-testid='jim-preview-drilldown-heading']").TextContent;
         using (Assert.EnterMultipleScope())
@@ -297,7 +298,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownRowsWithDifferentPatterns_LabelsEachOne()
+    public async Task Panel_DrillDownRowsWithDifferentPatterns_LabelsEachOneAsync()
     {
         // A group that collapsed past the value-pair guard carries rows of more than one kind, so the group itself
         // is unlabelled and the rows are where the distinction survives.
@@ -308,14 +309,14 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             Delta("bsmith", "svc-bsmith", PreviewPatternKeys.PrefixAdded));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Email");
+        await OpenSummaryRowContainingAsync(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("Prefix added"), TimeSpan.FromSeconds(2));
 
         Assert.That(panel.Markup, Does.Contain("Email or UPN domain changed"));
     }
 
     [Test]
-    public void Panel_DrillDownRowNamingAConnectedSystemObject_LinksItsNameToTheObject()
+    public async Task Panel_DrillDownRowNamingAConnectedSystemObject_LinksItsNameToTheObjectAsync()
     {
         // The name is the way into the object: an administrator reading "Amelia Sullivan would be removed from the
         // target system" wants to look at Amelia's object before deciding, and a name that is only text sends them
@@ -326,7 +327,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("In scope", "Out of scope", null, connectedSystemId: 5, connectedSystemObjectId: csoId));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        await OpenSummaryRowContainingAsync(panel, "Scoping Criteria");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
         // The name is rendered through ObjectChip, so the CS avatar says which side of the Metaverse the link
@@ -343,7 +344,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownRowNamingAMetaverseObjectOnly_LinksItsNameToTheMetaverseObject()
+    public async Task Panel_DrillDownRowNamingAMetaverseObjectOnly_LinksItsNameToTheMetaverseObjectAsync()
     {
         // A Metaverse Object's page is addressed by its type's plural name, which the stored row does not carry;
         // the panel resolves it from the group's type once, not per row.
@@ -358,7 +359,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("In scope", "Out of scope", null, metaverseObjectId: mvoId));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        await OpenSummaryRowContainingAsync(panel, "Scoping Criteria");
         panel.WaitForState(() => panel.FindAll("a").Any(a => a.TextContent.Contains("Bob Smith", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(2));
 
@@ -371,7 +372,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_AmbiguousDrillDownRow_LinksTheObjectsItWouldFind()
+    public async Task Panel_AmbiguousDrillDownRow_LinksTheObjectsItWouldFindAsync()
     {
         // #2052: an ambiguous row's next question is "which ones?", so the drill-down lists the candidates as links,
         // the first inline and the rest behind "+n more", rather than only saying there were several.
@@ -398,7 +399,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(delta);
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Object Matching");
+        await OpenSummaryRowContainingAsync(panel, "Object Matching");
         panel.WaitForState(() => panel.FindComponents<ObjectChip>().Any(c => c.Instance.Name == "aking"), TimeSpan.FromSeconds(2));
 
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "aking");
@@ -412,7 +413,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_AmbiguousDrillDownRow_LinksAMetaverseObjectCandidateThroughItsTypesPluralName()
+    public async Task Panel_AmbiguousDrillDownRow_LinksAMetaverseObjectCandidateThroughItsTypesPluralNameAsync()
     {
         var metaverseRepository = new Mock<IMetaverseRepository>();
         metaverseRepository
@@ -437,7 +438,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(delta);
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Object Matching");
+        await OpenSummaryRowContainingAsync(panel, "Object Matching");
         panel.WaitForState(() => panel.FindComponents<ObjectChip>().Any(c => c.Instance.Name == "Ada King" && c.Instance.Href != null),
             TimeSpan.FromSeconds(2));
 
@@ -450,7 +451,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownRowNamingBothObjects_LinksToTheConnectedSystemObject()
+    public async Task Panel_DrillDownRowNamingBothObjects_LinksToTheConnectedSystemObjectAsync()
     {
         // A row carrying both ids is an identity and its object in the Connected System the group is about (the
         // target object an export would remove, or the joined object an import would disconnect). That object is
@@ -462,7 +463,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             connectedSystemId: 5, connectedSystemObjectId: csoId, metaverseObjectId: Guid.CreateVersion7()));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Scoping Criteria");
+        await OpenSummaryRowContainingAsync(panel, "Scoping Criteria");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
@@ -474,7 +475,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownRowWithNoObjectIds_ShowsThePlainName()
+    public async Task Panel_DrillDownRowWithNoObjectIds_ShowsThePlainNameAsync()
     {
         // A row that names nothing addressable (a container, or a row from before ids were recorded) has nowhere to
         // point, and a dead link is worse than text.
@@ -483,7 +484,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("bob@contoso.com", "bob@fabrikam.com", null));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Email");
+        await OpenSummaryRowContainingAsync(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
         using (Assert.EnterMultipleScope())
@@ -494,7 +495,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDown_ReadsTheStoredDeltasFromTheFirstPageNotPageZero()
+    public async Task Panel_DrillDown_ReadsTheStoredDeltasFromTheFirstPageNotPageZeroAsync()
     {
         // The object-level rows are stored behind a page-based read while the grid asks for arbitrary windows, so the
         // panel serves a window from the whole pages that cover it. That conversion is 1-based on the way out: a
@@ -505,7 +506,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("bob@contoso.com", "bob@fabrikam.com", PreviewPatternKeys.EmailDomainChanged));
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Email");
+        await OpenSummaryRowContainingAsync(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("bob@fabrikam.com"), TimeSpan.FromSeconds(2));
 
         _previewRepository.Verify(
@@ -517,7 +518,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_DrillDownWithNoStoredDetail_SaysDetailWasNotKeptRatherThanBlamingASearch()
+    public async Task Panel_DrillDownWithNoStoredDetail_SaysDetailWasNotKeptRatherThanBlamingASearchAsync()
     {
         // The two reasons a drill-down is empty mean opposite things: a search that matched nothing is the reader's
         // to undo, while a preview that kept no object-level detail is a property of how the preview was run and has
@@ -527,7 +528,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas();
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Email");
+        await OpenSummaryRowContainingAsync(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("No object-level detail was kept"), TimeSpan.FromSeconds(2));
 
         Assert.That(panel.Markup, Does.Not.Contain("match that search"),
@@ -595,7 +596,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_WithACloseHandler_OffersCloseAndRaisesIt()
+    public async Task Panel_WithACloseHandler_OffersCloseAndRaisesItAsync()
     {
         // The panel does not decide what closing means; the surface that opened it does (the Synchronisation Rule
         // editor forgets the preview, so the save confirmation stops citing it). The panel's part is the affordance.
@@ -607,7 +608,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             .Add(x => x.OnClose, () => closed = true));
         panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
 
-        panel.Find("[data-testid='jim-preview-close']").Click();
+        await panel.Find("[data-testid='jim-preview-close']").ClickAsync();
 
         Assert.That(closed, Is.True);
     }
@@ -780,7 +781,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_WouldNotChangeLine_OpensItsObjects()
+    public async Task Panel_WouldNotChangeLine_OpensItsObjectsAsync()
     {
         GivenPreview(p =>
         {
@@ -791,7 +792,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(Delta("x", "y", null));
 
         var panel = RenderPanel();
-        panel.Find("[data-testid=jim-preview-unchanged-open]").Click();
+        await panel.Find("[data-testid=jim-preview-unchanged-open]").ClickAsync();
 
         panel.WaitForAssertion(() => Assert.That(panel.FindAll("[data-testid=jim-preview-drilldown-heading]"), Has.Count.EqualTo(1),
             "its objects are a drill-down like any group's"));
@@ -832,7 +833,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Panel_ObjectSelectedHandler_IsRaisedForTheDrillDownRowSelected()
+    public async Task Panel_ObjectSelectedHandler_IsRaisedForTheDrillDownRowSelectedAsync()
     {
         // A Full Synchronisation preview opens what the run would do to one object from its row (#1530).
         GivenPreview(Complete);
@@ -845,15 +846,15 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
             .Add(x => x.ActivityId, ActivityId)
             .Add(x => x.OnObjectSelected, d => selected = d));
         panel.WaitForState(() => !panel.Markup.Contains("jim-preview-loading"), TimeSpan.FromSeconds(2));
-        OpenSummaryRowContaining(panel, "Email");
+        await OpenSummaryRowContainingAsync(panel, "Email");
         panel.WaitForState(() => panel.Markup.Contains("new@example.com"), TimeSpan.FromSeconds(2));
-        panel.FindAll("tbody td").First(td => td.TextContent.Contains("new@example.com", StringComparison.Ordinal)).Click();
+        await panel.FindAll("tbody td").First(td => td.TextContent.Contains("new@example.com", StringComparison.Ordinal)).ClickAsync();
 
         Assert.That(selected?.Id, Is.EqualTo(delta.Id));
     }
 
     [Test]
-    public void Panel_ProvisionedRowOfAProjection_LinksTheObjectInThePreviewedSystem()
+    public async Task Panel_ProvisionedRowOfAProjection_LinksTheObjectInThePreviewedSystemAsync()
     {
         // A projected object's provisioning names the object being projected, in the system the preview synchronises:
         // the account in the target system does not exist yet, so the row's system cannot be where the object is.
@@ -873,7 +874,7 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
         GivenDeltas(delta);
 
         var panel = RenderPanel();
-        OpenSummaryRowContaining(panel, "Active Directory");
+        await OpenSummaryRowContainingAsync(panel, "Active Directory");
         panel.WaitForState(() => panel.Markup.Contains("Bob Smith"), TimeSpan.FromSeconds(2));
 
         var chip = panel.FindComponents<ObjectChip>().Single(c => c.Instance.Name == "Bob Smith");
@@ -911,11 +912,11 @@ public class ConfigurationChangePreviewPanelTests : JimComponentTestContext
     /// handler catches the bubbled event.
     /// </para>
     /// </summary>
-    private static void OpenSummaryRowContaining(IRenderedComponent<ConfigurationChangePreviewPanel> panel, string text)
+    private static async Task OpenSummaryRowContainingAsync(IRenderedComponent<ConfigurationChangePreviewPanel> panel, string text)
     {
         var cell = panel.FindAll("tbody td").FirstOrDefault(td => td.TextContent.Contains(text, StringComparison.Ordinal));
         Assert.That(cell, Is.Not.Null, $"no summary row containing \"{text}\" was rendered");
-        cell!.Click();
+        await cell!.ClickAsync();
     }
 
     private static void Complete(ConfigurationChangePreview preview)

@@ -690,6 +690,185 @@ Describe 'Resolve-LabInstallImage' {
     }
 }
 
+Describe 'The install image record (ConvertTo-, Find-, Merge-LabInstallImageRecord)' {
+    BeforeAll {
+        $script:IsoPath = 'C:\media\WindowsServer2025-eval.iso'
+        $script:Written = [datetime]::new(2026, 10, 14, 8, 30, 15, 123, [System.DateTimeKind]::Utc).AddTicks(4567)
+        $script:Image = [pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'; Evaluation = $true }
+        $script:Record = ConvertTo-LabInstallImageRecord -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written -Image $script:Image
+    }
+
+    It 'records the image with the file''s path, length and last write time, the time as UTC round-trip text' {
+        $script:Record.path | Should -Be $script:IsoPath
+        $script:Record.length | Should -Be 8152356864
+        $script:Record.lastWriteTimeUtc | Should -Be '2026-10-14T08:30:15.1234567Z'
+        $script:Record.imageIndex | Should -Be 4
+        $script:Record.imageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $script:Record.evaluation | Should -BeTrue
+    }
+
+    It 'writes a local time as the same instant in UTC' {
+        $local = $script:Written.ToLocalTime()
+        (ConvertTo-LabInstallImageRecord -Path $script:IsoPath -Length 1 -LastWriteTimeUtc $local -Image $script:Image).lastWriteTimeUtc | Should -Be '2026-10-14T08:30:15.1234567Z'
+    }
+
+    It 'finds the image again after a round trip through the file, by path, length and time' {
+        $json = ConvertTo-LabInstallImageRecordJson -Record @($script:Record)
+        $records = @(ConvertFrom-LabInstallImageRecordJson -Json $json)
+        $found = Find-LabInstallImageRecord -Record $records -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written
+        $found.ImageIndex | Should -Be 4
+        $found.ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $found.Evaluation | Should -BeTrue
+    }
+
+    It 'matches the path whatever its case or slashes, as Windows does' {
+        $found = Find-LabInstallImageRecord -Record @($script:Record) -Path 'c:/MEDIA/windowsserver2025-eval.ISO' -Length 8152356864 -LastWriteTimeUtc $script:Written
+        $found.ImageIndex | Should -Be 4
+    }
+
+    It 'does not take replaced media for the recorded file: another length or time finds nothing' {
+        Find-LabInstallImageRecord -Record @($script:Record) -Path $script:IsoPath -Length 8152356865 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+        Find-LabInstallImageRecord -Record @($script:Record) -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written.AddTicks(1) | Should -BeNullOrEmpty
+        Find-LabInstallImageRecord -Record @($script:Record) -Path 'C:\media\other.iso' -Length 8152356864 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+    }
+
+    It 'finds nothing when there are no records' {
+        Find-LabInstallImageRecord -Record @() -Path $script:IsoPath -Length 1 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+        @(ConvertFrom-LabInstallImageRecordJson -Json '').Count | Should -Be 0
+        @(ConvertFrom-LabInstallImageRecordJson -Json '{}').Count | Should -Be 0
+    }
+
+    It 'reads a half-written file as no records, with a warning, so it is recorded again rather than stuck' {
+        @(ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [ { "path": "C:\\media\\Windows' -WarningAction SilentlyContinue).Count | Should -Be 0
+        $null = ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [' -WarningVariable warned -WarningAction SilentlyContinue
+        $warned | Should -Not -BeNullOrEmpty
+    }
+
+    It 'replaces the record of the same media and keeps the records of other media' {
+        $other = ConvertTo-LabInstallImageRecord -Path 'C:\media\other.iso' -Length 1 -LastWriteTimeUtc $script:Written -Image $script:Image
+        $newer = ConvertTo-LabInstallImageRecord -Path 'c:\MEDIA\WindowsServer2025-eval.iso' -Length 2 -LastWriteTimeUtc $script:Written -Image $script:Image
+        $merged = @(Merge-LabInstallImageRecord -Record @($script:Record, $other) -NewRecord $newer)
+        $merged.Count | Should -Be 2
+        @($merged | Where-Object { $_.path -eq 'C:\media\other.iso' }).Count | Should -Be 1
+        @($merged | Where-Object { $_.length -eq 2 }).Count | Should -Be 1
+        @($merged | Where-Object { $_.length -eq 8152356864 }).Count | Should -Be 0
+    }
+
+    It 'keeps the record in media.json, beside settings.json' {
+        Get-LabInstallImageRecordPath -Root 'C:\jim-ad-lab' | Should -Be 'C:\jim-ad-lab\media.json'
+        Get-LabInstallImageRecordPath -Root '/srv/lab/' | Should -Be '/srv/lab/media.json'
+    }
+}
+
+Describe 'Get-LabMediaCapabilitySid' {
+    It 'is the capability SID Hyper-V grants read on the media it attaches' {
+        Get-LabMediaCapabilitySid | Should -Be 'S-1-15-3-1024-2268835264-3721307629-241982045-173645152-1490879176-104643441-2915960892-1612460704'
+    }
+
+    It 'is derived from the capability name vmWorkerProcess, so it is the same on every host' -Skip:(-not $IsWindows) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+public static class LabTestCapabilitySid
+{
+    [DllImport("kernelbase.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool DeriveCapabilitySidsFromName(string name, out IntPtr groupSids, out int groupCount, out IntPtr sids, out int count);
+
+    public static string Derive(string name)
+    {
+        IntPtr groupSids, sids;
+        int groupCount, count;
+        if (!DeriveCapabilitySidsFromName(name, out groupSids, out groupCount, out sids, out count) || count == 0) { return null; }
+        return new SecurityIdentifier(Marshal.ReadIntPtr(sids)).Value;
+    }
+}
+'@
+        [LabTestCapabilitySid]::Derive('vmWorkerProcess') | Should -Be (Get-LabMediaCapabilitySid)
+    }
+}
+
+Describe 'Test-LabAccessRuleGranted' {
+    BeforeAll {
+        $script:Sid = 'S-1-5-21-1-2-3-1001'
+        # FileSystemRights: Modify 0x301BF, Read 0x20089, Synchronize 0x100000. InheritanceFlags: ContainerInherit 1,
+        # ObjectInherit 2. PropagationFlags: InheritOnly 2. AccessControlType: Allow 0, Deny 1.
+        function Get-TestRule {
+            param([string]$Sid = $script:Sid, [long]$Rights = 0x1301BF, [int]$Type = 0, [int]$Inheritance = 3, [int]$Propagation = 0)
+            return [pscustomobject]@{ IdentityReference = $Sid; FileSystemRights = $Rights; AccessControlType = $Type; InheritanceFlags = $Inheritance; PropagationFlags = $Propagation }
+        }
+    }
+
+    It 'is granted by an inheritable Allow rule for the SID that carries every right asked for' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeTrue
+    }
+
+    It 'counts an inherited rule, so a folder beneath a granted one needs nothing of its own' {
+        $rule = Get-TestRule | Add-Member -NotePropertyName IsInherited -NotePropertyValue $true -PassThru
+        Test-LabAccessRuleGranted -Rule @($rule) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeTrue
+    }
+
+    It 'is not granted by fewer rights, another SID, a Deny rule or no rules' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Rights 0x1200A9) -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Sid 'S-1-5-32-545') -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Type 1) -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @() -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+    }
+
+    It 'needs both inheritance flags when asked for an inheritable grant, and none otherwise' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 1) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 0) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 0 -Rights 0x120089) -Sid $script:Sid -Rights 0x20089 | Should -BeTrue
+    }
+
+    It 'ignores an inherit-only rule, which does not apply to the object itself' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 2) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+    }
+
+    It 'does not count a rule that reaches only the direct children as inheritable, since it misses what is deeper' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 1) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+    }
+}
+
+Describe 'Get-LabControlFolder' {
+    BeforeAll {
+        $script:Root = 'C:\vm'
+        $script:Names = @('dc-primary', 'dc-primary-candidate', 'dc-primary-prev', 'exchange-primary', 'exchange-primary-candidate', 'exchange-primary-prev')
+    }
+
+    It 'lists the folder of each lab VM beneath the VHD directory, and each rebuild folder' {
+        $vms = @(
+            [pscustomobject]@{ Name = 'dc-primary'; Path = 'C:\vm\dc-primary' }
+            [pscustomobject]@{ Name = 'exchange-primary'; Path = 'C:\vm\exchange-primary\' }
+        )
+        $folders = @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('dc-primary', 'exchange-primary', 'rebuild-20261111'))
+        $folders | Should -Be @('C:\vm\dc-primary', 'C:\vm\exchange-primary', 'C:\vm\rebuild-20261111')
+    }
+
+    It 'never lists a VM that is not the lab''s, such as the runner, though it shares the VHD directory' {
+        $vms = @([pscustomobject]@{ Name = 'jim-ad-lab-runner'; Path = 'C:\vm\jim-ad-lab-runner' })
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('jim-ad-lab-runner')).Count | Should -Be 0
+    }
+
+    It 'never lists a lab VM whose folder lies outside the VHD directory, or is the directory itself' {
+        $vms = @(
+            [pscustomobject]@{ Name = 'dc-primary'; Path = 'D:\elsewhere\dc-primary' }
+            [pscustomobject]@{ Name = 'dc-primary-prev'; Path = 'C:\vm' }
+        )
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names).Count | Should -Be 0
+    }
+
+    It 'leaves out a folder beneath another listed one, which inherits its grant' {
+        $vms = @([pscustomobject]@{ Name = 'dc-primary'; Path = 'C:\vm\rebuild-20261111\dc-primary-candidate' })
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('rebuild-20261111')) | Should -Be @('C:\vm\rebuild-20261111')
+    }
+
+    It 'only takes rebuild-yyyyMMdd folders from the directory listing' {
+        @(Get-LabControlFolder -Root $script:Root -FolderName $script:Names -Directory @('rebuild-2026', 'rebuild-20261111-old', 'media', 'REBUILD-20261212')) | Should -Be @('C:\vm\REBUILD-20261212')
+    }
+}
+
 Describe 'ConvertFrom-LabDirectoryExtensionSetting' {
     It 'returns nothing when the settings list no extensions, which is a plain forest' {
         @(ConvertFrom-LabDirectoryExtensionSetting -Value $null).Count | Should -Be 0

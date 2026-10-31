@@ -32,7 +32,21 @@
     jim-lab account's environment (see README.md).
 
     Host prerequisites (Hyper-V, OpenSSH, the jim-lab account, the switches) are the host's own concern and live in
-    the ci-runners repository, docs/hyperv-host.md. This script only places JIM's own scripts.
+    the ci-runners repository, docs/hyperv-host.md. Beyond placing JIM's own scripts, this script does the three
+    things the monthly rebuild needs that jim-lab, a Hyper-V administrator and nothing more, is refused (host access).
+    It does them once settings.json exists, and only when elevated, which the hourly update task (SYSTEM) always is:
+
+      - media.json, beside settings.json, records the image the builds install from the Windows media (isoPath), read
+        once per version of the file. Reading it needs Mount-DiskImage and Get-WindowsImage, which refuse jim-lab.
+      - The Windows media and each directoryExtensions media are readable by Hyper-V's worker processes
+        (Get-LabMediaCapabilitySid). VMMS grants that itself when it attaches media, but as its caller, and jim-lab
+        may not change the ACL of media it does not own.
+      - The control account may modify the lab VMs' folders beneath vhdDirectory (Get-LabControlFolder): those of the
+        VMs an administrator built, and the rebuild-yyyyMMdd folders, where VMMS creates the Snapshots folders as
+        SYSTEM. Without it the rebuild cannot delete a removed VM's disk. Never vhdDirectory itself, which may also
+        hold the runner's VM.
+
+    Each grant is left alone once it is there, so the hourly run changes nothing on a host already prepared.
 
 .PARAMETER Destination
     Where the scripts go. Default C:\jim-ad-lab, which is the runner's default JIM_AD_LAB_SCRIPT_ROOT.
@@ -45,6 +59,9 @@
 
 .PARAMETER ModuleRetentionDays
     How long a copy of another version of the module is kept after it was last deployed. Default 7.
+
+.PARAMETER ControlAccount
+    The local account the runner logs in as (JIM_AD_LAB_CONTROL_USER). Default jim-lab.
 
 .EXAMPLE
     .\Install-LabScripts.ps1
@@ -64,10 +81,13 @@ param(
     [switch]$CreateSettings,
 
     [ValidateRange(1, 365)]
-    [int]$ModuleRetentionDays = 7
+    [int]$ModuleRetentionDays = 7,
+
+    [string]$ControlAccount = 'jim-lab'
 )
 
 Import-Module (Join-Path $PSScriptRoot '..' 'guest' 'LabFederationServer.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..' 'guest' 'LabDomainController.psm1') -Force
 
 function Get-LabDeploymentMap {
     <#
@@ -337,6 +357,124 @@ else {
     Write-Host "  settings.json left untouched"
 }
 
+# --- Host access: what the control account is refused, done here (see the description) -------------------------
+Write-Heading 'Host access for the control account'
+$hostAccessFailures = 0
+
+function Invoke-HostAccessStep {
+    # One step, reported on one line; a failure is counted and the next step still runs.
+    param([string]$Name, [scriptblock]$Action)
+    try {
+        $outcome = & $Action
+        Write-Host ('  {0,-14} {1}' -f $outcome, $Name)
+    }
+    catch {
+        $script:hostAccessFailures++
+        Write-Host ('  {0,-14} {1}: {2}' -f 'FAILED', $Name, $_.Exception.Message) -ForegroundColor Red
+    }
+}
+
+$hostSettings = $null
+if (-not (Test-Path -LiteralPath $settingsPath)) {
+    Write-Host '  skipped: no settings.json yet'
+}
+elseif (-not (Test-LabIsWindows)) {
+    Write-Host '  skipped: not a Windows host'
+}
+elseif (-not (Test-LabElevated)) {
+    Write-Host '  skipped: not elevated. The hourly update task (SYSTEM) does this; or run this script from an elevated pwsh.' -ForegroundColor Yellow
+}
+else {
+    try {
+        $hostSettings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        $hostAccessFailures++
+        Write-Host "  FAILED         reading settings.json: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+if ($null -ne $hostSettings) {
+    $isoPath = if ($hostSettings.PSObject.Properties['isoPath']) { [string]$hostSettings.isoPath } else { '' }
+
+    # The control account may modify the lab VMs' folders.
+    $account = Get-LocalUser -Name $ControlAccount -ErrorAction SilentlyContinue
+    $vhdDirectory = if ($hostSettings.PSObject.Properties['vhdDirectory']) { [string]$hostSettings.vhdDirectory } else { '' }
+    if ($null -eq $account) {
+        Write-Host "  skipped        folders: there is no local account '$ControlAccount'"
+    }
+    elseif (-not $vhdDirectory -or -not (Test-Path -LiteralPath $vhdDirectory -PathType Container)) {
+        Write-Host "  skipped        folders: vhdDirectory '$vhdDirectory' does not exist"
+    }
+    else {
+        # Planning is a step of its own, so a setting it cannot read fails only this, not the media steps below.
+        $folders = @()
+        Invoke-HostAccessStep -Name "finding the lab VM folders beneath $vhdDirectory" -Action {
+            $plan = ConvertFrom-LabRebuildSetting -Settings $hostSettings -NamesOnly
+            $folderNames = @($plan.Roles | ForEach-Object { $_.LiveName; $_.CandidateName; $_.PrevName })
+            $vms = @(Get-VM | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Path = $_.Path } })
+            $directories = @(Get-ChildItem -LiteralPath $vhdDirectory -Directory | ForEach-Object { $_.Name })
+            $script:folders = @(Get-LabControlFolder -Root $vhdDirectory -Vm $vms -FolderName $folderNames -Directory $directories)
+            "Found $($script:folders.Count)"
+        }
+        foreach ($folder in $folders) {
+            Invoke-HostAccessStep -Name "$ControlAccount may modify $folder" -Action {
+                Grant-LabFileSystemAccess -Path $folder -Sid $account.SID.Value -Rights Modify -Inheritable
+            }
+        }
+    }
+
+    # Hyper-V's worker processes may read the media. A directoryExtensions entry that fails validation fails only the
+    # extension media, not the Windows media or its record.
+    $media = @()
+    if ($isoPath) { $media += $isoPath }
+    if ($hostSettings.PSObject.Properties['directoryExtensions']) {
+        Invoke-HostAccessStep -Name 'reading directoryExtensions' -Action {
+            $script:media += @(ConvertFrom-LabDirectoryExtensionSetting -Value $hostSettings.directoryExtensions | ForEach-Object { $_.IsoPath })
+            'Read'
+        }
+    }
+    foreach ($file in $media) {
+        if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+            Write-Host "  skipped        VMs may read ${file}: it does not exist"
+            continue
+        }
+        Invoke-HostAccessStep -Name "VMs may read $file" -Action {
+            Grant-LabFileSystemAccess -Path $file -Sid (Get-LabMediaCapabilitySid) -Rights 'Read, Synchronize'
+        }
+    }
+
+    # The image the builds install, recorded once per version of the Windows media.
+    if (-not $isoPath -or -not (Test-Path -LiteralPath $isoPath -PathType Leaf)) {
+        Write-Host "  skipped        the install image: isoPath '$isoPath' does not exist"
+    }
+    else {
+        Invoke-HostAccessStep -Name "the install image of $isoPath, in media.json" -Action {
+            $recordPath = Get-LabInstallImageRecordPath -Root $Destination
+            $records = @()
+            if (Test-Path -LiteralPath $recordPath -PathType Leaf) {
+                $records = @(ConvertFrom-LabInstallImageRecordJson -Json (Get-Content -LiteralPath $recordPath -Raw))
+            }
+            $file = Get-Item -LiteralPath $isoPath
+            if ($null -ne (Find-LabInstallImageRecord -Record $records -Path $file.FullName -Length $file.Length -LastWriteTimeUtc $file.LastWriteTimeUtc)) {
+                return 'AlreadyRecorded'
+            }
+            $image = Get-LabInstallImage -IsoPath $file.FullName
+            $record = ConvertTo-LabInstallImageRecord -Path $file.FullName -Length $file.Length -LastWriteTimeUtc $file.LastWriteTimeUtc -Image $image
+            $json = ConvertTo-LabInstallImageRecordJson -Record @(Merge-LabInstallImageRecord -Record $records -NewRecord $record)
+            # Written beside it, then moved over it, so a build reading it never sees a half-written file.
+            $partial = "$recordPath.tmp"
+            Set-Content -LiteralPath $partial -Value $json -Encoding utf8
+            Move-Item -LiteralPath $partial -Destination $recordPath -Force
+            return "Recorded ($($image.ImageName))"
+        }
+    }
+}
+
 Write-Heading 'Done'
 Write-Host ("  {0} new, {1} updated, {2} unchanged, {3} removed, in {4}" -f $counts['new'], $counts['updated'], $counts['unchanged'], $counts['removed'], $Destination)
 Write-Host "  The runner reaches these through JIM_AD_LAB_SCRIPT_ROOT=$Destination"
+if ($hostAccessFailures -gt 0) {
+    Write-Host "  Host access: $hostAccessFailures step(s) failed; the rebuild may be refused what they would have allowed." -ForegroundColor Red
+    exit 1
+}

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
@@ -140,14 +141,14 @@ public class NavigableMudTabsTests : JimComponentTestContext
     /// thing the URL carries and is stable across readers.
     /// </summary>
     [Test]
-    public void ActivePanelSlugChanged_WhenATabIsClicked_ReportsThatTabsSlug()
+    public async Task ActivePanelSlugChanged_WhenATabIsClicked_ReportsThatTabsSlugAsync()
     {
         var slugs = new List<string?>();
         var cut = Render<NavigableMudTabs>(p => p
             .Add(c => c.ActivePanelSlugChanged, slug => slugs.Add(slug))
             .Add(c => c.ChildContent, Panels("Overview", "Password History")));
 
-        cut.FindAll(".mud-tab")[1].Click();
+        await cut.FindAll(".mud-tab")[1].ClickAsync();
 
         cut.WaitForAssertion(() => Assert.That(slugs, Is.EqualTo(new[] { "password-history" })));
     }

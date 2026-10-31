@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -181,12 +182,12 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_RunFullSynchronisationFromACurrentPreview_QueuesTheRunCitingIt()
+    public async Task FullSyncPreview_RunFullSynchronisationFromACurrentPreview_QueuesTheRunCitingItAsync()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
 
         var cut = RenderHost();
-        cut.Find($"[data-testid='{RunMarker}']").Click();
+        await cut.Find($"[data-testid='{RunMarker}']").ClickAsync();
         cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
 
         using (Assert.EnterMultipleScope())
@@ -198,13 +199,14 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_RunFullSynchronisationFromAStalePreview_AsksFirstNamingWhatOvertookIt()
+    public async Task FullSyncPreview_RunFullSynchronisationFromAStalePreview_AsksFirstNamingWhatOvertookItAsync()
     {
         // Staleness is judged across the whole deployment, so a preview is usually overtaken before anyone acts on it
         // (#2022). The administrator is asked before the run queues, and told what overtook the preview.
         var (provider, cut) = RenderStaleHost();
 
-        cut.Find($"[data-testid='{RunMarker}']").Click();
+        // Not awaited: the Run handler waits for an answer to the question, which this test leaves open
+        _ = cut.Find($"[data-testid='{RunMarker}']").ClickAsync();
         provider.WaitForState(() => provider.FindAll("button").Any(b => b.TextContent.Contains("Run anyway")), TimeSpan.FromSeconds(2));
 
         using (Assert.EnterMultipleScope())
@@ -215,14 +217,16 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_RunAnywayFromAStalePreview_QueuesTheRunCitingIt()
+    public async Task FullSyncPreview_RunAnywayFromAStalePreview_QueuesTheRunCitingItAsync()
     {
         // The run cites the preview its administrator read; the server records that the preview was out of date, rather
         // than the link being dropped and the run reading as though no preview was read at all.
         var (provider, cut) = RenderStaleHost();
 
-        cut.Find($"[data-testid='{RunMarker}']").Click();
-        ClickDialogButton(provider, "Run anyway");
+        // The Run handler waits for the question's answer, so its click completes only once that is given
+        var running = cut.Find($"[data-testid='{RunMarker}']").ClickAsync();
+        await ClickDialogButtonAsync(provider, "Run anyway");
+        await running;
         cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
 
         using (Assert.EnterMultipleScope())
@@ -234,13 +238,15 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_PreviewAgainFromAStalePreview_StartsAPreviewAndQueuesNoRun()
+    public async Task FullSyncPreview_PreviewAgainFromAStalePreview_StartsAPreviewAndQueuesNoRunAsync()
     {
         _starter.Setup(s => s.StartAsync(It.IsAny<ConfigurationChangePreviewRequest>())).ReturnsAsync(Guid.CreateVersion7());
         var (provider, cut) = RenderStaleHost();
 
-        cut.Find($"[data-testid='{RunMarker}']").Click();
-        ClickDialogButton(provider, "Preview again");
+        // The Run handler waits for the question's answer, so its click completes only once that is given
+        var running = cut.Find($"[data-testid='{RunMarker}']").ClickAsync();
+        await ClickDialogButtonAsync(provider, "Preview again");
+        await running;
         cut.WaitForState(() => _starter.Invocations.Count > 0, TimeSpan.FromSeconds(2));
 
         using (Assert.EnterMultipleScope())
@@ -252,13 +258,13 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
     }
 
     [Test]
-    public void FullSyncPreview_RunFullSynchronisationFromACurrentPreview_AsksNothing()
+    public async Task FullSyncPreview_RunFullSynchronisationFromACurrentPreview_AsksNothingAsync()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete);
         var provider = Render<MudBlazor.MudDialogProvider>();
 
         var cut = RenderHost();
-        cut.Find($"[data-testid='{RunMarker}']").Click();
+        await cut.Find($"[data-testid='{RunMarker}']").ClickAsync();
         cut.WaitForState(() => _queuedRun != null, TimeSpan.FromSeconds(2));
 
         Assert.That(provider.FindAll("button").Where(b => b.TextContent.Contains("Run anyway")), Is.Empty);
@@ -275,10 +281,10 @@ public class ConnectedSystemFullSynchronisationPreviewTests : JimComponentTestCo
         return (provider, cut);
     }
 
-    private static void ClickDialogButton(IRenderedComponent<MudBlazor.MudDialogProvider> provider, string text)
+    private static async Task ClickDialogButtonAsync(IRenderedComponent<MudBlazor.MudDialogProvider> provider, string text)
     {
         provider.WaitForState(() => provider.FindAll("button").Any(b => b.TextContent.Contains(text)), TimeSpan.FromSeconds(2));
-        provider.FindAll("button").First(b => b.TextContent.Contains(text)).Click();
+        await provider.FindAll("button").First(b => b.TextContent.Contains(text)).ClickAsync();
     }
 
     [Test]

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -74,7 +75,7 @@ public class ConnectedSystemSchemaAttributeGridTests : JimComponentTestContext
     }
 
     [Test]
-    public void SchemaTab_SelectionSwitch_WritesThroughToTheAttributeSaveWouldPersist()
+    public async Task SchemaTab_SelectionSwitch_WritesThroughToTheAttributeSaveWouldPersistAsync()
     {
         // The grid hands the page a window of rows rather than the whole list, so the switches must still be bound
         // to the object type's own attribute objects: anything else would report a selection the save never sees.
@@ -83,7 +84,7 @@ public class ConnectedSystemSchemaAttributeGridTests : JimComponentTestContext
         var beta = connectedSystem.ObjectTypes!.Single().Attributes.Single(a => a.Name == "beta");
 
         // Rows are sorted by name by default, so the second switch in the grid belongs to "beta".
-        component.FindAll("#schema-attributes-1 input[type=checkbox]")[1].Change(true);
+        await component.FindAll("#schema-attributes-1 input[type=checkbox]")[1].ChangeAsync(true);
 
         Assert.That(beta.Selected, Is.True);
     }
@@ -108,13 +109,13 @@ public class ConnectedSystemSchemaAttributeGridTests : JimComponentTestContext
     }
 
     [Test]
-    public void SchemaTab_SortingByName_ReordersTheWholeMatchSet()
+    public async Task SchemaTab_SortingByName_ReordersTheWholeMatchSetAsync()
     {
         var connectedSystem = ConnectedSystemWithSelectedObjectType();
         var component = RenderSchemaTabOnObjectTypeSubTab(connectedSystem);
 
         // The grid opens sorted by name ascending, so one click on the Name header flips it to descending.
-        ClickSortHeader(component, "Name");
+        await ClickSortHeaderAsync(component, "Name");
 
         component.WaitForAssertion(() =>
         {
@@ -167,10 +168,10 @@ public class ConnectedSystemSchemaAttributeGridTests : JimComponentTestContext
         component.InvokeAsync(() => chipSet.Instance.SelectedValueChanged.InvokeAsync(selectedOnly)).GetAwaiter().GetResult();
     }
 
-    private static void ClickSortHeader(IRenderedComponent<ConnectedSystemSchemaTab> component, string title)
+    private static async Task ClickSortHeaderAsync(IRenderedComponent<ConnectedSystemSchemaTab> component, string title)
     {
         var header = component.FindComponents<VirtualisedSortHeader>().First(h => h.Instance.Title == title);
-        header.Find("span").Click();
+        await header.Find("span").ClickAsync();
     }
 
     /// <summary>

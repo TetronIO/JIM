@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using MudBlazor;
@@ -47,7 +48,7 @@ public class AlertButtonTests : JimComponentTestContext
     }
 
     [Test]
-    public void AlertButton_Clicked_RaisesOnClick()
+    public async Task AlertButton_Clicked_RaisesOnClickAsync()
     {
         var clicked = false;
         var cut = Render<AlertButton>(p => p
@@ -55,7 +56,7 @@ public class AlertButtonTests : JimComponentTestContext
             .Add(c => c.OnClick, () => clicked = true)
             .AddChildContent("Go"));
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
 
         Assert.That(clicked, Is.True);
     }

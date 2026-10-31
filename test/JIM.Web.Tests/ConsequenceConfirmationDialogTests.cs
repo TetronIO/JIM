@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using AngleSharp.Dom;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Models;
 using JIM.Web.Shared;
@@ -57,8 +58,8 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     /// blur). If that attribute is ever dropped, these tests fail with a missing oninput handler,
     /// which is the point.
     /// </summary>
-    private static void TypePhrase(IRenderedComponent<MudDialogProvider> provider, string phrase) =>
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(phrase);
+    private static async Task TypePhraseAsync(IRenderedComponent<MudDialogProvider> provider, string phrase) =>
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync(phrase);
 
     #region Blocking
 
@@ -148,20 +149,20 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_PhraseTypedIncorrectly_DisablesConfirm()
+    public async Task ConsequenceConfirmationDialog_PhraseTypedIncorrectly_DisablesConfirmAsync()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
         {
             { x => x.ConfirmationPhrase, "Payroll" }
         });
 
-        TypePhrase(provider, "Payrol");
+        await TypePhraseAsync(provider, "Payrol");
 
         Assert.That(ConfirmIsDisabled(provider), Is.True);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_PhraseTypedWithWrongCase_DisablesConfirm()
+    public async Task ConsequenceConfirmationDialog_PhraseTypedWithWrongCase_DisablesConfirmAsync()
     {
         // Ordinal comparison: a destructive confirmation should not accept a near miss.
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
@@ -169,26 +170,26 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.ConfirmationPhrase, "Payroll" }
         });
 
-        TypePhrase(provider, "payroll");
+        await TypePhraseAsync(provider, "payroll");
 
         Assert.That(ConfirmIsDisabled(provider), Is.True);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_PhraseTypedExactly_EnablesConfirm()
+    public async Task ConsequenceConfirmationDialog_PhraseTypedExactly_EnablesConfirmAsync()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
         {
             { x => x.ConfirmationPhrase, "Payroll" }
         });
 
-        TypePhrase(provider, "Payroll");
+        await TypePhraseAsync(provider, "Payroll");
 
         Assert.That(ConfirmIsDisabled(provider), Is.False);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_PhraseTypedWithSurroundingWhitespace_EnablesConfirm()
+    public async Task ConsequenceConfirmationDialog_PhraseTypedWithSurroundingWhitespace_EnablesConfirmAsync()
     {
         // Trimmed before comparison: pasting a name often brings whitespace with it, and refusing
         // that is friction without any safety benefit.
@@ -197,7 +198,7 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.ConfirmationPhrase, "Payroll" }
         });
 
-        TypePhrase(provider, "  Payroll  ");
+        await TypePhraseAsync(provider, "  Payroll  ");
 
         Assert.That(ConfirmIsDisabled(provider), Is.False);
     }
@@ -207,7 +208,7 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     #region Confirming
 
     [Test]
-    public void ConsequenceConfirmationDialog_ConfirmClicked_InvokesCallback()
+    public async Task ConsequenceConfirmationDialog_ConfirmClicked_InvokesCallbackAsync()
     {
         var invoked = false;
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
@@ -216,13 +217,13 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => { invoked = true; return Task.FromResult(true); } }
         });
 
-        ConfirmButton(provider).Click();
+        await ConfirmButton(provider).ClickAsync();
 
         Assert.That(invoked, Is.True);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_ConfirmSucceeds_ClosesDialog()
+    public async Task ConsequenceConfirmationDialog_ConfirmSucceeds_ClosesDialogAsync()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
         {
@@ -230,13 +231,13 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => Task.FromResult(true) }
         });
 
-        ConfirmButton(provider).Click();
+        await ConfirmButton(provider).ClickAsync();
 
         Assert.That(provider.FindAll($"[data-testid='{ConfirmButtonMarker}']"), Is.Empty);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_ConfirmFails_KeepsDialogOpen()
+    public async Task ConsequenceConfirmationDialog_ConfirmFails_KeepsDialogOpenAsync()
     {
         // The caller reports failure by returning false; the administrator keeps their context and
         // can retry rather than losing the dialog behind a snackbar.
@@ -246,13 +247,13 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => Task.FromResult(false) }
         });
 
-        ConfirmButton(provider).Click();
+        await ConfirmButton(provider).ClickAsync();
 
         Assert.That(provider.FindAll($"[data-testid='{ConfirmButtonMarker}']"), Is.Not.Empty);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_ConfirmFails_ReenablesConfirmForRetry()
+    public async Task ConsequenceConfirmationDialog_ConfirmFails_ReenablesConfirmForRetryAsync()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
         {
@@ -260,13 +261,13 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => Task.FromResult(false) }
         });
 
-        ConfirmButton(provider).Click();
+        await ConfirmButton(provider).ClickAsync();
 
         Assert.That(ConfirmIsDisabled(provider), Is.False);
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_WhileConfirming_DisablesConfirmToPreventDoubleSubmit()
+    public async Task ConsequenceConfirmationDialog_WhileConfirming_DisablesConfirmToPreventDoubleSubmitAsync()
     {
         var release = new TaskCompletionSource<bool>();
         var callCount = 0;
@@ -276,19 +277,21 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => { callCount++; return release.Task; } }
         });
 
-        ConfirmButton(provider).Click();
+        // Not awaited yet: the click's handler waits on the confirmation task, which is released below
+        var confirming = ConfirmButton(provider).ClickAsync();
 
         // The confirmation is still in flight, so the disabled state holds until the task is released
         // below: waiting for the re-render rather than sampling it once removes the race between the
         // click's render batch and this assertion, without weakening what is being asserted.
         provider.WaitForAssertion(() => Assert.That(ConfirmIsDisabled(provider), Is.True));
         release.SetResult(true);
+        await confirming;
 
         Assert.That(callCount, Is.EqualTo(1));
     }
 
     [Test]
-    public void ConsequenceConfirmationDialog_WhileConfirming_ShowsBusyText()
+    public async Task ConsequenceConfirmationDialog_WhileConfirming_ShowsBusyTextAsync()
     {
         var release = new TaskCompletionSource<bool>();
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
@@ -298,11 +301,12 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.OnConfirmAsync, () => release.Task }
         });
 
-        ConfirmButton(provider).Click();
+        var confirming = ConfirmButton(provider).ClickAsync();
 
         // As above: the busy text stays on screen until the confirmation task is released.
         provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Deleting...")));
         release.SetResult(true);
+        await confirming;
     }
 
     #endregion

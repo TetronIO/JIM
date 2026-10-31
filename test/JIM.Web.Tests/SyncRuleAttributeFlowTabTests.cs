@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -49,7 +50,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void SyncRuleAttributeFlowTab_ExportTargetPicker_RendersTheChosenAttributeAsTextRatherThanItsOption()
+    public async Task SyncRuleAttributeFlowTab_ExportTargetPicker_RendersTheChosenAttributeAsTextRatherThanItsOptionAsync()
     {
         var attribute = new ConnectedSystemObjectTypeAttribute
         {
@@ -59,7 +60,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
             AttributePlurality = AttributePlurality.SingleValued
         };
 
-        var picker = OpenAddDialogAndFindPicker(SyncRuleDirection.Export, attribute, "Assign the value to", "Attribute");
+        var picker = await OpenAddDialogAndFindPickerAsync(SyncRuleDirection.Export, attribute, "Assign the value to", "Attribute");
 
         using (Assert.EnterMultipleScope())
         {
@@ -69,7 +70,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void SyncRuleAttributeFlowTab_ImportSourcePicker_RendersTheChosenAttributeAsTextRatherThanItsOption()
+    public async Task SyncRuleAttributeFlowTab_ImportSourcePicker_RendersTheChosenAttributeAsTextRatherThanItsOptionAsync()
     {
         // The import-side sibling. Its options carry no chip today, but it is the same picker over the same
         // attributes and its label should read the same as the export target's and the Metaverse pickers'.
@@ -81,7 +82,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
             AttributePlurality = AttributePlurality.MultiValued
         };
 
-        var picker = OpenAddDialogAndFindPicker(SyncRuleDirection.Import, attribute, "Connected System Attribute", "Attribute");
+        var picker = await OpenAddDialogAndFindPickerAsync(SyncRuleDirection.Import, attribute, "Connected System Attribute", "Attribute");
 
         using (Assert.EnterMultipleScope())
         {
@@ -98,7 +99,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
     /// renders inside the dialog provider rather than inside the tab; the provider is what is searched, and the
     /// tab is only clicked.
     /// </summary>
-    private MudSelect<ConnectedSystemObjectTypeAttribute> OpenAddDialogAndFindPicker(
+    private async Task<MudSelect<ConnectedSystemObjectTypeAttribute>> OpenAddDialogAndFindPickerAsync(
         SyncRuleDirection direction, ConnectedSystemObjectTypeAttribute attribute, string label, string sourceType)
     {
         var sourceAttribute = new MetaverseAttribute
@@ -112,7 +113,7 @@ public class SyncRuleAttributeFlowTabTests : JimComponentTestContext
         var provider = Render<MudDialogProvider>();
         var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, BuildRule(direction, attribute, sourceAttribute)));
 
-        tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).Click();
+        await tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<MudSelect<string>>(), Is.True));
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");

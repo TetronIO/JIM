@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -304,7 +305,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
         var cut = Render<OperationsCompletedSection>(p => p.Add(c => c.ToggleRequested, () => toggled = true));
         cut.WaitForAssertion(() => Assert.That(cut.FindAll(".jim-virtualised-list-toolbar [aria-expanded]"), Has.Count.EqualTo(1)));
 
-        await cut.InvokeAsync(() => cut.Find(".jim-virtualised-list-toolbar [aria-expanded]").Click());
+        await cut.Find(".jim-virtualised-list-toolbar [aria-expanded]").ClickAsync();
 
         Assert.That(toggled, Is.True);
     }
@@ -409,7 +410,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
     };
 
     [Test]
-    public void OperationsCompletedSection_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralName()
+    public async Task OperationsCompletedSection_MetaverseObjectActivitySelected_LinksTheObjectUnderItsTypesPluralNameAsync()
     {
         // The panel used to link /admin/metaverse/{id}, a route that does not exist (#2151).
         var metaverseObjectId = Guid.NewGuid();
@@ -419,7 +420,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
 
         var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
-        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
+        await cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).ClickAsync();
 
         cut.WaitForAssertion(() => Assert.That(
             cut.FindAll("a").Select(a => a.GetAttribute("href")),
@@ -427,7 +428,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsCompletedSection_ActivityWithAWarningSelected_ShowsEachWarningInThePanel()
+    public async Task OperationsCompletedSection_ActivityWithAWarningSelected_ShowsEachWarningInThePanelAsync()
     {
         // The panel's status chip said Complete With Warning but not why: the reason was only on the Activity page.
         var activity = RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.CompleteWithWarning);
@@ -436,7 +437,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
 
         var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
-        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+        await cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -451,13 +452,13 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsCompletedSection_ActivityWithoutAWarningSelected_ShowsNoWarning()
+    public async Task OperationsCompletedSection_ActivityWithoutAWarningSelected_ShowsNoWarningAsync()
     {
         ArrangeWindow([RunProfileExecution("Glitterband EMEA", "Export", ActivityStatus.Complete)], 1);
 
         var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Glitterband EMEA")));
-        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).Click();
+        await cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Glitterband EMEA")).ClickAsync();
 
         cut.WaitForAssertion(() =>
         {
@@ -467,7 +468,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void OperationsCompletedSection_MetaverseObjectActivityForADeletedObject_NamesItWithoutALink()
+    public async Task OperationsCompletedSection_MetaverseObjectActivityForADeletedObject_NamesItWithoutALinkAsync()
     {
         var metaverseObjectId = Guid.NewGuid();
         _metaverseRepository.Setup(r => r.GetMetaverseObjectHeaderAsync(metaverseObjectId))
@@ -476,7 +477,7 @@ public class OperationsCompletedSectionTests : JimComponentTestContext
 
         var cut = Render<OperationsCompletedSection>();
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Priya Shah")));
-        cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).Click();
+        await cut.FindAll("tbody tr").First(row => row.TextContent.Contains("Priya Shah")).ClickAsync();
 
         cut.WaitForAssertion(() =>
         {

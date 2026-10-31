@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -106,12 +107,12 @@ public class DirectoryServerDiscoveryDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DirectoryServerDiscoveryDialog_RetryClicked_AttemptsDiscoveryAgain()
+    public async Task DirectoryServerDiscoveryDialog_RetryClicked_AttemptsDiscoveryAgainAsync()
     {
         var provider = ShowDialog();
         _mockConnectedSystemRepo.Invocations.Clear();
 
-        provider.Find($"[data-testid='{RetryButtonMarker}']").Click();
+        await provider.Find($"[data-testid='{RetryButtonMarker}']").ClickAsync();
         provider.WaitForState(() => provider.FindAll(".mud-alert").Count > 0);
 
         _mockConnectedSystemRepo.Verify(
@@ -120,7 +121,7 @@ public class DirectoryServerDiscoveryDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DirectoryServerDiscoveryDialog_CloseClicked_ReturnsNoSelection()
+    public async Task DirectoryServerDiscoveryDialog_CloseClicked_ReturnsNoSelectionAsync()
     {
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
@@ -130,10 +131,10 @@ public class DirectoryServerDiscoveryDialogTests : JimComponentTestContext
         };
 
         IDialogReference? reference = null;
-        provider.InvokeAsync(async () => reference = await dialogService.ShowAsync<DirectoryServerDiscoveryDialog>("Discover Domain Controllers", parameters));
+        await provider.InvokeAsync(async () => reference = await dialogService.ShowAsync<DirectoryServerDiscoveryDialog>("Discover Domain Controllers", parameters));
         provider.WaitForState(() => provider.FindAll(".mud-alert").Count > 0);
 
-        provider.Find($"[data-testid='{CloseButtonMarker}']").Click();
+        await provider.Find($"[data-testid='{CloseButtonMarker}']").ClickAsync();
 
         var result = reference!.Result;
         Assert.That(result.IsCompleted, Is.True);

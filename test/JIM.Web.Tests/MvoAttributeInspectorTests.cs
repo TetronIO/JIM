@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
@@ -180,14 +181,14 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
     }
 
     [Test]
-    public void Inspector_CloseButtonClicked_RaisesOnClose()
+    public async Task Inspector_CloseButtonClicked_RaisesOnCloseAsync()
     {
         var closed = false;
         var cut = Render<MvoAttributeInspector>(p => p
             .Add(c => c.Provenance, BuildProvenance())
             .Add(c => c.OnClose, EventCallback.Factory.Create(this, () => closed = true)));
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
 
         Assert.That(closed, Is.True);
     }
@@ -292,7 +293,7 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
     }
 
     [Test]
-    public void Inspector_OpenInTimelineLinkClicked_RaisesOnOpenInTimeline()
+    public async Task Inspector_OpenInTimelineLinkClicked_RaisesOnOpenInTimelineAsync()
     {
         var opened = false;
         var cut = Render<MvoAttributeInspector>(p => p
@@ -300,7 +301,7 @@ public class MvoAttributeInspectorTests : JimComponentTestContext
             .Add(c => c.OnOpenInTimeline, EventCallback.Factory.Create(this, () => opened = true)));
 
         var link = cut.FindAll("a").First(a => a.TextContent.Contains("Open in Timeline"));
-        link.Click();
+        await link.ClickAsync();
 
         Assert.That(opened, Is.True);
     }

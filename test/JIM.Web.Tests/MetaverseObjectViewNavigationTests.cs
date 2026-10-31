@@ -330,13 +330,13 @@ public class MetaverseObjectViewNavigationTests : JimComponentTestContext
     /// the next person (the same rule, so the same key) starts closed, as does the section.
     /// </summary>
     [Test]
-    public void ConnectionsTab_NavigatingToAnotherObject_DoesNotCarryOverWhatTheReaderOpened()
+    public async Task ConnectionsTab_NavigatingToAnotherObject_DoesNotCarryOverWhatTheReaderOpenedAsync()
     {
         SetupConnections(AlphaId, "Alpha HR");
         SetupConnections(BravoId, "Bravo HR");
         var page = RenderObject(AlphaId, "connections");
-        page.WaitForElement("[data-testid='jim-not-connected-toggle']").Click();
-        page.WaitForElement("[data-testid='jim-not-connected-expand']").Click();
+        await page.WaitForElement("[data-testid='jim-not-connected-toggle']").ClickAsync();
+        await page.WaitForElement("[data-testid='jim-not-connected-expand']").ClickAsync();
         page.WaitForElement("[data-testid='jim-not-connected-detail']");
 
         ShowObject(page, BravoId, "connections");

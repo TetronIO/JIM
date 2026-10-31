@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using MudBlazor;
@@ -45,7 +46,7 @@ public class TableEmptyStateTests : JimComponentTestContext
     }
 
     [Test]
-    public void TableEmptyState_WithAction_RendersTheButtonAndInvokesTheCallback()
+    public async Task TableEmptyState_WithAction_RendersTheButtonAndInvokesTheCallbackAsync()
     {
         var invoked = false;
         var cut = Render<TableEmptyState>(p => p
@@ -53,7 +54,7 @@ public class TableEmptyStateTests : JimComponentTestContext
             .Add(c => c.ActionText, "Clear Search")
             .Add(c => c.OnAction, () => invoked = true));
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {

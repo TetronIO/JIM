@@ -49,7 +49,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
 | `host/Grant-LabDelegation.ps1` | Hyper-V host | Applies the delegation to a container created at run time (`-Tombstones` for Deleted Objects) |
 | `host/Invoke-LabRebuild.ps1` | Hyper-V host | One phase of the monthly rebuild (`Prune`, `Build`, `Stage`, `Promote`, `Rollback`, `Status`): builds a candidate set beside the live one and swaps names only when the suite passes; see [Monthly rebuild](#monthly-rebuild) |
-| `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above; see [Deploying to the host](#deploying-to-the-host) |
+| `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above, and does what `jim-lab` is refused (Host access); see [Deploying to the host](#deploying-to-the-host) |
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
 | `guest/Initialize-LabDomainController.ps1` | Guest | The build phases: `License`, `Prepare`, `Promote`, `Extend`, `Configure`, `Verify` |
 | `guest/LabDomainController.psm1` | Both | Pure functions (tested) and the Windows-only helpers |
@@ -177,6 +177,22 @@ It runs `Update-LabScripts.ps1` as SYSTEM every hour (`\JIM\Update AD lab script
 `Install-LabScripts.ps1` from it, logging to `C:\jim-ad-lab\logs\update-lab-scripts.log`. The repository is public, so
 it needs no credentials. A run dispatched within the hour of a module change can still find no copy of its module, and
 says so. A merge during a run does no harm: the run keeps using its own commit's copy.
+
+**Host access.** The rebuild runs as `jim-lab`, which is a Hyper-V administrator and nothing more, and three things it
+needs are refused to such an account. So `Install-LabScripts.ps1` does them, once `settings.json` exists and only when
+elevated (the hourly task, as SYSTEM, always is), and reports each as `Granted`, `AlreadyGranted`, `Recorded` or
+`AlreadyRecorded`:
+
+| What | Why `jim-lab` cannot | What host setup does |
+|------|----------------------|----------------------|
+| Read the image list of the Windows media | `Mount-DiskImage` and `Get-WindowsImage` need an administrator ("Access denied", "requires elevation") | Records the image to install in `media.json` beside `settings.json`, once per version of the file (its length and time). The builds read it from there; an elevated build without a record reads the media itself, and `jim-lab` without one is refused with a message saying so |
+| Let a VM read the media it is given | VMMS grants that on the ISO as its caller, who must be allowed to change the ISO's ACL (VMMS event 20790) | Grants read on `isoPath` and each `directoryExtensions` ISO to the capability SID Hyper-V uses for it (`vmWorkerProcess`, `Get-LabMediaCapabilitySid`) |
+| Delete a removed VM's files | The VMs an administrator built are not its own, and VMMS creates each VM's `Snapshots` folder as SYSTEM | Lets `jim-lab` modify each lab VM's folder beneath `vhdDirectory` and each `rebuild-yyyyMMdd` folder (`Get-LabControlFolder`), never `vhdDirectory` itself, which may hold the runner's VM. The rebuild also gives itself the same on the folder it creates |
+
+So after building the domain controllers by hand (step 4), either run `Install-LabScripts.ps1` again or wait for the
+hourly task before the first rebuild. A step that fails makes the script exit 1, after everything else is done. If a
+VM's files still cannot be deleted, `Remove-LabDomainController.ps1` and the rebuild name what they left behind.
+
 **2. Fill in `settings.json`.** Every value in the example is a placeholder. `Invoke-LabRebuild.ps1` reads this file, and
 the first build below is easiest when it is driven from the same values:
 
@@ -627,7 +643,8 @@ C:\jim-ad-lab\Invoke-LabRebuild.ps1 -Phase Build -Role dc-primary   # one domain
 It reads `settings.json` beside it (`-SettingsPath` to point elsewhere; only `Build` reads more than the names, so a
 rollback is never blocked by a settings file that is wrong for building), logs to `%ProgramData%\jim-ad-lab\logs`, and
 needs the two passwords in the `jim-lab` account's environment like the other control-plane scripts. It runs only what
-Hyper-V Administrators may run: no elevation.
+Hyper-V Administrators may run: no elevation. What such an account is refused, host setup does beforehand (Host access,
+under [Deploying to the host](#deploying-to-the-host)).
 
 **Recovery.** If a run is cancelled, the runner dies or the host restarts part way, the live set may still be off and the
 candidates running. On the host, as `jim-lab`:
