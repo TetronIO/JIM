@@ -95,7 +95,7 @@ A saved configuration change reaches existing objects only when a synchronisatio
 
 ### Changes the next synchronisation applies
 
-Saving an import Synchronisation Rule or an Object Matching Rule records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing each change (linked to its Activity, with when it was saved and by whom). **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip showing how many changes are waiting, and the rule shows an **Awaiting synchronisation** chip.
+Saving an import Synchronisation Rule, an Object Matching Rule or an Attribute Priority order records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing each change (linked to its Activity, with who saved it and when). **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip counting the changes waiting, and the rule shows an **Awaiting synchronisation** chip.
 
 The Connected System's next synchronisation, Delta or Full, processes every object of that Object Type and only the changed objects of the others, then marks the changes applied:
 

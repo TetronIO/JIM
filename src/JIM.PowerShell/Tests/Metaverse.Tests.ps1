@@ -462,6 +462,37 @@ Describe 'Set-JIMMetaverseAttributePriority' {
         }
     }
 
+    Context 'Awaiting synchronisation' {
+
+        It 'Should hand the response''s AwaitingSynchronisation to the warning, with or without -PassThru' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:PriorityAwaiting = @([PSCustomObject]@{ ConnectedSystemName = 'HR'; ObjectTypeName = 'user'; ObjectCount = 3; EstimatedDuration = $null })
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Contributors = @(); AwaitingSynchronisation = $script:PriorityAwaiting } }
+                Mock Write-JIMAwaitingSynchronisationWarning { }
+
+                Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -Confirm:$false | Out-Null
+
+                Should -Invoke Write-JIMAwaitingSynchronisationWarning -Times 1 -Exactly -ParameterFilter {
+                    @($AwaitingSynchronisation).Count -eq 1 -and $AwaitingSynchronisation[0].ObjectTypeName -eq 'user'
+                }
+            }
+        }
+
+        It 'Should not warn when -WhatIf makes no change' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+                Mock Write-JIMAwaitingSynchronisationWarning { }
+
+                Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -WhatIf
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                Should -Invoke Write-JIMAwaitingSynchronisationWarning -Times 0 -Exactly
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -518,6 +549,37 @@ Describe 'Move-JIMMetaverseAttributePriority' {
 
         It 'Should throw when not connected' {
             { Move-JIMMetaverseAttributePriority -AttributeId 1 -ObjectTypeId 1 -MappingId 1 -Position 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Awaiting synchronisation' {
+
+        It 'Should hand the response''s AwaitingSynchronisation to the warning, with or without -PassThru' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:PriorityAwaiting = @([PSCustomObject]@{ ConnectedSystemName = 'HR'; ObjectTypeName = 'user'; ObjectCount = 3; EstimatedDuration = $null })
+                Mock Invoke-JIMApi { [PSCustomObject]@{ Contributors = @(); AwaitingSynchronisation = $script:PriorityAwaiting } }
+                Mock Write-JIMAwaitingSynchronisationWarning { }
+
+                Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1 -Confirm:$false | Out-Null
+
+                Should -Invoke Write-JIMAwaitingSynchronisationWarning -Times 1 -Exactly -ParameterFilter {
+                    @($AwaitingSynchronisation).Count -eq 1 -and $AwaitingSynchronisation[0].ObjectTypeName -eq 'user'
+                }
+            }
+        }
+
+        It 'Should not warn when -WhatIf makes no change' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { }
+                Mock Write-JIMAwaitingSynchronisationWarning { }
+
+                Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1 -WhatIf
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+                Should -Invoke Write-JIMAwaitingSynchronisationWarning -Times 0 -Exactly
+            }
         }
     }
 

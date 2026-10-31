@@ -8,6 +8,7 @@ using System.Text.Json;
 using JIM.Application.Staging;
 using JIM.Connectors;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -8525,7 +8526,9 @@ public partial class ConnectedSystemServer
     /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the requested order
     /// does not match the attribute's current contributor set exactly (the message names what is missing and what
     /// is not a contributor).</exception>
-    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
+    /// <returns>The resulting order, the mappings whose priority or "Null is a value" it changes, and every contributor's
+    /// priority and "Null is a value" as stored, which is what the preflight describes the change against.</returns>
+    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> Before)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
     {
         if (orderedContributors == null)
             throw new ArgumentNullException(nameof(orderedContributors));
@@ -8562,7 +8565,7 @@ public partial class ConnectedSystemServer
         ordered.AddRange(omittedPendingDeletion);
 
         var changed = RenumberAndCollectChanges(ordered, snapshot);
-        return (ordered, changed);
+        return (ordered, changed, snapshot);
     }
 
     /// <summary>
@@ -8710,18 +8713,14 @@ public partial class ConnectedSystemServer
     /// </summary>
     private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
     {
-        foreach (var ruleId in GetAffectedSyncRuleIds(changed))
+        foreach (var rule in await GetSyncRulesAnAttributePriorityChangeAffectsAsync(changed))
         {
-            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
-            if (rule == null)
-                continue;
-
             var childActivity = new Activity
             {
                 TargetName = rule.Name,
                 TargetType = ActivityTargetType.SynchronisationRule,
                 TargetOperationType = ActivityTargetOperationType.Update,
-                SyncRuleId = ruleId,
+                SyncRuleId = rule.Id,
                 ParentActivityId = parentActivity.Id,
                 Message = parentActivity.TargetName
             };
@@ -8744,6 +8743,25 @@ public partial class ConnectedSystemServer
 
             await Application.Activities.CompleteActivityAsync(childActivity);
         }
+    }
+
+    /// <summary>
+    /// The Synchronisation Rules an Attribute Priority change affects, as stored: one for each distinct rule whose Attribute
+    /// Flow the change renumbers or whose "Null is a value" it changes. The save reads them after writing the change, to
+    /// version each and record what it leaves awaiting synchronisation; its preflight reads them before, to say what the save
+    /// will record (#2650). A rule that no longer exists is left out by both.
+    /// </summary>
+    private async Task<List<SyncRule>> GetSyncRulesAnAttributePriorityChangeAffectsAsync(IEnumerable<SyncRuleMapping> changed)
+    {
+        var rules = new List<SyncRule>();
+        foreach (var ruleId in GetAffectedSyncRuleIds(changed))
+        {
+            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+            if (rule != null)
+                rules.Add(rule);
+        }
+
+        return rules;
     }
 
     /// <summary>
@@ -8829,6 +8847,111 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// What saving a complete Attribute Priority order with <see cref="SetAttributePriorityOrderAsync(int, int, IReadOnlyList{ValueTuple{int, bool}}, MetaverseObject?)"/>
+    /// would change and record, worked out before the save and without writing anything (#2650): each priority and
+    /// "Null is a value" the order changes, and, as the preflight's effect, the Connected System Object Types the save will
+    /// record as awaiting synchronisation, each with what processing it in full costs. The shared acknowledgement states
+    /// that effect exactly as it states a Synchronisation Rule save's.
+    /// <para>
+    /// The answer cannot disagree with the save, because it is the save's own decision asked early. The same builder works
+    /// out which mappings the order changes and refuses an order the save would refuse; the same rules are read; each is
+    /// compared, as the save will have stored it, against the same baseline the save's capture compares against; the same
+    /// policy decides which of them it records; and the same estimate is made of each type once.
+    /// </para>
+    /// <para>
+    /// It writes nothing, and the mappings it renumbers in memory are put back as stored before it returns. On a
+    /// change-tracked unit of work those are the very instances every later read returns, so a save made afterwards on the
+    /// same unit of work writes nothing the preflight set.
+    /// </para>
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    /// <param name="orderedContributors">The contributors in the proposed priority order (highest first), each with its "Null is a value" flag.</param>
+    /// <returns>The preflight. <see cref="ConfigurationChangePreflight.None"/> when the order changes nothing.</returns>
+    /// <exception cref="ArgumentException">The order does not match the attribute's contributors, which the save would refuse too.</exception>
+    public async Task<ConfigurationChangePreflight> EvaluateAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
+    {
+        var (_, changed, before) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        if (changed.Count == 0)
+            return ConfigurationChangePreflight.None;
+
+        var proposed = changed.ToDictionary(mapping => mapping.Id, mapping => (mapping.Priority, mapping.NullIsValue));
+        try
+        {
+            var targets = new List<(int ConnectedSystemId, string? ConnectedSystemName, int ObjectTypeId, string? ObjectTypeName)>();
+            foreach (var rule in await GetSyncRulesAnAttributePriorityChangeAffectsAsync(changed))
+            {
+                // The save reads each rule back after writing the change; the preflight, which writes nothing, gives the rule
+                // it read the priority and "Null is a value" the change will store, and asks what the capture will then find.
+                SetAttributePriorityState(rule.AttributeFlowRules, proposed);
+                var outcome = await Application.ConfigurationChangePreflight.OutcomeOfSyncRuleSaveAsync(rule);
+                if (AwaitingSynchronisationTargetOf(rule, outcome) is { } target)
+                    targets.Add(target);
+            }
+
+            var items = DescribeAttributePriorityChange(changed, before);
+            return new ConfigurationChangePreflight
+            {
+                HighestClass = items.Max(item => item.Class),
+                Items = items,
+                Effect = new ConfigurationChangeEffect { ObjectTypesProcessedInFull = await EstimateEachObjectTypeOnceAsync(targets) }
+            };
+        }
+        finally
+        {
+            // A change-tracked unit of work hands back the very instances the builder renumbered; put them as they are stored.
+            SetAttributePriorityState(changed, before);
+        }
+    }
+
+    /// <summary>
+    /// Sets each listed mapping's priority and "Null is a value" to the state given for it; mappings not given are left alone.
+    /// </summary>
+    private static void SetAttributePriorityState(IEnumerable<SyncRuleMapping> mappings, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> state)
+    {
+        foreach (var mapping in mappings.Where(mapping => state.ContainsKey(mapping.Id)))
+            (mapping.Priority, mapping.NullIsValue) = state[mapping.Id];
+    }
+
+    /// <summary>
+    /// The changes an Attribute Priority order makes, one item for each priority and each "Null is a value" it changes, named
+    /// by the Synchronisation Rule they belong to, so the acknowledgement lists them as it lists a rule's own changes.
+    /// </summary>
+    private static List<ConfigurationChangePreflightItem> DescribeAttributePriorityChange(
+        IEnumerable<SyncRuleMapping> changed, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> before)
+    {
+        var items = new List<ConfigurationChangePreflightItem>();
+        foreach (var mapping in changed)
+        {
+            var was = before[mapping.Id];
+            var ruleName = mapping.SyncRule?.Name is { Length: > 0 } name ? name : $"Synchronisation Rule {mapping.SyncRuleId}";
+
+            if (was.Priority != mapping.Priority)
+                items.Add(AttributePriorityItem("priority", $"{ruleName} > Priority", DisplayPriority(was.Priority), DisplayPriority(mapping.Priority)));
+            if (was.NullIsValue != mapping.NullIsValue)
+                items.Add(AttributePriorityItem("nullIsValue", $"{ruleName} > Null is a value", DisplayFlag(was.NullIsValue), DisplayFlag(mapping.NullIsValue)));
+        }
+
+        return items;
+    }
+
+    private static ConfigurationChangePreflightItem AttributePriorityItem(string key, string label, string? oldValue, string? newValue) => new()
+    {
+        Key = key,
+        Label = label,
+        Class = ConfigurationChangeClassifier.ClassifyKey(ConfigurationSnapshotService.SyncRuleObjectType, key),
+        ChangeType = ConfigurationDiffChangeType.Modified,
+        OldDisplayValue = oldValue,
+        NewDisplayValue = newValue
+    };
+
+    // int.MaxValue is the "sole contributor, no explicit priority" sentinel, which the change history leaves out too.
+    private static string? DisplayPriority(int priority) =>
+        priority == int.MaxValue ? null : priority.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string DisplayFlag(bool value) => value ? "Yes" : "No";
+
+    /// <summary>
     /// Replaces the entire attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91),
     /// transactionally renumbering all contributing mappings' priorities and applying their "Null is a value" flags.
     /// The request must list every current contributor exactly once. Use <see cref="MoveAttributePriorityAsync(int, int, int, int, bool?, MetaverseObject?)"/>
@@ -8840,7 +8963,7 @@ public partial class ConnectedSystemServer
     /// <param name="initiatedBy">The user who initiated the change.</param>
     public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, MetaverseObject? initiatedBy)
     {
-        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        var (ordered, changed, _) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
         await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedBy);
         return ordered;
     }
@@ -8851,7 +8974,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, ApiKey initiatedByApiKey)
     {
-        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        var (ordered, changed, _) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
         await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedByApiKey);
         return ordered;
     }

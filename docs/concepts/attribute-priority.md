@@ -139,7 +139,7 @@ In the expanded list (highest priority at the top):
 - Toggle **Null is a value** per contributor.
 - **Disabled Synchronisation Rules** stay in the list, greyed out, holding their position but never contributing.
 - A **Synchronisation Rule being deleted** (its contributed values are still being recalled) drops to the bottom of the list the moment you delete it, and is gone once the recall finishes. You can reorder the surviving contributors straight away; there is no need to wait for the recall.
-- Changes are held until you click **Save order**, and you can **Reset** to discard them.
+- Changes are held until you click **Save order**, and you can **Reset** to discard them. **Save order** asks you to confirm the change, as saving a Synchronisation Rule does, and says when it takes effect: which Connected Systems' next synchronisation processes every object of an Object Type, how many objects that is, and about how long it takes (see [When changes take effect](#when-changes-take-effect)).
 
 ### In the Attribute Flow editor
 

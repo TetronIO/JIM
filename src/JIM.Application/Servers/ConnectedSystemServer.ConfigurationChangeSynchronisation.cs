@@ -53,17 +53,37 @@ public partial class ConnectedSystemServer
         Activity activity, SyncRule rule, ConfigurationChangeCaptureOutcome outcome, bool isNew)
     {
         // The policy decides, and the acknowledgement before the save asks the same function with the same inputs.
-        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(rule, outcome))
+        if (AwaitingSynchronisationTargetOf(rule, outcome) is not { } target)
             return;
 
         await RecordConfigurationChangeAwaitingSynchronisationAsync(
             activity,
-            connectedSystemId: rule.ConnectedSystemId > 0 ? rule.ConnectedSystemId : rule.ConnectedSystem?.Id ?? 0,
-            connectedSystemName: rule.ConnectedSystem?.Name,
-            objectTypeId: rule.ConnectedSystemObjectTypeId > 0 ? rule.ConnectedSystemObjectTypeId : rule.ConnectedSystemObjectType?.Id ?? 0,
-            objectTypeName: rule.ConnectedSystemObjectType?.Name,
+            target.ConnectedSystemId,
+            target.ConnectedSystemName,
+            target.ObjectTypeId,
+            target.ObjectTypeName,
             syncRuleId: rule.Id > 0 ? rule.Id : null,
             reason: ConfigurationChangeSynchronisationPolicy.Describe(rule.Name, outcome, isNew));
+    }
+
+    /// <summary>
+    /// The Connected System Object Type a Synchronisation Rule's change records as awaiting synchronisation, or null when the
+    /// policy records nothing for it. The save records what this answers, and the preflight of an Attribute Priority change
+    /// states it before the save (#2650), so what the confirmation promises and what the save records come from one place.
+    /// </summary>
+    /// <param name="rule">The rule as saved (or, before the save, as it will be).</param>
+    /// <param name="outcome">What configuration change capture found (or, before the save, will find) for the change.</param>
+    private static (int ConnectedSystemId, string? ConnectedSystemName, int ObjectTypeId, string? ObjectTypeName)? AwaitingSynchronisationTargetOf(
+        SyncRule rule, ConfigurationChangeCaptureOutcome outcome)
+    {
+        if (!ConfigurationChangeSynchronisationPolicy.RecordsAwaitingSynchronisation(rule, outcome))
+            return null;
+
+        return (
+            rule.ConnectedSystemId > 0 ? rule.ConnectedSystemId : rule.ConnectedSystem?.Id ?? 0,
+            rule.ConnectedSystem?.Name,
+            rule.ConnectedSystemObjectTypeId > 0 ? rule.ConnectedSystemObjectTypeId : rule.ConnectedSystemObjectType?.Id ?? 0,
+            rule.ConnectedSystemObjectType?.Name);
     }
 
     /// <summary>
@@ -287,14 +307,22 @@ public partial class ConnectedSystemServer
     /// </summary>
     public async Task<List<AwaitingSynchronisationEstimate>> TakeRecordedAwaitingSynchronisationAsync()
     {
-        var recorded = _recordedAwaitingSynchronisation
-            .GroupBy(entry => (entry.ConnectedSystemId, entry.ObjectTypeId))
-            .Select(group => group.First())
-            .ToList();
+        var recorded = _recordedAwaitingSynchronisation.ToList();
         _recordedAwaitingSynchronisation.Clear();
 
+        return await EstimateEachObjectTypeOnceAsync(recorded);
+    }
+
+    /// <summary>
+    /// What processing each Connected System Object Type in full costs, each type once however many changes name it, in
+    /// the order the types first appear. Shared by what a save recorded and what a preflight says a save will record, so
+    /// the two are counted and estimated alike.
+    /// </summary>
+    private async Task<List<AwaitingSynchronisationEstimate>> EstimateEachObjectTypeOnceAsync(
+        IEnumerable<(int ConnectedSystemId, string? ConnectedSystemName, int ObjectTypeId, string? ObjectTypeName)> targets)
+    {
         var estimates = new List<AwaitingSynchronisationEstimate>();
-        foreach (var entry in recorded)
+        foreach (var entry in targets.GroupBy(entry => (entry.ConnectedSystemId, entry.ObjectTypeId)).Select(group => group.First()))
             estimates.Add(await EstimateProcessingInFullAsync(entry.ConnectedSystemId, entry.ConnectedSystemName, entry.ObjectTypeId, entry.ObjectTypeName));
 
         return estimates;

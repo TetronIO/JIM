@@ -71,6 +71,25 @@ public class ConfigurationChangePreflightService
     }
 
     /// <summary>
+    /// What configuration change capture will find when <paramref name="proposed"/> is saved: the same baseline, the same
+    /// snapshot and the same comparison the capture makes after the save, read without capturing anything. The save's
+    /// decisions are made from this outcome (#2615), so a preflight that asks it states what the save then does. Used by
+    /// the preflight of an Attribute Priority change (#2650), which saves no rule itself but changes each affected rule's
+    /// Attribute Flow.
+    /// </summary>
+    /// <param name="proposed">The rule as it will be stored once the change is saved.</param>
+    internal async Task<ConfigurationChangeCaptureOutcome> OutcomeOfSyncRuleSaveAsync(SyncRule proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        var evaluation = await EvaluateCoreAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshotAsync(proposed, hashKey),
+            $"Synchronisation Rule {proposed.Id}");
+        return evaluation.Outcome;
+    }
+
+    /// <summary>
     /// <see cref="EffectOfSyncRuleSaveAsync"/>, degrading as the capture does: a read that fails (the outcome, the count of
     /// objects, the stored scope, a name) leaves the effect unstated rather than failing the acknowledgement, so the
     /// dialog falls back to its general reminder instead of stopping the administrator saving. Only the failures the

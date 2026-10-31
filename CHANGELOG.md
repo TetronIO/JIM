@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An object that leaves an import Synchronisation Rule's scope under the Disconnect action is now actually disconnected rather than staying joined, and is no longer deprovisioned when its Metaverse Object is deleted as a result.
 - 🐛 An Activity's **CSOs Disconnected** figure now includes objects that left an import Synchronisation Rule's scope, so it agrees with the outcome counts beneath it. (#2629)
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
+- 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 
 ### Performance
 

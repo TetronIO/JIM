@@ -33,7 +33,10 @@ function Move-JIMMetaverseAttributePriority {
         Returns the resulting priority order.
 
     .OUTPUTS
-        With -PassThru, the resulting priority order; otherwise nothing.
+        With -PassThru, the resulting priority order; otherwise nothing. AwaitingSynchronisation lists each Connected
+        System Object Type the move makes its Connected System's next synchronisation, Delta or Full, process in full,
+        with how many objects that is and about how long it takes, and a warning saying the same is written to the
+        warning stream either way.
 
     .EXAMPLE
         Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1
@@ -87,6 +90,9 @@ function Move-JIMMetaverseAttributePriority {
             try {
                 $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$AttributeId/priorities/$ObjectTypeId/mappings/$MappingId" -Method 'PUT' -Body $body
                 Write-Verbose "Moved mapping $MappingId to position $Position"
+
+                # The Object Types the move made the next synchronisation process in full (#2615): advised, never blocking.
+                Write-JIMAwaitingSynchronisationWarning -AwaitingSynchronisation $response.AwaitingSynchronisation
 
                 if ($PassThru) {
                     $response

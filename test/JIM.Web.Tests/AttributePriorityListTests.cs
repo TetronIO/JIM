@@ -8,9 +8,11 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.TestSupport;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -18,7 +20,8 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// Component tests for <see cref="AttributePriorityList"/>'s read-only mode (#91 Surface 1, #1199): the mapping
 /// editor reuses the same control Surface 2 manages priority with, but has to show a contribution that does not
-/// exist yet, or point at the one being edited. Those two states are only expressible at component level.
+/// exist yet, or point at the one being edited. Those two states are only expressible at component level. Also its
+/// editable mode's save confirmation (#2650), which states when the change takes effect from the save's own preflight.
 /// </summary>
 [TestFixture]
 public class AttributePriorityListTests : JimComponentTestContext
@@ -33,6 +36,10 @@ public class AttributePriorityListTests : JimComponentTestContext
         var mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
+        // What the save confirmation's preflight reads: change tracking on (the default), and no earlier version of any
+        // rule, so each rule's change reads as its first.
+        mockRepository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
+        mockRepository.Setup(r => r.Activity).Returns(new Mock<IActivityRepository>().Object);
 
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(mockRepository.Object));
     }
@@ -188,6 +195,101 @@ public class AttributePriorityListTests : JimComponentTestContext
         cut.Render(p => p.Add(c => c.MetaverseAttributeId, otherAttributeId));
 
         Assert.That(cut.FindAll(".apt-row")[0].TextContent, Does.Contain("Payroll"));
+    }
+
+    // -- the save confirmation (#2650) ----------------------------------------------------------------------------------
+
+    private const string Confirm = "[data-testid='jim-consequence-confirm']";
+    private const string Effect = "[data-testid='jim-effect']";
+    private const string EffectAwaiting = "[data-testid='jim-effect-awaiting-synchronisation']";
+    private const string EffectUntilThen = "[data-testid='jim-effect-until-then']";
+    private const string EffectGeneral = "[data-testid='jim-effect-general']";
+
+    [Test]
+    public void Save_ChangeTheSaveRecordsAsAwaitingSynchronisation_ConfirmationSaysWhenItTakesEffect()
+    {
+        SetupEditableContributors(firstRuleEnabled: true);
+        var provider = Render<MudDialogProvider>();
+        var cut = RenderEditable();
+
+        ToggleNullIsValueOnFirstRowAndSave(cut);
+
+        provider.WaitForElement(Confirm);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectAwaiting), Has.Count.EqualTo(1), "one line for the one Object Type the save records");
+            Assert.That(provider.FindAll(EffectUntilThen), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(EffectGeneral), Is.Empty, "the general reminder would contradict it");
+        }
+    }
+
+    [Test]
+    public void Save_ChangeTheSaveRecordsNothingFor_ConfirmationGivesTheGeneralReminderOnly()
+    {
+        // The changed contributor's rule is switched off, so the save records nothing awaiting synchronisation for it,
+        // and the confirmation falls back exactly as a Synchronisation Rule save's does.
+        SetupEditableContributors(firstRuleEnabled: false);
+        var provider = Render<MudDialogProvider>();
+        var cut = RenderEditable();
+
+        ToggleNullIsValueOnFirstRowAndSave(cut);
+
+        provider.WaitForElement(Confirm);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(provider.FindAll(EffectGeneral), Has.Count.EqualTo(1));
+            Assert.That(provider.FindAll(Effect), Is.Empty);
+        }
+    }
+
+    // Two import contributors on different Connected Systems, the first optionally on a rule that is switched off. The
+    // rules are what the preflight reads back for each changed Attribute Flow.
+    private void SetupEditableContributors(bool firstRuleEnabled)
+    {
+        var first = BuildEditableContributor(10, "HR System", "HR People Inbound", priority: 1, enabled: firstRuleEnabled, objectTypeId: 70, objectTypeName: "person");
+        var second = BuildEditableContributor(20, "Corporate Directory", "CorpDir People Inbound", priority: 2, enabled: true, objectTypeId: 80, objectTypeName: "user");
+
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(ObjectTypeId, AttributeId))
+            .ReturnsAsync(() => [first, second]);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(first.SyncRuleId)).ReturnsAsync(() => first.SyncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(second.SyncRuleId)).ReturnsAsync(() => second.SyncRule);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectCountAsync(It.IsAny<int>(), It.IsAny<int?>(), null)).ReturnsAsync(250);
+    }
+
+    private static SyncRuleMapping BuildEditableContributor(int id, string systemName, string ruleName, int priority, bool enabled,
+        int objectTypeId, string objectTypeName)
+    {
+        var rule = new SyncRule
+        {
+            Id = id * 100,
+            Name = ruleName,
+            Enabled = enabled,
+            Direction = SyncRuleDirection.Import,
+            MetaverseObjectTypeId = ObjectTypeId,
+            ConnectedSystemId = id,
+            ConnectedSystem = new ConnectedSystem { Id = id, Name = systemName },
+            ConnectedSystemObjectTypeId = objectTypeId,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId, Name = objectTypeName, ConnectedSystemId = id }
+        };
+        var mapping = new SyncRuleMapping { Id = id, Priority = priority, TargetMetaverseAttributeId = AttributeId, SyncRuleId = rule.Id, SyncRule = rule };
+        rule.AttributeFlowRules = [mapping];
+        return mapping;
+    }
+
+    private IRenderedComponent<AttributePriorityList> RenderEditable() =>
+        Render<AttributePriorityList>(p =>
+        {
+            p.Add(c => c.MetaverseObjectTypeId, ObjectTypeId);
+            p.Add(c => c.MetaverseAttributeId, AttributeId);
+            p.Add(c => c.MetaverseAttributeName, "department");
+        });
+
+    // Changing "Null is a value" on a row makes the list dirty without a drag, which bUnit cannot perform.
+    private static void ToggleNullIsValueOnFirstRowAndSave(IRenderedComponent<AttributePriorityList> cut)
+    {
+        cut.FindAll(".apt-row input[type='checkbox']")[0].Change(true);
+        cut.FindAll("button").Single(b => b.TextContent.Contains("Save order")).Click();
     }
 
     private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
