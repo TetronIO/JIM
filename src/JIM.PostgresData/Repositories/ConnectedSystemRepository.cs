@@ -1064,17 +1064,39 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
+        // A leaver cohort's deletions spend seconds a page in here (#2669), so each step is spanned; the tags say how
+        // much of the context the deletion had to consider.
+        using var deleteSpan = ActivitySource.StartActivity("Cso.Delete");
+        deleteSpan?.SetTag("csoCount", connectedSystemObjects.Count);
+        deleteSpan?.SetTag("csoAttributeValueCount", connectedSystemObjects.Sum(cso => cso.AttributeValues.Count));
+
         await using var ownTransaction = await BeginTransactionIfNoneAsync();
 
         var csoIds = connectedSystemObjects.Select(cso => cso.Id).ToList();
         // Retire any export-mode generated values these objects held before they go (#242, Phase 6).
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
-        await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
-        Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
-        await Repository.Database.SaveChangesAsync();
+        using (var retireSpan = ActivitySource.StartActivity("Cso.Delete.RetireGeneratedValues"))
+        {
+            var retirements = await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
+            retireSpan?.SetTag("retiredCount", retirements.Count);
+        }
+
+        var trackedAttributeValueCount = await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
+        deleteSpan?.SetTag("trackedAttributeValueCount", trackedAttributeValueCount);
+
+        using (ActivitySource.StartActivity("Cso.Delete.RemoveRange"))
+            Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
+
+        using (var saveSpan = ActivitySource.StartActivity("Cso.Delete.SaveChanges"))
+        {
+            var written = await Repository.Database.SaveChangesAsync();
+            saveSpan?.SetTag("rowsWritten", written);
+        }
 
         if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
+        {
+            using (ActivitySource.StartActivity("Cso.Delete.Commit"))
+                await ownTransaction.CommitAsync();
+        }
     }
 
     /// <summary>
@@ -1106,34 +1128,56 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <see cref="JimDbContext"/> instance via <see cref="PostgresDataRepository"/>, so the tracked-instance
     /// fix-up below is visible to either caller.
     /// </remarks>
-    internal async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
+    /// <returns>How many Connected System Object attribute values the context was tracking, all of which the fix-up
+    /// scanned; a diagnostic count for the caller's span.</returns>
+    internal async Task<int> ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)
-            return;
+            return 0;
 
         var idArray = csoIds.ToArray();
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
-            idArray);
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" = ANY({0})",
-            idArray);
+        using (var clearSpan = ActivitySource.StartActivity("Cso.Delete.ClearReferenceValues"))
+        {
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
+                idArray);
+            clearSpan?.SetTag("rowsAffected", rowsAffected);
+        }
+
+        using (var clearSpan = ActivitySource.StartActivity("Cso.Delete.ClearUnresolvedReferenceValues"))
+        {
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" = ANY({0})",
+                idArray);
+            clearSpan?.SetTag("rowsAffected", rowsAffected);
+        }
 
         // Update tracked entities to match the database state, otherwise SaveChangesAsync would try to
         // write the stale FK value back (same pattern as DeleteMetaverseObjectAsync's CSO detach).
+        using var fixUpSpan = ActivitySource.StartActivity("Cso.Delete.FixUpTrackedReferences");
         var deletedIds = csoIds as HashSet<Guid> ?? [.. csoIds];
-        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+        var trackedCsoValues = Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().ToList();
+        var fixedUpCount = 0;
+        foreach (var trackedValue in trackedCsoValues
             .Where(e => e.Entity.ReferenceValueId.HasValue && deletedIds.Contains(e.Entity.ReferenceValueId.Value)))
         {
             trackedValue.Entity.ReferenceValueId = null;
             trackedValue.Entity.ReferenceValue = null;
+            fixedUpCount++;
         }
-        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>()
+        var trackedMvoValues = Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>().ToList();
+        foreach (var trackedValue in trackedMvoValues
             .Where(e => e.Entity.UnresolvedReferenceValueId.HasValue && deletedIds.Contains(e.Entity.UnresolvedReferenceValueId.Value)))
         {
             trackedValue.Entity.UnresolvedReferenceValueId = null;
             trackedValue.Entity.UnresolvedReferenceValue = null;
+            fixedUpCount++;
         }
+
+        fixUpSpan?.SetTag("trackedCsoAttributeValuesScanned", trackedCsoValues.Count);
+        fixUpSpan?.SetTag("trackedMvoAttributeValuesScanned", trackedMvoValues.Count);
+        fixUpSpan?.SetTag("fixedUpCount", fixedUpCount);
+        return trackedCsoValues.Count;
     }
 
     /// <summary>
@@ -1793,7 +1837,16 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
             : csoQuery.Skip(offset).Take(pageSize);
 
-        var results = await pagedCsoQuery.ToListAsync();
+        // The Delta Synchronisation's counterpart of the Full Synchronisation's Cso.Page.LoadWithAttributeValues: a
+        // modified group brings its whole membership with it (#2669).
+        List<ConnectedSystemObject> results;
+        using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadModifiedWithAttributeValues"))
+        {
+            results = await pagedCsoQuery.ToListAsync();
+            loadSpan?.SetTag("csoCount", results.Count);
+            loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
+        }
+
         await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
 
@@ -1907,21 +1960,26 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Distinct()
             .ToList();
 
+        span?.SetTag("referencedCsoCount", referencedCsoIds.Count);
         if (referencedCsoIds.Count == 0)
             return;
 
         // Direct SQL: get Id, MetaverseObjectId, TypeId and Created for every referenced CSO.
         // This bypasses the deep EF Include chain entirely — no navigation properties, no
         // change tracker conflicts, no cartesian explosions.
-        var rows = await Repository.Database.Database
-            .SqlQueryRaw<ReferencedCsoRow>(
-                """
-                SELECT "Id" AS "CsoId", "MetaverseObjectId", "TypeId", "Created"
-                FROM "ConnectedSystemObjects"
-                WHERE "Id" = ANY({0})
-                """,
-                referencedCsoIds.ToArray())
-            .ToListAsync();
+        List<ReferencedCsoRow> rows;
+        using (ActivitySource.StartActivity("Cso.PopulateReferenceValues.Query"))
+        {
+            rows = await Repository.Database.Database
+                .SqlQueryRaw<ReferencedCsoRow>(
+                    """
+                    SELECT "Id" AS "CsoId", "MetaverseObjectId", "TypeId", "Created"
+                    FROM "ConnectedSystemObjects"
+                    WHERE "Id" = ANY({0})
+                    """,
+                    referencedCsoIds.ToArray())
+                .ToListAsync();
+        }
 
         var rowLookup = rows.ToDictionary(r => r.CsoId);
 

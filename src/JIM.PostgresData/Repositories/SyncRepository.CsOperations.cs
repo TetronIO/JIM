@@ -815,6 +815,11 @@ public partial class SyncRepository
         if (csoIds.Length == 0)
             return 0;
 
+        // Spanned step by step, as the tracked-graph deletion is (#2669). The source is the repository's one; it is
+        // named for the Metaverse Object operations that declared it first.
+        using var deleteSpan = MvoActivitySource.StartActivity("Cso.DeleteByIds");
+        deleteSpan?.SetTag("csoCount", csoIds.Length);
+
         // One transaction for the retirement and the deletion (Unique Value Generation, #242, Phase 6). A caller
         // already inside a transaction keeps it; this joins it.
         await using var ownTransaction = _context.Database.CurrentTransaction == null
@@ -823,14 +828,19 @@ public partial class SyncRepository
 
         // Retire any export-mode generated values these objects held, BEFORE the rows go: their assignments are
         // removed by the deletion's foreign-key cascade, so afterwards there is nothing left to read them from.
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(_context, csoIds);
+        using (var retireSpan = MvoActivitySource.StartActivity("Cso.Delete.RetireGeneratedValues"))
+        {
+            var retirements = await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(_context, csoIds);
+            retireSpan?.SetTag("retiredCount", retirements.Count);
+        }
 
         // Null incoming reference values from other rows before deleting, exactly as
         // DeleteConnectedSystemObjectsAsync does for its tracked-graph RemoveRange path. Both
         // repositories share the same DbContext (via PostgresDataRepository), so the tracked-instance
         // fix-up this performs is visible here too. Cast rather than widen IConnectedSystemRepository:
         // the method is internal specifically so only same-assembly callers like this one can reach it.
-        await ((ConnectedSystemRepository)_repo.ConnectedSystems).ClearReferencesToConnectedSystemObjectsAsync(csoIds);
+        var trackedAttributeValueCount = await ((ConnectedSystemRepository)_repo.ConnectedSystems).ClearReferencesToConnectedSystemObjectsAsync(csoIds);
+        deleteSpan?.SetTag("trackedAttributeValueCount", trackedAttributeValueCount);
 
         // Detach tracked instances of the rows raw SQL is about to delete. A tracked CSO or attribute
         // value left behind causes EF's SetNull cascade fix-up (ActivityRunProfileExecutionItem,
@@ -838,21 +848,32 @@ public partial class SyncRepository
         // against the already-deleted row on the next SaveChangesAsync, matching zero rows and throwing
         // DbUpdateConcurrencyException; the same failure mode documented on
         // DeletePendingExportsByConnectedSystemObjectIdsAsync above.
-        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(av =>
-            csoIds.Contains(EntityShadowConnectedSystemObjectId(av)));
-        DetachTrackedEntities<ConnectedSystemObject>(cso => csoIds.Contains(cso.Id));
+        using (MvoActivitySource.StartActivity("Cso.DeleteByIds.DetachTracked"))
+        {
+            DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(av =>
+                csoIds.Contains(EntityShadowConnectedSystemObjectId(av)));
+            DetachTrackedEntities<ConnectedSystemObject>(cso => csoIds.Contains(cso.Id));
+        }
 
         // Raw DELETE by id. ConnectedSystemObjectAttributeValues cascade in the database; the
         // ActivityRunProfileExecutionItem, ConnectedSystemObjectChange and PendingExport foreign keys to
         // this table are all SetNull (JimDbContext.OnModelCreating), and PendingPasswordChange's CSO
         // foreign key is SetNull too. Nothing else references this table with Restrict/NoAction
         // behaviour beyond the two reference columns cleared above.
-        var deleted = await _context.Database.ExecuteSqlRawAsync(
-            @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({0})",
-            csoIds);
+        int deleted;
+        using (var sqlSpan = MvoActivitySource.StartActivity("Cso.DeleteByIds.Delete"))
+        {
+            deleted = await _context.Database.ExecuteSqlRawAsync(
+                @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""Id"" = ANY({0})",
+                csoIds);
+            sqlSpan?.SetTag("rowsAffected", deleted);
+        }
 
         if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
+        {
+            using (MvoActivitySource.StartActivity("Cso.Delete.Commit"))
+                await ownTransaction.CommitAsync();
+        }
 
         return deleted;
     }
