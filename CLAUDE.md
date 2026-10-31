@@ -219,6 +219,25 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
   - Exceptions: a draft PR; a stack layer, which cannot use auto-merge (see "Merging a stack"); and a user who says to hold ("open it, but I want to review first").
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
+- **Every new issue gets its Priority and Effort set, as part of creating it, without being asked.** They are the organisation's single-select issue fields. An issue without them is invisible to triage, so set both even when the right value is a judgement call, and say which values you chose when you report the issue. This applies equally to an issue a sub-agent or a skill files; brief it accordingly.
+  - **Priority** (Urgent, High, Medium, Low):
+    - Urgent: data corruption, a security hole, or a broken release.
+    - High: a synchronisation correctness bug, the largest measured performance cost, or a user-facing feature that does not work.
+    - Medium: a real defect or a latent risk nobody has hit yet.
+    - Low: polish and nice-to-haves.
+  - **Effort** (High, Medium, Low):
+    - Low: a change confined to one area that needs no integration run.
+    - Medium: several files or surfaces, a scale test, or integration scenarios.
+    - High: design work, a migration, or several days.
+  - **Setting them.** `gh issue create` has no flag for issue fields, so set them straight after creating the issue through the REST API. `POST` adds or updates the fields it names and leaves the rest alone; `PUT` replaces every value. Priority is field 21700281 and Effort is 21700284, and each value is the option's name exactly:
+
+    ```bash
+    gh api -X POST repos/TetronIO/JIM/issues/<n>/issue-field-values --input - <<'EOF'
+    {"issue_field_values":[{"field_id":21700281,"value":"Medium"},{"field_id":21700284,"value":"Low"}]}
+    EOF
+    ```
+
+    In Claude Code on the web, use the GitHub MCP `issue_write` tool's `issue_fields` (`[{"field_name": "Priority", "field_option_name": "Medium"}, {"field_name": "Effort", "field_option_name": "Low"}]`), or the same REST call as plain `curl` through the relay. Either way, read the values back afterwards (`gh api repos/TetronIO/JIM/issues/<n>/issue-field-values`). (Rule added after issues filed by sessions sat with neither field set.)
 - **Before starting work on a GitHub issue, search open PRs referencing its number** (`gh pr list --search "#<n>"`, or the `search_pull_requests` MCP tool), not just the issue's own timeline. Parallel sessions work feature branches, and the stacked-PR doctrine sends a session into any issue that blocks its feature as discovered work, so an issue can already have a fix in flight that its timeline never mentions. (Rule added after two sessions independently implemented #1398's second half on the same day: the in-flight PR, #1414, was open hours before the second session's start, and only the issue's comments were checked.)
 - **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
   - Sequencing ("must land first"): the blocked-by relationship, via REST: `gh api -X POST repos/TetronIO/JIM/issues/<blocked>/dependencies/blocked_by -F issue_id=<id>` where `<id>` is the blocking issue's database id (`gh api repos/TetronIO/JIM/issues/<n> --jq .id`). Inspect with `GET .../dependencies/blocked_by`; remove with `DELETE .../dependencies/blocked_by/<id>`.
