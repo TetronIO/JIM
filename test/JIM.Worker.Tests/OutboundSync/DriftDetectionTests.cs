@@ -3127,4 +3127,180 @@ public class DriftDetectionTests
     }
 
     #endregion
+
+    #region Large memberships (#2658)
+
+    // Drift Detection once compared what a large group should hold with what it holds value by value, every expected value
+    // against every held one, so its cost grew with the square of the membership. These guards stage that drift at the
+    // size of a large group and require it found in time that grows with the membership. The bound is generous, so a
+    // return of the pairwise comparison fails loudly rather than flakily.
+
+    private const int LargeMembershipCount = 50_000;
+
+    private static readonly TimeSpan LargeMembershipBound = TimeSpan.FromSeconds(10);
+
+    private static string Address(int index) => $"smtp:user{index}@panoply.local";
+
+    /// <summary>
+    /// An expression mapping's drift check (#2180) asks of each value the expression stages whether the target already
+    /// holds it. Each value was compared with every value the target held, so a list of 50,000 values against as many held
+    /// cost the square of the list, however few of them had drifted.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_ExpressionListOfFiftyThousandValuesWithAHandfulDrifted_CorrectsJustThoseWithinBound()
+    {
+        var proxyAddresses = AddTargetAttribute(9500, "proxyAddresses", AttributeDataType.Text, AttributePlurality.MultiValued);
+        var codes = new MetaverseAttribute { Id = 9501, Name = "Codes", Type = AttributeDataType.Text };
+        var exportRule = CreateExpressionExportRule(proxyAddresses, "Split(" + MvRead("Codes") + ", \";\")");
+
+        // The expression's list: every address the target holds but the first, and two new ones.
+        var wanted = Enumerable.Range(1, LargeMembershipCount - 1).Select(Address)
+            .Concat(["smtp:new0@panoply.local", "smtp:new1@panoply.local"]);
+        var mvo = CreateMvoWithText((codes, string.Join(";", wanted)));
+        var cso = CreateCsoHolding(mvo, proxyAddresses, Enumerable.Range(0, LargeMembershipCount).Select(Address).ToArray());
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = Evaluate(cso, mvo, exportRule);
+        stopwatch.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True);
+            Assert.That(result.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges).Select(change => (change.ChangeType, change.StringValue)),
+                Is.EquivalentTo(new[]
+                {
+                    (PendingExportAttributeChangeType.Add, (string?)"smtp:new0@panoply.local"),
+                    (PendingExportAttributeChangeType.Add, (string?)"smtp:new1@panoply.local"),
+                    (PendingExportAttributeChangeType.Remove, (string?)Address(0))
+                }), "only the two new addresses and the departed one are corrected; every other address is already held");
+            Assert.That(stopwatch.Elapsed, Is.LessThan(LargeMembershipBound),
+                $"checking an expression's {LargeMembershipCount + 1:N0} values against {LargeMembershipCount:N0} held took {stopwatch.Elapsed.TotalSeconds:N1}s; " +
+                "each value must be answered from one lookup of what the target holds, not a scan of it");
+        }
+    }
+
+    /// <summary>
+    /// A direct mapping's correction for a drifted group: an Add for each member the target lacks and a Remove for each it
+    /// should not hold. Each expected member was compared with every held member to find the Adds, and each held member
+    /// with every expected one to find the Removes, so a 50,000-member group missing two members cost the square of its
+    /// membership twice over.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_FiftyThousandMemberGroupMissingTwoMembersAndHoldingAStray_CorrectsJustThoseWithinBound()
+    {
+        var (membersMvAttr, memberCsoAttr) = AddGroupMembershipAttributes();
+        var memberIds = Enumerable.Range(0, LargeMembershipCount).Select(_ => Guid.NewGuid()).ToList();
+        var strayMemberId = Guid.NewGuid();
+
+        var groupMvo = CreateTestMvo();
+        foreach (var memberId in memberIds)
+        {
+            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), MetaverseObject = groupMvo, Attribute = membersMvAttr, AttributeId = membersMvAttr.Id, ReferenceValueId = memberId
+            });
+        }
+
+        // The target lost the first two members and gained one nobody asked for. Members are held as the page load reads
+        // them: the Metaverse Object each referenced object is joined to, without the referenced object itself.
+        var groupCso = CreateTestCso(groupMvo);
+        foreach (var memberId in memberIds.Skip(2).Append(strayMemberId))
+        {
+            groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = groupCso, Attribute = memberCsoAttr, AttributeId = memberCsoAttr.Id, ResolvedReferenceMetaverseObjectId = memberId
+            });
+        }
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        var exportRule = CreateDirectExportRule(membersMvAttr, memberCsoAttr);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = Evaluate(groupCso, groupMvo, exportRule);
+        stopwatch.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.True);
+            Assert.That(result.CorrectiveExports.SelectMany(pe => pe.AttributeValueChanges).Select(change => (change.ChangeType, change.UnresolvedReferenceValue)),
+                Is.EquivalentTo(new[]
+                {
+                    (PendingExportAttributeChangeType.Add, (string?)memberIds[0].ToString()),
+                    (PendingExportAttributeChangeType.Add, (string?)memberIds[1].ToString()),
+                    (PendingExportAttributeChangeType.Remove, (string?)strayMemberId.ToString())
+                }), "only the two missing members are added and the stray removed; every other member is already held");
+            Assert.That(stopwatch.Elapsed, Is.LessThan(LargeMembershipBound),
+                $"correcting a {LargeMembershipCount:N0}-member group's drift took {stopwatch.Elapsed.TotalSeconds:N1}s; " +
+                "each member must be answered from one lookup of the other side, not a scan of it");
+        }
+    }
+
+    /// <summary>
+    /// The drift check itself compares the two sets by hash first, and only a value the hash cannot find is looked for by
+    /// comparing it with every held value. A Guid held as its text never hashes alike, so a target holding 50,000 such
+    /// values exactly as expected, which is no drift at all, paid the square of its membership on every synchronisation.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_FiftyThousandGuidsHeldAsTheirText_IsNoDriftFoundWithinBound()
+    {
+        var entitlementsMvAttr = new MetaverseAttribute
+        {
+            Id = 9600, Name = "Entitlement Ids", Type = AttributeDataType.Guid, AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(entitlementsMvAttr);
+        var entitlementsCsoAttr = AddTargetAttribute(9601, "entitlements", AttributeDataType.Text, AttributePlurality.MultiValued);
+
+        var entitlementIds = Enumerable.Range(0, LargeMembershipCount).Select(_ => Guid.NewGuid()).ToList();
+        var userMvo = CreateTestMvo();
+        foreach (var entitlementId in entitlementIds)
+        {
+            userMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), MetaverseObject = userMvo, Attribute = entitlementsMvAttr, AttributeId = entitlementsMvAttr.Id, GuidValue = entitlementId
+            });
+        }
+        var userCso = CreateCsoHolding(userMvo, entitlementsCsoAttr, entitlementIds.Select(id => id.ToString()).ToArray());
+
+        var exportRule = CreateDirectExportRule(entitlementsMvAttr, entitlementsCsoAttr);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = Evaluate(userCso, userMvo, exportRule);
+        stopwatch.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False, "every Guid is held, as its text");
+            Assert.That(result.CorrectiveExports, Is.Empty);
+            Assert.That(stopwatch.Elapsed, Is.LessThan(LargeMembershipBound),
+                $"finding no drift in {LargeMembershipCount:N0} Guids held as text took {stopwatch.Elapsed.TotalSeconds:N1}s; " +
+                "each value the hash cannot find must be answered from one lookup of what the target holds, not a scan of it");
+        }
+    }
+
+    private (MetaverseAttribute Members, ConnectedSystemObjectTypeAttribute Member) AddGroupMembershipAttributes()
+    {
+        var membersMvAttr = new MetaverseAttribute
+        {
+            Id = 9000, Name = "Static Members", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.RemoveAll(a => a.Name == "Static Members");
+        MvoUserType.Attributes.Add(membersMvAttr);
+
+        TargetUserType.Attributes.RemoveAll(a => a.Name == "member");
+        var memberCsoAttr = AddTargetAttribute(9001, "member", AttributeDataType.Reference, AttributePlurality.MultiValued);
+        return (membersMvAttr, memberCsoAttr);
+    }
+
+    private SyncRule CreateDirectExportRule(MetaverseAttribute source, ConnectedSystemObjectTypeAttribute target)
+    {
+        var exportRule = CreateExportRule();
+        var mapping = exportRule.AttributeFlowRules.Single();
+        mapping.TargetConnectedSystemAttribute = target;
+        mapping.TargetConnectedSystemAttributeId = target.Id;
+        mapping.Sources.Clear();
+        mapping.Sources.Add(new SyncRuleMappingSource { Id = 10002, MetaverseAttribute = source, MetaverseAttributeId = source.Id });
+        return exportRule;
+    }
+
+    #endregion
 }
