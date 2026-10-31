@@ -27,8 +27,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// prints them; it asserts only that each path did its job, not how fast.
 /// <list type="bullet">
 /// <item>Deleting a page of obsolete Connected System Objects: 500 departed accounts of 25 values each, on a tracking
-/// context that also holds two groups' 50,000 member values referencing them and others, as the Worker holds a page
-/// (tracking, change detection off). Times the repository deletion through each way in: the Connected System
+/// context that also holds two groups' 50,000 member values referencing them and others, and the run's Connected System,
+/// as the Worker holds a page (tracking, change detection off). Times the repository deletion through each way in: the Connected System
 /// repository's, the quiet deletion that wraps it (the path a leaver cohort actually takes), the execution-item
 /// deletion, and the Synchronisation repository's delete by id; each with and without the history rows (execution
 /// items, change records and the values in them) the database clears to null when an object goes. The statement
@@ -192,6 +192,9 @@ public class LeaverCohortCostDatabaseTests
             InitiatedByType = ActivityInitiatorType.System
         };
 
+        // The Connected System first, tracked, as the Worker loads its own at the start of the run: fix-up then adds
+        // every object the page loads to its Objects, which the deletion has to take the deleted ones out of.
+        var connectedSystem = await ctx.ConnectedSystems.SingleAsync(cs => cs.Id == seeded.SystemId);
         var userPage = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
             seeded.SystemId, seeded.Watermark, 1, 500, Leavers, Guid.Empty, seeded.UserTypeId, null);
         var groupPage = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
@@ -204,6 +207,7 @@ public class LeaverCohortCostDatabaseTests
             Assert.That(groupPage.Results, Has.Count.EqualTo(2));
             Assert.That(ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(),
                 Is.EqualTo(Leavers * ValuesPerLeaver + 2 * (MembersPerGroup + 1)), "the page as the Worker tracks it");
+            Assert.That(connectedSystem.Objects, Has.Count.EqualTo(Leavers + 2), "fix-up added the page's objects to the tracked Connected System");
         }
 
         // The execution-item path deletes objects the obsoletion handling gave an execution item each, as the processor
@@ -243,6 +247,7 @@ public class LeaverCohortCostDatabaseTests
         // on the same context), so whatever a path left tracked must save cleanly.
         Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, $"{path}: the context saves after the deletion");
         await AssertDeletedAsync(path, seeded, leaverIds);
+        Assert.That(connectedSystem.Objects, Has.Count.EqualTo(2), $"{path}: the tracked Connected System holds only the groups");
         if (path == DeletionPath.ExecutionItems)
         {
             using (Assert.EnterMultipleScope())

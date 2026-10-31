@@ -201,13 +201,22 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             Assert.That(tracked.PasswordChange.ProvisionedConnectedSystemObjectId, Is.Null, "and the account it owes a first password");
         }
 
-        // What a later save on the same context writes: nothing, whether or not it detects changes first.
+        // What a later save on the same context writes: nothing, whether or not it detects changes first. A tracked
+        // principal's collection that kept a deleted instance is what a detecting save would find and insert again, so
+        // the collections are asserted beside what the save wrote.
         counter.Reset();
         counter.Counting = true;
         ctx.ChangeTracker.AutoDetectChangesEnabled = detectChangesForSave;
         Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, "a later save on the context succeeds");
         counter.Counting = false;
-        Assert.That(counter.StatementCount, Is.Zero, $"a later save writes nothing: {counter.Describe()}");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(counter.StatementCount, Is.Zero, $"a later save writes nothing: {counter.Describe()}");
+            Assert.That(tracked.ConnectedSystem.Objects.Any(o => ReferenceEquals(o, tracked.Deleted)), Is.False,
+                "the tracked Connected System no longer holds the deleted object");
+            Assert.That(tracked.JoinedMetaverseObject.ConnectedSystemObjects.Any(o => ReferenceEquals(o, tracked.Deleted)), Is.False,
+                "the tracked Metaverse Object it was joined to no longer holds it");
+        }
 
         await AssertDatabaseAfterDeletionAsync(seeded);
     }
@@ -246,6 +255,8 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
     }
 
     private sealed record TrackedReferences(
+        ConnectedSystem ConnectedSystem,
+        MetaverseObject JoinedMetaverseObject,
         ConnectedSystemObject Deleted,
         ConnectedSystemObjectAttributeValue ReferencingValue,
         MetaverseObjectAttributeValue MetaverseValue,
@@ -259,10 +270,14 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
 
     /// <summary>
     /// Every seeded row, loaded tracked one query at a time as different parts of a page would load them, so EF Core's
-    /// fix-up joins each to the tracked object it refers to.
+    /// fix-up joins each to the tracked object it refers to. The Connected System comes first, as the Worker loads its
+    /// own at the start of the run, so fix-up adds each object loaded after it to its <c>Objects</c>; the Metaverse
+    /// Object the deleted object is joined to is tracked too, as it is outside a synchronisation page.
     /// </summary>
     private static async Task<TrackedReferences> LoadTrackedAsync(JimDbContext ctx, SeededReferences seeded)
     {
+        var connectedSystem = await ctx.ConnectedSystems.SingleAsync(cs => cs.Id == seeded.SystemId);
+        var joinedMetaverseObject = await ctx.MetaverseObjects.SingleAsync(m => m.Id == seeded.JoinedMetaverseObjectId);
         var deleted = await ctx.ConnectedSystemObjects
             .Include(c => c.Type)
             .Include(c => c.AttributeValues).ThenInclude(v => v.Attribute)
@@ -271,6 +286,8 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             .Include(c => c.AttributeValues)
             .SingleAsync(c => c.Id == seeded.ReferencingId);
         var tracked = new TrackedReferences(
+            connectedSystem,
+            joinedMetaverseObject,
             deleted,
             referencing.AttributeValues.Single(v => v.Id == seeded.ReferencingValueId),
             await ctx.MetaverseObjectAttributeValues.SingleAsync(v => v.Id == seeded.MetaverseValueId),
@@ -287,6 +304,10 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             Assert.That(tracked.ReferencingValue.ReferenceValue, Is.SameAs(deleted), "fix-up joined the referencing value to the tracked object");
             Assert.That(tracked.PendingExport.ConnectedSystemObject, Is.SameAs(deleted), "and the Pending Export");
             Assert.That(tracked.ChangeValue.ReferenceValue, Is.SameAs(deleted), "and the change value");
+            Assert.That(connectedSystem.Objects.Any(o => ReferenceEquals(o, deleted)), Is.True,
+                "fix-up added the object to the tracked Connected System's Objects, as on the Worker's context");
+            Assert.That(joinedMetaverseObject.ConnectedSystemObjects.Any(o => ReferenceEquals(o, deleted)), Is.True,
+                "and to the tracked Metaverse Object it is joined to");
         }
 
         return tracked;
@@ -491,7 +512,7 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
     }
 
     private sealed record SeededReferences(
-        Guid DeletedId, Guid ReferencingId, Guid ReferencingValueId, Guid MetaverseValueId, Guid PendingExportId, Guid ExecutionItemId,
+        int SystemId, Guid JoinedMetaverseObjectId, Guid DeletedId, Guid ReferencingId, Guid ReferencingValueId, Guid MetaverseValueId, Guid PendingExportId, Guid ExecutionItemId,
         Guid ChangeId, Guid ChangeValueId, Guid PasswordChangeId, Guid DeferredReferenceId, Guid AssignmentId);
 
     /// <summary>
@@ -524,10 +545,12 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
         seed.SyncRuleMappingGenerations.Add(generation);
         await seed.SaveChangesAsync();
 
+        // Joined, as an obsolete object whose Inbound Out of Scope Action keeps the join is deleted while still joined.
         var deleted = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(), ConnectedSystemId = schema.SystemId, TypeId = schema.TypeId, ExternalIdAttributeId = schema.ExternalIdAttributeId,
-            Status = ConnectedSystemObjectStatus.Obsolete, JoinType = ConnectedSystemObjectJoinType.NotJoined
+            Status = ConnectedSystemObjectStatus.Obsolete, JoinType = ConnectedSystemObjectJoinType.Joined, MetaverseObject = person,
+            DateJoined = DateTime.UtcNow
         };
         deleted.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schema.ExternalIdAttributeId, StringValue = "uid=tina.adams,ou=People,dc=yellowstone,dc=local" });
         deleted.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), AttributeId = schema.TextAttributeIds[0], StringValue = "tadams" });
@@ -588,7 +611,7 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
         seed.AddRange(metaverseValue, pendingExport, activity, executionItem, change, referencingChange, passwordChange, deferredReference, assignment);
         await seed.SaveChangesAsync();
 
-        return new SeededReferences(deleted.Id, referencing.Id, referencingValue.Id, metaverseValue.Id, pendingExport.Id, executionItem.Id,
+        return new SeededReferences(schema.SystemId, person.Id, deleted.Id, referencing.Id, referencingValue.Id, metaverseValue.Id, pendingExport.Id, executionItem.Id,
             change.Id, changeValue.Id, passwordChange.Id, deferredReference.Id, assignment.Id);
     }
 

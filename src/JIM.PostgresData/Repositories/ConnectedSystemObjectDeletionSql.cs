@@ -8,6 +8,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace JIM.PostgresData.Repositories;
 
@@ -42,6 +43,12 @@ namespace JIM.PostgresData.Repositories;
 /// Clearing sets a foreign key's current and original value to null and its navigation to null, so the tracker holds
 /// what the database holds and a later save writes nothing, whether or not it detects changes first. A row that was
 /// already modified keeps its other pending changes and writes the null with them.
+/// </para>
+/// <para>
+/// The other direction too: a deleted row is taken out of every tracked principal's collection navigation that holds
+/// it (the Connected System's <c>Objects</c>, a joined Metaverse Object's <c>ConnectedSystemObjects</c>, and any other
+/// the model declares), as EF Core's delete fix-up did, so nothing reads a deleted object as connected or walks it back
+/// into the tracker.
 /// </para>
 /// <para>
 /// One foreign key points the other way, at a value deleted with its object: <c>ConnectedSystemObjectChanges.DeletedObjectExternalIdAttributeValueId</c>,
@@ -116,10 +123,11 @@ internal static class ConnectedSystemObjectDeletionSql
         // rolled-back database.
         using (var trackerSpan = ActivitySource.StartActivity("Cso.Delete.UpdateTracker"))
         {
-            var (scanned, detached, cleared) = UpdateTracker(context, ids);
+            var (scanned, detached, cleared, removedFromCollections) = UpdateTracker(context, ids);
             trackerSpan?.SetTag("entriesScanned", scanned);
             trackerSpan?.SetTag("detachedCount", detached);
             trackerSpan?.SetTag("clearedForeignKeyCount", cleared);
+            trackerSpan?.SetTag("removedFromCollectionCount", removedFromCollections);
         }
 
         if (ownTransaction != null)
@@ -143,7 +151,7 @@ internal static class ConnectedSystemObjectDeletionSql
     /// References are cleared while the deleted objects are still tracked, so EF Core's own fix-up also takes the rows
     /// out of the objects' inverse collections.
     /// </remarks>
-    private static (int Scanned, int Detached, int Cleared) UpdateTracker(JimDbContext context, HashSet<Guid> ids)
+    private static (int Scanned, int Detached, int Cleared, int RemovedFromCollections) UpdateTracker(JimDbContext context, HashSet<Guid> ids)
     {
         var detectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
         context.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -160,10 +168,12 @@ internal static class ConnectedSystemObjectDeletionSql
                     cleared += ClearReferencesToTheObjects(entry, ids);
             }
 
+            var removedFromCollections = RemoveFromTrackedCollections(entries, toDetach);
+
             foreach (var entry in toDetach)
                 entry.State = EntityState.Detached;
 
-            return (entries.Count, toDetach.Count, cleared);
+            return (entries.Count, toDetach.Count, cleared, removedFromCollections);
         }
         finally
         {
@@ -182,6 +192,136 @@ internal static class ConnectedSystemObjectDeletionSql
         GeneratedValueAssignment assignment => assignment.ConnectedSystemObjectId is { } owner && ids.Contains(owner),
         _ => false
     };
+
+    /// <summary>
+    /// Takes the deleted instances out of every tracked principal's collection navigation that holds them, as EF Core's
+    /// own delete fix-up did when the deletion went through <c>RemoveRange</c>; returns how many it removed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Detaching an instance leaves it in any tracked collection that holds it: the run's tracked Connected System
+    /// holds every object fix-up met while it was tracked in <c>Objects</c>, and a tracked Metaverse Object holds its
+    /// joined objects in <c>ConnectedSystemObjects</c>. A deleted object left there is read as still connected by
+    /// anything walking the collection, and is attached again by anything that walks the principal's graph (#2669).
+    /// </para>
+    /// <para>
+    /// The collections are found from the model, not named: every foreign key of a deleted row's entity type whose
+    /// principal has a collection navigation onto it, so a navigation added later is covered too. The principal is the
+    /// deleted row's reference navigation where it has one, otherwise the tracked row its foreign key names. A
+    /// principal deleted in the same pass keeps its collections (a deleted object still lists its values for whoever
+    /// reads it afterwards). A plain list is cleared in one pass; any other collection through EF Core's accessor.
+    /// </para>
+    /// </remarks>
+    private static int RemoveFromTrackedCollections(List<EntityEntry> entries, List<EntityEntry> deletedEntries)
+    {
+        if (deletedEntries.Count == 0)
+            return 0;
+
+        var deleted = deletedEntries.Select(e => e.Entity).ToHashSet(ReferenceEqualityComparer.Instance);
+        var trackedEntities = entries.Select(e => e.Entity).ToHashSet(ReferenceEqualityComparer.Instance);
+        var collectionForeignKeys = new Dictionary<IEntityType, List<IForeignKey>>();
+        var principalsByKey = new Dictionary<IEntityType, Dictionary<object, object>>();
+
+        // Principal, then the collection on it, then the deleted rows it holds.
+        var toRemove = new Dictionary<object, Dictionary<INavigation, List<object>>>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in deletedEntries)
+        {
+            if (!collectionForeignKeys.TryGetValue(entry.Metadata, out var foreignKeys))
+            {
+                foreignKeys = entry.Metadata.GetForeignKeys().Where(fk => fk.PrincipalToDependent is { IsCollection: true }).ToList();
+                collectionForeignKeys[entry.Metadata] = foreignKeys;
+            }
+
+            foreach (var foreignKey in foreignKeys)
+            {
+                var principal = FindTrackedPrincipal(entry, foreignKey, trackedEntities, entries, principalsByKey);
+                if (principal == null || deleted.Contains(principal))
+                    continue;
+
+                if (!toRemove.TryGetValue(principal, out var byNavigation))
+                {
+                    byNavigation = [];
+                    toRemove[principal] = byNavigation;
+                }
+
+                var navigation = foreignKey.PrincipalToDependent!;
+                if (!byNavigation.TryGetValue(navigation, out var dependents))
+                {
+                    dependents = [];
+                    byNavigation[navigation] = dependents;
+                }
+
+                dependents.Add(entry.Entity);
+            }
+        }
+
+        var removed = 0;
+        foreach (var (principal, byNavigation) in toRemove)
+        {
+            foreach (var (navigation, dependents) in byNavigation)
+                removed += RemoveFromCollection(principal, navigation, dependents, deleted);
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    /// The tracked principal a deleted row's foreign key points at, or null when none is tracked.
+    /// </summary>
+    private static object? FindTrackedPrincipal(EntityEntry entry, IForeignKey foreignKey, HashSet<object> trackedEntities,
+        List<EntityEntry> entries, Dictionary<IEntityType, Dictionary<object, object>> principalsByKey)
+    {
+        if (foreignKey.DependentToPrincipal is { } toPrincipal
+            && entry.Reference(toPrincipal.Name).CurrentValue is { } referenced
+            && trackedEntities.Contains(referenced))
+        {
+            return referenced;
+        }
+
+        // Without a reference to follow, the key: every foreign key into these tables is a single column today.
+        if (foreignKey.Properties.Count != 1 || entry.Property(foreignKey.Properties[0].Name).CurrentValue is not { } keyValue)
+            return null;
+
+        var principalType = foreignKey.PrincipalEntityType;
+        if (!principalsByKey.TryGetValue(principalType, out var byKey))
+        {
+            var keyName = foreignKey.PrincipalKey.Properties[0].Name;
+            byKey = entries
+                .Where(e => principalType.IsAssignableFrom(e.Metadata))
+                .GroupBy(e => e.Property(keyName).CurrentValue!)
+                .ToDictionary(g => g.Key, g => g.First().Entity);
+            principalsByKey[principalType] = byKey;
+        }
+
+        return byKey.GetValueOrDefault(keyValue);
+    }
+
+    /// <summary>
+    /// Removes the deleted rows from one collection on one principal; returns how many it held.
+    /// </summary>
+    private static int RemoveFromCollection(object principal, INavigation navigation, List<object> dependents, HashSet<object> deleted)
+    {
+        var collection = navigation.GetGetter().GetClrValue(principal);
+        if (collection is System.Collections.IList list)
+        {
+            var removed = 0;
+            for (var i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i] is { } item && deleted.Contains(item))
+                {
+                    list.RemoveAt(i);
+                    removed++;
+                }
+            }
+            return removed;
+        }
+
+        if (collection == null)
+            return 0;
+
+        var accessor = navigation.GetCollectionAccessor()!;
+        return dependents.Count(dependent => accessor.Remove(principal, dependent));
+    }
 
     /// <summary>
     /// Clears every reference the entry holds to a deleted object, as the database cleared it; returns how many.
