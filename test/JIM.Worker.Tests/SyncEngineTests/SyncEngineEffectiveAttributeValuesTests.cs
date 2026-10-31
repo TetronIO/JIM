@@ -6,6 +6,7 @@ using JIM.Application.Servers;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 
 namespace JIM.Worker.Tests.SyncEngineTests;
 
@@ -21,6 +22,9 @@ public class SyncEngineEffectiveAttributeValuesTests
 {
     private const int HeldMemberCount = 50_000;
     private const int SurvivingMemberCount = 2;
+
+    // The number of pending removals above which the list indexes them.
+    private const int IndexThreshold = ReferenceIndexedList<MetaverseObjectAttributeValue>.IndexThreshold;
 
     private static readonly TimeSpan Bound = TimeSpan.FromSeconds(1);
 
@@ -97,8 +101,9 @@ public class SyncEngineEffectiveAttributeValuesTests
     /// name held values, other attributes' values and values not held. While the values are read, the removals change
     /// as callers change them, mostly by growing: the value just read is appended (as the typed writer does), or a
     /// value still to be read, a value not held, or a batch that takes the removals across the threshold. Now and then
-    /// the last few are dropped, or all are cleared, or the list is replaced by another. Every trial must yield the
-    /// same values, by reference and in the same order.
+    /// the last few are dropped, or all are cleared, or the list is replaced by another, or an earlier removal is taken
+    /// back and the last one appended again (the edit the next test isolates). Every trial must yield the same
+    /// values, by reference and in the same order.
     /// </summary>
     [Test]
     public void GetEffectiveAttributeValues_RemovalsChangingWhileTheValuesAreRead_YieldsWhatScanningTheRemovalsYielded()
@@ -108,11 +113,11 @@ public class SyncEngineEffectiveAttributeValuesTests
         for (var trial = 0; trial < 2_000; trial++)
         {
             var values = new List<MetaverseObjectAttributeValue>();
-            var valueCount = random.Next(PendingRemovalLookup.IndexThreshold * 4);
+            var valueCount = random.Next(IndexThreshold * 4);
             for (var i = 0; i < valueCount; i++)
                 values.Add(HeldValue(random, values, description));
             var strangers = Enumerable.Range(0, 20).Select(_ => MemberValue()).ToList();
-            var removals = Enumerable.Range(0, random.Next(PendingRemovalLookup.IndexThreshold * 3))
+            var removals = Enumerable.Range(0, random.Next(IndexThreshold * 3))
                 .Select(_ => Pick(random, values, strangers))
                 .ToList();
             var steps = Enumerable.Range(0, valueCount).Select(_ => NextStep(random, values, strangers)).ToList();
@@ -129,6 +134,38 @@ public class SyncEngineEffectiveAttributeValuesTests
         }
     }
 
+    /// <summary>
+    /// The edit the first fix for #2664 could not see. Between two checks, an earlier removal is taken back and the
+    /// last one appended again, so the removals are as many as before and end with the same value. That fix kept its
+    /// own index of the removals beside the list, brought up to date before each check by what had been appended, and
+    /// rebuilt only when the list was replaced, shorter, or ended differently; this edit is none of those, so it still
+    /// held the value taken back and filtered it out (this test failed against it). The pending removals now index
+    /// themselves, as every edit happens, so no edit goes unseen.
+    /// </summary>
+    [Test]
+    public void GetEffectiveAttributeValues_EarlierRemovalTakenBackAndLastAppendedAgainMidRead_YieldsTheValueTakenBack()
+    {
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var members = Enumerable.Range(0, IndexThreshold + 8).Select(_ => MemberValue()).ToList();
+        mvo.AttributeValues.AddRange(members);
+        var removed = members.Skip(1).Take(IndexThreshold + 3).ToList();
+        mvo.PendingAttributeValueRemovals.AddRange(removed);
+
+        var yielded = new List<MetaverseObjectAttributeValue>();
+        foreach (var value in SyncEngine.GetEffectiveAttributeValues(mvo, StaticMembers.Id))
+        {
+            yielded.Add(value);
+            if (yielded.Count == 1)
+            {
+                mvo.PendingAttributeValueRemovals.Remove(members[1]);
+                mvo.PendingAttributeValueRemovals.Add(mvo.PendingAttributeValueRemovals[^1]);
+            }
+        }
+
+        Assert.That(yielded, Is.EqualTo(members.Where(member => ReferenceEquals(member, members[1]) || !removed.Contains(member))),
+            "the member taken back from the removals is read, after the first member, then those never removed");
+    }
+
     // GetEffectiveAttributeValues as it stood before #2664: a lazy filter that scans the pending removals, as they
     // stand when it reaches each value, by reference (the value type does not override Equals).
     private static IEnumerable<MetaverseObjectAttributeValue> EffectiveValuesByScan(MetaverseObject mvo, int attributeId)
@@ -136,7 +173,7 @@ public class SyncEngineEffectiveAttributeValuesTests
 
     // Reads the effective values of a fresh object holding these values and removals, changing its removals after each
     // value is read as the step for that position says.
-    private static (List<MetaverseObjectAttributeValue> Yielded, List<MetaverseObjectAttributeValue> Removals) Read(
+    private static (List<MetaverseObjectAttributeValue> Yielded, IReadOnlyList<MetaverseObjectAttributeValue> Removals) Read(
         Func<MetaverseObject, int, IEnumerable<MetaverseObjectAttributeValue>> effectiveValues,
         List<MetaverseObjectAttributeValue> values,
         List<MetaverseObjectAttributeValue> removals,
@@ -166,10 +203,15 @@ public class SyncEngineEffectiveAttributeValuesTests
                     mvo.PendingAttributeValueRemovals = [.. step.Values, .. mvo.PendingAttributeValueRemovals];
                     break;
                 case ReadStepKind.DropTheLast:
-                    var dropped = Math.Min(step.DropCount, mvo.PendingAttributeValueRemovals.Count);
-                    mvo.PendingAttributeValueRemovals.RemoveRange(mvo.PendingAttributeValueRemovals.Count - dropped, dropped);
+                    var dropped = Math.Min(step.Number, mvo.PendingAttributeValueRemovals.Count);
+                    for (var i = 0; i < dropped; i++)
+                        mvo.PendingAttributeValueRemovals.RemoveAt(mvo.PendingAttributeValueRemovals.Count - 1);
                     break;
-                case ReadStepKind.Nothing:
+                case ReadStepKind.TakeBackAnEarlierAndAppendTheLastAgain when mvo.PendingAttributeValueRemovals.Count > 1:
+                    mvo.PendingAttributeValueRemovals.RemoveAt(step.Number % (mvo.PendingAttributeValueRemovals.Count - 1));
+                    mvo.PendingAttributeValueRemovals.Add(mvo.PendingAttributeValueRemovals[^1]);
+                    break;
+                default:
                     break;
             }
         }
@@ -177,11 +219,11 @@ public class SyncEngineEffectiveAttributeValuesTests
     }
 
     // Mostly nothing or the typed writer's append of the value just read; otherwise an append of one value (held, still
-    // to be read, or not held) or of a batch, and now and then the last few dropped, a clear, or a replacement of the
-    // list.
+    // to be read, or not held) or of a batch, and now and then the last few dropped, a clear, a replacement of the
+    // list, or an earlier removal taken back and the last appended again.
     private static ReadStep NextStep(Random random, List<MetaverseObjectAttributeValue> values, List<MetaverseObjectAttributeValue> strangers)
     {
-        var kind = random.Next(42);
+        var kind = random.Next(44);
         if (kind < 20)
             return new ReadStep(ReadStepKind.Nothing, []);
         if (kind < 28)
@@ -189,12 +231,14 @@ public class SyncEngineEffectiveAttributeValuesTests
         if (kind < 35)
             return new ReadStep(ReadStepKind.Append, [Pick(random, values, strangers)]);
         if (kind < 38)
-            return new ReadStep(ReadStepKind.Append, [.. Enumerable.Range(0, random.Next(PendingRemovalLookup.IndexThreshold + 10)).Select(_ => Pick(random, values, strangers))]);
+            return new ReadStep(ReadStepKind.Append, [.. Enumerable.Range(0, random.Next(IndexThreshold + 10)).Select(_ => Pick(random, values, strangers))]);
         if (kind == 38)
             return new ReadStep(ReadStepKind.Clear, []);
         if (kind == 39)
             return new ReadStep(ReadStepKind.Replace, [.. Enumerable.Range(0, random.Next(10)).Select(_ => Pick(random, values, strangers))]);
-        return new ReadStep(ReadStepKind.DropTheLast, [], random.Next(1, 12));
+        if (kind < 42)
+            return new ReadStep(ReadStepKind.DropTheLast, [], random.Next(1, 12));
+        return new ReadStep(ReadStepKind.TakeBackAnEarlierAndAppendTheLastAgain, [], random.Next(1_000_000));
     }
 
     // Mostly a held value (of this attribute or another, so some are named more than once), otherwise one not held.
@@ -226,9 +270,11 @@ public class SyncEngineEffectiveAttributeValuesTests
         AppendTheValueRead,
         Append,
         DropTheLast,
+        TakeBackAnEarlierAndAppendTheLastAgain,
         Clear,
         Replace
     }
 
-    private sealed record ReadStep(ReadStepKind Kind, List<MetaverseObjectAttributeValue> Values, int DropCount = 0);
+    // Number is how many to drop, or which earlier removal to take back.
+    private sealed record ReadStep(ReadStepKind Kind, List<MetaverseObjectAttributeValue> Values, int Number = 0);
 }
