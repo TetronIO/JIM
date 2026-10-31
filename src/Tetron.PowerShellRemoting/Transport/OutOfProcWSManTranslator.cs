@@ -22,7 +22,8 @@ namespace Tetron.PowerShellRemoting.Transport;
 /// </list>
 /// Packets are handled one at a time, in order, on a dedicated thread, so PowerShell's writer never blocks on the
 /// network. Control operations share one connection; each Receive pump has its own, because a Receive may be held by
-/// the server for the whole operation timeout. The approach follows PSWSMan (MIT, Jordan Borean), which first showed
+/// the server for the whole operation timeout. A pump that finishes cleanly hands its connection, still authenticated,
+/// to the next, and every connection shares the session's one login to the KDC. The approach follows PSWSMan (MIT, Jordan Borean), which first showed
 /// PowerShell's custom transport API can carry WinRM.
 /// </remarks>
 internal sealed class OutOfProcWSManTranslator : IDisposable
@@ -31,6 +32,7 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
     private const int EnvelopeOverhead = 4096;
 
     private readonly RemoteSessionOptions _options;
+    private readonly RemoteSessionStatistics _statistics;
     private readonly WSManSessionSettings _settings;
     private readonly Guid _shellId;
     private readonly Action<string> _onPacket;
@@ -40,21 +42,25 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
     private readonly ManualResetEventSlim _firstShellReceive = new();
     private readonly PsrpOpeningMessage _sessionOpening = new(InitRunspacePool);
     private readonly Dictionary<Guid, Pipeline> _pipelines = [];
-    private readonly ConcurrentBag<WinRMConnection> _connections = [];
+    private readonly KerberosLogin _login;
+    private readonly ConcurrentDictionary<WinRMConnection, byte> _connections = new();
+    private readonly ConcurrentBag<WinRMConnection> _idle = [];
     private readonly WinRMConnection _control;
     private bool _shellCreated;
     private volatile bool _closing;
     private int _disposed;
 
-    public OutOfProcWSManTranslator(RemoteSessionOptions options, Guid shellId, Action<string> onPacket, Action<Exception> onError)
+    public OutOfProcWSManTranslator(RemoteSessionOptions options, RemoteSessionStatistics statistics, Guid shellId, Action<string> onPacket, Action<Exception> onError)
     {
         _options = options;
+        _statistics = statistics;
         _shellId = shellId;
         _onPacket = onPacket;
         _onError = onError;
         _settings = new WSManSessionSettings(options.ConnectionUri, $"http://schemas.microsoft.com/powershell/{options.ConfigurationName}",
             Guid.NewGuid(), 153600, options.OperationTimeout);
-        _control = NewConnection();
+        _login = new KerberosLogin(options, statistics);
+        _control = OpenConnection();
         Writer = new PacketWriter(_requests);
         new Thread(Run) { IsBackground = true, Name = $"Tetron.PowerShellRemoting {shellId}" }.Start();
     }
@@ -70,15 +76,34 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
         _closing = true;
         _lifetime.Cancel();
         _requests.CompleteAdding();
-        foreach (var connection in _connections)
+        foreach (var connection in _connections.Keys)
             connection.Dispose();
+        _connections.Clear();
+        _login.Dispose();
     }
 
-    private WinRMConnection NewConnection()
+    private WinRMConnection OpenConnection()
     {
-        var connection = new WinRMConnection(_options);
-        _connections.Add(connection);
+        var connection = new WinRMConnection(_options, _login, _statistics);
+        _connections.TryAdd(connection, 0);
         return connection;
+    }
+
+    // A connection a finished Receive handed back is still authenticated, so it serves the next rather than a new one.
+    private WinRMConnection RentConnection() => _idle.TryTake(out var connection) ? connection : OpenConnection();
+
+    private void ReturnConnection(WinRMConnection connection)
+    {
+        if (_closing)
+            Retire(connection);
+        else
+            _idle.Add(connection);
+    }
+
+    private void Retire(WinRMConnection connection)
+    {
+        _connections.TryRemove(connection, out _);
+        connection.Dispose();
     }
 
     private void Run()
@@ -89,8 +114,10 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
             {
                 Process(line);
             }
-            catch (Exception error) when (error is not OperationCanceledException || !_closing)
+            catch (Exception error) when (error is not OutOfMemoryException)
             {
+                // Nothing may escape this thread: an exception there ends the whole process. A failure goes to
+                // PowerShell, unless the session is already closing and nothing is waiting for it.
                 if (!_closing)
                     _onError(error);
             }
@@ -118,7 +145,8 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
                 break;
 
             case "Command":
-                _pipelines[psGuid] = new Pipeline(psGuid);
+                _statistics.RecordCommand();
+                _pipelines[psGuid] = new Pipeline(psGuid, _lifetime.Token);
                 Emit($"<CommandAck PSGuid='{psGuid}' />");
                 break;
 
@@ -189,6 +217,7 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
         if (_pipelines.Remove(commandId, out var pipeline))
         {
             pipeline.Receive.Cancel();
+            pipeline.Receive.Dispose();
             if (pipeline.Created)
                 Call(WSManMessages.Signal(_settings, _shellId, commandId, WSManSignal.Terminate));
         }
@@ -240,14 +269,15 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
 
     private void StartReceive(Pipeline? pipeline)
     {
-        var connection = NewConnection();
-        var cancellation = pipeline is null ? _lifetime.Token : CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, pipeline.Receive.Token).Token;
+        var connection = RentConnection();
+        var cancellation = pipeline?.Receive.Token ?? _lifetime.Token;
         _ = Task.Run(() => ReceiveLoopAsync(connection, pipeline, cancellation), CancellationToken.None);
     }
 
     private async Task ReceiveLoopAsync(WinRMConnection connection, Pipeline? pipeline, CancellationToken cancellationToken)
     {
         var psGuid = pipeline?.CommandId ?? Guid.Empty;
+        var finished = false;
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -269,21 +299,30 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
                 if (pipeline is null)
                     _firstShellReceive.Set();
                 if (result.CommandDone)
+                {
+                    finished = true;
                     return;
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // The pipeline or the session closed.
         }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (Exception error) when (error is not OutOfMemoryException)
         {
+            // This includes a request timing out, which is an OperationCanceledException nobody here asked for: it
+            // must reach PowerShell as an error, or the command would wait for output that never comes.
             if (!_closing && pipeline?.Receive.IsCancellationRequested != true)
                 _onError(error);
         }
         finally
         {
-            connection.Dispose();
+            // Only a connection whose last Receive completed is known to be in step with the server.
+            if (finished)
+                ReturnConnection(connection);
+            else
+                Retire(connection);
         }
     }
 
@@ -293,11 +332,13 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
             _onPacket(packet);
     }
 
-    private sealed class Pipeline(Guid commandId)
+    private sealed class Pipeline(Guid commandId, CancellationToken session)
     {
         public Guid CommandId { get; } = commandId;
         public PsrpOpeningMessage Opening { get; } = new(requiredMessageType: null);
-        public CancellationTokenSource Receive { get; } = new();
+
+        /// <summary>Cancelled when the pipeline or the session closes; disposed when the pipeline closes.</summary>
+        public CancellationTokenSource Receive { get; } = CancellationTokenSource.CreateLinkedTokenSource(session);
         public bool Created { get; set; }
     }
 

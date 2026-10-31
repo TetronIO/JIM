@@ -64,6 +64,7 @@ KERBEROS_PROTOCOL = "application/HTTP-Kerberos-session-encrypted"
 SERVICE_HOST = os.environ.get("WINRM_SERVICE_HOST", "winrm-harness.harness.test")
 # How long a Receive waits for output when the client sends no w:OperationTimeout. WinRM honours the client's.
 RECEIVE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_RECEIVE_TIMEOUT_SECONDS", "10"))
+IDLE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_IDLE_TIMEOUT_SECONDS", "120"))
 DURATION = re.compile(r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$")
 
 
@@ -343,6 +344,9 @@ def handle(envelope_bytes: bytes) -> bytes:
 
 class WinRMHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # A connection that sends nothing for this long is closed, as HTTP.sys closes idle connections (120 seconds by
+    # default). Kerberos authentication goes with it, so the client must authenticate a new connection to carry on.
+    timeout = IDLE_TIMEOUT_SECONDS
 
     def setup(self):
         super().setup()

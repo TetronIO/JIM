@@ -44,6 +44,9 @@ services:
     hostname: winrm-harness
     environment:
       - WINRM_SERVICE_HOST=winrm-harness.harness.test
+      # HTTP.sys closes idle connections after 120 seconds; the harness does it after 5, so the tests reach the
+      # client's re-authentication quickly. KerberosHarness.ServerIdleTimeout must match.
+      - WINRM_IDLE_TIMEOUT_SECONDS=5
       - WINRM_TLS_CERTIFICATE=/etc/harness/winrm-tls.crt
       - WINRM_TLS_KEY=/etc/harness/winrm-tls.key
     volumes:

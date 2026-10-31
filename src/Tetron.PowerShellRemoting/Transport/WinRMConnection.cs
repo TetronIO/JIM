@@ -20,13 +20,17 @@ namespace Tetron.PowerShellRemoting.Transport;
 internal sealed class WinRMConnection : IDisposable
 {
     private readonly RemoteSessionOptions _options;
+    private readonly KerberosLogin _login;
+    private readonly RemoteSessionStatistics _statistics;
     private readonly HttpClient _http;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private KerberosClientContext? _context;
 
-    public WinRMConnection(RemoteSessionOptions options)
+    public WinRMConnection(RemoteSessionOptions options, KerberosLogin login, RemoteSessionStatistics statistics)
     {
         _options = options;
+        _login = login;
+        _statistics = statistics;
         var handler = new SocketsHttpHandler
         {
             MaxConnectionsPerServer = 1,
@@ -49,28 +53,36 @@ internal sealed class WinRMConnection : IDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_context is not { IsEstablished: true })
-                await AuthenticateAsync(cancellationToken).ConfigureAwait(false);
-
-            using var request = BuildRequest(envelope);
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            for (var attempt = 1; ; attempt++)
             {
-                ResetContext();
-                throw new WSManFaultException(5, "AccessDenied",
-                    "The WinRM server refused the request after Kerberos authentication (HTTP 401). The account may lack access to the session configuration.");
+                if (_context is not { IsEstablished: true })
+                    await AuthenticateAsync(cancellationToken).ConfigureAwait(false);
+
+                using var request = BuildRequest(envelope);
+                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+                // A 401 after authenticating usually means the server no longer knows this connection: it closed it
+                // while it was idle (HTTP.sys does after two minutes) and the client opened a new one. The server
+                // processed nothing, so the request goes again, once, on a newly authenticated connection.
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    ResetContext();
+                    if (attempt == 1)
+                        continue;
+                    throw new WSManFaultException(5, "AccessDenied",
+                        "The WinRM server refused the request after Kerberos authentication (HTTP 401). The account may lack access to the session configuration.");
+                }
+
+                // WinRM returns SOAP faults as HTTP 500, still encrypted; anything else unexpected has no SOAP to read.
+                if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.InternalServerError))
+                    throw new WSManFaultException((uint)response.StatusCode, "HttpError",
+                        $"The WinRM server answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
+
+                return _options.UsesMessageEncryption
+                    ? WinRMEncryptedMessage.Decode(body, response.Content.Headers.ContentType?.ToString() ?? "", _context!)
+                    : body;
             }
-
-            // WinRM returns SOAP faults as HTTP 500, still encrypted; anything else unexpected has no SOAP to read.
-            if (response.StatusCode is not (HttpStatusCode.OK or HttpStatusCode.InternalServerError))
-                throw new WSManFaultException((uint)response.StatusCode, "HttpError",
-                    $"The WinRM server answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
-
-            return _options.UsesMessageEncryption
-                ? WinRMEncryptedMessage.Decode(body, response.Content.Headers.ContentType?.ToString() ?? "", _context!)
-                : body;
         }
         finally
         {
@@ -111,9 +123,20 @@ internal sealed class WinRMConnection : IDisposable
     private async Task AuthenticateAsync(CancellationToken cancellationToken)
     {
         ResetContext();
-        _context = KerberosClientContext.Create(_options.UserPrincipalName, _options.Password, _options.ServiceHost);
-
-        var token = _context.Step(ReadOnlySpan<byte>.Empty);
+        var credential = _login.Current;
+        byte[]? token;
+        try
+        {
+            _context = KerberosClientContext.Create(credential, _options.ServiceHost);
+            token = _context.Step(ReadOnlySpan<byte>.Empty);
+        }
+        catch (KerberosException error) when (error.IsCredentialExpired)
+        {
+            // The session's ticket-granting ticket has run out (ten hours, by default): log in again and carry on.
+            ResetContext();
+            _context = KerberosClientContext.Create(_login.Renew(credential), _options.ServiceHost);
+            token = _context.Step(ReadOnlySpan<byte>.Empty);
+        }
         for (var round = 0; round < 4 && token is not null; round++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.ConnectionUri)
@@ -135,6 +158,7 @@ internal sealed class WinRMConnection : IDisposable
         if (!_context.IsEstablished)
             throw new WSManFaultException(5, "AccessDenied",
                 "The WinRM server did not complete mutual Kerberos authentication, so its identity is unproven; nothing was sent.");
+        _statistics.RecordConnectionOpened();
     }
 
     private void ResetContext()

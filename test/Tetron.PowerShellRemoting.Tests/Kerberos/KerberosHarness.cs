@@ -18,6 +18,9 @@ internal static partial class KerberosHarness
     internal const string ClientPassword = "Client@123!";
     internal const string ServiceHost = "winrm-harness.harness.test";
 
+    /// <summary>How long the stand-in server keeps an idle connection (docker-compose.yml, WINRM_IDLE_TIMEOUT_SECONDS).</summary>
+    internal static readonly TimeSpan ServerIdleTimeout = TimeSpan.FromSeconds(5);
+
     private static readonly object Gate = new();
     private static bool _configured;
 

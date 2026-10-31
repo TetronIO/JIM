@@ -14,14 +14,16 @@ namespace Tetron.PowerShellRemoting.Transport;
 internal sealed class WinRMClientTransportManager : ClientSessionTransportManagerBase
 {
     private readonly RemoteSessionOptions _options;
+    private readonly RemoteSessionStatistics _statistics;
     private readonly Guid _runspacePoolId;
     private OutOfProcWSManTranslator? _translator;
     private volatile bool _closed;
 
-    public WinRMClientTransportManager(RemoteSessionOptions options, Guid runspacePoolId, PSRemotingCryptoHelper cryptoHelper)
+    public WinRMClientTransportManager(RemoteSessionOptions options, RemoteSessionStatistics statistics, Guid runspacePoolId, PSRemotingCryptoHelper cryptoHelper)
         : base(runspacePoolId, cryptoHelper)
     {
         _options = options;
+        _statistics = statistics;
         _runspacePoolId = runspacePoolId;
     }
 
@@ -29,7 +31,7 @@ internal sealed class WinRMClientTransportManager : ClientSessionTransportManage
     {
         try
         {
-            _translator = new OutOfProcWSManTranslator(_options, _runspacePoolId, HandleDataReceived, ReportError);
+            _translator = new OutOfProcWSManTranslator(_options, _statistics, _runspacePoolId, HandleDataReceived, ReportError);
             SetMessageWriter(_translator.Writer);
             SendOneItem();
         }

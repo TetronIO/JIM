@@ -21,14 +21,20 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
     private const uint RequestFlags = GssapiNative.GSS_C_MUTUAL_FLAG | GssapiNative.GSS_C_REPLAY_FLAG
         | GssapiNative.GSS_C_SEQUENCE_FLAG | GssapiNative.GSS_C_CONF_FLAG | GssapiNative.GSS_C_INTEG_FLAG;
 
-    private IntPtr _credential;
+    private readonly KerberosCredential _credential;
+    private readonly bool _ownsCredential;
+    private bool _credentialReferenced;
     private IntPtr _targetName;
     private IntPtr _context;
+    private bool _disposed;
 
-    private KerberosClientContext(IntPtr credential, IntPtr targetName)
+    private KerberosClientContext(KerberosCredential credential, bool ownsCredential, IntPtr targetName)
     {
         _credential = credential;
+        _ownsCredential = ownsCredential;
         _targetName = targetName;
+        // Holds the credential's handle for the life of this context, however soon its owner disposes of it.
+        credential.DangerousAddRef(ref _credentialReferenced);
     }
 
     /// <summary>True once the service has authenticated back (mutual authentication) and messages can be sealed.</summary>
@@ -41,31 +47,27 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
     /// <exception cref="KerberosException">The KDC refused the credential, or the names could not be parsed.</exception>
     public static KerberosClientContext Create(string userPrincipalName, string password, string serviceHost, string serviceClass = "HTTP")
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(userPrincipalName);
-        ArgumentNullException.ThrowIfNull(password);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceHost);
         ArgumentException.ThrowIfNullOrWhiteSpace(serviceClass);
 
-        var userName = ImportName(userPrincipalName, NativeOids.KerberosPrincipalName);
+        var credential = KerberosCredential.Acquire(userPrincipalName, password);
         try
         {
-            var credential = AcquireCredential(userName, password);
-            try
-            {
-                var targetName = ImportName($"{serviceClass}@{serviceHost}", NativeOids.HostBasedServiceName);
-                return new KerberosClientContext(credential, targetName);
-            }
-            catch
-            {
-                GssapiNative.ReleaseCredential(out _, ref credential);
-                throw;
-            }
+            return Create(credential, ownsCredential: true, serviceHost, serviceClass);
         }
-        finally
+        catch
         {
-            GssapiNative.ReleaseName(out _, ref userName);
+            credential.Dispose();
+            throw;
         }
     }
+
+    /// <summary>
+    /// Prepares a context with the service <c>serviceClass/serviceHost</c> from a credential already obtained, so no
+    /// new login is needed. The context does not own the credential.
+    /// </summary>
+    internal static KerberosClientContext Create(KerberosCredential credential, string serviceHost, string serviceClass = "HTTP") =>
+        Create(credential, ownsCredential: false, serviceHost, serviceClass);
 
     /// <summary>
     /// Advances the handshake. Call first with an empty token; send what it returns to the service; call again with
@@ -73,7 +75,7 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
     /// </summary>
     public byte[]? Step(ReadOnlySpan<byte> serviceToken)
     {
-        ObjectDisposedException.ThrowIf(_credential == IntPtr.Zero, this);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (IsEstablished)
             throw new InvalidOperationException("The Kerberos context is already established.");
 
@@ -83,7 +85,7 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
             {
                 var inputBuffer = new GssapiNative.GssBuffer { Length = (nuint)serviceToken.Length, Value = (IntPtr)input };
                 var mechanism = NativeOids.KerberosMechanism;
-                var major = GssapiNative.InitSecurityContext(out var minor, _credential, ref _context, _targetName, ref mechanism,
+                var major = GssapiNative.InitSecurityContext(out var minor, _credential.DangerousGetHandle(), ref _context, _targetName, ref mechanism,
                     RequestFlags, 0, IntPtr.Zero, ref inputBuffer, IntPtr.Zero, out var output, out var returnedFlags, IntPtr.Zero);
                 try
                 {
@@ -120,17 +122,45 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
 
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
+        _disposed = true;
         if (_context != IntPtr.Zero)
             GssapiNative.DeleteSecurityContext(out _, ref _context, IntPtr.Zero);
         if (_targetName != IntPtr.Zero)
             GssapiNative.ReleaseName(out _, ref _targetName);
-        if (_credential != IntPtr.Zero)
-            GssapiNative.ReleaseCredential(out _, ref _credential);
+        if (_credentialReferenced)
+        {
+            _credentialReferenced = false;
+            _credential.DangerousRelease();
+        }
+
+        if (_ownsCredential)
+            _credential.Dispose();
+    }
+
+    private static KerberosClientContext Create(KerberosCredential credential, bool ownsCredential, string serviceHost, string serviceClass)
+    {
+        ArgumentNullException.ThrowIfNull(credential);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceHost);
+        ArgumentException.ThrowIfNullOrWhiteSpace(serviceClass);
+
+        var targetName = ImportName($"{serviceClass}@{serviceHost}", NativeOids.HostBasedServiceName);
+        try
+        {
+            return new KerberosClientContext(credential, ownsCredential, targetName);
+        }
+        catch
+        {
+            GssapiNative.ReleaseName(out _, ref targetName);
+            throw;
+        }
     }
 
     private void RequireEstablished()
     {
-        ObjectDisposedException.ThrowIf(_credential == IntPtr.Zero, this);
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (!IsEstablished)
             throw new InvalidOperationException("The Kerberos context is not established yet.");
     }
@@ -143,7 +173,7 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
                 "the service did not agree to mutual authentication with confidentiality and integrity");
     }
 
-    private static IntPtr ImportName(string name, GssapiNative.GssOid nameType)
+    internal static IntPtr ImportName(string name, GssapiNative.GssOid nameType)
     {
         var bytes = Encoding.UTF8.GetBytes(name);
         unsafe
@@ -155,44 +185,6 @@ public sealed class KerberosClientContext : IWinRMMessageSealer, IDisposable
                 GssapiStatus.ThrowIfError("gss_import_name", major, minor);
                 return output;
             }
-        }
-    }
-
-    private static IntPtr AcquireCredential(IntPtr userName, string password)
-    {
-        var mechanisms = IntPtr.Zero;
-        var length = Encoding.UTF8.GetByteCount(password);
-        var native = Marshal.AllocHGlobal(Math.Max(length, 1));
-        try
-        {
-            unsafe
-            {
-                var passwordBytes = new Span<byte>((void*)native, length);
-                Encoding.UTF8.GetBytes(password, passwordBytes);
-                var buffer = new GssapiNative.GssBuffer { Length = (nuint)length, Value = native };
-
-                var major = GssapiNative.CreateEmptyOidSet(out var minor, out mechanisms);
-                GssapiStatus.ThrowIfError("gss_create_empty_oid_set", major, minor);
-                var mechanism = NativeOids.KerberosMechanism;
-                major = GssapiNative.AddOidSetMember(out minor, ref mechanism, ref mechanisms);
-                GssapiStatus.ThrowIfError("gss_add_oid_set_member", major, minor);
-
-                major = GssapiNative.AcquireCredentialWithPassword(out minor, userName, ref buffer, GssapiNative.GSS_C_INDEFINITE,
-                    mechanisms, GssapiNative.GSS_C_INITIATE, out var credential, IntPtr.Zero, IntPtr.Zero);
-                GssapiStatus.ThrowIfError("gss_acquire_cred_with_password", major, minor);
-                return credential;
-            }
-        }
-        finally
-        {
-            unsafe
-            {
-                new Span<byte>((void*)native, length).Clear();
-            }
-
-            Marshal.FreeHGlobal(native);
-            if (mechanisms != IntPtr.Zero)
-                GssapiNative.ReleaseOidSet(out _, ref mechanisms);
         }
     }
 }

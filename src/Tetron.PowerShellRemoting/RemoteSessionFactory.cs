@@ -42,6 +42,15 @@ public static class RemoteSessionFactory
         }
     }
 
+    /// <summary>What a runspace this factory opened has cost so far: logins, connections and commands.</summary>
+    /// <exception cref="ArgumentException">The runspace was not opened by <see cref="OpenAsync"/>.</exception>
+    public static RemoteSessionStatistics GetStatistics(Runspace runspace)
+    {
+        ArgumentNullException.ThrowIfNull(runspace);
+        return (runspace.ConnectionInfo as WinRMConnectionInfo)?.Statistics
+            ?? throw new ArgumentException("The runspace was not opened by RemoteSessionFactory.OpenAsync.", nameof(runspace));
+    }
+
     // Runspace.OpenAsync raises StateChanged rather than completing an IAsyncResult, so the open is bridged to a Task.
     private static IAsyncResult BeginOpen(Runspace runspace, AsyncCallback callback)
     {

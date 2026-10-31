@@ -18,10 +18,19 @@ internal sealed class WinRMConnectionInfo : RunspaceConnectionInfo
     private readonly RemoteSessionOptions _options;
 
     public WinRMConnectionInfo(RemoteSessionOptions options)
+        : this(options, new RemoteSessionStatistics())
+    {
+    }
+
+    private WinRMConnectionInfo(RemoteSessionOptions options, RemoteSessionStatistics statistics)
     {
         _options = options;
+        Statistics = statistics;
         OpenTimeout = (int)Math.Min(int.MaxValue, options.RequestTimeout.TotalMilliseconds * 2);
     }
+
+    /// <summary>The session's running costs; shared with every clone PowerShell makes of these details.</summary>
+    public RemoteSessionStatistics Statistics { get; }
 
     public override string ComputerName
     {
@@ -52,8 +61,8 @@ internal sealed class WinRMConnectionInfo : RunspaceConnectionInfo
         set => throw new NotSupportedException("Certificate authentication is not supported.");
     }
 
-    public override RunspaceConnectionInfo Clone() => new WinRMConnectionInfo(_options);
+    public override RunspaceConnectionInfo Clone() => new WinRMConnectionInfo(_options, Statistics);
 
     public override BaseClientSessionTransportManager CreateClientSessionTransportManager(Guid instanceId, string sessionName, PSRemotingCryptoHelper cryptoHelper) =>
-        new WinRMClientTransportManager(_options, instanceId, cryptoHelper);
+        new WinRMClientTransportManager(_options, Statistics, instanceId, cryptoHelper);
 }

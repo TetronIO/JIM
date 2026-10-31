@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using Tetron.PowerShellRemoting.Kerberos.Native;
+
 namespace Tetron.PowerShellRemoting.Kerberos;
 
 /// <summary>
@@ -25,4 +27,12 @@ public sealed class KerberosException : Exception
 
     /// <summary>The mechanism (Kerberos) minor status code.</summary>
     public uint MinorStatus { get; }
+
+    /// <summary>
+    /// True when the ticket-granting ticket has expired, so a new login would succeed: GSSAPI's own
+    /// <c>GSS_S_CREDENTIALS_EXPIRED</c>, or the KDC refusing a service ticket with <c>KRB5KRB_AP_ERR_TKT_EXPIRED</c>.
+    /// </summary>
+    public bool IsCredentialExpired =>
+        (MajorStatus & GssapiNative.GssRoutineErrorMask) == GssapiNative.GSS_S_CREDENTIALS_EXPIRED
+        || MinorStatus == GssapiNative.KRB5KRB_AP_ERR_TKT_EXPIRED;
 }

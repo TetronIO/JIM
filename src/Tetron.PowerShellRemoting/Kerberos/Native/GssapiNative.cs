@@ -17,6 +17,11 @@ internal static partial class GssapiNative
     internal const uint GSS_S_COMPLETE = 0;
     internal const uint GSS_S_CONTINUE_NEEDED = 1;
     internal const uint GssErrorMask = 0xFFFF0000;
+    internal const uint GssRoutineErrorMask = 0x00FF0000;
+    internal const uint GSS_S_CREDENTIALS_EXPIRED = 11 << 16;
+
+    // MIT krb5's error table code for an expired ticket (ERROR_TABLE_BASE_krb5 + 32), as GSSAPI's minor status.
+    internal const uint KRB5KRB_AP_ERR_TKT_EXPIRED = 0x96C73A20;
 
     internal const int GSS_C_INITIATE = 1;
     internal const int GSS_C_ACCEPT = 2;
