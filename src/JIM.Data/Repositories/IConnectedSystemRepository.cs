@@ -1839,6 +1839,19 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Gets every Connected System setting value that holds a value for an encrypted setting
+    /// (<see cref="ConnectedSystemSettingType.StringEncrypted"/>), across all Connected Systems, with its Setting
+    /// loaded. Used by the startup pass that encrypts any credential found stored in clear.
+    /// </summary>
+    public Task<List<ConnectedSystemSettingValue>> GetEncryptedSettingValuesAsync();
+
+    /// <summary>
+    /// Writes one setting value's <see cref="ConnectedSystemSettingValue.StringEncryptedValue"/> column and nothing
+    /// else, so converging a stored credential to its encrypted form touches no other part of the Connected System.
+    /// </summary>
+    public Task UpdateSettingValueEncryptedValueAsync(int settingValueId, string encryptedValue);
+
+    /// <summary>
     /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
     /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
     /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
