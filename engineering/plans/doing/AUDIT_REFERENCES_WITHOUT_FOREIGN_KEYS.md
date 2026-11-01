@@ -1,10 +1,10 @@
 # Deleting an Object Leaves Its Audit History Untouched
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 underway: spans and fixture in; the scale baseline is outstanding)
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Related:**
   - [#2670](https://github.com/TetronIO/JIM/issues/2670), the `DeletedObjectExternalIdAttributeValueId` check, removed separately.
-  - [Connected System Object Pages Off EF Core](done/SYNC_CSO_PAGE_RAW_READER.md), closed at Phase 0. It found that the leaver step's larger cost is database-side deletion.
+  - [Connected System Object Pages Off EF Core](../done/SYNC_CSO_PAGE_RAW_READER.md), closed at Phase 0. It found that the leaver step's larger cost is database-side deletion.
 - **Last Updated:** 2026-11-01
 
 ## Overview
@@ -311,7 +311,9 @@ The audit share is 2,573 ms, or 79%.
 ### Phase 0: Baseline and spans
 
 - **Spans.** Add per-statement `ActivitySource` spans to both Metaverse Object deleters (`Mvo.Delete.*`), mirroring `Cso.Delete.*`, so before and after are measured the same way.
-- **Fixture.** Extend `LeaverCohortCostDatabaseTests` to report, beside each deletion path's time, how many audit rows it updated (`pg_stat_xact_user_tables`), and add the two Metaverse Object paths.
+- **Fixture.** Extend `LeaverCohortCostDatabaseTests` to report, beside each deletion path's time, how many audit rows it updated and deleted, and add the two Metaverse Object paths.
+  - Every path commits its own transaction, so the counts are the difference in `pg_stat_user_tables` before and after, read on the deleting connection after `pg_stat_force_next_flush()`, not `pg_stat_xact_user_tables`.
+  - The quiet deletion cannot run inside a caller's transaction at all: `PersistCsoChangesAsync` begins its own unconditionally. Phase 2's guard needs the same before-and-after read for that entry point, or that method must join an ambient transaction.
 - **Scale baseline.** On Scale500k25kGroups, with the same PostgreSQL settings as the 1 November run (the runner's Scale500k profile), record:
   - the leaver step's `Cso.Delete.*` and `Mvo.Delete.*` totals;
   - WAL bytes over the leaver step;
@@ -321,6 +323,26 @@ The audit share is 2,573 ms, or 79%.
   - a Scenario 007 Connector Space clear at Large.
 
   The issue's two `EXPLAIN (ANALYZE, BUFFERS)` runs of 1 November are the statement-level baseline.
+
+**Measured (local fixture).** 500 objects per path, median of 5 runs after a warm-up, on 1 November 2026.
+
+- **Host:** 4 vCPU Intel Xeon at 2.10 GHz, 15 GB RAM, shared with other sessions' test runs. PostgreSQL 18.6 in Docker on its default settings: 160 MB `shared_buffers`, 1 GB `max_wal_size`, `fsync` on.
+- **Shape:** each departed object has 25 values and is a member of two groups of 25,000 among 50,000. With history it also has 3 change records and 15 reference change values naming it, plus 5 Run Profile Execution Items (Connected System Objects) or 2 Activities (Metaverse Objects).
+
+| Path | Without history | With history | Difference | Audit rows updated, with history |
+|---|---|---|---|---|
+| Connected System Object: Connected System repository | 407 ms | 593 ms | 186 ms | 1,500 change records, 7,500 change values, 2,500 items |
+| Connected System Object: quiet deletion | 870 ms | 931 ms | 61 ms | the same |
+| Connected System Object: execution items | 390 ms | 501 ms | 111 ms | the same |
+| Connected System Object: Synchronisation repository by id | 317 ms | 495 ms | 178 ms | the same |
+| Metaverse Object: bulk | 98 ms | 270 ms | 172 ms | 1,500 change records, 7,500 change values, 1,000 Activities |
+| Metaverse Object: singular, once per object | 6,756 ms | 7,861 ms | 1,105 ms | the same |
+
+- **Every audit row is rewritten, and none in place.** Every row naming a deleted object was updated, none deleted, and not one update was HOT, as option (d) says.
+- **The shares are lower than at scale.** The fixture's tables are small and cache-resident, so treat these as a floor and judge the success criteria against the scale baseline.
+  - **Connected System Object `DELETE`:** the `Cso.Delete.Delete` span rises from 165 to 226 ms without history to 318 to 438 ms with it, an audit share of about 47% (68% at scale). The #2670 check is in both columns.
+  - **Metaverse Object bulk statements, with history:** 278 ms, of which the three audit UPDATEs are 165 ms, or 59% (79% at scale). The `DELETE` also rises from 59 to 88 ms, from the audit tables' `NO ACTION` checks. Counting that, the share is 70%.
+- **The singular deleter is dominated by per-call cost, not audit rows.** It spends 13.5 ms an object without history: the save, 4.8 ms, and the tracked join fix-up's change detection, 2.5 ms. It also writes each join twice, by the raw UPDATE and again by the save of the tracked Connected System Object.
 
 ### Phase 1: Readers onto ids, behaviour-neutral
 
