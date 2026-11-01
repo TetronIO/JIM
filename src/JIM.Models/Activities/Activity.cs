@@ -38,6 +38,17 @@ public class Activity
     public Guid? ParentActivityId { get; set; }
 
     /// <summary>
+    /// The Run Profile Execution Item whose work this Activity follows up (#2668): the export that provisioned an
+    /// account, for the Activity recording that account's Initial Password queued for delivery. An Activity has at most
+    /// one parent, this or <see cref="ParentActivityId"/>, and one with either is a child, never listed at the top level.
+    ///
+    /// A plain column rather than a foreign key, matching <see cref="ParentActivityId"/>. Password Activities are kept
+    /// longer than the export run whose items they follow, so the link routinely outlives its item; keeping the raw id
+    /// preserves "this followed an export" once the item itself has gone, rather than nulling it or blocking retention.
+    /// </summary>
+    public Guid? ParentRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// When this Activity applied a configuration change that was previewed first, the preview's Activity. Null
     /// means the change was applied without a preview, which is a legitimate choice and is recorded as such: an
     /// auditor asking "did anyone look at what this would do before doing it?" gets an answer either way, and a
