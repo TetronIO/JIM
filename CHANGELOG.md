@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
 - ⚡ Removing many departed accounts in one synchronisation is faster: each page now deletes them in a few statements, rather than one per object and per value. (#2669)
 - ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
+- ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
 
 
 ## [0.17.0] - 2026-10-29

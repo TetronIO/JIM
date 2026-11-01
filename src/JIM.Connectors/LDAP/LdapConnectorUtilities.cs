@@ -169,9 +169,10 @@ internal static class LdapConnectorUtilities
         if (binaryValues.Count == 0)
             return null;
 
-        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates
-        // Use a custom comparer for byte arrays since default equality doesn't work for arrays
-        var uniqueValues = binaryValues.Distinct(ByteArrayComparer.Instance).ToList();
+        // Deduplicate values defensively - LDAP multi-valued attributes should not contain duplicates.
+        // Arrays are compared by content and hashed over every byte, so values sharing their length and first and last
+        // bytes (as Security Identifiers do) do not all collide in one bucket (#2672).
+        var uniqueValues = binaryValues.Distinct(ByteArrayContentComparer.Instance).ToList();
         if (uniqueValues.Count < binaryValues.Count)
         {
             var duplicateCount = binaryValues.Count - uniqueValues.Count;
@@ -181,32 +182,6 @@ internal static class LdapConnectorUtilities
         }
 
         return uniqueValues;
-    }
-
-    /// <summary>
-    /// Comparer for byte arrays that compares by content rather than reference.
-    /// </summary>
-    private sealed class ByteArrayComparer : IEqualityComparer<byte[]>
-    {
-        public static readonly ByteArrayComparer Instance = new();
-
-        public bool Equals(byte[]? x, byte[]? y)
-        {
-            if (ReferenceEquals(x, y)) return true;
-            if (x == null || y == null) return false;
-            if (x.Length != y.Length) return false;
-            return x.SequenceEqual(y);
-        }
-
-        public int GetHashCode(byte[] obj)
-        {
-            if (obj == null) return 0;
-            // Use a simple hash combining the length and first/last bytes
-            var hash = obj.Length;
-            if (obj.Length > 0) hash = (hash * 31) + obj[0];
-            if (obj.Length > 1) hash = (hash * 31) + obj[^1];
-            return hash;
-        }
     }
 
     internal static int? GetEntryAttributeIntValue(SearchResultEntry entry, string attributeName)
