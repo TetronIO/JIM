@@ -177,6 +177,63 @@ public class ActivityRpeiPersistenceTests
     }
 
     /// <summary>
+    /// The change record reference fix-up reads only values marked unresolved (#2690), so this writer must mark them as
+    /// the bulk writer does: a snapshot of withdrawn or staged reference values names its objects by DN and carries no
+    /// object, and later runs resolve it; a value written with its object's id, or of a Text attribute, is never marked.
+    /// </summary>
+    [Test]
+    public async Task AddRunProfileExecutionItems_SnapshotValues_MarksOnlyReferencesWrittenWithoutTheirObjectsIdAsync()
+    {
+        var csoType = new ConnectedSystemObjectType { Name = "Group", ConnectedSystemId = 5 };
+        var memberAttribute = new ConnectedSystemObjectTypeAttribute { Name = "member", Type = AttributeDataType.Reference, ConnectedSystemObjectType = csoType, Selected = true };
+        var descriptionAttribute = new ConnectedSystemObjectTypeAttribute { Name = "description", Type = AttributeDataType.Text, ConnectedSystemObjectType = csoType, Selected = true };
+        DbContext.ConnectedSystemAttributes.AddRange(memberAttribute, descriptionAttribute);
+        await DbContext.SaveChangesAsync();
+        var activity = await CreatePersistedActivityAsync();
+
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = 5,
+            ChangeType = ObjectChangeType.PendingExport,
+            ChangeTime = DateTime.UtcNow,
+            InitiatedByType = ActivityInitiatorType.System
+        };
+        var memberChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Attribute = memberAttribute, AttributeName = memberAttribute.Name, AttributeType = memberAttribute.Type, ConnectedSystemChange = change
+        };
+        memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.dn,ou=People,dc=glitterband,dc=local"));
+        memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.id,ou=People,dc=glitterband,dc=local")
+        {
+            ReferenceValue = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 5, TypeId = csoType.Id }
+        });
+        var descriptionChange = new ConnectedSystemObjectChangeAttribute
+        {
+            Attribute = descriptionAttribute, AttributeName = descriptionAttribute.Name, AttributeType = descriptionAttribute.Type, ConnectedSystemChange = change
+        };
+        descriptionChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(descriptionChange, ValueChangeType.Add, "uid=as.text,ou=People,dc=glitterband,dc=local"));
+        change.AttributeChanges.AddRange([memberChange, descriptionChange]);
+
+        var item = new ActivityRunProfileExecutionItem { ObjectChangeType = ObjectChangeType.PendingExport };
+        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome
+        {
+            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn,
+            ConnectedSystemObjectChange = change
+        });
+
+        await Jim.Activities.AddRunProfileExecutionItemsAsync(activity, [item]);
+
+        var marks = await DbContext.ConnectedSystemObjectChangeAttributeValues.AsNoTracking()
+            .ToDictionaryAsync(v => v.StringValue!, v => v.IsUnresolvedReference);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(marks["uid=by.dn,ou=People,dc=glitterband,dc=local"], Is.True, "a reference held by its DN alone still needs resolving");
+            Assert.That(marks["uid=by.id,ou=People,dc=glitterband,dc=local"], Is.False, "a reference written with its object's id is resolved");
+            Assert.That(marks["uid=as.text,ou=People,dc=glitterband,dc=local"], Is.False, "a Text value is never a reference");
+        }
+    }
+
+    /// <summary>
     /// An empty item collection must be a no-op.
     /// </summary>
     [Test]

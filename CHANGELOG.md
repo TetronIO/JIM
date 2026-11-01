@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Deleting many departed accounts in one synchronisation is faster: each page removes them in a few statements rather than one per value, and a database check that ran for every value is gone, saving about a fifth of the time at 500,000 people. (#2669, #2670)
 - ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
 - ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
+- ⚡ Exports and imports into large Connected Systems no longer re-read all their change history to resolve references (about 20 seconds a run at 500,000 objects), and history naming a deleted object is no longer re-pointed at a later object reusing its DN. (#2690)
 
 
 ## [0.17.0] - 2026-10-29

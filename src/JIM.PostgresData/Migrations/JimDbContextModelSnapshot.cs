@@ -3907,6 +3907,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("IsPendingExportStub")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsUnresolvedReference")
+                        .HasColumnType("boolean");
+
                     b.Property<long?>("LongValue")
                         .HasColumnType("bigint");
 
@@ -3930,6 +3933,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectChangeAttributeId");
 
                     b.HasIndex("ReferenceValueId");
+
+                    b.HasIndex(new[] { "ConnectedSystemObjectChangeAttributeId" }, "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+                        .HasFilter("\"IsUnresolvedReference\"");
 
                     b.ToTable("ConnectedSystemObjectChangeAttributeValues");
                 });

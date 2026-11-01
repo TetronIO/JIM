@@ -457,12 +457,16 @@ public interface ISyncRepository
     Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
-    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
-    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same Connected System using case-insensitive comparison. Resolutions are applied in bounded
-    /// batches so each statement stays inside the bulk command timeout regardless of backlog size
-    /// (a Scale500k25kGroups run accumulates millions of unresolved rows).
+    /// Resolves the reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues) that were
+    /// written without their referenced object's id, which the writer marks
+    /// <see cref="ConnectedSystemObjectChangeAttributeValue.IsUnresolvedReference"/>: the referenced object's row did
+    /// not exist yet (a later batch writes it), or the reference named no object when it was recorded. The DN in
+    /// StringValue is matched against the secondary external ID attribute values of CSOs in the same Connected System,
+    /// ignoring case unless the target's attribute is case-exact; writing the id clears the mark, and a value that
+    /// matches nothing stays marked for a later run. A value written with its id is never read, so one whose object
+    /// is deleted later keeps the DN it was recorded with rather than being re-pointed at a later object reusing it.
+    /// Resolutions are applied in bounded batches so each statement stays inside the bulk command timeout regardless
+    /// of backlog size (a Scale500k25kGroups run accumulates millions of unresolved rows).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose change records to resolve.</param>
     /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>

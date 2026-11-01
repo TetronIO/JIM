@@ -243,4 +243,143 @@ public class SyncRepositoryCsoWriteTests
             Assert.That(refAv.ReferenceValueId, Is.EqualTo(expectResolved ? targetCso.Id : null));
         }
     }
+
+    #region Change record references (#2690)
+
+    private const string ManagerDn = "CN=Mo Manager,OU=People,DC=glitterband,DC=local";
+
+    /// <summary>
+    /// Mirrors the PostgreSQL change record writer: a Reference value holding a DN is marked unresolved unless the
+    /// object it refers to is already stored; nothing else is marked.
+    /// </summary>
+    [Test]
+    public async Task PersistRpeiCsoChangesAsync_ReferenceValues_MarksOnlyThoseWithoutAStoredObjectAsync()
+    {
+        var stored = SeedPersonWithDn(ManagerDn);
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var noObject = AddValue(managerChange, ManagerDn);
+        var storedObject = AddValue(managerChange, ManagerDn, stored);
+        var objectNotStoredYet = AddValue(managerChange, ManagerDn, new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = CsId });
+        var descriptionChange = AddAttributeChange(rpei.ConnectedSystemObjectChange!, AttributeDataType.Text, "description");
+        var text = AddValue(descriptionChange, ManagerDn);
+
+        await PersistAsync(rpei);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(noObject.IsUnresolvedReference, Is.True, "a reference that named no object");
+            Assert.That(storedObject.IsUnresolvedReference, Is.False, "a reference to a stored object is resolved");
+            Assert.That(objectNotStoredYet.IsUnresolvedReference, Is.True, "a reference to an object a later batch stores");
+            Assert.That(text.IsUnresolvedReference, Is.False, "a Text value is never a reference");
+        }
+    }
+
+    [Test]
+    public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_MarkedReference_ResolvesItAndClearsTheMarkAsync()
+    {
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var value = AddValue(managerChange, ManagerDn.ToLowerInvariant());
+        await PersistAsync(rpei);
+        var manager = SeedPersonWithDn(ManagerDn);
+
+        var resolved = await _repo.FixupCrossBatchChangeRecordReferenceIdsAsync(CsId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolved, Is.EqualTo(1));
+            Assert.That(value.ReferenceValue, Is.SameAs(manager));
+            Assert.That(value.IsUnresolvedReference, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_MarkedReferenceNamingNoObject_StaysMarkedAsync()
+    {
+        SeedPersonWithDn(ManagerDn);
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var value = AddValue(managerChange, "CN=Nobody,OU=People,DC=glitterband,DC=local");
+        await PersistAsync(rpei);
+
+        var resolved = await _repo.FixupCrossBatchChangeRecordReferenceIdsAsync(CsId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolved, Is.Zero);
+            Assert.That(value.ReferenceValue, Is.Null);
+            Assert.That(value.IsUnresolvedReference, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// Mirrors the PostgreSQL fix-up reading only marked rows: a value holding a DN that was never marked (a reference
+    /// once written with its object, whose object has since gone) is not re-pointed at whichever object now has the DN.
+    /// </summary>
+    [Test]
+    public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_UnmarkedValueHoldingADn_IsLeftAloneAsync()
+    {
+        SeedPersonWithDn(ManagerDn);
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var value = AddValue(managerChange, ManagerDn);
+        await _repo.BulkInsertRpeisAsync([rpei]);
+
+        var resolved = await _repo.FixupCrossBatchChangeRecordReferenceIdsAsync(CsId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(resolved, Is.Zero);
+            Assert.That(value.ReferenceValue, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A person whose Secondary External ID is the given DN.
+    /// </summary>
+    private ConnectedSystemObject SeedPersonWithDn(string dn)
+    {
+        var dnAttribute = new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "distinguishedName", Type = AttributeDataType.Text, IsSecondaryExternalId = true };
+        var person = CreateCso();
+        person.SecondaryExternalIdAttributeId = dnAttribute.Id;
+        person.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), Attribute = dnAttribute, AttributeId = dnAttribute.Id, StringValue = dn, ConnectedSystemObject = person
+        });
+        _repo.SeedConnectedSystemObject(person);
+        return person;
+    }
+
+    private static (ActivityRunProfileExecutionItem Rpei, ConnectedSystemObjectChangeAttribute AttributeChange) NewChangeRecord(AttributeDataType attributeType)
+    {
+        var change = new ConnectedSystemObjectChange
+        {
+            ConnectedSystemId = CsId, ChangeType = ObjectChangeType.Added, ChangeTime = DateTime.UtcNow, InitiatedByType = ActivityInitiatorType.System
+        };
+        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid(), ConnectedSystemObjectChange = change };
+        return (rpei, AddAttributeChange(change, attributeType, "manager"));
+    }
+
+    private static ConnectedSystemObjectChangeAttribute AddAttributeChange(ConnectedSystemObjectChange change, AttributeDataType attributeType, string name)
+    {
+        var attributeChange = new ConnectedSystemObjectChangeAttribute { AttributeName = name, AttributeType = attributeType, ConnectedSystemChange = change };
+        change.AttributeChanges.Add(attributeChange);
+        return attributeChange;
+    }
+
+    private static ConnectedSystemObjectChangeAttributeValue AddValue(
+        ConnectedSystemObjectChangeAttribute attributeChange, string stringValue, ConnectedSystemObject? referenceValue = null)
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, stringValue) { ReferenceValue = referenceValue };
+        attributeChange.ValueChanges.Add(value);
+        return value;
+    }
+
+    /// <summary>
+    /// Stores an execution item and its change record as an import's flush does.
+    /// </summary>
+    private async Task PersistAsync(ActivityRunProfileExecutionItem rpei)
+    {
+        await _repo.BulkInsertRpeisAsync([rpei]);
+        await _repo.PersistRpeiCsoChangesAsync([rpei]);
+    }
+
+    #endregion
 }
