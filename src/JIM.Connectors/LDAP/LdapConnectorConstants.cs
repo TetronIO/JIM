@@ -207,6 +207,12 @@ internal static class LdapConnectorConstants
     internal const string SETTING_USERNAME = "Username";
 
     /// <summary>
+    /// The Exchange heading's checkbox (#2021): whether this Connected System makes the objects it provisions Exchange
+    /// recipients. Active Directory only, and behind the Exchange recipients feature flag while it is built.
+    /// </summary>
+    internal const string SETTING_MANAGE_EXCHANGE_RECIPIENTS = "Manage Exchange recipients";
+
+    /// <summary>
     /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).
     /// When exporting to directories using these classes, a placeholder member is injected
     /// to satisfy the schema constraint when the group would otherwise be empty.

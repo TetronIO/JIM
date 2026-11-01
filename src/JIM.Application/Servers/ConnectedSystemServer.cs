@@ -630,6 +630,16 @@ public partial class ConnectedSystemServer
         // The SCIM 2.0 Service Provider (D16 in SCIM_SERVER_DESIGN.md, #2372).
         connectorName == ConnectorConstants.ScimServiceProviderConnectorName ? FeatureFlagCatalogue.ScimServiceProvider : null;
 
+    /// <summary>
+    /// Whether an administrator can see and set this Connector setting now: every setting can, except one whose
+    /// feature is behind a flag (<see cref="ConnectorSetting.FeatureFlagKey"/>) that is off.
+    /// </summary>
+    public async Task<bool> IsSettingAvailableAsync(ConnectorSetting setting)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+        return setting.FeatureFlagKey is not { } key || await Application.FeatureFlags.IsEnabledAsync(key);
+    }
+
     private static bool IsScimServiceProvider(ConnectorDefinition connectorDefinition) =>
         connectorDefinition.Name == ConnectorConstants.ScimServiceProviderConnectorName;
 
@@ -1909,7 +1919,8 @@ public partial class ConnectedSystemServer
                 RequiredGroup = connectorSetting.RequiredGroup,
                 RequiredGroupCardinality = connectorSetting.RequiredGroupCardinality,
                 RequiredWhenSetting = connectorSetting.RequiredWhenSetting,
-                RequiredWhenValue = connectorSetting.RequiredWhenValue
+                RequiredWhenValue = connectorSetting.RequiredWhenValue,
+                FeatureFlagKey = connectorSetting.FeatureFlagKey
             });
         }
     }
@@ -3116,6 +3127,7 @@ public partial class ConnectedSystemServer
 
                         // Connector-owned, so a refresh restates it.
                         existingAttribute.IsOperational = schemaAttribute.IsOperational;
+                        existingAttribute.IsConnectorDefined = schemaAttribute.IsConnectorDefined;
                         connectedSystemObjectType.Attributes.Add(existingAttribute);
                     }
                     else
@@ -3133,7 +3145,8 @@ public partial class ConnectedSystemServer
                             Required = schemaAttribute.Required,
                             CaseExact = schemaAttribute.CaseExact,
                             DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, schemaAttribute.Type),
-                            IsOperational = schemaAttribute.IsOperational
+                            IsOperational = schemaAttribute.IsOperational,
+                            IsConnectorDefined = schemaAttribute.IsConnectorDefined
                         });
                     }
                 }
@@ -3187,7 +3200,8 @@ public partial class ConnectedSystemServer
                         Required = a.Required,
                         CaseExact = a.CaseExact,
                         DateTimeResolution = DiscoveredDateTimeResolution(a, a.Type),
-                        IsOperational = a.IsOperational
+                        IsOperational = a.IsOperational,
+                        IsConnectorDefined = a.IsConnectorDefined
                     }).ToList()
                 };
 

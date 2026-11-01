@@ -222,6 +222,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
 
+            // Exchange (#2021): behind its feature flag until the feature ships (#2681)
+            new() { Name = "Exchange", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading, FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key },
+            new() { Name = LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS, Description = "Active Directory only. Makes the objects this Connected System provisions Exchange recipients (mailboxes, mail users, mail contacts and mail-enabled groups), as declared by the Exchange attributes their Synchronisation Rules flow.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox, FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key },
+
             new() { Name = "Group Membership", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingGroupPlaceholderMemberDn, Required = false, Description = "Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.", DefaultStringValue = LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
         };
@@ -238,10 +242,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // generic required, required-group and required-when validation is handled centrally by ConnectorSettingValidator
         // (invoked by the application layer before this method); only LDAP-specific rules live here.
 
-        // validate that we can connect to the directory service with the supplied setting credentials
-        var connectivityTestResult = TestDirectoryConnectivity(settingValues, logger);
+        // validate that we can connect to the directory service with the supplied setting credentials, learning what
+        // kind of directory it is on the way
+        var connectivityTestResult = TestDirectoryConnectivity(settingValues, logger, out var directoryType);
         if (!connectivityTestResult.IsValid)
+        {
             response.Add(connectivityTestResult);
+            return response;
+        }
+
+        var manageExchange = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS);
+        if (LdapExchangeSettings.DirectoryTypeRefusal(manageExchange?.CheckboxValue == true, directoryType) is { } refusal)
+            response.Add(new ConnectorSettingValueValidationResult { SettingValue = manageExchange, ErrorMessage = refusal });
 
         return response;
     }
@@ -267,7 +279,9 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // the Connected System after schema import, saving any changes.
             AutoTuneExportConcurrency(settingValues, rootDse, logger);
 
-            var ldapConnectorSchema = new LdapConnectorSchema(new LdapOperationExecutor(_connection), logger, rootDse, includeAuxiliaryClasses);
+            var manageExchangeRecipients = settingValues.SingleOrDefault(q => q.Setting.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS)?.CheckboxValue ?? false;
+            var ldapConnectorSchema = new LdapConnectorSchema(new LdapOperationExecutor(_connection), logger, rootDse, includeAuxiliaryClasses,
+                manageExchangeRecipients);
             return await ldapConnectorSchema.GetSchemaAsync();
         }
         finally
@@ -1747,14 +1761,17 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         }
     }
 
-    private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger,
+        out LdapDirectoryType directoryType)
     {
+        directoryType = LdapDirectoryType.Generic;
         try
         {
             try
             {
                 // This is a connectivity test only; no persisted connector state applies.
                 OpenImportConnection(settingValues, null, logger);
+                directoryType = LdapConnectorUtilities.GetBasicRootDseInformation(_connection!, logger).DirectoryType;
             }
             finally
             {

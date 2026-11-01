@@ -798,8 +798,10 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     /// </remarks>
     internal static string[] GetRequestedAttributeNames(ConnectedSystemObjectType connectedSystemObjectType)
     {
-        // add user selected attributes
-        var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
+        // add user selected attributes. A connector-defined one (an Exchange attribute, #2021) is not in the directory,
+        // and its name is not a valid one to search for: what it is derived from is asked for instead
+        var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected && !a.IsConnectorDefined).Select(a => a.Name).ToList();
+        attributes.AddRange(LdapExchangeAttributes.SourceAttributes(SelectedConnectorDefinedAttributeNames(connectedSystemObjectType)));
 
         // ensure we are also retrieving the unique identifier attribute(s)
         attributes.AddRange(connectedSystemObjectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
@@ -814,6 +816,10 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         // remove any duplicates we might have added and change to a simple array for use with the search request
         return attributes.Distinct().ToArray();
     }
+
+    /// <summary>The connector-defined attributes selected on an Object Type, which the import derives rather than reads.</summary>
+    internal static List<string> SelectedConnectorDefinedAttributeNames(ConnectedSystemObjectType connectedSystemObjectType) =>
+        connectedSystemObjectType.Attributes.Where(a => a.Selected && a.IsConnectorDefined).Select(a => a.Name).ToList();
 
     private void GetFisoResults(ConnectedSystemImportResult connectedSystemImportResult, ConnectedSystemContainer connectedSystemContainer, ConnectedSystemObjectType connectedSystemObjectType, byte[]? lastRunsCookie)
         => GetFisoResults(connectedSystemImportResult, _connection, connectedSystemContainer, connectedSystemObjectType, lastRunsCookie);
@@ -931,13 +937,12 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
         try
         {
-            // Get all selected attributes across all object types
+            // Every attribute a Full Import reads, across all selected object types, since the entry's type is not yet known
             var allAttributes = _connectedSystem.ObjectTypes
                 .Where(ot => ot.Selected)
-                .SelectMany(ot => ot.Attributes.Where(a => a.Selected || a.IsExternalId).Select(a => a.Name))
+                .SelectMany(GetRequestedAttributeNames)
                 .Distinct()
                 .ToList();
-            allAttributes.Add("objectClass");
 
             var searchRequest = new SearchRequest(dn, "(objectClass=*)", SearchScope.Base, allAttributes.ToArray());
             var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
@@ -1011,9 +1016,19 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
             importObject.ObjectType = objectType.Name;
 
+            // Connector-defined attributes (Exchange's, #2021) are derived from directory attributes read for them, which
+            // are not themselves imported unless they are selected too
+            var connectorDefinedAttributes = SelectedConnectorDefinedAttributeNames(objectType);
+            var derivationOnlySources = LdapExchangeAttributes.SourceAttributes(connectorDefinedAttributes)
+                .Where(source => !objectType.Attributes.Any(a => a.Selected && a.Name.Equals(source, StringComparison.OrdinalIgnoreCase)))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             // start populating import object attribute values from the search result
             foreach (var attributeDescription in LdapRangedAttribute.DescriptionsToRead(searchResult))
             {
+                if (derivationOnlySources.Contains(LdapRangedAttribute.TryParse(attributeDescription, out var sourceName, out _, out _) ? sourceName : attributeDescription))
+                    continue;
+
                 // Active Directory answers a multi-valued attribute over its MaxValRange (1,500 by default) as
                 // "member;range=0-1499", with the plain attribute absent or empty beside it (an empty one is left out
                 // of what is read, #2041). The range option is not part of the attribute's name, so it is stripped for
@@ -1138,6 +1153,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 importObject.Attributes.Add(importObjectAttribute);
             }
 
+            if (connectorDefinedAttributes.Count > 0 && importObject.ErrorType != ConnectedSystemImportObjectError.ConfigurationError)
+                importObject.Attributes.AddRange(LdapExchangeAttributes.Derive(name => ReadDerivationSource(searchResult, name), connectorDefinedAttributes));
+
             // Synthesise distinguishedName for directories that don't return it as an attribute.
             // OpenLDAP (and most RFC-compliant directories) expose the DN as the entry's DistinguishedName
             // property, not as a searchable/importable attribute. The connector schema synthesises
@@ -1160,6 +1178,10 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         LogUnreadableValueSummary(importObjects);
         return importObjects;
     }
+
+    /// <summary>A directory attribute's values as text, for deriving a connector-defined attribute; empty when it has none.</summary>
+    private static IReadOnlyList<string> ReadDerivationSource(SearchResultEntry entry, string attributeName) =>
+        LdapConnectorUtilities.GetAttributeStringValues(entry.Attributes[attributeName], attributeName, entry.DistinguishedName) ?? [];
 
     /// <summary>
     /// Records the values of one attribute that are not imported on the object (one that could not be read as its type,

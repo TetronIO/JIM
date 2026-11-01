@@ -660,6 +660,14 @@ public class ConnectedSystemAttributeDto
     public bool IsOperational { get; set; }
 
     /// <summary>
+    /// Whether the Connector made this attribute up rather than read it from the Connected System's own schema, such as
+    /// the LDAP Connector's Exchange Recipient Type. The Connector derives its values on import and acts on them on
+    /// export in its own way; they are never written to the Connected System as they stand.
+    /// </summary>
+    /// <remarks>Read-only: discovered from the Connected System's schema, never set through this API.</remarks>
+    public bool IsConnectorDefined { get; set; }
+
+    /// <summary>
     /// For a Reference attribute, the id of the Object Type this reference points at, when the Connected
     /// System's schema declares one (the SQL Connector's <c>referencesObjectType</c>). Import reference
     /// resolution resolves the reference within that Object Type alone; null means the schema does not say
@@ -698,6 +706,7 @@ public class ConnectedSystemAttributeDto
             SelectionLocked = entity.SelectionLocked,
             Writability = entity.Writability.ToString(),
             IsOperational = entity.IsOperational,
+            IsConnectorDefined = entity.IsConnectorDefined,
             ReferencedObjectTypeId = entity.ReferencedObjectTypeId,
             ReferencedObjectTypeName = ResolveReferencedObjectTypeName(entity, objectTypeNamesById)
         };

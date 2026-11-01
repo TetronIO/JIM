@@ -34,10 +34,22 @@ public static class FeatureFlagCatalogue
         TrackingIssueNumber: 2372);
 
     /// <summary>
+    /// Exchange recipient management through the LDAP Connector (#2021): the Exchange settings, the connector-defined
+    /// Exchange attributes and the Exchange step. Built hidden on <c>main</c>, phase by phase (decision D11 in
+    /// <c>engineering/plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md</c>), and removed when the feature ships (#2681).
+    /// </summary>
+    public static readonly FeatureFlagDefinition ExchangeRecipients = new(
+        "Features.ExchangeRecipients",
+        "Exchange recipients",
+        "Lets an LDAP Connected System connected to Active Directory make the objects it provisions Exchange recipients: mailboxes, mail users, mail contacts and mail-enabled groups.",
+        FeatureFlagTier.InDevelopment,
+        TrackingIssueNumber: 2681);
+
+    /// <summary>
     /// The declared flags. Add a <c>public static readonly FeatureFlagDefinition</c> field above this for each new
     /// flag (so gates can reference it by name), and list it here.
     /// </summary>
-    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [ScimServiceProvider];
+    private static readonly IReadOnlyList<FeatureFlagDefinition> Declared = [ScimServiceProvider, ExchangeRecipients];
 
     /// <summary>
     /// A test's substitute catalogue, scoped to its own asynchronous flow so concurrently running tests cannot see

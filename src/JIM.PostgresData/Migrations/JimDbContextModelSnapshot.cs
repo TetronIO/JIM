@@ -4013,6 +4013,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<bool>("IsConnectorDefined")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsExternalId")
                         .HasColumnType("boolean");
 
@@ -4579,6 +4582,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text[]");
 
                     b.Property<string>("Example")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeatureFlagKey")
                         .HasColumnType("text");
 
                     b.Property<string>("Name")

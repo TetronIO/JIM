@@ -120,15 +120,23 @@ public class ConnectorSettingDocsCoverageTests
         .Where(c => ConnectedSystemServer.FeatureFlagFor(c.Name)?.Tier != FeatureFlagTier.InDevelopment)
         .ToList();
 
-    /// <summary>The settings a Connector asks an administrator for, by the name the settings form shows.</summary>
+    /// <summary>
+    /// The settings a Connector asks an administrator for, by the name the settings form shows. A setting behind an In
+    /// Development feature flag is offered nowhere, so, like such a Connector, it needs no public row until its flag
+    /// reaches Preview.
+    /// </summary>
     private static List<string> SettingNames(IConnector connector) =>
         connector is IConnectorSettings withSettings
             ? withSettings.GetSettings()
                 .Where(s => !LayoutTypes.Contains(s.Type) && !string.IsNullOrWhiteSpace(s.Name))
+                .Where(s => !IsInDevelopment(s))
                 .Select(s => s.Name!)
                 .Distinct(StringComparer.Ordinal)
                 .ToList()
             : [];
+
+    private static bool IsInDevelopment(ConnectorSetting setting) =>
+        setting.FeatureFlagKey is { } key && FeatureFlagCatalogue.All.Single(f => f.Key == key).Tier == FeatureFlagTier.InDevelopment;
 
     /// <summary>The page docs/connectors/index.md links to under the Connector's name, or null if it links none.</summary>
     private static string? ConnectorPage(string connectorName)
