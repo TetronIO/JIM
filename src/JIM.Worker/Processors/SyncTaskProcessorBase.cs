@@ -963,7 +963,12 @@ public abstract class SyncTaskProcessorBase
     /// Logs memory diagnostics at page boundaries to track memory usage across the sync run.
     /// Helps diagnose memory accumulation issues and verify bounded memory behaviour.
     /// </summary>
-    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
+    /// <param name="pageNumber">The page just completed.</param>
+    /// <param name="totalPages">The pages the run expects.</param>
+    /// <param name="trackerCountBeforeClear">The change tracker's entry count just before the page's clear: what the page
+    /// accumulated, where the count logged after the clear only shows that the clear happened (#2669). Rows a flush
+    /// deleted have already left the tracker, so a page's peak can be higher.</param>
+    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages, int trackerCountBeforeClear)
     {
         var memoryBytes = GC.GetTotalMemory(forceFullCollection: false);
         var memoryMb = memoryBytes / (1024.0 * 1024.0);
@@ -974,10 +979,10 @@ public abstract class SyncTaskProcessorBase
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
         Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
-            "Tracker: {TrackerCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
+            "Tracker: {TrackerCount}, TrackerBeforeClear: {TrackerCountBeforeClear}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
             pageNumber, totalPages, memoryMb,
             GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
-            trackerCount, crossPageRefCount, rpeiCount);
+            trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount);
     }
 
     /// <summary>

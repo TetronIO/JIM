@@ -1,9 +1,9 @@
 # Connected System Object Pages Off EF Core
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 underway: diagnostics and measurement variants in; the scale run is outstanding)
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Last Updated:** 2026-11-01
-- **Follows:** [Synchronisation Hot Path Off EF Core's Change Tracker](done/SYNC_HOT_PATH_OFF_EF_TRACKER.md) (#2598), whose Phase 4 deferred this load "until a scale run shows the linear cost matters"
+- **Follows:** [Synchronisation Hot Path Off EF Core's Change Tracker](../done/SYNC_HOT_PATH_OFF_EF_TRACKER.md) (#2598), whose Phase 4 deferred this load "until a scale run shows the linear cost matters"
 
 ## Overview
 
@@ -232,6 +232,31 @@ Deliverables:
   - the summed time and `attributeValueCount` of `Cso.Page.LoadModifiedWithAttributeValues` and `Cso.Page.LoadWithAttributeValues`;
   - `Cso.LoadMetaverseObjects` cost per value;
   - `Cso.Delete.UpdateTracker` `entriesScanned`.
+
+The diagnostics are in: `Cso.LoadMetaverseObjects` carries `valueCount`, and each page's `Page n/m complete` line carries `TrackerBeforeClear` beside `Tracker`, at Information.
+
+#### Measured (local fixture)
+
+`LeaverCohortCostDatabaseTests`, one modified group loaded each way; the median of five runs after a warm-up, in ms, with µs per value in brackets. A group of n members has n + 1 values. Host: 4 vCPU Intel Xeon at 2.10 GHz, 16 GB, PostgreSQL 18.6 in Docker on default settings, with the JIM stack running alongside.
+
+| Load | 25,000 | 50,000 | 100,000 | 400,000 |
+|---|---|---|---|---|
+| Today, tracked, `NextPageAsync` whole | 491 (19.6) | 964 (19.3) | 2,221 (22.2) | 10,037 (25.1) |
+| of which the main query (`Cso.Page.LoadModifiedWithAttributeValues`) | 350 (14.0) | 534 (10.7) | 1,345 (13.5) | 6,576 (16.4) |
+| of which `Cso.PopulateReferenceValues` | 86 (3.5) | 109 (2.2) | 250 (2.5) | 1,603 (4.0) |
+| of which `Cso.LoadMetaverseObjects` | 88 (3.5) | 316 (6.3) | 576 (5.8) | 1,974 (4.9) |
+| Main query and reference lookup together | 413 (16.5) | 647 (12.9) | 1,619 (16.2) | 8,063 (20.2) |
+| (a') EF `AsNoTracking`, the main query alone | 209 (8.4) | 428 (8.6) | 967 (9.7) | 4,812 (12.0) |
+| (b) EF rows, raw values attached `Unchanged`, references joined | 181 (7.3) | 376 (7.5) | 826 (8.3) | 3,959 (9.9) |
+| (c) raw rows and values built into objects, references joined | 88 (3.5) | 159 (3.2) | 258 (2.6) | 1,331 (3.3) |
+| Raw, one column per value row, nothing built | 28 (1.1) | 74 (1.5) | 124 (1.2) | 659 (1.6) |
+
+(b) and (c) include the reference lookup, so they compare with the main query and reference lookup together; (a') compares with the main query alone. Read within one pass, not across hosts: an earlier three-run pass at 25,000 members put (a') at 13.7 µs and (b) at 10.6 µs.
+
+- **(c) is within the projection** at 2.6 to 3.5 µs per value, and flat with size, where today's load climbs to 20.2 µs at 400,000 members.
+- **(a') saves 20 to 40% of the main query,** not half, and its cost per value climbs with size too (8.4 to 12.0 µs).
+- **(b) is cheaper than projected:** 7.3 to 9.9 µs, below (a') and well below "11 µs or more". It keeps 56 to 71% of (c)'s gain over today. Its rejection stands on its other grounds: it costs about three times (c), and every value stays tracked, so every tracker scan in D stays as large.
+- **The Metaverse Object reader costs more per value than (c),** 3.5 to 6.3 µs, so as the projection for the new reader it is pessimistic. After (a) it is the larger part of the page: at 100,000 members (c) and the Metaverse Object read together are about 834 ms, just inside Phase 2's 900 ms target.
 
 Gate (all three, judged on that run):
 

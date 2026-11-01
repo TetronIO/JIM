@@ -1923,10 +1923,16 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToArray();
 
         if (mvoIds.Length == 0)
+        {
+            span?.SetTag("valueCount", 0);
             return;
+        }
 
         // Raw SQL into untracked objects (#2598): see MetaverseObjectRawReader for why.
         var mvosById = await MetaverseObjectRawReader.ReadAsync(Repository.Database, mvoIds);
+
+        // The values the read brought, so a run's log gives the reader's cost per value (#2669).
+        span?.SetTag("valueCount", mvosById.Values.Sum(m => m.AttributeValues.Count));
 
         // Join each page Connected System Object to its object, both ways. EF's relationship fix-up did this when the
         // objects were tracked; the reverse collection is what the engine reads for an object's loaded connectors.
