@@ -159,9 +159,7 @@
                         @if (_parentItem != null)
                         {
                             var itemName = ObjectDescription.ChipName(_parentItem.DisplayNameSnapshot, _parentItem.ExternalIdSnapshot);
-                            var runName = _parentItemRun == null
-                                ? "Execution item"
-                                : $"{Helpers.GetActivityTargetTypeName(_parentItemRun.TargetType)}: {_parentItemRun.TargetName}";
+                            var runName = _parentItemRun?.DisplayName ?? "Execution item";
                             <ObjectChip Kind="ObjectChipKind.Activity" TypeName="@runName" Name="@itemName"
                                         Href="@($"/activity/item/{parentItemId}")" Class="ma-0" />
                         }
