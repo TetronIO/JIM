@@ -133,7 +133,7 @@ A Connected System Object carries no record of which values changed since the la
 |---|---|---|---|
 | (a) Raw untracked page reader, with A to F replaced | about 2 to 3.5 µs per value (Phase 0 confirms) | Every hazard above, each replaced explicitly | **Recommended** |
 | (a') EF `AsNoTracking` with the same `Include`s | about 8 µs per value (#2598 Phase 4: untracked was about half the tracked cost) | The same hazards as (a) | Rejected: the same risk for half the gain |
-| (b) EF loads the rows, raw read of the values, attach them | about 11 µs per value or more | Little new risk | Rejected: the attach gives the gain back |
+| (b) EF loads the rows, raw read of the values, attach them | 7.3 to 9.9 µs per value, measured in Phase 0 | Little new risk | Rejected: about three times (a), and every value stays tracked |
 | (c) Load only the changed values | n/a | A new delta model end to end | Rejected: incorrect as stated |
 | (d) Nothing beyond #2649 | 15 to 18 µs per value | Nothing | Only if Phase 0 shows the volume is small |
 
@@ -146,7 +146,7 @@ A Connected System Object carries no record of which values changed since the la
 - **`Add`, `Update` or `Attach` reaching a page row (E):** closed in the repository.
 - **Change detection:** stays off for the page. A tracked Activity's `RunProfileExecutionItems` would otherwise lead detection to the page's objects.
 
-**(b) Raw values attached to EF-loaded rows.** #2598 Phase 0 measured attaching values at 16 µs each for a 1,000-value object and 29.6 µs each at 10,000. The cost was identity-map hashing and the fix-up of each value's reference to a member the context does not track, which is exactly a group's case. Only its list-scan part was later removed. So raw read plus attach lands at about the tracked query's cost, and every value stays tracked, which keeps every tracker scan in D just as large. Phase 0 adds this variant to the measurement so the rejection rests on a number.
+**(b) Raw values attached to EF-loaded rows.** #2598 Phase 0 measured attaching values at 16 µs each for a 1,000-value object and 29.6 µs each at 10,000. The cost was identity-map hashing and the fix-up of each value's reference to a member the context does not track, which is exactly a group's case. Only its list-scan part was later removed. That projected raw read plus attach at about the tracked query's cost. Phase 0 measured it at 7.3 to 9.9 µs per value, references included: better than projected, and cheaper than (a'), but still about three times (a). It also leaves every value tracked, which keeps every tracker scan in D just as large. Those two reasons, not the attach cost alone, are why it is rejected.
 
 The same evidence rules out a hybrid: rows attached with `Entry(cso).State`, values untracked. Any tracked load of a page object's values would then fix new tracked value instances into the tracked object's `AttributeValues` beside the raw ones. The group would hold every member twice, and `ExternalIdAttributeValue`'s `SingleOrDefault` would throw. That is worse than either pure option.
 
