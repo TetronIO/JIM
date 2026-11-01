@@ -149,6 +149,30 @@
                 </MudItem>
             }
 
+            @* A follow-up of a Run Profile Execution Item (#2668): the export item whose account this Activity's work is for. *@
+            @if (_activity.ParentRunProfileExecutionItemId.HasValue)
+            {
+                var parentItemId = _activity.ParentRunProfileExecutionItemId.Value;
+                <MudItem xs="12" sm="6" md="4">
+                    <MudText Typo="Typo.button" Class="mud-text-secondary">Follow-up To:</MudText>
+                    <MudText>
+                        @if (_parentItem != null)
+                        {
+                            var itemName = ObjectDescription.ChipName(_parentItem.DisplayNameSnapshot, _parentItem.ExternalIdSnapshot);
+                            var runName = _parentItemRun == null
+                                ? "Execution item"
+                                : $"{Helpers.GetActivityTargetTypeName(_parentItemRun.TargetType)}: {_parentItemRun.TargetName}";
+                            <ObjectChip Kind="ObjectChipKind.Activity" TypeName="@runName" Name="@itemName"
+                                        Href="@($"/activity/item/{parentItemId}")" Class="ma-0" />
+                        }
+                        else
+                        {
+                            <span class="mud-text-secondary">Export item no longer retained</span>
+                        }
+                    </MudText>
+                </MudItem>
+            }
+
             @* An import's watermarks: what range a Delta Import read, or where the next Delta Import starts. *@
             <ImportReadRangeField RunType="@_activity.ConnectedSystemRunType" WatermarkFrom="@_activity.ImportWatermarkFrom"
                                   WatermarkTo="@_activity.ImportWatermarkTo" ReadRange="@_importReadRange" />
@@ -1221,6 +1245,8 @@
     private ServerCertificateDiagnostic? _serverCertificate;
     private bool _hasUnresolvedReferences;
     private Activity? _parentActivity;
+    private ActivityRunProfileExecutionItem? _parentItem;
+    private Activity? _parentItemRun;
 
     // The preview that informed this change (#134), its Activity, and its verdict; empty where there is none.
     private Activity? _informingPreviewActivity;
@@ -1363,6 +1389,8 @@
         _metaverseObjectHeader = null;
         _initiatorMetaverseObjectHeader = null;
         _parentActivity = null;
+        _parentItem = null;
+        _parentItemRun = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
         _configurationChangeSynchronisations = [];
@@ -1428,6 +1456,15 @@
         // Load the parent activity (if any) so the Summary can render its type and target name rather than a bare link.
         if (_activity.ParentActivityId.HasValue)
             _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
+
+        // The execution item this Activity follows up (#2668), and its run, so the link names both. Both are removed with
+        // the run under history retention, which the Summary says rather than linking to nothing.
+        if (_activity.ParentRunProfileExecutionItemId is { } parentItemId)
+        {
+            _parentItem = await jim.Activities.GetActivityRunProfileExecutionItemCoreAsync(parentItemId);
+            if (_parentItem != null)
+                _parentItemRun = await jim.Activities.GetActivityAsync(_parentItem.ActivityId);
+        }
 
         // The preview the administrator read before this change (#134), and what it said. Both are gone once the
         // preview's Activity ages out under retention, which the Summary says rather than linking to nothing.

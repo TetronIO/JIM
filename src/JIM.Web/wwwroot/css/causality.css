@@ -1904,3 +1904,49 @@ a.jim-causality-crumb:hover {
     font-size: 0.875rem;
     color: var(--mud-palette-text-secondary);
 }
+
+/* A follow-up card in After this run (#2668): work the item set in motion that finishes after its run, such as an
+   Initial Password. Tinted and labelled so it does not read as a later run's outcome. */
+.ln-followup {
+    display: grid;
+    gap: 0.375rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--mud-palette-primary) 28%, var(--mud-palette-lines-default));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 5%, transparent);
+}
+
+.ln-followup-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mud-palette-primary);
+}
+
+.ln-followup-label .mud-icon-root {
+    font-size: 0.875rem;
+}
+
+.ln-followup-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+
+/* A follow-up beneath its item's row in an object's timeline (#2668): set off by a rule in the primary colour. */
+.jim-causality-timeline-followup td:nth-child(2) {
+    box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mud-palette-primary) 50%, transparent);
+}
+
+.jim-causality-timeline-followup-run {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--mud-palette-primary);
+}

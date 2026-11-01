@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Web.Models;
 
 namespace JIM.Web.Causality;
 
@@ -28,11 +29,16 @@ public static partial class CausalityLineageModelBuilder
     /// The downward walk (#1811): what the item went on to cause, placed in each object's After this run section. Null
     /// where it has not been read yet, which leaves the Lineage exactly as it would be without it.
     /// </param>
+    /// <param name="followUps">
+    /// The item's follow-ups (#2668): work it set in motion that finishes after its run, placed in its own record's After
+    /// this run section, oldest first. Null or empty leaves the Lineage as it would be without them.
+    /// </param>
     public static CausalityLineageModel Build(
         CausalityModel model,
         CausalChain? chain,
         ObjectChangeType itemChangeType,
-        CausalConsequences? consequences = null)
+        CausalConsequences? consequences = null,
+        IReadOnlyList<ExecutionItemFollowUpDisplay>? followUps = null)
     {
         var context = model.Context;
         var allEvents = model.AllEvents().ToList();
@@ -244,6 +250,27 @@ public static partial class CausalityLineageModelBuilder
                 .Place(consequences);
         }
 
+        // ─── The item's follow-ups (#2668): work on the item's own record that finishes after its run ───
+        if (followUps is { Count: > 0 })
+        {
+            var record = pageRecordColumn ?? GetIdentityColumn();
+            foreach (var followUp in followUps)
+            {
+                record.Consequences.Add((new CausalityLineageConsequence
+                {
+                    Kind = CausalityLineageConsequenceKind.FollowUp,
+                    FollowUp = followUp,
+                    Title = followUp.Title,
+                    Text = followUp.Detail,
+                    Occurred = followUp.Created,
+                    LinkText = "View Activity",
+                    LinkHref = followUp.ActivityHref
+                }, int.MaxValue));
+            }
+
+            consequenceSummary = WithFollowUps(consequenceSummary, followUps);
+        }
+
         // The Identity column also exists when the story spans both sides of the Metaverse with no
         // loaded event on the Identity itself and no creation cohort resolved either (a create export
         // whose projecting item's history has aged out): records never join directly, so the graph the
@@ -433,6 +460,41 @@ public static partial class CausalityLineageModelBuilder
             Endings = endings,
             Consequences = consequenceCards,
             MemberCount = head.IsRoleHead ? state.MemberCount : null
+        };
+    }
+
+    /// <summary>
+    /// The footer's reading once the item's follow-ups (#2668) are counted: while any is still running the story has not
+    /// ended, so that is said in place of "every branch has run to its end"; once all have finished, a Lineage with no
+    /// other consequence has still had something follow from its run.
+    /// </summary>
+    private static CausalityLineageConsequenceSummary WithFollowUps(CausalityLineageConsequenceSummary? summary,
+        IReadOnlyList<ExecutionItemFollowUpDisplay> followUps)
+    {
+        var running = followUps.Where(f => f.IsRunning).ToList();
+        var sentences = (summary?.StateSentences ?? [])
+            .Where(s => s is not ("Every branch has run to its end." or "Nothing followed from this run."))
+            .ToList();
+        if (running.Count > 0)
+        {
+            var which = string.Join("; ", running.Select(f => $"{f.Title}, {f.StateLabel.ToLowerInvariant()}"));
+            sentences.Add(running.Count == 1
+                ? $"1 follow-up is still running: {which}."
+                : $"{running.Count} follow-ups are still running: {which}.");
+        }
+        else if (sentences.Count == 0)
+        {
+            sentences.Add("Every branch has run to its end.");
+        }
+
+        return new CausalityLineageConsequenceSummary
+        {
+            CheckedAt = summary?.CheckedAt ?? DateTime.UtcNow,
+            HasWaitingBranches = (summary?.HasWaitingBranches ?? false) || running.Count > 0,
+            IsFurtherThanShown = summary?.IsFurtherThanShown ?? false,
+            HasAny = true,
+            StateSentences = sentences,
+            Pills = summary?.Pills ?? []
         };
     }
 

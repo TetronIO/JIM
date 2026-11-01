@@ -32,6 +32,37 @@
         </div>
         break;
 
+    case CausalityLineageConsequenceKind.FollowUp:
+        var followUp = Consequence.FollowUp!;
+        var followUpLocal = followUp.Created.ToLocalTime();
+        @* Work the item set in motion that finishes after its run (#2668): marked as a follow-up so it does not read as a
+           later run's outcome, with where it stands now. *@
+        <div class="ln-followup" data-testid="ln-followup" data-state="@followUp.StateLabel">
+            <div class="ln-followup-label">
+                <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" aria-hidden="true" />
+                <span>Follow-up</span>
+            </div>
+            <div class="ln-followup-title">
+                <span>@followUp.Title</span>
+                <span class="@($"jim-status-pill jim-status-pill--{followUp.PillModifier}")">
+                    <span class="jim-status-dot"></span>@followUp.StateLabel
+                </span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(followUp.Detail))
+            {
+                <div class="ln-wait-text">@followUp.Detail</div>
+            }
+            <div class="ln-wait-text">
+                @if (!string.IsNullOrWhiteSpace(followUp.TargetName))
+                {
+                    <span>@followUp.TargetName · </span>
+                }
+                <span title="@followUpLocal.ToFriendlyDate()">@followUpLocal.ToRelativeTime()</span>
+            </div>
+            <a class="ln-link" href="@followUp.ActivityHref">View Activity</a>
+        </div>
+        break;
+
     case CausalityLineageConsequenceKind.Waiting:
     case CausalityLineageConsequenceKind.NeedsAttention:
     case CausalityLineageConsequenceKind.Settled:
