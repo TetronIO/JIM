@@ -204,6 +204,31 @@ public class ActivityRangeDatabaseTests
     }
 
     [Test]
+    public async Task GetFollowUpActivitiesAsync_ReturnsOnlyTheNamedItemsFollowUpsOldestFirstAsync()
+    {
+        var item = Guid.NewGuid();
+        var otherItem = Guid.NewGuid();
+        await using (var ctx = NewContext())
+        {
+            var first = NewActivity("First");
+            first.ParentRunProfileExecutionItemId = item;
+            first.Created = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
+            var second = NewActivity("Second");
+            second.ParentRunProfileExecutionItemId = item;
+            second.Created = first.Created.AddMinutes(1);
+            var other = NewActivity("Other item");
+            other.ParentRunProfileExecutionItemId = otherItem;
+            ctx.Activities.AddRange(second, other, first, NewActivity("No parent"));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        var followUps = await new PostgresDataRepository(read).Activity.GetFollowUpActivitiesAsync([item]);
+
+        Assert.That(followUps.Select(a => a.TargetName), Is.EqualTo(new[] { "First", "Second" }));
+    }
+
+    [Test]
     public async Task Range_FullWindow_MatchesPagedReaderAsync()
     {
         await SeedSequentialActivitiesAsync(10);

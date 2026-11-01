@@ -724,6 +724,21 @@ public partial class ActivityRepository : IActivityRepository
             OccurredAt = a.Created
         };
 
+    /// <inheritdoc />
+    public async Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds)
+    {
+        if (executionItemIds.Count == 0)
+            return [];
+
+        // Served by the partial index IX_Activities_ParentRunProfileExecutionItemId.
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentRunProfileExecutionItemId != null && executionItemIds.Contains(a.ParentRunProfileExecutionItemId.Value))
+            .OrderBy(a => a.Created)
+            .ThenBy(a => a.Id)
+            .ToListAsync();
+    }
+
     public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
     {
         if (pageSize < 1)
