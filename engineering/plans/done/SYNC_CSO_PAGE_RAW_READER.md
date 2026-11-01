@@ -1,9 +1,10 @@
 # Connected System Object Pages Off EF Core
 
-- **Status:** Doing (Phase 0 underway: diagnostics and measurement variants in; the scale run is outstanding)
+- **Status:** Done
+- **Note:** Closed at Phase 0 as option (d). The gate's scale run passed gates 1 and 3 but only met gate 2 on the run-wide average, and the realistic saving (about 9 s of the leaver step's 87 s, about 75 s of a 100-minute run) does not justify Phases 1 and 2. Revisit when million-member groups are measured, since EF's cost per value rises with group size. The leaver step's larger cost turned out to be database-side deletion, which stays with [#2669](https://github.com/TetronIO/JIM/issues/2669).
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Last Updated:** 2026-11-01
-- **Follows:** [Synchronisation Hot Path Off EF Core's Change Tracker](../done/SYNC_HOT_PATH_OFF_EF_TRACKER.md) (#2598), whose Phase 4 deferred this load "until a scale run shows the linear cost matters"
+- **Follows:** [Synchronisation Hot Path Off EF Core's Change Tracker](SYNC_HOT_PATH_OFF_EF_TRACKER.md) (#2598), whose Phase 4 deferred this load "until a scale run shows the linear cost matters"
 
 ## Overview
 
@@ -265,6 +266,41 @@ Gate (all three, judged on that run):
 3. **Volume.** The summed main-load time across the run's synchronisations is at least 60 s, or at least 15% of any one synchronisation's wall clock. The 31 October numbers already meet the second test (21 s of 78.7 s, 27%). The run sizes the Full Synchronisation's share, which the explicit test cannot.
 
 If gate 2 or 3 fails, record the numbers here, close the plan as option (d), and move it to `done/` with a Note.
+
+#### Measured (scale run) and the gate's outcome
+
+Scale500k25kGroups, Scenario 008 on OpenLDAP, at `63e9af5c3`, run on 1 November in 1h40m. The run passed with no errors and peaked at 17.07 GiB of Worker memory. The whole run ran about 10% slower than the 31 October run, so compare within it. Per value below is the sum of the logged `Cso.Page.Load*WithAttributeValues` lines (spans of 100 ms and over) divided by their summed `attributeValueCount`.
+
+| Synchronisation | Page main loads, logged | Values | Per value | Breakdown total for the main load |
+|---|---|---|---|---|
+| Source Full Synchronisation (initial) | 95 loads, 60.4 s | 4,693,702 | 12.9 µs | 114.0 s over 1,053 loads |
+| Target Full Synchronisation (initial) | 4 loads, 0.6 s | 2,000 | n/a | 16.1 s over 1,085 loads |
+| Target confirming Full Synchronisation | 52 loads, 31.0 s | 4,376,702 | 7.1 µs | 77.5 s over 1,053 loads |
+| Leaver cohort, Target confirming Delta Synchronisation | 12 loads, 18.4 s | 2,815,775 | 6.5 µs | 18.9 s over 24 loads |
+| All logged loads in the run | 165 loads, 111.3 s | 11,988,197 | 9.3 µs | about 227 s |
+
+In the leaver cohort's confirming Delta Synchronisation, `LoadModifiedCsoPage` totalled 28.7 s: the main load 18.9 s, `Cso.LoadMetaverseObjects` 5.5 s and `Cso.PopulateReferenceValues` 4.3 s.
+
+The gate:
+
+1. **Premise: passed.** The main load is 18.9 s of the 18.9 s that `LoadModifiedCsoPage` spent outside its two older child spans. It read 2.8 million values, twice the estimate.
+2. **Per value: met only on the run-wide average.** The run-wide average is 9.3 µs, about 2.8 to 3.1 times the measured raw reader (c), at 3.0 to 3.3 µs. The initial Full Synchronisation is 12.9 µs, but the confirming Full Synchronisation is 7.1 µs and the leaver step 6.5 µs, both below the 8 µs threshold and about twice the raw reader.
+3. **Volume: passed.** About 227 s of main loads across the run (breakdown totals), and 22% of the leaver step's confirming synchronisation.
+
+**Decision: closed as option (d).** Replacing about 9 µs with about 3 µs saves roughly 6 µs on each of about 12 million values. That is about 75 s of a 100-minute run, mostly in the initial Full Synchronisation, and about 9 s of the leaver step's 87 s. Phases 1 and 2 are two large pull requests with the duplicate-instance hazards above, and the saving does not justify them at this scale.
+
+**Revisit** when million-member groups are measured. The local fixture shows EF's cost per value climbing with group size (14.0 µs at 25,000 members, 16.4 µs at 400,000), so the case may hold there.
+
+The same run showed where the leaver step's time actually goes: database-side deletion. Four steps account for most of it:
+
+| Step | Time | Per object |
+|---|---|---|
+| The raw `DELETE` of 5,000 Connected System Objects | about 36 s | about 7 ms (0.35 ms locally) |
+| Persisting their deletion records | 14.6 s | |
+| The Metaverse Object bulk delete | 20.6 s | about 4 ms |
+| Execution items for the recalls | 13.0 s | |
+
+That work continues under #2669.
 
 ### Phase 1: A page identity for Connected System Objects, and the loads that go around it
 
