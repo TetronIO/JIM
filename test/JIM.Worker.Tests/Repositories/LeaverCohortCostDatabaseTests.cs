@@ -10,7 +10,9 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 using JIM.PostgresData;
+using JIM.PostgresData.Repositories;
 using JIM.TestSupport;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
@@ -34,8 +36,11 @@ namespace JIM.Worker.Tests.Repositories;
 /// items, change records and the values in them) the database clears to null when an object goes. The statement
 /// count it prints is held constant by <see cref="ConnectedSystemObjectBatchDeletionDatabaseTests"/>; this measures
 /// the time.</item>
-/// <item>Loading a modified group's page through <see cref="TypeOrderedCsoPager.NextPageAsync"/>, at several
-/// membership sizes, against a raw read of the same rows.</item>
+/// <item>Loading a modified group's page, at several membership sizes, in each of the ways the plan for #2669 weighs:
+/// today's tracked load through <see cref="TypeOrderedCsoPager.NextPageAsync"/>, split by its spans; the same EF query
+/// untracked (option (a')); EF rows with raw values attached to the context (option (b)); a raw read that builds what
+/// a raw page reader would (the floor for option (a)); and a raw read of one column per value row, which builds
+/// nothing. Each asserts it loaded every value, so a variant that loaded less cannot report a time.</item>
 /// </list>
 /// </summary>
 /// <remarks>
@@ -53,6 +58,10 @@ public class LeaverCohortCostDatabaseTests
     private const int Users = 50_000;
     private const int MembersPerGroup = 25_000;
     private const int MeasuredRuns = 3;
+
+    // A page load's runs vary more than a deletion's, on a shared host above all (the first measured run after the
+    // warm-up was over twice the median at 25,000 members), so its median is taken over more of them.
+    private const int PageLoadRuns = 5;
 
     // History each departed account carries at the moment it is deleted, all of it pointing at the account and so all
     // of it cleared to null by the database as the account goes: execution items from the runs that touched it, its own
@@ -145,27 +154,21 @@ public class LeaverCohortCostDatabaseTests
     [TestCase(25_000)]
     [TestCase(50_000)]
     [TestCase(100_000)]
+    [TestCase(400_000)]
     public async Task NextPageAsync_ModifiedGroupWithLargeMembership_ReportsPageLoadCostAsync(int members)
     {
         var seeded = await SeedModifiedGroupAsync(members);
 
-        var runs = new List<PageLoadRun>();
-        for (var i = 0; i <= MeasuredRuns; i++)
+        var variants = new List<(string Name, List<PageLoadRun> Runs)>
         {
-            var run = await MeasurePageLoadAsync(seeded);
-            if (i > 0)
-                runs.Add(run);
-        }
+            ("EF tracked, the Delta loader through NextPageAsync", await MeasureAsync(() => MeasurePageLoadAsync(seeded))),
+            ("(a') EF AsNoTracking, the main query alone", await MeasureAsync(() => LoadWithUntrackedQueryAsync(seeded))),
+            ("(b) EF rows, raw values attached Unchanged, references joined", await MeasureAsync(() => LoadWithAttachedRawValuesAsync(seeded))),
+            ("(c) raw rows and values built into objects, references joined", await MeasureAsync(() => ReadPageRawAsync(seeded))),
+            ("raw, one column per value row (the floor)", await MeasureAsync(() => ReadGroupValuesRawAsync(seeded)))
+        };
 
-        var rawMs = new List<double>();
-        for (var i = 0; i <= MeasuredRuns; i++)
-        {
-            var ms = await ReadGroupValuesRawAsync(seeded.GroupCsoId);
-            if (i > 0)
-                rawMs.Add(ms);
-        }
-
-        TestContext.Out.WriteLine(DescribePageLoadRuns(members, runs, Median(rawMs)));
+        TestContext.Out.WriteLine(DescribePageLoadRuns(members, variants));
     }
 
     #region Deletion
@@ -473,17 +476,50 @@ public class LeaverCohortCostDatabaseTests
 
     #region Page load
 
-    private sealed record PageLoadRun(double GroupPageMs, int ValueCount, Dictionary<string, double> SpanMs);
+    /// <summary>
+    /// The page size every variant loads with: the one the measured pager passes the Delta loader.
+    /// </summary>
+    private const int SyncPageSize = 500;
 
-    private sealed record SeededModifiedGroup(int SystemId, int UserTypeId, int GroupTypeId, Guid GroupCsoId, DateTime Watermark);
+    private const string MainQuerySpan = "Cso.Page.LoadModifiedWithAttributeValues";
+    private const string ReferenceLookupSpan = "Cso.PopulateReferenceValues";
 
+    private sealed record PageLoadRun(double Ms, int ValueCount, Dictionary<string, double> SpanMs);
+
+    private sealed record SeededModifiedGroup(
+        int SystemId, int UserTypeId, int GroupTypeId, Guid GroupCsoId, DateTime Watermark,
+        HashSet<Guid> MemberCsoIds, HashSet<Guid> MemberMvoIds);
+
+    /// <summary>
+    /// One run discarded for warm-up (JIT, EF's model and query caches), then the measured runs, each after a full
+    /// collection so that no run pays for the garbage the one before it left.
+    /// </summary>
+    private static async Task<List<PageLoadRun>> MeasureAsync(Func<Task<PageLoadRun>> run)
+    {
+        var runs = new List<PageLoadRun>();
+        for (var i = 0; i <= PageLoadRuns; i++)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            var measured = await run();
+            if (i > 0)
+                runs.Add(measured);
+        }
+        return runs;
+    }
+
+    /// <summary>
+    /// Today's load, as the Worker runs it: the Delta loader through the pager, on a tracking context with change
+    /// detection off. Its spans split it into the main query, the reference lookup and the Metaverse Object read.
+    /// </summary>
     private async Task<PageLoadRun> MeasurePageLoadAsync(SeededModifiedGroup seeded)
     {
         await using var ctx = NewPageContext(null);
         var repository = new PostgresDataRepository(ctx);
         var pager = new TypeOrderedCsoPager(
             (afterId, objectTypeId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
-                seeded.SystemId, seeded.Watermark, 1, 500, 1, afterId, objectTypeId, createdOnOrAfter),
+                seeded.SystemId, seeded.Watermark, 1, SyncPageSize, 1, afterId, objectTypeId, createdOnOrAfter),
             [seeded.UserTypeId, seeded.GroupTypeId],
             seeded.Watermark);
 
@@ -493,19 +529,116 @@ public class LeaverCohortCostDatabaseTests
         stopwatch.Stop();
         var recorded = _spans.Stop();
 
-        Assert.That(page?.Results.Select(c => c.Id), Is.EqualTo(new[] { seeded.GroupCsoId }), "the modified group's page");
+        Assert.That(page, Is.Not.Null, "EF tracked: a page");
+        AssertGroupPage("EF tracked", page!.Results, seeded, referencesResolved: true);
         Assert.That(await pager.NextPageAsync(), Is.Null, "nothing else is modified");
 
         return new PageLoadRun(
             stopwatch.Elapsed.TotalMilliseconds,
-            page!.Results.Single().AttributeValues.Count,
+            page!.Results[0].AttributeValues.Count,
             recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => g.Sum(s => s.Ms), StringComparer.Ordinal));
     }
 
     /// <summary>
-    /// The floor: the group's value rows with their attribute, read raw.
+    /// Option (a'): the Delta loader's main query, its Includes and selection unchanged, untracked. It reads no
+    /// references; the Delta loader's reference lookup would follow it.
     /// </summary>
-    private async Task<double> ReadGroupValuesRawAsync(Guid groupCsoId)
+    private async Task<PageLoadRun> LoadWithUntrackedQueryAsync(SeededModifiedGroup seeded)
+    {
+        await using var ctx = NewPageContext(null);
+        var stopwatch = Stopwatch.StartNew();
+        var page = await SelectModifiedPage(ctx.ConnectedSystemObjects
+                .AsNoTracking()
+                .Include(cso => cso.Type)
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute), seeded)
+            .ToListAsync();
+        stopwatch.Stop();
+
+        AssertGroupPage("(a')", page, seeded, referencesResolved: false);
+        return new PageLoadRun(stopwatch.Elapsed.TotalMilliseconds, page[0].AttributeValues.Count, []);
+    }
+
+    /// <summary>
+    /// Option (b): EF loads the Connected System Object rows, tracked, then the values are read raw and each is attached
+    /// to the context as Unchanged and added to its object's values. The attach is the cost #2598 Phase 0 measured.
+    /// </summary>
+    private async Task<PageLoadRun> LoadWithAttachedRawValuesAsync(SeededModifiedGroup seeded)
+    {
+        await using var ctx = NewPageContext(null);
+        var stopwatch = Stopwatch.StartNew();
+        var page = await SelectModifiedPage(ctx.ConnectedSystemObjects.AsTracking().Include(cso => cso.Type), seeded).ToListAsync();
+        var objectsById = page.ToDictionary(cso => cso.Id);
+        var valuesByOwner = await ReadValueRowsAsync(ctx, [.. objectsById.Keys]);
+        var attributesById = await LoadAttributesAsync(ctx, valuesByOwner);
+        foreach (var (owner, values) in valuesByOwner.Select(o => (objectsById[o.Key], o.Value)))
+        {
+            foreach (var value in values)
+            {
+                value.ConnectedSystemObject = owner;
+                value.Attribute = attributesById[value.AttributeId];
+                owner.AttributeValues.Add(value);
+                ctx.Entry(value).State = EntityState.Unchanged;
+            }
+        }
+        stopwatch.Stop();
+
+        AssertGroupPage("(b)", page, seeded, referencesResolved: true);
+        Assert.That(ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Count(e => e.State == EntityState.Unchanged),
+            Is.EqualTo(seeded.MemberCsoIds.Count + 1), "(b): every value is tracked, unchanged");
+        return new PageLoadRun(stopwatch.Elapsed.TotalMilliseconds, page[0].AttributeValues.Count, []);
+    }
+
+    /// <summary>
+    /// The floor for option (a), as its reader would build the page: every column of both tables (the bulk writers'
+    /// lists) plus <c>xmin</c>, into untracked objects; Type and Attribute resolved through the context, as
+    /// <c>MetaverseObjectRawReader</c> resolves its own; one <see cref="ReferenceIndexedList{T}"/> per object; the three
+    /// resolved-reference fields from a join to the referenced object; and a reference to an object on the page wired
+    /// to that object.
+    /// </summary>
+    private async Task<PageLoadRun> ReadPageRawAsync(SeededModifiedGroup seeded)
+    {
+        await using var ctx = NewPageContext(null);
+        var stopwatch = Stopwatch.StartNew();
+        var page = await ReadObjectRowsAsync(ctx, seeded);
+        var objectsById = page.ToDictionary(cso => cso.Id);
+        var typeIds = page.Select(cso => cso.TypeId).Distinct().ToList();
+        var typesById = await ctx.ConnectedSystemObjectTypes.Where(t => typeIds.Contains(t.Id)).ToDictionaryAsync(t => t.Id);
+        foreach (var cso in page)
+            cso.Type = typesById[cso.TypeId];
+
+        var valuesByOwner = await ReadValueRowsAsync(ctx, [.. objectsById.Keys]);
+        var attributesById = await LoadAttributesAsync(ctx, valuesByOwner);
+        foreach (var (owner, values) in valuesByOwner.Select(o => (objectsById[o.Key], o.Value)))
+        {
+            foreach (var value in values)
+            {
+                value.ConnectedSystemObject = owner;
+                value.Attribute = attributesById[value.AttributeId];
+                if (value.ReferenceValueId is { } referenceId && objectsById.TryGetValue(referenceId, out var target))
+                    value.ReferenceValue = target;
+            }
+            owner.AttributeValues = new ReferenceIndexedList<ConnectedSystemObjectAttributeValue>(values);
+        }
+        stopwatch.Stop();
+
+        AssertGroupPage("(c)", page, seeded, referencesResolved: true);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ctx.ChangeTracker.Entries<ConnectedSystemObject>(), Is.Empty, "(c): the objects are untracked");
+            Assert.That(ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>(), Is.Empty, "(c): the values are untracked");
+            Assert.That(ctx.Entry(page[0].Type).State, Is.EqualTo(EntityState.Unchanged), "(c): the Type is the context's tracked instance");
+            Assert.That(ctx.Entry(page[0].AttributeValues[0].Attribute).State, Is.EqualTo(EntityState.Unchanged),
+                "(c): each Attribute is the context's tracked instance");
+        }
+        return new PageLoadRun(stopwatch.Elapsed.TotalMilliseconds, page[0].AttributeValues.Count, []);
+    }
+
+    /// <summary>
+    /// The floor: the group's value rows with their attribute's name, read raw, one column taken per row and nothing
+    /// built.
+    /// </summary>
+    private async Task<PageLoadRun> ReadGroupValuesRawAsync(SeededModifiedGroup seeded)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -513,7 +646,7 @@ public class LeaverCohortCostDatabaseTests
         await using var command = new NpgsqlCommand(
             @"SELECT v.*, a.""Name"" FROM ""ConnectedSystemObjectAttributeValues"" v JOIN ""ConnectedSystemAttributes"" a ON a.""Id"" = v.""AttributeId"" " +
             @"WHERE v.""ConnectedSystemObjectId"" = @id ORDER BY v.""Id""", connection);
-        command.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = groupCsoId });
+        command.Parameters.Add(new NpgsqlParameter("id", NpgsqlDbType.Uuid) { Value = seeded.GroupCsoId });
         await using var reader = await command.ExecuteReaderAsync();
         var rows = 0;
         while (await reader.ReadAsync())
@@ -522,23 +655,247 @@ public class LeaverCohortCostDatabaseTests
             rows++;
         }
         stopwatch.Stop();
-        Assert.That(rows, Is.GreaterThan(0));
-        return stopwatch.Elapsed.TotalMilliseconds;
+        Assert.That(rows, Is.EqualTo(seeded.MemberCsoIds.Count + 1), "the floor: every value row");
+        return new PageLoadRun(stopwatch.Elapsed.TotalMilliseconds, rows, []);
     }
 
-    private static string DescribePageLoadRuns(int members, List<PageLoadRun> runs, double rawMs)
+    /// <summary>
+    /// The Delta loader's selection as <c>GetConnectedSystemObjectsModifiedSinceAsync</c> composes it for the group's
+    /// Object Type from an empty keyset cursor: the marks or the timestamps, the type, the cursor, ordered by id.
+    /// </summary>
+    private static IQueryable<ConnectedSystemObject> SelectModifiedPage(IQueryable<ConnectedSystemObject> source, SeededModifiedGroup seeded)
     {
-        var median = Median(runs.Select(r => r.GroupPageMs));
+        var (systemId, modifiedSince, typeId, afterId) = (seeded.SystemId, seeded.Watermark, seeded.GroupTypeId, Guid.Empty);
+        return source
+            .Where(cso => cso.ConnectedSystemId == systemId &&
+                          (cso.SynchronisationPending ||
+                           cso.DerivedInputChangePending ||
+                           cso.ScopeReviewPending ||
+                           cso.Created > modifiedSince ||
+                           (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)))
+            .Where(cso => cso.TypeId == typeId)
+            .OrderBy(cso => cso.Id)
+            .Where(cso => cso.Id.CompareTo(afterId) > 0)
+            .Take(SyncPageSize);
+    }
+
+    /// <summary>
+    /// Statement 1 of option (a)'s reader: the Delta loader's selection over every column of the rows, and xmin.
+    /// </summary>
+    private static async Task<List<ConnectedSystemObject>> ReadObjectRowsAsync(JimDbContext context, SeededModifiedGroup seeded)
+    {
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var columns = CsoBulkColumns.ConnectedSystemObjects;
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT {BulkSqlHelpers.ToQuotedList(columns)}, "xmin"
+             FROM "ConnectedSystemObjects"
+             WHERE "ConnectedSystemId" = @systemId
+               AND ("SynchronisationPending" OR "DerivedInputChangePending" OR "ScopeReviewPending"
+                    OR "Created" > @modifiedSince OR "LastUpdated" > @modifiedSince)
+               AND "TypeId" = @typeId
+               AND "Id" > @afterId
+             ORDER BY "Id"
+             LIMIT @pageSize
+             """, connection);
+        command.Parameters.Add(new NpgsqlParameter("systemId", NpgsqlDbType.Integer) { Value = seeded.SystemId });
+        command.Parameters.Add(new NpgsqlParameter("modifiedSince", NpgsqlDbType.TimestampTz) { Value = seeded.Watermark });
+        command.Parameters.Add(new NpgsqlParameter("typeId", NpgsqlDbType.Integer) { Value = seeded.GroupTypeId });
+        command.Parameters.Add(new NpgsqlParameter("afterId", NpgsqlDbType.Uuid) { Value = Guid.Empty });
+        command.Parameters.Add(new NpgsqlParameter("pageSize", NpgsqlDbType.Integer) { Value = SyncPageSize });
+
+        var result = new List<ConnectedSystemObject>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var cso = new ConnectedSystemObject();
+            for (var ordinal = 0; ordinal < columns.Length; ordinal++)
+                SetObjectColumn(cso, columns[ordinal], reader, ordinal);
+            cso.xmin = reader.GetFieldValue<uint>(columns.Length);
+            result.Add(cso);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Statement 2 of option (a)'s reader, and option (b)'s value read: every column of the objects' values, in the
+    /// order EF's Include reads them, each with its referenced object's Metaverse Object, Type and creation time from a
+    /// join, in place of the Delta loader's second lookup. Grouped by owner.
+    /// </summary>
+    private static async Task<Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>>> ReadValueRowsAsync(JimDbContext context, Guid[] ownerIds)
+    {
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        var columns = CsoBulkColumns.ConnectedSystemObjectAttributeValues;
+        var valueColumns = string.Join(", ", columns.Select(c => $"v.\"{c}\""));
+        await using var command = new NpgsqlCommand(
+            $"""
+             SELECT {valueColumns}, r."MetaverseObjectId", r."TypeId", r."Created"
+             FROM "ConnectedSystemObjectAttributeValues" v
+             LEFT JOIN "ConnectedSystemObjects" r ON r."Id" = v."ReferenceValueId"
+             WHERE v."ConnectedSystemObjectId" = ANY(@ownerIds)
+             ORDER BY v."ConnectedSystemObjectId", v."Id"
+             """, connection);
+        command.Parameters.Add(new NpgsqlParameter("ownerIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ownerIds });
+
+        var result = new Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>>(ownerIds.Length);
+        var referenced = columns.Length;
+        List<ConnectedSystemObjectAttributeValue>? ownerValues = null;
+        var currentOwnerId = Guid.Empty;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var value = new ConnectedSystemObjectAttributeValue();
+            var ownerId = Guid.Empty;
+            for (var ordinal = 0; ordinal < columns.Length; ordinal++)
+                SetValueColumn(value, columns[ordinal], reader, ordinal, ref ownerId);
+
+            // A referenced row always has a Type, so a null one means the reference names no row.
+            if (!reader.IsDBNull(referenced + 1))
+            {
+                value.ResolvedReferenceMetaverseObjectId = reader.IsDBNull(referenced) ? null : reader.GetGuid(referenced);
+                value.ResolvedReferenceTypeId = reader.GetInt32(referenced + 1);
+                value.ResolvedReferenceCreated = reader.GetDateTime(referenced + 2);
+            }
+
+            // Rows arrive by owner, so each owner's values are one run; an owner seen twice fails the read.
+            if (ownerValues == null || ownerId != currentOwnerId)
+            {
+                ownerValues = [];
+                result.Add(ownerId, ownerValues);
+                currentOwnerId = ownerId;
+            }
+            ownerValues.Add(value);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The values' Attributes through the context, so on a tracking context they are its tracked instances, the ones
+    /// the run's Synchronisation Rules hold.
+    /// </summary>
+    private static Task<Dictionary<int, ConnectedSystemObjectTypeAttribute>> LoadAttributesAsync(
+        JimDbContext context, Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>> valuesByOwner)
+    {
+        var attributeIds = valuesByOwner.Values.SelectMany(values => values).Select(value => value.AttributeId).Distinct().ToList();
+        return context.ConnectedSystemAttributes.Where(a => attributeIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id);
+    }
+
+    /// <summary>
+    /// Sets the property a <c>ConnectedSystemObjects</c> column maps to, as <c>MetaverseObjectRawReader</c> does for its
+    /// own table; a column with no case fails the read.
+    /// </summary>
+    private static void SetObjectColumn(ConnectedSystemObject cso, string column, NpgsqlDataReader reader, int ordinal)
+    {
+        var isNull = reader.IsDBNull(ordinal);
+        switch (column)
+        {
+            case "Id": cso.Id = reader.GetGuid(ordinal); break;
+            case "ConnectedSystemId": cso.ConnectedSystemId = reader.GetInt32(ordinal); break;
+            case "Created": cso.Created = reader.GetDateTime(ordinal); break;
+            case "LastUpdated": cso.LastUpdated = isNull ? null : reader.GetDateTime(ordinal); break;
+            case "TypeId": cso.TypeId = reader.GetInt32(ordinal); break;
+            case "ExternalIdAttributeId": cso.ExternalIdAttributeId = reader.GetInt32(ordinal); break;
+            case "SecondaryExternalIdAttributeId": cso.SecondaryExternalIdAttributeId = isNull ? null : reader.GetInt32(ordinal); break;
+            case "Status": cso.Status = (ConnectedSystemObjectStatus)reader.GetInt32(ordinal); break;
+            case "MetaverseObjectId": cso.MetaverseObjectId = isNull ? null : reader.GetGuid(ordinal); break;
+            case "JoinType": cso.JoinType = (ConnectedSystemObjectJoinType)reader.GetInt32(ordinal); break;
+            case "DateJoined": cso.DateJoined = isNull ? null : reader.GetDateTime(ordinal); break;
+            case "PartitionId": cso.PartitionId = isNull ? null : reader.GetInt32(ordinal); break;
+            case "ScopeReviewPending": cso.ScopeReviewPending = reader.GetBoolean(ordinal); break;
+            case "LastScopeEvaluatedAt": cso.LastScopeEvaluatedAt = isNull ? null : reader.GetDateTime(ordinal); break;
+            case "ImportStateHash": cso.ImportStateHash = isNull ? null : reader.GetGuid(ordinal); break;
+            case "ImportStateFingerprint": cso.ImportStateFingerprint = isNull ? null : reader.GetGuid(ordinal); break;
+            case "DerivedInputChangePending": cso.DerivedInputChangePending = reader.GetBoolean(ordinal); break;
+            case "JoinMethod": cso.JoinMethod = isNull ? null : (ConnectedSystemObjectJoinMethod)reader.GetInt32(ordinal); break;
+            case "JoinSyncRuleId": cso.JoinSyncRuleId = isNull ? null : reader.GetInt32(ordinal); break;
+            case "JoinSyncRuleName": cso.JoinSyncRuleName = isNull ? null : reader.GetString(ordinal); break;
+            case "JoinObjectMatchingRuleId": cso.JoinObjectMatchingRuleId = isNull ? null : reader.GetInt32(ordinal); break;
+            case "JoinMatchValue": cso.JoinMatchValue = isNull ? null : reader.GetString(ordinal); break;
+            case "SynchronisationPending": cso.SynchronisationPending = reader.GetBoolean(ordinal); break;
+            default: throw new InvalidOperationException($"ConnectedSystemObjects column '{column}' is not read; map it in {nameof(SetObjectColumn)}.");
+        }
+    }
+
+    /// <summary>
+    /// Sets the property a <c>ConnectedSystemObjectAttributeValues</c> column maps to; the owner's id, a shadow
+    /// property, goes to <paramref name="ownerId"/>. See <see cref="SetObjectColumn"/>.
+    /// </summary>
+    private static void SetValueColumn(ConnectedSystemObjectAttributeValue value, string column, NpgsqlDataReader reader, int ordinal, ref Guid ownerId)
+    {
+        var isNull = reader.IsDBNull(ordinal);
+        switch (column)
+        {
+            case "Id": value.Id = reader.GetGuid(ordinal); break;
+            case "ConnectedSystemObjectId": ownerId = reader.GetGuid(ordinal); break;
+            case "AttributeId": value.AttributeId = reader.GetInt32(ordinal); break;
+            case "StringValue": value.StringValue = isNull ? null : reader.GetString(ordinal); break;
+            case "DateTimeValue": value.DateTimeValue = isNull ? null : JIM.Utilities.DateTimeAttributeValue.ToCanonical(reader.GetDateTime(ordinal)); break;
+            case "IntValue": value.IntValue = isNull ? null : reader.GetInt32(ordinal); break;
+            case "LongValue": value.LongValue = isNull ? null : reader.GetInt64(ordinal); break;
+            case "DecimalValue": value.DecimalValue = isNull ? null : reader.GetDecimal(ordinal); break;
+            case "ByteValue": value.ByteValue = isNull ? null : reader.GetFieldValue<byte[]>(ordinal); break;
+            case "GuidValue": value.GuidValue = isNull ? null : reader.GetGuid(ordinal); break;
+            case "BoolValue": value.BoolValue = isNull ? null : reader.GetBoolean(ordinal); break;
+            case "ReferenceValueId": value.ReferenceValueId = isNull ? null : reader.GetGuid(ordinal); break;
+            case "UnresolvedReferenceValue": value.UnresolvedReferenceValue = isNull ? null : reader.GetString(ordinal); break;
+            default: throw new InvalidOperationException($"ConnectedSystemObjectAttributeValues column '{column}' is not read; map it in {nameof(SetValueColumn)}.");
+        }
+    }
+
+    /// <summary>
+    /// Every variant loaded the one modified group with all its values, each carrying its Attribute and, where the
+    /// variant reads references, each member's Metaverse Object; so a variant that loaded less cannot report a time.
+    /// </summary>
+    private static void AssertGroupPage(string variant, IReadOnlyList<ConnectedSystemObject> page, SeededModifiedGroup seeded, bool referencesResolved)
+    {
+        Assert.That(page.Select(cso => cso.Id), Is.EqualTo(new[] { seeded.GroupCsoId }), $"{variant}: the modified group's page");
+        var values = page[0].AttributeValues;
+        var references = values.Where(v => v.ReferenceValueId.HasValue).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(values, Has.Count.EqualTo(seeded.MemberCsoIds.Count + 1), $"{variant}: every value");
+            Assert.That(references.Select(v => v.ReferenceValueId!.Value).ToHashSet().SetEquals(seeded.MemberCsoIds), Is.True,
+                $"{variant}: every member");
+            Assert.That(values.All(v => v.Attribute?.Id == v.AttributeId), Is.True, $"{variant}: each value carries its Attribute");
+            if (referencesResolved)
+            {
+                Assert.That(references.Select(v => v.ResolvedReferenceMetaverseObjectId ?? Guid.Empty).ToHashSet().SetEquals(seeded.MemberMvoIds),
+                    Is.True, $"{variant}: each member's Metaverse Object");
+            }
+        }
+    }
+
+    private static string DescribePageLoadRuns(int members, List<(string Name, List<PageLoadRun> Runs)> variants)
+    {
+        var valueCount = variants[0].Runs[^1].ValueCount;
         var lines = new List<string>
         {
             string.Create(CultureInfo.InvariantCulture,
-                $"== NextPageAsync, one modified group of {members} members ({runs[^1].ValueCount} values): median {median:F1} ms " +
-                $"(runs {string.Join(" / ", runs.Select(r => r.GroupPageMs.ToString("F1", CultureInfo.InvariantCulture)))}), " +
-                $"{median * 1000 / runs[^1].ValueCount:F2} µs per value; raw read of the same rows {rawMs:F1} ms")
+                $"== One modified group of {members} members ({valueCount} values): median of {PageLoadRuns} runs after a warm-up")
         };
-        foreach (var name in runs[^1].SpanMs.Keys.Order(StringComparer.Ordinal))
-            lines.Add(string.Create(CultureInfo.InvariantCulture, $"   span {name}: median {Median(runs.Select(r => r.SpanMs.GetValueOrDefault(name))):F1} ms"));
+        foreach (var (name, runs) in variants)
+        {
+            lines.Add(DescribeTimings(name, runs.Select(r => r.Ms), valueCount));
+            foreach (var span in runs[^1].SpanMs.Keys.Order(StringComparer.Ordinal))
+                lines.Add(DescribeTimings($"   span {span}", runs.Select(r => r.SpanMs.GetValueOrDefault(span)), valueCount));
+            if (runs[^1].SpanMs.ContainsKey(MainQuerySpan))
+            {
+                lines.Add(DescribeTimings("   main query and reference lookup together, which (b) and (c) replace",
+                    runs.Select(r => r.SpanMs.GetValueOrDefault(MainQuerySpan) + r.SpanMs.GetValueOrDefault(ReferenceLookupSpan)), valueCount));
+            }
+        }
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string DescribeTimings(string name, IEnumerable<double> runMs, int valueCount)
+    {
+        var ms = runMs.ToList();
+        var median = Median(ms);
+        return string.Create(CultureInfo.InvariantCulture,
+            $"   {name}: {median:F1} ms, {median * 1000 / valueCount:F2} µs per value " +
+            $"(runs {string.Join(" / ", ms.Select(m => m.ToString("F1", CultureInfo.InvariantCulture)))})");
     }
 
     /// <summary>
@@ -633,7 +990,8 @@ public class LeaverCohortCostDatabaseTests
             await analyse.ExecuteNonQueryAsync();
         }
 
-        return new SeededModifiedGroup(systemId, userTypeId, groupTypeId, groupCsoId, DateTime.UtcNow.AddDays(1));
+        return new SeededModifiedGroup(systemId, userTypeId, groupTypeId, groupCsoId, DateTime.UtcNow.AddDays(1),
+            people.Select(p => p.Cso).ToHashSet(), people.Select(p => p.Mvo).ToHashSet());
     }
 
     #endregion
