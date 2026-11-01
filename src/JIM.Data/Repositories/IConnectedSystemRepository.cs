@@ -1650,7 +1650,7 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Deletes every stored attribute value of the given attributes across a Connected System's objects: the
     /// schema refresh removal task's disposal of values whose attribute the Connected System no longer reports
-    /// (#1485). References from change history to the deleted values are cleared first.
+    /// (#1485).
     /// </summary>
     /// <returns>How many attribute value rows were deleted.</returns>
     public Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
@@ -1839,6 +1839,19 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Gets every Connected System setting value that holds a value for an encrypted setting
+    /// (<see cref="ConnectedSystemSettingType.StringEncrypted"/>), across all Connected Systems, with its Setting
+    /// loaded. Used by the startup pass that encrypts any credential found stored in clear.
+    /// </summary>
+    public Task<List<ConnectedSystemSettingValue>> GetEncryptedSettingValuesAsync();
+
+    /// <summary>
+    /// Writes one setting value's <see cref="ConnectedSystemSettingValue.StringEncryptedValue"/> column and nothing
+    /// else, so converging a stored credential to its encrypted form touches no other part of the Connected System.
+    /// </summary>
+    public Task UpdateSettingValueEncryptedValueAsync(int settingValueId, string encryptedValue);
+
+    /// <summary>
     /// Persists ONLY the Connected System's persisted connector data column (the connector's machine-generated
     /// watermark/state), leaving the rest of the row and the whole graph untouched. Exists because routing this
     /// write through <see cref="UpdateConnectedSystemAsync"/> marked the entire graph Modified, so runtime-only
@@ -1860,8 +1873,6 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem);
 
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
-
-    public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
 
     /// <summary>
     /// Deletes Connected System Objects by id, with their attribute values and the rows the database cascades with

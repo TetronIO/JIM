@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
 - 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 
+### Security
+
+- 🔒 Connector credentials entered in the portal, such as an LDAP Connector password or a SCIM Client Secret, are now encrypted at rest; they were stored unencrypted, as only the REST API encrypted them. Credentials already stored unencrypted are encrypted automatically when JIM next starts, so nothing needs re-entering, and JIM now refuses any stored credential it finds unencrypted rather than using it. (#2680)
+
 ### Performance
 
 - ⚡ Synchronising into a system with large groups is faster: reading each page's Metaverse Objects no longer grows with the square of a group's membership, which cost 154 seconds for one page in a 750,000-person directory. Synchronisation and deletion previews speed up too. (#2598)
@@ -37,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Synchronising a change to a large group's membership is faster: checking which members the Connected System already holds no longer grows with the square of the group's size, which cost 50 seconds for one 50,000-member group gaining two members. (#2645)
 - ⚡ Large groups checked for drift, or with an export already queued, synchronise faster: Drift Detection, and merging a membership change into a queued Pending Export, no longer grow with the square of the group's size, which could take minutes at 50,000 members. (#2658)
 - ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
-- ⚡ Removing many departed accounts in one synchronisation is faster: each page now deletes them in a few statements, rather than one per object and per value. (#2669)
+- ⚡ Deleting many departed accounts in one synchronisation is faster: each page removes them in a few statements rather than one per value, and a database check that ran for every value is gone, saving about a fifth of the time at 500,000 people. (#2669, #2670)
 - ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
 - ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
 

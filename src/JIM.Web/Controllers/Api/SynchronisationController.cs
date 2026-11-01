@@ -2759,7 +2759,10 @@ public class SynchronisationController(
                 {
                     if (update.StringValue != null)
                     {
-                        // For encrypted settings (like Password), encrypt and store in StringEncryptedValue
+                        // For encrypted settings (like Password), encrypt and store in StringEncryptedValue. The
+                        // application layer also encrypts any credential it is handed in clear, on validation and on
+                        // save, whichever surface saved it (#2680); encrypting here as well is harmless, since an
+                        // already-encrypted value is never encrypted again.
                         if (settingValue.Setting?.Type == ConnectedSystemSettingType.StringEncrypted)
                             settingValue.StringEncryptedValue = _credentialProtection.Protect(update.StringValue);
                         else

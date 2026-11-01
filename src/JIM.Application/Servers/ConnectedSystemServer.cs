@@ -26,6 +26,7 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
+using JIM.Application.Interfaces;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
@@ -65,8 +66,15 @@ public partial class ConnectedSystemServer
     /// store when it reads one.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
+    /// <remarks>
+    /// Encrypts, in place, any of the Connected System's credentials still in clear first (#2680). A Connector only ever
+    /// accepts an encrypted credential, and the Connected System it is created for may carry one an administrator has
+    /// typed and not yet saved (the portal validates its settings before saving them). Every server path that hands a
+    /// Connector a Connected System's settings creates the Connector here first, so none can hand it one in clear.
+    /// </remarks>
     internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
+        ProtectEncryptedSettingValues(connectedSystem);
         var connector = ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
         if (connector is IConnectorScimResourceStoreAware storeAware)
             storeAware.SetScimResourceStore(new ScimResourceStoreService(Application, connectedSystem.Id));
@@ -613,7 +621,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     private async Task PersistNewConnectedSystemAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemCreateAsync(connectedSystem);
         if (IsScimServiceProvider(connectedSystem.ConnectorDefinition))
             await Application.Scim.EnsureCoreDefinitionsAsync(connectedSystem.Id);
 
@@ -681,7 +689,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
@@ -748,7 +756,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
@@ -800,7 +808,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
 
         // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
@@ -818,7 +826,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -831,7 +839,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -844,7 +852,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -856,7 +864,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
     }
 
     /// <summary>
@@ -868,7 +876,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
     }
 
     /// <summary>
@@ -907,7 +915,7 @@ public partial class ConnectedSystemServer
             throw new ArgumentNullException(nameof(connectedSystem));
 
         connectedSystem.Status = status;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -1016,7 +1024,7 @@ public partial class ConnectedSystemServer
         else
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         var captureOutcome = await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await RecordMatchingModeSwitchAwaitingSynchronisationAsync(activity, connectedSystem, newMode, captureOutcome);
@@ -1456,7 +1464,7 @@ public partial class ConnectedSystemServer
         {
             // Set status to Deleting to block new operations
             connectedSystem.Status = ConnectedSystemStatus.Deleting;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            await PersistConnectedSystemAsync(connectedSystem);
             Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
@@ -1573,7 +1581,7 @@ public partial class ConnectedSystemServer
             {
                 // Reset status so deletion can be retried
                 connectedSystem.Status = ConnectedSystemStatus.Active;
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+                await PersistConnectedSystemAsync(connectedSystem);
             }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
@@ -1621,7 +1629,7 @@ public partial class ConnectedSystemServer
         {
             // Set status to Deleting to block new operations
             connectedSystem.Status = ConnectedSystemStatus.Deleting;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            await PersistConnectedSystemAsync(connectedSystem);
             Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
@@ -1718,7 +1726,7 @@ public partial class ConnectedSystemServer
             else
             {
                 connectedSystem.Status = ConnectedSystemStatus.Active;
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+                await PersistConnectedSystemAsync(connectedSystem);
             }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
@@ -1769,6 +1777,105 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Connected System Settings
+    /// <summary>
+    /// Writes a Connected System's graph, encrypting its credentials first. Every update of a Connected System's graph
+    /// goes through here (or <see cref="PersistConnectedSystemSchemaAsync"/>), so a credential is encrypted at rest
+    /// whichever surface saved it.
+    /// </summary>
+    private async Task PersistConnectedSystemAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Writes a Connected System's graph including its schema, encrypting its credentials first. See
+    /// <see cref="PersistConnectedSystemAsync"/>.
+    /// </summary>
+    private async Task PersistConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Writes a new Connected System, encrypting its credentials first. See <see cref="PersistConnectedSystemAsync"/>.
+    /// </summary>
+    private async Task PersistConnectedSystemCreateAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Encrypts, in place, every encrypted setting value (<see cref="ConnectedSystemSettingType.StringEncrypted"/>) that
+    /// holds a value not already encrypted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The portal binds what an administrator types straight to <see cref="ConnectedSystemSettingValue.StringEncryptedValue"/>,
+    /// and once only the REST endpoint encrypted, so every credential entered in the portal was stored in clear (#2680).
+    /// Encrypting here, below every surface, is what makes encryption at rest independent of who saved the value.
+    /// </para>
+    /// <para>
+    /// A value that is already encrypted is left exactly as it is: an untouched password field posts back the
+    /// ciphertext it was loaded with, and encrypting that a second time would store a credential the Connector could
+    /// never use. An empty value means no credential and is left empty.
+    /// </para>
+    /// </remarks>
+    private void ProtectEncryptedSettingValues(ConnectedSystem connectedSystem)
+    {
+        var credentials = connectedSystem.SettingValues
+            .Where(sv => sv.Setting is { Type: ConnectedSystemSettingType.StringEncrypted } && !string.IsNullOrEmpty(sv.StringEncryptedValue))
+            .ToList();
+
+        // Resolved only when there is something to encrypt, since the fallback reads the key ring from disk.
+        if (credentials.Count == 0)
+            return;
+
+        var credentialProtection = ResolveCredentialProtection();
+        foreach (var settingValue in credentials.Where(sv => !credentialProtection.IsProtected(sv.StringEncryptedValue)))
+            settingValue.StringEncryptedValue = credentialProtection.Protect(settingValue.StringEncryptedValue);
+    }
+
+    /// <summary>
+    /// Encrypts any Connected System credential found stored in clear, and returns how many it encrypted. Runs on every
+    /// start (<see cref="JimApplication.InitialiseDatabaseAsync"/>), so credentials saved from the portal before #2680
+    /// was fixed are encrypted without anyone having to re-enter them, and so a value that reaches the column in clear
+    /// by any future route is corrected at the next start rather than lying there unnoticed.
+    /// </summary>
+    public async Task<int> ProtectStoredCredentialsAsync()
+    {
+        var settingValues = await Application.Repository.ConnectedSystems.GetEncryptedSettingValuesAsync();
+        if (settingValues.Count == 0)
+            return 0;
+
+        var credentialProtection = ResolveCredentialProtection();
+        var converged = 0;
+        foreach (var settingValue in settingValues.Where(sv => !credentialProtection.IsProtected(sv.StringEncryptedValue)))
+        {
+            // Protect returns null only for a null or empty input, which the repository query has already ruled out.
+            await Application.Repository.ConnectedSystems.UpdateSettingValueEncryptedValueAsync(
+                settingValue.Id, credentialProtection.Protect(settingValue.StringEncryptedValue)!);
+            converged++;
+        }
+
+        // The count only: never the values.
+        if (converged > 0)
+            Log.Warning("ProtectStoredCredentialsAsync: Encrypted {Count} Connected System credential(s) that were stored unencrypted", converged);
+        else
+            Log.Debug("ProtectStoredCredentialsAsync: All {Count} stored Connected System credential(s) are encrypted", settingValues.Count);
+
+        return converged;
+    }
+
+    /// <summary>
+    /// The host's credential protection, or the shared-key-ring fallback every other server uses when a host has not
+    /// set one, so what is encrypted here can always be decrypted by the Connector that later reads it.
+    /// </summary>
+    internal ICredentialProtectionService ResolveCredentialProtection() =>
+        Application.CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider());
+
     /// <summary>
     /// Creates a Connected System's value for a Connector Definition setting, carrying the setting's declared default.
     /// Used when a Connected System is created and when <see cref="ReconcileSettingValues"/> adds a setting the
@@ -1965,6 +2072,7 @@ public partial class ConnectedSystemServer
         // implement IConnectorSettings have no such validation to add; the generic results above stand alone.
         // validation opens real connections, so the connector is disposed here rather than left to the collector:
         // it holds the connection and any temporary files prepared for it.
+        // creating the Connector encrypts any credential the administrator has typed and not yet saved (#2680)
         var connector = CreateConnector(connectedSystem);
         try
         {
@@ -3970,7 +4078,7 @@ public partial class ConnectedSystemServer
             throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
-            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
@@ -4119,7 +4227,7 @@ public partial class ConnectedSystemServer
             ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
-            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is IConnectorCatalogue catalogue)
@@ -5847,167 +5955,6 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Connected System Objects
-    /// <summary>
-    /// Deletes a Connected System Object, and it's attribute values from a Connected System.
-    /// Also prepares a Connected System Object Change for persistence with the activityRunProfileExecutionItem by the caller.
-    /// </summary>
-    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
-    {
-        // Capture the external ID and display name BEFORE deletion.
-        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
-        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
-        var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
-        // Name only, never NameOrId: the external id is captured separately just above, and letting it
-        // stand in for the name would persist the same value into both snapshot fields.
-        var displayName = connectedSystemObject.Name;
-
-        // Snapshot all attribute values BEFORE deletion for change tracking.
-        // Attribute values are cascade-deleted with the CSO, so we must capture them now.
-        // Filter out attributes with NotSet type (e.g., incomplete test data) to avoid errors.
-        var finalAttributeValues = connectedSystemObject.AttributeValues
-            .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-            .ToList();
-
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectAsync(connectedSystemObject);
-
-        // Check if CSO change tracking is enabled
-        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
-        if (!changeTrackingEnabled)
-        {
-            // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
-            activityRunProfileExecutionItem.ConnectedSystemObject = null;
-            activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
-            return;
-        }
-
-        // Create a Change Object for this deletion.
-        // Note: ConnectedSystemObject and DeletedObjectExternalIdAttributeValue are intentionally NOT set
-        // because the CSO and its attribute values have been cascade deleted from the database.
-        // The DeletedObjectType, DeletedObjectExternalId, and DeletedObjectDisplayName fields preserve the object identity.
-        var change = new ConnectedSystemObjectChange
-        {
-            ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
-            // ConnectedSystemObject is null for DELETE operations (CSO no longer exists)
-            ChangeType = ObjectChangeType.Deleted,
-            ChangeTime = DateTime.UtcNow,
-            DeletedObjectType = connectedSystemObject.Type,
-            // DeletedObjectExternalIdAttributeValue cannot be set - the attribute value is cascade deleted with the CSO
-            // Use string fields to preserve the values for UI display:
-            DeletedObjectExternalId = externalIdDisplayValue,
-            DeletedObjectDisplayName = displayName,
-            // The id survives here as a plain column; ConnectedSystemObjectId is a foreign key and is nulled
-            // with the object, so this is the only way back to this record from a reference to what was deleted.
-            DeletedConnectedSystemObjectId = connectedSystemObject.Id,
-            ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
-            // Copy initiator info from the Activity for audit trail (if Activity is loaded)
-            InitiatedByType = activityRunProfileExecutionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-            InitiatedById = activityRunProfileExecutionItem.Activity?.InitiatedById,
-            InitiatedByName = activityRunProfileExecutionItem.Activity?.InitiatedByName
-        };
-
-        // Capture all final attribute values as removals for audit purposes.
-        // Attribute value entities reference ConnectedSystemObjectTypeAttribute schema entities
-        // that may already be tracked by EF Core's change tracker, so we capture in a separate
-        // step and associate with the change record only if no tracking conflicts occur.
-        CaptureDeletedCsoAttributeValues(change, finalAttributeValues);
-
-        // Log the external ID for audit purposes
-        if (!string.IsNullOrEmpty(externalIdDisplayValue))
-        {
-            Log.Debug("DeleteConnectedSystemObjectAsync: Deleted CSO with external ID: {ExternalId}, captured {AttrCount} final attribute values",
-                externalIdDisplayValue, change.AttributeChanges.Count);
-        }
-
-        // The change object will be persisted with the activity Run Profile execution item further up the stack.
-        // We just need to associate the change with the execution item.
-        activityRunProfileExecutionItem.ConnectedSystemObjectChange = change;
-
-        // Clear the navigation property and FK to the deleted CSO to prevent FK constraint violations.
-        // The CSO is now deleted, so we cannot maintain a reference to it.
-        activityRunProfileExecutionItem.ConnectedSystemObject = null;
-        activityRunProfileExecutionItem.ConnectedSystemObjectId = null;
-    }
-
-    /// <summary>
-    /// Batch deletes multiple Connected System Objects and their attribute values.
-    /// This is more efficient than calling DeleteConnectedSystemObjectAsync in a loop.
-    /// </summary>
-    public async Task DeleteConnectedSystemObjectsAsync(
-        List<ConnectedSystemObject> connectedSystemObjects,
-        List<ActivityRunProfileExecutionItem> activityRunProfileExecutionItems)
-    {
-        if (connectedSystemObjects.Count != activityRunProfileExecutionItems.Count)
-            throw new ArgumentException("CSO count must match execution item count");
-
-        // Capture external ID, display name, and all attribute values before deletion.
-        // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
-        // Use ToStringNoName() to get just the value without "attributeName: " prefix.
-        // Name only, never NameOrId: the external id is captured separately alongside it.
-        var deletedObjectInfo = connectedSystemObjects
-            .Select(cso => (
-                ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.Name,
-                FinalAttributeValues: cso.AttributeValues
-                    .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
-                    .ToList()))
-            .ToList();
-
-        // Batch delete from database
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
-
-        // Check if CSO change tracking is enabled
-        var changeTrackingEnabled = await Application.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
-
-        // Create change objects for each deletion (if enabled)
-        for (int i = 0; i < connectedSystemObjects.Count; i++)
-        {
-            var cso = connectedSystemObjects[i];
-            var executionItem = activityRunProfileExecutionItems[i];
-            var (externalId, displayName, finalAttributeValues) = deletedObjectInfo[i];
-
-            if (changeTrackingEnabled)
-            {
-                var change = new ConnectedSystemObjectChange
-                {
-                    ConnectedSystemId = cso.ConnectedSystemId,
-                    ChangeType = ObjectChangeType.Deleted,
-                    ChangeTime = DateTime.UtcNow,
-                    DeletedObjectType = cso.Type,
-                    // Use string fields to preserve the values for UI display:
-                    DeletedObjectExternalId = externalId,
-                    DeletedObjectDisplayName = displayName,
-                    DeletedConnectedSystemObjectId = cso.Id,
-                    ActivityRunProfileExecutionItem = executionItem,
-                    // Copy initiator info from the Activity for audit trail (if Activity is loaded)
-                    InitiatedByType = executionItem.Activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
-                    InitiatedById = executionItem.Activity?.InitiatedById,
-                    InitiatedByName = executionItem.Activity?.InitiatedByName
-                };
-
-                // Capture all final attribute values as removals for audit purposes.
-                CaptureDeletedCsoAttributeValues(change, finalAttributeValues);
-
-                executionItem.ConnectedSystemObjectChange = change;
-            }
-
-            executionItem.ConnectedSystemObject = null;
-            executionItem.ConnectedSystemObjectId = null;
-        }
-
-        Log.Debug("DeleteConnectedSystemObjectsAsync: Batch deleted {Count} CSOs", connectedSystemObjects.Count);
-    }
-
-    /// <summary>
-    /// Batch deletes multiple Connected System Objects without creating change history or RPEIs.
-    /// Use this for quiet deletions where the disconnection was already recorded elsewhere
-    /// (e.g., pre-disconnected CSOs from synchronous MVO deletion).
-    /// </summary>
-    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-    {
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
-        Log.Debug("DeleteConnectedSystemObjectsAsync: Quietly batch deleted {Count} CSOs (no RPEI)", connectedSystemObjects.Count);
-    }
-
     public async Task<List<string>> GetAllExternalIdAttributeValuesOfTypeStringAsync(int connectedSystemId, int connectedSystemObjectTypeId)
     {
         return await Application.Repository.ConnectedSystems.GetAllExternalIdAttributeValuesOfTypeStringAsync(connectedSystemId, connectedSystemObjectTypeId);
@@ -7154,41 +7101,13 @@ public partial class ConnectedSystemServer
             default:
                 // Reached when a *known*, switch-handled data type's value holder was unexpectedly null (a corrupt
                 // attribute value), or when the AttributeDataType enum has gained a member this switch does not yet
-                // handle. The message distinguishes the two; the exception type is deliberately kept uniform
-                // (InvalidDataException) because the deletion path's CaptureDeletedCsoAttributeValues catch filters
-                // on InvalidOperationException/InvalidDataException to degrade gracefully.
+                // handle. The message distinguishes the two; the exception type is the same InvalidDataException
+                // either way, as for NotSet above.
                 throw Enum.IsDefined(connectedSystemObjectAttributeValue.Attribute.Type)
                     ? new InvalidDataException(
                         $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' has no value; the Connected System Object attribute value is corrupt.")
                     : new InvalidDataException(
                         $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has an unhandled data type '{connectedSystemObjectAttributeValue.Attribute.Type}' for Connected System Object change tracking.");
-        }
-    }
-
-    /// <summary>
-    /// Captures all final attribute values from a deleted CSO as Remove records on the change.
-    /// Handles EF Core entity tracking conflicts gracefully — the attribute schema entities
-    /// (ConnectedSystemObjectTypeAttribute) may already be tracked by the change tracker,
-    /// causing InvalidOperationException when the change record is associated with the context.
-    /// In that case, we clear the attribute changes and preserve only the basic identity info.
-    /// </summary>
-    private static void CaptureDeletedCsoAttributeValues(
-        ConnectedSystemObjectChange change,
-        List<ConnectedSystemObjectAttributeValue> finalAttributeValues)
-    {
-        try
-        {
-            foreach (var attributeValue in finalAttributeValues)
-            {
-                AddChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
-            }
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException)
-        {
-            // EF Core tracking conflict or invalid attribute type (e.g., NotSet).
-            // Clear any partially-built attribute changes and fall back to basic identity info.
-            Log.Warning(ex, "CaptureDeletedCsoAttributeValues: Could not capture final attribute values. Basic identity info preserved.");
-            change.AttributeChanges.Clear();
         }
     }
 

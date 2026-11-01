@@ -264,6 +264,9 @@ public class JimApplication : IDisposable
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
+        // Encrypts any Connected System credential stored in clear (#2680) before anything can read one: credential
+        // decryption refuses an unencrypted value, so this has to run ahead of every Connector that might.
+        await ConnectedSystems.ProtectStoredCredentialsAsync();
         // Converges the database towards the built-in configuration this release ships, creating whatever is
         // absent and leaving everything else alone. Runs on every start, not just the first, so a built-in
         // introduced in a later release reaches deployments that already exist. The pass ordering, and the

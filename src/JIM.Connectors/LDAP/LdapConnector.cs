@@ -686,7 +686,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
 
         // Decrypt the password if credential protection is available
-        // If not available or password is plain text, it will be returned as-is
         var decryptedPassword = _credentialProtection?.Unprotect(password.StringEncryptedValue) ?? password.StringEncryptedValue;
         var credential = new NetworkCredential(username.StringValue, decryptedPassword);
 

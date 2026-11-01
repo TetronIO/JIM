@@ -37,11 +37,11 @@ public interface IPasswordProtectionService
     /// <param name="protectedPassword">The encrypted password.</param>
     /// <returns>The decrypted password, or the original value if null or empty.</returns>
     /// <exception cref="System.Security.Cryptography.CryptographicException">
-    /// Thrown when the value carries no password prefix, and when decryption fails. Unlike
+    /// Thrown when the value carries no password prefix, and when decryption fails. As with
     /// <see cref="JIM.Models.Interfaces.ICredentialProtection.Unprotect"/>, an unprefixed value is never passed
-    /// through as plain text: no password has ever been stored in clear, so one arriving without the prefix is
-    /// corruption or tampering, and returning it would hand the caller something it would then transmit to a
-    /// target system as though JIM had encrypted it.
+    /// through as plain text: no password is stored in clear, so one arriving without the prefix is corruption or
+    /// tampering, and returning it would hand the caller something it would then transmit to a target system as
+    /// though JIM had encrypted it.
     /// </exception>
     string? UnprotectPassword(string? protectedPassword);
 

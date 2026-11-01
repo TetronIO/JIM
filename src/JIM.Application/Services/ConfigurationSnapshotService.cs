@@ -540,10 +540,16 @@ public class ConfigurationSnapshotService
         // Decrypt transiently so the keyed hash is deterministic across versions; the plaintext is discarded
         // immediately and never stored. If credential protection is unavailable we cannot produce a meaningful keyed
         // hash, so an empty marker is recorded rather than risk storing ciphertext.
+        var credentialProtection = Application.CredentialProtection;
         string? plaintext;
         try
         {
-            plaintext = Application.CredentialProtection?.Unprotect(encryptedValue);
+            // A value not yet encrypted is a credential typed on screen and not saved yet: the save confirmation's
+            // preflight snapshots the Connected System before the save encrypts it (#2680). It is hashed as it is, so
+            // it compares equal to the same credential once saved; decryption would rightly refuse it.
+            plaintext = credentialProtection == null ? null
+                : credentialProtection.IsProtected(encryptedValue) ? credentialProtection.Unprotect(encryptedValue)
+                : encryptedValue;
         }
         catch (CryptographicException ex)
         {
