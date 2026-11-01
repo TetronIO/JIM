@@ -83,6 +83,44 @@ public class PendingRemovalMembershipScaleTests
     }
 
     /// <summary>
+    /// The same emptied 50,000-member group, asked the way the callers that capture the pending changes before applying
+    /// them ask it: a Connected System Object's obsoletion, a Synchronisation Rule's deletion recall, the Synchronised
+    /// Deprovisioning preview and a scope exit's NoContributor outcome each hand over lists copied from the pending
+    /// changes, not the pending removals themselves, and a copied list answers each held member's membership check by
+    /// scanning itself (#2666). Measured when #2666 was fixed, this took about 4.3 s before the fix and about 10 ms after;
+    /// the bound sits well clear of both, so a return of the per-value scan fails loudly rather than flakily.
+    /// </summary>
+    [Test]
+    public void GetClearedAttributeIds_FiftyThousandMemberGroupEmptiedAndHandedACopy_FindsTheMembersClearedWithinBound()
+    {
+        var group = new MetaverseObject { Id = Guid.NewGuid() };
+        group.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = group, Attribute = DisplayName, AttributeId = DisplayName.Id, StringValue = "All Staff"
+        });
+        var members = Enumerable.Range(0, HeldValueCount).Select(_ => new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = group, Attribute = StaticMembers, AttributeId = StaticMembers.Id, ReferenceValueId = Guid.NewGuid()
+        }).ToList();
+        group.AttributeValues.AddRange(members);
+        group.PendingAttributeValueRemovals.AddRange(members);
+        var additions = group.PendingAttributeValueAdditions.ToList();
+        var removals = group.PendingAttributeValueRemovals.ToList();
+
+        var stopwatch = Stopwatch.StartNew();
+        var cleared = ContributorReElectionService.GetClearedAttributeIds(group, additions, removals);
+        stopwatch.Stop();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cleared, Is.EquivalentTo(new[] { StaticMembers.Id }), "the members are cleared and nothing else is");
+            Assert.That(stopwatch.Elapsed, Is.LessThan(Bound),
+                $"checking which attributes {HeldValueCount:N0} member removals, handed over as a copied list, clear took " +
+                $"{stopwatch.Elapsed.TotalSeconds:N1}s; each held member must be looked up in the removals, not found by a scan of them");
+        }
+    }
+
+    /// <summary>
     /// A person whose 50,000 Mail Aliases this synchronisation's live mapping has just replaced wholesale, so all
     /// 50,000 held aliases are pending removal when recall looks for contributions whose mapping is gone. The mapping
     /// is live, so nothing is recalled; the recall asks, of each value the system contributed, whether it is already
