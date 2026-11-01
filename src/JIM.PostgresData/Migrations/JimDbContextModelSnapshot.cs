@@ -1293,9 +1293,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SSOEnableLogOut")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("SSOSecret")
-                        .HasColumnType("text");
-
                     b.Property<string>("SSOUniqueIdentifierClaimType")
                         .HasColumnType("text");
 

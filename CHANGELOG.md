@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 JIM no longer keeps a plain-text copy of its OpenID Connect client secret in the database; the copy it wrote at every start is removed on upgrade, and the encrypted copy JIM uses is unchanged. (#2684)
 - 🔒 Connector credentials entered in the portal, such as an LDAP Connector password or a SCIM Client Secret, are now encrypted at rest; they were stored unencrypted, as only the REST API encrypted them. Credentials already stored unencrypted are encrypted automatically when JIM next starts, so nothing needs re-entering, and JIM now refuses any stored credential it finds unencrypted rather than using it. (#2680)
 
 ### Performance
