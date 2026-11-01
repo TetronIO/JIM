@@ -178,11 +178,7 @@ public class DeletePathForeignKeyCoverageTests
                 "nulls it.",
             ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectTypes_Del~"] =
                 "On the preserve-history path the change rows are kept; step 2d nulls DeletedObjectTypeId before " +
-                "step 13 removes the Object Types. On the delete-history path the rows are already gone.",
-            ["FK_ConnectedSystemObjectChanges_ConnectedSystemObjectAttribute~"] =
-                "On the preserve-history path the change rows are kept; step 5 nulls " +
-                "DeletedObjectExternalIdAttributeValueId before step 6 removes the attribute values. On the " +
-                "delete-history path the rows are already gone."
+                "step 13 removes the Object Types. On the delete-history path the rows are already gone."
         });
 
     /// <summary>

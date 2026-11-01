@@ -158,6 +158,35 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
 
     #endregion
 
+    #region Checks per deleted value
+
+    /// <summary>
+    /// The delete cascades every value its objects hold, and PostgreSQL checks each foreign key into the values table
+    /// once for every value it removes. Change history held one such key (#2670), a reference to the deleted object's
+    /// External ID value that nothing ever wrote, because the value goes with its object. It checked nothing and cost
+    /// 0.82 s of a 2.88 s delete of 500 objects in a 500,000-person directory.
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemObjectsAsync_ObjectsWithValues_ChecksNoForeignKeyPerValueAsync()
+    {
+        await using var context = NewContext();
+
+        var foreignKeysOntoValues = await context.Database.SqlQueryRaw<string>(
+            @"SELECT (child.relname || '  [' || c.conname || ']')::text AS ""Value""
+              FROM pg_constraint c
+              INNER JOIN pg_class child ON child.oid = c.conrelid
+              WHERE c.contype = 'f'
+                AND c.confrelid = '""ConnectedSystemObjectAttributeValues""'::regclass
+              ORDER BY 1;").ToListAsync();
+
+        Assert.That(foreignKeysOntoValues, Is.Empty,
+            "each of these foreign keys is checked once for every value an object deletion cascades away, which at " +
+            "directory scale is a large share of the delete's cost; change history keeps a deleted object's External " +
+            "ID as text instead (#2670)");
+    }
+
+    #endregion
+
     #region Round trip
 
     [Test]
