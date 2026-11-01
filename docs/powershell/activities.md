@@ -125,6 +125,7 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 | `TotalPendingExports` | `int` | Count of Pending Exports staged for the next export run. |
 | `TotalErrors` | `int` | Count of Run Profile Execution Items with errors. |
 | `ChildActivityCount` | `int` | The number of direct child Activities linked to this Activity. Zero for Activities with no children. |
+| `ParentRunProfileExecutionItemId` | `guid` | The Run Profile Execution Item this Activity follows up, such as the export item of the account whose Initial Password it records. Empty for an Activity that follows no item. An Activity with a parent item, like one with a parent Activity, is never listed at the top level. |
 | `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Empty otherwise. |
 | `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
 | `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |
@@ -144,6 +145,7 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 |----------|------|-------------|
 | `Id` | `guid` | The unique identifier of the Activity. |
 | `ParentActivityId` | `guid` | Parent Activity ID if this was triggered by another Activity. |
+| `ParentRunProfileExecutionItemId` | `guid` | The Run Profile Execution Item this Activity follows up, such as the export item of the account whose Initial Password it records. Empty for an Activity that follows no item. The item may since have been removed with its run under history retention, while this Activity is kept. |
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
