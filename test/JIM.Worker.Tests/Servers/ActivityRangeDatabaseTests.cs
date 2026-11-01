@@ -181,6 +181,29 @@ public class ActivityRangeDatabaseTests
     }
 
     [Test]
+    public async Task Range_FollowUpOfAnExecutionItem_IsNeverAtTheTopLevelAsync()
+    {
+        await using (var ctx = NewContext())
+        {
+            var followUp = NewActivity("Initial password");
+            followUp.ParentRunProfileExecutionItemId = Guid.NewGuid();
+            ctx.Activities.AddRange(NewActivity("Export"), followUp);
+            await ctx.SaveChangesAsync();
+        }
+
+        var jim = NewJim();
+        var range = await jim.Activities.GetActivitiesRangeAsync(startIndex: 0, count: 10);
+        var page = await jim.Activities.GetActivitiesAsync(page: 1, pageSize: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(range.TotalResults, Is.EqualTo(1));
+            Assert.That(range.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Export" }));
+            Assert.That(page.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Export" }));
+        }
+    }
+
+    [Test]
     public async Task Range_FullWindow_MatchesPagedReaderAsync()
     {
         await SeedSequentialActivitiesAsync(10);
