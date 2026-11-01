@@ -591,8 +591,15 @@ nightly's concurrency group, so the two never overlap, and a run is never cancel
 | `Rollback` | Not green: stops the candidates, leaves them in place for diagnosis, and starts the live VMs again from `baseline`. Also puts the live VM back if a promotion was interrupted after it was demoted |
 | `Status` | Read-only: which VMs exist, their state, and the live guest OS build |
 
-**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after the
-three domain controllers in every phase:
+**The forests are built side by side.** The workflow builds each VM in its own control-plane call and runs one chain
+per domain controller at the same time (`Get-LabRebuildBuildChain`): `dc-source` and `dc-target` alone, and
+`dc-primary` followed by the member servers that join it, in turn, since each takes that domain controller's baseline
+again. A chain that fails stops there; the others finish, and the step then fails, so the run rolls back. The Build
+phase takes about two hours instead of three. Each such call logs to a file of its own,
+`%ProgramData%\jim-ad-lab\logs\Invoke-LabRebuild-yyyyMMdd-<vm>.log`.
+
+**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after its
+domain controller in every phase:
 - **Build** stops the live `adfs-primary` and builds `adfs-primary-candidate` with `New-LabFederationServer.ps1`, joined
   to `dc-primary-candidate`. That build retakes `dc-primary-candidate`'s baseline, so the accounts are in it.
 - Build refuses to start before `dc-primary-candidate` exists. It rebuilds an AD FS candidate older than that domain

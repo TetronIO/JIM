@@ -1946,6 +1946,46 @@ Describe 'Get-LabNewestCumulativeUpdate' {
     }
 }
 
+Describe 'Get-LabRebuildBuildChain' {
+    BeforeAll {
+        function Get-Role {
+            param([string]$Live, [AllowNull()][string]$DependsOn)
+            return [pscustomobject]@{ live = $Live; dependsOn = $DependsOn }
+        }
+    }
+
+    It 'puts each member server in a chain after the domain controller it joins, and each domain controller in a chain of its own' {
+        $roles = @(
+            (Get-Role 'dc-primary' $null), (Get-Role 'dc-source' $null), (Get-Role 'dc-target' $null),
+            (Get-Role 'adfs-primary' 'dc-primary'), (Get-Role 'exchange-primary' 'dc-primary')
+        )
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-primary', 'dc-source', 'dc-target')
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'adfs-primary', 'exchange-primary')
+        @($chains[1].Roles) | Should -Be @('dc-source')
+        @($chains[2].Roles) | Should -Be @('dc-target')
+    }
+
+    It 'keeps the member servers of one domain controller in the order given, since each takes its baseline again' {
+        $roles = @((Get-Role 'exchange-primary' 'dc-primary'), (Get-Role 'dc-primary' ''), (Get-Role 'adfs-primary' 'dc-primary'))
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'exchange-primary', 'adfs-primary')
+    }
+
+    It 'gives a member server whose domain controller is not in the list a chain of its own, for the Build phase to refuse' {
+        $chains = @(Get-LabRebuildBuildChain -Role @((Get-Role 'dc-source' $null), (Get-Role 'adfs-primary' 'dc-primary')))
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-source', 'adfs-primary')
+    }
+
+    It 'builds everything in one chain, in order, when the roles do not say what they join (a host on older scripts)' {
+        $roles = @([pscustomobject]@{ live = 'dc-primary' }, [pscustomobject]@{ live = 'dc-source' }, [pscustomobject]@{ live = 'adfs-primary' })
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'dc-source', 'adfs-primary')
+    }
+}
+
 Describe 'Get-LabRebuildBuildAction' {
     BeforeAll {
         $script:BuildNow = [datetime]::new(2026, 9, 30, 12, 0, 0, [System.DateTimeKind]::Utc)
@@ -3125,6 +3165,13 @@ Describe 'Invoke-LabRebuildPhase' {
             $lab = Get-FakeLab
             $lab.Adapter.Remove('RenameVm')
             { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw "*no 'RenameVm' operation*"
+        }
+
+        It 'names the domain controller each member server joins, so the runner can build the member after it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { "$($_.live)<$($_.dependsOn)" } | Sort-Object) | Should -Be @('adfs-primary<dc-primary', 'dc-primary<', 'dc-source<', 'dc-target<', 'exchange-primary<dc-primary')
         }
 
         It 'still reports a run whose guest build cannot be read, as no build rather than an error' {

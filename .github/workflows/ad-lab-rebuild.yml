@@ -188,34 +188,53 @@ jobs:
           Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-prune.json') -Value $json
           (ConvertFrom-Json $json).roles | ForEach-Object { Write-Host ('{0,-8} {1,-14} {2}' -f $_.role, $_.action, $_.detail) }
 
-      # One control-plane call per VM (each is 30 to 60 minutes), so each is its own log group and its own timeout.
-      # From the first call the live VM is off: the candidate is built with its address. The newest .msu in the host's
-      # cumulativeUpdateDirectory is installed in each. The VMs come from the host's settings.json, in the order the
-      # rebuild handles them: the three domain controllers, then any AD FS server, after the domain controller it joins.
+      # One control-plane call per VM (each is 20 to 60 minutes), each with its own timeout. From the first call the
+      # live VM is off: the candidate is built with its address. The newest .msu in the host's cumulativeUpdateDirectory
+      # is installed in each. The VMs come from the host's settings.json. The forests are independent, so each domain
+      # controller's chain runs at the same time (Get-LabRebuildBuildChain): dc-source and dc-target alone, and
+      # dc-primary followed by the AD FS and Exchange servers that join it, in turn. A chain that fails stops there; the
+      # others finish, then the step fails.
       - name: 'Phase: Build the candidates'
         id: build
         env:
           FRESH: ${{ inputs.fresh }}
         run: |
           . ./test/integration/utils/Invoke-LabControl.ps1
+          Import-Module ./test/integration/ad-lab/guest/LabDomainController.psm1 -Force
           $extra = @()
           if ($env:FRESH -eq 'true') { $extra += '-Fresh' }
-          $vms = @((ConvertFrom-Json (Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Status', '-AsJson') -TimeoutSeconds 600)).roles | ForEach-Object { $_.live })
-          Write-Host "Building candidates for: $($vms -join ', ')"
+          $status = @((ConvertFrom-Json (Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments @('-Phase', 'Status', '-AsJson') -TimeoutSeconds 600)).roles)
+          $chains = @(Get-LabRebuildBuildChain -Role $status)
+          foreach ($chain in $chains) { Write-Host "Building side by side: $($chain.Roles -join ', then ')" }
+          $control = (Resolve-Path ./test/integration/utils/Invoke-LabControl.ps1).Path
+          $jobs = @(foreach ($chain in $chains) {
+              Start-ThreadJob -Name $chain.Root -ArgumentList $control, $chain.Roles, $extra -ScriptBlock {
+                param($control, $roles, $extra)
+                . $control
+                foreach ($role in $roles) {
+                  Write-Host "$([datetime]::UtcNow.ToString('HH:mm:ss'))Z building $role-candidate"
+                  $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
+                  $result = (ConvertFrom-Json $json).roles
+                  Write-Host ('{0}Z {1,-8} {2,-8} {3}  [guest build {4}]' -f [datetime]::UtcNow.ToString('HH:mm:ss'), $result.role, $result.action, $result.detail, $result.guestBuild)
+                  $result
+                }
+              }
+            })
           $built = @()
-          foreach ($role in $vms) {
-            Write-Host "::group::Build $role-candidate"
-            try {
-              $json = Invoke-LabControl -Script 'Invoke-LabRebuild.ps1' -Arguments (@('-Phase', 'Build', '-Role', $role, '-AsJson') + $extra) -TimeoutSeconds 10800
-            }
-            finally {
-              Write-Host '::endgroup::'
-            }
-            $result = (ConvertFrom-Json $json).roles
-            $built += $result
-            Write-Host ('{0,-8} {1,-8} {2}  [guest build {3}]' -f $result.role, $result.action, $result.detail, $result.guestBuild)
+          $failures = @()
+          while (@($jobs | Where-Object { $_.State -in 'NotStarted', 'Running' }).Count -gt 0) {
+            $built += @(Receive-Job -Job $jobs -ErrorAction SilentlyContinue -ErrorVariable +failures)
+            Start-Sleep -Seconds 30
           }
-          $built | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-build.json')
+          $built += @(Receive-Job -Job $jobs -Wait -ErrorAction SilentlyContinue -ErrorVariable +failures)
+          $failed = @($jobs | Where-Object { $_.State -eq 'Failed' } | ForEach-Object { $_.Name })
+          $jobs | Remove-Job -Force
+          $order = @($status | ForEach-Object { $_.live })
+          @($built | Sort-Object { $order.IndexOf($_.live) }) | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'rebuild-build.json')
+          if (($failed.Count -gt 0) -or ($failures.Count -gt 0)) {
+            foreach ($failure in $failures) { Write-Host "::error::$($failure.Exception.Message)" }
+            throw "The build failed in the chain of $(@($failed) -join ', '); the other chains finished."
+          }
 
       - name: 'Phase: Stage the candidates on the live addresses'
         id: stage
