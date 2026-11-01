@@ -600,10 +600,6 @@ public partial class SyncRepository
                 await writer.WriteAsync(deletedTypeId, NpgsqlTypes.NpgsqlDbType.Integer);
             else
                 await writer.WriteNullAsync();
-            if (c.DeletedObjectExternalIdAttributeValue?.Id is { } deletedExtIdAvId)
-                await writer.WriteAsync(deletedExtIdAvId, NpgsqlTypes.NpgsqlDbType.Uuid);
-            else
-                await writer.WriteNullAsync();
             if (c.DeletedObjectExternalId is not null)
                 await writer.WriteAsync(c.DeletedObjectExternalId, NpgsqlTypes.NpgsqlDbType.Text);
             else
