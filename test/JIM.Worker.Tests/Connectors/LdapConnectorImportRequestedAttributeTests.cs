@@ -36,6 +36,36 @@ public class LdapConnectorImportRequestedAttributeTests
         }
     }
 
+    /// <summary>
+    /// A connector-defined Exchange attribute (#2021) is not a directory attribute, and its name, which contains spaces,
+    /// is not even a valid one to search for. The search asks instead for the attributes Exchange stamped, from which
+    /// the import derives the value.
+    /// </summary>
+    [Test]
+    public void GetRequestedAttributeNames_SelectedExchangeAttribute_RequestsWhatItIsDerivedFromInstead()
+    {
+        var objectType = InetOrgPerson();
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "Exchange Recipient Type", Type = AttributeDataType.Text, Selected = true, IsConnectorDefined = true, ConnectedSystemObjectType = objectType
+        });
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "Exchange Primary SMTP Address", Type = AttributeDataType.Text, Selected = true, IsConnectorDefined = true, ConnectedSystemObjectType = objectType
+        });
+
+        var requested = LdapConnectorImport.GetRequestedAttributeNames(objectType);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(requested, Has.None.Contains(" "), "no requested attribute name may contain a space");
+            Assert.That(requested, Does.Contain("msExchRecipientTypeDetails"));
+            Assert.That(requested, Does.Contain("proxyAddresses"));
+            Assert.That(requested, Does.Not.Contain("homeMDB"), "Exchange Database is not selected, so what it is derived from is not read");
+            Assert.That(requested, Is.Unique);
+        }
+    }
+
     private static ConnectedSystemObjectType InetOrgPerson()
     {
         var objectType = new ConnectedSystemObjectType { Id = 1, Name = "inetOrgPerson", Selected = true };

@@ -157,6 +157,17 @@ public class ConnectedSystemObjectTypeAttribute
     public bool IsOperational { get; set; }
 
     /// <summary>
+    /// Whether the Connector made this attribute up rather than read it from the Connected System's own schema: a value
+    /// the Connector interprets itself, such as the LDAP Connector's Exchange Recipient Type (#2021). Its values are never
+    /// written to the Connected System as they stand; the Connector derives them on import from what the system holds,
+    /// and acts on them on export in its own way.
+    /// </summary>
+    /// <remarks>
+    /// Connector-owned: a schema refresh restates it, like <see cref="IsOperational"/>; administrators cannot set it.
+    /// </remarks>
+    public bool IsConnectorDefined { get; set; }
+
+    /// <summary>
     /// For a <see cref="AttributeDataType.Reference"/> attribute, the Object Type this reference points at,
     /// when the Connected System's schema declares one (the SQL Connector's <c>referencesObjectType</c>).
     /// Null when the schema does not say; import reference resolution then searches every Object Type and

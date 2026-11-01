@@ -284,13 +284,10 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
         // uSNChanged is a 64-bit integer stored as a string
         var ldapFilter = $"(&(objectClass={objectType.Name})(uSNChanged>={previousUsn + 1}))";
 
-        // Build attribute list
-        var attributes = objectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
-        attributes.AddRange(objectType.Attributes.Where(a => a.IsExternalId).Select(a => a.Name));
-        attributes.AddRange(objectType.Attributes.Where(a => a.IsSecondaryExternalId).Select(a => a.Name));
-        attributes.Add("objectClass");
-        attributes.Add("isDeleted"); // To detect deleted objects (when searching deleted objects container)
-        var queryAttributes = attributes.Distinct().ToArray();
+        // The same attributes a Full Import reads, so a Delta Import cannot drift from it (a connector-defined Exchange
+        // attribute, for one, is read through what it is derived from, #2021), plus isDeleted to detect deleted
+        // objects when searching the deleted objects container
+        var queryAttributes = LdapConnectorImport.GetRequestedAttributeNames(objectType).Append("isDeleted").Distinct().ToArray();
 
         var searchRequest = new SearchRequest(container.ExternalId, ldapFilter,
             LdapConnectorUtilities.GetSearchScope(container), queryAttributes);

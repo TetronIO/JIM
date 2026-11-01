@@ -144,6 +144,47 @@ public class ConnectedSystemSchemaOperationalAttributeTests
             "The flag is connector-owned, so a refresh restates it rather than keeping one nothing stands behind.");
     }
 
+    /// <summary>
+    /// A connector-defined attribute (#2021, D2) is one the Connector made up and interprets itself, such as the LDAP
+    /// Connector's Exchange Recipient Type. Schema import persists the flag so export and the portal can tell it from a
+    /// real directory attribute, and like the operational flag a refresh restates it.
+    /// </summary>
+    [Test]
+    public async Task ImportConnectedSystemSchemaAsync_NewObjectType_PersistsTheConnectorDefinedFlagAsync()
+    {
+        _connector.SetSchema("inetOrgPerson", Identifier(), Mail(), ExchangeRecipientType());
+
+        await _jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(CreateConnectedSystem(), NewInitiator());
+
+        var objectType = SingleObjectType();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Attribute(objectType, "Exchange Recipient Type").IsConnectorDefined, Is.True);
+            Assert.That(Attribute(objectType, "mail").IsConnectorDefined, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task ImportConnectedSystemSchemaAsync_ExistingAttributeNowConnectorDefined_RestatesTheFlagAsync()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        var objectType = ExistingInetOrgPerson();
+        objectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 23, Name = "Exchange Recipient Type", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued,
+            Selected = true, IsConnectorDefined = false, ConnectedSystemObjectType = objectType
+        });
+        connectedSystem.ObjectTypes = [objectType];
+        _connector.SetSchema("inetOrgPerson", Identifier(), Mail(), ExchangeRecipientType());
+
+        await _jim.ConnectedSystems.ImportConnectedSystemSchemaAsync(connectedSystem, NewInitiator());
+
+        Assert.That(Attribute(SingleObjectType(), "Exchange Recipient Type").IsConnectorDefined, Is.True);
+    }
+
+    private static ConnectorSchemaAttribute ExchangeRecipientType() =>
+        new("Exchange Recipient Type", AttributeDataType.Text, AttributePlurality.SingleValued) { IsConnectorDefined = true };
+
     private static ConnectorSchemaAttribute Identifier() =>
         new("entryUUID", AttributeDataType.Text, AttributePlurality.SingleValued, writability: AttributeWritability.ReadOnly);
 
