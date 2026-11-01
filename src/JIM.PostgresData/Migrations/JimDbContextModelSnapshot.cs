@@ -211,6 +211,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentActivityId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ParentRunProfileExecutionItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("PendingExportsConfirmed")
                         .HasColumnType("integer");
 
@@ -345,6 +348,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
+                    b.HasIndex("ParentRunProfileExecutionItemId")
+                        .HasDatabaseName("IX_Activities_ParentRunProfileExecutionItemId")
+                        .HasFilter("\"ParentRunProfileExecutionItemId\" IS NOT NULL");
 
                     b.HasIndex("ScheduleExecutionId")
                         .HasDatabaseName("IX_Activities_ScheduleExecutionId");

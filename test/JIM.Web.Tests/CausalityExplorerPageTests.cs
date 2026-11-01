@@ -55,6 +55,7 @@ public class CausalityExplorerPageTests : JimComponentTestContext
     public void SetUp()
     {
         _activityRepository = new Mock<IActivityRepository>();
+        _activityRepository.Setup(r => r.GetFollowUpActivitiesAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
         var metaverseRepository = new Mock<IMetaverseRepository>();
 

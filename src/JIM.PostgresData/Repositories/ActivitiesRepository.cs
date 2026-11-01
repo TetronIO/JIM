@@ -384,7 +384,7 @@ public partial class ActivityRepository : IActivityRepository
 
     /// <summary>
     /// Shared query core for the paged and range Activity list reads: applies every filter and the sort to the
-    /// top-level (parentless) Activities and returns the composed query for the caller to count and window.
+    /// top-level Activities (those with no parent Activity and no parent execution item) and returns the composed query for the caller to count and window.
     /// Shared so the two reads can never disagree on which Activities match; callers own input validation.
     /// </summary>
     private IQueryable<Activity> BuildTopLevelActivitiesQuery(
@@ -406,9 +406,10 @@ public partial class ActivityRepository : IActivityRepository
         bool? initiatedBySchedule,
         IEnumerable<Guid>? scheduleFilter)
     {
+        // Top level means no parent of either kind: a follow-up of an execution item (#2668) is that item's child.
         var query = Repository.Database.Activities
 
-            .Where(a => a.ParentActivityId == null)
+            .Where(a => a.ParentActivityId == null && a.ParentRunProfileExecutionItemId == null)
             .AsQueryable();
 
         // Apply initiated by filter (searches by InitiatedById which covers both MVO and ApiKey)
@@ -723,6 +724,21 @@ public partial class ActivityRepository : IActivityRepository
             OccurredAt = a.Created
         };
 
+    /// <inheritdoc />
+    public async Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds)
+    {
+        if (executionItemIds.Count == 0)
+            return [];
+
+        // Served by the partial index IX_Activities_ParentRunProfileExecutionItemId.
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentRunProfileExecutionItemId != null && executionItemIds.Contains(a.ParentRunProfileExecutionItemId.Value))
+            .OrderBy(a => a.Created)
+            .ThenBy(a => a.Id)
+            .ToListAsync();
+    }
+
     public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
     {
         if (pageSize < 1)
@@ -945,7 +961,7 @@ public partial class ActivityRepository : IActivityRepository
 
         return Repository.Database.Activities
 
-            .Where(a => a.ParentActivityId == null)
+            .Where(a => a.ParentActivityId == null && a.ParentRunProfileExecutionItemId == null)
             .Where(a => workerTaskTargetTypes.Contains(a.TargetType) && workerTaskOperations.Contains(a.TargetOperationType))
             .AsQueryable();
     }

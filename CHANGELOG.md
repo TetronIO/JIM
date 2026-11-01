@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
 - ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
+- ✨ An Initial Password now sits under the export item that provisioned the account, which shows where it stands as a follow-up (also in the Causality Explorer, the REST API and PowerShell), so an export no longer adds one Activity per account to the Activity list. (#2668)
 
 ### Changed
 

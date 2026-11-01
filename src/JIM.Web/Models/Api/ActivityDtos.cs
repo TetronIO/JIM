@@ -366,6 +366,16 @@ public class ActivityDetailDto
     public Guid? ParentActivityId { get; set; }
 
     /// <summary>
+    /// The Run Profile Execution Item this Activity follows up, if any.
+    /// </summary>
+    /// <remarks>
+    /// Set on an Initial Password's Activity, which follows up the export item that provisioned the account (#2668).
+    /// Such an Activity is never listed at the top level, so Activity headers do not carry it. The item can be removed
+    /// with its run under history retention while this Activity is kept, so the id may no longer resolve.
+    /// </remarks>
+    public Guid? ParentRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// When the Activity was created.
     /// </summary>
     public DateTime Created { get; set; }
@@ -501,11 +511,10 @@ public class ActivityDetailDto
 
     /// <summary>
     /// The steps the Run Profile execution moved through, in run order, each with how it
-    /// turned out and how long it took. This is what answers "where did the four hours go?" on a
-    /// run that finished days ago. Empty for other Activity types, and for runs that predate phase
-    /// recording.
+    /// turned out and how long it took. Empty for other Activity types, and for runs that predate
+    /// phase recording.
     /// </summary>
-    /// <remarks>Run Profile phases, #454.</remarks>
+    /// <remarks>Run Profile phases, #454: what answers "where did the four hours go?" on a run that finished days ago.</remarks>
     public List<ActivityPhaseDto> Phases { get; set; } = [];
 
     /// <summary>
@@ -718,6 +727,7 @@ public class ActivityDetailDto
             Phases = (phases ?? []).OrderBy(p => p.Order).Select(ActivityPhaseDto.FromEntity).ToList(),
             Id = activity.Id,
             ParentActivityId = activity.ParentActivityId,
+            ParentRunProfileExecutionItemId = activity.ParentRunProfileExecutionItemId,
             Created = activity.Created,
             Executed = activity.Executed == default ? null : activity.Executed,
             Status = activity.Status,

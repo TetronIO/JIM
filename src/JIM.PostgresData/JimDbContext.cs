@@ -1258,6 +1258,13 @@ public class JimDbContext : DbContext
             .HasIndex(a => a.ScheduleExecutionId)
             .HasDatabaseName("IX_Activities_ScheduleExecutionId");
 
+        // Follow-ups of a Run Profile Execution Item (#2668): the item page and the causality views read an item's
+        // follow-up Activities by this column. Partial, because almost every Activity has no such parent.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ParentRunProfileExecutionItemId)
+            .HasFilter("\"ParentRunProfileExecutionItemId\" IS NOT NULL")
+            .HasDatabaseName("IX_Activities_ParentRunProfileExecutionItemId");
+
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => o.ActivityRunProfileExecutionItemId)

@@ -181,6 +181,54 @@ public class ActivityRangeDatabaseTests
     }
 
     [Test]
+    public async Task Range_FollowUpOfAnExecutionItem_IsNeverAtTheTopLevelAsync()
+    {
+        await using (var ctx = NewContext())
+        {
+            var followUp = NewActivity("Initial password");
+            followUp.ParentRunProfileExecutionItemId = Guid.NewGuid();
+            ctx.Activities.AddRange(NewActivity("Export"), followUp);
+            await ctx.SaveChangesAsync();
+        }
+
+        var jim = NewJim();
+        var range = await jim.Activities.GetActivitiesRangeAsync(startIndex: 0, count: 10);
+        var page = await jim.Activities.GetActivitiesAsync(page: 1, pageSize: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(range.TotalResults, Is.EqualTo(1));
+            Assert.That(range.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Export" }));
+            Assert.That(page.Results.Select(a => a.TargetName), Is.EqualTo(new[] { "Export" }));
+        }
+    }
+
+    [Test]
+    public async Task GetFollowUpActivitiesAsync_ReturnsOnlyTheNamedItemsFollowUpsOldestFirstAsync()
+    {
+        var item = Guid.NewGuid();
+        var otherItem = Guid.NewGuid();
+        await using (var ctx = NewContext())
+        {
+            var first = NewActivity("First");
+            first.ParentRunProfileExecutionItemId = item;
+            first.Created = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
+            var second = NewActivity("Second");
+            second.ParentRunProfileExecutionItemId = item;
+            second.Created = first.Created.AddMinutes(1);
+            var other = NewActivity("Other item");
+            other.ParentRunProfileExecutionItemId = otherItem;
+            ctx.Activities.AddRange(second, other, first, NewActivity("No parent"));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        var followUps = await new PostgresDataRepository(read).Activity.GetFollowUpActivitiesAsync([item]);
+
+        Assert.That(followUps.Select(a => a.TargetName), Is.EqualTo(new[] { "First", "Second" }));
+    }
+
+    [Test]
     public async Task Range_FullWindow_MatchesPagedReaderAsync()
     {
         await SeedSequentialActivitiesAsync(10);

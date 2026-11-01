@@ -6516,6 +6516,50 @@ html[lang] .jim-scope-text .mud-input-slot {
     background: var(--jim-status-colour, var(--mud-palette-lines-default));
 }
 
+/* A follow-up of an execution item (#2668): work the item set in motion that finishes after its run, such as an
+   Initial Password. Icon, then what it is with its state pill and the sentence beneath, then the link to its Activity. */
+.jim-follow-up-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.jim-follow-up-row + .jim-follow-up-row {
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-follow-up-icon {
+    flex: none;
+    margin-top: 0.125rem;
+    color: var(--mud-palette-primary);
+}
+
+.jim-follow-up-what {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+}
+
+.jim-follow-up-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.jim-follow-up-detail {
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-follow-up-link {
+    flex: none;
+    white-space: nowrap;
+}
+
 /* The state word after a name on a pill ("Corporate Directory · retrying") is lighter than the name, so the
    name is what the eye lands on and the state reads as its qualifier. */
 .jim-status-pill-suffix {
