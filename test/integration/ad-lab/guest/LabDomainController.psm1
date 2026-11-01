@@ -2432,6 +2432,74 @@ function Assert-LabRebuildPairCurrent {
     }
 }
 
+function Get-LabRebuildBuildChain {
+    <#
+    .SYNOPSIS
+        Groups the lab VMs into chains the runner can build at the same time: each domain controller starts one, and
+        each member server joins the chain of the domain controller it depends on.
+
+    .DESCRIPTION
+        The forests are independent, so their domain controllers can be built side by side. A member server joins its
+        domain controller's candidate and takes that candidate's baseline again, so it is built after the domain
+        controller, and after any other member server of the same domain controller, in the order given.
+
+        A member server whose domain controller is not in the list gets a chain of its own, which the Build phase then
+        refuses with its own reason. When no role says what it depends on (a Status from a host on older scripts), all
+        of them form one chain in the order given, which is how the lab was built before.
+
+    .PARAMETER Role
+        The roles of a Status or Build result: objects with live and, from a current host, dependsOn.
+
+    .OUTPUTS
+        One object per chain, in the order of their first roles: Root (the first live name) and Roles (the live names,
+        in build order).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Role
+    )
+
+    $roles = @($Role)
+    if ($roles.Count -eq 0) {
+        return
+    }
+    $reportsDependency = @($roles | Where-Object { $null -ne $_.PSObject.Properties['dependsOn'] }).Count -gt 0
+    if (-not $reportsDependency) {
+        [pscustomobject]@{ Root = [string]$roles[0].live; Roles = [string[]]@($roles | ForEach-Object { [string]$_.live }) }
+        return
+    }
+
+    $names = @($roles | ForEach-Object { [string]$_.live })
+    $chains = [ordered]@{}
+    # Domain controllers (and orphaned members) first, so a member listed before its domain controller still follows it.
+    foreach ($item in $roles) {
+        $dependsOn = [string]$item.dependsOn
+        if ([string]::IsNullOrEmpty($dependsOn) -or ($names -notcontains $dependsOn)) {
+            $chains[[string]$item.live] = New-Object System.Collections.Generic.List[string]
+            $chains[[string]$item.live].Add([string]$item.live)
+        }
+    }
+    foreach ($item in $roles) {
+        $dependsOn = [string]$item.dependsOn
+        if ((-not [string]::IsNullOrEmpty($dependsOn)) -and ($names -contains $dependsOn)) {
+            if (-not $chains.Contains($dependsOn)) {
+                # It depends on another member server, which the settings never do: a chain of its own.
+                $chains[[string]$item.live] = New-Object System.Collections.Generic.List[string]
+                $chains[[string]$item.live].Add([string]$item.live)
+                continue
+            }
+            $chains[$dependsOn].Add([string]$item.live)
+        }
+    }
+
+    foreach ($root in $chains.Keys) {
+        [pscustomobject]@{ Root = $root; Roles = [string[]]$chains[$root].ToArray() }
+    }
+}
+
 function Get-LabRebuildBuildAction {
     <#
     .SYNOPSIS
@@ -3030,6 +3098,7 @@ function ConvertTo-LabRebuildResult {
         action     = $Action
         detail     = $Detail
         guestBuild = $GuestBuild
+        dependsOn  = $Role.DependsOn
     }
 }
 
@@ -4750,7 +4819,7 @@ Export-ModuleMember -Function @(
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
     'Get-LabDomainPasswordPolicyChange',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
-    'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
+    'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
     'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
     'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall',
