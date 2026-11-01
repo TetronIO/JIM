@@ -5,6 +5,7 @@
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](../plans/doing/EXCHANGE_REMOTING_SPIKE.md). Phases 0, 1a and 2 are complete; the go/no-go waits on Phases 1b and 3 against the AD lab's Exchange server.
+- **Implementation plan:** [`engineering/plans/EXCHANGE_MAILBOX_PROVISIONING.md`](../plans/EXCHANGE_MAILBOX_PROVISIONING.md)
 
 ## Problem Statement
 
