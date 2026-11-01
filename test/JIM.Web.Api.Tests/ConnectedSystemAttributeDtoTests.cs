@@ -148,4 +148,14 @@ public class ConnectedSystemAttributeDtoTests
 
         Assert.That(dto.IsOperational, Is.False);
     }
+
+    [Test]
+    public void FromEntity_ConnectorDefinedAttribute_ReportsItConnectorDefined()
+    {
+        var entity = new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "Exchange Recipient Type", Type = AttributeDataType.Text, IsConnectorDefined = true };
+
+        var dto = ConnectedSystemAttributeDto.FromEntity(entity);
+
+        Assert.That(dto.IsConnectorDefined, Is.True);
+    }
 }

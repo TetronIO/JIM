@@ -1078,11 +1078,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     #endregion
 
     #region Connected System Objects
-    public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
-    {
-        await ConnectedSystemObjectDeletionSql.DeleteAsync(Repository.Database, [connectedSystemObject.Id]);
-    }
-
     /// <summary>
     /// Deletes the objects by id with raw SQL and brings the change tracker into line with the database's cascades
     /// (<see cref="ConnectedSystemObjectDeletionSql"/>, shared with the Synchronisation repository's delete by id). The
@@ -3472,19 +3467,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             return 0;
 
         var ids = attributeIds.ToArray();
-
-        // Change history rows may reference a value row as a deleted object's external id snapshot holder; the
-        // FK does not cascade, so clear those references first (mirrors DeleteAllConnectedSystemObjectsAndDependenciesAsync).
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjectChanges""
-              SET ""DeletedObjectExternalIdAttributeValueId"" = NULL
-              WHERE ""DeletedObjectExternalIdAttributeValueId"" IN (
-                  SELECT av.""Id"" FROM ""ConnectedSystemObjectAttributeValues"" av
-                  JOIN ""ConnectedSystemObjects"" cso ON cso.""Id"" = av.""ConnectedSystemObjectId""
-                  WHERE av.""AttributeId"" = ANY({0}) AND cso.""ConnectedSystemId"" = {1}
-              )",
-            ids,
-            connectedSystemId);
 
         return await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemObjectAttributeValues"" av
@@ -7634,11 +7616,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             query = query.Where(c => c.ChangeTime <= toDateValue);
         }
 
-        // Search the preserved DeletedObjectExternalId string, which is what the Deleted Objects page renders.
-        // The DeletedObjectExternalIdAttributeValue navigation this used to match is cascade deleted with the
-        // Connected System Object, so it is null for the very records this browser exists to show, and the old
-        // predicate silently matched nothing. Case-insensitive for user convenience, matching the other list
-        // searches.
+        // Search the preserved DeletedObjectExternalId string, which is what the Deleted Objects page renders: the
+        // External ID value itself is deleted with its object. Case-insensitive for user convenience, matching the
+        // other list searches.
         if (!string.IsNullOrWhiteSpace(externalIdSearch))
         {
             var searchPattern = LikePattern.Contains(externalIdSearch);
@@ -7659,8 +7639,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Skip(offset)
             .Take(count)
             .Include(c => c.DeletedObjectType)
-            .Include(c => c.DeletedObjectExternalIdAttributeValue)
-            .ThenInclude(av => av!.Attribute)
             .ToListAsync();
 
         return (items, totalCount);
@@ -8520,10 +8498,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 5. Handle ConnectedSystemObjectChanges before deleting CSO attribute values and CSOs below. The change rows
-        //    carry non-cascading FKs (DeletedObjectExternalIdAttributeValueId -> a CSO attribute value; ConnectedSystemObjectId
-        //    -> a CSO), so they must be removed (delete-history path) or have those FKs nulled (preserve-history path)
-        //    first, otherwise the attribute-value and CSO deletes are blocked.
+        // 5. Handle ConnectedSystemObjectChanges before deleting the CSOs below: remove them (delete-history path), or
+        //    keep them and clear their reference to the CSOs (preserve-history path).
         if (deleteChangeHistory)
         {
             // Delete change attribute values first (child records)
@@ -8551,11 +8527,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         }
         else
         {
-            // Preserve the audit trail: null the change FKs that point at the CSO attribute values and CSOs deleted
-            // below (DeletedObjectExternalIdAttributeValueId and ConnectedSystemObjectId are both non-cascading).
+            // Preserve the audit trail: null the change rows' reference to the CSOs deleted below.
             await Repository.Database.Database.ExecuteSqlRawAsync(
                 @"UPDATE ""ConnectedSystemObjectChanges""
-                  SET ""DeletedObjectExternalIdAttributeValueId"" = NULL, ""ConnectedSystemObjectId"" = NULL
+                  SET ""ConnectedSystemObjectId"" = NULL
                   WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
         }
@@ -8689,7 +8664,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
 
         // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference and, on the preserve-history
-        //    path, the change FKs that point at CSOs / CSO attribute values).
+        //    path, the change records' reference to the CSOs).
         await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: false);
 
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for

@@ -3821,9 +3821,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("DeletedObjectExternalId")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("DeletedObjectExternalIdAttributeValueId")
-                        .HasColumnType("uuid");
-
                     b.Property<int?>("DeletedObjectTypeId")
                         .HasColumnType("integer");
 
@@ -3846,8 +3843,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("DeletedConnectedSystemObjectId")
                         .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
                         .HasFilter("\"DeletedConnectedSystemObjectId\" IS NOT NULL");
-
-                    b.HasIndex("DeletedObjectExternalIdAttributeValueId");
 
                     b.HasIndex("DeletedObjectTypeId");
 
@@ -4009,6 +4004,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsConnectorDefined")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsExternalId")
                         .HasColumnType("boolean");
@@ -4576,6 +4574,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text[]");
 
                     b.Property<string>("Example")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FeatureFlagKey")
                         .HasColumnType("text");
 
                     b.Property<string>("Name")
@@ -6516,10 +6517,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemObjectId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectAttributeValue", "DeletedObjectExternalIdAttributeValue")
-                        .WithMany()
-                        .HasForeignKey("DeletedObjectExternalIdAttributeValueId");
-
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "DeletedObjectType")
                         .WithMany()
                         .HasForeignKey("DeletedObjectTypeId");
@@ -6527,8 +6524,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ActivityRunProfileExecutionItem");
 
                     b.Navigation("ConnectedSystemObject");
-
-                    b.Navigation("DeletedObjectExternalIdAttributeValue");
 
                     b.Navigation("DeletedObjectType");
                 });

@@ -51,9 +51,10 @@ namespace JIM.PostgresData.Repositories;
 /// into the tracker.
 /// </para>
 /// <para>
-/// One foreign key points the other way, at a value deleted with its object: <c>ConnectedSystemObjectChanges.DeletedObjectExternalIdAttributeValueId</c>,
-/// with no action. Nothing writes it, so it never blocks a delete; a row holding it would fail this delete as it would
-/// have failed EF Core's.
+/// Nothing holds a foreign key into <c>ConnectedSystemObjectAttributeValues</c>, so the values cascade away without a
+/// check per value, and <c>ConnectedSystemObjectBatchDeletionDatabaseTests</c> keeps it that way. Change history held
+/// one until #2670, a reference to the deleted object's External ID value that nothing wrote; it cost 0.82 s of a
+/// 2.88 s delete of 500 objects in a 500,000-person directory.
 /// </para>
 /// </remarks>
 internal static class ConnectedSystemObjectDeletionSql

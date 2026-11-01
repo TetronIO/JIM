@@ -2743,6 +2743,15 @@ public class SynchronisationController(
         // Update setting values if provided
         if (request.SettingValues != null)
         {
+            // A setting whose feature is behind a flag that is off is refused outright, before anything is applied, so an
+            // In Development feature cannot be reached by script any more than from the portal (#2021).
+            foreach (var settingId in request.SettingValues.Keys)
+            {
+                var setting = connectedSystem.SettingValues.FirstOrDefault(sv => sv.Setting?.Id == settingId)?.Setting;
+                if (setting != null && !await _application.ConnectedSystems.IsSettingAvailableAsync(setting))
+                    return BadRequest(ApiErrorResponse.BadRequest($"The setting '{setting.Name}' is not available."));
+            }
+
             foreach (var (settingId, update) in request.SettingValues)
             {
                 var settingValue = connectedSystem.SettingValues.FirstOrDefault(sv => sv.Setting?.Id == settingId);
@@ -3379,7 +3388,7 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with ID {id} not found."));
 
-        return Ok(ConnectorDefinitionDto.FromEntity(definition));
+        return Ok(await ToAvailableDefinitionDtoAsync(definition));
     }
 
     /// <summary>
@@ -3398,7 +3407,25 @@ public class SynchronisationController(
         if (definition == null)
             return NotFound(ApiErrorResponse.NotFound($"Connector definition with name '{name}' not found."));
 
-        return Ok(ConnectorDefinitionDto.FromEntity(definition));
+        return Ok(await ToAvailableDefinitionDtoAsync(definition));
+    }
+
+    /// <summary>
+    /// A Connector Definition as an administrator may see it now: without any setting whose feature is behind a flag
+    /// that is off (<see cref="ConnectorSetting.FeatureFlagKey"/>).
+    /// </summary>
+    private async Task<ConnectorDefinitionDto> ToAvailableDefinitionDtoAsync(ConnectorDefinition definition)
+    {
+        var dto = ConnectorDefinitionDto.FromEntity(definition);
+        var unavailable = new HashSet<int>();
+        foreach (var setting in definition.Settings.Where(s => s.FeatureFlagKey != null))
+        {
+            if (!await _application.ConnectedSystems.IsSettingAvailableAsync(setting))
+                unavailable.Add(setting.Id);
+        }
+
+        dto.Settings.RemoveAll(s => unavailable.Contains(s.Id));
+        return dto;
     }
 
     #endregion

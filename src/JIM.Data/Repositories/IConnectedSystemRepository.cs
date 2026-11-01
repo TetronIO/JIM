@@ -1650,7 +1650,7 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Deletes every stored attribute value of the given attributes across a Connected System's objects: the
     /// schema refresh removal task's disposal of values whose attribute the Connected System no longer reports
-    /// (#1485). References from change history to the deleted values are cleared first.
+    /// (#1485).
     /// </summary>
     /// <returns>How many attribute value rows were deleted.</returns>
     public Task<int> DeleteConnectedSystemAttributeValuesByAttributeIdsAsync(int connectedSystemId, IReadOnlyCollection<int> attributeIds);
@@ -1873,8 +1873,6 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem);
 
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
-
-    public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
 
     /// <summary>
     /// Deletes Connected System Objects by id, with their attribute values and the rows the database cascades with

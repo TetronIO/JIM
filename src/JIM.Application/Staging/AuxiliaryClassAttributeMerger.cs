@@ -160,6 +160,9 @@ internal static class AuxiliaryClassAttributeMerger
                     // And whether the Connector reported it as operational.
                     IsOperational = attribute.IsOperational,
 
+                    // And whether the Connector made it up.
+                    IsConnectorDefined = attribute.IsConnectorDefined,
+
                     // Provenance, and the marker this merger recognises its own work by.
                     ClassName = contributor.Name
 
