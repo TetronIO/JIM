@@ -1472,6 +1472,66 @@ Describe 'Get-LabDomainPasswordPolicyChange' {
     }
 }
 
+Describe 'Get-LabPasswordTemplateChange' {
+    BeforeAll {
+        # The Default Domain Policy's GptTmpl.inf, as Exchange /PrepareAD left it in RESURGAM and GENTIAN (#2412).
+        function Get-Template {
+            param([string]$MinAge = '0', [string]$MaxAge = '42', [string]$MinLength = '0', [string]$Complexity = '1', [string]$History = '0')
+            @(
+                '[Unicode]', 'Unicode=yes',
+                '[System Access]',
+                "MinimumPasswordAge = $MinAge", "MaximumPasswordAge = $MaxAge", "MinimumPasswordLength = $MinLength",
+                "PasswordComplexity = $Complexity", "PasswordHistorySize = $History",
+                'LockoutBadCount = 0', 'RequireLogonToChangePassword = 0', 'ClearTextPassword = 0',
+                '[Kerberos Policy]', 'MaxTicketAge = 10',
+                '[Version]', 'signature="$CHICAGO$"', 'Revision=1'
+            )
+        }
+    }
+
+    It 'changes nothing in a template at the Windows defaults' {
+        $template = Get-Template -MinAge 1 -MinLength 7 -History 24
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -BeNullOrEmpty
+        $result.Line | Should -Be $template
+    }
+
+    It 'restores length, history and minimum age where /PrepareAD wrote the starting values, leaving every other line' {
+        $template = Get-Template
+        $result = Get-LabPasswordTemplateChange -Line $template
+        @($result.Changed | Sort-Object) | Should -Be @('MinimumPasswordAge', 'MinimumPasswordLength', 'PasswordHistorySize')
+        $result.Line | Should -Be (Get-Template -MinAge 1 -MinLength 7 -History 24)
+    }
+
+    It 'turns complexity back on and restores the maximum age, whatever the spacing' {
+        $template = @('[System Access]', 'MinimumPasswordAge=1', 'MaximumPasswordAge=90', 'MinimumPasswordLength=7', 'PasswordComplexity=0', 'PasswordHistorySize=24')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        @($result.Changed | Sort-Object) | Should -Be @('MaximumPasswordAge', 'PasswordComplexity')
+        $result.Line | Should -Be @('[System Access]', 'MinimumPasswordAge=1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength=7', 'PasswordComplexity = 1', 'PasswordHistorySize=24')
+    }
+
+    It 'adds a setting the section lacks at the end of the section' {
+        $template = @('[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'PasswordComplexity = 1', 'PasswordHistorySize = 24', '[Version]', 'Revision=1')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -Be @('MinimumPasswordLength')
+        $result.Line | Should -Be @('[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'PasswordComplexity = 1', 'PasswordHistorySize = 24', 'MinimumPasswordLength = 7', '[Version]', 'Revision=1')
+    }
+
+    It 'adds the whole section to a template without one' {
+        $result = Get-LabPasswordTemplateChange -Line @('[Unicode]', 'Unicode=yes', '[Version]', 'Revision=1')
+        @($result.Changed | Sort-Object) | Should -Be @('MaximumPasswordAge', 'MinimumPasswordAge', 'MinimumPasswordLength', 'PasswordComplexity', 'PasswordHistorySize')
+        $result.Line | Should -Be @('[Unicode]', 'Unicode=yes', '[Version]', 'Revision=1', '[System Access]',
+            'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength = 7', 'PasswordComplexity = 1', 'PasswordHistorySize = 24')
+    }
+
+    It 'leaves a same-named setting in another section alone' {
+        $template = @('[Registry Values]', 'MinimumPasswordLength = 0', '[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength = 7', 'PasswordComplexity = 1', 'PasswordHistorySize = 24')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -BeNullOrEmpty
+        $result.Line | Should -Be $template
+    }
+}
+
 Describe 'Set-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($PSVersionTable.PSEdition -eq 'Desktop'))) {
     BeforeEach {
         $script:LsaPath = 'TestRegistry:\Lsa'
