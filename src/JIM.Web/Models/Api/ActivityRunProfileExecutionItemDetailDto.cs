@@ -129,6 +129,14 @@ public class ActivityRunProfileExecutionItemDetailDto
     public ExecutionItemChanges? Changes { get; set; }
 
     /// <summary>
+    /// Work the item set in motion that finishes after its run, oldest first: for an export that provisioned an
+    /// account, the account's Initial Password, with where it stands now. Null unless asked for
+    /// (<c>include=followups</c>, or <c>-IncludeFollowUps</c> in PowerShell); an empty list when asked for and the item
+    /// has none.
+    /// </summary>
+    public List<ExecutionItemFollowUp>? FollowUps { get; set; }
+
+    /// <summary>
     /// Creates the detail from an item's own row; no navigation property is read, so the light retrieval suffices.
     /// </summary>
     public static ActivityRunProfileExecutionItemDetailDto FromEntity(ActivityRunProfileExecutionItem entity)

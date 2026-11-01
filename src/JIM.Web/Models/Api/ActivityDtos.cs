@@ -198,6 +198,13 @@ public class ActivityHeader
     public int ChildActivityCount { get; set; }
 
     /// <summary>
+    /// The Run Profile Execution Item this Activity follows up, such as the export item of the account whose Initial
+    /// Password it records. Null for an Activity that follows no item. An Activity with a parent item, like one with a
+    /// parent Activity, is never listed at the top level.
+    /// </summary>
+    public Guid? ParentRunProfileExecutionItemId { get; set; }
+
+    /// <summary>
     /// If a Schedule Execution produced this Activity, the execution's unique identifier. Null otherwise.
     /// </summary>
     public Guid? ScheduleExecutionId { get; set; }
@@ -276,6 +283,7 @@ public class ActivityHeader
         return new ActivityHeader
         {
             Id = activity.Id,
+            ParentRunProfileExecutionItemId = activity.ParentRunProfileExecutionItemId,
             Created = activity.Created,
             Executed = activity.Executed == default ? null : activity.Executed,
             Status = activity.Status,
@@ -364,6 +372,13 @@ public class ActivityDetailDto
     /// Parent Activity ID if this was triggered by another Activity.
     /// </summary>
     public Guid? ParentActivityId { get; set; }
+
+    /// <summary>
+    /// The Run Profile Execution Item this Activity follows up, such as the export item of the account whose Initial
+    /// Password it records. Null for an Activity that follows no item. The item may since have been removed with its
+    /// run under history retention, while this Activity is kept.
+    /// </summary>
+    public Guid? ParentRunProfileExecutionItemId { get; set; }
 
     /// <summary>
     /// When the Activity was created.
@@ -718,6 +733,7 @@ public class ActivityDetailDto
             Phases = (phases ?? []).OrderBy(p => p.Order).Select(ActivityPhaseDto.FromEntity).ToList(),
             Id = activity.Id,
             ParentActivityId = activity.ParentActivityId,
+            ParentRunProfileExecutionItemId = activity.ParentRunProfileExecutionItemId,
             Created = activity.Created,
             Executed = activity.Executed == default ? null : activity.Executed,
             Status = activity.Status,

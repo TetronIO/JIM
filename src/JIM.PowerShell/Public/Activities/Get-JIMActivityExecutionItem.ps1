@@ -38,6 +38,10 @@ function Get-JIMActivityExecutionItem {
         Add the attribute changes recorded with the item as Changes: its Metaverse Object change, its Connected System
         Object change, and what each Pending Export it staged would write.
 
+    .PARAMETER IncludeFollowUps
+        Add the work the item set in motion that finishes after its run as FollowUps: for an export that provisioned
+        an account, the account's Initial Password, with where it stands now in PasswordOutcomes.
+
     .PARAMETER Causes
         Return what caused the item instead, one row per cohort of causes.
 
@@ -66,8 +70,8 @@ function Get-JIMActivityExecutionItem {
         Fetch past the 1000-page limit of -All.
 
     .OUTPUTS
-        Without a switch, the item; -IncludeOutcomes and -IncludeChanges add its Outcomes and Changes, which are
-        otherwise empty. With -Causes, what caused it, and with -Consequences what it went on to cause,
+        Without a switch, the item; -IncludeOutcomes, -IncludeChanges and -IncludeFollowUps add its Outcomes, Changes
+        and FollowUps, which are otherwise empty. With -Causes, what caused it, and with -Consequences what it went on to cause,
         in later runs as well as its own: one row per cohort (objects sharing a cause and its reason read as one row
         with a Count), with Level 1 for the nearest and one more per step. With an object's id, the object's
         timeline, one row per execution item, newest first; where the deployment records no Metaverse Object
@@ -178,6 +182,13 @@ function Get-JIMActivityExecutionItem {
         Lists the Pending Exports a synchronisation staged for one object, walking the outcome tree to every depth.
 
     .EXAMPLE
+        $item = Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -IncludeFollowUps
+        $item.FollowUps | Select-Object TargetName, Message,
+            @{ Name = 'State'; Expression = { $_.PasswordOutcomes.Targets.State } }
+
+        Shows whether the Initial Password of an account an export provisioned has been set yet.
+
+    .EXAMPLE
         Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Causes |
             Format-Table Level, EdgeType, ReasonCode, Count, ObjectType, ConnectedSystem, Members
 
@@ -228,6 +239,9 @@ function Get-JIMActivityExecutionItem {
 
         [Parameter(ParameterSetName = 'Item')]
         [switch]$IncludeChanges,
+
+        [Parameter(ParameterSetName = 'Item')]
+        [switch]$IncludeFollowUps,
 
         [Parameter(Mandatory, ParameterSetName = 'Causes')]
         [switch]$Causes,
@@ -334,6 +348,7 @@ function Get-JIMActivityExecutionItem {
         $include = @(
             if ($IncludeOutcomes) { 'outcomes' }
             if ($IncludeChanges) { 'changes' }
+            if ($IncludeFollowUps) { 'followups' }
         )
         $endpoint = "/api/v1/activities/items/$Id"
         if ($include.Count -gt 0) {
