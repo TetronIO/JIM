@@ -185,6 +185,7 @@ internal sealed class HeldAttributeValues
         private HashSet<long>? _dateKeys;
         private HashSet<bool>? _booleans;
         private HashSet<Guid>? _guids;
+        // Binary values compared by content, as SyncEngine.ValuesMatch compares them.
         private HashSet<byte[]>? _binaries;
         private HashSet<string>? _unresolvedReferences;
         private bool _holdsNothing;
@@ -246,7 +247,7 @@ internal sealed class HeldAttributeValues
             else if (value.GuidValue.HasValue)
                 (_guids ??= []).Add(value.GuidValue.Value);
             else if (value.ByteValue != null)
-                (_binaries ??= new HashSet<byte[]>(ByteContentComparer.Instance)).Add(value.ByteValue);
+                (_binaries ??= new HashSet<byte[]>(ByteArrayContentComparer.Instance)).Add(value.ByteValue);
             else if (value.UnresolvedReferenceValue != null)
                 (_unresolvedReferences ??= new HashSet<string>(Comparer)).Add(value.UnresolvedReferenceValue);
             else
@@ -262,25 +263,6 @@ internal sealed class HeldAttributeValues
 
             _dateKeys ??= _dates.Select(held => DateTimeAttributeValue.Key(held, Resolution)).ToHashSet();
             return _dateKeys.Contains(DateTimeAttributeValue.Key(date, Resolution));
-        }
-    }
-
-    /// <summary>
-    /// Binary values compared by content, as <see cref="SyncEngine.ValuesMatch"/> compares them.
-    /// </summary>
-    private sealed class ByteContentComparer : IEqualityComparer<byte[]>
-    {
-        public static readonly ByteContentComparer Instance = new();
-
-        public bool Equals(byte[]? x, byte[]? y) => x == null ? y == null : y != null && x.AsSpan().SequenceEqual(y);
-
-        public int GetHashCode(byte[] obj)
-        {
-            ArgumentNullException.ThrowIfNull(obj);
-
-            var hash = new HashCode();
-            hash.AddBytes(obj);
-            return hash.ToHashCode();
         }
     }
 }
