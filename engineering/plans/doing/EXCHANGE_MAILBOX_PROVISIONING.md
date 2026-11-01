@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phase 3 under way)
+- **Status:** Doing (Phase 3 complete, TetronIO/JIM#2686; the rest waits on the spike's go)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -145,7 +145,7 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
   - discovery parsing of `msExchExchangeServer`;
   - a harness test of the save-time check against the stand-in.
 
-### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25)
+### Phase 3: The flag, the Exchange setting and connector-defined attributes ✅ (4 days; requirements 1 in part, 4, 6, 25)
 
 Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carries what the flag needs from Phase 2.
 
