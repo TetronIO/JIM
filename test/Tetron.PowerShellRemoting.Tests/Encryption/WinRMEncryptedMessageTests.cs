@@ -115,6 +115,20 @@ public class WinRMEncryptedMessageTests
     }
 
     [Test]
+    public void Decode_BoundaryLinesWithSpaceAfterTheDashes_AreRead()
+    {
+        // pypsrp, the reference client, allows whitespace between the dashes and the boundary name, so some servers
+        // must write it that way.
+        var plaintext = "<s:Envelope/>"u8.ToArray();
+        var sealer = new FakeSealer();
+        var body = Frame(Boundary, plaintext, sealer, indent: "\t", dashes: "-- ");
+
+        var decoded = WinRMEncryptedMessage.Decode(body, $"multipart/encrypted;protocol=\"{Protocol}\";boundary=\"{Boundary}\"", sealer);
+
+        Assert.That(decoded, Is.EqualTo(plaintext));
+    }
+
+    [Test]
     public void Decode_BodyWithoutADataPart_SaysWhatArrived()
     {
         var body = "<html><body>Server Error in '/PowerShell' Application.</body></html>"u8.ToArray();
@@ -194,20 +208,20 @@ public class WinRMEncryptedMessageTests
     private static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
 
     /// <summary>A response framed as a WinRM server other than the WinRM service might frame it.</summary>
-    private static byte[] Frame(string boundary, byte[] plaintext, FakeSealer sealer, string indent)
+    private static byte[] Frame(string boundary, byte[] plaintext, FakeSealer sealer, string indent, string dashes = "--")
     {
         var sealedMessage = sealer.Wrap(plaintext);
         return Concat(
             Encoding.ASCII.GetBytes(
-                $"--{boundary}\r\n" +
+                $"{dashes}{boundary}\r\n" +
                 $"{indent}Content-Type: {Protocol}\r\n" +
                 $"{indent}OriginalContent: type=application/soap+xml;charset=UTF-8;Length={plaintext.Length}\r\n" +
-                $"--{boundary}\r\n" +
+                $"{dashes}{boundary}\r\n" +
                 $"{indent}Content-Type: application/octet-stream\r\n"),
             LittleEndian(sealedMessage.Header.Length),
             sealedMessage.Header,
             sealedMessage.Data,
-            Encoding.ASCII.GetBytes($"--{boundary}--\r\n"));
+            Encoding.ASCII.GetBytes($"{dashes}{boundary}--\r\n"));
     }
 
     private static int IndexOf(byte[] haystack, byte[] needle) => haystack.AsSpan().IndexOf(needle);

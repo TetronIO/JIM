@@ -77,23 +77,23 @@ public static class WinRMEncryptedMessage
             throw new WinRMEncryptionException("The encrypted WinRM response is empty: it has no body at all.");
 
         var span = body.AsSpan();
-        var partStart = Encoding.ASCII.GetBytes($"--{boundary}\r\n");
-        var descriptionStart = span.IndexOf(partStart);
-        var dataPartStart = descriptionStart < 0 ? -1 : IndexOfAfter(span, partStart, descriptionStart + partStart.Length);
-        if (dataPartStart < 0)
+        var boundaryName = Encoding.ASCII.GetBytes(boundary);
+        var description = FindPartStart(span, boundaryName, 0);
+        var dataPart = description.Start < 0 ? (Start: -1, End: -1) : FindPartStart(span, boundaryName, description.End);
+        if (dataPart.Start < 0)
             throw Malformed("has no data part", body);
 
-        var expectedLength = ReadOriginalLength(span[descriptionStart..dataPartStart], body);
+        var expectedLength = ReadOriginalLength(span[description.End..dataPart.Start], body);
 
         // The data part's own header names application/octet-stream; the encrypted payload follows its line directly.
-        var headerStart = dataPartStart + partStart.Length;
+        var headerStart = dataPart.End;
         var headerWindow = Encoding.Latin1.GetString(span.Slice(headerStart, Math.Min(MaximumPartHeaderLength, span.Length - headerStart)));
         var headerEnd = headerWindow.IndexOf(DataPartContentType, StringComparison.OrdinalIgnoreCase);
         if (headerEnd < 0)
             throw Malformed("has no application/octet-stream data part", body);
 
         var payloadStart = headerStart + headerEnd + DataPartContentType.Length;
-        var payloadEnd = span.LastIndexOf(Encoding.ASCII.GetBytes($"--{boundary}--"));
+        var payloadEnd = FindClosingBoundary(span, boundaryName);
         if (payloadEnd < payloadStart + 4)
             throw Malformed("is truncated: its closing boundary is missing", body);
 
@@ -135,10 +135,55 @@ public static class WinRMEncryptedMessage
         return body.Length > ExcerptLength ? text.Append('…').ToString() : text.ToString();
     }
 
-    private static int IndexOfAfter(ReadOnlySpan<byte> span, ReadOnlySpan<byte> value, int from)
+    /// <summary>
+    /// Finds the next line that starts a part, <c>--boundary</c> then CRLF, allowing whitespace between the dashes and
+    /// the boundary as the reference client does.
+    /// </summary>
+    /// <returns>Where the line starts and where the part's content begins after it, or -1 for both.</returns>
+    private static (int Start, int End) FindPartStart(ReadOnlySpan<byte> span, ReadOnlySpan<byte> boundaryName, int from)
     {
-        var index = span[from..].IndexOf(value);
-        return index < 0 ? -1 : from + index;
+        for (var position = from; position < span.Length;)
+        {
+            var found = span[position..].IndexOf(boundaryName);
+            if (found < 0)
+                break;
+
+            var nameStart = position + found;
+            var nameEnd = nameStart + boundaryName.Length;
+            var dashes = DashesBefore(span, nameStart);
+            if (dashes >= 0 && span[nameEnd..].StartsWith("\r\n"u8))
+                return (dashes, nameEnd + 2);
+            position = nameEnd;
+        }
+
+        return (-1, -1);
+    }
+
+    /// <returns>Where the last <c>--boundary--</c> starts, or -1.</returns>
+    private static int FindClosingBoundary(ReadOnlySpan<byte> span, ReadOnlySpan<byte> boundaryName)
+    {
+        for (var end = span.Length; end > 0;)
+        {
+            var nameStart = span[..end].LastIndexOf(boundaryName);
+            if (nameStart < 0)
+                break;
+
+            var dashes = DashesBefore(span, nameStart);
+            if (dashes >= 0 && span[(nameStart + boundaryName.Length)..].StartsWith("--"u8))
+                return dashes;
+            end = nameStart;
+        }
+
+        return -1;
+    }
+
+    /// <returns>The index of the two dashes before <paramref name="nameStart"/>, past any spaces or tabs, or -1.</returns>
+    private static int DashesBefore(ReadOnlySpan<byte> span, int nameStart)
+    {
+        var index = nameStart;
+        while (index > 0 && span[index - 1] is (byte)' ' or (byte)'\t')
+            index--;
+        return index >= 2 && span[index - 2] == '-' && span[index - 1] == '-' ? index - 2 : -1;
     }
 
     /// <returns>The boundary the Content-Type names, or WinRM's own when it names none.</returns>

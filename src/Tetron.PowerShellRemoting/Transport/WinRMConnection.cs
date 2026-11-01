@@ -91,7 +91,8 @@ internal sealed class WinRMConnection : IDisposable
                 {
                     // Say which response it was: the status and Content-Type are what tell one server's framing from another's.
                     throw new WinRMEncryptionException(
-                        $"{error.Message} (HTTP {(int)response.StatusCode} {response.ReasonPhrase}, Content-Type '{contentType}')", error);
+                        $"{error.Message} (HTTP {(int)response.StatusCode} {response.ReasonPhrase}, Content-Type '{contentType}', " +
+                        $"Content-Encoding '{string.Join(",", response.Content.Headers.ContentEncoding)}')", error);
                 }
             }
         }
@@ -108,9 +109,20 @@ internal sealed class WinRMConnection : IDisposable
         _gate.Dispose();
     }
 
+    /// <summary>
+    /// A POST to the endpoint, as every request is. It asks for the reply uncompressed: Exchange's endpoint is hosted by
+    /// IIS, which compresses replies when a client allows it, and a compressed reply is not a WinRM message.
+    /// </summary>
+    internal static HttpRequestMessage NewPost(Uri uri)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, uri) { Version = HttpVersion.Version11 };
+        request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("identity"));
+        return request;
+    }
+
     private HttpRequestMessage BuildRequest(byte[] envelope)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, _options.ConnectionUri) { Version = HttpVersion.Version11 };
+        var request = NewPost(_options.ConnectionUri);
         if (_options.UsesMessageEncryption)
         {
             var encoded = WinRMEncryptedMessage.Encode(envelope, _context!);
@@ -150,11 +162,8 @@ internal sealed class WinRMConnection : IDisposable
         }
         for (var round = 0; round < 4 && token is not null; round++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, _options.ConnectionUri)
-            {
-                Version = HttpVersion.Version11,
-                Content = new ByteArrayContent([])
-            };
+            using var request = NewPost(_options.ConnectionUri);
+            request.Content = new ByteArrayContent([]);
             request.Headers.Authorization = new AuthenticationHeaderValue("Kerberos", Convert.ToBase64String(token));
             using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
