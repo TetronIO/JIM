@@ -578,7 +578,7 @@ public class CausalTimelineReadDatabaseTests
         await SeedItemsOfDeletedRecordsAsync(hr.SystemId, 5_000);
         var tina = Guid.NewGuid();
         await SeedCsoDeletionRecordAsync(hr.SystemId, tina, "E1001", itemId: null, T0);
-        await AnalyseAsync();
+        await SeedRepresentativeHistoryAsync();
 
         var plan = await ExplainAsync(command =>
             ActivityRepository.PrepareCausalTimelinePageCommand(command, CsoSubject(tina), 0, 50));
@@ -595,6 +595,8 @@ public class CausalTimelineReadDatabaseTests
     [Test]
     public async Task GetCausalTimelinePageAsync_MetaverseObjectTimeline_IsReadThroughIndexesAsync()
     {
+        await SeedRepresentativeHistoryAsync();
+
         var plan = await ExplainAsync(command =>
             ActivityRepository.PrepareCausalTimelinePageCommand(command, MvoSubject(Guid.NewGuid()), 0, 50));
 
@@ -611,6 +613,9 @@ public class CausalTimelineReadDatabaseTests
     [Test]
     public async Task GetLatestImportEventsForItemsAsync_IsReadThroughIndexesAsync()
     {
+        await SeedRepresentativeHistoryAsync();
+        await SeedItemsOfDeletedRecordsAsync((await SeedConnectedSystemAsync("Glitterband EMEA")).SystemId, 1_000);
+
         var plan = await ExplainAsync(command =>
             ActivityRepository.PrepareLatestImportEventsCommand(command, [Guid.NewGuid(), Guid.NewGuid()]));
 
@@ -677,24 +682,111 @@ public class CausalTimelineReadDatabaseTests
     }
 
     /// <summary>
-    /// The plan PostgreSQL would use for the statement <paramref name="prepare"/> builds, with sequential scans switched
-    /// off for the session.
+    /// Every table the causal timeline and latest-import reads touch. A plan is only as stable as the statistics of the
+    /// tables it reads, so all of them are analysed before a plan is taken, not only the ones a test happens to seed.
     /// </summary>
+    private const string TablesTheReadsTouch = """
+        "Activities", "ActivityRunProfileExecutionItems", "ConnectedSystemObjectChanges", "ConnectedSystemObjects",
+        "ConnectedSystemObjectTypes", "ConnectedSystems", "MetaverseObjectChanges", "MetaverseObjects"
+        """;
+
+    /// <summary>
+    /// The plan PostgreSQL would use for the statement <paramref name="prepare"/> builds.
+    /// </summary>
+    /// <remarks>
+    /// The tests assert on what each predicate allows, not on the planner's cost-based choice (#2646, #2682). Two things
+    /// make that hold whatever earlier tests left behind. Sequential scans are switched off, so a tiny table cannot make
+    /// the planner prefer one regardless. And every table the read touches is analysed first: the reset empties the
+    /// tables but leaves their column statistics in place, and analysing an empty table does not replace them, so left
+    /// alone the planner plans from whatever an earlier test's rows looked like. On a long-lived test database that read
+    /// a Metaverse Object's change records through the item index with a filter. Hence the callers seed
+    /// <see cref="SeedRepresentativeHistoryAsync"/> first: there must be rows for the statistics to describe. The
+    /// setting and the column statistics roll back with the transaction, so the pooled connection and the next test see
+    /// neither; the table sizes ANALYZE records do not, and the next reset clears them.
+    /// </remarks>
     private async Task<string> ExplainAsync(Action<NpgsqlCommand> prepare)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
-        await using (var off = new NpgsqlCommand("SET enable_seqscan = off", connection))
-            await off.ExecuteNonQueryAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var plannerConditions = new NpgsqlCommand(
+            $"ANALYZE {TablesTheReadsTouch}; SET LOCAL enable_seqscan = off;", connection, transaction))
+            await plannerConditions.ExecuteNonQueryAsync();
 
-        await using var explain = new NpgsqlCommand { Connection = connection };
+        await using var explain = new NpgsqlCommand { Connection = connection, Transaction = transaction };
         prepare(explain);
         explain.CommandText = "EXPLAIN " + explain.CommandText;
         var plan = new List<string>();
-        await using var reader = await explain.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            plan.Add(reader.GetString(0));
+        await using (var reader = await explain.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                plan.Add(reader.GetString(0));
+        }
+
+        await transaction.RollbackAsync();
         return string.Join("\n", plan);
+    }
+
+    /// <summary>
+    /// Seeds a history shaped like production's for the plan tests' statistics to describe: <paramref name="count"/>
+    /// Metaverse Objects, each joined to a Connected System Object of its own, each record with an item in one run, and a
+    /// change record per item naming it and its Metaverse Object. So an object's id picks out a handful of rows in every
+    /// table, and nearly every change record names an item, as they do once a deployment has been synchronising.
+    /// Set-based copies of one seeded template each, so four statements whatever the count.
+    /// </summary>
+    private async Task SeedRepresentativeHistoryAsync(int count = 2_000)
+    {
+        var system = await SeedConnectedSystemAsync("Representative history");
+        var templateMvo = await SeedMvoAsync();
+        var templateCso = await SeedCsoAsync(system, joinedTo: templateMvo);
+        var run = await SeedActivityAsync(system.SystemId, ConnectedSystemRunType.DeltaSynchronisation, T0.AddDays(-2));
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        // SeedMvoAsync gives every Metaverse Object a type of its own, so the template's type picks out its copies. Each
+        // copy's id is derived from g: a LATERAL that does not reference g is evaluated once, so gen_random_uuid() there
+        // would give every copy the same id.
+        await using var seed = new NpgsqlCommand("""
+            INSERT INTO "MetaverseObjects"
+            SELECT copy.*
+            FROM "MetaverseObjects" t
+            CROSS JOIN generate_series(1, @count - 1) AS g
+            CROSS JOIN LATERAL jsonb_populate_record(NULL::"MetaverseObjects",
+                to_jsonb(t) || jsonb_build_object('Id', md5(t."Id"::text || g)::uuid)) AS copy
+            WHERE t."Id" = @template_mvo;
+
+            INSERT INTO "ConnectedSystemObjects"
+            SELECT copy.*
+            FROM "ConnectedSystemObjects" t
+            JOIN "MetaverseObjects" template_mvo ON template_mvo."Id" = @template_mvo
+            JOIN "MetaverseObjects" m ON m."TypeId" = template_mvo."TypeId" AND m."Id" <> template_mvo."Id"
+            CROSS JOIN LATERAL jsonb_populate_record(NULL::"ConnectedSystemObjects",
+                to_jsonb(t) || jsonb_build_object('Id', gen_random_uuid(), 'MetaverseObjectId', m."Id")) AS copy
+            WHERE t."Id" = @template_cso;
+
+            INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType", "ConnectedSystemObjectId", "DisplayNameSnapshot")
+            SELECT gen_random_uuid(), @run, @change_type, cso."Id", 'Representative'
+            FROM "ConnectedSystemObjects" cso
+            WHERE cso."ConnectedSystemId" = @system;
+
+            INSERT INTO "MetaverseObjectChanges"
+                ("Id", "ChangeTime", "InitiatedByType", "ChangeInitiatorType", "ChangeType", "MetaverseObjectId",
+                 "ActivityRunProfileExecutionItemId")
+            SELECT gen_random_uuid(), @time, @initiated_by, @initiator, @change_type, cso."MetaverseObjectId", r."Id"
+            FROM "ActivityRunProfileExecutionItems" r
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = r."ConnectedSystemObjectId"
+            WHERE r."ActivityId" = @run;
+            """, connection);
+        seed.Parameters.AddWithValue("count", count);
+        seed.Parameters.AddWithValue("template_mvo", templateMvo);
+        seed.Parameters.AddWithValue("template_cso", templateCso);
+        seed.Parameters.AddWithValue("run", run);
+        seed.Parameters.AddWithValue("system", system.SystemId);
+        seed.Parameters.AddWithValue("time", T0.AddDays(-2));
+        seed.Parameters.AddWithValue("initiated_by", (int)ActivityInitiatorType.System);
+        seed.Parameters.AddWithValue("initiator", (int)MetaverseObjectChangeInitiatorType.SynchronisationRule);
+        seed.Parameters.AddWithValue("change_type", (int)ObjectChangeType.AttributeFlow);
+        await seed.ExecuteNonQueryAsync();
     }
 
     /// <summary>
@@ -780,8 +872,7 @@ public class CausalTimelineReadDatabaseTests
     {
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
-        await using var analyse = new NpgsqlCommand(
-            """ANALYZE "Activities", "ActivityRunProfileExecutionItems", "ConnectedSystemObjectChanges" """, connection);
+        await using var analyse = new NpgsqlCommand($"ANALYZE {TablesTheReadsTouch}", connection);
         await analyse.ExecuteNonQueryAsync();
     }
 
