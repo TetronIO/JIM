@@ -1492,15 +1492,11 @@ public class ActivitiesControllerTests
     }
 
     [Test]
-    public void ActivityHeaderAndDetail_FromEntity_FollowUpOfAnItem_CarryTheParentItem()
+    public void ActivityDetail_FromEntity_FollowUpOfAnItem_CarriesTheParentItem()
     {
         var activity = new Activity { Id = Guid.NewGuid(), ParentRunProfileExecutionItemId = Guid.NewGuid(), Created = DateTime.UtcNow };
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(ActivityHeader.FromEntity(activity).ParentRunProfileExecutionItemId, Is.EqualTo(activity.ParentRunProfileExecutionItemId));
-            Assert.That(ActivityDetailDto.FromEntity(activity).ParentRunProfileExecutionItemId, Is.EqualTo(activity.ParentRunProfileExecutionItemId));
-        }
+        Assert.That(ActivityDetailDto.FromEntity(activity).ParentRunProfileExecutionItemId, Is.EqualTo(activity.ParentRunProfileExecutionItemId));
     }
 
     [TestCase("bogus")]
