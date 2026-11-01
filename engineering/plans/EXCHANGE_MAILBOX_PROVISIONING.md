@@ -24,9 +24,9 @@ Phase 5's failure classification and the concurrency bound (PRD decision 4) come
 
 ## Design decisions made in this plan
 
-The PRD settled behaviour and left the mechanics here. The choices below are recommendations; the four marked **(confirm)** change something the user can see or the PRD's wording, and want the user's agreement before Phase 1 starts.
+The PRD settled behaviour and left the mechanics here. The four marked **(confirmed)** change something the user can see or the PRD's wording; all four were agreed on 2026-11-01, and D7 is recorded in the PRD as decision 15.
 
-### D1. A separate Exchange queue, on a shared delivery scheduler (confirm)
+### D1. A separate Exchange queue, on a shared delivery scheduler (confirmed)
 
 The PRD asks whether to generalise the password lane or build a parallel one. The survey of the password lane shows the split cleanly:
 
@@ -83,7 +83,7 @@ Requirement 3 needs a warning that does not refuse the save (a cmdlet the accoun
 
 `IConnectorDirectoryServers` declares a single target setting. The Exchange server picker (requirement 1) needs a second "Discover" beside the Exchange server setting, listing `msExchExchangeServer` objects from the configuration partition. Widen the interface to a list of discoveries keyed by target setting (pre-release, so no compatibility shim). The portal's existing Discover button then works per setting.
 
-### D7. Trust for an `https://` endpoint comes from JIM's certificate store (confirm)
+### D7. Trust for an `https://` endpoint comes from JIM's certificate store (confirmed)
 
 There is no certificate setting type. Rather than add one for a single field, an `https://` Exchange endpoint is validated against JIM's existing trusted certificate store (`IConnectorCertificateAware`), as LDAPS is. **This changes requirement 1's "CA certificate, shown only for an `https://` endpoint" into "trust the Exchange server's CA in Certificates"**, with the setting's help text saying so and the save-time check naming the missing certificate when it fails.
 
@@ -105,11 +105,11 @@ The resolution runs at save time (Phase 2), and its result is shown among the de
 
 Neither queues a change. Each writes a follow-up Activity under the export item, CompleteWithError for a misfit and CompleteWithWarning for a type change, so it shows in the item's Follow-up section, the Lineage and the timeline with its reason (Scenarios 6 and 8).
 
-### D10. Retention: Exchange follow-ups use the general history period (confirm)
+### D10. Retention: Exchange follow-ups use the general history period (confirmed)
 
 The general retention pass excludes Password Synchronisation Activities, which are kept for 365 days. Exchange follow-ups get a new `ActivityTargetType.ExchangeRecipient` and fall under the **general 90-day period**, the same as the export items they hang from. That avoids the dangling "Export item no longer retained" link that password follow-ups show after 90 days. Terminal queue rows (Parked or Cancelled) are pruned by the same pass, after the same period.
 
-### D11. Incremental delivery behind a feature flag (confirm)
+### D11. Incremental delivery behind a feature flag (confirmed)
 
 The work lands as eight pull requests, each merged to `main` when green, behind a new `ExchangeRecipients` feature flag (the #1781 lifecycle). The flag hides:
 - the Exchange settings heading;

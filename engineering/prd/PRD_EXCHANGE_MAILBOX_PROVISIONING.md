@@ -59,7 +59,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 1. An LDAP Connected System connected to Active Directory can manage Exchange recipients. Its Exchange settings are LDAP Connector settings, under an Exchange heading, so only LDAP Connected Systems show them, and the REST API and PowerShell handle them as they handle any Connector setting:
    - **Manage Exchange recipients**, a checkbox that reveals the rest. Saving it turned on is refused when the Connected System's detected directory type is not Active Directory.
    - **Exchange server.** JIM offers the Exchange servers recorded in Active Directory's configuration partition, and accepts an endpoint instead (default `http://<server>/PowerShell/`), such as a load-balanced name or an `https://` address. One endpoint per Connected System. Reading the servers from the configuration partition is to be confirmed against the AD lab in spike Phase 1b.
-   - **CA certificate**, shown only for an `https://` endpoint.
+   - For an `https://` endpoint, the Exchange server's CA is trusted through JIM's Certificates store, as for LDAPS; there is no separate certificate setting (decision 15).
 2. JIM signs in to Exchange with the Connected System's own credentials; there is no second account. It works out the Kerberos details itself: the principal from the credential's account (given as `DOMAIN\name`, a user principal name or a distinguished name, and resolved through the directory), the realm from the DNS name of that account's domain, and the KDC as the domain controller the Connected System is pinned to, since every domain controller is one. An operator never enters a realm or a KDC, or mounts a `krb5.conf`. Both of the LDAP Connector's authentication types, Simple and NTLM, carry the password Kerberos needs.
 3. When the Exchange settings are saved, alongside the directory connection check that already runs then, JIM opens an Exchange session. A save that cannot reach Exchange, or whose sign-in Exchange refuses, is refused with the reason. A cmdlet JIM needs that the account's Exchange roles do not allow (Exchange's session lists only the cmdlets an account may run) is reported by name, with the recipient types it affects, as a warning that does not refuse the save. The Exchange version and the Kerberos sign-in JIM worked out are shown among the Connected System's detected facts.
 
@@ -251,6 +251,10 @@ Made on 2026-11-01, in review of the [portal mock](https://claude.ai/artifact/WJ
 12. **The retry policy is fixed for the first release**: backoff from 2 minutes to an hour, parked after 24 hours of failures, revisited after the integration tests (requirement 11).
 13. **JIM warns about the GAL loop** rather than leaving it to the docs (requirement 23).
 14. **Exchange gets its own Operations tab**, separate from Passwords, whose lifecycle differs (requirement 13).
+
+Made on 2026-11-01, in review of the [implementation plan](../plans/EXCHANGE_MAILBOX_PROVISIONING.md):
+
+15. **An `https://` endpoint is trusted through JIM's Certificates store**, as LDAPS is, rather than through a certificate setting of its own (requirement 1). The plan's other decisions (a separate Exchange queue on a shared delivery scheduler, 90-day retention for Exchange follow-ups, and delivery behind a feature flag) change no requirement and are recorded in the plan.
 
 ## Open Questions
 
