@@ -4780,6 +4780,92 @@ function Get-LabDomainPasswordPolicyChange {
     return $change
 }
 
+function Get-LabPasswordTemplateChange {
+    <#
+    .SYNOPSIS
+        Brings the [System Access] password settings of a Group Policy security template (GptTmpl.inf) to the Windows
+        defaults (minimum age 1 day, maximum age 42 days, minimum length 7, complexity on, history 24). Returns the
+        template's lines with the change made, and the names of the settings it changed: none means it was right.
+
+    .DESCRIPTION
+        Setting the domain's own policy (Get-LabDomainPasswordPolicyChange) is not enough on its own. Exchange
+        /PrepareAD can rewrite the Default Domain Policy's template with the domain's values of that moment, and on a
+        domain Group Policy has not yet reached they are the starting values (length 0, history 0, age 0). Group
+        Policy's Security extension then writes those back onto the domain at its next apply, over what Configure set:
+        GENTIAN's did, during the suite of rebuild run 41300223125 (JIM#2412). So Configure puts the template right too.
+
+        A setting in the section with another value is rewritten in place; one the section lacks is added at its end;
+        a template without the section gets it at the end. Every other line is left as it is.
+
+    .PARAMETER Line
+        The template's lines.
+
+    .OUTPUTS
+        An object with Line (the template's lines, changed) and Changed (the names of the settings changed).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [AllowEmptyString()]
+        [string[]]$Line
+    )
+
+    $defaults = [ordered]@{
+        MinimumPasswordAge    = 1
+        MaximumPasswordAge    = 42
+        MinimumPasswordLength = 7
+        PasswordComplexity    = 1
+        PasswordHistorySize   = 24
+    }
+    $result = [System.Collections.Generic.List[string]]::new()
+    $changed = [System.Collections.Generic.List[string]]::new()
+    $seen = @{}
+    $inSection = $false
+    $sectionFound = $false
+
+    # The settings the section lacks, added where it ends.
+    $addMissing = {
+        foreach ($name in $defaults.Keys) {
+            if (-not $seen.ContainsKey($name)) {
+                $result.Add("$name = $($defaults[$name])")
+                $changed.Add($name)
+            }
+        }
+    }
+
+    foreach ($text in $Line) {
+        if ($text -match '^\s*\[(?<section>[^\]]+)\]\s*$') {
+            if ($inSection) { . $addMissing }
+            $inSection = ($Matches['section'] -eq 'System Access')
+            if ($inSection) { $sectionFound = $true }
+            $result.Add($text)
+            continue
+        }
+        if ($inSection -and ($text -match '^\s*(?<name>[A-Za-z]+)\s*=\s*(?<value>.*?)\s*$') -and $defaults.Contains($Matches['name'])) {
+            $name = $Matches['name']
+            $seen[$name] = $true
+            if ($Matches['value'] -ne [string]$defaults[$name]) {
+                $result.Add("$name = $($defaults[$name])")
+                $changed.Add($name)
+                continue
+            }
+        }
+        $result.Add($text)
+    }
+    if ($inSection) { . $addMissing }
+    if (-not $sectionFound) {
+        $result.Add('[System Access]')
+        . $addMissing
+    }
+
+    [pscustomobject]@{
+        Line    = [string[]]$result.ToArray()
+        Changed = [string[]]$changed.ToArray()
+    }
+}
+
 function Get-LabOldPasswordAllowedPeriod {
     <#
     .SYNOPSIS
@@ -4817,7 +4903,7 @@ Export-ModuleMember -Function @(
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
-    'Get-LabDomainPasswordPolicyChange',
+    'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
     'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',

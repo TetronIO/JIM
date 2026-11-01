@@ -26,7 +26,8 @@
                  certificate, and (when asked) the Recycle Bin. Beyond post-provision.sh, it stops a previous
                  password working after a change (OldPasswordAllowedPeriod=0), which Samba never allows anyway,
                  and sets the domain password policy to the Windows defaults itself rather than waiting for
-                 Group Policy to write them.
+                 Group Policy to write them, in the Default Domain Policy as well as on the domain, because Exchange
+                 /PrepareAD can leave the starting values in the policy.
       Verify     Read it all back, then prove the delegation as svc-jim over LDAPS, as post-provision.sh does.
                  Throws if any required check fails.
 
@@ -549,6 +550,39 @@ function Set-ServiceAccount {
     }
 }
 
+function Get-DefaultDomainPolicyPath {
+    # The Default Domain Policy has the same GUID in every domain. Returns its folder in SYSVOL and its directory object.
+    param([string]$DnsDomain, [string]$BaseDn)
+    $guid = '{31B2F340-016D-11D2-945F-00C04FB984F9}'
+    $sysvol = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters' -Name SysVol -ErrorAction Stop).SysVol
+    [pscustomobject]@{
+        Folder   = Join-Path $sysvol "$DnsDomain\Policies\$guid"
+        Template = Join-Path $sysvol "$DnsDomain\Policies\$guid\MACHINE\Microsoft\Windows NT\SecEdit\GptTmpl.inf"
+        Dn       = "CN=$guid,CN=Policies,CN=System,$BaseDn"
+    }
+}
+
+function Set-DefaultDomainPolicyPasswordTemplate {
+    # Exchange /PrepareAD can leave the domain's starting values (length 0, history 0, age 0) in the Default Domain
+    # Policy, and Group Policy then writes them back over the domain's own policy (#2412). Put the template right.
+    param([string]$DnsDomain, [string]$BaseDn)
+    $policy = Get-DefaultDomainPolicyPath -DnsDomain $DnsDomain -BaseDn $BaseDn
+    $template = Get-LabPasswordTemplateChange -Line @(Get-Content -LiteralPath $policy.Template -Encoding Unicode -ErrorAction Stop)
+    if ($template.Changed.Count -eq 0) {
+        return
+    }
+    Set-Content -LiteralPath $policy.Template -Value $template.Line -Encoding Unicode
+
+    # Group Policy applies a GPO again only when its version moves. The computer half is the low 16 bits, so one more,
+    # the same in GPT.INI and on the directory object.
+    $version = [int](Get-ADObject -Identity $policy.Dn -Properties versionNumber).versionNumber + 1
+    $gptIni = Join-Path $policy.Folder 'GPT.INI'
+    $ini = @(Get-Content -LiteralPath $gptIni -ErrorAction Stop) -replace '^Version=\d+$', "Version=$version"
+    Set-Content -LiteralPath $gptIni -Value $ini -Encoding Ascii
+    Set-ADObject -Identity $policy.Dn -Replace @{ versionNumber = $version }
+    Set-Changed "Set the Default Domain Policy's password settings to the Windows defaults ($(@($template.Changed | Sort-Object) -join ', ')); version $version"
+}
+
 function Set-LdapsCertificate {
     param([object]$Info, [string[]]$Extra, [string]$ExportName)
 
@@ -660,7 +694,9 @@ function Invoke-ConfigurePhase {
     if (Set-LabOldPasswordAllowedPeriod) { Set-Changed 'Stopped the previous password working after a change (OldPasswordAllowedPeriod=0)' }
 
     # The Windows defaults, set here rather than left to Group Policy, which may not have written them onto the
-    # domain before the baseline checkpoint (#2412). The password scenarios are built on them.
+    # domain before the baseline checkpoint (#2412). The password scenarios are built on them. The Default Domain
+    # Policy first, so a Group Policy apply from now on writes the same values as the domain's own policy below.
+    Set-DefaultDomainPolicyPasswordTemplate -DnsDomain $info.DnsDomain -BaseDn $base
     $policyChange = Get-LabDomainPasswordPolicyChange -Policy (Get-ADDefaultDomainPasswordPolicy -Identity $info.DnsDomain)
     if ($policyChange.Count -gt 0) {
         Set-ADDefaultDomainPasswordPolicy -Identity $info.DnsDomain @policyChange
@@ -730,6 +766,19 @@ function Invoke-VerifyPhase {
         [pscustomobject]@{
             Passed = ($wrong.Count -eq 0)
             Detail = "complexity=$($policy.ComplexityEnabled), min length=$($policy.MinPasswordLength), history=$($policy.PasswordHistoryCount), min age=$($policy.MinPasswordAge.TotalDays) day(s), max age=$($policy.MaxPasswordAge.TotalDays) day(s); not at the default: $($wrong -join ', ')"
+        }
+    }
+
+    # Group Policy writes the Default Domain Policy's values onto the domain at every apply, so they must agree (#2412).
+    Add-Check "The Default Domain Policy's password settings are at the Windows defaults" {
+        $policy = Get-DefaultDomainPolicyPath -DnsDomain $info.DnsDomain -BaseDn $base
+        $template = @(Get-Content -LiteralPath $policy.Template -Encoding Unicode -ErrorAction Stop)
+        $wrong = @((Get-LabPasswordTemplateChange -Line $template).Changed | Sort-Object)
+        $settings = @($template | Where-Object { $_ -match '^\s*(MinimumPasswordAge|MaximumPasswordAge|MinimumPasswordLength|PasswordComplexity|PasswordHistorySize)\s*=' } | ForEach-Object { $_ -replace '\s', '' })
+        $version = (Get-ADObject -Identity $policy.Dn -Properties versionNumber).versionNumber
+        [pscustomobject]@{
+            Passed = ($wrong.Count -eq 0)
+            Detail = "$($settings -join ', '), version $version; not at the default: $($wrong -join ', ')"
         }
     }
 
