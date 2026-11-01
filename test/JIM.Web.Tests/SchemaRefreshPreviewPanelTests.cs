@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Pages.Admin.Components;
@@ -166,7 +167,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Discard_WithOnlyClassificationChanges_InvokesOnDiscardWithoutAskingForConfirmation()
+    public async Task Discard_WithOnlyClassificationChanges_InvokesOnDiscardWithoutAskingForConfirmationAsync()
     {
         // Cancelling keeps the classification JIM has stored, which is what matching reads, so nothing drifts and a
         // confirmation would be friction with no protective value.
@@ -176,13 +177,13 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             .Add(c => c.Result, ClassificationOnlyResult())
             .Add(c => c.OnDiscard, () => discarded = true));
 
-        cut.Find("[data-testid=jim-discard-schema-refresh]").Click();
+        await cut.Find("[data-testid=jim-discard-schema-refresh]").ClickAsync();
 
         Assert.That(discarded, Is.True);
     }
 
     [Test]
-    public void Discard_WithAdditionsOnly_InvokesOnDiscardWithoutAskingForConfirmation()
+    public async Task Discard_WithAdditionsOnly_InvokesOnDiscardWithoutAskingForConfirmationAsync()
     {
         // Discarding additions costs nothing (the next refresh finds them again), so a confirmation dialog here
         // would be friction with no protective value.
@@ -197,7 +198,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             .Add(c => c.Result, result)
             .Add(c => c.OnDiscard, () => discarded = true));
 
-        cut.Find("[data-testid=jim-discard-schema-refresh]").Click();
+        await cut.Find("[data-testid=jim-discard-schema-refresh]").ClickAsync();
 
         Assert.That(discarded, Is.True);
     }
@@ -292,7 +293,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void ApplyAndDisable_ShowsThePlanThenConfirmsThroughIt()
+    public async Task ApplyAndDisable_ShowsThePlanThenConfirmsThroughItAsync()
     {
         var result = new SchemaRefreshResult { Success = true, RemovedObjectTypes = ["computer"] };
         var dependents = new SchemaRefreshDependents();
@@ -314,7 +315,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             .Add(c => c.Dependents, dependents)
             .Add(c => c.OnApplyWithDisables, () => applied = true));
 
-        cut.Find("[data-testid=jim-apply-disable-schema-refresh]").Click();
+        await cut.Find("[data-testid=jim-apply-disable-schema-refresh]").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -323,12 +324,12 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             Assert.That(applied, Is.False, "Opening the plan must not apply it.");
         }
 
-        provider.Find("[data-testid=jim-confirm-apply-disable]").Click();
+        await provider.Find("[data-testid=jim-confirm-apply-disable]").ClickAsync();
         Assert.That(applied, Is.True);
     }
 
     [Test]
-    public void ApplyAndRemove_ShowsTheImpactAndTheExactWarningThenConfirmsThroughIt()
+    public async Task ApplyAndRemove_ShowsTheImpactAndTheExactWarningThenConfirmsThroughItAsync()
     {
         var result = new SchemaRefreshResult
         {
@@ -357,7 +358,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             .Add(c => c.RemovalImpact, impact)
             .Add(c => c.OnApplyWithRemovals, () => applied = true));
 
-        cut.Find("[data-testid=jim-apply-remove-schema-refresh]").Click();
+        await cut.Find("[data-testid=jim-apply-remove-schema-refresh]").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -369,7 +370,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             Assert.That(applied, Is.False, "Opening the plan must not apply it.");
         }
 
-        provider.Find("[data-testid=jim-confirm-apply-remove]").Click();
+        await provider.Find("[data-testid=jim-confirm-apply-remove]").ClickAsync();
         Assert.That(applied, Is.True);
     }
 
@@ -393,7 +394,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void Apply_InvokesOnApply()
+    public async Task Apply_InvokesOnApplyAsync()
     {
         var result = new SchemaRefreshResult
         {
@@ -406,7 +407,7 @@ public class SchemaRefreshPreviewPanelTests : JimComponentTestContext
             .Add(c => c.Result, result)
             .Add(c => c.OnApply, () => applied = true));
 
-        cut.Find("[data-testid=jim-apply-schema-refresh]").Click();
+        await cut.Find("[data-testid=jim-apply-schema-refresh]").ClickAsync();
 
         Assert.That(applied, Is.True);
     }

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AngleSharp.Dom;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -126,7 +127,7 @@ public class DeletedObjectsTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeletedObjects_DeletedMetaverseObjectRow_NamesItsType()
+    public async Task DeletedObjects_DeletedMetaverseObjectRow_NamesItsTypeAsync()
     {
         SetupMvoChanges(
         [
@@ -143,13 +144,13 @@ public class DeletedObjectsTests : JimComponentTestContext
 
         // Switch to the Deleted Metaverse Objects tab.
         var tabs = cut.FindAll(".mud-tab");
-        tabs[1].Click();
+        await tabs[1].ClickAsync();
 
         cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("User in the Metaverse")));
     }
 
     [Test]
-    public void DeletedObjects_DeletedByAPerson_LinksTheirMetaverseObject()
+    public async Task DeletedObjects_DeletedByAPerson_LinksTheirMetaverseObjectAsync()
     {
         // Deleted By used to link a person to /users/{id}, a route that does not exist (#2066).
         var personId = Guid.NewGuid();
@@ -170,7 +171,7 @@ public class DeletedObjectsTests : JimComponentTestContext
         var cut = Render<DeletedObjects>();
 
         // Deleted By is on the Deleted Metaverse Objects tab.
-        cut.FindAll(".mud-tab")[1].Click();
+        await cut.FindAll(".mud-tab")[1].ClickAsync();
 
         cut.WaitForAssertion(() =>
             Assert.That(cut.Find("[data-testid=jim-initiator-user] a").GetAttribute("href"), Is.EqualTo($"/t/users/v/{personId}")));
@@ -183,7 +184,7 @@ public class DeletedObjectsTests : JimComponentTestContext
     /// hard-coded to /t/users/ fails this as surely as the old one did.
     /// </summary>
     [Test]
-    public void DeletedObjects_DeletedMetaverseObjectHistoryWithAReference_LinksTheReferencedMetaverseObject()
+    public async Task DeletedObjects_DeletedMetaverseObjectHistoryWithAReference_LinksTheReferencedMetaverseObjectAsync()
     {
         var deletionId = Guid.NewGuid();
         var managerId = Guid.NewGuid();
@@ -229,18 +230,18 @@ public class DeletedObjectsTests : JimComponentTestContext
         // MudDialogs, so their content renders into the provider rather than into the page.
         var provider = Render<MudDialogProvider>();
         var cut = Render<DeletedObjects>();
-        cut.FindAll(".mud-tab")[1].Click();
+        await cut.FindAll(".mud-tab")[1].ClickAsync();
 
         // Wait only to find the row's View button, then click it once: a click inside a retried wait could open
         // the dialog more than once and would hide which half failed.
         cut.WaitForAssertion(() => Assert.That(FindMvoViewButton(cut), Is.Not.Null));
-        FindMvoViewButton(cut)!.Click();
+        await FindMvoViewButton(cut)!.ClickAsync();
 
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<ChangeHistoryTimeline>(), Is.True));
-        provider.FindComponent<ChangeHistoryTimeline>()
+        await provider.FindComponent<ChangeHistoryTimeline>()
             .FindAll(".change-card")
             .Single(c => c.TextContent.Contains("Manager"))
-            .Click();
+            .ClickAsync();
 
         provider.WaitForAssertion(() =>
             Assert.That(provider.FindAll("a").Single(a => a.TextContent.Trim() == "Ada Lovelace").GetAttribute("href"),

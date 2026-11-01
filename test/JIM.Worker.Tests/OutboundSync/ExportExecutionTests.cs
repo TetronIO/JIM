@@ -163,7 +163,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -258,7 +258,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -332,7 +332,7 @@ public class ExportExecutionTests
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -399,7 +399,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -482,7 +482,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -535,7 +535,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -588,7 +588,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -643,7 +643,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -720,7 +720,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -786,7 +786,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
@@ -803,7 +803,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -892,7 +892,7 @@ public class ExportExecutionTests
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
             ExternalIdAttributeId = objectGuidAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
@@ -909,7 +909,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1015,7 +1015,7 @@ public class ExportExecutionTests
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
             ExternalIdAttributeId = idAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(pendingProvisioningCso);
         SyncRepo.SeedConnectedSystemObject(pendingProvisioningCso);
@@ -1031,7 +1031,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1106,7 +1106,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -1123,7 +1123,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0, // Starting at 0 - this is the first attempt
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1254,7 +1254,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -1271,7 +1271,7 @@ public class ExportExecutionTests
             CreatedAt = DateTime.UtcNow.AddHours(-1),
             ErrorCount = errorCount,
             LastAttemptedAt = errorCount > 0 ? DateTime.UtcNow.AddMinutes(-1) : null,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1313,7 +1313,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -1328,7 +1328,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1391,7 +1391,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -1408,7 +1408,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow.AddHours(-1),
             ErrorCount = 1, // Already failed once
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1489,7 +1489,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1549,7 +1549,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -1601,7 +1601,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Exported,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1661,7 +1661,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -1710,7 +1710,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1769,7 +1769,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -1814,7 +1814,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -1829,7 +1829,7 @@ public class ExportExecutionTests
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow.AddMinutes(-10 + i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -1863,7 +1863,7 @@ public class ExportExecutionTests
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
                 MetaverseObjectId = mvoId,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -1887,7 +1887,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -1903,7 +1903,7 @@ public class ExportExecutionTests
                 ChangeType = PendingExportChangeType.Update,
                 HasUnresolvedReferences = true,
                 CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -2003,7 +2003,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -2018,7 +2018,7 @@ public class ExportExecutionTests
                 Status = PendingExportStatus.Pending,
                 ChangeType = PendingExportChangeType.Update,
                 CreatedAt = DateTime.UtcNow.AddMinutes(-10 + i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -2049,7 +2049,7 @@ public class ExportExecutionTests
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
                 MetaverseObjectId = mvoId,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -2071,7 +2071,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -2087,7 +2087,7 @@ public class ExportExecutionTests
                 ChangeType = PendingExportChangeType.Update,
                 HasUnresolvedReferences = true,
                 CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -2215,7 +2215,7 @@ public class ExportExecutionTests
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
                 MetaverseObjectId = mvoId,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -2237,7 +2237,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -2253,7 +2253,7 @@ public class ExportExecutionTests
                 ChangeType = PendingExportChangeType.Update,
                 HasUnresolvedReferences = true,
                 CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -2368,7 +2368,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -2385,7 +2385,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -2410,7 +2410,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -2490,7 +2490,7 @@ public class ExportExecutionTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
 
@@ -2507,7 +2507,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
             ErrorCount = 0,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -2570,7 +2570,7 @@ public class ExportExecutionTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             MetaverseObjectId = managerMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -2590,7 +2590,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -2615,7 +2615,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             HasUnresolvedReferences = true,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+            AttributeValueChanges = [managerChange]
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -2687,7 +2687,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         countingRepo.SeedConnectedSystemObject(cso);
 
@@ -2711,7 +2711,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Update,
             HasUnresolvedReferences = true,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+            AttributeValueChanges = [managerChange]
         };
         countingRepo.SeedPendingExport(pendingExport);
 
@@ -2754,7 +2754,7 @@ public class ExportExecutionTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -2769,7 +2769,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -2824,7 +2824,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         syncRepo.SeedConnectedSystemObject(cso);
 
@@ -2838,7 +2838,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -2992,7 +2992,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         unrecordedCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
@@ -3009,7 +3009,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -3091,7 +3091,7 @@ public class ExportExecutionTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             Status = status,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         syncRepo.SeedConnectedSystemObject(cso);
 
@@ -3105,7 +3105,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         });
 
         return cso;
@@ -3125,7 +3125,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         syncRepo.SeedConnectedSystemObject(cso);
 
@@ -3139,7 +3139,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -3193,7 +3193,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -3208,7 +3208,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -3245,7 +3245,7 @@ public class ExportExecutionTests
             ConnectedSystemId = targetSystem.Id,
             Type = targetUserType,
             TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -3260,7 +3260,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -3320,7 +3320,7 @@ public class ExportExecutionTests
             Type = targetUserType,
             TypeId = targetUserType.Id,
             MetaverseObjectId = managerMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
             }
@@ -3337,7 +3337,7 @@ public class ExportExecutionTests
                 ConnectedSystemId = targetSystem.Id,
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);
@@ -3354,7 +3354,7 @@ public class ExportExecutionTests
                 ChangeType = PendingExportChangeType.Update,
                 HasUnresolvedReferences = true,
                 CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -3532,7 +3532,7 @@ public class ExportExecutionTests
                 ErrorCount = source.ErrorCount,
                 FailingSince = source.FailingSince,
                 LastAttemptedAt = source.LastAttemptedAt,
-                AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
+                AttributeValueChanges = new(source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
                 {
                     Id = avc.Id,
                     PendingExportId = avc.PendingExportId,
@@ -3546,7 +3546,7 @@ public class ExportExecutionTests
                     IntValue = avc.IntValue,
                     ExportAttemptCount = avc.ExportAttemptCount,
                     ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
-                }).ToList()
+                }))
             };
         }
     }
@@ -3585,7 +3585,7 @@ public class ExportExecutionTests
             ChangeType = PendingExportChangeType.Create,
             CreatedAt = createdAt,
             HasUnresolvedReferences = hasUnresolvedReferences,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         return pendingExport;
@@ -3879,7 +3879,7 @@ public class ExportExecutionTests
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
                 MetaverseObjectId = mvoId,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -4334,7 +4334,7 @@ public class ExportExecutionTests
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -4349,7 +4349,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -4407,7 +4407,7 @@ public class ExportExecutionTests
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
             JoinType = ConnectedSystemObjectJoinType.Joined,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -4422,7 +4422,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -4474,7 +4474,7 @@ public class ExportExecutionTests
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -4489,7 +4489,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -4539,7 +4539,7 @@ public class ExportExecutionTests
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -4554,7 +4554,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -4609,7 +4609,7 @@ public class ExportExecutionTests
             TypeId = targetUserType.Id,
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -4624,7 +4624,7 @@ public class ExportExecutionTests
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -4682,7 +4682,7 @@ public class ExportExecutionTests
                 Type = targetUserType,
                 TypeId = targetUserType.Id,
                 Status = ConnectedSystemObjectStatus.Normal,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+                AttributeValues = new()
             };
             ConnectedSystemObjectsData.Add(cso);
             SyncRepo.SeedConnectedSystemObject(cso);

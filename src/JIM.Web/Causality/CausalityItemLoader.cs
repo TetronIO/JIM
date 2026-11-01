@@ -108,7 +108,10 @@ public static class CausalityItemLoader
             IdentityHeader = identityHeader,
             DeletedIdentityId = deletedIdentityId,
             MetaverseObjectType = await ResolveMetaverseObjectTypeAsync(jim, item),
-            Links = links ?? CausalityPageLinks.Instance
+            Links = links ?? CausalityPageLinks.Instance,
+            FollowUps = (await jim.Activities.GetExecutionItemFollowUpsAsync(item.Id))
+                .Select(JIM.Web.Models.ExecutionItemFollowUpDisplay.From)
+                .ToList()
         };
     }
 

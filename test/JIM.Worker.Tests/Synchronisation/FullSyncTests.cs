@@ -219,7 +219,7 @@ public class FullSyncTests
             ConnectedSystemObjectId = cso.Id,
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -300,7 +300,7 @@ public class FullSyncTests
             ErrorCount = 12,
             FailingSince = failingSince,
             LastAttemptedAt = failingSince.AddDays(2),
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -359,7 +359,7 @@ public class FullSyncTests
             Status = PendingExportStatus.Parked,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 1,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -420,7 +420,7 @@ public class FullSyncTests
             Status = PendingExportStatus.ExportNotConfirmed,
             ChangeType = PendingExportChangeType.Update,
             ErrorCount = 2,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -1346,7 +1346,7 @@ public class FullSyncTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Add attribute values with back-reference to the CSO (required for repository queries)
@@ -3003,7 +3003,7 @@ public class FullSyncTests
         {
             Id = Guid.NewGuid(),
             Type = mvUserType,
-            AttributeValues = new List<MetaverseObjectAttributeValue>()
+            AttributeValues = new()
         };
         MetaverseObjectsData.Add(mvo);
 
@@ -3024,7 +3024,7 @@ public class FullSyncTests
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             DateJoined = DateTime.UtcNow,
             ExternalIdAttributeId = externalIdAttr.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -3085,7 +3085,7 @@ public class FullSyncTests
         {
             Id = Guid.NewGuid(),
             Type = mvUserType,
-            AttributeValues = new List<MetaverseObjectAttributeValue>()
+            AttributeValues = new()
         };
         MetaverseObjectsData.Add(mvo);
 
@@ -3102,7 +3102,7 @@ public class FullSyncTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned, // Was provisioned by JIM
             Status = ConnectedSystemObjectStatus.Normal, // Export completed successfully
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -3169,7 +3169,7 @@ public class FullSyncTests
                 ConnectedSystemObjectId = cso.Id,
                 Status = status,
                 ChangeType = PendingExportChangeType.Update,
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                AttributeValueChanges = new()
                 {
                     new()
                     {
@@ -4335,7 +4335,7 @@ public class FullSyncTests
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
             Status = ConnectedSystemObjectStatus.Normal,
             DateJoined = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {

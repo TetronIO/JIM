@@ -243,52 +243,55 @@ public partial class SyncEngine
         PendingExport stagedPendingExport,
         List<PendingExportAttributeValueChange> newChanges)
     {
-        var replacedCount = 0;
-        var addedCount = 0;
-
         newChanges = WithOneChangePerSingleValuedAttribute(newChanges);
 
-        // Drop the staged changes this evaluation supersedes wholesale before the value-level merge below
-        // (#1199): an incoming Update or RemoveAll sets the attribute's entire value set, so any staged
-        // change for that attribute is void whatever its own value or change type, and the value-level keys
-        // cannot see that.
+        // Merge keys: single-valued attributes key by attribute id only (newest wins), multi-valued attributes key by
+        // attribute id plus value (each distinct value preserved). Every change is keyed once and the superseded staged
+        // changes leave in one pass (#2658): re-keying every staged change for each incoming one that collided, and
+        // removing them one at a time, cost the square of a large group's membership. The outcome is the one merging
+        // the incoming changes in order gives, each replacing whatever already holds its key: the staged changes left
+        // keep their order, then the incoming changes follow in theirs, a later one for the same key taking the place of
+        // an earlier one.
+        var incomingKeys = newChanges.Select(GetAttributeChangeMergeKey).ToList();
+        var lastIncomingIndexByKey = new Dictionary<string, int>(incomingKeys.Count);
+        for (var i = 0; i < incomingKeys.Count; i++)
+            lastIncomingIndexByKey[incomingKeys[i]] = i;
+
+        // The staged changes this evaluation supersedes wholesale (#1199): an incoming Update or RemoveAll sets the
+        // attribute's entire value set, so any staged change for that attribute is void whatever its own value or change
+        // type, and the value-level keys cannot see that. Such a change takes no part in the value-level merge below.
         var wholeAttributeReplacementIds = GetWholeAttributeReplacementAttributeIds(newChanges);
-        var supersededChanges = stagedPendingExport.AttributeValueChanges
-            .Where(avc => wholeAttributeReplacementIds.Contains(avc.AttributeId))
-            .ToList();
-        foreach (var superseded in supersededChanges)
-            stagedPendingExport.AttributeValueChanges.Remove(superseded);
+        var superseded = new HashSet<PendingExportAttributeValueChange>(
+            stagedPendingExport.AttributeValueChanges.Where(staged => wholeAttributeReplacementIds.Contains(staged.AttributeId)),
+            ReferenceEqualityComparer.Instance);
 
-        // Build a lookup of the remaining staged changes for deduplication. Merge keys: single-valued
-        // attributes key by attribute id only (newest wins), multi-valued attributes key by attribute id
-        // plus value (each distinct value preserved).
-        var existingChangeKeys = new HashSet<string>();
-        foreach (var existing in stagedPendingExport.AttributeValueChanges)
-            existingChangeKeys.Add(GetAttributeChangeMergeKey(existing));
-
-        foreach (var newChange in newChanges)
+        // The staged changes an incoming change replaces (same attribute, or attribute and value): export evaluation
+        // wins, because it derives from the latest Metaverse Object state. Their keys are the incoming keys already held.
+        var heldKeys = new HashSet<string>();
+        foreach (var (replacedChange, key) in stagedPendingExport.AttributeValueChanges
+                     .Where(staged => !wholeAttributeReplacementIds.Contains(staged.AttributeId))
+                     .Select(staged => (Change: staged, Key: GetAttributeChangeMergeKey(staged)))
+                     .Where(keyed => lastIncomingIndexByKey.ContainsKey(keyed.Key)))
         {
-            var key = GetAttributeChangeMergeKey(newChange);
-            if (existingChangeKeys.Contains(key))
-            {
-                // Same attribute (single-valued) or attribute+value (multi-valued) already staged: remove the
-                // staged version(s) and add the newly evaluated one (newer Metaverse Object state wins).
-                var toRemove = stagedPendingExport.AttributeValueChanges
-                    .Where(avc => GetAttributeChangeMergeKey(avc) == key)
-                    .ToList();
-                foreach (var r in toRemove)
-                    stagedPendingExport.AttributeValueChanges.Remove(r);
-                stagedPendingExport.AttributeValueChanges.Add(newChange);
-                existingChangeKeys.Remove(key);
-                existingChangeKeys.Add(GetAttributeChangeMergeKey(newChange));
-                replacedCount++;
-            }
-            else
-            {
-                stagedPendingExport.AttributeValueChanges.Add(newChange);
-                existingChangeKeys.Add(key);
+            superseded.Add(replacedChange);
+            heldKeys.Add(key);
+        }
+
+        stagedPendingExport.AttributeValueChanges.RemoveAll(superseded.Contains);
+
+        // An incoming change replaces when its key is already held, by a staged change or an earlier incoming one, and is
+        // added otherwise; only the last for each key stays.
+        var replacedCount = 0;
+        var addedCount = 0;
+        for (var i = 0; i < newChanges.Count; i++)
+        {
+            if (heldKeys.Add(incomingKeys[i]))
                 addedCount++;
-            }
+            else
+                replacedCount++;
+
+            if (lastIncomingIndexByKey[incomingKeys[i]] == i)
+                stagedPendingExport.AttributeValueChanges.Add(newChanges[i]);
         }
 
         if (newChanges.Any(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue)))
@@ -586,10 +589,16 @@ public partial class SyncEngine
                     var expressionChanges = StageExportExpressionMapping(mapping, source, exportRule, mvAttributeDictionary,
                         expressionEvaluator, heldValues, flowErrors);
 
-                    // No-net-change detection for expression-based mappings
-                    var alreadyCurrent = heldValues == null
-                        ? []
-                        : expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldValues)).ToList();
+                    // No-net-change detection for expression-based mappings. A list for a multi-valued target stages one
+                    // change per value, so each is answered from one lookup of the held values, never a scan of them
+                    // (#2645), and the changes kept are those not found current, by identity, again without a scan.
+                    List<PendingExportAttributeValueChange> alreadyCurrent = [];
+                    if (heldValues != null)
+                    {
+                        var heldLookup = new HeldAttributeValues(heldValues);
+                        alreadyCurrent = expressionChanges.Where(change => IsCsoAttributeAlreadyCurrent(change, heldLookup)).ToList();
+                    }
+
                     foreach (var change in alreadyCurrent)
                     {
                         Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (expression)",
@@ -598,7 +607,8 @@ public partial class SyncEngine
 
                     csoAlreadyCurrentCount += alreadyCurrent.Count;
                     noNetChangeSkipped?.AddRange(alreadyCurrent);
-                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrent.Contains(change)));
+                    var alreadyCurrentChanges = alreadyCurrent.ToHashSet();
+                    changes.AddRange(expressionChanges.Where(change => !alreadyCurrentChanges.Contains(change)));
                     continue;
                 }
 
@@ -684,6 +694,12 @@ public partial class SyncEngine
                             source.MetaverseAttribute.Name);
                     }
                 }
+
+                // What the Connected System Object holds for the target attribute, gathered on the first value that needs
+                // no-net-change detection and kept for this mapping's values alone (#2645). A multi-valued attribute stages
+                // one change per value, and checking each against every held value cost the square of a large group's
+                // membership; the lookup answers each in constant time.
+                HeldAttributeValues? heldTargetValues = null;
 
                 foreach (var (mvoValue, attrChangeType) in stagedValues)
                 {
@@ -772,13 +788,13 @@ public partial class SyncEngine
                     // method now compares these properly by extracting the MVO ID from both representations.
                     if (canDetectNoNetChange)
                     {
-                        var cacheKey = (existingCso!.Id, attributeChange.AttributeId);
-                        var existingCsoValues = csoAttributeCache![cacheKey];
+                        var targetCsoId = existingCso!.Id;
+                        heldTargetValues ??= new HeldAttributeValues(csoAttributeCache![(targetCsoId, attributeChange.AttributeId)]);
 
-                        if (IsCsoAttributeAlreadyCurrent(attributeChange, existingCsoValues))
+                        if (IsCsoAttributeAlreadyCurrent(attributeChange, heldTargetValues))
                         {
                             Log.Debug("CreateAttributeValueChanges: Skipping attribute {AttrId} for CSO {CsoId} - CSO already has current value (direct)",
-                                attributeChange.AttributeId, existingCso.Id);
+                                attributeChange.AttributeId, targetCsoId);
                             csoAlreadyCurrentCount++;
                             noNetChangeSkipped?.Add(attributeChange);
                             continue;
@@ -1414,6 +1430,38 @@ public partial class SyncEngine
                 // If the value exists, we need to remove it (not a no-net-change)
                 return !valuesList.Any(ev => ValuesMatch(pendingChange, ev));
 
+            default:
+                return IsCsoAttributeAlreadyCurrentAsAWhole(pendingChange, valuesList);
+        }
+    }
+
+    /// <summary>
+    /// The same answer as <see cref="IsCsoAttributeAlreadyCurrent(PendingExportAttributeValueChange, IEnumerable{ConnectedSystemObjectAttributeValue})"/>,
+    /// against values gathered once for every change staged for the attribute (#2645): a per-value Add or Remove is
+    /// answered by lookup instead of by comparing it with every value the Connected System Object holds, which for a
+    /// large group cost the square of its membership.
+    /// </summary>
+    /// <param name="pendingChange">The pending change to export.</param>
+    /// <param name="heldValues">The Connected System Object's values for the change's attribute.</param>
+    /// <returns>True if the operation is a no-net-change (should be skipped), false otherwise.</returns>
+    internal static bool IsCsoAttributeAlreadyCurrent(PendingExportAttributeValueChange pendingChange, HeldAttributeValues heldValues) =>
+        pendingChange.ChangeType switch
+        {
+            PendingExportAttributeChangeType.Add => heldValues.HoldsMatchFor(pendingChange),
+            PendingExportAttributeChangeType.Remove => !heldValues.HoldsMatchFor(pendingChange),
+            _ => IsCsoAttributeAlreadyCurrentAsAWhole(pendingChange, heldValues.Values)
+        };
+
+    /// <summary>
+    /// No-net-change detection for a change that sets, or clears, the attribute as a whole rather than adding or removing
+    /// one of its values: a RemoveAll, or an Update.
+    /// </summary>
+    private static bool IsCsoAttributeAlreadyCurrentAsAWhole(
+        PendingExportAttributeValueChange pendingChange,
+        IReadOnlyList<ConnectedSystemObjectAttributeValue> valuesList)
+    {
+        switch (pendingChange.ChangeType)
+        {
             case PendingExportAttributeChangeType.RemoveAll:
                 // For RemoveAll: skip if CSO has no values for this attribute (no-net-change)
                 // If CSO has values, we need to remove them (not a no-net-change)
@@ -1446,8 +1494,13 @@ public partial class SyncEngine
     /// - Pending Exports from sync store resolved DNs in StringValue
     /// - CSO values from AD import store DNs in UnresolvedReferenceValue
     /// This method handles cross-field comparison for these cases.
+    /// <para>
+    /// <see cref="HeldAttributeValues"/> answers the same question by lookup, keyed exactly as this method decides, so a
+    /// change to this method needs the same change there; <c>HeldAttributeValuesDifferentialTests</c> fails until the two
+    /// agree (#2645).
+    /// </para>
     /// </remarks>
-    private static bool ValuesMatch(
+    internal static bool ValuesMatch(
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue existingValue)
     {
@@ -1877,13 +1930,15 @@ public partial class SyncEngine
     /// creation and its password's delivery. An incoming change with a different value is a genuine change and still
     /// supersedes the held one.
     /// </summary>
+    /// <typeparam name="TChanges">The collection the changes are held in; a filtered result is a new one of the same type.</typeparam>
     /// <param name="incomingChanges">The newly evaluated export changes.</param>
     /// <param name="existingChanges">The changes on the Pending Export they are about to be merged into.</param>
     /// <returns><paramref name="incomingChanges"/> itself when nothing is held (the ordinary case, allocation-free),
     /// otherwise a new list without the restatements, in their original order.</returns>
-    internal static List<PendingExportAttributeValueChange> WithoutChangesRestatingAHeldChange(
-        List<PendingExportAttributeValueChange> incomingChanges,
+    internal static TChanges WithoutChangesRestatingAHeldChange<TChanges>(
+        TChanges incomingChanges,
         IEnumerable<PendingExportAttributeValueChange> existingChanges)
+        where TChanges : ICollection<PendingExportAttributeValueChange>, new()
     {
         ArgumentNullException.ThrowIfNull(incomingChanges);
         ArgumentNullException.ThrowIfNull(existingChanges);
@@ -1895,7 +1950,10 @@ public partial class SyncEngine
         if (heldAssertions.Count == 0)
             return incomingChanges;
 
-        return incomingChanges.Where(change => !heldAssertions.Contains(HeldChangeAssertion(change))).ToList();
+        var kept = new TChanges();
+        foreach (var change in incomingChanges.Where(change => !heldAssertions.Contains(HeldChangeAssertion(change))))
+            kept.Add(change);
+        return kept;
     }
 
     /// <summary>

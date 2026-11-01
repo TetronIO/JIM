@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -314,13 +315,13 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void InitialPasswordSection_WhenTheTwoPasswordFieldsMatch_RaisesThePassword()
+    public async Task InitialPasswordSection_WhenTheTwoPasswordFieldsMatch_RaisesThePasswordAsync()
     {
         string? raised = null;
         var cut = RenderStatic(onStaticPasswordEntered: EventCallback.Factory.Create<string?>(this, p => raised = p));
 
-        cut.Find("[data-testid=initial-password-static]").Input("Brown-Chicken-Ladder-47");
-        cut.Find("[data-testid=initial-password-static-confirm]").Input("Brown-Chicken-Ladder-47");
+        await cut.Find("[data-testid=initial-password-static]").InputAsync("Brown-Chicken-Ladder-47");
+        await cut.Find("[data-testid=initial-password-static-confirm]").InputAsync("Brown-Chicken-Ladder-47");
 
         Assert.That(raised, Is.EqualTo("Brown-Chicken-Ladder-47"));
     }
@@ -331,13 +332,13 @@ public class SyncRuleInitialPasswordSectionTests : JimComponentTestContext
     /// nobody typed. Nothing usable is raised until they agree.
     /// </summary>
     [Test]
-    public void InitialPasswordSection_WhenTheTwoPasswordFieldsDiffer_RaisesNothingAndSaysSo()
+    public async Task InitialPasswordSection_WhenTheTwoPasswordFieldsDiffer_RaisesNothingAndSaysSoAsync()
     {
         var raised = new List<string?>();
         var cut = RenderStatic(onStaticPasswordEntered: EventCallback.Factory.Create<string?>(this, p => raised.Add(p)));
 
-        cut.Find("[data-testid=initial-password-static]").Input("Brown-Chicken-Ladder-47");
-        cut.Find("[data-testid=initial-password-static-confirm]").Input("Brown-Chicken-Ladder-48");
+        await cut.Find("[data-testid=initial-password-static]").InputAsync("Brown-Chicken-Ladder-47");
+        await cut.Find("[data-testid=initial-password-static-confirm]").InputAsync("Brown-Chicken-Ladder-48");
 
         using (Assert.EnterMultipleScope())
         {

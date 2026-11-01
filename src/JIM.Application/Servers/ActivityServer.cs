@@ -483,6 +483,51 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// The follow-ups of one Run Profile Execution Item (#2668), oldest first: work it set in motion that finishes after
+    /// its run, each with where it stands now.
+    /// </summary>
+    public async Task<List<ExecutionItemFollowUp>> GetExecutionItemFollowUpsAsync(Guid executionItemId)
+    {
+        var byItem = await GetExecutionItemFollowUpsAsync([executionItemId]);
+        return byItem.GetValueOrDefault(executionItemId, []);
+    }
+
+    /// <summary>
+    /// The follow-ups of several Run Profile Execution Items in one read, keyed by item; an item with none is left out.
+    /// An Initial Password's standing comes from the password queue and its delivery Activities, as the person's own
+    /// password history reads it.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<ExecutionItemFollowUp>>> GetExecutionItemFollowUpsAsync(IReadOnlyCollection<Guid> executionItemIds)
+    {
+        var activities = await Application.Repository.Activity.GetFollowUpActivitiesAsync(executionItemIds);
+        var byItem = new Dictionary<Guid, List<ExecutionItemFollowUp>>();
+        foreach (var activity in activities)
+        {
+            var itemId = activity.ParentRunProfileExecutionItemId!.Value;
+            var followUp = new ExecutionItemFollowUp
+            {
+                ActivityId = activity.Id,
+                RunProfileExecutionItemId = itemId,
+                Created = activity.Created,
+                TargetType = activity.TargetType,
+                TargetName = activity.TargetName,
+                ConnectedSystemId = activity.ConnectedSystemId,
+                Status = activity.Status,
+                Message = activity.Message,
+                PasswordOutcomes = activity.TargetType == ActivityTargetType.PasswordSynchronisation
+                    ? await Application.PasswordSynchronisation.GetChangeOutcomesAsync(activity.Id)
+                    : null
+            };
+
+            if (!byItem.TryGetValue(itemId, out var followUps))
+                byItem[itemId] = followUps = [];
+            followUps.Add(followUp);
+        }
+
+        return byItem;
+    }
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>

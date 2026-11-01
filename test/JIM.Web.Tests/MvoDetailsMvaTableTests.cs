@@ -82,14 +82,13 @@ public class MvoDetailsMvaTableTests : JimComponentTestContext
         {
             Id = MetaverseObjectId,
             Type = new MetaverseObjectType { Id = 3, Name = "Group" },
-            AttributeValues = Enumerable.Range(0, valueCount)
+            AttributeValues = new(Enumerable.Range(0, valueCount)
                 .Select(i => new MetaverseObjectAttributeValue
                 {
                     Id = Guid.NewGuid(),
                     Attribute = attribute,
                     StringValue = $"value-{i:D4}"
-                })
-                .ToList()
+                }))
         };
     }
 

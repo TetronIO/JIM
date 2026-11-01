@@ -10,6 +10,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -105,7 +106,7 @@ public static class ContributorReElectionService
         // Each survivor as it was found before its first re-flow (one contributing through two rules is met twice), for
         // a caller that must leave the survivors as it found them.
         var survivorsAsFound = leaveSurvivorsAsFound
-            ? new Dictionary<Guid, (ConnectedSystemObject Survivor, MetaverseObject? MetaverseObject, List<ConnectedSystemObjectAttributeValue> AttributeValues, ConnectedSystemObjectType Type)>()
+            ? new Dictionary<Guid, (ConnectedSystemObject Survivor, MetaverseObject? MetaverseObject, ReferenceIndexedList<ConnectedSystemObjectAttributeValue> AttributeValues, ConnectedSystemObjectType Type)>()
             : null;
         try
         {
@@ -322,6 +323,12 @@ public static class ContributorReElectionService
     /// attribute (a multi-valued attribute shrinking is not a clear). An attribute that was already blank is not
     /// included. Callable before or after the pending changes are applied.
     /// </summary>
+    /// <remarks>
+    /// Whether a held value is among the removals is asked of every value of each attribute that lost one, so it is
+    /// answered from a set of the removals keyed by reference, as the removals' own membership check is (the values do
+    /// not override equality). Several callers hand over a list copied from the pending removals, and a list answers by
+    /// scanning itself, so emptying a 50,000-member group cost its membership squared over two (#2666).
+    /// </remarks>
     /// <param name="mvo">The Metaverse Object the changes apply to.</param>
     /// <param name="additions">The attribute values added this run.</param>
     /// <param name="removals">The attribute values removed this run.</param>
@@ -334,11 +341,15 @@ public static class ContributorReElectionService
             return new HashSet<int>();
 
         var reAddedAttributeIds = additions.Select(av => av.AttributeId).ToHashSet();
-        return removals
+        var clearedAttributeIds = removals
             .Select(av => av.AttributeId)
-            .Distinct()
-            .Where(attributeId => !reAddedAttributeIds.Contains(attributeId) &&
-                                  !mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removals.Contains(av)))
+            .Where(attributeId => !reAddedAttributeIds.Contains(attributeId))
             .ToHashSet();
+        if (clearedAttributeIds.Count == 0)
+            return clearedAttributeIds;
+
+        var removed = new HashSet<MetaverseObjectAttributeValue>(removals, ReferenceEqualityComparer.Instance);
+        clearedAttributeIds.RemoveWhere(attributeId => mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removed.Contains(av)));
+        return clearedAttributeIds;
     }
 }

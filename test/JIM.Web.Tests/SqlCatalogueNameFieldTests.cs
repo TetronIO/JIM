@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Connectors.Sql;
 using JIM.Web.Pages.Admin.Components.Sql;
@@ -17,7 +18,7 @@ namespace JIM.Web.Tests;
 public class SqlCatalogueNameFieldTests : JimComponentTestContext
 {
     [Test]
-    public void TypingInTheField_CommitsNothingUntilTheNameIsFinished()
+    public async Task TypingInTheField_CommitsNothingUntilTheNameIsFinishedAsync()
     {
         var committed = new List<string?>();
         var cut = Render<SqlCatalogueNameField>(p => p
@@ -26,15 +27,15 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
             .Add(c => c.ValueChanged, (string? value) => committed.Add(value)));
 
         var input = cut.Find("input");
-        input.Input("A");
-        input.Input("AP");
-        input.Input("APP_U");
+        await input.InputAsync("A");
+        await input.InputAsync("AP");
+        await input.InputAsync("APP_U");
 
         Assert.That(committed, Is.Empty, "a name part-way through being typed is not a name");
     }
 
     [Test]
-    public void LeavingTheField_CommitsTheNameTyped()
+    public async Task LeavingTheField_CommitsTheNameTypedAsync()
     {
         // Where the catalogue cannot be read the field is free text, so a typed name has to be committed somehow.
         var committed = new List<string?>();
@@ -43,14 +44,14 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
             .Add(c => c.ValueChanged, (string? value) => committed.Add(value)));
 
         var input = cut.Find("input");
-        input.Input("EMPLOYEES");
-        LeaveByTab(input);
+        await input.InputAsync("EMPLOYEES");
+        await LeaveByTabAsync(input);
 
         cut.WaitForAssertion(() => Assert.That(committed, Is.EqualTo(new[] { "EMPLOYEES" })));
     }
 
     [Test]
-    public void AnchorPicker_TypingAColumnName_AddsNoColumnUntilItIsFinished()
+    public async Task AnchorPicker_TypingAColumnName_AddsNoColumnUntilItIsFinishedAsync()
     {
         var objectType = new SqlObjectTypeDocument { Name = "PersonView", Table = "V_EMPLOYEES" };
         var cut = Render<SqlAnchorColumnsField>(p => p
@@ -58,15 +59,15 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
             .Add(c => c.ColumnOptions, ["EMPLOYEE_ID", "EMAIL"]));
 
         var input = cut.Find("input");
-        input.Input("E");
-        input.Input("EM");
-        input.Input("EMP");
+        await input.InputAsync("E");
+        await input.InputAsync("EM");
+        await input.InputAsync("EMP");
 
         Assert.That(objectType.AnchorColumns ?? [], Is.Empty);
     }
 
     [Test]
-    public void AnchorPicker_PartOfANameCommittedByLeavingTheField_IsNotAColumn()
+    public async Task AnchorPicker_PartOfANameCommittedByLeavingTheField_IsNotAColumnAsync()
     {
         // Clicking a list item blurs the field before the click lands, which commits what was typed so far.
         var objectType = new SqlObjectTypeDocument { Name = "Person", Table = "EMPLOYEES" };
@@ -75,8 +76,8 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
             .Add(c => c.ColumnOptions, ["EMPLOYEE_ID", "DEPARTMENT_ID"]));
 
         var input = cut.Find("input");
-        input.Input("EP");
-        LeaveByTab(input);
+        await input.InputAsync("EP");
+        await LeaveByTabAsync(input);
 
         Assert.That(objectType.AnchorColumns ?? [], Is.Empty, "'EP' is not one of the table's columns");
     }
@@ -101,24 +102,24 @@ public class SqlCatalogueNameFieldTests : JimComponentTestContext
     }
 
     [Test]
-    public void AnchorPicker_ColumnsUnknown_AddsTheNameTyped()
+    public async Task AnchorPicker_ColumnsUnknown_AddsTheNameTypedAsync()
     {
         // Where the database could not be read there is no list, and the name typed is all there is.
         var objectType = new SqlObjectTypeDocument { Name = "Person", Table = "EMPLOYEES" };
         var cut = Render<SqlAnchorColumnsField>(p => p.Add(c => c.ObjectType, objectType));
 
         var input = cut.Find("input");
-        input.Input("EMPLOYEE_ID");
-        LeaveByTab(input);
+        await input.InputAsync("EMPLOYEE_ID");
+        await LeaveByTabAsync(input);
 
         cut.WaitForAssertion(() => Assert.That(objectType.AnchorColumns, Is.EqualTo(new[] { "EMPLOYEE_ID" })));
     }
 
     /// <summary>Leaves the field as a person does: Tab closes the list, then the field loses focus.</summary>
-    private static void LeaveByTab(AngleSharp.Dom.IElement input)
+    private static async Task LeaveByTabAsync(AngleSharp.Dom.IElement input)
     {
-        input.KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Tab" });
-        input.Blur();
+        await input.KeyDownAsync(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Tab" });
+        await input.BlurAsync();
     }
 
     [Test]

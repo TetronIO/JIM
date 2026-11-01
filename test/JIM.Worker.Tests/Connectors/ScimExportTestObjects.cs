@@ -49,7 +49,7 @@ internal static class ScimExportTestObjects
         return new PendingExport
         {
             ChangeType = PendingExportChangeType.Create,
-            AttributeValueChanges = changes.ToList()
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -81,7 +81,7 @@ internal static class ScimExportTestObjects
         {
             ChangeType = changeType,
             ConnectedSystemObject = connectedSystemObject,
-            AttributeValueChanges = changes.ToList()
+            AttributeValueChanges = new(changes)
         };
     }
 

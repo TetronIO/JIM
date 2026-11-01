@@ -425,7 +425,7 @@ try {
     # --- The VM ---------------------------------------------------------------------------------
     $installPending = $false
     if ($null -eq $vm) {
-        $image = Get-LabInstallImage -IsoPath $IsoPath
+        $image = Get-LabInstallImage -IsoPath $IsoPath -RecordPath (Get-LabInstallImageRecordPath -Root $PSScriptRoot)
         Write-Ok "Installation image: $($image.ImageName)$(if ($image.Evaluation) { ' (evaluation media: converted to full Datacenter by the License phase)' })"
         $null = New-Item -ItemType Directory -Path (Join-Path $VhdDirectory $Name) -Force
         New-LabUnattendIso -TemplatePath (Join-Path $guestDirectory 'autounattend.xml') -Image $image -Password $adminSecret `
@@ -532,9 +532,16 @@ try {
         else {
             Write-Ok "Shut $Name down, so the pair of checkpoints matches"
         }
-        Invoke-Checkpoint -VmName $Name
         # All or nothing: an Exchange baseline whose domain controller baseline lacks it would be reused as a pair on a
-        # retry, so if the second checkpoint fails the first is removed and the retry builds the server again.
+        # retry, so if either checkpoint fails the server's is removed and the retry builds the server again. That
+        # includes its own: a checkpoint reported as failed may still have been taken (JIM#2412).
+        try {
+            Invoke-Checkpoint -VmName $Name
+        }
+        catch {
+            Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue | Remove-VMSnapshot -Confirm:$false
+            throw "The baseline of $Name failed, so any baseline of it that could be listed was removed (the rebuild replaces, and will not stage, one its domain controller's baseline lacks): $($_.Exception.Message)"
+        }
         try {
             Invoke-Checkpoint -VmName $DomainControllerName
         }

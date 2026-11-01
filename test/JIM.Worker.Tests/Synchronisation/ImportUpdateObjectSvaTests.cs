@@ -2982,7 +2982,7 @@ public class ImportUpdateObjectSvaTests
             Type = connectedSystemObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new()
             {
@@ -3065,7 +3065,7 @@ public class ImportUpdateObjectSvaTests
             Type = connectedSystemObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso2.AttributeValues = new()
         {
             new()
             {

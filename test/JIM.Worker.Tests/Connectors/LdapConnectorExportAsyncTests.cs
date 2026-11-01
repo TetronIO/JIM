@@ -569,7 +569,7 @@ public class LdapConnectorExportAsyncTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -578,7 +578,7 @@ public class LdapConnectorExportAsyncTests
                     }
                 }
             },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -617,7 +617,7 @@ public class LdapConnectorExportAsyncTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -626,7 +626,7 @@ public class LdapConnectorExportAsyncTests
                     }
                 }
             },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -657,7 +657,7 @@ public class LdapConnectorExportAsyncTests
                 Id = Guid.NewGuid(),
                 Type = csoType
             },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -695,7 +695,7 @@ public class LdapConnectorExportAsyncTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -704,7 +704,7 @@ public class LdapConnectorExportAsyncTests
                     }
                 }
             },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {
@@ -741,7 +741,7 @@ public class LdapConnectorExportAsyncTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttribute.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new()
                     {
@@ -750,7 +750,7 @@ public class LdapConnectorExportAsyncTests
                     }
                 }
             },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
     }
 

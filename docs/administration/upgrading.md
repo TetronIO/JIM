@@ -29,6 +29,8 @@ end: {from: ready, label: Schedules back on, note: 'once checked; those you reco
 
 ## :material-clipboard-check-outline: Before you upgrade {#before-you-upgrade}
 
+You can upgrade from v0.16.0 or any later release straight to the latest, without installing the releases in between. Upgrading an installation of v0.15.0 or earlier is not supported or tested, because those releases predate the installer and were set up by hand: install the latest release afresh, as [Deployment](deployment.md) describes, with an empty database.
+
 - [ ] **Read the release notes.** Check the `CHANGELOG.md` for the target release (on the [releases page](https://github.com/TetronIO/JIM/releases), or under `docs/` in an air-gapped bundle) for breaking changes, new configuration variables, and security fixes.
 - [ ] **Rehearse in staging** against a copy of production data where practical.
 - [ ] **Take a full backup: database plus encryption keys**, as a matched pair, following [Backup & Disaster Recovery](backup-recovery.md). Take it after stopping the services (below) so the two artefacts are consistent with each other.
@@ -41,7 +43,6 @@ end: {from: ready, label: Schedules back on, note: 'once checked; those you reco
     - **With AD FS, run `Register-JIMIdentityProvider -Provider ADFS` again first** ([Keep the registration right](sso-setup/ad-fs.md#keep-the-registration-right)): the portal asks AD FS for the `allatclaims` scope, and AD FS refuses sign-in until the registration permits it.
     - **Upgrade the PowerShell module with JIM, and send API keys as `Authorization: Bearer`.** JIM refuses a key in `X-API-Key`, which earlier modules send ([API Keys](../api/authentication.md#api-keys)).
     - **Afterwards, refresh each Connected System's schema** ([Refreshing the schema](../configuration/connected-system-schema.md#refreshing-the-schema)) and run a Full Import, to pick up changes to how attributes are discovered, such as date resolutions. Pending Exports that had **Failed** are queued again, for the next export run, and an Attribute Flow to a `password` attribute exports nothing, as [Credential errors after upgrading](#credential-errors-after-upgrading) describes.
-- [ ] **Upgrading from v0.15 or earlier on Docker: put JIM's certificate in place first.** `docker-compose.production.yml` serves HTTPS itself, on host port 443 by default, from `tls/tls.crt` and `tls/tls.key` beside the compose files (see [The Certificate](tls-and-reverse-proxy.md#the-certificate)). Without them, `docker compose up` stops, naming the missing file, and your data is untouched: put the files in place and run it again. Behind a reverse proxy on the same host, use [Plain HTTP for a Proxy on the Same Host](tls-and-reverse-proxy.md#plain-http-for-a-proxy-on-the-same-host) instead, which needs no certificate.
 
 ### Pausing work first {#pausing-work}
 

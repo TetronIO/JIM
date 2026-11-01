@@ -382,9 +382,73 @@ Describe 'Cmdlets that warn what a save made the next synchronisation process' {
         }
     }
 
+    It 'Set-JIMMetaverseAttributePriority warns for each type the reorder makes a system process, and returns the list with -PassThru' {
+        InModuleScope JIM {
+            $script:Awaiting += [PSCustomObject]@{
+                ConnectedSystemId = 2; ConnectedSystemName = 'Directory'; ConnectedSystemObjectTypeId = 8
+                ObjectTypeName = 'person'; ObjectCount = 4; EstimatedDuration = $null
+            }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ MetaverseObjectTypeId = 1; MetaverseAttributeId = 12; Contributors = @(); AwaitingSynchronisation = $script:Awaiting }
+            }
+
+            $order = Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -Confirm:$false -PassThru `
+                -WarningVariable saved -WarningAction SilentlyContinue
+
+            @($saved) | Should -HaveCount 2
+            $saved[0].Message | Should -Match 'HR'
+            $saved[0].Message | Should -Match 'every user object'
+            $saved[1].Message | Should -Match 'Directory'
+            $saved[1].Message | Should -Match 'every person object'
+            @($order.AwaitingSynchronisation) | Should -HaveCount 2
+        }
+    }
+
+    It 'Set-JIMMetaverseAttributePriority warns of nothing when the reorder recorded nothing' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ MetaverseObjectTypeId = 1; MetaverseAttributeId = 12; Contributors = @(); AwaitingSynchronisation = @() }
+            }
+
+            Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -Confirm:$false `
+                -WarningVariable saved -WarningAction SilentlyContinue | Out-Null
+
+            @($saved) | Should -HaveCount 0
+        }
+    }
+
+    It 'Move-JIMMetaverseAttributePriority warns for the type the move makes the system process, without -PassThru' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ MetaverseObjectTypeId = 1; MetaverseAttributeId = 12; Contributors = @(); AwaitingSynchronisation = $script:Awaiting }
+            }
+
+            $returned = Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1 -Confirm:$false `
+                -WarningVariable saved -WarningAction SilentlyContinue
+
+            $returned | Should -BeNullOrEmpty -Because 'without -PassThru the cmdlet returns nothing, and still warns'
+            @($saved) | Should -HaveCount 1
+            $saved[0].Message | Should -Match '30,000 objects'
+        }
+    }
+
+    It 'Move-JIMMetaverseAttributePriority warns of nothing when the move recorded nothing' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{ MetaverseObjectTypeId = 1; MetaverseAttributeId = 12; Contributors = @(); AwaitingSynchronisation = @() }
+            }
+
+            Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1 -Confirm:$false `
+                -WarningVariable saved -WarningAction SilentlyContinue | Out-Null
+
+            @($saved) | Should -HaveCount 0
+        }
+    }
+
     It 'Documents the warning where the caller looks for it' {
         foreach ($cmdlet in 'New-JIMSyncRule', 'Set-JIMSyncRule', 'New-JIMSyncRuleMapping', 'Set-JIMSyncRuleMapping',
-            'Remove-JIMSyncRuleMapping', 'New-JIMMatchingRule', 'Set-JIMMatchingRule', 'New-JIMSyncRuleMatchingRule', 'Set-JIMSyncRuleMatchingRule') {
+            'Remove-JIMSyncRuleMapping', 'New-JIMMatchingRule', 'Set-JIMMatchingRule', 'New-JIMSyncRuleMatchingRule', 'Set-JIMSyncRuleMatchingRule',
+            'Set-JIMMetaverseAttributePriority', 'Move-JIMMetaverseAttributePriority') {
             ((Get-Help $cmdlet -Full).returnValues | Out-String) | Should -Match 'warning stream' -Because "$cmdlet describes the warning it writes"
         }
     }

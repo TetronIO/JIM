@@ -3,6 +3,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Logic;
+using JIM.Models.Staging.DTOs;
 
 namespace JIM.Web.Models.Api;
 
@@ -31,6 +32,16 @@ public class AttributePriorityOrderDto
     /// The Attribute Flows that contribute a value to the attribute, highest priority first; empty when none does.
     /// </summary>
     public List<AttributePriorityContributorDto> Contributors { get; set; } = new();
+
+    /// <summary>
+    /// On the response to a change of the order: the Connected System Object Types the change recorded as awaiting
+    /// synchronisation, one for each enabled Synchronisation Rule whose Attribute Flow it moved or whose "Null is a value"
+    /// it changed, since the change alters which value wins for that rule's objects. For each, the Connected System's next
+    /// synchronisation, Delta or Full, processes every object of the type, not only the changed ones; the entry gives how
+    /// many objects that is and about how long it takes at the speed of the Connected System's last Full Synchronisation
+    /// (empty when it has never completed one). Empty on a read, and when the change recorded nothing.
+    /// </summary>
+    public List<AwaitingSynchronisationEstimate> AwaitingSynchronisation { get; set; } = new();
 
     public static AttributePriorityOrderDto FromEntities(int metaverseObjectTypeId, int metaverseAttributeId, IEnumerable<SyncRuleMapping> orderedMappings)
     {

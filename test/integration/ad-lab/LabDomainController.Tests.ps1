@@ -690,6 +690,185 @@ Describe 'Resolve-LabInstallImage' {
     }
 }
 
+Describe 'The install image record (ConvertTo-, Find-, Merge-LabInstallImageRecord)' {
+    BeforeAll {
+        $script:IsoPath = 'C:\media\WindowsServer2025-eval.iso'
+        $script:Written = [datetime]::new(2026, 10, 14, 8, 30, 15, 123, [System.DateTimeKind]::Utc).AddTicks(4567)
+        $script:Image = [pscustomobject]@{ ImageIndex = 4; ImageName = 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'; Evaluation = $true }
+        $script:Record = ConvertTo-LabInstallImageRecord -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written -Image $script:Image
+    }
+
+    It 'records the image with the file''s path, length and last write time, the time as UTC round-trip text' {
+        $script:Record.path | Should -Be $script:IsoPath
+        $script:Record.length | Should -Be 8152356864
+        $script:Record.lastWriteTimeUtc | Should -Be '2026-10-14T08:30:15.1234567Z'
+        $script:Record.imageIndex | Should -Be 4
+        $script:Record.imageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $script:Record.evaluation | Should -BeTrue
+    }
+
+    It 'writes a local time as the same instant in UTC' {
+        $local = $script:Written.ToLocalTime()
+        (ConvertTo-LabInstallImageRecord -Path $script:IsoPath -Length 1 -LastWriteTimeUtc $local -Image $script:Image).lastWriteTimeUtc | Should -Be '2026-10-14T08:30:15.1234567Z'
+    }
+
+    It 'finds the image again after a round trip through the file, by path, length and time' {
+        $json = ConvertTo-LabInstallImageRecordJson -Record @($script:Record)
+        $records = @(ConvertFrom-LabInstallImageRecordJson -Json $json)
+        $found = Find-LabInstallImageRecord -Record $records -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written
+        $found.ImageIndex | Should -Be 4
+        $found.ImageName | Should -Be 'Windows Server 2025 Datacenter Evaluation (Desktop Experience)'
+        $found.Evaluation | Should -BeTrue
+    }
+
+    It 'matches the path whatever its case or slashes, as Windows does' {
+        $found = Find-LabInstallImageRecord -Record @($script:Record) -Path 'c:/MEDIA/windowsserver2025-eval.ISO' -Length 8152356864 -LastWriteTimeUtc $script:Written
+        $found.ImageIndex | Should -Be 4
+    }
+
+    It 'does not take replaced media for the recorded file: another length or time finds nothing' {
+        Find-LabInstallImageRecord -Record @($script:Record) -Path $script:IsoPath -Length 8152356865 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+        Find-LabInstallImageRecord -Record @($script:Record) -Path $script:IsoPath -Length 8152356864 -LastWriteTimeUtc $script:Written.AddTicks(1) | Should -BeNullOrEmpty
+        Find-LabInstallImageRecord -Record @($script:Record) -Path 'C:\media\other.iso' -Length 8152356864 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+    }
+
+    It 'finds nothing when there are no records' {
+        Find-LabInstallImageRecord -Record @() -Path $script:IsoPath -Length 1 -LastWriteTimeUtc $script:Written | Should -BeNullOrEmpty
+        @(ConvertFrom-LabInstallImageRecordJson -Json '').Count | Should -Be 0
+        @(ConvertFrom-LabInstallImageRecordJson -Json '{}').Count | Should -Be 0
+    }
+
+    It 'reads a half-written file as no records, with a warning, so it is recorded again rather than stuck' {
+        @(ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [ { "path": "C:\\media\\Windows' -WarningAction SilentlyContinue).Count | Should -Be 0
+        $null = ConvertFrom-LabInstallImageRecordJson -Json '{ "images": [' -WarningVariable warned -WarningAction SilentlyContinue
+        $warned | Should -Not -BeNullOrEmpty
+    }
+
+    It 'replaces the record of the same media and keeps the records of other media' {
+        $other = ConvertTo-LabInstallImageRecord -Path 'C:\media\other.iso' -Length 1 -LastWriteTimeUtc $script:Written -Image $script:Image
+        $newer = ConvertTo-LabInstallImageRecord -Path 'c:\MEDIA\WindowsServer2025-eval.iso' -Length 2 -LastWriteTimeUtc $script:Written -Image $script:Image
+        $merged = @(Merge-LabInstallImageRecord -Record @($script:Record, $other) -NewRecord $newer)
+        $merged.Count | Should -Be 2
+        @($merged | Where-Object { $_.path -eq 'C:\media\other.iso' }).Count | Should -Be 1
+        @($merged | Where-Object { $_.length -eq 2 }).Count | Should -Be 1
+        @($merged | Where-Object { $_.length -eq 8152356864 }).Count | Should -Be 0
+    }
+
+    It 'keeps the record in media.json, beside settings.json' {
+        Get-LabInstallImageRecordPath -Root 'C:\jim-ad-lab' | Should -Be 'C:\jim-ad-lab\media.json'
+        Get-LabInstallImageRecordPath -Root '/srv/lab/' | Should -Be '/srv/lab/media.json'
+    }
+}
+
+Describe 'Get-LabMediaCapabilitySid' {
+    It 'is the capability SID Hyper-V grants read on the media it attaches' {
+        Get-LabMediaCapabilitySid | Should -Be 'S-1-15-3-1024-2268835264-3721307629-241982045-173645152-1490879176-104643441-2915960892-1612460704'
+    }
+
+    It 'is derived from the capability name vmWorkerProcess, so it is the same on every host' -Skip:(-not $IsWindows) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+public static class LabTestCapabilitySid
+{
+    [DllImport("kernelbase.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool DeriveCapabilitySidsFromName(string name, out IntPtr groupSids, out int groupCount, out IntPtr sids, out int count);
+
+    public static string Derive(string name)
+    {
+        IntPtr groupSids, sids;
+        int groupCount, count;
+        if (!DeriveCapabilitySidsFromName(name, out groupSids, out groupCount, out sids, out count) || count == 0) { return null; }
+        return new SecurityIdentifier(Marshal.ReadIntPtr(sids)).Value;
+    }
+}
+'@
+        [LabTestCapabilitySid]::Derive('vmWorkerProcess') | Should -Be (Get-LabMediaCapabilitySid)
+    }
+}
+
+Describe 'Test-LabAccessRuleGranted' {
+    BeforeAll {
+        $script:Sid = 'S-1-5-21-1-2-3-1001'
+        # FileSystemRights: Modify 0x301BF, Read 0x20089, Synchronize 0x100000. InheritanceFlags: ContainerInherit 1,
+        # ObjectInherit 2. PropagationFlags: InheritOnly 2. AccessControlType: Allow 0, Deny 1.
+        function Get-TestRule {
+            param([string]$Sid = $script:Sid, [long]$Rights = 0x1301BF, [int]$Type = 0, [int]$Inheritance = 3, [int]$Propagation = 0)
+            return [pscustomobject]@{ IdentityReference = $Sid; FileSystemRights = $Rights; AccessControlType = $Type; InheritanceFlags = $Inheritance; PropagationFlags = $Propagation }
+        }
+    }
+
+    It 'is granted by an inheritable Allow rule for the SID that carries every right asked for' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeTrue
+    }
+
+    It 'counts an inherited rule, so a folder beneath a granted one needs nothing of its own' {
+        $rule = Get-TestRule | Add-Member -NotePropertyName IsInherited -NotePropertyValue $true -PassThru
+        Test-LabAccessRuleGranted -Rule @($rule) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeTrue
+    }
+
+    It 'is not granted by fewer rights, another SID, a Deny rule or no rules' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Rights 0x1200A9) -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Sid 'S-1-5-32-545') -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Type 1) -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @() -Sid $script:Sid -Rights 0x301BF | Should -BeFalse
+    }
+
+    It 'needs both inheritance flags when asked for an inheritable grant, and none otherwise' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 1) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 0) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Inheritance 0 -Rights 0x120089) -Sid $script:Sid -Rights 0x20089 | Should -BeTrue
+    }
+
+    It 'ignores an inherit-only rule, which does not apply to the object itself' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 2) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+    }
+
+    It 'does not count a rule that reaches only the direct children as inheritable, since it misses what is deeper' {
+        Test-LabAccessRuleGranted -Rule @(Get-TestRule -Propagation 1) -Sid $script:Sid -Rights 0x301BF -Inheritable | Should -BeFalse
+    }
+}
+
+Describe 'Get-LabControlFolder' {
+    BeforeAll {
+        $script:Root = 'C:\vm'
+        $script:Names = @('dc-primary', 'dc-primary-candidate', 'dc-primary-prev', 'exchange-primary', 'exchange-primary-candidate', 'exchange-primary-prev')
+    }
+
+    It 'lists the folder of each lab VM beneath the VHD directory, and each rebuild folder' {
+        $vms = @(
+            [pscustomobject]@{ Name = 'dc-primary'; Path = 'C:\vm\dc-primary' }
+            [pscustomobject]@{ Name = 'exchange-primary'; Path = 'C:\vm\exchange-primary\' }
+        )
+        $folders = @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('dc-primary', 'exchange-primary', 'rebuild-20261111'))
+        $folders | Should -Be @('C:\vm\dc-primary', 'C:\vm\exchange-primary', 'C:\vm\rebuild-20261111')
+    }
+
+    It 'never lists a VM that is not the lab''s, such as the runner, though it shares the VHD directory' {
+        $vms = @([pscustomobject]@{ Name = 'jim-ad-lab-runner'; Path = 'C:\vm\jim-ad-lab-runner' })
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('jim-ad-lab-runner')).Count | Should -Be 0
+    }
+
+    It 'never lists a lab VM whose folder lies outside the VHD directory, or is the directory itself' {
+        $vms = @(
+            [pscustomobject]@{ Name = 'dc-primary'; Path = 'D:\elsewhere\dc-primary' }
+            [pscustomobject]@{ Name = 'dc-primary-prev'; Path = 'C:\vm' }
+        )
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names).Count | Should -Be 0
+    }
+
+    It 'leaves out a folder beneath another listed one, which inherits its grant' {
+        $vms = @([pscustomobject]@{ Name = 'dc-primary'; Path = 'C:\vm\rebuild-20261111\dc-primary-candidate' })
+        @(Get-LabControlFolder -Root $script:Root -Vm $vms -FolderName $script:Names -Directory @('rebuild-20261111')) | Should -Be @('C:\vm\rebuild-20261111')
+    }
+
+    It 'only takes rebuild-yyyyMMdd folders from the directory listing' {
+        @(Get-LabControlFolder -Root $script:Root -FolderName $script:Names -Directory @('rebuild-2026', 'rebuild-20261111-old', 'media', 'REBUILD-20261212')) | Should -Be @('C:\vm\REBUILD-20261212')
+    }
+}
+
 Describe 'ConvertFrom-LabDirectoryExtensionSetting' {
     It 'returns nothing when the settings list no extensions, which is a plain forest' {
         @(ConvertFrom-LabDirectoryExtensionSetting -Value $null).Count | Should -Be 0
@@ -989,7 +1168,7 @@ Describe 'Stop-LabVm' {
         $script:turnedOff = $false
         Mock -ModuleName LabDomainController Get-VM { [pscustomobject]@{ State = $(if ($script:turnedOff) { 'Off' } else { 'Running' }) } }
         Mock -ModuleName LabDomainController Stop-VM { $script:turnedOff = $true } -ParameterFilter { $TurnOff }
-        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 30 } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 2 } } -ParameterFilter { $AsJob }
         Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 30 | Should -Be 'TurnedOff'
         Should -Invoke -ModuleName LabDomainController Stop-VM -Times 1 -Exactly -ParameterFilter { $TurnOff }
     }
@@ -1001,6 +1180,86 @@ Describe 'Stop-LabVm' {
         Mock -ModuleName LabDomainController Stop-VM { $job = Start-Job -ScriptBlock { throw 'The shutdown integration service did not answer.' }; $null = Wait-Job -Job $job; $job } -ParameterFilter { $AsJob }
         Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 3600 | Should -Be 'TurnedOff'
         Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+    }
+
+    It 'waits for the shutdown job to finish, and never disposes of it, since the Hyper-V module completes it on a thread of its own' {
+        # The VM reads Off before the module has completed its job; disposing of the job then makes that thread throw
+        # PSObjectDisposedException, which ends the whole process (the rebuild's Rollback, run 41142349653).
+        $script:polls = 0
+        $script:job = $null
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { $script:job = Start-Job -ScriptBlock { Start-Sleep -Seconds 2 }; $script:job } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Remove-Job {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        [string]$script:job.State | Should -Be 'Completed'
+        Should -Invoke -ModuleName LabDomainController Remove-Job -Times 0 -Exactly -Scope It
+    }
+
+    It 'warns when the shutdown job is still running after the wait, since the process may then report an error as it exits' {
+        $script:polls = 0
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { Start-Sleep -Seconds 30 } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Wait-Job {}
+        Mock -ModuleName LabDomainController Write-Warning {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 1 -Exactly -Scope It -ParameterFilter { $Message -like '*shutdown job for exchange-primary had not finished*' }
+    }
+
+    It 'does not warn when the shutdown job finishes in the wait' {
+        $script:polls = 0
+        Mock -ModuleName LabDomainController Get-VM { $script:polls++; [pscustomobject]@{ State = $(if ($script:polls -ge 2) { 'Off' } else { 'Running' }) } }
+        Mock -ModuleName LabDomainController Stop-VM { Start-Job -ScriptBlock { } } -ParameterFilter { $AsJob }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        Stop-LabVm -Name 'exchange-primary' -TimeoutSeconds 60 | Should -Be 'ShutDown'
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 0 -Exactly -Scope It
+    }
+
+    AfterEach {
+        Get-Job | Microsoft.PowerShell.Core\Remove-Job -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Describe 'Wait-LabCheckpoint' {
+    BeforeAll {
+        if (-not (Get-Command Get-VMSnapshot -ErrorAction SilentlyContinue)) {
+            # Advanced, as the cmdlet is, so that -ErrorVariable captures what the mock writes.
+            function global:Get-VMSnapshot {
+                [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Hyper-V cmdlet, to be mocked.')]
+                [CmdletBinding()]
+                param([string]$VMName, [string]$Name)
+            }
+        }
+        Mock -ModuleName LabDomainController Start-Sleep {}
+    }
+
+    It 'returns the checkpoint as soon as it is listed' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { [pscustomobject]@{ Name = 'baseline' } }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
+        Should -Invoke -ModuleName LabDomainController Start-Sleep -Times 0 -Exactly -Scope It
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 0 -Exactly -Scope It
+    }
+
+    It 'waits for a checkpoint that is listed only a moment after it is taken, and says so' {
+        # Taken of a VM just shut down, the checkpoint existed but was not found straight away (run 41142349653). Saying
+        # when it turns up late lets the next rebuild confirm that, rather than a silent retry hiding it.
+        $script:lists = 0
+        Mock -ModuleName LabDomainController Get-VMSnapshot { $script:lists++; if ($script:lists -ge 3) { [pscustomobject]@{ Name = 'baseline' } } }
+        Mock -ModuleName LabDomainController Write-Warning {}
+        (Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline').Name | Should -Be 'baseline'
+        Should -Invoke -ModuleName LabDomainController Get-VMSnapshot -Times 3 -Exactly -Scope It
+        Should -Invoke -ModuleName LabDomainController Write-Warning -Times 1 -Exactly -Scope It -ParameterFilter { $Message -like "*'baseline' of exchange-primary was listed only after 4 s*" }
+    }
+
+    It 'gives up after the timeout, naming why the listing failed' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { Write-Error 'You do not have permission to perform the operation.' -ErrorAction SilentlyContinue }
+        { Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline' -TimeoutSeconds 10 } |
+            Should -Throw "*'baseline' of exchange-primary was not listed within 10 seconds*You do not have permission*"
+    }
+
+    It 'refuses more than one checkpoint of the name' {
+        Mock -ModuleName LabDomainController Get-VMSnapshot { [pscustomobject]@{ Name = 'baseline' }; [pscustomobject]@{ Name = 'baseline' } }
+        { Wait-LabCheckpoint -VMName 'exchange-primary' -Name 'baseline' } | Should -Throw "*2 checkpoints called 'baseline'*"
     }
 }
 
@@ -1180,6 +1439,36 @@ Describe 'Resolve-LabLayout' {
 
     It 'throws naming what it looked for when the assets are not there' {
         { Resolve-LabLayout -ScriptRoot $script:Root } | Should -Throw '*jim-ad-delegation.acl*'
+    }
+}
+
+Describe 'Get-LabDomainPasswordPolicyChange' {
+    BeforeAll {
+        # As Get-ADDefaultDomainPasswordPolicy reports it.
+        function Get-Policy {
+            param([bool]$Complexity = $true, [int]$MinLength = 7, [int]$History = 24, [timespan]$MinAge = [timespan]::FromDays(1), [timespan]$MaxAge = [timespan]::FromDays(42))
+            [pscustomobject]@{ ComplexityEnabled = $Complexity; MinPasswordLength = $MinLength; PasswordHistoryCount = $History; MinPasswordAge = $MinAge; MaxPasswordAge = $MaxAge }
+        }
+    }
+
+    It 'changes nothing on a domain at the Windows defaults' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy)
+        $change.Count | Should -Be 0
+    }
+
+    It 'restores length, history and minimum age on a domain the Default Domain Policy never reached' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy -MinLength 0 -History 0 -MinAge ([timespan]::Zero))
+        @($change.Keys | Sort-Object) | Should -Be @('MinPasswordAge', 'MinPasswordLength', 'PasswordHistoryCount')
+        $change.MinPasswordLength | Should -Be 7
+        $change.PasswordHistoryCount | Should -Be 24
+        $change.MinPasswordAge | Should -Be ([timespan]::FromDays(1))
+    }
+
+    It 'turns complexity back on and restores the maximum age' {
+        $change = Get-LabDomainPasswordPolicyChange -Policy (Get-Policy -Complexity $false -MaxAge ([timespan]::FromDays(90)))
+        @($change.Keys | Sort-Object) | Should -Be @('ComplexityEnabled', 'MaxPasswordAge')
+        $change.ComplexityEnabled | Should -BeTrue
+        $change.MaxPasswordAge | Should -Be ([timespan]::FromDays(42))
     }
 }
 
@@ -1657,6 +1946,46 @@ Describe 'Get-LabNewestCumulativeUpdate' {
     }
 }
 
+Describe 'Get-LabRebuildBuildChain' {
+    BeforeAll {
+        function Get-Role {
+            param([string]$Live, [AllowNull()][string]$DependsOn)
+            return [pscustomobject]@{ live = $Live; dependsOn = $DependsOn }
+        }
+    }
+
+    It 'puts each member server in a chain after the domain controller it joins, and each domain controller in a chain of its own' {
+        $roles = @(
+            (Get-Role 'dc-primary' $null), (Get-Role 'dc-source' $null), (Get-Role 'dc-target' $null),
+            (Get-Role 'adfs-primary' 'dc-primary'), (Get-Role 'exchange-primary' 'dc-primary')
+        )
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-primary', 'dc-source', 'dc-target')
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'adfs-primary', 'exchange-primary')
+        @($chains[1].Roles) | Should -Be @('dc-source')
+        @($chains[2].Roles) | Should -Be @('dc-target')
+    }
+
+    It 'keeps the member servers of one domain controller in the order given, since each takes its baseline again' {
+        $roles = @((Get-Role 'exchange-primary' 'dc-primary'), (Get-Role 'dc-primary' ''), (Get-Role 'adfs-primary' 'dc-primary'))
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'exchange-primary', 'adfs-primary')
+    }
+
+    It 'gives a member server whose domain controller is not in the list a chain of its own, for the Build phase to refuse' {
+        $chains = @(Get-LabRebuildBuildChain -Role @((Get-Role 'dc-source' $null), (Get-Role 'adfs-primary' 'dc-primary')))
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-source', 'adfs-primary')
+    }
+
+    It 'builds everything in one chain, in order, when the roles do not say what they join (a host on older scripts)' {
+        $roles = @([pscustomobject]@{ live = 'dc-primary' }, [pscustomobject]@{ live = 'dc-source' }, [pscustomobject]@{ live = 'adfs-primary' })
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'dc-source', 'adfs-primary')
+    }
+}
+
 Describe 'Get-LabRebuildBuildAction' {
     BeforeAll {
         $script:BuildNow = [datetime]::new(2026, 9, 30, 12, 0, 0, [System.DateTimeKind]::Utc)
@@ -1729,6 +2058,23 @@ Describe 'Get-LabRebuildBuildAction' {
     It 'reuses a finished Exchange candidate on a retry' {
         Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-1) -CandidateHasBaseline $true `
             -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Reuse'
+    }
+
+    It 'reuses a finished Exchange candidate whose domain controller''s baseline was taken after its own, as its build takes them' {
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-2) -CandidateHasBaseline $true `
+            -CandidateBaselineUtc $script:BuildNow.AddHours(-1) -DependencyBaselineUtc $script:BuildNow.AddHours(-1).AddSeconds(20) `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -DirectoryHoldsServer | Should -Be 'Reuse'
+    }
+
+    It 'replaces a finished <Case> whose domain controller''s baseline is older than its own, since the build stopped between the two' -TestCases @(
+        @{ Case = 'Exchange candidate'; Exchange = $true; Fresh = $false }
+        @{ Case = 'Exchange candidate, asked for a fresh one'; Exchange = $true; Fresh = $true }
+        @{ Case = 'AD FS candidate'; Exchange = $false; Fresh = $false }
+    ) {
+        param($Exchange, $Fresh)
+        Get-LabRebuildBuildAction -CandidateExists $true -CandidateCreatedUtc $script:BuildNow.AddHours(-2) -CandidateHasBaseline $true `
+            -CandidateBaselineUtc $script:BuildNow.AddHours(-1) -DependencyBaselineUtc $script:BuildNow.AddHours(-2).AddMinutes(-1) `
+            -DependencyCreatedUtc $script:BuildNow.AddHours(-3) -NowUtc $script:BuildNow -Fresh:$Fresh -DirectoryHoldsServer:$Exchange | Should -Be 'Replace'
     }
 
     It 'does not mind a candidate stamped slightly in the future (clock skew)' {
@@ -2118,9 +2464,10 @@ Describe 'Invoke-LabRebuildPhase' {
                     $state = 'Running'
                     if ($Kind -in 'FederationServer', 'ExchangeServer') {
                         # New-LabFederationServer.ps1 and New-LabExchangeServer.ps1 join the domain controller's
-                        # candidate, which must be there.
+                        # candidate, which must be there, and take its baseline again after their own.
                         $dc = $Parameters.DomainControllerName
                         if (-not $lab.Vms.ContainsKey($dc) -or -not $lab.Vms[$dc].HasBaseline) { throw "no domain controller $dc to join" }
+                        $lab.Vms[$dc].BaselineCreatedUtc = $lab.Now
                         $notes = ConvertTo-LabVmNote -Domain 'PANOPLY.LOCAL' -ShortName $Parameters.ComputerName -NetBiosName 'PANOPLY' -IPAddress $Parameters.IPAddress -Role $Kind
                         # New-LabExchangeServer.ps1 shuts the server down once its baseline is taken.
                         if ($Kind -eq 'ExchangeServer') { $state = 'Off' }
@@ -2129,12 +2476,13 @@ Describe 'Invoke-LabRebuildPhase' {
                         $notes = ConvertTo-LabVmNote -Domain $Parameters.Domain -ShortName 'dc1' -NetBiosName ($Parameters.Domain.Split('.')[0]) -IPAddress $Parameters.IPAddress
                     }
                     $lab.Vms[$Parameters.Name] = @{
-                        Name        = $Parameters.Name
-                        State       = $state
-                        Notes       = $notes
-                        CreatedUtc  = $lab.Now
-                        HasBaseline = $true
-                        Build       = "26100.$(4000 + $lab.BuildIndex)"
+                        Name               = $Parameters.Name
+                        State              = $state
+                        Notes              = $notes
+                        CreatedUtc         = $lab.Now
+                        HasBaseline        = $true
+                        BaselineCreatedUtc = $lab.Now
+                        Build              = "26100.$(4000 + $lab.BuildIndex)"
                     }
                 }.GetNewClosure()
                 GetGuestBuild = {
@@ -2376,6 +2724,48 @@ Describe 'Invoke-LabRebuildPhase' {
 
             { Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*exchange-primary-candidate*dc-primary-candidate*'
             @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'builds the Exchange candidate again when its domain controller''s baseline is older than its own' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            # As a build leaves it when it takes the Exchange server's baseline and fails before taking its domain
+            # controller's again: that domain controller's baseline is from before the server was installed.
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc = $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc.AddHours(-1)
+            $lab.Now = $lab.Now.AddHours(1)
+            $lab.Calls.Clear()
+
+            $results = @(Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $results[3].action | Should -Be 'Replace'
+            (Get-CallIndex $lab 'RemoveVm exchange-primary-candidate') | Should -BeLessThan (Get-CallIndex $lab 'BuildVm exchange-primary-candidate')
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc | Should -Not -BeLessThan $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc
+        }
+
+        It 'refuses to stage or promote an Exchange candidate whose domain controller''s baseline is older than its own, touching nothing' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            $lab.Vms['dc-primary-candidate'].BaselineCreatedUtc = $lab.Vms['exchange-primary-candidate'].BaselineCreatedUtc.AddHours(-1)
+            $lab.Calls.Clear()
+
+            { Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*baseline of ''exchange-primary-candidate''*newer than that of ''dc-primary-candidate''*'
+            @($lab.Calls | Where-Object { $_ -like 'RestoreVm*' -or $_ -like 'ResetVm*' -or $_ -like 'StopVm*' }).Count | Should -Be 0
+
+            { Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter } | Should -Throw '*baseline of ''exchange-primary-candidate''*newer than that of ''dc-primary-candidate''*'
+            @($lab.Calls | Where-Object { $_ -like 'RenameVm*' -or $_ -like 'RemoveVm*' }).Count | Should -Be 0
+        }
+
+        It 'promotes a pair whose baselines match, as its build takes them' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab -WithExchange
+            $plan = Get-FakePlan -WithExchange
+            [void](Invoke-LabRebuildPhase -Phase Build -Plan $plan -Adapter $lab.Adapter)
+            [void](Invoke-LabRebuildPhase -Phase Stage -Plan $plan -Adapter $lab.Adapter)
+            $results = @(Invoke-LabRebuildPhase -Phase Promote -Plan $plan -Adapter $lab.Adapter)
+            $results[3].action | Should -Be 'Promoted'
         }
 
         It 'refuses an adapter that cannot revert a VM and leave it off' {
@@ -2775,6 +3165,13 @@ Describe 'Invoke-LabRebuildPhase' {
             $lab = Get-FakeLab
             $lab.Adapter.Remove('RenameVm')
             { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw "*no 'RenameVm' operation*"
+        }
+
+        It 'names the domain controller each member server joins, so the runner can build the member after it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { "$($_.live)<$($_.dependsOn)" } | Sort-Object) | Should -Be @('adfs-primary<dc-primary', 'dc-primary<', 'dc-source<', 'dc-target<', 'exchange-primary<dc-primary')
         }
 
         It 'still reports a run whose guest build cannot be read, as no build rather than an error' {

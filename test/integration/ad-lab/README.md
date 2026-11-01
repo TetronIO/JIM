@@ -24,10 +24,11 @@ as the Samba images (`test/integration/docker/samba-ad-prebuilt/post-provision.s
 `Groups` under it, `TestUsers`, `TestGroups` and `Services`; the `svc-jim` account in the `JIM Connectors` group; the
 delegation from `jim-ad-delegation.acl`, applied unchanged; read over Deleted Objects; and an LDAPS certificate with the
 same subject and names. It differs from Samba where Windows Server 2025 differs: LDAP signing is enforced (everything
-talks LDAPS on 636) and the domain password policy keeps its defaults (complexity on). One registry value departs from
-the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous password stops working as soon as it changes rather
-than for 5 minutes after, as on Samba (#2287). `Configure` sets it, `Verify` checks it, and
-`Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
+talks LDAPS on 636) and the domain password policy is at the Windows defaults (complexity on, minimum length 7,
+history 24, minimum age 1 day, maximum age 42 days), which `Configure` sets itself rather than waiting for Group Policy to
+write them (#2412). One registry value departs from the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous
+password stops working as soon as it changes rather than for 5 minutes after, as on Samba (#2287). `Configure` sets it,
+`Verify` checks it, and `Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
 
 Each forest also carries the **full Exchange organisation**, as an Exchange customer's forest does: Exchange's schema
 (all of its classes and attributes, `extensionAttribute1`-`15` among them), an organisation named after the forest
@@ -49,7 +50,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
 | `host/Grant-LabDelegation.ps1` | Hyper-V host | Applies the delegation to a container created at run time (`-Tombstones` for Deleted Objects) |
 | `host/Invoke-LabRebuild.ps1` | Hyper-V host | One phase of the monthly rebuild (`Prune`, `Build`, `Stage`, `Promote`, `Rollback`, `Status`): builds a candidate set beside the live one and swaps names only when the suite passes; see [Monthly rebuild](#monthly-rebuild) |
-| `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above; see [Deploying to the host](#deploying-to-the-host) |
+| `host/Install-LabScripts.ps1` | Hyper-V host or the repository clone | Copies the host and guest scripts into `C:\jim-ad-lab` in the layout above, and does what `jim-lab` is refused (Host access); see [Deploying to the host](#deploying-to-the-host) |
 | `guest/autounattend.xml` | Guest (via ISO) | Template for the unattended install; rendered by the module |
 | `guest/Initialize-LabDomainController.ps1` | Guest | The build phases: `License`, `Prepare`, `Promote`, `Extend`, `Configure`, `Verify` |
 | `guest/LabDomainController.psm1` | Both | Pure functions (tested) and the Windows-only helpers |
@@ -177,6 +178,22 @@ It runs `Update-LabScripts.ps1` as SYSTEM every hour (`\JIM\Update AD lab script
 `Install-LabScripts.ps1` from it, logging to `C:\jim-ad-lab\logs\update-lab-scripts.log`. The repository is public, so
 it needs no credentials. A run dispatched within the hour of a module change can still find no copy of its module, and
 says so. A merge during a run does no harm: the run keeps using its own commit's copy.
+
+**Host access.** The rebuild runs as `jim-lab`, which is a Hyper-V administrator and nothing more, and three things it
+needs are refused to such an account. So `Install-LabScripts.ps1` does them, once `settings.json` exists and only when
+elevated (the hourly task, as SYSTEM, always is), and reports each as `Granted`, `AlreadyGranted`, `Recorded` or
+`AlreadyRecorded`:
+
+| What | Why `jim-lab` cannot | What host setup does |
+|------|----------------------|----------------------|
+| Read the image list of the Windows media | `Mount-DiskImage` and `Get-WindowsImage` need an administrator ("Access denied", "requires elevation") | Records the image to install in `media.json` beside `settings.json`, once per version of the file (its length and time). The builds read it from there; an elevated build without a record reads the media itself, and `jim-lab` without one is refused with a message saying so |
+| Let a VM read the media it is given | VMMS grants that on the ISO as its caller, who must be allowed to change the ISO's ACL (VMMS event 20790) | Grants read on `isoPath` and each `directoryExtensions` ISO to the capability SID Hyper-V uses for it (`vmWorkerProcess`, `Get-LabMediaCapabilitySid`) |
+| Delete a removed VM's files | The VMs an administrator built are not its own, and VMMS creates each VM's `Snapshots` folder as SYSTEM | Lets `jim-lab` modify each lab VM's folder beneath `vhdDirectory` and each `rebuild-yyyyMMdd` folder (`Get-LabControlFolder`), never `vhdDirectory` itself, which may hold the runner's VM. The rebuild also gives itself the same on the folder it creates |
+
+So after building the domain controllers by hand (step 4), either run `Install-LabScripts.ps1` again or wait for the
+hourly task before the first rebuild. A step that fails makes the script exit 1, after everything else is done. If a
+VM's files still cannot be deleted, `Remove-LabDomainController.ps1` and the rebuild name what they left behind.
+
 **2. Fill in `settings.json`.** Every value in the example is a placeholder. `Invoke-LabRebuild.ps1` reads this file, and
 the first build below is easiest when it is driven from the same values:
 
@@ -574,8 +591,15 @@ nightly's concurrency group, so the two never overlap, and a run is never cancel
 | `Rollback` | Not green: stops the candidates, leaves them in place for diagnosis, and starts the live VMs again from `baseline`. Also puts the live VM back if a promotion was interrupted after it was demoted |
 | `Status` | Read-only: which VMs exist, their state, and the live guest OS build |
 
-**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after the
-three domain controllers in every phase:
+**The forests are built side by side.** The workflow builds each VM in its own control-plane call and runs one chain
+per domain controller at the same time (`Get-LabRebuildBuildChain`): `dc-source` and `dc-target` alone, and
+`dc-primary` followed by the member servers that join it, in turn, since each takes that domain controller's baseline
+again. A chain that fails stops there; the others finish, and the step then fails, so the run rolls back. The Build
+phase takes about two hours instead of three. Each such call logs to a file of its own,
+`%ProgramData%\jim-ad-lab\logs\Invoke-LabRebuild-yyyyMMdd-<vm>.log`.
+
+**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after its
+domain controller in every phase:
 - **Build** stops the live `adfs-primary` and builds `adfs-primary-candidate` with `New-LabFederationServer.ps1`, joined
   to `dc-primary-candidate`. That build retakes `dc-primary-candidate`'s baseline, so the accounts are in it.
 - Build refuses to start before `dc-primary-candidate` exists. It rebuilds an AD FS candidate older than that domain
@@ -627,7 +651,8 @@ C:\jim-ad-lab\Invoke-LabRebuild.ps1 -Phase Build -Role dc-primary   # one domain
 It reads `settings.json` beside it (`-SettingsPath` to point elsewhere; only `Build` reads more than the names, so a
 rollback is never blocked by a settings file that is wrong for building), logs to `%ProgramData%\jim-ad-lab\logs`, and
 needs the two passwords in the `jim-lab` account's environment like the other control-plane scripts. It runs only what
-Hyper-V Administrators may run: no elevation.
+Hyper-V Administrators may run: no elevation. What such an account is refused, host setup does beforehand (Host access,
+under [Deploying to the host](#deploying-to-the-host)).
 
 **Recovery.** If a run is cancelled, the runner dies or the host restarts part way, the live set may still be off and the
 candidates running. On the host, as `jim-lab`:

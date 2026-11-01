@@ -303,7 +303,7 @@ public static class CausalityModelBuilder
         if (!isWithdrawal && !SyncOutcomeTypes.IsPendingExport(node.OutcomeType))
             return [];
 
-        List<PendingExportAttributeValueChange>? changes = null;
+        IReadOnlyCollection<PendingExportAttributeValueChange>? changes = null;
         // A deletion's own deprovisioning takes the deletion's own Delete, whatever rule it names; see BuildSpeculative.
         if (!isDeletionCascade && effectiveSyncRuleId is { } ruleId && entriesBySyncRuleId.TryGetValue(ruleId, out var entry))
         {
@@ -328,7 +328,7 @@ public static class CausalityModelBuilder
             return [];
 
         var syntheticChange = ExportChangeHistoryBuilder.BuildFromPendingExport(
-            new PendingExport { AttributeValueChanges = changes },
+            new PendingExport { AttributeValueChanges = new(changes) },
             ActivityInitiatorType.System,
             initiatedById: null,
             initiatedByName: null);

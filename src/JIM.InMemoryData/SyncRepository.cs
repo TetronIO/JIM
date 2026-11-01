@@ -717,7 +717,7 @@ public class SyncRepository : ISyncRepository
         PartitionId = cso.PartitionId,
         ExternalIdAttributeId = cso.ExternalIdAttributeId,
         SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
-        AttributeValues = new List<ConnectedSystemObjectAttributeValue>(cso.AttributeValues),
+        AttributeValues = new ReferenceIndexedList<ConnectedSystemObjectAttributeValue>(cso.AttributeValues),
         Status = cso.Status,
         MetaverseObject = cso.MetaverseObject,
         MetaverseObjectId = cso.MetaverseObjectId,
@@ -3116,8 +3116,9 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> has been
-    /// asked for, in call order, so a test can prove a lookup is not repeated (#2492).
+    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> or
+    /// <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/> has been asked for, in call order, so a test
+    /// can prove a lookup is not repeated (#2492).
     /// </summary>
     public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
 
@@ -3143,6 +3144,14 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(result);
+    }
+
+    public async Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+    {
+        // The store's objects carry every value, so the identifier is the model's own rule over the whole object.
+        var objects = await GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        return objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString());
     }
 
     public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(

@@ -709,7 +709,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         // shared AssertContract call below, which does the same counting - honest.
         var callHistory = new List<PendingExport>();
         void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
-            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = new(pe.AttributeValueChanges) }));
 
         // Export the Create.
         var createActivity = await RunExportAsync(topology.Target, connector);
@@ -907,7 +907,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         // "exactly one Create ever reached the connector" an honest assertion.
         var callHistory = new List<PendingExport>();
         void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
-            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = new(pe.AttributeValueChanges) }));
 
         // Export the Create; the connector reports success.
         var createActivity = await RunExportAsync(topology.Target, connector);
@@ -1030,7 +1030,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
         var connector = CreateExportConnector(exportPath);
         var callHistory = new List<PendingExport>();
         void RecordNewCalls() => callHistory.AddRange(GetExportedItems(connector).Skip(callHistory.Count)
-            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = pe.AttributeValueChanges.ToList() }));
+            .Select(pe => new PendingExport { Id = pe.Id, ChangeType = pe.ChangeType, AttributeValueChanges = new(pe.AttributeValueChanges) }));
 
         // Export the Create; the connector reports success.
         var createActivity = await RunExportAsync(topology.Target, connector);

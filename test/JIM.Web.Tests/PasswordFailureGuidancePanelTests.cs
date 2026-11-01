@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging;
 using JIM.Web.Shared;
@@ -53,11 +54,11 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_WhenAsked_ShowsTheGuidance()
+    public async Task PasswordFailureGuidancePanel_WhenAsked_ShowsTheGuidanceAsync()
     {
         var panel = Render(PasswordSetFailureReason.PolicyRejection);
 
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{PanelMarker}']").TextContent, Does.Contain("read the password and rejected it"));
     }
@@ -80,20 +81,20 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     /// something that was fine.
     /// </summary>
     [Test]
-    public void PasswordFailureGuidancePanel_ForAPolicyRejection_SaysToTryADifferentPassword()
+    public async Task PasswordFailureGuidancePanel_ForAPolicyRejection_SaysToTryADifferentPasswordAsync()
     {
         var panel = Render(PasswordSetFailureReason.PolicyRejection);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{VerdictMarker}']").TextContent,
             Does.Contain("different password"));
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_ForAnUnreachableSystem_SaysToTryAgainUnchanged()
+    public async Task PasswordFailureGuidancePanel_ForAnUnreachableSystem_SaysToTryAgainUnchangedAsync()
     {
         var panel = Render(PasswordSetFailureReason.Transient);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -104,10 +105,10 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_ForMissingRights_SaysNothingChangesWithoutSomebodyElse()
+    public async Task PasswordFailureGuidancePanel_ForMissingRights_SaysNothingChangesWithoutSomebodyElseAsync()
     {
         var panel = Render(PasswordSetFailureReason.ConfigurationFault);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{VerdictMarker}']").TextContent, Does.Contain("grants the right"));
     }
@@ -117,10 +118,10 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     /// would be a lie that costs a round trip every time somebody believes it.
     /// </summary>
     [Test]
-    public void PasswordFailureGuidancePanel_ForAnUnsupportedOperation_SaysRetryingWillNeverHelp()
+    public async Task PasswordFailureGuidancePanel_ForAnUnsupportedOperation_SaysRetryingWillNeverHelpAsync()
     {
         var panel = Render(PasswordSetFailureReason.UnsupportedOperation);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{VerdictMarker}']").TextContent, Does.Contain("never help"));
     }
@@ -130,20 +131,20 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     /// will help.
     /// </summary>
     [Test]
-    public void PasswordFailureGuidancePanel_LinksToWhereTheRepairHappens()
+    public async Task PasswordFailureGuidancePanel_LinksToWhereTheRepairHappensAsync()
     {
         var panel = Render(PasswordSetFailureReason.Transient);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{LinkMarker}']").GetAttribute("href"),
             Is.EqualTo("/admin/connected-systems/7/?t=passwords"));
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_WhereNothingInJimWillHelp_OffersNoLink()
+    public async Task PasswordFailureGuidancePanel_WhereNothingInJimWillHelp_OffersNoLinkAsync()
     {
         var panel = Render(PasswordSetFailureReason.UnsupportedOperation);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.FindAll($"[data-testid='{LinkMarker}']"), Is.Empty);
     }
@@ -156,20 +157,20 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     /// just be noise.
     /// </summary>
     [Test]
-    public void PasswordFailureGuidancePanel_ForARejectionAcrossSeveralAccounts_OffersAFreshPasswordForAllOfThem()
+    public async Task PasswordFailureGuidancePanel_ForARejectionAcrossSeveralAccounts_OffersAFreshPasswordForAllOfThemAsync()
     {
         var panel = Render(PasswordSetFailureReason.PolicyRejection, accountCount: 3);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.Find($"[data-testid='{RegenerateMarker}']").TextContent,
             Does.Contain("New password for all 3 Connected System Objects"));
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_ForARejectionOnOneAccount_DoesNotOfferIt()
+    public async Task PasswordFailureGuidancePanel_ForARejectionOnOneAccount_DoesNotOfferItAsync()
     {
         var panel = Render(PasswordSetFailureReason.PolicyRejection, accountCount: 1);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.FindAll($"[data-testid='{RegenerateMarker}']"), Is.Empty);
     }
@@ -179,22 +180,22 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     /// original perfectly well, for nothing.
     /// </summary>
     [Test]
-    public void PasswordFailureGuidancePanel_WhereThePasswordWasNotTheProblem_DoesNotOfferAFreshOne()
+    public async Task PasswordFailureGuidancePanel_WhereThePasswordWasNotTheProblem_DoesNotOfferAFreshOneAsync()
     {
         var panel = Render(PasswordSetFailureReason.Transient, accountCount: 3);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         Assert.That(panel.FindAll($"[data-testid='{RegenerateMarker}']"), Is.Empty);
     }
 
     [Test]
-    public void PasswordFailureGuidancePanel_WhenAFreshPasswordIsAskedFor_RaisesItToTheCaller()
+    public async Task PasswordFailureGuidancePanel_WhenAFreshPasswordIsAskedFor_RaisesItToTheCallerAsync()
     {
         var raised = false;
         var panel = Render(PasswordSetFailureReason.PolicyRejection, accountCount: 3, onRegenerateForAll: () => raised = true);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
-        panel.Find($"[data-testid='{RegenerateMarker}']").Click();
+        await panel.Find($"[data-testid='{RegenerateMarker}']").ClickAsync();
 
         Assert.That(raised, Is.True);
     }
@@ -213,11 +214,11 @@ public class PasswordFailureGuidancePanelTests : JimComponentTestContext
     [TestCase(PasswordSetFailureReason.Transient, "jim-password-guidance-verdict--retry")]
     [TestCase(PasswordSetFailureReason.ConfigurationFault, "jim-password-guidance-verdict--somebody-else")]
     [TestCase(PasswordSetFailureReason.UnsupportedOperation, "jim-password-guidance-verdict--never")]
-    public void PasswordFailureGuidancePanel_ForEachVerdict_CarriesItsOwnDotColour(
+    public async Task PasswordFailureGuidancePanel_ForEachVerdict_CarriesItsOwnDotColourAsync(
         PasswordSetFailureReason reason, string expectedModifier)
     {
         var panel = Render(reason);
-        panel.Find($"[data-testid='{ToggleMarker}']").Click();
+        await panel.Find($"[data-testid='{ToggleMarker}']").ClickAsync();
 
         var verdict = panel.Find($"[data-testid='{VerdictMarker}']");
         using (Assert.EnterMultipleScope())

@@ -963,7 +963,12 @@ public abstract class SyncTaskProcessorBase
     /// Logs memory diagnostics at page boundaries to track memory usage across the sync run.
     /// Helps diagnose memory accumulation issues and verify bounded memory behaviour.
     /// </summary>
-    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
+    /// <param name="pageNumber">The page just completed.</param>
+    /// <param name="totalPages">The pages the run expects.</param>
+    /// <param name="trackerCountBeforeClear">The change tracker's entry count just before the page's clear: what the page
+    /// accumulated, where the count logged after the clear only shows that the clear happened (#2669). Rows a flush
+    /// deleted have already left the tracker, so a page's peak can be higher.</param>
+    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages, int trackerCountBeforeClear)
     {
         var memoryBytes = GC.GetTotalMemory(forceFullCollection: false);
         var memoryMb = memoryBytes / (1024.0 * 1024.0);
@@ -974,10 +979,10 @@ public abstract class SyncTaskProcessorBase
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
         Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
-            "Tracker: {TrackerCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
+            "Tracker: {TrackerCount}, TrackerBeforeClear: {TrackerCountBeforeClear}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
             pageNumber, totalPages, memoryMb,
             GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
-            trackerCount, crossPageRefCount, rpeiCount);
+            trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount);
     }
 
     /// <summary>
@@ -2117,17 +2122,17 @@ public abstract class SyncTaskProcessorBase
     {
         _syncRepo.ClearChangeTracker();
         _mvoIdentityMap.Clear();
-        _snapshotReferenceCsos.Clear();
+        _snapshotReferenceIdentifiers.Clear();
     }
 
     /// <summary>
-    /// The target Connected System Object each referenced Metaverse Object resolved to in this page's (or cross-page
-    /// batch's) export change snapshots, or null where the database held none. Every report of one manager, and every
-    /// group sharing a member, used to query the same object again (#2492: about 6 ms of each object's export
-    /// evaluation on Scenario 032). Cleared with the change tracker, because the objects it holds are tracked ones, and
-    /// once the page's provisioning objects are written, so a lookup that found none is asked again.
+    /// The display identifier of the target Connected System Object each referenced Metaverse Object resolved to in this
+    /// page's (or cross-page batch's) export change snapshots, or null where the database held none. Every report of one
+    /// manager, and every group sharing a member, used to query the same object again (#2492: about 6 ms of each object's
+    /// export evaluation on Scenario 032). Cleared at each page boundary, and once the page's provisioning objects are
+    /// written, so a lookup that found none is asked again.
     /// </summary>
-    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), ConnectedSystemObject?> _snapshotReferenceCsos = [];
+    private readonly Dictionary<(Guid MetaverseObjectId, int ConnectedSystemId), string?> _snapshotReferenceIdentifiers = [];
 
     /// <summary>
     /// Queues a Metaverse Object for the page-flush batch update (<see cref="_pendingMvoUpdates"/>), keyed
@@ -5287,7 +5292,7 @@ public abstract class SyncTaskProcessorBase
 
             // A snapshot lookup that found no target object may have been for one just written here; the snapshots
             // the rest of the page flush takes (deletion cascades, reference recall) must see it.
-            _snapshotReferenceCsos.Clear();
+            _snapshotReferenceIdentifiers.Clear();
         }
 
         // Unique Value Generation (#242, Phase 2 work package H): commit this page's export-mode
@@ -5820,7 +5825,10 @@ public abstract class SyncTaskProcessorBase
         // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
+            // The objects a Metaverse Object deletion already disconnected, which the confirming import found gone: a
+            // leaver cohort's whole deletion runs here, not in the execution-item path below (#2669).
+            using (Diagnostics.Sync.StartSpan("CsoDeletionQuiet").SetTag("csoCount", _quietCsosToDelete.Count))
+                await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -5830,7 +5838,13 @@ public abstract class SyncTaskProcessorBase
         // them; a review that runs while the departed object remains simply finds it and stages nothing.
         if (_pendingReProvisioningReviewMvoIds.Count > 0)
         {
-            var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+            int flagged;
+            using (var flagSpan = Diagnostics.Sync.StartSpan("CsoDeletionFlagScopeReview")
+                .SetTag("mvoCount", _pendingReProvisioningReviewMvoIds.Count))
+            {
+                flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+                flagSpan.SetTag("flaggedCount", flagged);
+            }
             Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Flagged} of {Requested} Metaverse Object(s) for an export scope review, " +
                 "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); an object flagged " +
                 "already is flagged again, so a review in progress cannot clear it",
@@ -5842,7 +5856,9 @@ public abstract class SyncTaskProcessorBase
         if (_obsoleteCsosToDelete.Count == 0)
             return;
 
-        using var span = Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations");
+        // Named for what it covers rather than after the method: the processors wrap the whole flush in a
+        // FlushObsoleteCsoOperations span, and a span inside its namesake made the breakdown ambiguous (#2669).
+        using var span = Diagnostics.Sync.StartSpan("CsoDeletionWithExecutionItems");
         span.SetTag("deleteCount", _obsoleteCsosToDelete.Count);
 
         // Batch delete obsolete CSOs
@@ -7100,72 +7116,47 @@ public abstract class SyncTaskProcessorBase
         using var snapshotSpan = Diagnostics.Sync.StartSpan("SnapshotPendingExportChanges")
             .SetTag("changeCount", pendingExport.AttributeValueChanges.Count);
 
-        // Collect MVO GUIDs from reference attribute changes so we can resolve them
-        // to stub CSOs in the target Connected System
-        Dictionary<Guid, ConnectedSystemObject>? resolvedReferences = null;
+        // Name each Metaverse Object a reference points at by its object in the target Connected System.
+        Dictionary<Guid, string>? referenceDisplayIdentifiers = null;
         var mvoGuids = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(pendingExport.AttributeValueChanges);
 
         if (mvoGuids.Count > 0)
         {
             using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
-            // First, check the in-memory batch of provisioning CSOs that haven't been persisted yet.
-            // During sync, provisioning CSOs are collected for batch creation (FlushPendingExportOperationsAsync)
-            // and won't be in the database when this snapshot runs.
-            // IMPORTANT: We create detached copies to avoid EF change tracker issues — the original
-            // CSOs are tracked entities that will be inserted by FlushPendingExportOperationsAsync.
-            // If we reference them directly via the ReferenceValue navigation property, EF's
-            // SaveChangesAsync would attempt to insert them again, causing duplicate key violations.
-            resolvedReferences = new Dictionary<Guid, ConnectedSystemObject>();
-            foreach (var cso in _provisioningCsosToCreate)
+            // First, the provisioning objects this page has collected for batch creation (FlushPendingExportOperationsAsync),
+            // which are not in the database yet. Only their names are taken, so nothing here can reach them.
+            referenceDisplayIdentifiers = new Dictionary<Guid, string>();
+            foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
+                         && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
+                         && mvoGuids.Contains(cso.MetaverseObjectId.Value)))
             {
-                if (cso.MetaverseObjectId.HasValue
-                    && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
-                    && mvoGuids.Contains(cso.MetaverseObjectId.Value))
-                {
-                    var detached = new ConnectedSystemObject
-                    {
-                        Id = cso.Id,
-                        MetaverseObjectId = cso.MetaverseObjectId,
-                        ConnectedSystemId = cso.ConnectedSystemId,
-                        Status = cso.Status,
-                        Type = cso.Type,
-                        TypeId = cso.TypeId,
-                        ExternalIdAttributeId = cso.ExternalIdAttributeId,
-                        SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
-                        AttributeValues = cso.AttributeValues.ToList()
-                    };
-                    resolvedReferences.TryAdd(cso.MetaverseObjectId.Value, detached);
-                }
+                referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
             }
 
-            // For any MVO GUIDs not found in the in-memory batch, query the database
-            // (these may be CSOs created in a previous page/batch or a prior sync run)
-            var unresolvedMvoGuids = mvoGuids
-                .Where(g => !resolvedReferences.ContainsKey(g))
-                .ToList();
-
-            // Answered from this page's earlier lookups first; only Metaverse Objects not looked up yet reach the database.
+            // Then this page's earlier lookups; only Metaverse Objects not looked up yet reach the database (objects created
+            // in a previous page or run).
             var connectedSystemId = pendingExport.ConnectedSystemId;
             var notYetLookedUp = new List<Guid>();
-            foreach (var mvoGuid in unresolvedMvoGuids)
+            foreach (var mvoGuid in mvoGuids.Where(g => !referenceDisplayIdentifiers.ContainsKey(g)))
             {
-                if (!_snapshotReferenceCsos.TryGetValue((mvoGuid, connectedSystemId), out var known))
+                if (!_snapshotReferenceIdentifiers.TryGetValue((mvoGuid, connectedSystemId), out var known))
                     notYetLookedUp.Add(mvoGuid);
                 else if (known != null)
-                    resolvedReferences.TryAdd(mvoGuid, known);
+                    referenceDisplayIdentifiers.TryAdd(mvoGuid, known);
             }
 
             if (notYetLookedUp.Count > 0)
             {
-                Dictionary<Guid, ConnectedSystemObject> dbResolved;
+                // The identifiers alone, not the objects (#2598): loading a referenced group whole brought every member value.
+                Dictionary<Guid, string> found;
                 using (Diagnostics.Sync.StartSpan("Snapshot.LoadReferencedObjects").SetTag("count", notYetLookedUp.Count))
-                    dbResolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
+                    found = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(notYetLookedUp, connectedSystemId);
                 foreach (var mvoGuid in notYetLookedUp)
                 {
-                    var found = dbResolved.GetValueOrDefault(mvoGuid);
-                    _snapshotReferenceCsos[(mvoGuid, connectedSystemId)] = found;
-                    if (found != null)
-                        resolvedReferences.TryAdd(mvoGuid, found);
+                    var identifier = found.GetValueOrDefault(mvoGuid);
+                    _snapshotReferenceIdentifiers[(mvoGuid, connectedSystemId)] = identifier;
+                    if (identifier != null)
+                        referenceDisplayIdentifiers.TryAdd(mvoGuid, identifier);
                 }
 
                 // Some references may remain unresolved if the referenced objects haven't been
@@ -7182,7 +7173,7 @@ public abstract class SyncTaskProcessorBase
             _activity.InitiatedByType,
             _activity.InitiatedById,
             _activity.InitiatedByName,
-            resolvedReferences);
+            referenceDisplayIdentifiers);
 
         // Deletion-cascade and reference-recall Pending Exports are created with the Connected System
         // Object FK only (never the navigation property), so the builder cannot infer the object the
@@ -7252,14 +7243,14 @@ public abstract class SyncTaskProcessorBase
         if (unresolvedValueChanges.Count == 0)
             return;
 
-        // Batch-resolve all MVO GUIDs per Connected System
-        var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), ConnectedSystemObject>();
+        // Batch-resolve all MVO GUIDs per Connected System, to the identifiers alone (#2598)
+        var resolvedLookup = new Dictionary<(int CsId, Guid MvoGuid), string>();
         foreach (var (csId, mvoGuids) in unresolvedByCs)
         {
-            var resolved = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoGuids, csId);
-            foreach (var (mvoGuid, cso) in resolved)
+            var resolved = await _syncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(mvoGuids, csId);
+            foreach (var (mvoGuid, identifier) in resolved)
             {
-                resolvedLookup[(csId, mvoGuid)] = cso;
+                resolvedLookup[(csId, mvoGuid)] = identifier;
             }
         }
 
@@ -7270,9 +7261,9 @@ public abstract class SyncTaskProcessorBase
         var resolvedCount = 0;
         foreach (var (valueChange, csId, mvoGuid) in unresolvedValueChanges)
         {
-            if (resolvedLookup.TryGetValue((csId, mvoGuid), out var cso))
+            if (resolvedLookup.TryGetValue((csId, mvoGuid), out var identifier))
             {
-                valueChange.StringValue = ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso);
+                valueChange.StringValue = identifier;
                 valueChange.IsPendingExportStub = true;
                 resolvedCount++;
             }
@@ -7664,8 +7655,7 @@ public abstract class SyncTaskProcessorBase
                         // value stays marked for removal); only the leaver's non-re-elected values are unmarked.
                         var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
                         var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
-                        foreach (var frozen in frozenValues)
-                            mvo.PendingAttributeValueRemovals.Remove(frozen);
+                        mvo.PendingAttributeValueRemovals.RemoveEach(frozenValues);
 
                         // A pending deletion explains itself via the deletion outcome; the no-source
                         // preservation gets its own ValuesPreserved outcome downstream (#1570).

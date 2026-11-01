@@ -1171,6 +1171,316 @@ function Resolve-LabInstallImage {
 }
 
 # ---------------------------------------------------------------------------------------------
+# What the control account may not do itself, done by host setup (pure)
+# ---------------------------------------------------------------------------------------------
+#
+# The rebuild runs as jim-lab, which is a Hyper-V administrator and nothing more. Three things it needs are refused to
+# such an account, so Install-LabScripts.ps1, which runs elevated (by the operator, and hourly as SYSTEM), does them
+# instead: reading the Windows media's image list (Mount-DiskImage and Get-WindowsImage need an administrator), letting
+# VMs read the media (VMMS grants that as its caller, who must be allowed to change the media's ACL), and letting
+# jim-lab delete the lab VMs' files (those built by an administrator, and the Snapshots folders VMMS creates as SYSTEM).
+
+function Get-LabInstallImageRecordPath {
+    <#
+    .SYNOPSIS
+        Where host setup records the image each Windows media file installs: media.json, beside settings.json.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root
+    )
+
+    return (Join-LabPathText -Root $Root -Child 'media.json')
+}
+
+function ConvertTo-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The record of the image a build installs from one Windows media file: { path, length, lastWriteTimeUtc,
+        imageIndex, imageName, evaluation }.
+
+    .DESCRIPTION
+        The length and last write time identify the file the image list was read from, so replaced media is never taken
+        for the file recorded (Find-LabInstallImageRecord). The time is written as round-trip text in UTC, which keeps
+        every tick.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Collections.Specialized.OrderedDictionary])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [long]$Length,
+
+        [Parameter(Mandatory)]
+        [datetime]$LastWriteTimeUtc,
+
+        # As Resolve-LabInstallImage returns it: { ImageIndex, ImageName, Evaluation }.
+        [Parameter(Mandatory)]
+        [object]$Image
+    )
+
+    return [ordered]@{
+        path             = $Path
+        length           = $Length
+        lastWriteTimeUtc = $LastWriteTimeUtc.ToUniversalTime().ToString('o', [System.Globalization.CultureInfo]::InvariantCulture)
+        imageIndex       = [int]$Image.ImageIndex
+        imageName        = [string]$Image.ImageName
+        evaluation       = [bool]$Image.Evaluation
+    }
+}
+
+function ConvertTo-LabInstallImageRecordJson {
+    <#
+    .SYNOPSIS
+        The text of media.json: { "images": [ record, ... ] }.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Record
+    )
+
+    return ([ordered]@{ images = @($Record) } | ConvertTo-Json -Depth 4)
+}
+
+function ConvertFrom-LabInstallImageRecordJson {
+    <#
+    .SYNOPSIS
+        The records in the text of media.json; nothing for empty text, a file without images, or text that does not
+        parse.
+
+    .DESCRIPTION
+        Unparsable text is warned about and read as no records rather than thrown, so that host setup records the image
+        again (a file that stayed corrupt would otherwise fail every hourly run), and a build without a record reaches
+        the refusal that names the fix.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [AllowEmptyString()]
+        [AllowNull()]
+        [string]$Json
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Json)) {
+        return
+    }
+    try {
+        $document = $Json | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "The install image records do not parse, so they are read as none: $($_.Exception.Message)"
+        return
+    }
+    if ($null -eq $document -or $null -eq $document.PSObject.Properties['images']) {
+        return
+    }
+    @($document.images | Where-Object { $null -ne $_ })
+}
+
+function ConvertTo-LabRecordTime {
+    # Internal: a recorded time as UTC. ConvertFrom-Json turns round-trip text into a DateTime itself, so either may
+    # arrive here.
+    param($Value)
+
+    if ($Value -is [datetime]) {
+        $time = $Value
+    }
+    else {
+        $time = [datetime]::Parse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+    }
+    if ($time.Kind -eq [System.DateTimeKind]::Unspecified) {
+        $time = [datetime]::SpecifyKind($time, [System.DateTimeKind]::Utc)
+    }
+    return $time.ToUniversalTime()
+}
+
+function Test-LabSamePath {
+    # Internal: whether two Windows paths name the same file, by text: either slash, any case.
+    param([string]$Left, [string]$Right)
+
+    return [string]::Equals(($Left -replace '/', '\'), ($Right -replace '/', '\'), [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Find-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The recorded image of a Windows media file, { ImageIndex, ImageName, Evaluation }, or nothing when no record
+        matches its path, length and last write time.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]]$Record,
+
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [long]$Length,
+
+        [Parameter(Mandatory)]
+        [datetime]$LastWriteTimeUtc
+    )
+
+    $wanted = $LastWriteTimeUtc.ToUniversalTime()
+    foreach ($entry in @($Record | Where-Object { $null -ne $_ })) {
+        if (-not (Test-LabSamePath -Left ([string]$entry.path) -Right $Path)) { continue }
+        if ([long]$entry.length -ne $Length) { continue }
+        if ((ConvertTo-LabRecordTime -Value $entry.lastWriteTimeUtc) -ne $wanted) { continue }
+        return [pscustomobject]@{
+            ImageIndex = [int]$entry.imageIndex
+            ImageName  = [string]$entry.imageName
+            Evaluation = [bool]$entry.evaluation
+        }
+    }
+    return $null
+}
+
+function Merge-LabInstallImageRecord {
+    <#
+    .SYNOPSIS
+        The records with -NewRecord in place of any earlier record of the same file; other media's records are kept.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [AllowEmptyCollection()]
+        [AllowNull()]
+        [object[]]$Record,
+
+        [Parameter(Mandatory)]
+        [object]$NewRecord
+    )
+
+    @($Record | Where-Object { ($null -ne $_) -and -not (Test-LabSamePath -Left ([string]$_.path) -Right ([string]$NewRecord.path)) })
+    $NewRecord
+}
+
+function Get-LabMediaCapabilitySid {
+    <#
+    .SYNOPSIS
+        The SID Hyper-V grants read on an ISO it attaches to a VM, so that the VM's worker process can open it.
+
+    .DESCRIPTION
+        The capability SID of "vmWorkerProcess" (DeriveCapabilitySidsFromName), the same on every Windows host. VMMS
+        adds it to the ISO's ACL as its caller, which jim-lab cannot do on media it does not own (VMMS event 20790,
+        "Failed to set security info ... Access is denied"). Media an administrator has attached carries it already;
+        new media does not, so host setup grants it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param()
+
+    return 'S-1-15-3-1024-2268835264-3721307629-241982045-173645152-1490879176-104643441-2915960892-1612460704'
+}
+
+function Test-LabAccessRuleGranted {
+    <#
+    .SYNOPSIS
+        Whether a file or folder's access rules already allow a SID every right asked for (with -Inheritable, inherited
+        by the files and folders beneath), so that host setup leaves an ACL it has granted alone.
+
+    .DESCRIPTION
+        Each rule carries IdentityReference (the SID, as GetAccessRules with [SecurityIdentifier] gives it),
+        FileSystemRights, AccessControlType, InheritanceFlags and PropagationFlags, as enums or their numbers. An
+        inherited rule counts, so a folder beneath a granted one needs nothing of its own; an inherit-only rule does
+        not, since it does not apply to the object itself. With -Inheritable, a rule must propagate without limit: one
+        that reaches only the direct children (NoPropagateInherit) misses what is deeper, such as a Snapshots folder's
+        contents.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Rule,
+
+        [Parameter(Mandatory)]
+        [string]$Sid,
+
+        # FileSystemRights as a number, such as 0x301BF for Modify.
+        [Parameter(Mandatory)]
+        [long]$Rights,
+
+        [switch]$Inheritable
+    )
+
+    $allow = 0
+    $inheritOnly = 2
+    $containerAndObject = 3
+    foreach ($entry in $Rule) {
+        if ([string]$entry.IdentityReference -ne $Sid) { continue }
+        if ([int]$entry.AccessControlType -ne $allow) { continue }
+        if (([long]$entry.FileSystemRights -band $Rights) -ne $Rights) { continue }
+        if (([int]$entry.PropagationFlags -band $inheritOnly) -ne 0) { continue }
+        if ($Inheritable -and (([int]$entry.InheritanceFlags -band $containerAndObject) -ne $containerAndObject)) { continue }
+        if ($Inheritable -and ([int]$entry.PropagationFlags -ne 0)) { continue }
+        return $true
+    }
+    return $false
+}
+
+function Get-LabControlFolder {
+    <#
+    .SYNOPSIS
+        The folders host setup lets the control account modify, so the rebuild can delete what it removes: each
+        rebuild-yyyyMMdd folder directly beneath the VHD directory, and each lab VM's folder elsewhere beneath it (the
+        VMs built by an administrator).
+
+    .DESCRIPTION
+        Pure. Vm holds { Name, Path } for the host's VMs. Only a lab VM (FolderName: each role's live, candidate and
+        prev names) in a folder Test-LabOwnedVmFolder accepts counts, so the runner's own VM, which may share the VHD
+        directory, never does. A folder beneath another listed one is left out: it inherits the grant.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Root,
+
+        [AllowEmptyCollection()]
+        [object[]]$Vm = @(),
+
+        [Parameter(Mandatory)]
+        [string[]]$FolderName,
+
+        # The names of the folders directly beneath Root.
+        [AllowEmptyCollection()]
+        [string[]]$Directory = @()
+    )
+
+    $folders = [System.Collections.Generic.List[string]]::new()
+    foreach ($name in $Directory) {
+        if ($name -match '^rebuild-\d{8}$') {
+            $folders.Add((Join-LabPathText -Root $Root -Child $name))
+        }
+    }
+    foreach ($entry in $Vm) {
+        $path = ([string]$entry.Path).TrimEnd('\', '/')
+        if (($FolderName -contains [string]$entry.Name) -and (Test-LabOwnedVmFolder -Path $path -Root $Root -Name $FolderName)) {
+            $folders.Add($path)
+        }
+    }
+
+    $unique = @($folders | Sort-Object -Unique)
+    foreach ($folder in $unique) {
+        $normalised = $folder -replace '/', '\'
+        $beneath = @($unique | Where-Object { $normalised.StartsWith((($_ -replace '/', '\') + '\'), [System.StringComparison]::OrdinalIgnoreCase) })
+        if ($beneath.Count -eq 0) {
+            $folder
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------------------------
 # Guest phases: settings, arguments and results (pure)
 # ---------------------------------------------------------------------------------------------
 
@@ -2045,6 +2355,42 @@ function Test-LabRebuildBuiltAfter {
     return ($CreatedUtc.ToUniversalTime() -ge $DependencyCreatedUtc.ToUniversalTime())
 }
 
+function Test-LabRebuildBaselinePaired {
+    # Internal: whether a dependent candidate's baseline and its domain controller candidate's are a pair. Its build
+    # takes the dependent's first and the domain controller's after, so the domain controller's is never older; if it
+    # is, the build stopped between the two and that baseline lacks the dependent's objects. An unknown time passes.
+    param(
+        [Nullable[datetime]]$BaselineUtc,
+
+        [Nullable[datetime]]$DependencyBaselineUtc
+    )
+
+    if (($null -eq $BaselineUtc) -or ($null -eq $DependencyBaselineUtc)) {
+        return $true
+    }
+    return (([datetime]$DependencyBaselineUtc).ToUniversalTime() -ge ([datetime]$BaselineUtc).ToUniversalTime())
+}
+
+function Get-LabRebuildBaselineUtc {
+    # Internal: when an adapter's VM record says its baseline was taken, or $null when the record does not say.
+    param(
+        [AllowNull()]
+        [object]$Vm
+    )
+
+    if ($null -eq $Vm) {
+        return $null
+    }
+    if ($Vm -is [System.Collections.IDictionary]) {
+        return $Vm['BaselineCreatedUtc']
+    }
+    $property = $Vm.PSObject.Properties['BaselineCreatedUtc']
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
 function Assert-LabRebuildPairCurrent {
     # Internal: before Stage or Promote touches anything, refuse a dependent candidate built before its domain
     # controller candidate. That domain controller's directory lacks its accounts and objects, so the pair would not
@@ -2079,6 +2425,79 @@ function Assert-LabRebuildPairCurrent {
     if (-not (Test-LabRebuildBuiltAfter -CreatedUtc ([datetime]$candidate.CreatedUtc) -DependencyCreatedUtc ([datetime]$dependency.CreatedUtc))) {
         throw "'$($Role.CandidateName)' was built before '$dependencyName', whose directory therefore does not hold its accounts and objects; build $($Role.LiveName) again (Build -Role $($Role.LiveName)) before $($Phase.ToLowerInvariant())."
     }
+    $baselineUtc = Get-LabRebuildBaselineUtc -Vm $candidate
+    $dependencyBaselineUtc = Get-LabRebuildBaselineUtc -Vm $dependency
+    if ([bool]$candidate.HasBaseline -and (-not (Test-LabRebuildBaselinePaired -BaselineUtc $baselineUtc -DependencyBaselineUtc $dependencyBaselineUtc))) {
+        throw "The baseline of '$($Role.CandidateName)' ($(([datetime]$baselineUtc).ToUniversalTime().ToString('u'))) is newer than that of '$dependencyName' ($(([datetime]$dependencyBaselineUtc).ToUniversalTime().ToString('u'))), so its build stopped between the two and that directory baseline does not hold its accounts and objects; build $($Role.LiveName) again (Build -Role $($Role.LiveName)) before $($Phase.ToLowerInvariant())."
+    }
+}
+
+function Get-LabRebuildBuildChain {
+    <#
+    .SYNOPSIS
+        Groups the lab VMs into chains the runner can build at the same time: each domain controller starts one, and
+        each member server joins the chain of the domain controller it depends on.
+
+    .DESCRIPTION
+        The forests are independent, so their domain controllers can be built side by side. A member server joins its
+        domain controller's candidate and takes that candidate's baseline again, so it is built after the domain
+        controller, and after any other member server of the same domain controller, in the order given.
+
+        A member server whose domain controller is not in the list gets a chain of its own, which the Build phase then
+        refuses with its own reason. When no role says what it depends on (a Status from a host on older scripts), all
+        of them form one chain in the order given, which is how the lab was built before.
+
+    .PARAMETER Role
+        The roles of a Status or Build result: objects with live and, from a current host, dependsOn.
+
+    .OUTPUTS
+        One object per chain, in the order of their first roles: Root (the first live name) and Roles (the live names,
+        in build order).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [object[]]$Role
+    )
+
+    $roles = @($Role)
+    if ($roles.Count -eq 0) {
+        return
+    }
+    $reportsDependency = @($roles | Where-Object { $null -ne $_.PSObject.Properties['dependsOn'] }).Count -gt 0
+    if (-not $reportsDependency) {
+        [pscustomobject]@{ Root = [string]$roles[0].live; Roles = [string[]]@($roles | ForEach-Object { [string]$_.live }) }
+        return
+    }
+
+    $names = @($roles | ForEach-Object { [string]$_.live })
+    $chains = [ordered]@{}
+    # Domain controllers (and orphaned members) first, so a member listed before its domain controller still follows it.
+    foreach ($item in $roles) {
+        $dependsOn = [string]$item.dependsOn
+        if ([string]::IsNullOrEmpty($dependsOn) -or ($names -notcontains $dependsOn)) {
+            $chains[[string]$item.live] = New-Object System.Collections.Generic.List[string]
+            $chains[[string]$item.live].Add([string]$item.live)
+        }
+    }
+    foreach ($item in $roles) {
+        $dependsOn = [string]$item.dependsOn
+        if ((-not [string]::IsNullOrEmpty($dependsOn)) -and ($names -contains $dependsOn)) {
+            if (-not $chains.Contains($dependsOn)) {
+                # It depends on another member server, which the settings never do: a chain of its own.
+                $chains[[string]$item.live] = New-Object System.Collections.Generic.List[string]
+                $chains[[string]$item.live].Add([string]$item.live)
+                continue
+            }
+            $chains[$dependsOn].Add([string]$item.live)
+        }
+    }
+
+    foreach ($root in $chains.Keys) {
+        [pscustomobject]@{ Root = $root; Roles = [string[]]$chains[$root].ToArray() }
+    }
 }
 
 function Get-LabRebuildBuildAction {
@@ -2109,6 +2528,13 @@ function Get-LabRebuildBuildAction {
 
           finished, built after its dependency,      Refuse  (build the dependency again first; the dependent is then
           and would be replaced                               older than it and is replaced)
+
+        Both builds take the dependent's baseline and then the dependency's again, so a finished pair has the
+        dependency's baseline no older than the dependent's. With both times given (-CandidateBaselineUtc and
+        -DependencyBaselineUtc), a finished dependent whose dependency's baseline is older came from a build that
+        stopped between the two checkpoints: the directory's baseline never held its objects, so it is built again.
+
+          finished, dependency's baseline older      Replace (before Refuse: that baseline does not hold the server)
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -2120,7 +2546,11 @@ function Get-LabRebuildBuildAction {
 
         [bool]$CandidateHasBaseline = $false,
 
+        [Nullable[datetime]]$CandidateBaselineUtc,
+
         [Nullable[datetime]]$DependencyCreatedUtc,
+
+        [Nullable[datetime]]$DependencyBaselineUtc,
 
         [Parameter(Mandatory)]
         [datetime]$NowUtc,
@@ -2135,6 +2565,10 @@ function Get-LabRebuildBuildAction {
 
     if (-not $CandidateExists) {
         return 'Build'
+    }
+    if (($null -ne $DependencyCreatedUtc) -and $CandidateHasBaseline -and
+        (-not (Test-LabRebuildBaselinePaired -BaselineUtc $CandidateBaselineUtc -DependencyBaselineUtc $DependencyBaselineUtc))) {
+        return 'Replace'
     }
     $builtAfterDependency = ($null -ne $DependencyCreatedUtc) -and (Test-LabRebuildBuiltAfter -CreatedUtc $CandidateCreatedUtc -DependencyCreatedUtc ([datetime]$DependencyCreatedUtc))
     $age = $NowUtc.ToUniversalTime() - $CandidateCreatedUtc.ToUniversalTime()
@@ -2614,7 +3048,8 @@ function Get-LabRunStatusDescription {
 # host/Invoke-LabRebuild.ps1 (and by a fake in the tests). The adapter is a hashtable of script blocks:
 #
 #   GetVm         { param($Name) }                 -> $null, or an object with Name, State ('Running', 'Off', ...),
-#                                                     Notes, CreatedUtc (datetime) and HasBaseline (bool)
+#                                                     Notes, CreatedUtc (datetime), HasBaseline (bool) and
+#                                                     BaselineCreatedUtc (datetime, or $null without a baseline)
 #   StopVm        { param($Name) }                 shut the VM down (turn it off if it will not stop)
 #   RestoreVm     { param($Name, $Checkpoint) }    apply the checkpoint, start the VM, wait until it answers
 #   RenameVm      { param($Name, $NewName) }
@@ -2663,6 +3098,7 @@ function ConvertTo-LabRebuildResult {
         action     = $Action
         detail     = $Detail
         guestBuild = $GuestBuild
+        dependsOn  = $Role.DependsOn
     }
 }
 
@@ -2718,14 +3154,17 @@ function Invoke-LabRebuildRole {
         'Build' {
             $createdUtc = [datetime]::MinValue
             $hasBaseline = $false
+            $baselineUtc = $null
             if ($null -ne $candidate) {
                 $createdUtc = [datetime]$candidate.CreatedUtc
                 $hasBaseline = [bool]$candidate.HasBaseline
+                $baselineUtc = Get-LabRebuildBaselineUtc -Vm $candidate
             }
 
             # An AD FS server joins its domain controller's candidate, so that must be built first. Checked before
             # anything is stopped, so a wrong order changes nothing.
             $dependencyCreatedUtc = $null
+            $dependencyBaselineUtc = $null
             if (-not [string]::IsNullOrEmpty($Role.DependsOn)) {
                 $dependencyName = Get-LabRebuildVmName -LiveName $Role.DependsOn -Kind Candidate
                 $dependency = & $Adapter.GetVm $dependencyName
@@ -2734,10 +3173,12 @@ function Invoke-LabRebuildRole {
                     throw "'$dependencyName' is not built yet; build $($Role.DependsOn) before $($Role.LiveName), which joins its domain."
                 }
                 $dependencyCreatedUtc = [datetime]$dependency.CreatedUtc
+                $dependencyBaselineUtc = Get-LabRebuildBaselineUtc -Vm $dependency
             }
 
             $action = Get-LabRebuildBuildAction -CandidateExists ($null -ne $candidate) -CandidateCreatedUtc $createdUtc `
-                -CandidateHasBaseline $hasBaseline -DependencyCreatedUtc $dependencyCreatedUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh `
+                -CandidateHasBaseline $hasBaseline -CandidateBaselineUtc $baselineUtc -DependencyCreatedUtc $dependencyCreatedUtc `
+                -DependencyBaselineUtc $dependencyBaselineUtc -NowUtc $now -MaxAgeHours $MaxCandidateAgeHours -Fresh:$Fresh `
                 -DirectoryHoldsServer:($Role.Kind -eq 'ExchangeServer')
             if ($action -eq 'Refuse') {
                 throw "'$($Role.CandidateName)' is finished, and '$dependencyName''s baseline holds its Exchange server, so a new one cannot be installed against it. Build $($Role.DependsOn) again first (-Fresh), then $($Role.LiveName)."
@@ -3121,19 +3562,112 @@ public static class LabIsoStream
 # installed unattended from the same media. What makes it a domain controller or a federation server is its guest
 # script.
 
+function Test-LabElevated {
+    <#
+    .SYNOPSIS
+        Whether this process runs as an administrator with its full token (SYSTEM does).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    Assert-LabWindows -Feature 'Checking for an administrator'
+    $principal = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent())
+    return $principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Grant-LabFileSystemAccess {
+    <#
+    .SYNOPSIS
+        Allows a SID rights on a file or folder, inherited by everything beneath a folder with -Inheritable, unless its
+        ACL already does (Test-LabAccessRuleGranted). Returns AlreadyGranted or Granted.
+
+    .DESCRIPTION
+        Only the DACL is read and written, so the owner is left as it is (Set-Acl would write the owner back, which
+        fails for an owner the caller may not assign). Writing an inheritable entry on a folder propagates it to what
+        is beneath.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$Sid,
+
+        [Parameter(Mandatory)]
+        [System.Security.AccessControl.FileSystemRights]$Rights,
+
+        [switch]$Inheritable
+    )
+
+    Assert-LabWindows -Feature 'Granting access to a file or folder'
+    $item = Get-Item -LiteralPath $Path -Force
+    $access = [System.Security.AccessControl.AccessControlSections]::Access
+    if ($item -is [System.IO.DirectoryInfo]) {
+        $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.DirectoryInfo]$item, $access)
+    }
+    else {
+        $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.FileInfo]$item, $access)
+    }
+    $rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+    if (Test-LabAccessRuleGranted -Rule $rules -Sid $Sid -Rights ([long]$Rights) -Inheritable:$Inheritable) {
+        return 'AlreadyGranted'
+    }
+    if (-not $PSCmdlet.ShouldProcess($Path, "Allow $Sid $Rights")) {
+        return
+    }
+
+    $inheritance = [System.Security.AccessControl.InheritanceFlags]::None
+    if ($Inheritable) {
+        $inheritance = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    }
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new([System.Security.Principal.SecurityIdentifier]::new($Sid), $Rights, $inheritance,
+        [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)
+    $acl.AddAccessRule($rule)
+    if ($item -is [System.IO.DirectoryInfo]) {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.DirectoryInfo]$item, [System.Security.AccessControl.DirectorySecurity]$acl)
+    }
+    else {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl([System.IO.FileInfo]$item, [System.Security.AccessControl.FileSecurity]$acl)
+    }
+    return 'Granted'
+}
+
 function Get-LabInstallImage {
     <#
     .SYNOPSIS
-        Reads the image names off the media's install.wim and picks the Datacenter (Desktop Experience) one:
-        { ImageIndex, ImageName, Evaluation }.
+        The Datacenter (Desktop Experience) image to install from the media: { ImageIndex, ImageName, Evaluation }.
+
+    .DESCRIPTION
+        Taken from -RecordPath (media.json, written by host setup) when it holds a record of the file as it is now.
+        Otherwise the image names are read off the media's install.wim, which needs an administrator: Mount-DiskImage
+        and Get-WindowsImage refuse anyone else, including jim-lab, which the rebuild runs as.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$IsoPath
+        [string]$IsoPath,
+
+        [string]$RecordPath
     )
 
     Assert-LabWindows -Feature 'Reading the installation media'
+    if ($RecordPath -and (Test-Path -LiteralPath $RecordPath -PathType Leaf)) {
+        $file = Get-Item -LiteralPath $IsoPath
+        $records = @(ConvertFrom-LabInstallImageRecordJson -Json (Get-Content -LiteralPath $RecordPath -Raw))
+        $recorded = Find-LabInstallImageRecord -Record $records -Path $file.FullName -Length $file.Length -LastWriteTimeUtc $file.LastWriteTimeUtc
+        if ($null -ne $recorded) {
+            return $recorded
+        }
+    }
+    if (-not (Test-LabElevated)) {
+        $where = if ($RecordPath) { "$RecordPath holds no record of it as it is now" } else { 'no record of it was given' }
+        throw ("Reading the images on '$IsoPath' needs an administrator (Mount-DiskImage and Get-WindowsImage refuse anyone else), " +
+            "and $where. Run Install-LabScripts.ps1 elevated on the host, or wait for its hourly task (\JIM\Update AD lab scripts), which records it.")
+    }
+
     $mounted = Mount-DiskImage -ImagePath $IsoPath -PassThru
     try {
         $drive = ($mounted | Get-Volume).DriveLetter
@@ -3323,6 +3857,11 @@ function Stop-LabVm {
     .DESCRIPTION
         The guest shutdown runs as a job, so a guest that never answers cannot hold the caller. A VM turned off
         still gives a crash-consistent production checkpoint, which is enough for a lab baseline.
+
+        The VM reads Off before the Hyper-V module has completed that job, which it does on a thread of its own. A job
+        disposed of before then makes that thread throw PSObjectDisposedException, which ends the whole process, so
+        the job is waited for (up to a minute, with a warning if it is still running then) and never removed; it goes
+        when the process ends.
     #>
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([string])]
@@ -3359,8 +3898,57 @@ function Stop-LabVm {
         return 'TurnedOff'
     }
     finally {
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        if ($null -eq (Wait-Job -Job $job -Timeout 60)) {
+            Write-Warning "The shutdown job for $Name had not finished after 60 s; the process may report an error (PSObjectDisposedException) when it exits."
+        }
     }
+}
+
+function Wait-LabCheckpoint {
+    <#
+    .SYNOPSIS
+        Waits for a checkpoint just taken to be listed, and returns it. Throws if it is not listed within
+        -TimeoutSeconds, or if more than one checkpoint has the name.
+
+    .DESCRIPTION
+        A checkpoint of a VM that has just shut down can exist before it is listed (run 41142349653), so the listing is
+        tried again every two seconds, with a warning when the checkpoint turns up only after a wait. When it gives up,
+        the last error the listing raised is in the message.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VMName,
+
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [ValidateRange(2, 3600)]
+        [int]$TimeoutSeconds = 60
+    )
+
+    $intervalSeconds = 2
+    $listingError = $null
+    for ($waited = 0; ; $waited += $intervalSeconds) {
+        $listingErrors = $null
+        $found = @(Get-VMSnapshot -VMName $VMName -Name $Name -ErrorAction SilentlyContinue -ErrorVariable listingErrors)
+        if ($listingErrors) { $listingError = $listingErrors[-1] }
+        if ($found.Count -gt 1) {
+            throw "$VMName has $($found.Count) checkpoints called '$Name'."
+        }
+        if ($found.Count -eq 1) {
+            if ($waited -gt 0) {
+                Write-Warning "The checkpoint '$Name' of $VMName was listed only after $waited s."
+            }
+            return $found[0]
+        }
+        if ($waited + $intervalSeconds -gt $TimeoutSeconds) {
+            break
+        }
+        Start-Sleep -Seconds $intervalSeconds
+    }
+    $reason = if ($listingError) { " Listing it last failed with: $listingError" } else { ' Listing raised no error.' }
+    throw "The checkpoint '$Name' of $VMName was not listed within $TimeoutSeconds seconds of taking it.$reason"
 }
 
 function Wait-LabGuestReady {
@@ -4153,6 +4741,45 @@ function Set-LabOldPasswordAllowedPeriod {
     return $true
 }
 
+function Get-LabDomainPasswordPolicyChange {
+    <#
+    .SYNOPSIS
+        The Set-ADDefaultDomainPasswordPolicy parameters that bring a domain's password policy to the Windows
+        defaults (complexity on, minimum length 7, history 24, minimum age 1 day, maximum age 42 days): only those
+        that differ, so an empty hashtable means the policy is right.
+
+    .DESCRIPTION
+        The Default Domain Policy carries these values, and on a domain controller Group Policy's Security extension
+        writes them onto the domain. Until it has, the domain has its starting values (minimum length 0, history 0,
+        minimum age 0), and the rebuild's candidates were checkpointed like that (JIM#2412): Scenarios 017 and 020 are
+        built on a minimum length of 7. The Configure phase therefore sets them itself, and Verify checks them all.
+
+    .PARAMETER Policy
+        The domain's policy, as Get-ADDefaultDomainPasswordPolicy reports it.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Policy
+    )
+
+    $defaults = [ordered]@{
+        ComplexityEnabled    = $true
+        MinPasswordLength    = 7
+        PasswordHistoryCount = 24
+        MinPasswordAge       = [timespan]::FromDays(1)
+        MaxPasswordAge       = [timespan]::FromDays(42)
+    }
+    $change = @{}
+    foreach ($name in $defaults.Keys) {
+        if ($Policy.$name -ne $defaults[$name]) {
+            $change[$name] = $defaults[$name]
+        }
+    }
+    return $change
+}
+
 function Get-LabOldPasswordAllowedPeriod {
     <#
     .SYNOPSIS
@@ -4185,14 +4812,18 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeSchemaTarget', 'Get-LabExchangePreparationStep', 'Test-LabExchangeSchemaMasterBuild', 'Get-LabExchangeSetupArgument', 'Resolve-LabInstallImage',
     'Get-LabGuestPhaseArgument', 'ConvertTo-LabArgumentString', 'ConvertTo-LabOsBuild',
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
-    'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
+    'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabCheckpoint', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
     'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
+    'Get-LabDomainPasswordPolicyChange',
     'Get-LabRebuildVmName', 'Get-LabRebuildGenerationName', 'ConvertFrom-LabRebuildSetting', 'Get-LabNewestCumulativeUpdate',
-    'Get-LabRebuildBuildAction', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
+    'Get-LabRebuildBuildAction', 'Get-LabRebuildBuildChain', 'Get-LabPromotePlan', 'Get-LabRollbackPlan', 'Get-LabPrunePlan',
     'Get-LabVmNoteValue', 'Set-LabVmNoteValue', 'ConvertTo-LabChildArgument', 'Test-LabOwnedVmFolder',
     'Get-LabRunSummary', 'Get-LabRunStatusDescription', 'Invoke-LabRebuildPhase',
-    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall'
+    'Get-LabReadinessPort', 'Get-LabInstallImage', 'New-LabUnattendIso', 'New-LabVirtualMachine', 'Complete-LabUnattendedInstall',
+    'Get-LabInstallImageRecordPath', 'ConvertTo-LabInstallImageRecord', 'ConvertTo-LabInstallImageRecordJson', 'ConvertFrom-LabInstallImageRecordJson',
+    'Find-LabInstallImageRecord', 'Merge-LabInstallImageRecord', 'Get-LabMediaCapabilitySid', 'Test-LabAccessRuleGranted', 'Get-LabControlFolder',
+    'Test-LabElevated', 'Grant-LabFileSystemAccess'
 )

@@ -296,7 +296,7 @@ public class ImportReferenceMatchingTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso1.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso1.AttributeValues = new()
         {
             new() { Id = Guid.NewGuid(), GuidValue = TestConstants.CS_OBJECT_1_HR_ID, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()), ConnectedSystemObject = cso1 },
             new() { Id = Guid.NewGuid(), IntValue = 1, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()), ConnectedSystemObject = cso1 },
@@ -313,7 +313,7 @@ public class ImportReferenceMatchingTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso2.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso2.AttributeValues = new()
         {
             new() { Id = Guid.NewGuid(), GuidValue = TestConstants.CS_OBJECT_2_HR_ID, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()), ConnectedSystemObject = cso2 },
             new() { Id = Guid.NewGuid(), IntValue = 2, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()), ConnectedSystemObject = cso2 },
@@ -330,7 +330,7 @@ public class ImportReferenceMatchingTests
             Type = userObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.HR_ID
         };
-        cso3.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso3.AttributeValues = new()
         {
             new() { Id = Guid.NewGuid(), GuidValue = TestConstants.CS_OBJECT_3_HR_ID, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.HR_ID.ToString()), ConnectedSystemObject = cso3 },
             new() { Id = Guid.NewGuid(), IntValue = 3, Attribute = userObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.EMPLOYEE_ID.ToString()), ConnectedSystemObject = cso3 },
@@ -347,7 +347,7 @@ public class ImportReferenceMatchingTests
             Type = groupObjectType,
             ExternalIdAttributeId = (int)MockSourceSystemAttributeNames.GROUP_UID
         };
-        cso4.AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+        cso4.AttributeValues = new()
         {
             new() { Id = Guid.NewGuid(), GuidValue = TestConstants.CS_OBJECT_4_GROUP_UID, Attribute = groupObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.GROUP_UID.ToString()), ConnectedSystemObject = cso4 },
             new() { Id = Guid.NewGuid(), StringValue = TestConstants.CS_OBJECT_4_DISPLAY_NAME, Attribute = groupObjectType.Attributes.Single(q => q.Name == MockSourceSystemAttributeNames.DISPLAY_NAME.ToString()), ConnectedSystemObject = cso4 }

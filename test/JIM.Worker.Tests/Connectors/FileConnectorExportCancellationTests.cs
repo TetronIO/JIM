@@ -135,7 +135,7 @@ public class FileConnectorExportCancellationTests
             ChangeType = changeType,
             ConnectedSystemObject = cso,
             ConnectedSystemObjectId = cso.Id,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {

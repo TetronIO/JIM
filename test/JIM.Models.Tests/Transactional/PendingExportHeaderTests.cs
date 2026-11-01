@@ -26,7 +26,7 @@ public class PendingExportHeaderTests
         ChangeType = PendingExportChangeType.Update,
         Status = PendingExportStatus.Pending,
         CreatedAt = DateTime.UtcNow,
-        AttributeValueChanges = changes.ToList()
+        AttributeValueChanges = new(changes)
     };
 
     [Test]

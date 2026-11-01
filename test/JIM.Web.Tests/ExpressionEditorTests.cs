@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.JSInterop;
@@ -62,16 +63,16 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_WhileFirstTyped_HoldsTheSyntaxErrorBackUntilTheFieldIsLeft()
+    public async Task ExpressionEditor_WhileFirstTyped_HoldsTheSyntaxErrorBackUntilTheFieldIsLeftAsync()
     {
         // Every half-typed expression is a syntax error; reporting each keystroke turns the field red mid-word.
         var cut = Render<ExpressionEditor>(p => p
             .Add(c => c.Value, string.Empty)
             .Add(c => c.SyntaxCheck, _ => "Unterminated string literal."));
 
-        cut.Find("textarea").Input("Lower(\"");
+        await cut.Find("textarea").InputAsync("Lower(\"");
         var whileTyping = cut.Find("textarea").GetAttribute("aria-invalid");
-        cut.Find("textarea").Blur();
+        await cut.Find("textarea").BlurAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -81,14 +82,14 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_OnceLeft_ReportsTheSyntaxErrorAsItIsTyped()
+    public async Task ExpressionEditor_OnceLeft_ReportsTheSyntaxErrorAsItIsTypedAsync()
     {
         var cut = Render<ExpressionEditor>(p => p
             .Add(c => c.Value, "Lower(cs[\"mail\"])")
             .Add(c => c.SyntaxCheck, text => text.EndsWith(')') ? null : "Unterminated call."));
-        cut.Find("textarea").Blur();
+        await cut.Find("textarea").BlurAsync();
 
-        cut.Find("textarea").Input("Lower(cs[\"mail\"]");
+        await cut.Find("textarea").InputAsync("Lower(cs[\"mail\"]");
 
         Assert.That(cut.Markup, Does.Contain("Unterminated call."));
     }
@@ -283,24 +284,24 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_OnInput_RaisesValueChangedImmediately()
+    public async Task ExpressionEditor_OnInput_RaisesValueChangedImmediatelyAsync()
     {
         string? raised = null;
         var cut = Render<ExpressionEditor>(p => p
             .Add(c => c.Value, "mv")
             .Add(c => c.ValueChanged, value => raised = value));
 
-        cut.Find("textarea").Input("mv[\"x\"]");
+        await cut.Find("textarea").InputAsync("mv[\"x\"]");
 
         Assert.That(raised, Is.EqualTo("mv[\"x\"]"));
     }
 
     [Test]
-    public void ExpressionEditor_OnInput_RedrawsOverlayWithoutWaitingForParent()
+    public async Task ExpressionEditor_OnInput_RedrawsOverlayWithoutWaitingForParentAsync()
     {
         var cut = Render<ExpressionEditor>(p => p.Add(c => c.Value, string.Empty));
 
-        cut.Find("textarea").Input("mv[\"x\"]");
+        await cut.Find("textarea").InputAsync("mv[\"x\"]");
 
         Assert.That(cut.Find("pre").QuerySelector(".jim-expr-accessor-mv"), Is.Not.Null);
     }
@@ -392,13 +393,13 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_RequiredAndEmptyAfterBlur_ShowsRequiredError()
+    public async Task ExpressionEditor_RequiredAndEmptyAfterBlur_ShowsRequiredErrorAsync()
     {
         var cut = Render<ExpressionEditor>(p => p
             .Add(c => c.Label, "Expression")
             .Add(c => c.Required, true));
 
-        cut.Find("textarea").Blur();
+        await cut.Find("textarea").BlurAsync();
 
         var field = cut.FindComponent<MudField>().Instance;
         using (Assert.EnterMultipleScope())
@@ -410,13 +411,13 @@ public class ExpressionEditorTests : JimComponentTestContext
     }
 
     [Test]
-    public void ExpressionEditor_RequiredWithValueAfterBlur_ShowsNoError()
+    public async Task ExpressionEditor_RequiredWithValueAfterBlur_ShowsNoErrorAsync()
     {
         var cut = Render<ExpressionEditor>(p => p
             .Add(c => c.Value, "1")
             .Add(c => c.Required, true));
 
-        cut.Find("textarea").Blur();
+        await cut.Find("textarea").BlurAsync();
 
         Assert.That(cut.FindComponent<MudField>().Instance.Error, Is.False);
     }

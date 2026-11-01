@@ -487,7 +487,7 @@ public class LdapConnectorExportPlaceholderMemberTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -502,7 +502,7 @@ public class LdapConnectorExportPlaceholderMemberTests
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
             ConnectedSystemObject = new ConnectedSystemObject { Id = Guid.NewGuid(), Type = csoType },
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
     }
 
@@ -572,9 +572,9 @@ public class LdapConnectorExportPlaceholderMemberTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttr.Id,
-                AttributeValues = csoAttributeValues
+                AttributeValues = new(csoAttributeValues)
             },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -616,12 +616,12 @@ public class LdapConnectorExportPlaceholderMemberTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttr.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new() { AttributeId = dnAttr.Id, StringValue = groupDn }
                 }
             },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -665,7 +665,7 @@ public class LdapConnectorExportPlaceholderMemberTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttr.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                AttributeValues = new()
                 {
                     new() { AttributeId = dnAttr.Id, StringValue = groupDn },
                     new()
@@ -676,7 +676,7 @@ public class LdapConnectorExportPlaceholderMemberTests
                     }
                 }
             },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 
@@ -733,9 +733,9 @@ public class LdapConnectorExportPlaceholderMemberTests
                 Id = Guid.NewGuid(),
                 Type = csoType,
                 SecondaryExternalIdAttributeId = dnAttr.Id,
-                AttributeValues = csoAttributeValues
+                AttributeValues = new(csoAttributeValues)
             },
-            AttributeValueChanges = changes
+            AttributeValueChanges = new(changes)
         };
     }
 

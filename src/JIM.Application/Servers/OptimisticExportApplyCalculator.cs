@@ -60,7 +60,7 @@ public static class OptimisticExportApplyCalculator
     private static void ApplyPendingExport(
         Guid pendingExportId,
         ConnectedSystemObject cso,
-        List<PendingExportAttributeValueChange> changes,
+        IEnumerable<PendingExportAttributeValueChange> changes,
         OptimisticExportApplyDelta delta)
     {
         var workingByAttribute = cso.AttributeValues

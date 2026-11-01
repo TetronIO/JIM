@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Diagnostics;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -88,6 +89,35 @@ public class PageMetaverseObjectLoadDatabaseTests
             Assert.That(pageContext.ChangeTracker.Entries<MetaverseObjectAttributeValue>(), Is.Empty,
                 "Their attribute values are loaded untracked.");
         }
+    }
+
+    /// <summary>
+    /// The load's span carries how many values it read, so a run's log gives the reader's cost per value (#2669): the
+    /// projection for a raw reader of the page's Connected System Objects.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsAsync_WorkerContext_TagsTheMetaverseObjectLoadWithTheValuesItReadAsync()
+    {
+        var s = await SeedAsync();
+        var valueCounts = new List<object?>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "JIM.PostgresData.ConnectedSystem",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = span =>
+            {
+                if (span.DisplayName == "Cso.LoadMetaverseObjects")
+                    valueCounts.Add(span.GetTagItem("valueCount"));
+            }
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        await using var pageContext = NewContext(QueryTrackingBehavior.TrackAll);
+        pageContext.ChangeTracker.AutoDetectChangesEnabled = false;
+        await new PostgresDataRepository(pageContext).Sync.GetConnectedSystemObjectsAsync(s.SystemId, 1, 100, afterId: Guid.Empty);
+
+        Assert.That(valueCounts, Is.EqualTo(new object?[] { s.Expected.AttributeValues.Count }),
+            "One load, tagged with the values of the one joined Metaverse Object.");
     }
 
     /// <summary>

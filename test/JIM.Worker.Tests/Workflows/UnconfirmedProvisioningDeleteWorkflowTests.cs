@@ -50,7 +50,7 @@ public class UnconfirmedProvisioningDeleteWorkflowTests : WorkflowTestBase
             Status = PendingExportStatus.Pending,
             ChangeType = PendingExportChangeType.Delete,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         SyncRepo.SeedPendingExport(pendingExport);
 

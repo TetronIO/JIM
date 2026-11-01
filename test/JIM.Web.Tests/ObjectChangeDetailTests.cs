@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -87,7 +88,7 @@ public class ObjectChangeDetailTests : JimComponentTestContext
     }
 
     [Test]
-    public void ObjectChangeDetail_Close_RaisesOnClose()
+    public async Task ObjectChangeDetail_Close_RaisesOnCloseAsync()
     {
         var closed = false;
         var result = Result(ObjectChangeType.AttributeFlow, deleted: false, Attribute("Department", (ValueChangeType.Add, "Finance")));
@@ -95,7 +96,7 @@ public class ObjectChangeDetailTests : JimComponentTestContext
         var cut = Render<ObjectChangeDetail>(p => p
             .Add(c => c.Result, result)
             .Add(c => c.OnClose, () => closed = true));
-        cut.Find("[data-testid=close-detail]").Click();
+        await cut.Find("[data-testid=close-detail]").ClickAsync();
 
         Assert.That(closed, Is.True);
     }

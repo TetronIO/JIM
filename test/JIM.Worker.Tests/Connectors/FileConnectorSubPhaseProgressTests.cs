@@ -372,7 +372,7 @@ public class FileConnectorSubPhaseProgressTests
         {
             Id = Guid.NewGuid(),
             ChangeType = PendingExportChangeType.Create,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            AttributeValueChanges = new()
             {
                 new()
                 {

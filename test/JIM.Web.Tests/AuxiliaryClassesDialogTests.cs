@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -57,11 +58,11 @@ public class AuxiliaryClassesDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AuxiliaryClassesDialog_TheAllFilter_ListsEveryClassInTheSchema()
+    public async Task AuxiliaryClassesDialog_TheAllFilter_ListsEveryClassInTheSchemaAsync()
     {
         var provider = OpenDialog(ConnectedSystemWithAuxiliaryClasses());
 
-        provider.Find("[data-testid='jim-aux-filter-all']").Click();
+        await provider.Find("[data-testid='jim-aux-filter-all']").ClickAsync();
 
         var rows = provider.FindAll($"[data-testid='{RowMarker}']");
         Assert.That(rows.Select(r => r.GetAttribute("data-class")),
@@ -85,11 +86,11 @@ public class AuxiliaryClassesDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AuxiliaryClassesDialog_OpeningARow_ListsTheAttributesMergingItWouldContribute()
+    public async Task AuxiliaryClassesDialog_OpeningARow_ListsTheAttributesMergingItWouldContributeAsync()
     {
         var provider = OpenDialog(ConnectedSystemWithAuxiliaryClasses());
 
-        provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] [data-testid='{AttributesToggleMarker}']").Click();
+        await provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] [data-testid='{AttributesToggleMarker}']").ClickAsync();
 
         var attributes = provider.Find($"[data-testid='{AttributesMarker}']").TextContent;
         using (Assert.EnterMultipleScope())
@@ -105,11 +106,11 @@ public class AuxiliaryClassesDialogTests : JimComponentTestContext
     /// so would promise an attribute the administrator cannot have.
     /// </summary>
     [Test]
-    public void AuxiliaryClassesDialog_ACredentialAttribute_IsMarkedAsNeverSelectable()
+    public async Task AuxiliaryClassesDialog_ACredentialAttribute_IsMarkedAsNeverSelectableAsync()
     {
         var provider = OpenDialog(ConnectedSystemWithAuxiliaryClasses());
 
-        provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] [data-testid='{AttributesToggleMarker}']").Click();
+        await provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] [data-testid='{AttributesToggleMarker}']").ClickAsync();
 
         var credential = provider.Find($"[data-testid='{AttributesMarker}'] [data-attribute='userPassword']");
         using (Assert.EnterMultipleScope())
@@ -120,14 +121,14 @@ public class AuxiliaryClassesDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void AuxiliaryClassesDialog_ApplyIsDisabled_UntilAMergeChanges()
+    public async Task AuxiliaryClassesDialog_ApplyIsDisabled_UntilAMergeChangesAsync()
     {
         var provider = OpenDialog(ConnectedSystemWithAuxiliaryClasses());
 
         var applyBefore = provider.Find($"[data-testid='{ApplyMarker}']");
         Assert.That(applyBefore.HasAttribute("disabled"), Is.True, "nothing has changed yet");
 
-        provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] input[type='checkbox']").Change(true);
+        await provider.Find($"[data-testid='{RowMarker}'][data-class='posixAccount'] input[type='checkbox']").ChangeAsync(true);
 
         Assert.That(provider.Find($"[data-testid='{ApplyMarker}']").HasAttribute("disabled"), Is.False);
     }

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Models.Staging;
 using JIM.Web.Shared;
@@ -157,11 +158,11 @@ public class ImportReadRangeFieldTests : JimComponentTestContext
     }
 
     [Test]
-    public void ImportReadRangeField_ToggleClicked_ShowsBothRecordedStatesHighlighted()
+    public async Task ImportReadRangeField_ToggleClicked_ShowsBothRecordedStatesHighlightedAsync()
     {
         var cut = RenderField(ConnectedSystemRunType.DeltaImport, RawFrom, RawTo, new ImportReadRange { From = Sequence(8), To = Sequence(15) });
 
-        cut.Find(".jim-import-read-range button").Click();
+        await cut.Find(".jim-import-read-range button").ClickAsync();
 
         var blocks = cut.FindAll(".jim-json-syntax");
         using (Assert.EnterMultipleScope())

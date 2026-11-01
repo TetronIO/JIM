@@ -1176,10 +1176,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// </summary>
     /// <remarks>
     /// Transactionally renumbers the priorities of all import contributions to this Metaverse Attribute for a
-    /// given Metaverse Object Type (#91), and applies each contribution's "Null is a value" flag. The request must
+    /// given Metaverse Object Type, and applies each contribution's "Null is a value" flag. The request must
     /// list every current contributing mapping for the Attribute exactly once, in the desired priority order
     /// (highest first). To move a single mapping without restating the whole list, use the move endpoint instead.
-    /// Returns the resulting order.
+    /// Returns the resulting order, with the Connected System Object Types the change recorded as awaiting
+    /// synchronisation: the next synchronisation of each one's Connected System, Delta or Full, processes every object
+    /// of the type.
     /// </remarks>
     /// <param name="metaverseAttributeId">The Metaverse Attribute.</param>
     /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
@@ -1219,7 +1221,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                 ? await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, apiKey)
                 : await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, initiatedBy);
 
-            return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated));
+            var dto = AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated);
+            // What the reorder recorded as awaiting synchronisation, with what processing it costs (#2615, #2650).
+            dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+            return Ok(dto);
         }
         catch (ArgumentException ex)
         {
@@ -1234,10 +1239,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// </summary>
     /// <remarks>
     /// Repositions a single contributing mapping to the given 1-based priority position for this Metaverse
-    /// Attribute on a given Metaverse Object Type (#91), shuffling the other contributors to keep the list
+    /// Attribute on a given Metaverse Object Type, shuffling the other contributors to keep the list
     /// contiguous, then renumbering all affected rows in one transaction. The caller states only the new position;
     /// the engine keeps the order gap-free and duplicate-free. Optionally also updates the moved mapping's "Null is
-    /// a value" flag. Returns the resulting order, so the caller never has to renumber siblings or re-fetch.
+    /// a value" flag. Returns the resulting order, so the caller never has to renumber siblings or re-fetch, with the
+    /// Connected System Object Types the move recorded as awaiting synchronisation: the next synchronisation of each
+    /// one's Connected System, Delta or Full, processes every object of the type.
     /// </remarks>
     /// <param name="metaverseAttributeId">The Metaverse Attribute.</param>
     /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
@@ -1274,7 +1281,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                 ? await _application.ConnectedSystems.MoveAttributePriorityAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, request.Position, request.NullIsValue, apiKey)
                 : await _application.ConnectedSystems.MoveAttributePriorityAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, request.Position, request.NullIsValue, initiatedBy);
 
-            return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated));
+            var dto = AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated);
+            // What the move recorded as awaiting synchronisation, with what processing it costs (#2615, #2650).
+            dto.AwaitingSynchronisation = await _application.ConnectedSystems.TakeRecordedAwaitingSynchronisationAsync();
+            return Ok(dto);
         }
         catch (ArgumentException ex)
         {

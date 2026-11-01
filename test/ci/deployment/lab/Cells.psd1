@@ -16,6 +16,11 @@
         'alma9-podman' = @{ Image = 'jimlab/alma9-podman'; Os = 'AlmaLinux 9' }
     }
 
+    # The oldest release a customer can upgrade from, straight to the latest, as the upgrade guides say (upgrading.md,
+    # upgrading-podman.md; a test keeps them naming this one). v0.16.0 is the first with the installer and Podman.
+    # Cells marked FromOldest upgrade from it, so a customer who skipped releases is tested as well as one who did not.
+    OldestRelease = 'v0.16.0'
+
     Cells = @(
         # Docker, with each of its two image stores: containerd (the default for a new installation) and the classic
         # overlay2 store an existing host may still use.
@@ -36,6 +41,10 @@
         @{ Name = 'u24-podrl-up'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'ubuntu') }
         @{ Name = 'alma9-podrf-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrl-up'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; MemoryGiB = 12; Tags = @('upgrade', 'airgap', 'podman', 'rhel') }
+        # From the oldest release instead (OldestRelease), skipping every release since, on Docker and both kinds of Podman.
+        @{ Name = 'u24-docker-ctrd-up-oldest'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'Upgrade'; FromOldest = $true; MemoryGiB = 12; Tags = @('upgrade', 'oldest', 'airgap', 'docker', 'ubuntu') }
+        @{ Name = 'alma9-podrf-up-oldest'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Upgrade'; FromOldest = $true; MemoryGiB = 12; Tags = @('upgrade', 'oldest', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'u24-podrl-up-oldest'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Upgrade'; FromOldest = $true; MemoryGiB = 12; Tags = @('upgrade', 'oldest', 'airgap', 'podman', 'ubuntu') }
 
         # The installer's refusals, a run stopped with Ctrl+C, and runs over an installation, on each runtime and both
         # kinds of host.

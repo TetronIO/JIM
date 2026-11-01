@@ -308,8 +308,7 @@ public static class ConnectedSystemObjectObsoletionService
                 // removal); only the leaver's non-re-elected values are unmarked.
                 var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
                 var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
-                foreach (var frozen in frozenValues)
-                    mvo.PendingAttributeValueRemovals.Remove(frozen);
+                mvo.PendingAttributeValueRemovals.RemoveEach(frozenValues);
 
                 // A pending deletion already explains itself via the MvoDeletionScheduled outcome below; the
                 // no-source preservation is otherwise silent, so it gets its own outcome (#1570).

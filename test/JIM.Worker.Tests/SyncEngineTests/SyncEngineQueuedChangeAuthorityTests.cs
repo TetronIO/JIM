@@ -226,6 +226,6 @@ public class SyncEngineQueuedChangeAuthorityTests
         ConnectedSystemObjectId = Guid.NewGuid(),
         ChangeType = PendingExportChangeType.Update,
         Status = PendingExportStatus.Pending,
-        AttributeValueChanges = changes.ToList()
+        AttributeValueChanges = new(changes)
     };
 }

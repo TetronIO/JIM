@@ -171,7 +171,7 @@ public class ConnectedSystemRepositoryGetPendingExportsByIdsTests
         };
 
         var pe = CreatePendingExport();
-        pe.AttributeValueChanges = new List<PendingExportAttributeValueChange>
+        pe.AttributeValueChanges = new()
         {
             new()
             {
@@ -223,7 +223,7 @@ public class ConnectedSystemRepositoryGetPendingExportsByIdsTests
             ConnectedSystemId = _connectedSystem.Id,
             Type = _objectType,
             TypeId = _objectType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         return new PendingExport
@@ -236,7 +236,7 @@ public class ConnectedSystemRepositoryGetPendingExportsByIdsTests
             ChangeType = PendingExportChangeType.Update,
             Status = PendingExportStatus.Pending,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
     }
 

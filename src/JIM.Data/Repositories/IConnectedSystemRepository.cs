@@ -1861,8 +1861,13 @@ public interface IConnectedSystemRepository
 
     public Task UpdateSyncRuleAsync(SyncRule syncRule);
 
-
     public Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject);
+
+    /// <summary>
+    /// Deletes Connected System Objects by id, with their attribute values and the rows the database cascades with
+    /// them, leaving the change tracker matching the database (see <c>ISyncRepository.DeleteConnectedSystemObjectsAsync</c>,
+    /// which this backs).
+    /// </summary>
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
     public Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer);
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);

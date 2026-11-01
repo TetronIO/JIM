@@ -1922,7 +1922,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         }
 
         // Combine and attach to entity
-        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        entity.AttributeValues = new(svaValues.Concat(cappedMvaValues));
         using (ActivitySource.StartActivity("Mvo.LoadReferencedObjects"))
             await AttachReferencedMetaverseObjectsAsync(entity.AttributeValues);
 

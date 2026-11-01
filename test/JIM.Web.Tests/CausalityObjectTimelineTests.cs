@@ -138,8 +138,37 @@ public class CausalityObjectTimelineTests : JimComponentTestContext
         }
     }
 
+    /// <summary>
+    /// A follow-up of a row's item (#2668), such as the Initial Password of the account an export provisioned, is one row
+    /// directly beneath the item's row, showing where it stands now; a row with none has nothing beneath it.
+    /// </summary>
+    [Test]
+    public void Render_RowWithAFollowUp_ShowsItBeneathThatRowOnly()
+    {
+        var export = Row(ObjectChangeType.Exported, "Exported:1", Cause("Owen Hart"));
+        var other = Row(ObjectChangeType.Updated, "CsoUpdated:1", Cause("Owen Hart"));
+        var followUp = new JIM.Web.Models.ExecutionItemFollowUpDisplay(Guid.NewGuid(), "Initial password", "Glitterband EMEA",
+            "Retrying", "warn", "Timed out. Next attempt soon", true, DateTime.UtcNow);
+        var followUps = new Dictionary<Guid, IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>>
+        {
+            [export.Entry.RunProfileExecutionItemId] = [followUp]
+        };
+
+        var cut = RenderTimeline([other, export], totalCount: 2, followUps: followUps);
+
+        var rows = cut.FindAll("tbody tr");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(3), "the two items, and the one follow-up");
+            Assert.That(rows[2].ClassList, Does.Contain("jim-causality-timeline-followup"), "beneath the export, its row's own item");
+            Assert.That(rows[2].TextContent, Does.Contain("Initial password").And.Contain("Retrying"));
+            Assert.That(rows[2].QuerySelector("a")!.GetAttribute("href"), Is.EqualTo(followUp.ActivityHref));
+        }
+    }
+
     private IRenderedComponent<CausalityObjectTimeline> RenderTimeline(List<CausalTimelineRow> rows, int totalCount,
-        Action? onShowMore = null, bool changesNotRecorded = false, CausalObjectHeader? header = null)
+        Action? onShowMore = null, bool changesNotRecorded = false, CausalObjectHeader? header = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>>? followUps = null)
     {
         return Render<CausalityObjectTimeline>(ps =>
         {
@@ -148,6 +177,8 @@ public class CausalityObjectTimelineTests : JimComponentTestContext
             ps.Add(c => c.Links, Links());
             ps.Add(c => c.MetaverseObjectChangesNotRecorded, changesNotRecorded);
             ps.Add(c => c.Header, header);
+            if (followUps != null)
+                ps.Add(c => c.FollowUps, followUps);
             if (onShowMore != null)
                 ps.Add(c => c.OnShowMore, onShowMore);
         });

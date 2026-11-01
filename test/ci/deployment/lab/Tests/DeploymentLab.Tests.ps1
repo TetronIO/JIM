@@ -94,6 +94,48 @@ Describe 'Test-LabMatrix for upgrade cells' {
     }
 }
 
+Describe 'Test-LabMatrix for upgrades from the oldest release' {
+    BeforeAll {
+        function New-OldestMatrix {
+            $matrix = New-TestMatrix
+            $matrix.OldestRelease = 'v0.16.0'
+            $matrix.Cells[0].Scenario = 'Upgrade'
+            $matrix.Cells[0].MemoryGiB = 12
+            $matrix.Cells[0].FromOldest = $true
+            $matrix
+        }
+    }
+
+    It 'accepts an air-gapped upgrade cell from the matrix''s oldest release' {
+        Test-LabMatrix -Matrix (New-OldestMatrix) | Should -BeNullOrEmpty
+    }
+
+    It 'names a cell from the oldest release in a matrix that does not say which release that is' {
+        $matrix = New-OldestMatrix
+        $matrix.Remove('OldestRelease')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: FromOldest needs the matrix''s OldestRelease, as vX.Y.Z')
+    }
+
+    It 'names an oldest release that is not a release tag' {
+        $matrix = New-OldestMatrix
+        $matrix.OldestRelease = '0.16'
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: FromOldest needs the matrix''s OldestRelease, as vX.Y.Z')
+    }
+
+    It 'names FromOldest on a cell that does not upgrade' {
+        $matrix = New-OldestMatrix
+        $matrix.Cells[0].Scenario = 'Install'
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: FromOldest is for air-gapped Upgrade cells only')
+    }
+
+    It 'names FromOldest on an online cell, which upgrades from the release before the latest' {
+        $matrix = New-OldestMatrix
+        $matrix.Cells[0].Network = 'online'
+        $matrix.Cells[0].Tags += 'online'
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: FromOldest is for air-gapped Upgrade cells only')
+    }
+}
+
 Describe 'Test-LabMatrix for the installer''s cases and an external database' {
     It 'accepts an installer cases cell' {
         $matrix = New-TestMatrix
@@ -331,6 +373,24 @@ Describe 'The matrix in Cells.psd1' {
         $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
 
         Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'upgrades from its oldest release on Docker and both kinds of Podman' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $oldest = @($matrix.Cells | Where-Object { $_.ContainsKey('FromOldest') -and $_.FromOldest })
+
+        $oldest.Runtime | Should -Contain 'docker'
+        @($oldest | Where-Object { $_.Runtime -eq 'podman' -and -not $_.Rootless }) | Should -Not -BeNullOrEmpty
+        @($oldest | Where-Object { $_.Runtime -eq 'podman' -and $_.Rootless }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'has its oldest release named in both upgrade guides, as the oldest a customer can upgrade from' {
+        $oldest = (Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')).OldestRelease
+        $docs = Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration'
+
+        foreach ($page in 'upgrading.md', 'upgrading-podman.md') {
+            Get-Content -Raw (Join-Path $docs $page) | Should -Match "from $([regex]::Escape($oldest)) or any later release" -Because $page
+        }
     }
 }
 

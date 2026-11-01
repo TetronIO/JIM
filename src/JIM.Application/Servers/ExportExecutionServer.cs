@@ -2270,10 +2270,8 @@ public class ExportExecutionServer
     /// Removes the Connected System Objects (and their now-superfluous Pending Exports) for Delete exports
     /// that succeeded against a Connected System Object whose provisioning was never confirmed; see
     /// <see cref="IsUnconfirmedProvisioningDeleteSuccess"/> for the rule. Deletes by id via
-    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/> rather than the tracked-graph
-    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsAsync"/>: export batches load Pending Exports
-    /// <c>AsNoTracking()</c> with the Connected System Object graph included, and attaching that untracked
-    /// graph to a tracked <c>RemoveRange</c> can throw on the duplicate-key attach.
+    /// <see cref="ISyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>: export batches load Pending Exports
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so ids are what they hold.
     /// </summary>
     /// <param name="qualifyingExports">
     /// Delete exports that satisfy <see cref="IsUnconfirmedProvisioningDeleteSuccess"/>. Each caller is
@@ -2992,6 +2990,33 @@ public class ExportExecutionServer
     /// passing quietly.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Names the Run Profile Execution Item of each provisioning export before it exists (#2668), so the Activity of the
+    /// account's Initial Password can name it as its parent: the item takes <see cref="ProcessedExportItem.ExecutionItemId"/>
+    /// when the batch's items are written. An id already given (by Collision Remediation) is kept. The batch's items
+    /// were added last, so the search runs from the end and stops once every export is found.
+    /// </summary>
+    private static Dictionary<Guid, Guid> NameExecutionItems(ExportExecutionResult result, List<PendingExport> exports)
+    {
+        var wanted = exports.Select(pe => pe.Id).ToHashSet();
+        var named = new Dictionary<Guid, Guid>(wanted.Count);
+        for (var i = result.ProcessedExportItems.Count - 1; i >= 0 && named.Count < wanted.Count; i--)
+        {
+            var item = result.ProcessedExportItems[i];
+            if (item.PendingExportId is not { } pendingExportId || !wanted.Contains(pendingExportId) || named.ContainsKey(pendingExportId))
+                continue;
+
+            item.ExecutionItemId ??= Guid.NewGuid();
+            named[pendingExportId] = item.ExecutionItemId.Value;
+        }
+
+        if (named.Count < wanted.Count)
+            Log.Warning("NameExecutionItems: {Missing} of {Count} provisioning exports had no execution item to follow up; their Initial Password Activities " +
+                "will have no parent item", wanted.Count - named.Count, wanted.Count);
+
+        return named;
+    }
+
     private static async Task StageInitialPasswordsForBatchAsync(
         List<PendingExport> provisionedAccounts,
         IReadOnlySet<int>? rulesAskingForAPassword,
@@ -3038,6 +3063,11 @@ public class ExportExecutionServer
             staging = new List<PendingPasswordChange>(eligible.Count);
             var unaddressableCount = 0;
 
+            // Each password's Activity is a follow-up of the export item that provisioned the account (#2668). That
+            // item is only written after this batch, so it is named here, and takes this id when it is.
+            var executionItemIds = NameExecutionItems(result, eligible);
+            var executionItemByChange = new Dictionary<Guid, Guid?>(eligible.Count);
+
             foreach (var pe in eligible)
             {
                 var metaverseObjectId = pe.ConnectedSystemObject!.MetaverseObjectId;
@@ -3052,9 +3082,11 @@ public class ExportExecutionServer
                     continue;
                 }
 
+                var changeId = Guid.NewGuid();
+                executionItemByChange[changeId] = executionItemIds.GetValueOrDefault(pe.Id);
                 staging.Add(new PendingPasswordChange
                 {
-                    Id = Guid.NewGuid(),
+                    Id = changeId,
                     MetaverseObjectId = metaverseObjectId.Value,
                     ConnectedSystemId = pe.ConnectedSystemId,
                     ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
@@ -3107,6 +3139,7 @@ public class ExportExecutionServer
                     TargetOperationType = ActivityTargetOperationType.SetPassword,
                     TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned),
                     TargetName = connectedSystemName,
+                    ParentRunProfileExecutionItemId = executionItemByChange.GetValueOrDefault(outcome.RequestedId),
                     MetaverseObjectId = change.MetaverseObjectId,
                     ConnectedSystemId = change.ConnectedSystemId,
                     ConnectedSystemObjectId = change.ProvisionedConnectedSystemObjectId,
@@ -3941,7 +3974,7 @@ public class ExportExecutionServer
     /// A shallow copy of a Pending Export carrying a different set of attribute changes and sharing
     /// everything else (the Connected System Object included) with the original.
     /// </summary>
-    private static PendingExport WithChanges(PendingExport pendingExport, List<PendingExportAttributeValueChange> changes) => new()
+    private static PendingExport WithChanges(PendingExport pendingExport, IEnumerable<PendingExportAttributeValueChange> changes) => new()
     {
         Id = pendingExport.Id,
         ConnectedSystem = pendingExport.ConnectedSystem,
@@ -3962,7 +3995,7 @@ public class ExportExecutionServer
         ProvisioningSyncRuleId = pendingExport.ProvisioningSyncRuleId,
         InitialPasswordFollows = pendingExport.InitialPasswordFollows,
         CreatedAt = pendingExport.CreatedAt,
-        AttributeValueChanges = changes
+        AttributeValueChanges = new(changes)
     };
 
     /// <summary>

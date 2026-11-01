@@ -2049,8 +2049,7 @@ public class SyncPreviewServer
                 // are unmarked.
                 var reElectedDuringFreeze = workingMvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
                 var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
-                foreach (var frozen in frozenValues)
-                    workingMvo.PendingAttributeValueRemovals.Remove(frozen);
+                workingMvo.PendingAttributeValueRemovals.RemoveEach(frozenValues);
 
                 // A pending deletion explains itself via the deletion outcome; only the no-source
                 // preservation gets its own ValuesPreserved outcome (#1570).
@@ -2407,7 +2406,7 @@ public class SyncPreviewServer
                 ConnectedSystemId = downstreamCso.ConnectedSystemId,
                 ConnectedSystemObjectId = downstreamCso.Id,
                 SourceMetaverseObjectId = mvoId,
-                AttributeValueChanges = attributeChanges
+                AttributeValueChanges = new(attributeChanges)
             });
 
             deletionNode.Children.Add(new SyncOutcomeNode
@@ -2666,7 +2665,7 @@ public class SyncPreviewServer
                         ConnectedSystemId = entry.ConnectedSystemId,
                         ConnectedSystemObjectId = entry.WouldJoinCsoId ?? entry.ExistingTargetCsoId,
                         SourceMetaverseObjectId = entry.MetaverseObjectId,
-                        AttributeValueChanges = entry.AttributeChanges.ToList()
+                        AttributeValueChanges = new(entry.AttributeChanges)
                     });
                     break;
 

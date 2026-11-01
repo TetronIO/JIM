@@ -12,7 +12,8 @@
 
         Prune     Remove each <name>-prev that was demoted at least -PrevRetentionDays days ago. Runs first, so the
                   old set's disk is free before three new disks are built.
-        Build     For each domain controller: stop the live VM (the candidate takes its address), build
+        Build     For each domain controller (the workflow builds the forests side by side): stop the live VM (the
+                  candidate takes its address), build
                   <name>-candidate from settings.json and New-LabDomainController.ps1 with the newest cumulative
                   update in cumulativeUpdateDirectory, and take its baseline checkpoint. A finished candidate under a
                   day old is reused and an unfinished one resumed; an older one is a leftover from a red run and is
@@ -39,7 +40,9 @@
     An Exchange server in settings.json exchangeServers (exchange-primary) is rebuilt last, the same way, by
     New-LabExchangeServer.ps1 from the forests' Exchange media. It is off at rest, so Stage and Rollback revert it to
     its baseline and leave it off. A finished Exchange candidate is never rebuilt on its own: its domain controller
-    candidate's baseline holds its server object, so that domain controller is built again first.
+    candidate's baseline holds its server object, so that domain controller is built again first. The exception is a
+    domain controller baseline older than the server's, left by a build that stopped between the two checkpoints:
+    that baseline never held the server, so Build builds the server again, and Stage and Promote refuse the pair.
 
     Each domain controller is built with the live one's own address (its checkpoints carry the address, so it cannot be
     changed afterwards). The live VM is therefore OFF from the start of Build until Promote or Rollback; the workflow
@@ -55,7 +58,8 @@
         { phase, success, roles: [ { role, live, candidate, prev, action, detail, guestBuild } ] }
 
     A failure exits non-zero with the reason on standard error. Progress is also appended to a log under
-    %ProgramData%\jim-ad-lab\logs (or the temporary folder when that cannot be written). The lab scripts it drives run
+    %ProgramData%\jim-ad-lab\logs (or the temporary folder when that cannot be written), a file of its own for a call
+    limited to one VM, since the workflow builds several at once. The lab scripts it drives run
     in their own processes and read the two passwords from the host account's environment
     (JIM_AD_LAB_ADMIN_PASSWORD and JIM_AD_LAB_JIM_PASSWORD); nothing secret is a parameter or is logged.
 
@@ -65,8 +69,8 @@
 .PARAMETER Role
     Limit the phase to these live VM names (dc-primary, dc-source, dc-target, each AD FS server in settings.json
     federationServers, such as adfs-primary, and each Exchange server in exchangeServers, such as exchange-primary;
-    comma-separated is accepted). Default: all of them. The workflow builds one at a time so each is its own
-    control-plane call, a member server after the domain controller it joins.
+    comma-separated is accepted). Default: all of them. The workflow builds each VM in its own control-plane call,
+    the forests side by side and a member server after the domain controller it joins (Get-LabRebuildBuildChain).
 
 .PARAMETER SettingsPath
     The settings file. Default: settings.json beside this script (C:\jim-ad-lab\settings.json). Only Build reads more
@@ -134,7 +138,14 @@ $script:VhdRoot = $null
 $script:FolderName = @()
 
 function Initialize-RebuildLog {
-    # A log that cannot be written must never stop a rebuild, so every failure here is swallowed.
+    # A log that cannot be written must never stop a rebuild, so every failure here is swallowed. A call for one VM
+    # logs to a file of its own: the runner builds several at once, and appends from several processes to one file
+    # lose lines.
+    $roles = @($Role | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+    $suffix = ''
+    if (($roles.Count -eq 1) -and ($roles[0] -match '^[A-Za-z0-9-]+$')) {
+        $suffix = '-' + $roles[0]
+    }
     $candidates = @()
     if ($env:ProgramData) {
         $candidates += (Join-Path (Join-Path $env:ProgramData 'jim-ad-lab') 'logs')
@@ -143,7 +154,7 @@ function Initialize-RebuildLog {
     foreach ($directory in $candidates) {
         try {
             $null = New-Item -ItemType Directory -Path $directory -Force -ErrorAction Stop
-            $path = Join-Path $directory ('Invoke-LabRebuild-{0}.log' -f [datetime]::UtcNow.ToString('yyyyMMdd'))
+            $path = Join-Path $directory ('Invoke-LabRebuild-{0}{1}.log' -f [datetime]::UtcNow.ToString('yyyyMMdd'), $suffix)
             Add-Content -LiteralPath $path -Value ('--- {0:u} phase {1} ---' -f [datetime]::UtcNow, $Phase) -ErrorAction Stop
             $script:LogPath = $path
             return
@@ -238,13 +249,18 @@ function Get-RebuildAdapter {
                 return $null
             }
             $vm = $found[0]
-            $baseline = @(Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue).Count -gt 0
+            $baselines = @(Get-VMSnapshot -VMName $Name -Name (Get-LabCheckpointName -Baseline) -ErrorAction SilentlyContinue)
+            $baselineUtc = $null
+            if ($baselines.Count -gt 0) {
+                $baselineUtc = ([datetime]($baselines | Sort-Object -Property CreationTime -Descending | Select-Object -First 1).CreationTime).ToUniversalTime()
+            }
             return [pscustomobject]@{
-                Name        = [string]$vm.Name
-                State       = [string]$vm.State
-                Notes       = [string]$vm.Notes
-                CreatedUtc  = ([datetime]$vm.CreationTime).ToUniversalTime()
-                HasBaseline = $baseline
+                Name               = [string]$vm.Name
+                State              = [string]$vm.State
+                Notes              = [string]$vm.Notes
+                CreatedUtc         = ([datetime]$vm.CreationTime).ToUniversalTime()
+                HasBaseline        = ($baselines.Count -gt 0)
+                BaselineCreatedUtc = $baselineUtc
             }
         }
 
@@ -312,7 +328,11 @@ function Get-RebuildAdapter {
             if ($vmPath -and $script:VhdRoot -and (Test-LabOwnedVmFolder -Path $vmPath -Root $script:VhdRoot -Name $script:FolderName) -and (Test-Path -LiteralPath $vmPath)) {
                 $disks = @(Get-ChildItem -LiteralPath $vmPath -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.vhdx', '.avhdx', '.vhd', '.avhd' })
                 if ($disks.Count -eq 0) {
-                    Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue
+                    # Best effort: everything that can go goes, and each file that cannot is named.
+                    Remove-Item -LiteralPath $vmPath -Recurse -Force -ErrorAction SilentlyContinue -ErrorVariable removeErrors
+                    foreach ($failure in $removeErrors) {
+                        Write-RebuildLog "Removed $Name, but could not delete $($failure.TargetObject) ($($failure.Exception.Message)); an administrator must delete it."
+                    }
                 }
             }
         }
@@ -389,7 +409,24 @@ try {
             }
         }
 
-        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName (Get-LabRebuildGenerationName -NowUtc ([datetime]::UtcNow)) -CumulativeUpdatePath $updatePath
+        $generationName = Get-LabRebuildGenerationName -NowUtc ([datetime]::UtcNow)
+        $plan = ConvertFrom-LabRebuildSetting -Settings $settings -GenerationName $generationName -CumulativeUpdatePath $updatePath
+
+        # VMMS creates each VM's Snapshots folder as SYSTEM, and this account could not delete it when a candidate is
+        # replaced. An inheritable entry of its own on the rebuild folder reaches it, and as the folder's owner it may
+        # add one. Host setup grants the same within the hour in any case.
+        $generationFolder = Join-Path $plan.VhdDirectory $generationName
+        try {
+            $null = New-Item -ItemType Directory -Path $generationFolder -Force
+            $self = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $granted = Grant-LabFileSystemAccess -Path $generationFolder -Sid $self -Rights Modify -Inheritable
+            if ($granted -eq 'Granted') {
+                Write-RebuildLog "Let this account modify everything beneath $generationFolder, including what VMMS creates there."
+            }
+        }
+        catch {
+            Write-RebuildLog "Could not let this account modify everything beneath $generationFolder ($($_.Exception.Message)); a replaced candidate may leave an empty folder behind."
+        }
     }
     else {
         # Only the names are needed to stage, promote, roll back, prune or report, and a rollback must never be

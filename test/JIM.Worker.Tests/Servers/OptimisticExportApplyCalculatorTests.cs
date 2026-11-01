@@ -837,7 +837,7 @@ public class OptimisticExportApplyCalculatorTests
             ChangeType = PendingExportChangeType.Update,
             ConnectedSystemObject = cso,
             ConnectedSystemObjectId = cso.Id,
-            AttributeValueChanges = changes.ToList()
+            AttributeValueChanges = new(changes)
         };
     }
 

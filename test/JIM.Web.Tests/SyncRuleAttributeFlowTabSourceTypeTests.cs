@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Expressions;
@@ -52,10 +53,10 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
     }
 
     [Test]
-    public void AddDialog_GeneratedSourceTypeOptionIsOffered()
+    public async Task AddDialog_GeneratedSourceTypeOptionIsOfferedAsync()
     {
         BuildJim();
-        var (provider, _) = OpenAddDialog();
+        var (provider, _) = await OpenAddDialogAsync();
 
         var sourceTypePicker = provider.FindComponents<MudSelect<string>>().Single(s => s.Instance.Label == "Source Type");
         var options = sourceTypePicker.FindComponents<MudSelectItem<string>>().Select(i => i.Instance.Value).ToList();
@@ -104,7 +105,7 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
         // An Attribute copies its value as it is; an Expression or a Generated Value is worked out, and the Try it pane
         // beside the settings shows how (#2471).
         BuildJim();
-        var (provider, tab) = OpenAddDialog();
+        var (provider, tab) = await OpenAddDialogAsync();
 
         await ChooseSourceTypeAsync(provider, tab, sourceType);
 
@@ -117,7 +118,7 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
         // The target comes first (#2471), so the Try it pane can test the whole Attribute Flow from the first keystroke;
         // it used to appear only once an Expression had been typed.
         BuildJim();
-        var (provider, tab) = OpenAddDialog();
+        var (provider, tab) = await OpenAddDialogAsync();
 
         await ChooseSourceTypeAsync(provider, tab, "Expression");
 
@@ -154,12 +155,12 @@ public class SyncRuleAttributeFlowTabSourceTypeTests : JimComponentTestContext
         _factory.Current = new JimApplication(repo.Object, syncRepository: syncRepo.Object);
     }
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab) OpenAddDialog()
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab)> OpenAddDialogAsync()
     {
         var provider = Render<MudDialogProvider>();
         var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, BuildRule()));
 
-        tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).Click();
+        await tab.FindAll("button").First(b => b.TextContent.Contains("Add Attribute Flow")).ClickAsync();
         provider.WaitForAssertion(() => Assert.That(provider.HasComponent<MudSelect<string>>(), Is.True));
 
         return (provider, tab);

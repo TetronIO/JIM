@@ -106,7 +106,7 @@ public class PendingExportReconciliationTests
             Type = TargetUserType,
             TypeId = TargetUserType.Id,
             Status = ConnectedSystemObjectStatus.Normal,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         return cso;
@@ -126,7 +126,7 @@ public class PendingExportReconciliationTests
             Status = status,
             ChangeType = PendingExportChangeType.Update,
             CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = new()
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);

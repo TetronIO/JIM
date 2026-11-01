@@ -87,11 +87,8 @@ try {
     }
 
     Checkpoint-VM -Name $Name -SnapshotName $Checkpoint
-    $taken = @(Get-VMSnapshot -VMName $Name -Name $Checkpoint -ErrorAction SilentlyContinue)
-    if ($taken.Count -ne 1) {
-        throw "The checkpoint '$Checkpoint' was not found after taking it."
-    }
-    Write-Host "Took the production checkpoint '$Checkpoint' of $Name at $($taken[0].CreationTime.ToUniversalTime().ToString('u'))" -ForegroundColor Green
+    $taken = Wait-LabCheckpoint -VMName $Name -Name $Checkpoint
+    Write-Host "Took the production checkpoint '$Checkpoint' of $Name at $($taken.CreationTime.ToUniversalTime().ToString('u'))" -ForegroundColor Green
 }
 catch {
     [Console]::Error.WriteLine("Checkpoint-LabDomainController failed: $($_.Exception.Message)")

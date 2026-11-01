@@ -31,7 +31,7 @@ public class SyncRepositoryCsoWriteTests
             TypeId = ObjectTypeId,
             ExternalIdAttributeId = AttrId,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
     }
 
@@ -122,7 +122,7 @@ public class SyncRepositoryCsoWriteTests
             ExternalIdAttributeId = AttrId,
             Created = seeded.Created,
             LastUpdated = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>(seeded.AttributeValues)
+            AttributeValues = new(seeded.AttributeValues)
             {
                 new() { Id = Guid.NewGuid(), AttributeId = AttrId, StringValue = "added-value" }
             }
@@ -135,7 +135,7 @@ public class SyncRepositoryCsoWriteTests
             "The store must reflect the working copy's changes.");
 
         // The caller now releases its own working copy - the store must not be aliased to it.
-        workingCopy.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+        workingCopy.AttributeValues = new();
 
         var afterRelease = await _repo.GetConnectedSystemObjectAsync(CsId, seeded.Id);
         Assert.That(afterRelease!.AttributeValues, Has.Count.EqualTo(2),

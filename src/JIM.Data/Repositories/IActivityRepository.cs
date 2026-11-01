@@ -100,6 +100,12 @@ public interface IActivityRepository
     public Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId);
 
     /// <summary>
+    /// The follow-up Activities of the given Run Profile Execution Items (#2668): those whose parent is one of the
+    /// items, oldest first. Untracked; empty when none of the items has any.
+    /// </summary>
+    public Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds);
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>

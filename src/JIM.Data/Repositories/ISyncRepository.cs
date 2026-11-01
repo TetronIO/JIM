@@ -437,8 +437,15 @@ public interface ISyncRepository
     Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds);
 
     /// <summary>
-    /// Deletes CSOs and their attribute values without change tracking.
-    /// Used for quiet deletions (e.g., pre-disconnected CSOs).
+    /// Deletes Connected System Objects, their attribute values and the rows the database cascades with them, by id
+    /// and in a fixed number of statements however many objects go (#2669). Writes no change records: callers build
+    /// them beforehand (the quiet deletion persists its own; the execution-item path links them to its items).
+    /// <para>
+    /// Implementations must clear other rows' references to the objects that the database does not clear itself,
+    /// and leave the change tracker matching the database: the objects, their values and the rows cascaded with them
+    /// no longer tracked, and every tracked foreign key the database set to null set to null, so a later save writes
+    /// nothing. The objects need not be tracked, and nothing they refer to may be attached.
+    /// </para>
     /// </summary>
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
@@ -1107,16 +1114,13 @@ public interface ISyncRepository
     /// <para>
     /// Used for a successful Delete export against a Connected System Object whose provisioning was never
     /// confirmed (Status stayed PendingProvisioning): export batches load Pending Exports
-    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so passing that graph to
-    /// <see cref="DeleteConnectedSystemObjectsAsync"/> (which does <c>RemoveRange</c> on a tracked
-    /// <c>DbSet</c>) can throw "another instance with the same key value is already being tracked".
-    /// Deleting by id avoids attaching the untracked graph at all.
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so they hold ids rather than
+    /// tracked objects.
     /// </para>
     /// <para>
-    /// Implementations must null incoming reference values from other rows before deleting (mirroring
-    /// <see cref="DeleteConnectedSystemObjectsAsync"/>'s reference-clearing step), and must detach any
-    /// tracked instances of the deleted rows and their attribute values from the change tracker, for the
-    /// same reason documented on <see cref="DeletePendingExportsByConnectedSystemObjectIdsAsync"/>.
+    /// The same deletion as <see cref="DeleteConnectedSystemObjectsAsync"/>, with the same obligations: other
+    /// rows' references cleared where the database does not clear them, and the change tracker left matching
+    /// the database.
     /// </para>
     /// </summary>
     /// <returns>The number of Connected System Objects deleted.</returns>
@@ -1702,6 +1706,15 @@ public interface ISyncRepository
     /// </summary>
     Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
+
+    /// <summary>
+    /// Per Metaverse Object joined to an object in the Connected System, the identifier a change record shows for a
+    /// reference to that object: exactly what <c>ExportChangeHistoryBuilder.GetCsoDisplayIdentifier</c> gives for the
+    /// object (its name, else its external id, else its secondary external id, else its id). Summary tier (#2598): a
+    /// Pending Export's snapshot needs only this, and loading the whole object brought every member value of a
+    /// referenced group. Untracked; Metaverse Objects with no object in the system are absent.
+    /// </summary>
+    Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
     /// What references to the given Metaverse Objects are written as in a Connected System: per

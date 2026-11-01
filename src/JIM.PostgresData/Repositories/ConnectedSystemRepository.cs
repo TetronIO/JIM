@@ -1049,91 +1049,28 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Objects
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
-        await using var ownTransaction = await BeginTransactionIfNoneAsync();
-
-        // Retire any export-mode generated values the object held before it goes (Unique Value Generation, #242,
-        // Phase 6): its assignments are removed by the deletion's foreign-key cascade.
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, [connectedSystemObject.Id]);
-        await ClearReferencesToConnectedSystemObjectsAsync([connectedSystemObject.Id]);
-        Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
-        await Repository.Database.SaveChangesAsync();
-
-        if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
-    }
-
-    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
-    {
-        await using var ownTransaction = await BeginTransactionIfNoneAsync();
-
-        var csoIds = connectedSystemObjects.Select(cso => cso.Id).ToList();
-        // Retire any export-mode generated values these objects held before they go (#242, Phase 6).
-        await RetiredGeneratedValueSql.RetireForConnectedSystemObjectsAsync(Repository.Database, csoIds);
-        await ClearReferencesToConnectedSystemObjectsAsync(csoIds);
-        Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
-        await Repository.Database.SaveChangesAsync();
-
-        if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
+        await ConnectedSystemObjectDeletionSql.DeleteAsync(Repository.Database, [connectedSystemObject.Id]);
     }
 
     /// <summary>
-    /// Begins a transaction on the shared context when none is open, so a deletion and the retirement written
-    /// beside it land together; returns null when the caller already holds one, which the work then joins.
+    /// Deletes the objects by id with raw SQL and brings the change tracker into line with the database's cascades
+    /// (<see cref="ConnectedSystemObjectDeletionSql"/>, shared with the Synchronisation repository's delete by id). The
+    /// objects need not be tracked, and nothing they refer to is attached.
+    /// </summary>
+    public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
+    {
+        await ConnectedSystemObjectDeletionSql.DeleteAsync(Repository.Database, connectedSystemObjects.Select(cso => cso.Id).ToHashSet());
+    }
+
+    /// <summary>
+    /// Begins a transaction on the shared context when none is open, so writes made by separate statements land
+    /// together; returns null when the caller already holds one, which the work then joins.
     /// </summary>
     private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BeginTransactionIfNoneAsync()
     {
         return Repository.Database.Database.CurrentTransaction == null
             ? await Repository.Database.Database.BeginTransactionAsync()
             : null;
-    }
-
-    /// <summary>
-    /// Nulls reference values held by OTHER rows that point at the given CSOs, mirroring the reference
-    /// cleanup the Metaverse Object deletion path performs. Two restrict-behaviour FKs target
-    /// ConnectedSystemObjects: ConnectedSystemObjectAttributeValues.ReferenceValueId (for example a group
-    /// CSO's member values still referencing a deprovisioned user's CSO before the membership removals
-    /// are confirmed) and MetaverseObjectAttributeValues.UnresolvedReferenceValueId (an inbound reference
-    /// that never resolved to a Metaverse Object). Without this cleanup, deleting a still-referenced CSO
-    /// violates the FK constraint (PostgreSQL 23503) and fails the whole sync run. The raw reference
-    /// string (UnresolvedReferenceValue, for example the DN) is preserved on CSO rows, so the next
-    /// confirming import still reconciles the value normally.
-    /// </summary>
-    /// <remarks>
-    /// Internal rather than private so <see cref="SyncRepository.DeleteConnectedSystemObjectsByIdsAsync"/>
-    /// (JIM.PostgresData/Repositories/SyncRepository.CsOperations.cs) can reuse it ahead of its own raw-SQL
-    /// delete-by-id, instead of duplicating the restrict-FK nulling logic. Both repositories share the same
-    /// <see cref="JimDbContext"/> instance via <see cref="PostgresDataRepository"/>, so the tracked-instance
-    /// fix-up below is visible to either caller.
-    /// </remarks>
-    internal async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
-    {
-        if (csoIds.Count == 0)
-            return;
-
-        var idArray = csoIds.ToArray();
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
-            idArray);
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" = ANY({0})",
-            idArray);
-
-        // Update tracked entities to match the database state, otherwise SaveChangesAsync would try to
-        // write the stale FK value back (same pattern as DeleteMetaverseObjectAsync's CSO detach).
-        var deletedIds = csoIds as HashSet<Guid> ?? [.. csoIds];
-        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
-            .Where(e => e.Entity.ReferenceValueId.HasValue && deletedIds.Contains(e.Entity.ReferenceValueId.Value)))
-        {
-            trackedValue.Entity.ReferenceValueId = null;
-            trackedValue.Entity.ReferenceValue = null;
-        }
-        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>()
-            .Where(e => e.Entity.UnresolvedReferenceValueId.HasValue && deletedIds.Contains(e.Entity.UnresolvedReferenceValueId.Value)))
-        {
-            trackedValue.Entity.UnresolvedReferenceValueId = null;
-            trackedValue.Entity.UnresolvedReferenceValue = null;
-        }
     }
 
     /// <summary>
@@ -1793,7 +1730,16 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
             : csoQuery.Skip(offset).Take(pageSize);
 
-        var results = await pagedCsoQuery.ToListAsync();
+        // The Delta Synchronisation's counterpart of the Full Synchronisation's Cso.Page.LoadWithAttributeValues: a
+        // modified group brings its whole membership with it (#2669).
+        List<ConnectedSystemObject> results;
+        using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadModifiedWithAttributeValues"))
+        {
+            results = await pagedCsoQuery.ToListAsync();
+            loadSpan?.SetTag("csoCount", results.Count);
+            loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
+        }
+
         await PopulateReferenceValuesAsync(results);
         await LoadMetaverseObjectsForCsosAsync(results);
 
@@ -1907,21 +1853,26 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Distinct()
             .ToList();
 
+        span?.SetTag("referencedCsoCount", referencedCsoIds.Count);
         if (referencedCsoIds.Count == 0)
             return;
 
         // Direct SQL: get Id, MetaverseObjectId, TypeId and Created for every referenced CSO.
         // This bypasses the deep EF Include chain entirely — no navigation properties, no
         // change tracker conflicts, no cartesian explosions.
-        var rows = await Repository.Database.Database
-            .SqlQueryRaw<ReferencedCsoRow>(
-                """
-                SELECT "Id" AS "CsoId", "MetaverseObjectId", "TypeId", "Created"
-                FROM "ConnectedSystemObjects"
-                WHERE "Id" = ANY({0})
-                """,
-                referencedCsoIds.ToArray())
-            .ToListAsync();
+        List<ReferencedCsoRow> rows;
+        using (ActivitySource.StartActivity("Cso.PopulateReferenceValues.Query"))
+        {
+            rows = await Repository.Database.Database
+                .SqlQueryRaw<ReferencedCsoRow>(
+                    """
+                    SELECT "Id" AS "CsoId", "MetaverseObjectId", "TypeId", "Created"
+                    FROM "ConnectedSystemObjects"
+                    WHERE "Id" = ANY({0})
+                    """,
+                    referencedCsoIds.ToArray())
+                .ToListAsync();
+        }
 
         var rowLookup = rows.ToDictionary(r => r.CsoId);
 
@@ -1972,10 +1923,16 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToArray();
 
         if (mvoIds.Length == 0)
+        {
+            span?.SetTag("valueCount", 0);
             return;
+        }
 
         // Raw SQL into untracked objects (#2598): see MetaverseObjectRawReader for why.
         var mvosById = await MetaverseObjectRawReader.ReadAsync(Repository.Database, mvoIds);
+
+        // The values the read brought, so a run's log gives the reader's cost per value (#2669).
+        span?.SetTag("valueCount", mvosById.Values.Sum(m => m.AttributeValues.Count));
 
         // Join each page Connected System Object to its object, both ways. EF's relationship fix-up did this when the
         // objects were tracked; the reverse collection is what the engine reads for an object's loaded connectors.
@@ -2255,7 +2212,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Combine and attach to entity
-        entity.AttributeValues = svaValues.Concat(cappedMvaValues).ToList();
+        entity.AttributeValues = new(svaValues.Concat(cappedMvaValues));
         using (ActivitySource.StartActivity("Cso.LoadReferencedObjects"))
             await AttachReferencedConnectedSystemObjectsAsync(entity.AttributeValues);
 
@@ -5879,7 +5836,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             cappedMvaChanges.AddRange(values);
         }
 
-        entity.AttributeValueChanges = svaChanges.Concat(cappedMvaChanges).ToList();
+        entity.AttributeValueChanges = new(svaChanges.Concat(cappedMvaChanges));
 
         return new PendingExportDetailResult
         {
@@ -6299,7 +6256,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             var valueChangesByPendingExportId = valueChanges
                 .Where(avc => avc.PendingExportId.HasValue)
                 .GroupBy(avc => avc.PendingExportId!.Value)
-                .ToDictionary(g => g.Key, g => g.ToList());
+                .ToDictionary(g => g.Key, g => new ReferenceIndexedList<PendingExportAttributeValueChange>(g));
 
             foreach (var pe in page.Where(pe => valueChangesByPendingExportId.ContainsKey(pe.Id)))
                 pe.AttributeValueChanges = valueChangesByPendingExportId[pe.Id];

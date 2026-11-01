@@ -128,7 +128,7 @@ public class ExportChangeLimitTests
             ConnectedSystemId = targetSystem.Id,
             Type = type,
             TypeId = type.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
         ConnectedSystemObjectsData.Add(cso);
         SyncRepo.SeedConnectedSystemObject(cso);
@@ -144,7 +144,7 @@ public class ExportChangeLimitTests
             ChangeType = changeType,
             CreatedAt = createdAt,
             HasUnresolvedReferences = hasUnresolvedReferences,
-            AttributeValueChanges = attributeValueChanges ?? new List<PendingExportAttributeValueChange>()
+            AttributeValueChanges = attributeValueChanges is null ? [] : new(attributeValueChanges)
         };
         PendingExportsData.Add(pendingExport);
         SyncRepo.SeedPendingExport(pendingExport);
@@ -197,7 +197,7 @@ public class ExportChangeLimitTests
             Type = type,
             TypeId = type.Id,
             MetaverseObjectId = referencedMvoId,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
             }

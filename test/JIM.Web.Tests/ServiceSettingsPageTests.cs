@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -212,7 +213,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
     }
 
     [Test]
-    public void Settings_ShowPreviewFeaturesOnlyFilter_LimitsTheTableToFeatureFlagRows()
+    public async Task Settings_ShowPreviewFeaturesOnlyFilter_LimitsTheTableToFeatureFlagRowsAsync()
     {
         UseDevelopmentHost();
         _serviceSettingsRepository.Setup(r => r.GetAllSettingsAsync()).ReturnsAsync(
@@ -237,7 +238,7 @@ public class ServiceSettingsPageTests : JimComponentTestContext
         var checkboxLabel = page.FindAll("label")
             .Single(l => l.TextContent.Trim() == "Show preview features only");
         var checkboxInput = checkboxLabel.Closest(".mud-checkbox")!.QuerySelector("input[type=checkbox]")!;
-        checkboxInput.Change(true);
+        await checkboxInput.ChangeAsync(true);
 
         page.WaitForAssertion(() => Assert.That(page.Markup, Does.Not.Contain("SSO Authority"),
             "the filter must remove non-flag rows"));

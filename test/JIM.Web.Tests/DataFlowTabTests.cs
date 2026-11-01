@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -302,7 +303,7 @@ public class DataFlowTabTests : JimComponentTestContext
     }
 
     [Test]
-    public void DataFlowTab_MultipleContributorsSwitch_NarrowsTheQuery()
+    public async Task DataFlowTab_MultipleContributorsSwitch_NarrowsTheQueryAsync()
     {
         // The switch has to reach the query: filtering by eye over a page of flows is exactly the work the page
         // exists to remove, and a control that only changes colour is worse than no control.
@@ -310,7 +311,7 @@ public class DataFlowTabTests : JimComponentTestContext
         var cut = Render<DataFlowTab>();
         Assert.That(_lastQuery!.MultipleContributorsOnly, Is.False, "the initial load is unfiltered");
 
-        cut.Find("input[type=checkbox]").Change(true);
+        await cut.Find("input[type=checkbox]").ChangeAsync(true);
 
         Assert.That(_lastQuery!.MultipleContributorsOnly, Is.True);
     }

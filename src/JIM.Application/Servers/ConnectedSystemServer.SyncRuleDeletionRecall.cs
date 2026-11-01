@@ -634,12 +634,12 @@ public partial class ConnectedSystemServer
         };
 
         var referencedMvoIds = ExportChangeHistoryBuilder.GetUnresolvedReferenceMetaverseObjectIds(shell.AttributeValueChanges);
-        var resolvedReferences = referencedMvoIds.Count > 0
-            ? await Application.SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(referencedMvoIds, withdrawal.ConnectedSystemId)
+        var referenceDisplayIdentifiers = referencedMvoIds.Count > 0
+            ? await Application.SyncRepo.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(referencedMvoIds, withdrawal.ConnectedSystemId)
             : null;
 
         var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
-            shell, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, resolvedReferences);
+            shell, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName, referenceDisplayIdentifiers);
         change.ConnectedSystemObjectId ??= withdrawal.ConnectedSystemObjectId;
         return change;
     }

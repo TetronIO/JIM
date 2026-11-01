@@ -3,6 +3,7 @@
 
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Application;
 using JIM.Application.Interfaces;
@@ -115,9 +116,9 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     /// Opens the dialog through the dialog service and waits for the preview-loaded state (the mode radios
     /// render only once the preview arrives), so tests never race the async initialisation.
     /// </summary>
-    private IRenderedComponent<MudDialogProvider> ShowDialog() => ShowDialogWithReference().Provider;
+    private async Task<IRenderedComponent<MudDialogProvider>> ShowDialogAsync() => (await ShowDialogWithReferenceAsync()).Provider;
 
-    private (IRenderedComponent<MudDialogProvider> Provider, IDialogReference Reference) ShowDialogWithReference()
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IDialogReference Reference)> ShowDialogWithReferenceAsync()
     {
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
@@ -126,7 +127,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
             { x => x.ConnectedSystem, new ConnectedSystem { Id = ConnectedSystemId, Name = SystemName, Status = _systemStatus } }
         };
         IDialogReference? reference = null;
-        provider.InvokeAsync(async () => reference = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{SystemName}\" Connected System", parameters));
+        await provider.InvokeAsync(async () => reference = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{SystemName}\" Connected System", parameters));
         provider.WaitForElement("input[type='radio']");
         return (provider, reference!);
     }
@@ -134,10 +135,10 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     /// <summary>
     /// Types the system's name into the confirmation field and confirms, as an administrator deleting does.
     /// </summary>
-    private static void ConfirmDeletion(IRenderedComponent<MudDialogProvider> provider)
+    private static async Task ConfirmDeletionAsync(IRenderedComponent<MudDialogProvider> provider)
     {
-        provider.Find($"[data-testid='{PhraseFieldMarker}'] input").Input(SystemName);
-        provider.Find($"[data-testid='{ConfirmButtonMarker}']").Click();
+        await provider.Find($"[data-testid='{PhraseFieldMarker}'] input").InputAsync(SystemName);
+        await provider.Find($"[data-testid='{ConfirmButtonMarker}']").ClickAsync();
     }
 
     /// <summary>
@@ -172,17 +173,17 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     /// click on the second input is what selecting it produces (ContributedValuesChoiceDialogTests
     /// precedent).
     /// </summary>
-    private static void ChooseImmediate(IRenderedComponent<MudDialogProvider> provider)
+    private static async Task ChooseImmediateAsync(IRenderedComponent<MudDialogProvider> provider)
     {
         var radios = provider.FindAll("input[type='radio']");
         Assert.That(radios, Has.Count.EqualTo(2), "expected exactly the deprovision and immediate radios");
-        radios[1].Click();
+        await radios[1].ClickAsync();
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_DefaultsToDeprovisionThroughSynchronisation()
+    public async Task DeleteConnectedSystemDialog_DefaultsToDeprovisionThroughSynchronisationAsync()
     {
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var radios = provider.FindAll("input[type='radio']");
         using (Assert.EnterMultipleScope())
@@ -195,11 +196,11 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_ChoosingImmediate_RevealsKeepWarning()
+    public async Task DeleteConnectedSystemDialog_ChoosingImmediate_RevealsKeepWarningAsync()
     {
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
-        ChooseImmediate(provider);
+        await ChooseImmediateAsync(provider);
 
         Assert.That(provider.WaitForElement($"[data-testid='{ImmediateWarningMarker}']"), Is.Not.Null);
     }
@@ -207,10 +208,10 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     [Test]
     public async Task DeleteConnectedSystemDialog_NotPreviewed_OffersToPreviewFirstAsync()
     {
-        var (provider, reference) = ShowDialogWithReference();
+        var (provider, reference) = await ShowDialogWithReferenceAsync();
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
-        slot.QuerySelectorAll("button").Single(b => b.TextContent.Contains("Preview first")).Click();
+        await slot.QuerySelectorAll("button").Single(b => b.TextContent.Contains("Preview first")).ClickAsync();
 
         var result = await reference.Result;
         Assert.That(result?.Data, Is.EqualTo(DeleteConnectedSystemDialogOutcome.PreviewRequested),
@@ -218,70 +219,70 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_NotPreviewed_RecordsThatNoPreviewInformedTheDeletion()
+    public async Task DeleteConnectedSystemDialog_NotPreviewed_RecordsThatNoPreviewInformedTheDeletionAsync()
     {
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
-        ConfirmDeletion(provider);
+        await ConfirmDeletionAsync(provider);
 
         VerifyDeletionRecorded(null);
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_CurrentPreview_StatesItsVerdictAndRecordsItOnTheDeletion()
+    public async Task DeleteConnectedSystemDialog_CurrentPreview_StatesItsVerdictAndRecordsItOnTheDeletionAsync()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         Assert.That(slot.TextContent, Does.Contain("312"));
-        ConfirmDeletion(provider);
+        await ConfirmDeletionAsync(provider);
 
         VerifyDeletionRecorded(_latestPreview.ActivityId);
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_CurrentPreviewWhenDeletingImmediately_StatesThePreviewDescribesTheOtherMode()
+    public async Task DeleteConnectedSystemDialog_CurrentPreviewWhenDeletingImmediately_StatesThePreviewDescribesTheOtherModeAsync()
     {
         // The preview is of deprovisioning; its cleared values and exports do not happen when deleting immediately,
         // so listing them under that choice would describe a deletion nobody is about to make.
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor, 662));
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
-        ChooseImmediate(provider);
+        await ChooseImmediateAsync(provider);
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         Assert.That(slot.TextContent, Does.Not.Contain("662"), "the other mode's counts are not listed under this choice");
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_StalePreview_SaysSoAndRecordsItAsTheOneRead()
+    public async Task DeleteConnectedSystemDialog_StalePreview_SaysSoAndRecordsItAsTheOneReadAsync()
     {
         _latestPreview = Preview(ActivityStatus.Complete, ConfigurationChangePreviewStageStatus.Complete,
             new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.WouldBecomeDeletionEligible, 312));
         _staleness = new ConfigurationChangePreviewStaleness(null, new PreviewOvertakingActivity(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(-1), ActivityTargetType.SynchronisationRule, ActivityTargetOperationType.Update, "HR Users", null));
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         Assert.That(slot.TextContent, Does.Contain("may no longer"));
         Assert.That(slot.TextContent, Does.Contain("HR Users"), "the dialog names what overtook the preview");
-        ConfirmDeletion(provider);
+        await ConfirmDeletionAsync(provider);
 
         // The deletion cites the preview the administrator read; the server records that it was out of date (#2022).
         VerifyDeletionRecorded(_latestPreview.ActivityId);
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_RunningPreview_DeletingCancelsItAndRecordsNone()
+    public async Task DeleteConnectedSystemDialog_RunningPreview_DeletingCancelsItAndRecordsNoneAsync()
     {
         _latestPreview = Preview(ActivityStatus.InProgress, ConfigurationChangePreviewStageStatus.InProgress);
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var slot = provider.Find($"[data-testid='{PreviewSlotMarker}']");
         Assert.That(slot.TextContent, Does.Contain("Deleting now cancels it"));
-        ConfirmDeletion(provider);
+        await ConfirmDeletionAsync(provider);
 
         using (Assert.EnterMultipleScope())
         {
@@ -292,9 +293,9 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_GroupsCountsByFate()
+    public async Task DeleteConnectedSystemDialog_GroupsCountsByFateAsync()
     {
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -319,7 +320,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_WhenFencedWithQueuedRun_StatesRetryAttaches()
+    public async Task DeleteConnectedSystemDialog_WhenFencedWithQueuedRun_StatesRetryAttachesAsync()
     {
         _systemStatus = ConnectedSystemStatus.Deleting;
         _mockTaskingRepo
@@ -331,7 +332,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
                 Activity = new Activity { Id = Guid.NewGuid() }
             });
 
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var notice = provider.Find($"[data-testid='{FencedNoticeMarker}']");
         using (Assert.EnterMultipleScope())
@@ -343,7 +344,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_WhenFencedWithNoTask_StatesResumeOrFinish()
+    public async Task DeleteConnectedSystemDialog_WhenFencedWithNoTask_StatesResumeOrFinishAsync()
     {
         // A failed run's task row is removed at the worker's boundary, so a fenced system with no task is
         // the failed-run state: deprovisioning again resumes; immediate deletion finishes.
@@ -352,7 +353,7 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
             .Setup(r => r.GetDeleteConnectedSystemWorkerTaskAsync(ConnectedSystemId))
             .ReturnsAsync((DeleteConnectedSystemWorkerTask?)null);
 
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         var notice = provider.Find($"[data-testid='{FencedNoticeMarker}']");
         using (Assert.EnterMultipleScope())
@@ -364,9 +365,9 @@ public class DeleteConnectedSystemDialogTests : JimComponentTestContext
     }
 
     [Test]
-    public void DeleteConnectedSystemDialog_WhenNotFenced_ShowsNoFencedNotice()
+    public async Task DeleteConnectedSystemDialog_WhenNotFenced_ShowsNoFencedNoticeAsync()
     {
-        var provider = ShowDialog();
+        var provider = await ShowDialogAsync();
 
         Assert.That(provider.FindAll($"[data-testid='{FencedNoticeMarker}']"), Is.Empty);
     }

@@ -11,11 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
 - ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
+- ✨ An Initial Password now sits under the export item that provisioned the account, which shows where it stands as a follow-up (also in the Causality Explorer, the REST API and PowerShell), so an export no longer adds one Activity per account to the Activity list. (#2668)
 
 ### Changed
 
 - 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
+- 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
 
 ### Fixed
 
@@ -25,10 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An object that leaves an import Synchronisation Rule's scope under the Disconnect action is now actually disconnected rather than staying joined, and is no longer deprovisioned when its Metaverse Object is deleted as a result.
 - 🐛 An Activity's **CSOs Disconnected** figure now includes objects that left an import Synchronisation Rule's scope, so it agrees with the outcome counts beneath it. (#2629)
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
+- 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 
 ### Performance
 
 - ⚡ Synchronising into a system with large groups is faster: reading each page's Metaverse Objects no longer grows with the square of a group's membership, which cost 154 seconds for one page in a 750,000-person directory. Synchronisation and deletion previews speed up too. (#2598)
+- ⚡ Synchronising a group whose members are themselves large groups is faster: recording each export's change now reads only the names of the objects it references, not their members, which cost 14.8 seconds for one group in a 750,000-person directory. (#2598)
+- ⚡ Large groups load far faster during synchronisation: loading a group's members or pending membership changes no longer grows with the square of its size, taking one page with a 500,000-member group from over a minute to seconds. (#2598)
+- ⚡ Synchronising a change to a large group's membership is faster: checking which members the Connected System already holds no longer grows with the square of the group's size, which cost 50 seconds for one 50,000-member group gaining two members. (#2645)
+- ⚡ Large groups checked for drift, or with an export already queued, synchronise faster: Drift Detection, and merging a membership change into a queued Pending Export, no longer grow with the square of the group's size, which could take minutes at 50,000 members. (#2658)
+- ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
+- ⚡ Removing many departed accounts in one synchronisation is faster: each page now deletes them in a few statements, rather than one per object and per value. (#2669)
+- ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
+- ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
 
 
 ## [0.17.0] - 2026-10-29

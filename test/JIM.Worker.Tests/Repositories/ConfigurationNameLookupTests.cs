@@ -118,9 +118,8 @@ public class ConfigurationNameLookupTests
         {
             ConnectedSystem = connectedSystem,
             Type = type,
-            AttributeValues = attributes
-                .Select(a => new ConnectedSystemObjectAttributeValue { Attribute = a, StringValue = $"{a.Name} value" })
-                .ToList()
+            AttributeValues = new(attributes
+                .Select(a => new ConnectedSystemObjectAttributeValue { Attribute = a, StringValue = $"{a.Name} value" }))
         };
 
         var pendingExport = new PendingExport
@@ -129,9 +128,8 @@ public class ConfigurationNameLookupTests
             ConnectedSystem = connectedSystem,
             ConnectedSystemObject = cso,
             ChangeType = PendingExportChangeType.Update,
-            AttributeValueChanges = attributes
-                .Select(a => new PendingExportAttributeValueChange { Attribute = a, StringValue = $"{a.Name} change" })
-                .ToList()
+            AttributeValueChanges = new(attributes
+                .Select(a => new PendingExportAttributeValueChange { Attribute = a, StringValue = $"{a.Name} change" }))
         };
 
         _dbContext.AddRange(connectedSystem, cso, pendingExport);

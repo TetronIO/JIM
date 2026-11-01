@@ -45,7 +45,7 @@ public class CsoProvisioningTests
             MetaverseObjectId = Guid.NewGuid(),
             DateJoined = DateTime.UtcNow,
             Created = DateTime.UtcNow,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Assert
@@ -161,7 +161,7 @@ public class CsoProvisioningTests
             SecondaryExternalIdAttributeId = 101, // distinguishedName
             Status = ConnectedSystemObjectStatus.PendingProvisioning,
             JoinType = ConnectedSystemObjectJoinType.Provisioned,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            AttributeValues = new()
         };
 
         // Act - simulate receiving external ID from connector after export
@@ -215,7 +215,7 @@ public class CsoProvisioningTests
         {
             Id = Guid.NewGuid(),
             ExternalIdAttributeId = 100,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {
@@ -250,7 +250,7 @@ public class CsoProvisioningTests
         {
             Id = Guid.NewGuid(),
             SecondaryExternalIdAttributeId = 101,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            AttributeValues = new()
             {
                 new()
                 {

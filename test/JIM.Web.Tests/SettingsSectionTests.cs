@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
@@ -34,11 +35,11 @@ public class SettingsSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void SettingsSection_HeaderClicked_OpensIt()
+    public async Task SettingsSection_HeaderClicked_OpensItAsync()
     {
         var cut = RenderSection();
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
 
         Assert.That(cut.FindAll(".body"), Has.Count.EqualTo(1));
     }
@@ -54,19 +55,19 @@ public class SettingsSectionTests : JimComponentTestContext
     }
 
     [Test]
-    public void SettingsSection_ClosedAgainWithAttentionStanding_StaysClosed()
+    public async Task SettingsSection_ClosedAgainWithAttentionStanding_StaysClosedAsync()
     {
         // Opening on attention is a prompt, not a lock: the administrator can close it once seen.
         var cut = RenderSection(attention: "Fails the whole object");
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
         cut.Render(p => p.Add(c => c.Summary, "Fail the object"));
 
         Assert.That(cut.FindAll(".body"), Is.Empty);
     }
 
     [Test]
-    public void SettingsSection_OpenByDefaultThenClosed_StaysClosedWhenTheFormRerenders()
+    public async Task SettingsSection_OpenByDefaultThenClosed_StaysClosedWhenTheFormRerendersAsync()
     {
         // A section the form opens by default is passed Expanded on every render of the form; closing it must stick.
         var cut = Render<SettingsSection>(p => p
@@ -74,7 +75,7 @@ public class SettingsSectionTests : JimComponentTestContext
             .Add(c => c.Expanded, true)
             .Add(c => c.ChildContent, (RenderFragment)(builder => builder.AddMarkupContent(0, "<span class=\"body\">options</span>"))));
 
-        cut.Find("button").Click();
+        await cut.Find("button").ClickAsync();
         cut.Render(p => p.Add(c => c.Expanded, true));
 
         Assert.That(cut.FindAll(".body"), Is.Empty);
