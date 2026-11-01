@@ -35,6 +35,7 @@
                             var categorySettings = ConnectedSystem.SettingValues
                                 .Where(sv => sv.Setting.Category == settingCategory)
                                 .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
+                                .Where(sv => !_unavailableSettingIds.Contains(sv.Setting.Id))
                                 .OrderBy(sv => sv.Setting.Id)
                                 .ToList();
                             var headingCount = categorySettings.Count(sv => sv.Setting.Type == ConnectedSystemSettingType.Heading);
@@ -418,8 +419,37 @@
     /// </summary>
     private IConnectedSystemCatalogueSource? _catalogueSource;
 
+    /// <summary>
+    /// Settings whose feature is behind a flag that is off (#2021): never offered, though a value saved while the flag
+    /// was on stays stored.
+    /// </summary>
+    private HashSet<int> _unavailableSettingIds = [];
+
+    /// <summary>
+    /// Reads which of the Connected System's settings are behind a feature flag that is off. Asks nothing of the
+    /// application when no setting names a flag, which is every Connector but one.
+    /// </summary>
+    private async Task<HashSet<int>> ReadUnavailableSettingIdsAsync()
+    {
+        var flagged = ConnectedSystem.SettingValues.Select(sv => sv.Setting).Where(s => s.FeatureFlagKey != null).ToList();
+        if (flagged.Count == 0)
+            return [];
+
+        using var jim = JimFactory.Create();
+        var unavailable = new HashSet<int>();
+        foreach (var setting in flagged)
+        {
+            if (!await jim.ConnectedSystems.IsSettingAvailableAsync(setting))
+                unavailable.Add(setting.Id);
+        }
+
+        return unavailable;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
+        _unavailableSettingIds = await ReadUnavailableSettingIdsAsync();
+
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;

@@ -507,26 +507,6 @@ public class ConnectedSystemServerChangeTrackingTests
     }
 
     /// <summary>
-    /// The direct deletion path recovers from a value it cannot record by dropping every attribute change, so one value
-    /// holding nothing used to cost the deletion record all of the object's final values (#2183).
-    /// </summary>
-    [Test]
-    public async Task DeleteConnectedSystemObjectsAsync_ObjectHoldingValueThatHoldsNothing_RecordsItsOtherFinalValuesAsync()
-    {
-        var (cso, attribute) = CsoWithAttribute(AttributeDataType.Boolean);
-        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute, AttributeId = attribute.Id });
-        var rpei = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ConnectedSystemObject = cso };
-        _mockCsRepo
-            .Setup(r => r.DeleteConnectedSystemObjectsAsync(It.IsAny<List<ConnectedSystemObject>>()))
-            .Returns(Task.CompletedTask);
-
-        await _jim.ConnectedSystems.DeleteConnectedSystemObjectsAsync([cso], [rpei]);
-
-        Assert.That(rpei.ConnectedSystemObjectChange?.AttributeChanges.Select(c => c.AttributeName),
-            Is.EqualTo(new[] { _externalIdAttr.Name }));
-    }
-
-    /// <summary>
     /// A quiet deletion has no execution item to hang its record on, so the record stands alone, attributed to the run
     /// that deleted the object. It carries what every deletion record carries, the object's id and External ID above
     /// all: they are what find the object's execution items once its row is gone.

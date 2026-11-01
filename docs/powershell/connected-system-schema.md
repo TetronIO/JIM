@@ -274,7 +274,7 @@ The Object Types, each with its attributes. An attribute whose Writability is Re
 | `ManagesClassMembership` | `bool` | Whether the Connected System hands this object type's class membership to JIM to compose, which is what makes merging an auxiliary class into it mean anything. False for Active Directory, which resolves its own auxiliary classes into each structural class. |
 | `MergedAuxiliaryClassObjectTypeIds` | `int[]` | The auxiliary classes an administrator has merged into this Object Type, as their own Object Type IDs. |
 | `StructuralCarrierObjectTypeId` | `int` | For an auxiliary object type, the structural object type JIM writes alongside it when creating an object, or empty when none has been named and JIM therefore cannot create one. |
-| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `PluralitySetByAdministrator`, `CaseExact`, `CaseExactSetByAdministrator`, `DateTimeResolution`, `DateTimeResolutionSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `IsOperational`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `Attributes` | `object[]` | The Object Type's attributes; empty when the response does not include them. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `PluralitySetByAdministrator`, `CaseExact`, `CaseExactSetByAdministrator`, `DateTimeResolution`, `DateTimeResolutionSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `IsOperational`, `IsConnectorDefined`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 <!-- END GENERATED: Get-JIMConnectedSystemObjectType -->
 
 ### Examples
@@ -417,6 +417,7 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 | `SelectionLocked` | `bool` | Indicates if this attribute's selection state is locked and cannot be changed. This is true for External ID and Secondary External ID attributes. |
 | `Writability` | `string` | Indicates whether this attribute can be written to in the Connected System. One of `Writable`, `ReadOnly` or `WritableOnCreate`. `ReadOnly` attributes can be imported but cannot be targeted by export Attribute Flows. `WritableOnCreate` attributes can be targeted, but only ever flow on a Create Pending Export. |
 | `IsOperational` | `bool` | Whether the attribute is one the Connected System maintains for its own operation, such as an LDAP directory's `createTimestamp` or `pwdFailureTime`. Always read-only, and never selected until an administrator chooses it. |
+| `IsConnectorDefined` | `bool` | Whether the Connector made this attribute up rather than read it from the Connected System's own schema, such as the LDAP Connector's Exchange Recipient Type. The Connector derives its values on import and acts on them on export in its own way; they are never written to the Connected System as they stand. |
 | `ReferencedObjectTypeId` | `int` | For a Reference attribute, the id of the Object Type this reference points at, when the Connected System's schema declares one (the SQL Connector's `referencesObjectType`). Import reference resolution resolves the reference within that Object Type alone; empty means the schema does not say and resolution requires the value to be unambiguous across Object Types. |
 | `ReferencedObjectTypeName` | `string` | The name of the Object Type identified by ReferencedObjectTypeId, when declared. |
 
@@ -426,7 +427,7 @@ With `-PassThru`, the attribute as changed, or with `-AttributeUpdates`, what wa
 |----------|------|-------------|
 | `ActivityId` | `guid` | The activity ID for the bulk update operation. |
 | `UpdatedCount` | `int` | Number of attributes successfully updated. |
-| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `PluralitySetByAdministrator`, `CaseExact`, `CaseExactSetByAdministrator`, `DateTimeResolution`, `DateTimeResolutionSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `IsOperational`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
+| `UpdatedAttributes` | `object[]` | List of updated attributes. Each has `Id`, `Name`, `Description`, `ClassName`, `Created`, `Type`, `TypeSetByAdministrator`, `AttributePlurality`, `PluralitySetByAdministrator`, `CaseExact`, `CaseExactSetByAdministrator`, `DateTimeResolution`, `DateTimeResolutionSetByAdministrator`, `Selected`, `IsExternalId`, `IsSecondaryExternalId`, `Required`, `SelectionLocked`, `Writability`, `IsOperational`, `IsConnectorDefined`, `ReferencedObjectTypeId` and `ReferencedObjectTypeName`. |
 | `Errors` | `object[]` | Any errors that occurred during the update. Empty if no errors. Each has `AttributeId` and `ErrorMessage`. |
 <!-- END GENERATED: Set-JIMConnectedSystemAttribute -->
 
