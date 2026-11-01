@@ -501,6 +501,37 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task<List<ConnectedSystemSettingValue>> GetEncryptedSettingValuesAsync()
+    {
+        return await Repository.Database.ConnectedSystemSettingValues
+            .AsNoTracking()
+            .Include(sv => sv.Setting)
+            .Where(sv => sv.Setting.Type == ConnectedSystemSettingType.StringEncrypted && sv.StringEncryptedValue != null && sv.StringEncryptedValue != "")
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// A single-column write, for the same reason as <see cref="UpdateConnectedSystemPersistedConnectorDataAsync"/>:
+    /// the startup credential convergence must change the stored form of one credential and nothing else. The
+    /// in-memory test provider does not support ExecuteUpdateAsync, so it falls back to a narrow tracked load.
+    /// </summary>
+    public async Task UpdateSettingValueEncryptedValueAsync(int settingValueId, string encryptedValue)
+    {
+        if (Repository.Database.Database.IsRelational())
+        {
+            await Repository.Database.ConnectedSystemSettingValues
+                .Where(sv => sv.Id == settingValueId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(sv => sv.StringEncryptedValue, encryptedValue));
+            return;
+        }
+
+        var settingValue = await Repository.Database.ConnectedSystemSettingValues
+            .AsTracking()
+            .SingleAsync(sv => sv.Id == settingValueId);
+        settingValue.StringEncryptedValue = encryptedValue;
+        await Repository.Database.SaveChangesAsync();
+    }
+
     /// <summary>
     /// Targeted single-column write of the persisted connector data (see the interface doc for why this must
     /// not go through the graph-marking update path). On relational providers this is a single SQL UPDATE via

@@ -26,6 +26,7 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Exceptions;
+using JIM.Application.Interfaces;
 using JIM.Application.Expressions;
 using JIM.Application.Services;
 using JIM.Application.Utilities;
@@ -65,8 +66,15 @@ public partial class ConnectedSystemServer
     /// store when it reads one.
     /// </summary>
     /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
+    /// <remarks>
+    /// Encrypts, in place, any of the Connected System's credentials still in clear first (#2680). A Connector only ever
+    /// accepts an encrypted credential, and the Connected System it is created for may carry one an administrator has
+    /// typed and not yet saved (the portal validates its settings before saving them). Every server path that hands a
+    /// Connector a Connected System's settings creates the Connector here first, so none can hand it one in clear.
+    /// </remarks>
     internal IConnector CreateConnector(ConnectedSystem connectedSystem)
     {
+        ProtectEncryptedSettingValues(connectedSystem);
         var connector = ConnectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
         if (connector is IConnectorScimResourceStoreAware storeAware)
             storeAware.SetScimResourceStore(new ScimResourceStoreService(Application, connectedSystem.Id));
@@ -613,7 +621,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     private async Task PersistNewConnectedSystemAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemCreateAsync(connectedSystem);
         if (IsScimServiceProvider(connectedSystem.ConnectorDefinition))
             await Application.Scim.EnsureCoreDefinitionsAsync(connectedSystem.Id);
 
@@ -671,7 +679,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
@@ -738,7 +746,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await ReleaseParkedPasswordChangesIfDeliveryChangedAsync(connectedSystem, passwordSynchronisationAsStored);
@@ -790,7 +798,7 @@ public partial class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
 
         // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
@@ -808,7 +816,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -821,7 +829,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -834,7 +842,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -846,7 +854,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedBy);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
     }
 
     /// <summary>
@@ -858,7 +866,7 @@ public partial class ConnectedSystemServer
         connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
         AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
         SanitiseConnectedSystemUserInput(connectedSystem);
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await PersistConnectedSystemSchemaAsync(connectedSystem);
     }
 
     /// <summary>
@@ -897,7 +905,7 @@ public partial class ConnectedSystemServer
             throw new ArgumentNullException(nameof(connectedSystem));
 
         connectedSystem.Status = status;
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -1006,7 +1014,7 @@ public partial class ConnectedSystemServer
         else
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await PersistConnectedSystemAsync(connectedSystem);
 
         var captureOutcome = await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await RecordMatchingModeSwitchAwaitingSynchronisationAsync(activity, connectedSystem, newMode, captureOutcome);
@@ -1446,7 +1454,7 @@ public partial class ConnectedSystemServer
         {
             // Set status to Deleting to block new operations
             connectedSystem.Status = ConnectedSystemStatus.Deleting;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            await PersistConnectedSystemAsync(connectedSystem);
             Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
@@ -1563,7 +1571,7 @@ public partial class ConnectedSystemServer
             {
                 // Reset status so deletion can be retried
                 connectedSystem.Status = ConnectedSystemStatus.Active;
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+                await PersistConnectedSystemAsync(connectedSystem);
             }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
@@ -1611,7 +1619,7 @@ public partial class ConnectedSystemServer
         {
             // Set status to Deleting to block new operations
             connectedSystem.Status = ConnectedSystemStatus.Deleting;
-            await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+            await PersistConnectedSystemAsync(connectedSystem);
             Log.Information("DeleteAsync: Set Connected System {Id} status to Deleting", connectedSystemId);
         }
 
@@ -1708,7 +1716,7 @@ public partial class ConnectedSystemServer
             else
             {
                 connectedSystem.Status = ConnectedSystemStatus.Active;
-                await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+                await PersistConnectedSystemAsync(connectedSystem);
             }
 
             return ConnectedSystemDeletionResult.Failed($"Failed to delete Connected System: {errorMessage}");
@@ -1759,6 +1767,105 @@ public partial class ConnectedSystemServer
     #endregion
 
     #region Connected System Settings
+    /// <summary>
+    /// Writes a Connected System's graph, encrypting its credentials first. Every update of a Connected System's graph
+    /// goes through here (or <see cref="PersistConnectedSystemSchemaAsync"/>), so a credential is encrypted at rest
+    /// whichever surface saved it.
+    /// </summary>
+    private async Task PersistConnectedSystemAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Writes a Connected System's graph including its schema, encrypting its credentials first. See
+    /// <see cref="PersistConnectedSystemAsync"/>.
+    /// </summary>
+    private async Task PersistConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Writes a new Connected System, encrypting its credentials first. See <see cref="PersistConnectedSystemAsync"/>.
+    /// </summary>
+    private async Task PersistConnectedSystemCreateAsync(ConnectedSystem connectedSystem)
+    {
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Encrypts, in place, every encrypted setting value (<see cref="ConnectedSystemSettingType.StringEncrypted"/>) that
+    /// holds a value not already encrypted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The portal binds what an administrator types straight to <see cref="ConnectedSystemSettingValue.StringEncryptedValue"/>,
+    /// and once only the REST endpoint encrypted, so every credential entered in the portal was stored in clear (#2680).
+    /// Encrypting here, below every surface, is what makes encryption at rest independent of who saved the value.
+    /// </para>
+    /// <para>
+    /// A value that is already encrypted is left exactly as it is: an untouched password field posts back the
+    /// ciphertext it was loaded with, and encrypting that a second time would store a credential the Connector could
+    /// never use. An empty value means no credential and is left empty.
+    /// </para>
+    /// </remarks>
+    private void ProtectEncryptedSettingValues(ConnectedSystem connectedSystem)
+    {
+        var credentials = connectedSystem.SettingValues
+            .Where(sv => sv.Setting is { Type: ConnectedSystemSettingType.StringEncrypted } && !string.IsNullOrEmpty(sv.StringEncryptedValue))
+            .ToList();
+
+        // Resolved only when there is something to encrypt, since the fallback reads the key ring from disk.
+        if (credentials.Count == 0)
+            return;
+
+        var credentialProtection = ResolveCredentialProtection();
+        foreach (var settingValue in credentials.Where(sv => !credentialProtection.IsProtected(sv.StringEncryptedValue)))
+            settingValue.StringEncryptedValue = credentialProtection.Protect(settingValue.StringEncryptedValue);
+    }
+
+    /// <summary>
+    /// Encrypts any Connected System credential found stored in clear, and returns how many it encrypted. Runs on every
+    /// start (<see cref="JimApplication.InitialiseDatabaseAsync"/>), so credentials saved from the portal before #2680
+    /// was fixed are encrypted without anyone having to re-enter them, and so a value that reaches the column in clear
+    /// by any future route is corrected at the next start rather than lying there unnoticed.
+    /// </summary>
+    public async Task<int> ProtectStoredCredentialsAsync()
+    {
+        var settingValues = await Application.Repository.ConnectedSystems.GetEncryptedSettingValuesAsync();
+        if (settingValues.Count == 0)
+            return 0;
+
+        var credentialProtection = ResolveCredentialProtection();
+        var converged = 0;
+        foreach (var settingValue in settingValues.Where(sv => !credentialProtection.IsProtected(sv.StringEncryptedValue)))
+        {
+            // Protect returns null only for a null or empty input, which the repository query has already ruled out.
+            await Application.Repository.ConnectedSystems.UpdateSettingValueEncryptedValueAsync(
+                settingValue.Id, credentialProtection.Protect(settingValue.StringEncryptedValue)!);
+            converged++;
+        }
+
+        // The count only: never the values.
+        if (converged > 0)
+            Log.Warning("ProtectStoredCredentialsAsync: Encrypted {Count} Connected System credential(s) that were stored unencrypted", converged);
+        else
+            Log.Debug("ProtectStoredCredentialsAsync: All {Count} stored Connected System credential(s) are encrypted", settingValues.Count);
+
+        return converged;
+    }
+
+    /// <summary>
+    /// The host's credential protection, or the shared-key-ring fallback every other server uses when a host has not
+    /// set one, so what is encrypted here can always be decrypted by the Connector that later reads it.
+    /// </summary>
+    internal ICredentialProtectionService ResolveCredentialProtection() =>
+        Application.CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider());
+
     /// <summary>
     /// Creates a Connected System's value for a Connector Definition setting, carrying the setting's declared default.
     /// Used when a Connected System is created and when <see cref="ReconcileSettingValues"/> adds a setting the
@@ -1954,6 +2061,7 @@ public partial class ConnectedSystemServer
         // implement IConnectorSettings have no such validation to add; the generic results above stand alone.
         // validation opens real connections, so the connector is disposed here rather than left to the collector:
         // it holds the connection and any temporary files prepared for it.
+        // creating the Connector encrypts any credential the administrator has typed and not yet saved (#2680)
         var connector = CreateConnector(connectedSystem);
         try
         {
@@ -3956,7 +4064,7 @@ public partial class ConnectedSystemServer
             throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
-            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
@@ -4105,7 +4213,7 @@ public partial class ConnectedSystemServer
             ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
 
         if (draftSettingValues is { Count: > 0 })
-            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, ResolveCredentialProtection);
 
         var connector = CreateConnector(connectedSystem);
         if (connector is IConnectorCatalogue catalogue)

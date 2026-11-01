@@ -685,7 +685,7 @@ public class CertificateServer : ICertificateProvider
             return (null, null, ServerCertificateReadOutcome.ConnectedSystemNotFound, $"Connected System {connectedSystemId} was not found.");
 
         if (draftSettingValues is { Count: > 0 })
-            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues);
+            ConnectedSystemDraftSettings.Apply(connectedSystem, draftSettingValues, Application.ConnectedSystems.ResolveCredentialProtection);
 
         var connectorName = connectedSystem.ConnectorDefinition?.Name;
         if (string.IsNullOrEmpty(connectorName))
