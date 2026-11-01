@@ -9,7 +9,7 @@ namespace JIM.Models.Tests.Transactional;
 
 /// <summary>
 /// The Exchange queue row (#2021): one Exchange change owed to one directory account. What is pinned here is the
-/// declared-state comparison that decides whether re-staging a cancelled change leaves the cancellation in place.
+/// declared-state comparison that decides whether re-staging leaves the account's row as it is, whatever its status.
 /// </summary>
 [TestFixture]
 public class PendingExchangeChangeTests

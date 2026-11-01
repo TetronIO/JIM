@@ -20,9 +20,10 @@ namespace JIM.Models.Transactional;
 /// </para>
 /// <para>
 /// <b>The row holds the latest declared state for its account, never a replayable sequence.</b> A unique index on the
-/// Connected System Object makes that a database guarantee: staging a newer declared state supersedes the row in place
-/// (<see cref="ExchangeChangeStagingDisposition.Superseded"/>), so Exchange is only ever asked for what the account
-/// should be now.
+/// Connected System Object makes that a database guarantee: staging a different declared state supersedes the row in
+/// place (<see cref="ExchangeChangeStagingDisposition.Superseded"/>), so Exchange is only ever asked for what the account
+/// should be now, and staging the same declared state leaves the row as it is
+/// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>).
 /// </para>
 /// <para>
 /// <b>Success deletes the row.</b> The queue is work outstanding; the Activity (<see cref="ActivityId"/>) is the
@@ -178,9 +179,9 @@ public class PendingExchangeChange
     /// database, primary SMTP address and external address, compared ordinally, with null and empty treated as the
     /// same (both mean "nothing declared").
     /// <para>
-    /// What decides whether a re-stage of a cancelled change leaves the cancellation in place
-    /// (<see cref="ExchangeChangeStagingDisposition.HeldCancelled"/>). The staging statement makes the same comparison
-    /// in SQL; this is its in-memory twin.
+    /// What decides whether a re-stage leaves the row as it is, whatever its status
+    /// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>). The staging statement makes the same comparison in
+    /// SQL; this is its in-memory twin.
     /// </para>
     /// </summary>
     public bool HasSameDeclaredStateAs(PendingExchangeChange other)

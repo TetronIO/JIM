@@ -14,8 +14,8 @@ public partial class SyncRepository
     #region Exchange queue (#2021)
 
     /// <summary>
-    /// The five values that make up a change's declared state, compared to decide whether a re-stage of a cancelled
-    /// change leaves the cancellation held. The SQL twin of <see cref="PendingExchangeChange.HasSameDeclaredStateAs"/>.
+    /// The five values that make up a change's declared state, compared to decide whether a re-stage leaves the row as
+    /// it is, whatever its status. The SQL twin of <see cref="PendingExchangeChange.HasSameDeclaredStateAs"/>.
     /// </summary>
     private static readonly string[] ExchangeDeclaredStateColumns =
     [
@@ -77,17 +77,17 @@ public partial class SyncRepository
             await using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync())
             {
-                // The statement either writes (and returns the row it wrote) or declines because the account's row is a
-                // held cancellation (and returns that row). Neither coming back means a cancelled row appeared between
-                // the statement's snapshot and its conflict check, which staging never inserts; fail loudly rather than
-                // report the change as handled when nothing is known about it.
+                // The statement either writes (and returns the row it wrote) or declines because the account's row
+                // already declares this state (and returns that row). Neither coming back means another writer's row
+                // appeared between the statement's snapshot and its conflict check; fail loudly rather than report the
+                // change as handled when nothing is known about it.
                 throw new InvalidOperationException(
                     $"Staging the Exchange change for Connected System Object {change.ConnectedSystemObjectId} returned no row.");
             }
 
             var rowId = reader.GetGuid(0);
-            var held = reader.GetBoolean(1);
-            var inserted = !held && reader.IsDBNull(2);
+            var unchanged = reader.GetBoolean(1);
+            var inserted = !unchanged && reader.IsDBNull(2);
 
             // The row now in the table keeps its own id; the caller must hold that rather than the id it offered, or a
             // later write against this change would target a row that does not exist.
@@ -97,12 +97,13 @@ public partial class SyncRepository
             {
                 RequestedId = requestedId,
                 RowId = rowId,
-                Disposition = held
-                    ? ExchangeChangeStagingDisposition.HeldCancelled
+                Disposition = unchanged
+                    ? ExchangeChangeStagingDisposition.Unchanged
                     : inserted
                         ? ExchangeChangeStagingDisposition.Inserted
                         : ExchangeChangeStagingDisposition.Superseded,
-                PreviousActivityId = held || inserted ? null : reader.GetGuid(2)
+                PreviousActivityId = unchanged || inserted ? null : reader.GetGuid(2),
+                ExistingStatus = unchanged ? (PendingExchangeChangeStatus)reader.GetInt32(3) : null
             });
         }
 
@@ -111,14 +112,15 @@ public partial class SyncRepository
 
     /// <summary>
     /// One statement per change, deciding against the row the queue already holds for the account, if any (#2021):
-    /// insert where there is none; leave a Cancelled row declaring the same state untouched; supersede anything else in
-    /// place.
+    /// insert where there is none; leave a row declaring the same state untouched, whatever its status; supersede a row
+    /// declaring a different state in place.
     /// <para>
     /// One statement rather than a read followed by a write, so no other writer (a parallel export batch staging the
     /// same account, or the delivery lane recording an attempt) can act between the decision and the write. The unique
     /// index on the account makes the insert-or-supersede atomic; the conflict clause's WHERE declines the update for a
-    /// held cancellation, and the outer SELECT then reads that row's id from the statement's own snapshot, so the
-    /// held row is reported without being written (no new row version, no wake-up of the delivery lane).
+    /// row already declaring this state, and the outer SELECT then reads that row's id and status from the statement's
+    /// own snapshot, so the unchanged row is reported without being written (no new row version, no wake-up of the
+    /// delivery lane, and a Parked or retrying row keeps its attempts and backoff).
     /// </para>
     /// <para>
     /// RETURNING reads the superseded row as it stood (PostgreSQL 18's OLD), so the caller can record the supersession
@@ -142,14 +144,13 @@ public partial class SyncRepository
                 VALUES ({PendingExchangeChangeValuePlaceholders()})
                 ON CONFLICT ("ConnectedSystemObjectId") WHERE "ConnectedSystemObjectId" IS NOT NULL DO UPDATE SET ({BulkSqlHelpers.ToQuotedList(update)}) = (
                     {values})
-                WHERE NOT (existing."Status" = {(int)PendingExchangeChangeStatus.Cancelled}
-                  AND {sameDeclaredState})
+                WHERE NOT ({sameDeclaredState})
                 RETURNING new."Id", old."ActivityId"
             )
-            SELECT staged."Id", FALSE, staged."ActivityId" FROM staged
+            SELECT staged."Id", FALSE, staged."ActivityId", NULL::integer FROM staged
             UNION ALL
-            SELECT held."Id", TRUE, NULL FROM "PendingExchangeChanges" AS held
-            WHERE held."ConnectedSystemObjectId" = {accountParameter} AND NOT EXISTS (SELECT 1 FROM staged)
+            SELECT unchanged."Id", TRUE, NULL, unchanged."Status" FROM "PendingExchangeChanges" AS unchanged
+            WHERE unchanged."ConnectedSystemObjectId" = {accountParameter} AND NOT EXISTS (SELECT 1 FROM staged)
             """;
     }
 

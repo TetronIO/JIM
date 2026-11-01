@@ -1082,12 +1082,13 @@ public interface ISyncRepository
     /// queue holds at most one change per account, the latest declared state.
     /// <para>
     /// Decided per change in one statement against the row already there, if any
-    /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a Cancelled row declaring
-    /// the same state (the five declared values, null and empty alike) is left untouched, so re-staging what an
-    /// administrator cancelled does not undo the cancellation; any other row, including one being delivered, is
-    /// superseded in place, keeping its id, taking the change's declared state, domain controller, Metaverse Object,
-    /// Synchronisation Rule, Activity and creation time, and clearing every trace of earlier attempts, the claim and
-    /// the cancellation so it is due at once.
+    /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a row declaring the same
+    /// state (the five declared values, null and empty alike) is left untouched whatever its status, so re-staging
+    /// does not unpark a Parked change, undo a cancellation, wipe a retrying change's backoff or disturb a delivery in
+    /// flight, and its status is reported on the outcome; a row declaring a different state, including one being
+    /// delivered, is superseded in place, keeping its id, taking the change's declared state, domain controller,
+    /// Metaverse Object, Synchronisation Rule, Activity and creation time, and clearing every trace of earlier
+    /// attempts, the claim and the cancellation so it is due at once.
     /// </para>
     /// <para>
     /// Each change must name its account (<see cref="PendingExchangeChange.ConnectedSystemObjectId"/>). A change whose

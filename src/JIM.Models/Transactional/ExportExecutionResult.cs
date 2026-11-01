@@ -213,6 +213,50 @@ public class ExportExecutionResult
 
     #endregion
 
+    #region Exchange recipients (#2021)
+
+    /// <summary>
+    /// Number of Exchange changes newly queued for accounts whose export declared a recipient state: the work staged for
+    /// the Exchange delivery lane, not the recipients made.
+    /// </summary>
+    public int ExchangeChangesStagedCount { get; set; }
+
+    /// <summary>
+    /// Number of Exchange changes that replaced one already queued for their account, because the export declared a
+    /// different state. Not counted in <see cref="ExchangeChangesStagedCount"/>.
+    /// </summary>
+    public int ExchangeChangesSupersededCount { get; set; }
+
+    /// <summary>
+    /// Number of exports whose declared recipient state the account's queued Exchange change already carried, so the
+    /// change was left as it was (a cancellation still holds, a parked change stays parked).
+    /// </summary>
+    public int ExchangeChangesUnchangedCount { get; set; }
+
+    /// <summary>
+    /// Number of exports declaring a recipient type that does not fit the object (a mailbox on a group, a group that is
+    /// not universal mail-enabled). Nothing was queued; each is reported on a follow-up Activity under its export item.
+    /// </summary>
+    public int ExchangeChangesRefusedCount { get; set; }
+
+    /// <summary>
+    /// Number of exports declaring a change of an existing recipient's type, which this release does not make. Nothing
+    /// was queued; each is reported on a follow-up Activity under its export item.
+    /// </summary>
+    public int ExchangeTypeChangesNotMadeCount { get; set; }
+
+    /// <summary>
+    /// Number of exported accounts whose declared recipient state JIM failed to queue or report.
+    /// <para>
+    /// Contained, but never silent: the accounts were written to the directory and their exports succeeded, so this
+    /// must not fail the batch, but nothing will reach Exchange for them until the declared state is exported again.
+    /// The count is reported on the export Activity as a warning, and the service log names the accounts.
+    /// </para>
+    /// </summary>
+    public int ExchangeChangeStagingFailedCount { get; set; }
+
+    #endregion
+
     #region Run Profile Safeguards (issue #1618)
 
     /// <summary>

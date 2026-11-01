@@ -8,8 +8,8 @@ namespace JIM.InMemoryData.Tests;
 /// <summary>
 /// The in-memory twin of the Exchange queue's staging statement (#2021) must decide exactly as the PostgreSQL one does,
 /// because the unit and workflow tests of export staging run over it: one row per account, a newer declared state
-/// supersedes the row in place (whatever its status, a delivery in flight included), and re-staging what an
-/// administrator cancelled leaves the cancellation held.
+/// declaring a different state supersedes the row in place (whatever its status, a delivery in flight included), and
+/// re-staging the same declared state leaves the row as it is, whatever its status.
 /// </summary>
 [TestFixture]
 public class SyncRepositoryExchangeChangeStagingTests
@@ -141,7 +141,7 @@ public class SyncRepositoryExchangeChangeStagingTests
     }
 
     [Test]
-    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_HoldsTheCancellationAsync()
+    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
     {
         var csoId = Guid.NewGuid();
         var cancelledAt = DateTime.UtcNow.AddMinutes(-30);
@@ -163,7 +163,8 @@ public class SyncRepositoryExchangeChangeStagingTests
         var stored = _repo.PendingExchangeChanges[existingId];
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.HeldCancelled));
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcomes[0].ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
             Assert.That(outcomes[0].RowId, Is.EqualTo(existingId));
             Assert.That(outcomes[0].PreviousActivityId, Is.Null);
             Assert.That(restaged.Id, Is.EqualTo(existingId));
@@ -174,6 +175,81 @@ public class SyncRepositoryExchangeChangeStagingTests
             Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
             Assert.That(stored.ActivityId, Is.EqualTo(activityId), "a held row keeps its own Activity");
             Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"));
+        }
+    }
+
+    /// <summary>
+    /// Re-staging the declared state a Parked row already carries leaves it parked, with its failure and attempts: a
+    /// parked change holds until a person retries it or the declared state changes (PRD requirement 11), and an export
+    /// re-evaluated as unconfirmed must not unpark it.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_ParkedRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var firstFailedAt = DateTime.UtcNow.AddHours(-25);
+        var existing = await StagedAsync(csoId, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
+            row.FailureMessage = "The alias is already in use.";
+            row.AttemptCount = 4;
+            row.FirstFailedAt = firstFailedAt;
+        });
+        var existingId = existing.Id;
+        var activityId = existing.ActivityId;
+        var restaged = Change(csoId);
+        restaged.DomainController = "dc02.corp.example";
+
+        var outcomes = await _repo.StageExchangeChangesAsync([restaged]);
+
+        var stored = _repo.PendingExchangeChanges[existingId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcomes[0].ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Parked));
+            Assert.That(outcomes[0].RowId, Is.EqualTo(existingId));
+            Assert.That(outcomes[0].PreviousActivityId, Is.Null);
+            Assert.That(restaged.Id, Is.EqualTo(existingId), "the caller holds the id actually in the queue");
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Parked));
+            Assert.That(stored.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.Refused));
+            Assert.That(stored.FailureMessage, Is.EqualTo("The alias is already in use."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(4));
+            Assert.That(stored.FirstFailedAt, Is.EqualTo(firstFailedAt));
+            Assert.That(stored.ActivityId, Is.EqualTo(activityId));
+            Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"), "an unchanged row is left untouched");
+        }
+    }
+
+    /// <summary>
+    /// Re-staging the declared state a retrying row already carries keeps its backoff: wiping the attempts and the
+    /// next retry time would have every unconfirmed export hammer an Exchange that is already refusing.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_PendingRowWithAttemptsAndTheSameDeclaredState_KeepsItsBackoffAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var nextRetryAt = DateTime.UtcNow.AddMinutes(8);
+        var existing = await StagedAsync(csoId, row =>
+        {
+            row.FailureKind = ExchangeChangeFailureKind.Unreachable;
+            row.AttemptCount = 2;
+            row.FirstFailedAt = DateTime.UtcNow.AddMinutes(-6);
+            row.NextRetryAt = nextRetryAt;
+        });
+        var existingId = existing.Id;
+
+        var outcomes = await _repo.StageExchangeChangesAsync([Change(csoId)]);
+
+        var stored = _repo.PendingExchangeChanges[existingId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcomes[0].ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.EqualTo(2));
+            Assert.That(stored.NextRetryAt, Is.EqualTo(nextRetryAt));
+            Assert.That(stored.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.Unreachable));
         }
     }
 

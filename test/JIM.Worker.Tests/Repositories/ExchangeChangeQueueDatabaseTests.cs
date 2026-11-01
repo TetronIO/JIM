@@ -20,7 +20,7 @@ namespace JIM.Worker.Tests.Repositories;
 /// <para>
 /// Everything here is invisible to the in-memory provider by construction. Staging is an
 /// <c>INSERT ... ON CONFLICT DO UPDATE</c> against a filtered unique index the in-memory provider does not enforce, the
-/// held-cancellation decision is made in SQL, and the row is written by raw SQL that bypasses the EF model, so a column
+/// leave-unchanged decision is made in SQL, and the row is written by raw SQL that bypasses the EF model, so a column
 /// missed by the writer, or written in the wrong position or with the wrong type, persists wrongly with no error.
 /// </para>
 /// <para>
@@ -234,7 +234,7 @@ public class ExchangeChangeQueueDatabaseTests
     /// cancellation in place, untouched. Null and empty declare the same thing, in every one of the five values.
     /// </summary>
     [Test]
-    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_HoldsTheCancellationAsync()
+    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
     {
         var seeded = await SeedAsync();
         var cancelledAt = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
@@ -262,7 +262,8 @@ public class ExchangeChangeQueueDatabaseTests
         var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.HeldCancelled));
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcome.ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
             Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
             Assert.That(outcome.RequestedId, Is.Not.EqualTo(existing.Id));
             Assert.That(outcome.PreviousActivityId, Is.Null);
@@ -274,6 +275,77 @@ public class ExchangeChangeQueueDatabaseTests
             Assert.That(stored.ActivityId, Is.EqualTo(existing.ActivityId), "a held row keeps its own Activity");
             Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"), "a held row is left untouched");
             Assert.That(stored.Database, Is.EqualTo(""));
+        }
+    }
+
+    /// <summary>
+    /// Re-staging the declared state a Parked row already carries leaves it parked, untouched: a parked change holds
+    /// until a person retries it or the declared state changes (PRD requirement 11).
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_ParkedRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
+    {
+        var seeded = await SeedAsync();
+        var firstFailedAt = new DateTime(2026, 10, 31, 9, 0, 0, DateTimeKind.Utc);
+        var existing = await StageExistingAsync(seeded, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
+            row.FailureMessage = "The alias is already in use.";
+            row.AttemptCount = 4;
+            row.FirstFailedAt = firstFailedAt;
+        });
+        var restaged = NewChange(seeded);
+        restaged.DomainController = "dc02.corp.example";
+
+        var outcome = await StageAsync(restaged);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcome.ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Parked));
+            Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
+            Assert.That(outcome.PreviousActivityId, Is.Null);
+            Assert.That(restaged.Id, Is.EqualTo(existing.Id));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Parked));
+            Assert.That(stored.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.Refused));
+            Assert.That(stored.FailureMessage, Is.EqualTo("The alias is already in use."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(4));
+            Assert.That(stored.FirstFailedAt, Is.EqualTo(firstFailedAt));
+            Assert.That(stored.ActivityId, Is.EqualTo(existing.ActivityId));
+            Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"), "an unchanged row is left untouched");
+        }
+    }
+
+    /// <summary>
+    /// Re-staging the declared state a retrying row already carries keeps its attempts and its backoff.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_PendingRowWithAttemptsAndTheSameDeclaredState_KeepsItsBackoffAsync()
+    {
+        var seeded = await SeedAsync();
+        var nextRetryAt = new DateTime(2026, 11, 1, 12, 8, 0, DateTimeKind.Utc);
+        await StageExistingAsync(seeded, row =>
+        {
+            row.FailureKind = ExchangeChangeFailureKind.Unreachable;
+            row.AttemptCount = 2;
+            row.NextRetryAt = nextRetryAt;
+        });
+
+        var outcome = await StageAsync(NewChange(seeded));
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
+            Assert.That(outcome.ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.EqualTo(2));
+            Assert.That(stored.NextRetryAt, Is.EqualTo(nextRetryAt));
+            Assert.That(stored.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.Unreachable));
         }
     }
 

@@ -52,7 +52,10 @@ public class ActivityTargetOperationTypeOrdinalTests
         [ActivityTargetOperationType.RestartGeneratedValues] = 19,
         [ActivityTargetOperationType.AllowGeneratedValueRename] = 20,
         [ActivityTargetOperationType.RetryGeneratedValue] = 21,
-        [ActivityTargetOperationType.Receive] = 22
+        [ActivityTargetOperationType.Receive] = 22,
+
+        // Exchange recipient management (#2021): making an account the Exchange recipient its Synchronisation Rule declares.
+        [ActivityTargetOperationType.SetExchangeRecipient] = 23
     };
 
     [Test]

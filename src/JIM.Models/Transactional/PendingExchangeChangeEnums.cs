@@ -22,9 +22,9 @@ public enum PendingExchangeChangeStatus
     /// The Exchange delivery lane has claimed the change and is applying it now.
     /// <para>
     /// Held under a lease, as a password delivery is: a deliverer that dies mid-flight leaves the row here, and once
-    /// the lease has run out the row is claimable again. A newer declared state staged while the row is here
+    /// the lease has run out the row is claimable again. A different declared state staged while the row is here
     /// supersedes it in place and clears the claim, so the in-flight attempt's outcome write, guarded on the row still
-    /// being Delivering, lands nowhere.
+    /// being Delivering, lands nowhere; the same declared state leaves the delivery to finish.
     /// </para>
     /// </summary>
     Delivering = 1,
@@ -34,7 +34,8 @@ public enum PendingExchangeChangeStatus
     /// <para>
     /// Reached by a failure no retry can cure (Exchange refused the change, or JIM lacks the permissions to make it),
     /// or by failures that have gone on for 24 hours (<see cref="PendingExchangeChange.FirstFailedAt"/>). The ways out
-    /// are a manual retry once the cause is fixed, or a newer declared state superseding the row.
+    /// are a manual retry once the cause is fixed, or a different declared state superseding the row: re-staging the
+    /// same declared state leaves it parked (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>).
     /// </para>
     /// </summary>
     Parked = 2,
@@ -44,7 +45,7 @@ public enum PendingExchangeChangeStatus
     /// <para>
     /// Recorded rather than deleted, and it holds the cancelled declared state: an export re-evaluated as unconfirmed
     /// re-stages the same values, and that must leave the cancellation in place rather than quietly undo it
-    /// (<see cref="ExchangeChangeStagingDisposition.HeldCancelled"/>). Only a different declared state replaces it.
+    /// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>). Only a different declared state replaces it.
     /// </para>
     /// </summary>
     Cancelled = 3
@@ -100,7 +101,8 @@ public enum ExchangeChangeStagingDisposition
     Inserted = 0,
 
     /// <summary>
-    /// A row existed for the account and the change replaced it in place: its declared state, its domain controller, its
+    /// A row existed for the account declaring a different state, and the change replaced it in place: its declared
+    /// state, its domain controller, its
     /// Activity and its creation time, with every trace of the earlier attempt (failure, attempts, claim, cancellation)
     /// cleared and the row due at once. The row keeps its own id, so a caller must adopt the row's id for anything it
     /// does with the change afterwards. A row being delivered is superseded too, which is what makes the in-flight
@@ -109,8 +111,14 @@ public enum ExchangeChangeStagingDisposition
     Superseded = 1,
 
     /// <summary>
-    /// A row existed that an administrator had cancelled, declaring exactly this state, so it was left untouched: a
-    /// re-stage of what was cancelled must not undo the cancellation.
+    /// The account's change already declares this state; the row, whatever its status, is left as it is.
+    /// <para>
+    /// Re-staging the same declared state, as an export re-evaluated as unconfirmed does, must not reset the row: a
+    /// Parked or Cancelled change holds until a person acts or the declared state changes, a retrying change keeps its
+    /// backoff, and a delivery in flight finishes. The row's status comes back on the outcome
+    /// (<see cref="DTOs.ExchangeChangeStagingOutcome.ExistingStatus"/>), so a caller can say, for example, that a
+    /// cancellation still holds.
+    /// </para>
     /// </summary>
-    HeldCancelled = 2
+    Unchanged = 2
 }

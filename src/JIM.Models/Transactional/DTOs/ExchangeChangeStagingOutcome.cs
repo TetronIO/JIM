@@ -5,7 +5,7 @@ namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
 /// What became of one Exchange change offered to the queue (#2021): whether it inserted a new row, superseded the row
-/// already held for its account, or left a cancelled row declaring the same state as it was.
+/// already held for its account, or left that row as it was because it already declares the same state.
 /// </summary>
 public class ExchangeChangeStagingOutcome
 {
@@ -16,7 +16,7 @@ public class ExchangeChangeStagingOutcome
 
     /// <summary>
     /// The id of the row now in the table for the change's account: the inserted row, the row superseded in place, or
-    /// the cancelled row left as it was.
+    /// the row left as it was.
     /// </summary>
     public required Guid RowId { get; init; }
 
@@ -27,4 +27,11 @@ public class ExchangeChangeStagingOutcome
     /// unless the disposition is <see cref="ExchangeChangeStagingDisposition.Superseded"/>.
     /// </summary>
     public Guid? PreviousActivityId { get; init; }
+
+    /// <summary>
+    /// The status of the row left as it was, so a caller can tell a cancellation that still holds, or a parked change,
+    /// from one still being worked. Null unless the disposition is
+    /// <see cref="ExchangeChangeStagingDisposition.Unchanged"/>.
+    /// </summary>
+    public PendingExchangeChangeStatus? ExistingStatus { get; init; }
 }

@@ -73,6 +73,12 @@ public class SyncRepository : ISyncRepository
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
 
     /// <summary>
+    /// When set, <see cref="StageExchangeChangesAsync"/> throws it, so a test can prove that failing to queue an
+    /// account's Exchange change leaves the export that wrote the account successful, and is counted rather than silent.
+    /// </summary>
+    public Exception? FailExchangeChangeStagingWith { get; set; }
+
+    /// <summary>
     /// When set, <see cref="UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/> throws it, so a test can prove
     /// that a batch failing after its exports succeeded still takes every one of them out of Executing (#2270).
     /// </summary>
@@ -3739,6 +3745,9 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes)
     {
+        if (FailExchangeChangeStagingWith != null)
+            throw FailExchangeChangeStagingWith;
+
         var outcomes = new List<ExchangeChangeStagingOutcome>(changes.Count);
 
         foreach (var change in changes)
@@ -3770,13 +3779,16 @@ public class SyncRepository : ISyncRepository
             // The row keeps its own id, matching the real repository, so the caller adopts it.
             change.Id = existing.Id;
 
-            if (existing.Status == PendingExchangeChangeStatus.Cancelled && existing.HasSameDeclaredStateAs(change))
+            // The same declared state leaves the row as it is, whatever its status (a Parked row stays parked, a
+            // retrying row keeps its backoff, a cancellation holds), matching the real staging statement.
+            if (existing.HasSameDeclaredStateAs(change))
             {
                 outcomes.Add(new ExchangeChangeStagingOutcome
                 {
                     RequestedId = requestedId,
                     RowId = existing.Id,
-                    Disposition = ExchangeChangeStagingDisposition.HeldCancelled
+                    Disposition = ExchangeChangeStagingDisposition.Unchanged,
+                    ExistingStatus = existing.Status
                 });
                 continue;
             }
