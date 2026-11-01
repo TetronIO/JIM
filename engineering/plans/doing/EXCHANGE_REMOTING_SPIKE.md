@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0, 1a and 2 complete; Phases 1b and 3 wait for an Exchange window on the AD lab)
+- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b found a framing fault against Exchange, now fixed and awaiting re-test; Phase 3 waits for the next Exchange window on the AD lab)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -208,6 +208,22 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 1b: first run against Exchange (2026-10-31)
+
+**Kerberos to the real Exchange server works; reading its first encrypted reply did not.** One read-only run of `ExchangeLabTests`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` (Exchange Server SE), as svc-jim:
+
+- Kerberos authentication with message encryption completed: `gss_acquire_cred_with_password` against `dc1`, the `Authorization: Kerberos` handshake, and mutual authentication. No failed logon was recorded.
+- The first encrypted request (the PSRP Create) got a reply the client could not decode: "The encrypted WinRM response has no data part." The decoder matched one exact byte sequence, the WinRM service's own (`--Encrypted Boundary` then a tab-indented `Content-Type: application/octet-stream`). The stand-in server writes exactly that, so the harness could never catch it. This is the shared-author risk this phase exists for.
+- All six tests failed in set-up for that reason. The write suite (`ExchangeLabProvisioningTests`) did not run.
+
+**Fixed, not yet re-tested against Exchange.** The decoder now follows pypsrp, the reference client that already works with Exchange:
+- It uses the boundary the Content-Type names.
+- It accepts part headers with or without indentation, and whitespace after a boundary's dashes.
+- Every request sends `Accept-Encoding: identity`, because IIS, which hosts Exchange's endpoint, compresses replies when a client allows it.
+- An unreadable reply's error now gives its HTTP status, Content-Type, Content-Encoding, length and the start of its plain-text framing, so a further mismatch identifies itself in one run.
+
+The lab window closed before the re-run (commits `3d98ec412` and `8c9d56a33`). The next window needs about 30 minutes: the read-only suite, then the write suite.
 
 ### Phase 2: hardening probes (2026-10-31)
 
