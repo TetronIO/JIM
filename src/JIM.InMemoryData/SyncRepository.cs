@@ -36,6 +36,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
+    private readonly Dictionary<Guid, PendingExchangeChange> _pendingExchangeChanges = new();
 
     /// <summary>
     /// The queue rows a claim has handed out and not yet had back. Lets the attempt write honour the real
@@ -156,6 +157,9 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
+
+    /// <summary>The Exchange queue (#2021), keyed by row ID.</summary>
+    public IReadOnlyDictionary<Guid, PendingExchangeChange> PendingExchangeChanges => _pendingExchangeChanges;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -3731,6 +3735,96 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(outcomes);
+    }
+
+    public Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes)
+    {
+        var outcomes = new List<ExchangeChangeStagingOutcome>(changes.Count);
+
+        foreach (var change in changes)
+        {
+            if (change.ConnectedSystemObjectId == null)
+                throw new ArgumentException($"Exchange change {change.Id} names no Connected System Object; staging is per account.", nameof(changes));
+
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            var requestedId = change.Id;
+
+            // Coalescing on the Connected System Object, matching the unique index in the real schema and the staging
+            // statement's decision (#2021), which this mirrors.
+            var existing = _pendingExchangeChanges.Values.SingleOrDefault(c => c.ConnectedSystemObjectId == change.ConnectedSystemObjectId);
+
+            if (existing == null)
+            {
+                _pendingExchangeChanges[change.Id] = change;
+                outcomes.Add(new ExchangeChangeStagingOutcome
+                {
+                    RequestedId = requestedId,
+                    RowId = change.Id,
+                    Disposition = ExchangeChangeStagingDisposition.Inserted
+                });
+                continue;
+            }
+
+            // The row keeps its own id, matching the real repository, so the caller adopts it.
+            change.Id = existing.Id;
+
+            if (existing.Status == PendingExchangeChangeStatus.Cancelled && existing.HasSameDeclaredStateAs(change))
+            {
+                outcomes.Add(new ExchangeChangeStagingOutcome
+                {
+                    RequestedId = requestedId,
+                    RowId = existing.Id,
+                    Disposition = ExchangeChangeStagingDisposition.HeldCancelled
+                });
+                continue;
+            }
+
+            var previousActivityId = existing.ActivityId;
+            SupersedeExchangeChange(existing, change);
+            outcomes.Add(new ExchangeChangeStagingOutcome
+            {
+                RequestedId = requestedId,
+                RowId = existing.Id,
+                Disposition = ExchangeChangeStagingDisposition.Superseded,
+                PreviousActivityId = previousActivityId
+            });
+        }
+
+        return Task.FromResult(outcomes);
+    }
+
+    /// <summary>
+    /// What a newer declared state does to the row already held for the account: the in-memory twin of the staging
+    /// statement's supersede (<c>PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate</c>). The
+    /// declared state and where and why it was declared are replaced; every trace of earlier attempts, the claim and
+    /// the cancellation is cleared, so the row is due at once and an in-flight attempt's result lands nowhere.
+    /// </summary>
+    private static void SupersedeExchangeChange(PendingExchangeChange row, PendingExchangeChange newer)
+    {
+        row.MetaverseObjectId = newer.MetaverseObjectId;
+        row.SyncRuleId = newer.SyncRuleId;
+        row.RecipientType = newer.RecipientType;
+        row.Alias = newer.Alias;
+        row.Database = newer.Database;
+        row.PrimarySmtpAddress = newer.PrimarySmtpAddress;
+        row.ExternalAddress = newer.ExternalAddress;
+        row.DomainController = newer.DomainController;
+        row.ActivityId = newer.ActivityId;
+        row.CreatedAt = newer.CreatedAt;
+        row.Status = PendingExchangeChangeStatus.Pending;
+        row.FailureKind = null;
+        row.FailureMessage = null;
+        row.AttemptCount = 0;
+        row.LastAttemptedAt = null;
+        row.FirstFailedAt = null;
+        row.NextRetryAt = null;
+        row.ClaimedAt = null;
+        row.ClaimedBy = null;
+        row.CancelledAt = null;
+        row.CancelledById = null;
+        row.CancelledByName = null;
     }
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)

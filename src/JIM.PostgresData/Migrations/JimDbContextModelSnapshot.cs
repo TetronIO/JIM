@@ -4959,6 +4959,103 @@ namespace JIM.PostgresData.Migrations
                         });
                 });
 
+            modelBuilder.Entity("JIM.Models.Transactional.PendingExchangeChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Alias")
+                        .HasColumnType("text");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CancelledByName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ClaimedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ConnectedSystemObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Database")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DomainController")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalAddress")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("FailureKind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FailureMessage")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FirstFailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("MetaverseObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PrimarySmtpAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemObjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PendingExchangeChanges_ConnectedSystemObjectId_Unique")
+                        .HasFilter("\"ConnectedSystemObjectId\" IS NOT NULL");
+
+                    b.HasIndex("MetaverseObjectId");
+
+                    b.HasIndex("SyncRuleId");
+
+                    b.HasIndex("ConnectedSystemId", "Status", "NextRetryAt")
+                        .HasDatabaseName("IX_PendingExchangeChanges_ConnectedSystemId_Status_NextRetryAt");
+
+                    b.ToTable("PendingExchangeChanges");
+                });
+
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6872,6 +6969,30 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("LastMovedBySyncRuleMapping");
 
                     b.Navigation("MetaverseAttribute");
+                });
+
+            modelBuilder.Entity("JIM.Models.Transactional.PendingExchangeChange", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemObjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Core.MetaverseObject", null)
+                        .WithMany()
+                        .HasForeignKey("MetaverseObjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JIM.Models.Logic.SyncRule", null)
+                        .WithMany()
+                        .HasForeignKey("SyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("JIM.Models.Transactional.PendingExport", b =>

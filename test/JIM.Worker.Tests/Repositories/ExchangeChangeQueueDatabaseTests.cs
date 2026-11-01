@@ -1,0 +1,559 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using JIM.Models.Core;
+using JIM.Models.Logic;
+using JIM.Models.Staging;
+using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
+using JIM.PostgresData;
+using JIM.TestSupport;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
+using NUnit.Framework;
+
+namespace JIM.Worker.Tests.Repositories;
+
+/// <summary>
+/// Real-PostgreSQL verification of the Exchange queue's staging write (#2021).
+/// <para>
+/// Everything here is invisible to the in-memory provider by construction. Staging is an
+/// <c>INSERT ... ON CONFLICT DO UPDATE</c> against a filtered unique index the in-memory provider does not enforce, the
+/// held-cancellation decision is made in SQL, and the row is written by raw SQL that bypasses the EF model, so a column
+/// missed by the writer, or written in the wrong position or with the wrong type, persists wrongly with no error.
+/// </para>
+/// <para>
+/// Opt-in via the same <c>JIM_TEST_RESET_*</c> environment variables as the other <c>RequiresPostgres</c> fixtures;
+/// ignored when <c>JIM_TEST_RESET_DB</c> is absent. <c>SetUp</c> TRUNCATEs every table.
+/// </para>
+/// </summary>
+[TestFixture]
+[Category("RequiresPostgres")]
+public class ExchangeChangeQueueDatabaseTests
+{
+    private string _connectionString = null!;
+
+    private JimDbContext NewContext()
+    {
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        return new JimDbContext(options);
+    }
+
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        var connectionString = PostgresTestDatabase.ConnectionStringFromEnvironment();
+        if (connectionString == null)
+            Assert.Ignore("JIM_TEST_RESET_DB not set; skipping real-PostgreSQL Exchange queue tests.");
+        _connectionString = connectionString;
+
+        using var ctx = NewContext();
+        ctx.Database.Migrate();
+    }
+
+    [SetUp]
+    public async Task SetUpAsync()
+    {
+        await PostgresTestDatabase.ResetAsync(_connectionString);
+    }
+
+    /// <summary>
+    /// Every field survives the raw-SQL write path. The completeness test proves the column list matches the model;
+    /// only a round trip proves the writer puts the right value, of the right type, in each column.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_RoundTripsEveryFieldAsync()
+    {
+        var seeded = await SeedAsync();
+        var createdAt = new DateTime(2026, 11, 1, 9, 0, 0, DateTimeKind.Utc);
+        var change = new PendingExchangeChange
+        {
+            ConnectedSystemId = seeded.SystemId,
+            ConnectedSystemObjectId = seeded.CsoId,
+            MetaverseObjectId = seeded.MvoId,
+            SyncRuleId = seeded.SyncRuleId,
+            RecipientType = "MailUser",
+            Alias = "ada.lovelace",
+            Database = "DB01",
+            PrimarySmtpAddress = "ada.lovelace@example.com",
+            ExternalAddress = "SMTP:ada@partner.example",
+            DomainController = "dc01.corp.example",
+            Status = PendingExchangeChangeStatus.Parked,
+            FailureKind = ExchangeChangeFailureKind.InsufficientPermissions,
+            FailureMessage = "Access denied.",
+            AttemptCount = 3,
+            CreatedAt = createdAt,
+            LastAttemptedAt = createdAt.AddMinutes(1),
+            FirstFailedAt = createdAt.AddMinutes(2),
+            NextRetryAt = createdAt.AddMinutes(3),
+            ClaimedAt = createdAt.AddMinutes(4),
+            ClaimedBy = "worker-1a2b3c4d",
+            ActivityId = Guid.NewGuid(),
+            CancelledAt = createdAt.AddMinutes(5),
+            CancelledById = Guid.NewGuid(),
+            CancelledByName = "Ada Lovelace"
+        };
+
+        var outcome = await StageAsync(change);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Inserted));
+            Assert.That(outcome.RequestedId, Is.EqualTo(change.Id));
+            Assert.That(outcome.RowId, Is.EqualTo(change.Id));
+            Assert.That(outcome.PreviousActivityId, Is.Null);
+            Assert.That(stored.Id, Is.EqualTo(change.Id));
+            Assert.That(stored.ConnectedSystemId, Is.EqualTo(seeded.SystemId));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(seeded.CsoId));
+            Assert.That(stored.MetaverseObjectId, Is.EqualTo(seeded.MvoId));
+            Assert.That(stored.SyncRuleId, Is.EqualTo(seeded.SyncRuleId));
+            Assert.That(stored.RecipientType, Is.EqualTo("MailUser"));
+            Assert.That(stored.Alias, Is.EqualTo("ada.lovelace"));
+            Assert.That(stored.Database, Is.EqualTo("DB01"));
+            Assert.That(stored.PrimarySmtpAddress, Is.EqualTo("ada.lovelace@example.com"));
+            Assert.That(stored.ExternalAddress, Is.EqualTo("SMTP:ada@partner.example"));
+            Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Parked));
+            Assert.That(stored.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.InsufficientPermissions));
+            Assert.That(stored.FailureMessage, Is.EqualTo("Access denied."));
+            Assert.That(stored.AttemptCount, Is.EqualTo(3));
+            Assert.That(stored.CreatedAt, Is.EqualTo(createdAt));
+            Assert.That(stored.LastAttemptedAt, Is.EqualTo(change.LastAttemptedAt));
+            Assert.That(stored.FirstFailedAt, Is.EqualTo(change.FirstFailedAt));
+            Assert.That(stored.NextRetryAt, Is.EqualTo(change.NextRetryAt));
+            Assert.That(stored.ClaimedAt, Is.EqualTo(change.ClaimedAt));
+            Assert.That(stored.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
+            Assert.That(stored.ActivityId, Is.EqualTo(change.ActivityId));
+            Assert.That(stored.CancelledAt, Is.EqualTo(change.CancelledAt));
+            Assert.That(stored.CancelledById, Is.EqualTo(change.CancelledById));
+            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+        }
+    }
+
+    /// <summary>
+    /// A newer declared state for an account already on the queue supersedes its row in place: one row per account,
+    /// keeping its id, carrying the newer state, and reset to be due at once with every trace of the earlier attempts
+    /// gone. The superseded row's Activity is handed back so the supersession can be recorded under it.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_ParkedRowForTheAccount_SupersedesInPlaceAsync()
+    {
+        var seeded = await SeedAsync();
+        var existing = await StageExistingAsync(seeded, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
+            row.FailureMessage = "The alias is already in use.";
+            row.AttemptCount = 4;
+            row.LastAttemptedAt = DateTime.UtcNow.AddMinutes(-5);
+            row.FirstFailedAt = DateTime.UtcNow.AddHours(-25);
+            row.NextRetryAt = DateTime.UtcNow.AddMinutes(10);
+        });
+        var otherMvoId = await SeedIdentityAsync();
+        var newerCreatedAt = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+        var newer = NewChange(seeded, recipientType: "SharedMailbox", alias: "reception");
+        newer.MetaverseObjectId = otherMvoId;
+        newer.SyncRuleId = null;
+        newer.DomainController = "dc02.corp.example";
+        newer.ExternalAddress = "SMTP:reception@partner.example";
+        newer.CreatedAt = newerCreatedAt;
+
+        var outcome = await StageAsync(newer);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded));
+            Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
+            Assert.That(outcome.RequestedId, Is.Not.EqualTo(existing.Id));
+            Assert.That(outcome.PreviousActivityId, Is.EqualTo(existing.ActivityId));
+            Assert.That(newer.Id, Is.EqualTo(existing.Id), "the caller holds the id actually in the queue");
+            Assert.That(stored.Id, Is.EqualTo(existing.Id));
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(seeded.CsoId));
+            Assert.That(stored.MetaverseObjectId, Is.EqualTo(otherMvoId));
+            Assert.That(stored.SyncRuleId, Is.Null);
+            Assert.That(stored.RecipientType, Is.EqualTo("SharedMailbox"));
+            Assert.That(stored.Alias, Is.EqualTo("reception"));
+            Assert.That(stored.Database, Is.EqualTo("DB01"));
+            Assert.That(stored.ExternalAddress, Is.EqualTo("SMTP:reception@partner.example"));
+            Assert.That(stored.DomainController, Is.EqualTo("dc02.corp.example"));
+            Assert.That(stored.ActivityId, Is.EqualTo(newer.ActivityId));
+            Assert.That(stored.CreatedAt, Is.EqualTo(newerCreatedAt));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.FailureKind, Is.Null);
+            Assert.That(stored.FailureMessage, Is.Null);
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.LastAttemptedAt, Is.Null);
+            Assert.That(stored.FirstFailedAt, Is.Null);
+            Assert.That(stored.NextRetryAt, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// A row being delivered is superseded too, and its claim cleared: that is what makes the in-flight attempt's
+    /// outcome write, guarded on the row still being Delivering, land nowhere.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_DeliveringRowForTheAccount_SupersedesItAndClearsTheClaimAsync()
+    {
+        var seeded = await SeedAsync();
+        var existing = await StageExistingAsync(seeded, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Delivering;
+            row.ClaimedAt = DateTime.UtcNow;
+            row.ClaimedBy = "worker-1a2b3c4d";
+            row.AttemptCount = 1;
+        });
+
+        var outcome = await StageAsync(NewChange(seeded, alias: "ada"));
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded));
+            Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.ClaimedAt, Is.Null);
+            Assert.That(stored.ClaimedBy, Is.Null);
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.Alias, Is.EqualTo("ada"));
+        }
+    }
+
+    /// <summary>
+    /// Re-staging exactly what an administrator cancelled, as an export re-evaluated as unconfirmed does, leaves the
+    /// cancellation in place, untouched. Null and empty declare the same thing, in every one of the five values.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_HoldsTheCancellationAsync()
+    {
+        var seeded = await SeedAsync();
+        var cancelledAt = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
+        var cancelledById = Guid.NewGuid();
+        var existing = await StageExistingAsync(seeded, row =>
+        {
+            row.Alias = null;
+            row.Database = "";
+            row.PrimarySmtpAddress = null;
+            row.ExternalAddress = "";
+            row.Status = PendingExchangeChangeStatus.Cancelled;
+            row.CancelledAt = cancelledAt;
+            row.CancelledById = cancelledById;
+            row.CancelledByName = "Ada Lovelace";
+        });
+        var restaged = NewChange(seeded, alias: "");
+        restaged.Database = null;
+        restaged.PrimarySmtpAddress = "";
+        restaged.ExternalAddress = null;
+        restaged.DomainController = "dc02.corp.example";
+
+        var outcome = await StageAsync(restaged);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.HeldCancelled));
+            Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
+            Assert.That(outcome.RequestedId, Is.Not.EqualTo(existing.Id));
+            Assert.That(outcome.PreviousActivityId, Is.Null);
+            Assert.That(restaged.Id, Is.EqualTo(existing.Id));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
+            Assert.That(stored.CancelledAt, Is.EqualTo(cancelledAt));
+            Assert.That(stored.CancelledById, Is.EqualTo(cancelledById));
+            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(stored.ActivityId, Is.EqualTo(existing.ActivityId), "a held row keeps its own Activity");
+            Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"), "a held row is left untouched");
+            Assert.That(stored.Database, Is.EqualTo(""));
+        }
+    }
+
+    /// <summary>
+    /// A different declared state replaces a cancelled row like any other, and the cancellation goes with the state it
+    /// cancelled.
+    /// </summary>
+    [TestCase("RecipientType")]
+    [TestCase("Alias")]
+    [TestCase("Database")]
+    [TestCase("PrimarySmtpAddress")]
+    [TestCase("ExternalAddress")]
+    public async Task StageExchangeChangesAsync_CancelledRowWithADifferentDeclaredState_SupersedesItAsync(string differing)
+    {
+        var seeded = await SeedAsync();
+        var existing = await StageExistingAsync(seeded, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Cancelled;
+            row.CancelledAt = DateTime.UtcNow;
+            row.CancelledById = Guid.NewGuid();
+            row.CancelledByName = "Ada Lovelace";
+        });
+        var newer = NewChange(seeded);
+        switch (differing)
+        {
+            case "RecipientType": newer.RecipientType = "SharedMailbox"; break;
+            case "Alias": newer.Alias = "Ada.Lovelace"; break;
+            case "Database": newer.Database = null; break;
+            case "PrimarySmtpAddress": newer.PrimarySmtpAddress = "ada@example.com"; break;
+            case "ExternalAddress": newer.ExternalAddress = "SMTP:ada@partner.example"; break;
+        }
+
+        var outcome = await StageAsync(newer);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded), $"{differing} differs");
+            Assert.That(outcome.PreviousActivityId, Is.EqualTo(existing.ActivityId));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.CancelledAt, Is.Null);
+            Assert.That(stored.CancelledById, Is.Null);
+            Assert.That(stored.CancelledByName, Is.Null);
+            Assert.That(stored.ActivityId, Is.EqualTo(newer.ActivityId));
+        }
+    }
+
+    /// <summary>
+    /// The unique key holds within one call as well: two changes for one account coalesce onto one row, the later
+    /// declared state winning; changes for different accounts each get their own.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_TwoChangesForOneAccountInOneCall_CoalesceOntoOneRowAsync()
+    {
+        var seeded = await SeedAsync();
+        var secondCsoId = await SeedConnectedSystemObjectAsync(seeded.SystemId);
+        var first = NewChange(seeded, alias: "first");
+        var second = NewChange(seeded, alias: "second");
+        var otherAccount = NewChange(seeded, alias: "other");
+        otherAccount.ConnectedSystemObjectId = secondCsoId;
+
+        List<ExchangeChangeStagingOutcome> outcomes;
+        await using (var write = NewContext())
+            outcomes = await new PostgresDataRepository(write).Sync.StageExchangeChangesAsync([first, second, otherAccount]);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcomes.Select(o => o.Disposition), Is.EqualTo(new[]
+            {
+                ExchangeChangeStagingDisposition.Inserted,
+                ExchangeChangeStagingDisposition.Superseded,
+                ExchangeChangeStagingDisposition.Inserted
+            }));
+            Assert.That(outcomes[1].RowId, Is.EqualTo(outcomes[0].RowId));
+            Assert.That(stored, Has.Count.EqualTo(2));
+            Assert.That(stored.Single(r => r.ConnectedSystemObjectId == seeded.CsoId).Alias, Is.EqualTo("second"));
+            Assert.That(stored.Single(r => r.ConnectedSystemObjectId == secondCsoId).Alias, Is.EqualTo("other"));
+        }
+    }
+
+    /// <summary>
+    /// A change must name its account: the queue coalesces on it, and a change for no account is one nothing could
+    /// deliver. Refused before anything is written.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_ChangeNamingNoAccount_ThrowsAndWritesNothingAsync()
+    {
+        var seeded = await SeedAsync();
+        var change = NewChange(seeded);
+        change.ConnectedSystemObjectId = null;
+
+        await using (var write = NewContext())
+        {
+            Assert.That(() => new PostgresDataRepository(write).Sync.StageExchangeChangesAsync([change]),
+                Throws.ArgumentException);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.PendingExchangeChanges.CountAsync(), Is.Zero);
+    }
+
+    /// <summary>
+    /// Deleting the account clears the reference and keeps the row, so the delivery lane can withdraw it under its own
+    /// Activity rather than the change vanishing; deleting the identity and the rule likewise. Deleting the Connected
+    /// System takes the row with it.
+    /// </summary>
+    [Test]
+    public async Task DeletingTheAccountIdentityAndRule_ClearsTheReferencesAndKeepsTheRowAsync()
+    {
+        var seeded = await SeedAsync();
+        await StageAsync(NewChange(seeded));
+
+        await using (var delete = NewContext())
+        {
+            await delete.Database.ExecuteSqlRawAsync("""DELETE FROM "ConnectedSystemObjects" WHERE "Id" = {0}""", seeded.CsoId);
+            await delete.Database.ExecuteSqlRawAsync("""DELETE FROM "MetaverseObjects" WHERE "Id" = {0}""", seeded.MvoId);
+            await delete.Database.ExecuteSqlRawAsync("""DELETE FROM "SyncRules" WHERE "Id" = {0}""", seeded.SyncRuleId);
+        }
+
+        await using (var verify = NewContext())
+        {
+            var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(stored.ConnectedSystemObjectId, Is.Null);
+                Assert.That(stored.MetaverseObjectId, Is.Null);
+                Assert.That(stored.SyncRuleId, Is.Null);
+            }
+        }
+
+        await using (var delete = NewContext())
+            await delete.Database.ExecuteSqlRawAsync("""DELETE FROM "ConnectedSystems" WHERE "Id" = {0}""", seeded.SystemId);
+
+        await using var afterSystem = NewContext();
+        Assert.That(await afterSystem.PendingExchangeChanges.CountAsync(), Is.Zero);
+    }
+
+    /// <summary>
+    /// Staging wakes the Exchange delivery lane: the queue's trigger notifies on the channel the lane listens to, with
+    /// the Connected System id as the payload.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_RaisesExchangeChangeNotificationAsync()
+    {
+        var seeded = await SeedAsync();
+        var received = new List<(string Channel, string Payload)>();
+        await using var listener = new NpgsqlConnection(_connectionString + ";Pooling=false");
+        listener.Notification += (_, args) => received.Add((args.Channel, args.Payload));
+        await listener.OpenAsync();
+        await using (var listen = new NpgsqlCommand($"LISTEN \"{Constants.NotificationChannels.ExchangeChange}\"", listener))
+            await listen.ExecuteNonQueryAsync();
+
+        await StageAsync(NewChange(seeded));
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (received.Count == 0)
+            await listener.WaitAsync(cts.Token);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(received[0].Channel, Is.EqualTo(Constants.NotificationChannels.ExchangeChange));
+            Assert.That(received[0].Payload, Is.EqualTo(seeded.SystemId.ToString()));
+        }
+    }
+
+    #region helpers
+
+    private sealed record Seeded(int SystemId, Guid CsoId, Guid MvoId, int SyncRuleId);
+
+    private static PendingExchangeChange NewChange(Seeded seeded, string recipientType = "Mailbox", string? alias = "ada.lovelace") => new()
+    {
+        ConnectedSystemId = seeded.SystemId,
+        ConnectedSystemObjectId = seeded.CsoId,
+        MetaverseObjectId = seeded.MvoId,
+        SyncRuleId = seeded.SyncRuleId,
+        RecipientType = recipientType,
+        Alias = alias,
+        Database = "DB01",
+        DomainController = "dc01.corp.example",
+        CreatedAt = DateTime.UtcNow,
+        ActivityId = Guid.NewGuid()
+    };
+
+    private async Task<ExchangeChangeStagingOutcome> StageAsync(PendingExchangeChange change)
+    {
+        await using var write = NewContext();
+        return (await new PostgresDataRepository(write).Sync.StageExchangeChangesAsync([change])).Single();
+    }
+
+    /// <summary>
+    /// A row already on the queue for the seeded account, in the state an earlier attempt or an administrator left it:
+    /// inserted through staging, then adjusted directly, as the delivery lane or a cancellation would leave it.
+    /// </summary>
+    private async Task<PendingExchangeChange> StageExistingAsync(Seeded seeded, Action<PendingExchangeChange> leftAs)
+    {
+        var change = NewChange(seeded);
+        await StageAsync(change);
+
+        await using var adjust = NewContext();
+        var row = await adjust.PendingExchangeChanges.SingleAsync(r => r.Id == change.Id);
+        leftAs(row);
+        await adjust.SaveChangesAsync();
+        return row;
+    }
+
+    private async Task<Seeded> SeedAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Corporate AD Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Corporate AD", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+        var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
+        seed.AddRange(connectorDefinition, system, csType, mvType);
+        await seed.SaveChangesAsync();
+
+        var externalIdAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued,
+            Selected = true,
+            ConnectedSystemObjectType = csType
+        };
+        var mvo = new MetaverseObject { Type = mvType };
+        seed.AddRange(externalIdAttribute, mvo);
+        await seed.SaveChangesAsync();
+
+        var cso = new ConnectedSystemObject
+        {
+            TypeId = csType.Id,
+            ConnectedSystemId = system.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = externalIdAttribute.Id,
+            MetaverseObjectId = mvo.Id
+        };
+        var syncRule = new SyncRule
+        {
+            Name = "Provision Users",
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = system.Id,
+            ConnectedSystemObjectTypeId = csType.Id,
+            MetaverseObjectTypeId = mvType.Id,
+            ProvisionToConnectedSystem = true
+        };
+        seed.AddRange(cso, syncRule);
+        await seed.SaveChangesAsync();
+
+        return new Seeded(system.Id, cso.Id, mvo.Id, syncRule.Id);
+    }
+
+    private async Task<Guid> SeedIdentityAsync()
+    {
+        await using var seed = NewContext();
+        var mvType = await seed.MetaverseObjectTypes.FirstAsync();
+        var mvo = new MetaverseObject { Type = mvType };
+        seed.Add(mvo);
+        await seed.SaveChangesAsync();
+        return mvo.Id;
+    }
+
+    private async Task<Guid> SeedConnectedSystemObjectAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var csType = await seed.ConnectedSystemObjectTypes.FirstAsync(t => t.ConnectedSystemId == systemId);
+        var externalIdAttribute = await seed.ConnectedSystemAttributes.SingleAsync(a => a.ConnectedSystemObjectType.Id == csType.Id);
+        var cso = new ConnectedSystemObject
+        {
+            TypeId = csType.Id,
+            ConnectedSystemId = systemId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            ExternalIdAttributeId = externalIdAttribute.Id
+        };
+        seed.Add(cso);
+        await seed.SaveChangesAsync();
+        return cso.Id;
+    }
+
+    #endregion
+}

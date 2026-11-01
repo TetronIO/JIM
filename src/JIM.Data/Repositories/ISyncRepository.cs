@@ -1075,6 +1075,30 @@ public interface ISyncRepository
 
     #endregion
 
+    #region Exchange queue (#2021)
+
+    /// <summary>
+    /// Offers Exchange changes to the queue, one per exported account, coalescing on the Connected System Object: the
+    /// queue holds at most one change per account, the latest declared state.
+    /// <para>
+    /// Decided per change in one statement against the row already there, if any
+    /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a Cancelled row declaring
+    /// the same state (the five declared values, null and empty alike) is left untouched, so re-staging what an
+    /// administrator cancelled does not undo the cancellation; any other row, including one being delivered, is
+    /// superseded in place, keeping its id, taking the change's declared state, domain controller, Metaverse Object,
+    /// Synchronisation Rule, Activity and creation time, and clearing every trace of earlier attempts, the claim and
+    /// the cancellation so it is due at once.
+    /// </para>
+    /// <para>
+    /// Each change must name its account (<see cref="PendingExchangeChange.ConnectedSystemObjectId"/>). A change whose
+    /// row already existed is given that row's id, so the caller holds the id actually in the table.
+    /// </para>
+    /// </summary>
+    /// <returns>One outcome per change, in the order offered.</returns>
+    Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes);
+
+    #endregion
+
     /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
