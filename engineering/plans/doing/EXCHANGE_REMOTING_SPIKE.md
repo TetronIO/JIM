@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b found a framing fault against Exchange, now fixed and awaiting re-test; Phase 3 waits for the next Exchange window on the AD lab)
+- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b has proven Kerberos, encryption and framing against Exchange, and found an OptionSet fault in the shell Create, now fixed and awaiting re-test; Phase 3 waits for the next Exchange window)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -208,6 +208,23 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 1b: second run against Exchange (2026-11-01)
+
+**Kerberos, message encryption, the decoder fix and Exchange's authorisation all work against real Exchange; the shell Create was refused, and the cause is fixed.** One read-only run of `ExchangeLabTests` at `e7ea0b1c2`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` (Exchange 15.2 build 2562.17), as svc-jim:
+
+- **What worked:**
+  - Kerberos authentication (178 ms), and Exchange's front end authenticating `PANOPLY\svc-jim` and proxying the request to its back-end WinRM.
+  - The reply was decrypted and parsed, so the decoder fix (`3d98ec412`) holds against Exchange's real framing.
+- **What failed:** all six tests failed in set-up. The back end refused the PSRP Create (`New-PSSession`) with `w:InvalidOptions` (WinRM fault 2150858809, HTTP 500): "the SOAP packet that was received contained a invalid WS-Management OptionSet element, or it was duplicated". A rerun failed the same way, so it is deterministic. The write suite did not run.
+- **The control worked:** a native Windows `New-PSSession` to the same endpoint opened in 3.9 s.
+- **The cause:** WS-Management requires an OptionSet that holds an option marked `MustComply="true"` (the Create's `protocolversion`) to be `s:mustUnderstand="true"` itself. The client left the attribute off. The native client, pypsrp and PSWSMan all set it. The stand-in server did not check, so the harness passed.
+- **Fixed:**
+  - The client now marks such an OptionSet `mustUnderstand`.
+  - The stand-in server now refuses one that is not, with Exchange's own fault. With the client fix reverted, the harness reproduces the lab's error exactly.
+- **Cleanup:** none needed. No `jimspike*` recipient or directory object was left.
+
+The next window needs about 30 minutes: the read-only suite, then the write suite.
 
 ### Phase 1b: first run against Exchange (2026-10-31)
 

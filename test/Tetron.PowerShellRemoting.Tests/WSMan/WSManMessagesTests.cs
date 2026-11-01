@@ -43,6 +43,32 @@ public class WSManMessagesTests
         }
     }
 
+    /// <summary>
+    /// WS-Management requires an OptionSet holding an option the service must comply with to say so itself, with
+    /// <c>s:mustUnderstand="true"</c>. Exchange's IIS-hosted WinRM enforces it, refusing the Create with
+    /// <c>w:InvalidOptions</c> (2150858809) when it is missing; the native client, pypsrp and PSWSMan all send it.
+    /// </summary>
+    [Test]
+    public void Create_ProtocolVersionTheServiceMustComplyWith_MarksTheOptionSetMustUnderstand()
+    {
+        var optionSet = OptionSet(Parse(WSManMessages.Create(Settings, ShellId, "Q1JFQVRJT04=")));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(optionSet.Attribute(S + "mustUnderstand")?.Value, Is.EqualTo("true"));
+            Assert.That(optionSet.Element(W + "Option")?.Attribute("MustComply")?.Value, Is.EqualTo("true"));
+        }
+    }
+
+    [Test]
+    public void Command_OnlyOptionalOptions_LeavesTheOptionSetOptional()
+    {
+        var optionSet = OptionSet(Parse(WSManMessages.Command(Settings, ShellId, CommandId, "UElQRUxJTkU=")));
+
+        Assert.That(optionSet.Attribute(S + "mustUnderstand"), Is.Null,
+            "an OptionSet of options the service may ignore must not make the service refuse it for not knowing one");
+    }
+
     [Test]
     public void Command_AnyPipeline_CarriesTheFirstMessageAsItsArgumentWithAnEmptyCommand()
     {
@@ -192,6 +218,8 @@ public class WSManMessagesTests
     private static XDocument Parse(byte[] message) => XDocument.Parse(Encoding.UTF8.GetString(message));
 
     private static string? Header(XDocument envelope, XName name) => envelope.Root!.Element(S + "Header")!.Element(name)?.Value;
+
+    private static XElement OptionSet(XDocument envelope) => envelope.Root!.Element(S + "Header")!.Element(W + "OptionSet")!;
 
     private static XElement Body(XDocument envelope) => envelope.Root!.Element(S + "Body")!;
 

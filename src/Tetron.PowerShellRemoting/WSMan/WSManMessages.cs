@@ -151,14 +151,20 @@ public static class WSManMessages
 
         if (options.Length > 0)
         {
-            header.Add(new XElement(W + "OptionSet", new XAttribute(XNamespace.Xmlns + "xsi", "http://www.w3.org/2001/XMLSchema-instance"),
-                options.Select(o =>
-                {
-                    var option = new XElement(W + "Option", new XAttribute("Name", o.Name), o.Value);
-                    if (o.MustComply)
-                        option.Add(new XAttribute("MustComply", "true"));
-                    return option;
-                })));
+            // WS-Management requires an OptionSet holding an option the service must comply with to be mustUnderstand
+            // itself. Exchange's IIS-hosted WinRM enforces it, refusing the Create with w:InvalidOptions without it.
+            var optionSet = new XElement(W + "OptionSet", new XAttribute(XNamespace.Xmlns + "xsi", "http://www.w3.org/2001/XMLSchema-instance"));
+            if (options.Any(o => o.MustComply))
+                optionSet.Add(new XAttribute(S + "mustUnderstand", "true"));
+
+            header.Add(optionSet);
+            optionSet.Add(options.Select(o =>
+            {
+                var option = new XElement(W + "Option", new XAttribute("Name", o.Name), o.Value);
+                if (o.MustComply)
+                    option.Add(new XAttribute("MustComply", "true"));
+                return option;
+            }));
         }
 
         var envelope = new XElement(S + "Envelope",

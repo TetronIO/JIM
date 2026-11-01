@@ -247,6 +247,18 @@ def handle(envelope_bytes: bytes) -> bytes:
     message_id = envelope.findtext("s:Header/a:MessageID", namespaces=NS) or ""
     LOG.info("%s", action.rsplit("/", 1)[-1])
 
+    # WS-Management: an OptionSet holding an option the service must comply with must itself be mustUnderstand.
+    # Exchange's IIS-hosted WinRM refuses one that is not with w:InvalidOptions (2150858809), and so does this server,
+    # so the harness catches a client that leaves it off.
+    option_set = envelope.find("s:Header/w:OptionSet", NS)
+    if option_set is not None:
+        must_comply = any(o.get("MustComply", "").lower() == "true" for o in option_set.findall("w:Option", NS))
+        must_understand = option_set.get(f"{{{NS['s']}}}mustUnderstand", "").lower() == "true"
+        if must_comply and not must_understand:
+            return fault(message_id, 2150858809, "w:InvalidOptions",
+                         "The WS-Management service cannot process the request because the SOAP packet that was received "
+                         "contained a invalid WS-Management OptionSet element, or it was duplicated.")
+
     if action == ACTION_CREATE:
         resource_uri = envelope.findtext("s:Header/w:ResourceURI", namespaces=NS)
         shell_element = envelope.find("s:Body/rsp:Shell", NS)
