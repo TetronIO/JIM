@@ -274,6 +274,43 @@ public class SyncRepositoryCsoWriteTests
         }
     }
 
+    /// <summary>
+    /// Mirrors the PostgreSQL change record writer (#2700): an export's change record carries the object a reference
+    /// resolved to as an object holding just its id, and the id counts as written when that object is stored.
+    /// </summary>
+    [Test]
+    public async Task PersistRpeiCsoChangesAsync_ReferenceCarryingAStoredObjectsIdAlone_LeavesItUnmarkedAsync()
+    {
+        var stored = SeedPersonWithDn(ManagerDn);
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var value = AddValue(managerChange, ManagerDn, new ConnectedSystemObject { Id = stored.Id });
+
+        await PersistAsync(rpei);
+
+        Assert.That(value.IsUnresolvedReference, Is.False);
+    }
+
+    /// <summary>
+    /// Mirrors the PostgreSQL change record writer (#2700): a reference named by display text (a display name, or the
+    /// Metaverse Object id it was staged with) is never marked, since no identifier could ever resolve it.
+    /// </summary>
+    [Test]
+    public async Task PersistRpeiCsoChangesAsync_ReferencesNamingTheirObjectsByDisplayText_LeavesThemUnmarkedAsync()
+    {
+        SeedPersonWithDn(ManagerDn);
+        var (rpei, managerChange) = NewChangeRecord(AttributeDataType.Reference);
+        var displayName = AddDisplayTextValue(managerChange, "Mo Manager");
+        var metaverseObjectId = AddDisplayTextValue(managerChange, Guid.NewGuid().ToString());
+
+        await PersistAsync(rpei);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(displayName.IsUnresolvedReference, Is.False, "a display name");
+            Assert.That(metaverseObjectId.IsUnresolvedReference, Is.False, "a Metaverse Object id");
+        }
+    }
+
     [Test]
     public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_MarkedReference_ResolvesItAndClearsTheMarkAsync()
     {
@@ -368,6 +405,13 @@ public class SyncRepositoryCsoWriteTests
         ConnectedSystemObjectChangeAttribute attributeChange, string stringValue, ConnectedSystemObject? referenceValue = null)
     {
         var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, stringValue) { ReferenceValue = referenceValue };
+        attributeChange.ValueChanges.Add(value);
+        return value;
+    }
+
+    private static ConnectedSystemObjectChangeAttributeValue AddDisplayTextValue(ConnectedSystemObjectChangeAttribute attributeChange, string displayText)
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, displayText) { NamesReferencedObjectByDisplayText = true };
         attributeChange.ValueChanges.Add(value);
         return value;
     }

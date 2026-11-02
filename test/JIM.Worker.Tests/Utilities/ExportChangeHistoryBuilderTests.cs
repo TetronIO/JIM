@@ -685,6 +685,109 @@ public class ExportChangeHistoryBuilderTests
         Assert.That(valueChange.ReferenceValue, Is.Null);
     }
 
+    /// <summary>
+    /// Export resolution stamps the object a reference resolved to (<c>ResolvedReferenceCsoId</c>). The change record
+    /// carries it, so the writer can record the reference's id with it rather than leaving the change record reference
+    /// fix-up to find the object again by the DN; the DN and the stub flag stay, as the history shows them.
+    /// </summary>
+    [Test]
+    public void BuildFromProcessedExportItem_ResolvedReferenceWithItsObjectsId_CarriesTheObjectsIdWithTheDnAndStubFlag()
+    {
+        var memberCsoId = Guid.NewGuid();
+        var exportItem = CreateExportItem(PendingExportChangeType.Update,
+            new PendingExportAttributeValueChange
+            {
+                Attribute = _referenceAttribute,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                StringValue = "CN=User1,OU=Users,DC=test,DC=local",
+                ResolvedReferenceCsoId = memberCsoId
+            });
+
+        var change = ExportChangeHistoryBuilder.BuildFromProcessedExportItem(
+            exportItem, connectedSystemId: 1, CreateRpei(), ActivityInitiatorType.System, null, null);
+
+        var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.ReferenceValue?.Id, Is.EqualTo(memberCsoId), "the object the reference resolved to");
+            Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"), "the DN the history shows");
+            Assert.That(valueChange.IsPendingExportStub, Is.True);
+            Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.False, "a DN is the object's identifier, not display text");
+        }
+    }
+
+    /// <summary>
+    /// A resolved reference whose object was not stamped carries its DN alone, as before, for the fix-up to resolve.
+    /// </summary>
+    [Test]
+    public void MapAttributeValueChanges_ResolvedReferenceWithoutAnObjectId_CarriesTheDnAlone()
+    {
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, StringValue = "CN=User1,OU=Users,DC=test,DC=local" }
+        };
+
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.ReferenceValue, Is.Null);
+            Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
+            Assert.That(valueChange.IsPendingExportStub, Is.True);
+            Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.False);
+        }
+    }
+
+    /// <summary>
+    /// A staged reference named by its object's display identifier in the target Connected System is display text: it
+    /// can never be matched to an object by identifier, so it must never be left for the fix-up to read.
+    /// </summary>
+    [Test]
+    public void MapAttributeValueChanges_ReferenceNamedByItsObjectsDisplayIdentifier_NamesItsObjectByDisplayText()
+    {
+        var mvoGuid = Guid.NewGuid();
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid.ToString() }
+        };
+
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, new Dictionary<Guid, string> { { mvoGuid, "Alice Smith (S8-0)" } });
+
+        var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.StringValue, Is.EqualTo("Alice Smith (S8-0)"));
+            Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.True);
+        }
+    }
+
+    /// <summary>
+    /// A staged reference whose object has no display identifier is recorded as the Metaverse Object id it was staged
+    /// with, which is no identifier in the target Connected System either.
+    /// </summary>
+    [Test]
+    public void MapAttributeValueChanges_ReferenceNamedByItsMetaverseObjectId_NamesItsObjectByDisplayText()
+    {
+        var mvoGuid = Guid.NewGuid();
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _referenceAttribute, ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = mvoGuid.ToString() }
+        };
+
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges, new Dictionary<Guid, string>());
+
+        var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valueChange.StringValue, Is.EqualTo(mvoGuid.ToString()));
+            Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.True);
+        }
+    }
+
     [Test]
     public void GetCsoDisplayIdentifier_PrefersDisplayName()
     {

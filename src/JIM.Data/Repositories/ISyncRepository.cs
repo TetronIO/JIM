@@ -460,7 +460,8 @@ public interface ISyncRepository
     /// Resolves the reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues) that were
     /// written without their referenced object's id, which the writer marks
     /// <see cref="ConnectedSystemObjectChangeAttributeValue.IsUnresolvedReference"/>: the referenced object's row did
-    /// not exist yet (a later batch writes it), or the reference named no object when it was recorded. The DN in
+    /// not exist yet (a later batch writes it), or the reference named no object when it was recorded. A value naming its
+    /// object by display text holds no identifier to match, so it is never marked and never read here. The DN in
     /// StringValue is matched against the secondary external ID attribute values of CSOs in the same Connected System,
     /// ignoring case unless the target's attribute is case-exact; writing the id clears the mark, and a value that
     /// matches nothing stays marked for a later run. A value written with its id is never read, so one whose object
