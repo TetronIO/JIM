@@ -47,7 +47,7 @@
 # the first step refuses to start while any jl- VM exists, which is a run by hand in progress or a run that died, and
 # the last step deletes every jl- VM, which after that check can only be this run's.
 #
-# Timing: 01:00 UTC. A full run is about 50 minutes on the lab host (a bundle build, then 25 cells, several at once).
+# Timing: 01:00 UTC. A full run is about 55 minutes on the lab host (a bundle build, then 25 cells, several at once).
 
 name: jim-deploy-lab
 
