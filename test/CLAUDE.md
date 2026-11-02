@@ -272,6 +272,18 @@ These flags are for human developer iteration only. Claude must not use them bec
 **CRITICAL: A single-page run is not a sign-off for synchronisation or worker changes.**
 The worker synchronises in pages (`Sync.PageSize`, 500 by default) and clears its change tracker between them, so a template whose users fit in one page (Nano, Micro, Small) never runs the code between pages: tracker clear, cross-page reference fix-up, re-attaching bulk-created rows. The in-memory unit suite cannot see that code's faults either. Micro is fine for iterating, but before calling a change that touches synchronisation, the worker, or a sync-path repository write done, run its scenario at **Medium or above**, and preferably at the template Pre-Release uses for that directory (Medium for Samba AD, Large for OpenLDAP and 389 Directory Server), since that is the gate it will face anyway. The runner prints a `⚠ Single-page run` warning under a passing template-relevant scenario that did not cross a page boundary; treat it as "not verified", not as a pass. (Rule added after Scenario 023, Unique Value Generation, was signed off at Micro and then failed Pre-Release at Medium: page 2's bulk-created Metaverse Objects were left Modified, and the next EF save threw `DbUpdateConcurrencyException`.)
 
+### Keeping scenarios in step with the code
+
+A broken unit or workflow test fails the PR within minutes. A broken scenario does not: no scenario runs on a pull request, only in Pre-Release (`pre-release.yml`, on a `VERSION` change) and in the nightly AD lab (`ad-lab.yml`), so it surfaces on `main` after the merge, often in a scenario nobody on the PR could run. Scenarios read JIM the way an operator does, through the REST API and the PowerShell module, so they depend on things unit tests do not pin: response field names, which list or parent an object appears under, Activity statuses and message wording, and how long work takes to settle.
+
+When a change alters any of those:
+
+1. **Search every scenario for readers of the old behaviour,** not only the scenario you are working in: `grep -rn` over `test/integration` (scenarios, `Setup-Scenario-*.ps1` and `utils/`) for the cmdlet, the camelCase field name, the enum value and a distinctive fragment of any message text. #2677 updated Scenario 017; the same search for `PasswordSynchronisation` would also have found Scenario 024.
+2. **Update each reader in the same PR,** including scenarios you cannot run. Where two scenarios read the same thing, move the read into a shared helper in `utils/Test-Helpers.ps1` so the next change updates one place.
+3. **Run what you can,** per the sections above.
+4. **Account for the AD-lab-only scenarios.** `Get-ScenarioSupportedDirectoryTypes` is the list; today it is 024, 025, 030 and 031. They run only on the self-hosted lab, and `ad-lab.yml` runs only from `main`, so they cannot be run before merge. If you changed one, say so in the PR, and after the merge dispatch it on its own (`gh workflow run ad-lab.yml -f scenario=24`) and report the result on the PR.
+5. **Record it in the PR's Testing section:** what you searched for, which scenarios you changed, which you ran, and which wait for the AD lab.
+
 ### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
 
 When the sandbox has a working Docker daemon (the SessionStart hook starts one where the environment supports it; `docker info` confirms), the full `Run-IntegrationTests.ps1` path works, including the Docker image builds, with ONE bridge: `dotnet restore` inside the build stages fails with `NU1301 ... UntrustedRoot` because the egress proxy re-terminates TLS and the build containers do not trust its CA.
