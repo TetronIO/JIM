@@ -218,6 +218,66 @@ public class InitialPasswordStagingTests
     }
 
     /// <summary>
+    /// The password's Activity is a follow-up of the export item that provisioned the account (#2668): it names that
+    /// item as its parent, and the item is told to take that id when it is written after the batch, so the link
+    /// resolves. Without it the Activity sits at the top level of the Activities list, one per account provisioned.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateFromARuleThatAsksForAPassword_ParentsTheActivityOnTheExportItemAsync()
+    {
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var item = result.ProcessedExportItems.Single(i => i.PendingExportId == export.Id);
+        var activity = SyncRepo.Activities[SyncRepo.PendingPasswordChanges.Values.Single().ActivityId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(item.ExecutionItemId, Is.Not.Null, "the item is named before it exists, so the Activity can point at it");
+            Assert.That(activity.ParentRunProfileExecutionItemId, Is.EqualTo(item.ExecutionItemId));
+            Assert.That(activity.ParentActivityId, Is.Null, "an Activity has one parent");
+        }
+    }
+
+    /// <summary>
+    /// A waiting change carries the account's first password (Coalesced): the export's own Activity saying so is a
+    /// follow-up of the export item as well, while the deliveries stay under the person's change.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WaitingChangeCarriesTheInitialPassword_ParentsTheExportsActivityOnTheExportItemAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, cso, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        ArrangePasswordSynchronisation(system, cso, enabled: true);
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id, PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Pending);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var item = result.ProcessedExportItems.Single(i => i.PendingExportId == export.Id);
+        var note = SyncRepo.Activities.Values.Single(a => a.TargetType == ActivityTargetType.PasswordSynchronisation
+                                                          && a.TargetContext == nameof(PendingPasswordChangeOrigin.Provisioned));
+        Assert.That(note.ParentRunProfileExecutionItemId, Is.Not.Null.And.EqualTo(item.ExecutionItemId));
+    }
+
+    /// <summary>
+    /// The new Initial Password takes over a row that can no longer be delivered (Superseded): its Activity is the
+    /// export item's follow-up, like any other.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_InitialPasswordSupersedesAnExpiredRow_ParentsTheActivityOnTheExportItemAsync()
+    {
+        var metaverseObjectId = Guid.NewGuid();
+        var (system, _, export) = ArrangeProvisioningCreate(initialPasswordEnabled: true, metaverseObjectId: metaverseObjectId);
+        await SeedExistingChangeAsync(metaverseObjectId, system.Id, PendingPasswordChangeOrigin.Propagated, PendingPasswordChangeStatus.Expired);
+
+        var result = await ExportAsync(system, ConnectedSystemExportResult.Succeeded());
+
+        var item = result.ProcessedExportItems.Single(i => i.PendingExportId == export.Id);
+        var activity = SyncRepo.Activities[SyncRepo.PendingPasswordChanges.Values.Single().ActivityId];
+        Assert.That(activity.ParentRunProfileExecutionItemId, Is.Not.Null.And.EqualTo(item.ExecutionItemId));
+    }
+
+    /// <summary>
     /// The staged expiry follows the Connected System's own time to live, so a system known to be going out of
     /// service for longer than a week can be given a window that outlasts the outage.
     /// </summary>

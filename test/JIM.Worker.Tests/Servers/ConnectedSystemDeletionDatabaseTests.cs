@@ -293,7 +293,6 @@ public class ConnectedSystemDeletionDatabaseTests
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             DeletedObjectType = csType,
-            DeletedObjectExternalIdAttributeValue = csoAttrValue,
             ConnectedSystemObject = cso
         };
         var csoChangeAttr = new ConnectedSystemObjectChangeAttribute
@@ -401,8 +400,8 @@ public class ConnectedSystemDeletionDatabaseTests
         Assert.That(await verify.ConnectedSystemObjectTypes.AnyAsync(), Is.False, "Object types should be removed.");
 
         // Change history is retained, with foreign keys to the now-deleted schema/objects nulled.
-        // DeletedObjectTypeId / DeletedObjectExternalIdAttributeValueId / AttributeId / ReferenceValueId are shadow
-        // FKs (no CLR property), so they are read via EF.Property projections which work under NoTracking.
+        // DeletedObjectTypeId / AttributeId / ReferenceValueId are shadow FKs (no CLR property), so they are read via
+        // EF.Property projections which work under NoTracking.
         Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(c => c.Id == ids.CsoChangeId), Is.True,
             "Change history should be retained when deleteChangeHistory is false.");
 
@@ -411,12 +410,6 @@ public class ConnectedSystemDeletionDatabaseTests
             .Select(c => EF.Property<int?>(c, "DeletedObjectTypeId"))
             .SingleAsync();
         Assert.That(deletedObjectTypeId, Is.Null, "Retained change should null its deleted-object-type FK.");
-
-        var deletedExternalIdAttributeValueId = await verify.ConnectedSystemObjectChanges
-            .Where(c => c.Id == ids.CsoChangeId)
-            .Select(c => EF.Property<Guid?>(c, "DeletedObjectExternalIdAttributeValueId"))
-            .SingleAsync();
-        Assert.That(deletedExternalIdAttributeValueId, Is.Null, "Retained change should null its deleted-attribute-value FK.");
 
         var csoChange = await verify.ConnectedSystemObjectChanges.SingleAsync(c => c.Id == ids.CsoChangeId);
         Assert.That(csoChange.ConnectedSystemObjectId, Is.Null, "Retained change should null its CSO FK (SetNull cascade).");

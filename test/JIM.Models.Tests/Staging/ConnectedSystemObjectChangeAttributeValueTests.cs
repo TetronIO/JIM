@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -41,6 +42,57 @@ public class ConnectedSystemObjectChangeAttributeValueTests
         {
             CultureInfo.CurrentCulture = originalCulture;
         }
+    }
+
+    [Test]
+    public void SetUnresolvedReferenceMark_ReferenceDnWrittenWithoutItsObjectsId_MarksTheValue()
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue { StringValue = "CN=Mo Manager,DC=glitterband,DC=local" };
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: false);
+
+        Assert.That(value.IsUnresolvedReference, Is.True);
+    }
+
+    [Test]
+    public void SetUnresolvedReferenceMark_ReferenceDnWrittenWithItsObjectsId_LeavesTheValueUnmarked()
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue { StringValue = "CN=Mo Manager,DC=glitterband,DC=local" };
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: true);
+
+        Assert.That(value.IsUnresolvedReference, Is.False);
+    }
+
+    [Test]
+    public void SetUnresolvedReferenceMark_ReferenceHoldingNoString_LeavesTheValueUnmarked()
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue();
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: false);
+
+        Assert.That(value.IsUnresolvedReference, Is.False, "with no string there is nothing to resolve it by");
+    }
+
+    [Test]
+    public void SetUnresolvedReferenceMark_TextValueHoldingADn_LeavesTheValueUnmarked()
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue { StringValue = "CN=Mo Manager,DC=glitterband,DC=local" };
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Text, referenceIdWritten: false);
+
+        Assert.That(value.IsUnresolvedReference, Is.False, "a value of a Text attribute is never a reference");
+    }
+
+    [Test]
+    public void SetUnresolvedReferenceMark_MarkedValueWrittenAgainWithItsObjectsId_ClearsTheMark()
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue { StringValue = "CN=Mo Manager,DC=glitterband,DC=local" };
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: false);
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: true);
+
+        Assert.That(value.IsUnresolvedReference, Is.False);
     }
 
     [Test]

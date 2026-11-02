@@ -1,8 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Interfaces;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Models.Staging;
+using Microsoft.AspNetCore.DataProtection;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Servers;
@@ -17,6 +20,12 @@ namespace JIM.Worker.Tests.Servers;
 [TestFixture]
 public class ConnectedSystemDraftSettingsTests
 {
+    private static readonly CredentialProtectionService CredentialProtection = new(new EphemeralDataProtectionProvider());
+
+    private static ICredentialProtectionService Protection() => CredentialProtection;
+
+    private static readonly string SavedSecret = CredentialProtection.Protect("saved-secret")!;
+
     private static ConnectedSystem CreateConnectedSystem()
     {
         return new ConnectedSystem
@@ -38,7 +47,7 @@ public class ConnectedSystemDraftSettingsTests
                 new ConnectedSystemSettingValue
                 {
                     Setting = new ConnectorDefinitionSetting { Id = 3, Name = "Password", Type = ConnectedSystemSettingType.StringEncrypted },
-                    StringEncryptedValue = "saved-secret"
+                    StringEncryptedValue = SavedSecret
                 }
             ]
         };
@@ -53,7 +62,7 @@ public class ConnectedSystemDraftSettingsTests
         [
             new ConnectedSystemSettingValueDraft { SettingId = 1, StringValue = "draft-host.example.org" },
             new ConnectedSystemSettingValueDraft { SettingId = 2, IntValue = 636 }
-        ]);
+        ], Protection);
 
         Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 1).StringValue, Is.EqualTo("draft-host.example.org"));
         Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 2).IntValue, Is.EqualTo(636));
@@ -70,10 +79,10 @@ public class ConnectedSystemDraftSettingsTests
         ConnectedSystemDraftSettings.Apply(connectedSystem,
         [
             new ConnectedSystemSettingValueDraft { SettingId = 3, StringValue = "attacker-or-accident" }
-        ]);
+        ], Protection);
 
         var encrypted = connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3);
-        Assert.That(encrypted.StringEncryptedValue, Is.EqualTo("saved-secret"));
+        Assert.That(encrypted.StringEncryptedValue, Is.EqualTo(SavedSecret));
         Assert.That(encrypted.StringValue, Is.Null);
     }
 
@@ -88,10 +97,30 @@ public class ConnectedSystemDraftSettingsTests
         ConnectedSystemDraftSettings.Apply(connectedSystem,
         [
             new ConnectedSystemSettingValueDraft { SettingId = 3, StringEncryptedValue = "typed-but-not-saved" }
-        ]);
+        ], Protection);
 
-        Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3).StringEncryptedValue,
-            Is.EqualTo("typed-but-not-saved"));
+        // what the administrator typed is in clear, and a Connector only accepts an encrypted credential (#2680)
+        var applied = connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3).StringEncryptedValue;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CredentialProtection.IsProtected(applied), Is.True, "the drafted credential reached the Connector in clear");
+            Assert.That(CredentialProtection.Unprotect(applied), Is.EqualTo("typed-but-not-saved"));
+        }
+    }
+
+    [Test]
+    public void Apply_EncryptedDraftAlreadyEncrypted_IsAppliedUnchanged()
+    {
+        // the saved credential posted back untouched is already encrypted; encrypting it again would make it unusable
+        var connectedSystem = CreateConnectedSystem();
+        var other = CredentialProtection.Protect("other-secret")!;
+
+        ConnectedSystemDraftSettings.Apply(connectedSystem,
+        [
+            new ConnectedSystemSettingValueDraft { SettingId = 3, StringEncryptedValue = other }
+        ], Protection);
+
+        Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 3).StringEncryptedValue, Is.EqualTo(other));
     }
 
     [Test]
@@ -102,7 +131,7 @@ public class ConnectedSystemDraftSettingsTests
         ConnectedSystemDraftSettings.Apply(connectedSystem,
         [
             new ConnectedSystemSettingValueDraft { SettingId = 1, StringEncryptedValue = "wrong-channel" }
-        ]);
+        ], Protection);
 
         Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 1).StringValue,
             Is.EqualTo("saved-host.example.org"));
@@ -116,7 +145,7 @@ public class ConnectedSystemDraftSettingsTests
         ConnectedSystemDraftSettings.Apply(connectedSystem,
         [
             new ConnectedSystemSettingValueDraft { SettingId = 99, StringValue = "no such setting" }
-        ]);
+        ], Protection);
 
         Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == 1).StringValue, Is.EqualTo("saved-host.example.org"));
     }

@@ -1420,27 +1420,23 @@ public class SyncRepository : ISyncRepository
 
         var resolved = 0;
 
-        // Iterate all RPEIs and resolve change record attribute values
-        foreach (var rpei in _rpeis.Values)
+        // Mirrors the Postgres fixup (#2690): only values the writer marked as references still to resolve are read, so
+        // a value whose referenced object was stored when it was written is never re-pointed by its identifier; a
+        // resolved value loses its mark, and one that matches nothing keeps it for a later run.
+        var markedValues = GetStoredCsoChanges()
+            .Where(change => change.ConnectedSystemId == connectedSystemId)
+            .SelectMany(change => change.AttributeChanges)
+            .SelectMany(attrChange => attrChange.ValueChanges)
+            .Where(valueChange => valueChange.IsUnresolvedReference && valueChange.StringValue != null);
+
+        foreach (var valueChange in markedValues)
         {
-            var change = rpei.ConnectedSystemObjectChange;
-            if (change == null || change.ConnectedSystemId != connectedSystemId)
-                continue;
-
-            foreach (var attrChange in change.AttributeChanges)
+            if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue!, out var targetCso) ||
+                secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue!, caseExact: false), out targetCso))
             {
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.ReferenceValue != null || valueChange.StringValue == null)
-                        continue;
-
-                    if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue, out var targetCso) ||
-                        secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue, caseExact: false), out targetCso))
-                    {
-                        valueChange.ReferenceValue = targetCso;
-                        resolved++;
-                    }
-                }
+                valueChange.ReferenceValue = targetCso;
+                valueChange.IsUnresolvedReference = false;
+                resolved++;
             }
         }
 
@@ -2357,6 +2353,10 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
 
+            // The change records the outcomes carry (the sync snapshots) are written by this flush in production, so
+            // their values are marked here as the production writer marks them (#2690).
+            MarkUnresolvedChangeReferences(GetOutcomeCsoChanges(rpei));
+
             // Drain the ambiguous match candidate buffer (#2052), as the production flush does.
             foreach (var candidate in rpei.MatchCandidates)
             {
@@ -2536,15 +2536,63 @@ public class SyncRepository : ISyncRepository
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        // No-op — CSO changes are already in memory on the RPEI objects
+        // The CSO changes are already in memory on the RPEI objects; only their values' unresolved reference marks are
+        // set, as the production writer sets them.
+        MarkUnresolvedChangeReferences(rpeis.Where(r => r.ConnectedSystemObjectChange != null).Select(r => r.ConnectedSystemObjectChange!));
         return Task.CompletedTask;
     }
 
     public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
     {
+        MarkUnresolvedChangeReferences(changes);
         _standaloneCsoChanges.AddRange(changes);
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Sets each change value's unresolved reference mark as the PostgreSQL change record writer does on writing it
+    /// (#2690): a reference's id counts as written only when the object it refers to is stored, mirroring the writer's
+    /// check that the referenced row exists.
+    /// </summary>
+    private void MarkUnresolvedChangeReferences(IEnumerable<ConnectedSystemObjectChange> changes)
+    {
+        foreach (var attributeChange in changes.SelectMany(c => c.AttributeChanges))
+        {
+            foreach (var valueChange in attributeChange.ValueChanges)
+            {
+                var referenceIdWritten = valueChange.ReferenceValue is { } referenced
+                                         && referenced.Id != Guid.Empty
+                                         && _csos.ContainsKey(referenced.Id);
+                valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every change record the store holds: those on the execution items, those on their outcomes (the sync snapshots),
+    /// and those written without an execution item.
+    /// </summary>
+    private IEnumerable<ConnectedSystemObjectChange> GetStoredCsoChanges() =>
+        _rpeis.Values
+            .SelectMany(rpei => GetOutcomeCsoChanges(rpei).Prepend(rpei.ConnectedSystemObjectChange))
+            .Concat(_standaloneCsoChanges)
+            .Where(change => change != null)
+            .Select(change => change!)
+            .Distinct();
+
+    /// <summary>
+    /// The change records an execution item's outcomes carry, whether its outcome list holds every outcome or only the
+    /// roots of the tree.
+    /// </summary>
+    private static IEnumerable<ConnectedSystemObjectChange> GetOutcomeCsoChanges(ActivityRunProfileExecutionItem rpei) =>
+        FlattenOutcomes(rpei.SyncOutcomes)
+            .Select(outcome => outcome.ConnectedSystemObjectChange)
+            .Where(change => change != null)
+            .Select(change => change!)
+            .Distinct();
+
+    private static IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> FlattenOutcomes(IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> outcomes) =>
+        outcomes.SelectMany(outcome => FlattenOutcomes(outcome.Children).Prepend(outcome));
 
     #endregion
 

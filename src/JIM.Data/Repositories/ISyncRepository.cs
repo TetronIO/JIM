@@ -437,8 +437,15 @@ public interface ISyncRepository
     Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds);
 
     /// <summary>
-    /// Deletes CSOs and their attribute values without change tracking.
-    /// Used for quiet deletions (e.g., pre-disconnected CSOs).
+    /// Deletes Connected System Objects, their attribute values and the rows the database cascades with them, by id
+    /// and in a fixed number of statements however many objects go (#2669). Writes no change records: callers build
+    /// them beforehand (the quiet deletion persists its own; the execution-item path links them to its items).
+    /// <para>
+    /// Implementations must clear other rows' references to the objects that the database does not clear itself,
+    /// and leave the change tracker matching the database: the objects, their values and the rows cascaded with them
+    /// no longer tracked, and every tracked foreign key the database set to null set to null, so a later save writes
+    /// nothing. The objects need not be tracked, and nothing they refer to may be attached.
+    /// </para>
     /// </summary>
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
@@ -450,12 +457,16 @@ public interface ISyncRepository
     Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
-    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
-    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same Connected System using case-insensitive comparison. Resolutions are applied in bounded
-    /// batches so each statement stays inside the bulk command timeout regardless of backlog size
-    /// (a Scale500k25kGroups run accumulates millions of unresolved rows).
+    /// Resolves the reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues) that were
+    /// written without their referenced object's id, which the writer marks
+    /// <see cref="ConnectedSystemObjectChangeAttributeValue.IsUnresolvedReference"/>: the referenced object's row did
+    /// not exist yet (a later batch writes it), or the reference named no object when it was recorded. The DN in
+    /// StringValue is matched against the secondary external ID attribute values of CSOs in the same Connected System,
+    /// ignoring case unless the target's attribute is case-exact; writing the id clears the mark, and a value that
+    /// matches nothing stays marked for a later run. A value written with its id is never read, so one whose object
+    /// is deleted later keeps the DN it was recorded with rather than being re-pointed at a later object reusing it.
+    /// Resolutions are applied in bounded batches so each statement stays inside the bulk command timeout regardless
+    /// of backlog size (a Scale500k25kGroups run accumulates millions of unresolved rows).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose change records to resolve.</param>
     /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
@@ -1107,16 +1118,13 @@ public interface ISyncRepository
     /// <para>
     /// Used for a successful Delete export against a Connected System Object whose provisioning was never
     /// confirmed (Status stayed PendingProvisioning): export batches load Pending Exports
-    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so passing that graph to
-    /// <see cref="DeleteConnectedSystemObjectsAsync"/> (which does <c>RemoveRange</c> on a tracked
-    /// <c>DbSet</c>) can throw "another instance with the same key value is already being tracked".
-    /// Deleting by id avoids attaching the untracked graph at all.
+    /// <c>AsNoTracking()</c> with the Connected System Object graph included, so they hold ids rather than
+    /// tracked objects.
     /// </para>
     /// <para>
-    /// Implementations must null incoming reference values from other rows before deleting (mirroring
-    /// <see cref="DeleteConnectedSystemObjectsAsync"/>'s reference-clearing step), and must detach any
-    /// tracked instances of the deleted rows and their attribute values from the change tracker, for the
-    /// same reason documented on <see cref="DeletePendingExportsByConnectedSystemObjectIdsAsync"/>.
+    /// The same deletion as <see cref="DeleteConnectedSystemObjectsAsync"/>, with the same obligations: other
+    /// rows' references cleared where the database does not clear them, and the change tracker left matching
+    /// the database.
     /// </para>
     /// </summary>
     /// <returns>The number of Connected System Objects deleted.</returns>

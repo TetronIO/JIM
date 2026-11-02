@@ -288,6 +288,31 @@ try {
         }
 
         # ─────────────────────────────────────────────────────────────────────────────────────
+        # Test: each Initial Password is a follow-up of its export item, not a top-level Activity (#2668)
+        # ─────────────────────────────────────────────────────────────────────────────────────
+        # The password's Activity names the export item that provisioned the account as its parent, so the
+        # item lists it, with where it stands (here, parked), and the Activity list shows the export alone.
+        Write-TestSection "Test: each Initial Password is a follow-up of the export item that provisioned the account"
+
+        $exportItems = @(Get-JIMActivity -Id $r.activityId -ExecutionItems)
+        $followUpStates = @(foreach ($item in $exportItems) {
+            $detail = Get-JIMActivityExecutionItem -Id $item.id -IncludeFollowUps
+            foreach ($followUp in @($detail.followUps)) {
+                foreach ($target in @($followUp.passwordOutcomes.targets)) { $target.state }
+            }
+        })
+        Add-TestResult -Name "Every export item lists its account's Initial Password as a follow-up, parked" `
+            -Passed ($exportItems.Count -eq $provisionedCount -and $followUpStates.Count -eq $provisionedCount -and `
+                     @($followUpStates | Where-Object { $_ -ne 'Parked' }).Count -eq 0) `
+            -Detail "Export items: $($exportItems.Count); follow-up states: $($followUpStates -join ', ') (expected $provisionedCount, all Parked)."
+
+        $topLevelPasswordActivities = @(Get-JIMActivity -PageSize 100 |
+            Where-Object { $_.targetType -eq 'PasswordSynchronisation' -and $_.targetContext -eq 'Provisioned' })
+        Add-TestResult -Name "No Initial Password Activity is listed at the top level of the Activity list" `
+            -Passed ($topLevelPasswordActivities.Count -eq 0) `
+            -Detail "$($topLevelPasswordActivities.Count) Initial Password Activit(y/ies) were listed at the top level."
+
+        # ─────────────────────────────────────────────────────────────────────────────────────
         # Test: a password set on a parked account is its first password, with the rule's promises (#2160)
         # ─────────────────────────────────────────────────────────────────────────────────────
         # An administrator sets a password on one of the parked accounts without saying whether to enable

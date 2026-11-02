@@ -58,6 +58,45 @@
             </MudButton>
         </MudTd>
     </RowTemplate>
+    <ChildRowContent>
+        @* The row's follow-ups (#2668), directly beneath it: work its item set in motion that finishes after its run, one
+           row each showing where it stands now. Its attempts are on its own Activity. *@
+        @if (FollowUps.TryGetValue(context.Entry.RunProfileExecutionItemId, out var followUps))
+        {
+            foreach (var followUp in followUps)
+            {
+                var createdLocal = followUp.Created.ToLocalTime();
+                <MudTr @key="followUp.ActivityId" Class="jim-causality-timeline-followup">
+                    <MudTd DataLabel="When" Class="jim-nowrap">
+                        <span title="@createdLocal.ToFriendlyDate()">@createdLocal.ToRelativeTime()</span>
+                    </MudTd>
+                    <MudTd DataLabel="Run" Class="jim-nowrap">
+                        <div class="jim-causality-timeline-followup-run">
+                            <MudIcon Icon="@Icons.Material.Filled.SubdirectoryArrowRight" Size="Size.Small" aria-hidden="true" />
+                            <span>Follow-up</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(followUp.TargetName))
+                        {
+                            <div class="mud-text-secondary jim-causality-timeline-system">@followUp.TargetName</div>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="What happened">
+                        <span class="@($"jim-status-pill jim-status-pill--{followUp.PillModifier}")">
+                            <span class="jim-status-dot"></span>@followUp.Title<span class="jim-status-pill-suffix"> · @followUp.StateLabel</span>
+                        </span>
+                    </MudTd>
+                    <MudTd DataLabel="Because">
+                        <span class="mud-text-secondary">@followUp.Detail</span>
+                    </MudTd>
+                    <MudTd Class="jim-nowrap">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small" Href="@followUp.ActivityHref">
+                            View Activity
+                        </MudButton>
+                    </MudTd>
+                </MudTr>
+            }
+        }
+    </ChildRowContent>
     <NoRecordsContent>
         <TableEmptyState Icon="@Icons.Material.Filled.History" PrimaryText="Nothing recorded for this object"
                          SecondaryText="No execution item about it is retained. History retention may have removed them, or nothing has processed it yet." />
@@ -126,6 +165,13 @@
     /// </summary>
     [Parameter]
     public CausalObjectHeader? Header { get; set; }
+
+    /// <summary>
+    /// Each row's follow-ups (#2668), keyed by the row's execution item; a row with none is absent.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<Guid, IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>> FollowUps { get; set; } =
+        new Dictionary<Guid, IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>>();
 
     /// <summary>
     /// Whether the host is reading the next rows.

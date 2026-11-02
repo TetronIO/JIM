@@ -795,6 +795,8 @@ Describe 'Get-JIMActivityExecutionItem' {
             @{ Switches = '-IncludeOutcomes'; Splat = @{ IncludeOutcomes = $true }; Include = 'outcomes' }
             @{ Switches = '-IncludeChanges'; Splat = @{ IncludeChanges = $true }; Include = 'changes' }
             @{ Switches = '-IncludeOutcomes -IncludeChanges'; Splat = @{ IncludeOutcomes = $true; IncludeChanges = $true }; Include = 'outcomes,changes' }
+            @{ Switches = '-IncludeFollowUps'; Splat = @{ IncludeFollowUps = $true }; Include = 'followups' }
+            @{ Switches = '-IncludeOutcomes -IncludeFollowUps'; Splat = @{ IncludeOutcomes = $true; IncludeFollowUps = $true }; Include = 'outcomes,followups' }
         ) {
             InModuleScope JIM -Parameters @{ Splat = $Splat; Include = $Include } {
                 param($Splat, $Include)
@@ -810,7 +812,7 @@ Describe 'Get-JIMActivityExecutionItem' {
 
         It 'Offers the switches only with the item, not with its causes, consequences or a timeline' {
             $command = Get-Command Get-JIMActivityExecutionItem
-            foreach ($name in 'IncludeOutcomes', 'IncludeChanges') {
+            foreach ($name in 'IncludeOutcomes', 'IncludeChanges', 'IncludeFollowUps') {
                 $command.Parameters[$name].ParameterSets.Keys | Should -Be @('Item')
             }
         }

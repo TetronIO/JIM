@@ -112,4 +112,10 @@ public sealed class CausalityLineageConsequence
     /// How many objects the card speaks for, for the strip's counts.
     /// </summary>
     public int MemberCount { get; init; } = 1;
+
+    /// <summary>
+    /// The follow-up a <see cref="CausalityLineageConsequenceKind.FollowUp"/> card shows (#2668), as every surface
+    /// describes it; null for every other kind.
+    /// </summary>
+    public JIM.Web.Models.ExecutionItemFollowUpDisplay? FollowUp { get; init; }
 }

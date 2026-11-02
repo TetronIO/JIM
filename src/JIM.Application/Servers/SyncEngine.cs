@@ -249,8 +249,9 @@ public partial class SyncEngine : ISyncEngine
         if (addCount == 0 && removeCount == 0)
             return;
 
-        foreach (var removal in mvo.PendingAttributeValueRemovals)
-            mvo.AttributeValues.Remove(removal);
+        // Each removal takes the first occurrence of the value it names, by reference, in one pass over the values
+        // rather than a scan per removal: a group whose membership is replaced stages a removal per member (#2664).
+        mvo.AttributeValues.RemoveEach(mvo.PendingAttributeValueRemovals);
 
         foreach (var addition in mvo.PendingAttributeValueAdditions)
             mvo.AttributeValues.Add(addition);

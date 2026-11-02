@@ -415,6 +415,21 @@ public class JimDbContext : DbContext
             .WithMany()
             .OnDelete(DeleteBehavior.SetNull);
 
+        // The references the change record reference fix-up still has to resolve (#2690), which it reads after every
+        // export and import. Partial, because a reference is marked only while its object's id is unwritten, so the
+        // index holds a sliver of a table that grows by tens of millions of rows at customer scale, and the fix-up reads
+        // that sliver instead of every string value of change history. Keyed on the parent attribute change, which the
+        // fix-up joins on to reach the change record's Connected System. Named, so it is a second index beside the
+        // foreign key's own rather than a filter applied to that one; the foreign key's index is declared explicitly
+        // beside it because EF's convention treats any index leading with the foreign key column as covering it,
+        // partial or not, and would otherwise drop the full index the cascade from a deleted attribute change relies on.
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex("ConnectedSystemObjectChangeAttributeId");
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex(["ConnectedSystemObjectChangeAttributeId"], "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasFilter("\"IsUnresolvedReference\"");
+
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
@@ -1257,6 +1272,13 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<Activity>()
             .HasIndex(a => a.ScheduleExecutionId)
             .HasDatabaseName("IX_Activities_ScheduleExecutionId");
+
+        // Follow-ups of a Run Profile Execution Item (#2668): the item page and the causality views read an item's
+        // follow-up Activities by this column. Partial, because almost every Activity has no such parent.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ParentRunProfileExecutionItemId)
+            .HasFilter("\"ParentRunProfileExecutionItemId\" IS NOT NULL")
+            .HasDatabaseName("IX_Activities_ParentRunProfileExecutionItemId");
 
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()

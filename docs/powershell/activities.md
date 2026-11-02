@@ -144,6 +144,7 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 |----------|------|-------------|
 | `Id` | `guid` | The unique identifier of the Activity. |
 | `ParentActivityId` | `guid` | Parent Activity ID if this was triggered by another Activity. |
+| `ParentRunProfileExecutionItemId` | `guid` | The Run Profile Execution Item this Activity follows up, if any. |
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
@@ -170,7 +171,7 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 | `MetaverseObjectId` | `guid` | The Metaverse Object ID if applicable. |
 | `ExampleDataTemplateId` | `int` | The data generation template ID if applicable. |
 | `ExecutionStats` | `object` | Execution statistics for Run Profile Activities. It has `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, `TotalObjectTypes`, `TotalCsoAdds`, `TotalCsoUpdates`, `TotalCsoDeletes`, `TotalProjections`, `TotalJoins`, `TotalAttributeFlows`, `TotalDisconnections`, `TotalDisconnectedOutOfScope`, `TotalOutOfScopeRetainJoin`, `TotalDriftCorrections`, `TotalProvisioned`, `TotalGeneratedValues`, `TotalGeneratedValueFailures`, `TotalGeneratedValuesRemediated`, `TotalGeneratedValuesNeedingDecision`, `TotalGeneratedValuesWaiting`, `TotalExported`, `TotalDeprovisioned`, `TotalPendingExports`, `TotalPendingExportsConfirmed`, `TotalPendingExportsRetrying`, `TotalPendingExportsFailed`, `TotalCreated`, `EntriesDiscardedByExcludedContainer` and `TotalEntriesDiscardedByExclusion`. |
-| `Phases` | `object[]` | The steps the Run Profile execution moved through, in run order, each with how it turned out and how long it took. This is what answers "where did the four hours go?" on a run that finished days ago. Empty for other Activity types, and for runs that predate phase recording. Each has `Key`, `Name`, `ParentKey`, `Order`, `Status`, `Started`, `Ended` and `DurationSeconds`. |
+| `Phases` | `object[]` | The steps the Run Profile execution moved through, in run order, each with how it turned out and how long it took. Empty for other Activity types, and for runs that predate phase recording. Each has `Key`, `Name`, `ParentKey`, `Order`, `Status`, `Started`, `Ended` and `DurationSeconds`. |
 | `ScheduleExecutionId` | `guid` | If a Schedule Execution produced this Activity, the execution's unique identifier. Empty otherwise. |
 | `ScheduleStepIndex` | `int` | The step within the Schedule Execution that produced this Activity (0-based). Read with `ScheduleExecutionId` to identify exactly which step ran. Empty when no Schedule produced it. |
 | `ScheduledByScheduleId` | `guid` | If a Schedule produced this Activity, the Schedule's unique identifier. Empty otherwise. |

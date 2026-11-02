@@ -1,9 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -16,9 +14,9 @@ namespace JIM.Worker.Tests.Repositories;
 /// <summary>
 /// Real-PostgreSQL verification of the schema refresh removal's raw SQL writes (#1485): the set-based
 /// obsoletion of Connected System Objects, the Pending Export cleanup that rides with it, and the deletion of
-/// stored attribute values by attribute id (the first attribute-id-keyed deletion in the codebase, which must
-/// clear change-history references its FK does not cascade). The in-memory provider cannot see a wrong column,
-/// a wrong predicate or a violated FK in hand-written SQL. Opt-in via JIM_TEST_RESET_*; ignored when absent.
+/// stored attribute values by attribute id (the first attribute-id-keyed deletion in the codebase). The in-memory
+/// provider cannot see a wrong column, a wrong predicate or a violated FK in hand-written SQL. Opt-in via
+/// JIM_TEST_RESET_*; ignored when absent.
 /// </summary>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -170,14 +168,13 @@ public class SchemaRefreshRemovalDatabaseTests
     }
 
     [Test]
-    public async Task DeleteConnectedSystemAttributeValuesByAttributeIds_ValuesAndAChangeHistoryReference_DeletesValuesAndClearsTheReferenceAsync()
+    public async Task DeleteConnectedSystemAttributeValuesByAttributeIds_ValuesOfRemovedAndKeptAttributes_DeletesOnlyTheRemovedAttributesValuesAsync()
     {
         var (systemId, typeId, externalIdAttributeId, removableAttributeId) = await SeedConnectedSystemGraphAsync();
         var cso = await SeedCsoAsync(systemId, typeId, externalIdAttributeId, ConnectedSystemObjectStatus.Normal);
 
         Guid removableValueId;
         Guid survivingValueId;
-        Guid changeId;
         await using (var seed = NewContext())
         {
             // The value's CSO foreign key is shadow state, so the association goes through the navigation, on
@@ -198,24 +195,9 @@ public class SchemaRefreshRemovalDatabaseTests
                 GuidValue = Guid.NewGuid()
             };
             seed.ConnectedSystemObjectAttributeValues.AddRange(removableValue, survivingValue);
-
-            // A change-history row referencing the removable value through the non-cascading FK: the delete
-            // must clear this reference or the whole statement fails on the constraint.
-            var change = new ConnectedSystemObjectChange
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = systemId,
-                ConnectedSystemObjectId = cso.Id,
-                ChangeTime = DateTime.UtcNow,
-                ChangeType = ObjectChangeType.Deleted,
-                InitiatedByType = ActivityInitiatorType.System,
-                DeletedObjectExternalIdAttributeValue = removableValue
-            };
-            seed.Add(change);
             await seed.SaveChangesAsync();
             removableValueId = removableValue.Id;
             survivingValueId = survivingValue.Id;
-            changeId = change.Id;
         }
 
         int deleted;
@@ -226,19 +208,12 @@ public class SchemaRefreshRemovalDatabaseTests
         }
 
         await using var readContext = NewContext();
-        // The change's reference to the value is shadow state, so it is read via EF.Property.
-        var changeReferenceValueId = await readContext.Set<ConnectedSystemObjectChange>().AsNoTracking()
-            .Where(c => c.Id == changeId)
-            .Select(c => EF.Property<Guid?>(c, "DeletedObjectExternalIdAttributeValueId"))
-            .SingleAsync();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(deleted, Is.EqualTo(1));
             Assert.That(await readContext.ConnectedSystemObjectAttributeValues.AsNoTracking().AnyAsync(av => av.Id == removableValueId), Is.False);
             Assert.That(await readContext.ConnectedSystemObjectAttributeValues.AsNoTracking().AnyAsync(av => av.Id == survivingValueId), Is.True,
                 "Values of attributes outside the removal must be left alone.");
-            Assert.That(changeReferenceValueId, Is.Null,
-                "The change-history reference to the deleted value must be cleared, not left to fail the delete.");
         }
     }
 }

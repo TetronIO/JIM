@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Utilities;
+
 namespace JIM.Application.Services;
 
 /// <summary>
@@ -99,7 +101,8 @@ internal sealed class DriftValueSet
 
     private HashSet<string> Text => _text ??= _values.OfType<string>().ToHashSet(_textComparer);
 
-    private HashSet<byte[]> Binary => _binary ??= _values.OfType<byte[]>().ToHashSet(ByteContentComparer.Instance);
+    // Binary values compared by content, as DriftDetectionService.SingleValueEquals compares them.
+    private HashSet<byte[]> Binary => _binary ??= _values.OfType<byte[]>().ToHashSet(ByteArrayContentComparer.Instance);
 
     private HashSet<Guid> GuidsAsText => _guidsAsText ??= [.. _values.OfType<string>().SelectMany(GuidParsedFrom)];
 
@@ -107,23 +110,4 @@ internal sealed class DriftValueSet
 
     private static bool IsKeyedType(object value) =>
         value is string or byte[] or Guid or int or long or decimal or DateTime or bool;
-
-    /// <summary>
-    /// Binary values compared by content, as <see cref="DriftDetectionService.SingleValueEquals"/> compares them.
-    /// </summary>
-    private sealed class ByteContentComparer : IEqualityComparer<byte[]>
-    {
-        public static readonly ByteContentComparer Instance = new();
-
-        public bool Equals(byte[]? x, byte[]? y) => x == null ? y == null : y != null && x.AsSpan().SequenceEqual(y);
-
-        public int GetHashCode(byte[] obj)
-        {
-            ArgumentNullException.ThrowIfNull(obj);
-
-            var hash = new HashCode();
-            hash.AddBytes(obj);
-            return hash.ToHashCode();
-        }
-    }
 }

@@ -76,15 +76,8 @@ public class ConnectedSystemObjectChange
     public ConnectedSystemObjectType? DeletedObjectType { get; set; }
 
     /// <summary>
-    /// If the object was deleted, the External Id attribute will be copied here to make it possible to identify which object was deleted.
-    /// Note: This FK reference may be null even for deleted objects because the attribute value is cascade deleted with the CSO.
-    /// Use DeletedObjectExternalId instead for reliable access to the external ID value.
-    /// </summary>
-    public ConnectedSystemObjectAttributeValue? DeletedObjectExternalIdAttributeValue { get; set; }
-
-    /// <summary>
-    /// If the object was deleted, the external ID value is preserved here as a string for UI display.
-    /// This field is populated because the FK reference (DeletedObjectExternalIdAttributeValue) is cascade deleted with the CSO.
+    /// If the object was deleted, its External ID value, preserved as text, because the attribute value itself is
+    /// deleted with the object.
     /// </summary>
     public string? DeletedObjectExternalId { get; set; }
 

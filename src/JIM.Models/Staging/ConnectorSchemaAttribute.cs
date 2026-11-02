@@ -79,6 +79,13 @@ public class ConnectorSchemaAttribute
     /// </summary>
     public bool AlwaysImported { get; set; }
 
+    /// <summary>
+    /// Whether the Connector made this attribute up rather than read it from the Connected System's own schema: a value
+    /// the Connector interprets itself, such as the LDAP Connector's Exchange Recipient Type, which it turns into
+    /// Exchange cmdlets rather than a directory write (#2021). See <see cref="ConnectedSystemObjectTypeAttribute.IsConnectorDefined"/>.
+    /// </summary>
+    public bool IsConnectorDefined { get; set; }
+
     public ConnectorSchemaAttribute(string name, AttributeDataType type, AttributePlurality attributePlurality, bool required = false, string? className = null, AttributeWritability writability = AttributeWritability.Writable)
     {
         Name = name;

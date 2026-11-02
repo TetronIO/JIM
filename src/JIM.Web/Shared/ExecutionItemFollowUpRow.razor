@@ -1,0 +1,29 @@
+@using JIM.Web.Models
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One follow-up of an execution item (#2668): what the work is, where it stands, the sentence beneath, and a link to its
+   Activity. The item page's Follow-up section lists these; the object timeline shows one beneath its export's row. *@
+<div class="jim-follow-up-row" data-testid="jim-follow-up" data-state="@FollowUp.StateLabel">
+    <MudIcon Icon="@Icon" Class="jim-follow-up-icon" aria-hidden="true" />
+    <div class="jim-follow-up-what">
+        <div class="jim-follow-up-title">
+            <span>@FollowUp.Title</span>
+            <span class="@($"jim-status-pill jim-status-pill--{FollowUp.PillModifier}")">
+                <span class="jim-status-dot"></span>@FollowUp.StateLabel
+            </span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(FollowUp.Detail))
+        {
+            <div class="jim-follow-up-detail">@FollowUp.Detail</div>
+        }
+    </div>
+    <MudLink Href="@FollowUp.ActivityHref" Class="jim-follow-up-link">View Activity</MudLink>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ExecutionItemFollowUpDisplay FollowUp { get; set; } = null!;
+
+    private string Icon => FollowUp.Title == "Initial password" ? Icons.Material.Filled.Key : Icons.Material.Filled.SubdirectoryArrowRight;
+}

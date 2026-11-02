@@ -195,14 +195,15 @@ public class ActivityRunProfileExecutionItem
     [NotMapped]
     public List<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; set; } = [];
 
+    /// <summary>
+    /// The External ID value of the item's Connected System Object, while the object exists; null once it has been
+    /// deleted, because its values are deleted with it (<see cref="ExternalIdSnapshot"/> keeps the text).
+    /// </summary>
     public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
     {
-        // try and get an external id for the target object
-        // one should exist for updates and deletes, but isn't guaranteed for creates if the Connected System is
+        // One should exist for updates and deletes, but isn't guaranteed for creates if the Connected System is
         // responsible for generating it and a confirming import hasn't been completed.
-        return ConnectedSystemObject != null ?
-            ConnectedSystemObject.ExternalIdAttributeValue :
-            ConnectedSystemObjectChange?.DeletedObjectExternalIdAttributeValue;
+        return ConnectedSystemObject?.ExternalIdAttributeValue;
     }
 
     /// <summary>

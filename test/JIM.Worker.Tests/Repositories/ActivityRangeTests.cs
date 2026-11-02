@@ -219,6 +219,26 @@ public class ActivityRangeTests
     }
 
     [Test]
+    public async Task GetActivitiesRangeAsync_FollowUpOfAnExecutionItem_IsNeverIncludedAsync()
+    {
+        // An Initial Password's Activity follows the export item that provisioned the account (#2668): it is that
+        // item's child, so an export provisioning a thousand accounts adds nothing to the top level.
+        var run = NewActivity(targetName: "Export");
+        var followUp = NewActivity(targetName: "Initial password");
+        followUp.ParentRunProfileExecutionItemId = Guid.NewGuid();
+        _dbContext.Activities.AddRange(run, followUp);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await _repository.Activity.GetActivitiesRangeAsync(startIndex: 0, count: 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.TotalResults, Is.EqualTo(1));
+            Assert.That(result.Results.Select(a => a.Id), Is.EquivalentTo(new[] { run.Id }));
+        }
+    }
+
+    [Test]
     public async Task GetActivitiesRangeAsync_HasChildActivitiesFilter_ReturnsOnlyParentsWithChildrenAsync()
     {
         var withChild = NewActivity(targetName: "With Child");

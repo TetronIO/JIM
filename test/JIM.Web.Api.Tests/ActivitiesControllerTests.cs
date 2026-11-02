@@ -1454,6 +1454,51 @@ public class ActivitiesControllerTests
         Assert.That(dto?.Outcomes, Is.Not.Null.And.Empty, "asked for and none recorded reads as empty, not as left out");
     }
 
+    [Test]
+    public async Task GetActivityExecutionItemAsync_WithoutInclude_LeavesFollowUpsOutAndDoesNotReadThemAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.FollowUps, Is.Null);
+        _mockActivityRepo.Verify(r => r.GetFollowUpActivitiesAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetActivityExecutionItemAsync_IncludeFollowUps_ReturnsTheItemsFollowUpsAsync()
+    {
+        // #2668: an export item's follow-ups, such as the Initial Password of the account it provisioned.
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = Guid.NewGuid() };
+        var followUp = new Activity
+        {
+            Id = Guid.NewGuid(), ParentRunProfileExecutionItemId = item.Id, TargetType = ActivityTargetType.Authentication,
+            TargetName = "PANOPLY", Status = ActivityStatus.Complete, Message = "Followed up.", Created = DateTime.UtcNow
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockActivityRepo.Setup(r => r.GetFollowUpActivitiesAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([followUp]);
+
+        var dto = (await _controller.GetActivityExecutionItemAsync(item.Id, "followups") as OkObjectResult)?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto?.FollowUps, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.FollowUps!.Select(f => f.ActivityId), Is.EqualTo(new[] { followUp.Id }));
+            Assert.That(dto.FollowUps!.Single().RunProfileExecutionItemId, Is.EqualTo(item.Id));
+            Assert.That(dto.FollowUps!.Single().TargetName, Is.EqualTo("PANOPLY"));
+        }
+    }
+
+    [Test]
+    public void ActivityDetail_FromEntity_FollowUpOfAnItem_CarriesTheParentItem()
+    {
+        var activity = new Activity { Id = Guid.NewGuid(), ParentRunProfileExecutionItemId = Guid.NewGuid(), Created = DateTime.UtcNow };
+
+        Assert.That(ActivityDetailDto.FromEntity(activity).ParentRunProfileExecutionItemId, Is.EqualTo(activity.ParentRunProfileExecutionItemId));
+    }
+
     [TestCase("bogus")]
     [TestCase("outcomes,bogus")]
     public async Task GetActivityExecutionItemAsync_IncludeNamesSomethingUnknown_ReturnsBadRequestAsync(string include)

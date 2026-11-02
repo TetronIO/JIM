@@ -295,6 +295,12 @@ public partial class SyncEngine
     /// contributor, #91) as still present, so an identical surviving contribution would neither re-add the value nor
     /// take over its provenance, and the value would be silently cleared when the pending removals are applied.
     /// </summary>
+    /// <remarks>
+    /// The sequence is lazy, and each value is checked against the pending removals as they stand when it is reached, so
+    /// a caller may append to them while reading it (<see cref="ApplyTypedValueSet{TKey}"/> does). The pending removals
+    /// index themselves once they are many, so each check is a lookup rather than a scan of them: a group whose
+    /// membership is replaced wholesale reads its members with a removal pending for each (#2664).
+    /// </remarks>
     internal static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
         => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
 
@@ -1089,7 +1095,7 @@ public partial class SyncEngine
     /// (whitespace-as-no-value drops removed, transforms applied, de-duplicated), so this method only
     /// diffs them against the existing MVO values. An empty set clears the attribute.
     /// </summary>
-    private static void ProcessTextAttribute(
+    internal static void ProcessTextAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
         List<string> effectiveValues,
@@ -1099,14 +1105,24 @@ public partial class SyncEngine
         var targetAttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
         var currentValues = GetEffectiveAttributeValues(mvo, targetAttributeId).ToList();
 
+        // Each side is looked up in an ordinal set of the other's text, as the import's diff does (#988), rather than
+        // scanned for each of its values: a large multi-valued attribute otherwise cost its size times the source's on
+        // every synchronisation, changed or not (#2666). A held row holding no text matches no source value, so it stays
+        // out of the held set and is always removed. Duplicates and order are each side's own: a held value is removed
+        // once per occurrence, and a source value added once per occurrence the Metaverse Object does not hold.
+        var sourceTexts = new HashSet<string>(effectiveValues, StringComparer.Ordinal);
+        var heldTexts = currentValues
+            .Where(mvoav => mvoav.StringValue != null)
+            .Select(mvoav => mvoav.StringValue!)
+            .ToHashSet(StringComparer.Ordinal);
+
         // Remove MVO values that are not present in the processed source set.
         var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
-            !effectiveValues.Any(ev => ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
+            mvoav.StringValue == null || !sourceTexts.Contains(mvoav.StringValue));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
         // Add processed source values not already on the MVO.
-        var valuesToAdd = effectiveValues.Where(ev =>
-            !currentValues.Any(mvoav => ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
+        var valuesToAdd = effectiveValues.Where(ev => !heldTexts.Contains(ev));
 
         foreach (var value in valuesToAdd)
         {

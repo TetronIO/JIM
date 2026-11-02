@@ -3,6 +3,7 @@
 @page "/causality/connected-system-objects/{ConnectedSystemObjectId:guid}"
 @page "/causality/metaverse-objects/{MetaverseObjectId:guid}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Web.Models
 @using JIM.Models.Activities.DTOs
 @using JIM.Web.Causality
 @using JIM.Web.Shared.Causality
@@ -65,6 +66,7 @@ else
                                 IsSynchronisationRun="item.IsSynchronisationRun"
                                 LineageOnly="true"
                                 Consequences="_consequences"
+                                FollowUps="item.FollowUps"
                                 ConsequencesLoading="_consequencesLoading"
                                 OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
                                 LoadConsequenceMembers="LoadConsequenceMembersAsync"
@@ -78,6 +80,7 @@ else
                                      Links="links"
                                      MetaverseObjectChangesNotRecorded="timeline.MetaverseObjectChangesNotRecorded"
                                      Header="timeline.Header"
+                                     FollowUps="_followUps"
                                      Loading="_loadingMore"
                                      OnShowMore="ShowMoreAsync" />
         }
@@ -127,6 +130,22 @@ else
     // An object focus: its timeline, fifty rows at a time.
     private CausalTimeline? _timeline;
     private List<CausalTimelineRow> _rows = [];
+
+    // The follow-ups of the timeline's rows (#2668), keyed by each row's execution item.
+    private Dictionary<Guid, IReadOnlyList<ExecutionItemFollowUpDisplay>> _followUps = [];
+
+    /// <summary>
+    /// The follow-ups of a page of timeline rows, in one read, as every surface describes them.
+    /// </summary>
+    private static async Task<Dictionary<Guid, IReadOnlyList<ExecutionItemFollowUpDisplay>>> ReadFollowUpsAsync(
+        JIM.Application.JimApplication jim, IEnumerable<CausalTimelineRow> rows)
+    {
+        var byItem = await jim.Activities.GetExecutionItemFollowUpsAsync(rows.Select(r => r.Entry.RunProfileExecutionItemId).ToList());
+        return byItem.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<ExecutionItemFollowUpDisplay>)pair.Value.Select(ExecutionItemFollowUpDisplay.From).ToList());
+    }
+
     private bool _loadingMore;
 
     // Counts the reads this page has started, so one superseded by a later re-centring never lands on the wrong focus.
@@ -166,8 +185,12 @@ else
 
             CausalityItemData? item = null;
             CausalTimeline? timeline = null;
+            Dictionary<Guid, IReadOnlyList<ExecutionItemFollowUpDisplay>> followUps = [];
             if (focus.Subject is { } subject)
+            {
                 timeline = await jim.Activities.GetCausalTimelineAsync(subject);
+                followUps = await ReadFollowUpsAsync(jim, timeline.Rows);
+            }
             else if (labels.Items.ContainsKey(focus.Id))
                 item = await CausalityItemLoader.LoadAsync(jim, focus.Id, _links);
 
@@ -178,6 +201,7 @@ else
             _item = item;
             _timeline = timeline;
             _rows = timeline?.Rows.ToList() ?? [];
+            _followUps = followUps;
         }
         finally
         {
@@ -289,8 +313,12 @@ else
         {
             using var jim = JimFactory.Create();
             var next = await jim.Activities.GetCausalTimelineAsync(subject, timeline.Page + 1, timeline.PageSize);
+            var nextFollowUps = await ReadFollowUpsAsync(jim, next.Rows);
             if (load != _loadSequence)
                 return;
+
+            foreach (var (itemId, itemFollowUps) in nextFollowUps)
+                _followUps[itemId] = itemFollowUps;
 
             var shown = _rows.Select(r => r.Entry.RunProfileExecutionItemId).ToHashSet();
             _rows.AddRange(next.Rows.Where(r => !shown.Contains(r.Entry.RunProfileExecutionItemId)));

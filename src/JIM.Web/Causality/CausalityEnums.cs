@@ -203,7 +203,13 @@ public enum CausalityLineageConsequenceKind
     /// <summary>
     /// The branch goes further than the walk read.
     /// </summary>
-    FurtherThanShown
+    FurtherThanShown,
+
+    /// <summary>
+    /// Work the item set in motion that finishes after its run (#2668), such as an Initial Password, with where it
+    /// stands now. It happens to the item's own record, so it sits in that record's After this run section.
+    /// </summary>
+    FollowUp
 }
 
 /// <summary>

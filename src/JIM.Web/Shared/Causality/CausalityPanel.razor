@@ -247,6 +247,13 @@
     public CausalConsequences? Consequences { get; set; }
 
     /// <summary>
+    /// The item's follow-ups (#2668): work it set in motion that finishes after its run, shown in its own record's After
+    /// this run section. Null or empty shows none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>? FollowUps { get; set; }
+
+    /// <summary>
     /// Whether the page is still reading <see cref="Consequences"/>.
     /// </summary>
     [Parameter]
@@ -306,7 +313,7 @@
         {
             _builtConsequences = Consequences;
             if (Item != null && _model != null && PreviewResult == null)
-                _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences);
+                _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences, FollowUps);
             return;
         }
 
@@ -343,7 +350,7 @@
             _model = CausalityModelBuilder.Build(Item, Context, LivePendingExportIds,
                 DeletionPolicySnapshot, IsSynchronisationRun, Chain, ChangeValues);
             _summary = CausalitySummaryBuilder.Build(_model);
-            _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences);
+            _lineageModel = CausalityLineageModelBuilder.Build(_model, Chain, Item.ObjectChangeType, Consequences, FollowUps);
             _tableModel = CausalityTableModelBuilder.Build(_model);
         }
         else

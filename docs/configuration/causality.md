@@ -63,6 +63,8 @@ Objects the run itself never touched join the story where its consequences reach
 
 Objects that the same change reached for the same reason read as one card carrying an exact count ("Removed Tina Adams from Static Members on 4,218 Groups"). The count is exact however large the cohort is. Expanding the card lists its members 50 at a time with **Show 50 more**, and a cohort of more than 10 offers a find box to narrow the list by name.
 
+Work the item set in motion that finishes after its run is shown on the item's own object too, as a card marked **Follow-up**: an export that provisioned an account shows the account's Initial Password, with where it stands now and a link to its Activity (see [Follow-up](activity-execution-items.md#follow-up)).
+
 Where a configured setting decided an outcome, its card names that setting: a deprovision card names the [Deprovisioning Action](deprovisioning.md) that deleted the account or left it in place, and the card for a deleted Metaverse Object names its Deletion Rule and what the grace period meant. Those are the settings to change for a different result next time. When the item that deleted a Metaverse Object has since aged out of Activity retention, a note beneath its events still says it was deleted after this run and links its deletion record.
 
 ### Where each branch ends
@@ -83,7 +85,7 @@ An item whose kind causes nothing, such as an import that only confirmed an expo
 
 ### A reading, checked on demand
 
-Consequences can still be happening, so the Lineage shows a reading taken when the page loaded. A line beneath the canvas says whether every branch has run to its end or which ones are waiting, and when it was checked. **Check again** appears only while a branch is waiting on something that will happen without anyone acting; nothing refreshes by itself.
+Consequences can still be happening, so the Lineage shows a reading taken when the page loaded. A line beneath the canvas says whether every branch has run to its end, which ones are waiting, or which follow-ups are still running, and when it was checked. **Check again** appears only while a branch is waiting on something that will happen without anyone acting; nothing refreshes by itself.
 
 The summary band adds an **After this run** strip of what followed, separate from the run's own outcomes, and it shows in every view. Choosing a pill opens the Lineage, which is the one view that shows consequences; the Timeline and Table describe the run alone.
 
@@ -95,7 +97,7 @@ The Lineage answers for one execution item. The Causality Explorer answers for a
 - **Open in explorer** in an execution item's causality panel opens the item's Lineage in the explorer.
 - **Queued by** on a Pending Export lists the synchronisation runs that queued the change, each with **Explore** beside it.
 
-An object's timeline lists every execution item about it, newest first: when the run happened, what kind of run it was, what it did, and **Because**, the item's nearest cause in one line ("Tina Adams was deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"). Where nothing earlier was recorded, the line says so, and it says differently where the cause has aged out of history, so a story cut short never reads as complete. Long timelines load 50 items at a time with **Show 50 more**. Choosing a row opens that item's Lineage, and any object or item named in a Lineage opens in turn, so the explorer re-centres on whatever you choose.
+An object's timeline lists every execution item about it, newest first: when the run happened, what kind of run it was, what it did, and **Because**, the item's nearest cause in one line ("Tina Adams was deleted, so they were removed from Project Diamond's Static Members, and 2 more causes"). Where nothing earlier was recorded, the line says so, and it says differently where the cause has aged out of history, so a story cut short never reads as complete. A follow-up of an item, such as an account's Initial Password, appears in the row beneath the item's own, with where it stands now. Long timelines load 50 items at a time with **Show 50 more**. Choosing a row opens that item's Lineage, and any object or item named in a Lineage opens in turn, so the explorer re-centres on whatever you choose.
 
 Each re-centring adds a step to the **Trail** above the page. Choosing an earlier step goes back to it, as does the browser's back button. The page's address carries the focus and its trail, so a link to it opens the same view. Where a walk stops at its depth bound on a single item, **Continue from** carries on from that item rather than leaving you to find it.
 

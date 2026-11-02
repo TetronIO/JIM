@@ -14,9 +14,11 @@ public interface ICredentialProtection
     /// Decrypts a previously encrypted credential.
     /// </summary>
     /// <param name="protectedData">The encrypted credential.</param>
-    /// <returns>
-    /// The decrypted credential, or the original value if null/empty.
-    /// Plain text values (without encryption prefix) are returned as-is for migration support.
-    /// </returns>
+    /// <returns>The decrypted credential, or the original value if null or empty.</returns>
+    /// <exception cref="System.Security.Cryptography.CryptographicException">
+    /// Thrown when the value is not an encrypted credential (it carries no encryption prefix), and when decryption
+    /// fails. A credential is never passed through as plain text: every credential JIM stores is encrypted, so one
+    /// arriving unencrypted was stored without encryption or has been altered.
+    /// </exception>
     string? Unprotect(string? protectedData);
 }

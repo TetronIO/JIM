@@ -374,6 +374,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                     // becomes detached but UpdateDetachedSafe re-attaches it on the next UpdateActivityAsync
                     // call. Cross-page state (_unresolvedCrossPageReferences, _exportEvaluationCache, etc.) is
                     // held in CLR fields — detaching does not null their populated navigation properties.
+                    // The tracker's size before the clear is what the page accumulated, logged with the page below (#2669).
+                    var trackerCountBeforeClear = _syncRepo.GetChangeTrackerEntityCount();
                     ClearPageTrackingState();
 
                     // Update progress with page completion. The call persists the Activity's counters,
@@ -385,7 +387,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                         await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
                     }
 
-                    LogPageMemoryDiagnostics(i, totalCsoPages);
+                    LogPageMemoryDiagnostics(i, totalCsoPages, trackerCountBeforeClear);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
                 {

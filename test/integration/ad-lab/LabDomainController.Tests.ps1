@@ -1472,6 +1472,66 @@ Describe 'Get-LabDomainPasswordPolicyChange' {
     }
 }
 
+Describe 'Get-LabPasswordTemplateChange' {
+    BeforeAll {
+        # The Default Domain Policy's GptTmpl.inf, as Exchange /PrepareAD left it in RESURGAM and GENTIAN (#2412).
+        function Get-Template {
+            param([string]$MinAge = '0', [string]$MaxAge = '42', [string]$MinLength = '0', [string]$Complexity = '1', [string]$History = '0')
+            @(
+                '[Unicode]', 'Unicode=yes',
+                '[System Access]',
+                "MinimumPasswordAge = $MinAge", "MaximumPasswordAge = $MaxAge", "MinimumPasswordLength = $MinLength",
+                "PasswordComplexity = $Complexity", "PasswordHistorySize = $History",
+                'LockoutBadCount = 0', 'RequireLogonToChangePassword = 0', 'ClearTextPassword = 0',
+                '[Kerberos Policy]', 'MaxTicketAge = 10',
+                '[Version]', 'signature="$CHICAGO$"', 'Revision=1'
+            )
+        }
+    }
+
+    It 'changes nothing in a template at the Windows defaults' {
+        $template = Get-Template -MinAge 1 -MinLength 7 -History 24
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -BeNullOrEmpty
+        $result.Line | Should -Be $template
+    }
+
+    It 'restores length, history and minimum age where /PrepareAD wrote the starting values, leaving every other line' {
+        $template = Get-Template
+        $result = Get-LabPasswordTemplateChange -Line $template
+        @($result.Changed | Sort-Object) | Should -Be @('MinimumPasswordAge', 'MinimumPasswordLength', 'PasswordHistorySize')
+        $result.Line | Should -Be (Get-Template -MinAge 1 -MinLength 7 -History 24)
+    }
+
+    It 'turns complexity back on and restores the maximum age, whatever the spacing' {
+        $template = @('[System Access]', 'MinimumPasswordAge=1', 'MaximumPasswordAge=90', 'MinimumPasswordLength=7', 'PasswordComplexity=0', 'PasswordHistorySize=24')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        @($result.Changed | Sort-Object) | Should -Be @('MaximumPasswordAge', 'PasswordComplexity')
+        $result.Line | Should -Be @('[System Access]', 'MinimumPasswordAge=1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength=7', 'PasswordComplexity = 1', 'PasswordHistorySize=24')
+    }
+
+    It 'adds a setting the section lacks at the end of the section' {
+        $template = @('[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'PasswordComplexity = 1', 'PasswordHistorySize = 24', '[Version]', 'Revision=1')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -Be @('MinimumPasswordLength')
+        $result.Line | Should -Be @('[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'PasswordComplexity = 1', 'PasswordHistorySize = 24', 'MinimumPasswordLength = 7', '[Version]', 'Revision=1')
+    }
+
+    It 'adds the whole section to a template without one' {
+        $result = Get-LabPasswordTemplateChange -Line @('[Unicode]', 'Unicode=yes', '[Version]', 'Revision=1')
+        @($result.Changed | Sort-Object) | Should -Be @('MaximumPasswordAge', 'MinimumPasswordAge', 'MinimumPasswordLength', 'PasswordComplexity', 'PasswordHistorySize')
+        $result.Line | Should -Be @('[Unicode]', 'Unicode=yes', '[Version]', 'Revision=1', '[System Access]',
+            'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength = 7', 'PasswordComplexity = 1', 'PasswordHistorySize = 24')
+    }
+
+    It 'leaves a same-named setting in another section alone' {
+        $template = @('[Registry Values]', 'MinimumPasswordLength = 0', '[System Access]', 'MinimumPasswordAge = 1', 'MaximumPasswordAge = 42', 'MinimumPasswordLength = 7', 'PasswordComplexity = 1', 'PasswordHistorySize = 24')
+        $result = Get-LabPasswordTemplateChange -Line $template
+        $result.Changed | Should -BeNullOrEmpty
+        $result.Line | Should -Be $template
+    }
+}
+
 Describe 'Set-LabOldPasswordAllowedPeriod' -Skip:(-not [bool]($IsWindows -or ($PSVersionTable.PSEdition -eq 'Desktop'))) {
     BeforeEach {
         $script:LsaPath = 'TestRegistry:\Lsa'
@@ -1943,6 +2003,46 @@ Describe 'Get-LabNewestCumulativeUpdate' {
         Get-LabNewestCumulativeUpdate -File @() | Should -BeNullOrEmpty
         Get-LabNewestCumulativeUpdate -File $null | Should -BeNullOrEmpty
         Get-LabNewestCumulativeUpdate -File @((Get-FakeFile 'readme.txt' ([datetime]::UtcNow))) | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-LabRebuildBuildChain' {
+    BeforeAll {
+        function Get-Role {
+            param([string]$Live, [AllowNull()][string]$DependsOn)
+            return [pscustomobject]@{ live = $Live; dependsOn = $DependsOn }
+        }
+    }
+
+    It 'puts each member server in a chain after the domain controller it joins, and each domain controller in a chain of its own' {
+        $roles = @(
+            (Get-Role 'dc-primary' $null), (Get-Role 'dc-source' $null), (Get-Role 'dc-target' $null),
+            (Get-Role 'adfs-primary' 'dc-primary'), (Get-Role 'exchange-primary' 'dc-primary')
+        )
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-primary', 'dc-source', 'dc-target')
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'adfs-primary', 'exchange-primary')
+        @($chains[1].Roles) | Should -Be @('dc-source')
+        @($chains[2].Roles) | Should -Be @('dc-target')
+    }
+
+    It 'keeps the member servers of one domain controller in the order given, since each takes its baseline again' {
+        $roles = @((Get-Role 'exchange-primary' 'dc-primary'), (Get-Role 'dc-primary' ''), (Get-Role 'adfs-primary' 'dc-primary'))
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'exchange-primary', 'adfs-primary')
+    }
+
+    It 'gives a member server whose domain controller is not in the list a chain of its own, for the Build phase to refuse' {
+        $chains = @(Get-LabRebuildBuildChain -Role @((Get-Role 'dc-source' $null), (Get-Role 'adfs-primary' 'dc-primary')))
+        @($chains | ForEach-Object { $_.Root }) | Should -Be @('dc-source', 'adfs-primary')
+    }
+
+    It 'builds everything in one chain, in order, when the roles do not say what they join (a host on older scripts)' {
+        $roles = @([pscustomobject]@{ live = 'dc-primary' }, [pscustomobject]@{ live = 'dc-source' }, [pscustomobject]@{ live = 'adfs-primary' })
+        $chains = @(Get-LabRebuildBuildChain -Role $roles)
+        $chains.Count | Should -Be 1
+        @($chains[0].Roles) | Should -Be @('dc-primary', 'dc-source', 'adfs-primary')
     }
 }
 
@@ -3125,6 +3225,13 @@ Describe 'Invoke-LabRebuildPhase' {
             $lab = Get-FakeLab
             $lab.Adapter.Remove('RenameVm')
             { Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan) -Adapter $lab.Adapter } | Should -Throw "*no 'RenameVm' operation*"
+        }
+
+        It 'names the domain controller each member server joins, so the runner can build the member after it' {
+            $lab = Get-FakeLab
+            Add-FakeLiveSet $lab
+            $results = @(Invoke-LabRebuildPhase -Phase Status -Plan (Get-FakePlan -WithFederation -WithExchange) -Adapter $lab.Adapter)
+            @($results | ForEach-Object { "$($_.live)<$($_.dependsOn)" } | Sort-Object) | Should -Be @('adfs-primary<dc-primary', 'dc-primary<', 'dc-source<', 'dc-target<', 'exchange-primary<dc-primary')
         }
 
         It 'still reports a run whose guest build cannot be read, as no build rather than an error' {

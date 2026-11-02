@@ -72,4 +72,12 @@ public class ConnectorSetting
     /// for an integer use its decimal string. Ignored when <see cref="RequiredWhenSetting"/> is not set.
     /// </summary>
     public string? RequiredWhenValue { get; set; }
+
+    /// <summary>
+    /// The key of the feature flag this setting belongs to, for a setting whose feature is still behind one. While that
+    /// flag is off the setting is unavailable: left out of what the portal and the REST API offer, and refused when a
+    /// request sets it. A value saved while the flag was on is kept, so turning the flag off changes what is offered,
+    /// never what is stored. Null for an ordinary setting.
+    /// </summary>
+    public string? FeatureFlagKey { get; set; }
 }

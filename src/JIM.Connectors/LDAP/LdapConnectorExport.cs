@@ -1202,7 +1202,8 @@ internal class LdapConnectorExport
 
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
-            if (attrChange.Attribute == null)
+            // A connector-defined attribute (Exchange's, #2021) is not in the directory: the Exchange step acts on it
+            if (attrChange.Attribute == null || attrChange.Attribute.IsConnectorDefined)
                 continue;
 
             var attrName = attrChange.Attribute.Name;
@@ -1554,7 +1555,8 @@ internal class LdapConnectorExport
 
         foreach (var attrChange in pendingExport.AttributeValueChanges)
         {
-            if (attrChange.Attribute == null)
+            // A connector-defined attribute (Exchange's, #2021) is not in the directory: the Exchange step acts on it
+            if (attrChange.Attribute == null || attrChange.Attribute.IsConnectorDefined)
                 continue;
 
             var attrName = attrChange.Attribute.Name;

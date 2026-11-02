@@ -86,6 +86,12 @@ public sealed class CausalityItemData
     public ICausalityLinks Links { get; init; } = CausalityPageLinks.Instance;
 
     /// <summary>
+    /// The item's follow-ups (#2668), oldest first, as every surface describes them: work it set in motion that finishes
+    /// after its run, such as the Initial Password of the account an export provisioned.
+    /// </summary>
+    public IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay> FollowUps { get; init; } = [];
+
+    /// <summary>
     /// When the item's run executed (UTC).
     /// </summary>
     public DateTime? Timestamp => Activity?.Executed;

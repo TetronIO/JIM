@@ -46,6 +46,7 @@ public class CausalityItemLoaderChangeValuesTests
         _metaverseQueries.Clear();
         var repository = new Mock<IRepository>();
         var activities = new Mock<IActivityRepository>();
+        activities.Setup(r => r.GetFollowUpActivitiesAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
         var connectedSystems = new Mock<IConnectedSystemRepository>();
         var metaverse = new Mock<IMetaverseRepository>();
         repository.Setup(r => r.Activity).Returns(activities.Object);

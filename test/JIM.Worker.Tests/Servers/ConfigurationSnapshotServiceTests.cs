@@ -983,6 +983,32 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_UnsavedCredentialStillInClear_HashesThePlaintext()
+    {
+        // The save confirmation's preflight snapshots the Connected System as it stands on screen, before saving, so a
+        // credential the administrator has just typed is still in clear (#2680). It must hash to exactly what the same
+        // credential hashes to once saved and encrypted, so the preflight compares like with like.
+        var cs = new ConnectedSystem { Id = 9, Name = "AD", ConnectorDefinitionId = 4 };
+        cs.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 11,
+            Setting = new ConnectorDefinitionSetting { Id = 1, Name = "Password", Type = ConnectedSystemSettingType.StringEncrypted },
+            StringEncryptedValue = "typed-not-yet-saved"
+        });
+
+        var snapshot = _service.CreateSnapshot(cs, HashKey);
+        var json = ConfigurationSnapshotService.Serialise(snapshot);
+
+        var node = Child(snapshot.Root, "settingValues")!.Children!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(json, Does.Not.Contain("typed-not-yet-saved"), "Plaintext secret must never be serialised.");
+            Assert.That(node.IsSecret, Is.True);
+            Assert.That(node.Value, Is.EqualTo(HashOfSecretInSnapshot("typed-not-yet-saved")));
+        }
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_SecretHashIsDeterministicAndDetectsChange()
     {
         var unchangedA = HashOfSecretInSnapshot("same-value");
@@ -1528,9 +1554,14 @@ public class ConfigurationSnapshotServiceTests
             if (protectedData == UndecryptableValue)
                 throw new CryptographicException("The key {00000000-0000-0000-0000-000000000000} was not found in the key ring.");
 
-            return string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
-                ? protectedData
-                : Encoding.UTF8.GetString(Convert.FromBase64String(protectedData[Prefix.Length..]));
+            if (string.IsNullOrEmpty(protectedData))
+                return protectedData;
+
+            // as the real service does since #2680: an unencrypted value is refused, never handed back as plain text
+            if (!IsProtected(protectedData))
+                throw new CryptographicException("The stored value is not a JIM-protected credential.");
+
+            return Encoding.UTF8.GetString(Convert.FromBase64String(protectedData[Prefix.Length..]));
         }
 
         public bool IsProtected(string? value) =>

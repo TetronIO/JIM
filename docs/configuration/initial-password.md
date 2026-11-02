@@ -76,7 +76,7 @@ Setting the password is a separate concern from creating the Connected System Ob
 
 Instead, the moment the export gives the new Connected System Object its external id, JIM queues a password change for it and the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) takes it from there, typically within a second or two while the export run is still going. An unreachable or refused Connected System Object is retried on the Connected System's own [Password Synchronisation](../concepts/password-synchronisation.md) schedule, or JIM's default (five attempts, backing off from five minutes) where the system has none configured, capped by the time to live below, rather than waiting for another export run.
 
-Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued:
+Each Connected System Object ends up in one of these states, each recorded as a child Activity of the one written when the password was queued. That Activity is a [follow-up](activity-execution-items.md#follow-up) of the export's execution item for the account, so the export item shows where its password stands:
 
 | State | Meaning | What clears it |
 |-------|---------|----------------|

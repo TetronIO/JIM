@@ -282,7 +282,12 @@ public class SyncServer : ISyncServer
         List<ActivityRunProfileExecutionItem> rpeis)
     {
         var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
-        _jim.ConnectedSystems.LinkDeleteChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
+        using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionBuildChangeRecords")
+            .SetTag("csoCount", connectedSystemObjects.Count)
+            .SetTag("changeTrackingEnabled", changeTrackingEnabled))
+        {
+            _jim.ConnectedSystems.LinkDeleteChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
+        }
 
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
     }
@@ -292,12 +297,25 @@ public class SyncServer : ISyncServer
         // Built before the deletion, which takes the objects' attribute values with it; persisted after, so a record
         // never describes an object that is still there.
         var changeTrackingEnabled = await GetCsoChangeTrackingEnabledAsync();
-        var deletionRecords = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords(connectedSystemObjects, activity, changeTrackingEnabled);
+        List<ConnectedSystemObjectChange> deletionRecords;
+        using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionBuildChangeRecords")
+            .SetTag("csoCount", connectedSystemObjects.Count)
+            .SetTag("changeTrackingEnabled", changeTrackingEnabled))
+        {
+            deletionRecords = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords(connectedSystemObjects, activity, changeTrackingEnabled);
+        }
 
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
         if (deletionRecords.Count > 0)
-            await _syncRepo.PersistCsoChangesAsync(deletionRecords);
+        {
+            using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionPersistChangeRecords")
+                .SetTag("recordCount", deletionRecords.Count)
+                .SetTag("valueCount", deletionRecords.Sum(r => r.AttributeChanges.Sum(a => a.ValueChanges.Count))))
+            {
+                await _syncRepo.PersistCsoChangesAsync(deletionRecords);
+            }
+        }
     }
 
     public async Task CreateProvisioningCsoChangeRecordsAsync(

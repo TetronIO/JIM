@@ -99,7 +99,9 @@ The activity's detail page shows the batch like a Run Profile execution: summary
 
 ## :material-family-tree: Parent and child activities
 
-Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System. The REST API returns each Activity's `parentActivityId`, lists an Activity's children, and filters the list with `hasChildActivities`.
+Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System.
+
+An Activity can instead follow up one object's [execution item](activity-execution-items.md#follow-up): the Activity recording an account's Initial Password sits under the export item that provisioned the account, which lists it under **Follow-up**. A child of either kind is left off the main Activity list, so an export that provisions a thousand accounts adds one entry rather than a thousand. The REST API returns each Activity's `parentActivityId` and `parentRunProfileExecutionItemId`, lists an Activity's children, and filters the list with `hasChildActivities`.
 
 A Schedule's steps are not grouped this way: each step's Activity carries its [Schedule context](#schedule-context) instead, and the [Schedule Execution view](schedules.md#the-schedule-execution-view) links each step to its Activity.
 

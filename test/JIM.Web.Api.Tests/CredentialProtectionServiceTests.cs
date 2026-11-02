@@ -117,16 +117,13 @@ public class CredentialProtectionServiceTests
     }
 
     [Test]
-    public void Unprotect_WithPlainText_ReturnsSameValueAsync()
+    public void Unprotect_WithPlainText_ThrowsCryptographicException()
     {
-        // Arrange - plain text without the $JIM$v1$ prefix
+        // A credential stored in clear is one that bypassed encryption (#2680). Handing it back as though it had been
+        // decrypted is what let every portal-saved credential sit in the database unencrypted without anything noticing.
         const string plainText = "NotEncryptedPassword";
 
-        // Act
-        var result = _service.Unprotect(plainText);
-
-        // Assert - should return as-is for migration support
-        Assert.That(result, Is.EqualTo(plainText));
+        Assert.That(() => _service.Unprotect(plainText), Throws.InstanceOf<System.Security.Cryptography.CryptographicException>());
         _mockProtector.Verify(p => p.Unprotect(It.IsAny<byte[]>()), Times.Never);
     }
 

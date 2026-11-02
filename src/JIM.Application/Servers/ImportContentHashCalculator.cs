@@ -204,7 +204,7 @@ public static class ImportContentHashCalculator
 
             case AttributeDataType.Binary:
                 return importAttribute.ByteValues
-                    .Distinct(ByteArrayEqualityComparer.Instance)
+                    .Distinct(ByteArrayContentComparer.Instance)
                     .OrderBy(v => v, ByteArrayLexicographicComparer.Instance)
                     .ToList();
 
@@ -253,25 +253,6 @@ public static class ImportContentHashCalculator
     {
         incrementalHash.AppendData(BitConverter.GetBytes(value.Length));
         incrementalHash.AppendData(value);
-    }
-
-    private sealed class ByteArrayEqualityComparer : IEqualityComparer<byte[]>
-    {
-        public static readonly ByteArrayEqualityComparer Instance = new();
-
-        public bool Equals(byte[]? x, byte[]? y) => (x, y) switch
-        {
-            (null, null) => true,
-            (null, _) or (_, null) => false,
-            _ => x.AsSpan().SequenceEqual(y)
-        };
-
-        public int GetHashCode(byte[] obj)
-        {
-            var hash = new HashCode();
-            hash.AddBytes(obj);
-            return hash.ToHashCode();
-        }
     }
 
     private sealed class ByteArrayLexicographicComparer : IComparer<byte[]>

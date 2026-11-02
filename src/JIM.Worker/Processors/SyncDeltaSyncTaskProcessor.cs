@@ -368,7 +368,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                         await FlushPendingMvoChangesAsync();
 
                     // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
-                    // boundary. See SyncFullSyncTaskProcessor for detailed explanation.
+                    // boundary. See SyncFullSyncTaskProcessor for detailed explanation. The tracker's size before the
+                    // clear is what the page accumulated, logged with the page below (#2669).
+                    var trackerCountBeforeClear = _syncRepo.GetChangeTrackerEntityCount();
                     ClearPageTrackingState();
 
                     // Update progress with page completion. The call persists the Activity's counters,
@@ -379,7 +381,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                         await _syncRepo.UpdateActivityMessageAsync(_activity, string.Empty);
                     }
 
-                    LogPageMemoryDiagnostics(page, totalCsoPages);
+                    LogPageMemoryDiagnostics(page, totalCsoPages, trackerCountBeforeClear);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
                 {

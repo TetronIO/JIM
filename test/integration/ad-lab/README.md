@@ -26,7 +26,8 @@ delegation from `jim-ad-delegation.acl`, applied unchanged; read over Deleted Ob
 same subject and names. It differs from Samba where Windows Server 2025 differs: LDAP signing is enforced (everything
 talks LDAPS on 636) and the domain password policy is at the Windows defaults (complexity on, minimum length 7,
 history 24, minimum age 1 day, maximum age 42 days), which `Configure` sets itself rather than waiting for Group Policy to
-write them (#2412). One registry value departs from the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous
+write them, both on the domain and in the Default Domain Policy, where Exchange `/PrepareAD` can leave the starting values
+for Group Policy to write back later (#2412). `Verify` checks both. One registry value departs from the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous
 password stops working as soon as it changes rather than for 5 minutes after, as on Samba (#2287). `Configure` sets it,
 `Verify` checks it, and `Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
 
@@ -591,8 +592,15 @@ nightly's concurrency group, so the two never overlap, and a run is never cancel
 | `Rollback` | Not green: stops the candidates, leaves them in place for diagnosis, and starts the live VMs again from `baseline`. Also puts the live VM back if a promotion was interrupted after it was demoted |
 | `Status` | Read-only: which VMs exist, their state, and the live guest OS build |
 
-**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after the
-three domain controllers in every phase:
+**The forests are built side by side.** The workflow builds each VM in its own control-plane call and runs one chain
+per domain controller at the same time (`Get-LabRebuildBuildChain`): `dc-source` and `dc-target` alone, and
+`dc-primary` followed by the member servers that join it, in turn, since each takes that domain controller's baseline
+again. A chain that fails stops there; the others finish, and the step then fails, so the run rolls back. The Build
+phase takes about two hours instead of three. Each such call logs to a file of its own,
+`%ProgramData%\jim-ad-lab\logs\Invoke-LabRebuild-yyyyMMdd-<vm>.log`.
+
+**The AD FS server is rebuilt with them** when `settings.json` lists it under `federationServers`. It comes after its
+domain controller in every phase:
 - **Build** stops the live `adfs-primary` and builds `adfs-primary-candidate` with `New-LabFederationServer.ps1`, joined
   to `dc-primary-candidate`. That build retakes `dc-primary-candidate`'s baseline, so the accounts are in it.
 - Build refuses to start before `dc-primary-candidate` exists. It rebuilds an AD FS candidate older than that domain

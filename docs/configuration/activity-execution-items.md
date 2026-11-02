@@ -89,6 +89,14 @@ JIM leaves the attribute exactly as it already held it. Nothing is removed from 
 
 When the value is an object's External ID, JIM cannot tell which object it is, so that Full Import does not check the Object Type for deleted objects, and the Activity says so: marking objects deleted on that basis could remove one the Connected System still holds. Checking resumes on the next Full Import that reads every External ID.
 
+## :material-subdirectory-arrow-right: Follow-up
+
+Some work an item sets in motion finishes after its run. When an export provisions an account with an [Initial Password](initial-password.md), the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) sets the password moments later, and the export's item for that account lists it under **Follow-up**: where it stands now (Queued, Delivering, Retrying, Held, Delivered, Parked, Expired or Cancelled), why, or what happens next, and a link to its own Activity, which holds each delivery attempt. An Initial Password reads **Carried** when a password change already waiting for the person became the account's first password instead; that change's own Activity reports the delivery.
+
+A follow-up never changes its run's status. A password parked hours after a run completed is reported here and on its own Activity; the run stays Complete. The follow-up's Activity links back to the item, and is kept for as long as password history is, which is longer than the run's execution items: once the item has gone, the Activity says the export item is no longer retained.
+
+The REST API returns an item's follow-ups with `include=followups` (`GET /api/v1/activities/items/{id}?include=followups`), and PowerShell with `Get-JIMActivityExecutionItem -IncludeFollowUps`.
+
 ## :material-arrow-decision-outline: Causes and consequences
 
 The Lineage reads beyond the run in both directions: up the chain to what caused the item, and down it to what the item went on to cause in later runs, each on the object it happened to. [Causality](causality.md) explains both, including how each branch says where it ends.

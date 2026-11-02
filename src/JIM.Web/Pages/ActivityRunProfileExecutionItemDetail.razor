@@ -286,6 +286,7 @@
                                 IsSynchronisationRun="causality.IsSynchronisationRun"
                                 ExplorerHref="@(_isAdministrator ? $"/causality/items/{causality.Item.Id}" : null)"
                                 Consequences="_consequences"
+                                FollowUps="causality.FollowUps"
                                 ConsequencesLoading="_consequencesLoading"
                                 OnCheckConsequencesAgain="CheckConsequencesAgainAsync"
                                 LoadConsequenceMembers="LoadConsequenceMembersAsync"
@@ -311,6 +312,20 @@
         }
 
 
+
+        @* ─── Follow-up ─── *@
+        @* Work this item set in motion that finishes after its run (#2668), such as the Initial Password of the account an
+           export provisioned, with where it stands now. The run's own status is final; a follow-up reports here instead. *@
+        @if (_followUps.Count > 0)
+        {
+            <MudText Typo="Typo.h6" Class="mb-2">Follow-up</MudText>
+            <MudPaper Outlined="true" Class="pa-4 mb-5">
+                @foreach (var followUp in _followUps)
+                {
+                    <ExecutionItemFollowUpRow @key="followUp.ActivityId" FollowUp="followUp" />
+                }
+            </MudPaper>
+        }
 
         @* ─── What went wrong ─── *@
         @* Before what changed: an import's attribute table can run to thousands of rows, and an error below it was
@@ -574,6 +589,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     // Whether the reader is an Administrator, and so may follow "Open in explorer" to the Causality Explorer.
     private bool _isAdministrator;
 
+    // The item's follow-ups (#2668), oldest first, as they read on screen.
+    private List<ExecutionItemFollowUpDisplay> _followUps = [];
+
     protected override async Task OnParametersSetAsync()
     {
         _isAdministrator = (await AuthenticationStateTask).User.IsInRole("Administrator");
@@ -595,6 +613,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         _activityRunProfileExecutionItem = _causality.Item;
         _activity = _causality.Activity;
+        _followUps = _causality.FollowUps.ToList();
         _connectedSystemHeader = _causality.RecordConnectedSystem;
         _runConnectedSystemHeader = _causality.RunConnectedSystem;
         _externalIdAttributeValue = _causality.ExternalIdAttributeValue;

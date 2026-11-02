@@ -13,17 +13,20 @@ internal class LdapConnectorSchema
     private readonly ILogger _logger;
     private readonly LdapConnectorRootDse _rootDse;
     private readonly bool _includeAuxiliaryClasses;
+    private readonly bool _manageExchangeRecipients;
     private readonly ConnectorSchema _schema;
     private string _schemaNamingContext = null!;
     private Dictionary<string, SearchResultEntry> _classSchemaCache = null!;
     private Dictionary<string, SearchResultEntry> _attributeSchemaCache = null!;
 
-    internal LdapConnectorSchema(ILdapOperationExecutor executor, ILogger logger, LdapConnectorRootDse rootDse, bool includeAuxiliaryClasses = false)
+    internal LdapConnectorSchema(ILdapOperationExecutor executor, ILogger logger, LdapConnectorRootDse rootDse, bool includeAuxiliaryClasses = false,
+        bool manageExchangeRecipients = false)
     {
         _executor = executor;
         _logger = logger;
         _rootDse = rootDse;
         _includeAuxiliaryClasses = includeAuxiliaryClasses;
+        _manageExchangeRecipients = manageExchangeRecipients;
         _schema = new ConnectorSchema();
     }
 
@@ -120,6 +123,12 @@ internal class LdapConnectorSchema
                 if (AddObjectTypeAttributes(objectType))
                 {
                     ApplyExternalIdRecommendations(objectType);
+
+                    // A Connected System that manages Exchange recipients declares them through attributes of the
+                    // Connector's own (#2021); only Active Directory is ever allowed to, so only this branch adds them.
+                    if (_manageExchangeRecipients)
+                        LdapExchangeAttributes.AddTo(objectType);
+
                     _schema.ObjectTypes.Add(objectType);
                 }
             }

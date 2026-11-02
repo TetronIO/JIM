@@ -1731,7 +1731,8 @@ internal class SeedingServer
                     RequiredGroup = latestSetting.RequiredGroup,
                     RequiredGroupCardinality = latestSetting.RequiredGroupCardinality,
                     RequiredWhenSetting = latestSetting.RequiredWhenSetting,
-                    RequiredWhenValue = latestSetting.RequiredWhenValue
+                    RequiredWhenValue = latestSetting.RequiredWhenValue,
+                    FeatureFlagKey = latestSetting.FeatureFlagKey
                 });
                 hasChanges = true;
                 Log.Information($"SyncConnectorDefinitionAsync: Added new setting '{latestSetting.Name}' for '{connector.Name}'");
@@ -1748,6 +1749,7 @@ internal class SeedingServer
                     existingSetting.RequiredGroupCardinality != latestSetting.RequiredGroupCardinality ||
                     existingSetting.RequiredWhenSetting != latestSetting.RequiredWhenSetting ||
                     existingSetting.RequiredWhenValue != latestSetting.RequiredWhenValue ||
+                    existingSetting.FeatureFlagKey != latestSetting.FeatureFlagKey ||
                     existingSetting.DefaultCheckboxValue != latestSetting.DefaultCheckboxValue ||
                     existingSetting.DefaultStringValue != latestSetting.DefaultStringValue ||
                     existingSetting.DefaultIntValue != latestSetting.DefaultIntValue)
@@ -1761,6 +1763,7 @@ internal class SeedingServer
                     existingSetting.RequiredGroupCardinality = latestSetting.RequiredGroupCardinality;
                     existingSetting.RequiredWhenSetting = latestSetting.RequiredWhenSetting;
                     existingSetting.RequiredWhenValue = latestSetting.RequiredWhenValue;
+                    existingSetting.FeatureFlagKey = latestSetting.FeatureFlagKey;
                     existingSetting.DefaultCheckboxValue = latestSetting.DefaultCheckboxValue;
                     existingSetting.DefaultStringValue = latestSetting.DefaultStringValue;
                     existingSetting.DefaultIntValue = latestSetting.DefaultIntValue;

@@ -102,9 +102,8 @@ public class CredentialProtectionService : ICredentialProtectionService, IPasswo
         if (string.IsNullOrEmpty(protectedData))
             return protectedData;
 
-        // A value belonging to the password purpose is definitively not a credential, and the migration
-        // passthrough below would hand back its ciphertext as though it were plain text: a caller would then
-        // transmit that ciphertext to a target system as a credential. Refuse instead of guessing.
+        // A value belonging to the password purpose is definitively not a credential. Refused separately from the
+        // unprefixed case below so the message names what the value actually is.
         if (IsPasswordProtected(protectedData))
         {
             Log.Error("CredentialProtectionService.Unprotect: Value is protected under the password purpose, " +
@@ -113,12 +112,17 @@ public class CredentialProtectionService : ICredentialProtectionService, IPasswo
                 "The stored value is a JIM-protected password, not a credential, and cannot be decrypted here.");
         }
 
-        // Not encrypted (plain text) - return as-is for migration support
-        // This allows existing plain-text credentials to work until they're re-saved
+        // Every credential JIM stores is encrypted on write, and anything stored in clear before that was true is
+        // encrypted at startup (ConnectedSystemServer.ProtectStoredCredentialsAsync). An unprefixed value here is
+        // therefore a credential that bypassed encryption, or corruption. Returning it as-is is what hid #2680, where
+        // every credential saved from the portal was stored in clear and nothing noticed; refuse it instead.
         if (!IsProtected(protectedData))
         {
-            Log.Verbose("CredentialProtectionService.Unprotect: Value not encrypted, returning as-is (migration support)");
-            return protectedData;
+            Log.Error("CredentialProtectionService.Unprotect: Value is not encrypted. A stored credential without the " +
+                      "expected prefix was written without encryption, or has been corrupted or altered.");
+            throw new CryptographicException(
+                "The stored value is not a JIM-protected credential. It was stored without encryption, or has been " +
+                "corrupted or altered; re-enter the credential to store it encrypted.");
         }
 
         try
@@ -174,10 +178,9 @@ public class CredentialProtectionService : ICredentialProtectionService, IPasswo
         if (string.IsNullOrEmpty(protectedPassword))
             return protectedPassword;
 
-        // Deliberately unlike Unprotect, which returns an unprefixed value as-is to support credentials stored
-        // before encryption existed. No password has ever been stored in clear, so an unprefixed value here is
-        // corruption or tampering; returning it would hand the caller something it would then transmit to a
-        // directory as though JIM had encrypted it.
+        // As in Unprotect: no password is ever stored in clear, so an unprefixed value here is corruption or
+        // tampering; returning it would hand the caller something it would then transmit to a directory as though
+        // JIM had encrypted it.
         if (!IsPasswordProtected(protectedPassword))
         {
             Log.Error("CredentialProtectionService.UnprotectPassword: Value is not password-protected. " +

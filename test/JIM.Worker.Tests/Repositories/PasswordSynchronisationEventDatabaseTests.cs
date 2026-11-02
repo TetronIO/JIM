@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -203,6 +204,33 @@ public class PasswordSynchronisationEventDatabaseTests
         {
             Assert.That(events, Has.Exactly(1).Items);
             Assert.That(events[0].Outcomes, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetPasswordSynchronisationEventsAsync_InitialPasswordFollowingAnExportItem_IsStillInThePersonsHistoryAsync()
+    {
+        // An Initial Password's Activity is a follow-up of the export item that provisioned the account (#2668). That
+        // keeps it off the top level of the Activities list, but it is still one of the person's password changes.
+        var ada = Guid.NewGuid();
+        var changeId = await SeedChangeAsync(ada, new DateTime(2026, 8, 21, 9, 0, 0, DateTimeKind.Utc),
+            ("Corporate AD", ActivityStatus.Complete, null));
+        await using (var write = NewContext())
+        {
+            var change = await write.Activities.AsTracking().SingleAsync(a => a.Id == changeId);
+            change.ParentRunProfileExecutionItemId = Guid.NewGuid();
+            change.TargetContext = nameof(PendingPasswordChangeOrigin.Provisioned);
+            await write.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var events = await new PostgresDataRepository(ctx).Activity.GetPasswordSynchronisationEventsAsync(ada, 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(events.Select(e => e.ActivityId), Is.EqualTo(new[] { changeId }));
+            Assert.That(events.Single().Origin, Is.EqualTo(PendingPasswordChangeOrigin.Provisioned));
+            Assert.That(events.Single().Outcomes, Has.Count.EqualTo(1));
         }
     }
 

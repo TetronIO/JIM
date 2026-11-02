@@ -963,7 +963,12 @@ public abstract class SyncTaskProcessorBase
     /// Logs memory diagnostics at page boundaries to track memory usage across the sync run.
     /// Helps diagnose memory accumulation issues and verify bounded memory behaviour.
     /// </summary>
-    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages)
+    /// <param name="pageNumber">The page just completed.</param>
+    /// <param name="totalPages">The pages the run expects.</param>
+    /// <param name="trackerCountBeforeClear">The change tracker's entry count just before the page's clear: what the page
+    /// accumulated, where the count logged after the clear only shows that the clear happened (#2669). Rows a flush
+    /// deleted have already left the tracker, so a page's peak can be higher.</param>
+    protected void LogPageMemoryDiagnostics(int pageNumber, int totalPages, int trackerCountBeforeClear)
     {
         var memoryBytes = GC.GetTotalMemory(forceFullCollection: false);
         var memoryMb = memoryBytes / (1024.0 * 1024.0);
@@ -974,10 +979,10 @@ public abstract class SyncTaskProcessorBase
         var rpeiCount = _activity.RunProfileExecutionItems.Count;
 
         Log.Information("Page {Page}/{TotalPages} complete. Memory: {MemoryMb:F1} MB, Gen0: {Gen0}, Gen1: {Gen1}, Gen2: {Gen2} | " +
-            "Tracker: {TrackerCount}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
+            "Tracker: {TrackerCount}, TrackerBeforeClear: {TrackerCountBeforeClear}, CrossPageRefs: {CrossPageRefCount}, RPEIs: {RpeiCount}",
             pageNumber, totalPages, memoryMb,
             GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2),
-            trackerCount, crossPageRefCount, rpeiCount);
+            trackerCount, trackerCountBeforeClear, crossPageRefCount, rpeiCount);
     }
 
     /// <summary>
@@ -5820,7 +5825,10 @@ public abstract class SyncTaskProcessorBase
         // deletion record where Connected System Object changes are tracked, as for every other deletion.
         if (_quietCsosToDelete.Count > 0)
         {
-            await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
+            // The objects a Metaverse Object deletion already disconnected, which the confirming import found gone: a
+            // leaver cohort's whole deletion runs here, not in the execution-item path below (#2669).
+            using (Diagnostics.Sync.StartSpan("CsoDeletionQuiet").SetTag("csoCount", _quietCsosToDelete.Count))
+                await _syncServer.DeleteConnectedSystemObjectsQuietlyAsync(_quietCsosToDelete, _activity);
             Log.Debug("FlushObsoleteCsoOperationsAsync: Quietly deleted {Count} pre-disconnected CSOs", _quietCsosToDelete.Count);
             _quietCsosToDelete.Clear();
         }
@@ -5830,7 +5838,13 @@ public abstract class SyncTaskProcessorBase
         // them; a review that runs while the departed object remains simply finds it and stages nothing.
         if (_pendingReProvisioningReviewMvoIds.Count > 0)
         {
-            var flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+            int flagged;
+            using (var flagSpan = Diagnostics.Sync.StartSpan("CsoDeletionFlagScopeReview")
+                .SetTag("mvoCount", _pendingReProvisioningReviewMvoIds.Count))
+            {
+                flagged = await _syncRepo.FlagMetaverseObjectsForScopeReviewAsync(_pendingReProvisioningReviewMvoIds.ToList());
+                flagSpan.SetTag("flaggedCount", flagged);
+            }
             Log.Information("FlushObsoleteCsoOperationsAsync: Flagged {Flagged} of {Requested} Metaverse Object(s) for an export scope review, " +
                 "having lost their object in a Connected System an export Synchronisation Rule provisions to (#2318); an object flagged " +
                 "already is flagged again, so a review in progress cannot clear it",
@@ -5842,7 +5856,9 @@ public abstract class SyncTaskProcessorBase
         if (_obsoleteCsosToDelete.Count == 0)
             return;
 
-        using var span = Diagnostics.Sync.StartSpan("FlushObsoleteCsoOperations");
+        // Named for what it covers rather than after the method: the processors wrap the whole flush in a
+        // FlushObsoleteCsoOperations span, and a span inside its namesake made the breakdown ambiguous (#2669).
+        using var span = Diagnostics.Sync.StartSpan("CsoDeletionWithExecutionItems");
         span.SetTag("deleteCount", _obsoleteCsosToDelete.Count);
 
         // Batch delete obsolete CSOs
@@ -7639,8 +7655,7 @@ public abstract class SyncTaskProcessorBase
                         // value stays marked for removal); only the leaver's non-re-elected values are unmarked.
                         var reElectedDuringFreeze = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
                         var frozenValues = contributedAttributes.Where(av => !reElectedDuringFreeze.Contains(av.AttributeId)).ToList();
-                        foreach (var frozen in frozenValues)
-                            mvo.PendingAttributeValueRemovals.Remove(frozen);
+                        mvo.PendingAttributeValueRemovals.RemoveEach(frozenValues);
 
                         // A pending deletion explains itself via the deletion outcome; the no-source
                         // preservation gets its own ValuesPreserved outcome downstream (#1570).
