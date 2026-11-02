@@ -12,7 +12,7 @@ Activity cmdlets retrieve and inspect the execution history of operations within
 ```jim-diagram
 archetype: decision
 title: Which Activity cmdlet answers your question
-desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
+desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats, documented on Activity Statistics; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
 questions:
   - { id: id, label: "Do you have its ID?", sub: "an `ActivityId`, as a run returns" }
   - { id: need, label: "What do you need?" }
@@ -20,7 +20,7 @@ outcomes:
   - { id: list, label: "`Get-JIMActivity`", sub: "filtered by `-Status` and more" }
   - { id: follow, label: "`Get-JIMActivity -Follow`", sub: progress until it completes }
   - { id: full, label: "`Get-JIMActivity -Id`", sub: the Activity in full }
-  - { id: stats, label: "`Get-JIMActivityStats`", sub: a run's counts }
+  - { id: stats, label: "`Get-JIMActivityStats`", sub: "a run's counts; see Activity Statistics" }
   - { id: items, label: "`-ExecutionItems`", sub: "with `-Id`: one row per object" }
   - { id: children, label: "`Get-JIMActivityChildren`", sub: one row per child Activity }
 answers:
@@ -346,6 +346,8 @@ Get-JIMActivity -Search "Nightly Sync Schedule" |
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
     Where-Object { $_.Status -eq "FailedWithError" }
 ```
+
+For each child's statistics, pipe the children to [`Get-JIMActivityStats`](activity-statistics.md#get-jimactivitystats):
 
 ```powershell title="Get statistics for each child activity"
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
