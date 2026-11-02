@@ -7,15 +7,23 @@ namespace JIM.PostgresData.Migrations
 {
     /// <summary>
     /// The Exchange queue (#2021, Phase 4 of the Exchange mailbox provisioning plan): one change per directory account,
-    /// staged after a successful export and delivered by the Exchange delivery lane. The table gains a notification
+    /// staged after a successful export and delivered by the Exchange delivery lane, and the AwaitsExchange mark that
+    /// holds an exported connector-defined change's confirmation while Exchange owes it. The table gains a notification
     /// trigger so the lane is woken by a row change rather than by a poll, following AddPasswordDeliveryClaims; its
     /// channel name must match Constants.NotificationChannels.ExchangeChange.
     /// </summary>
-    public partial class AddPendingExchangeChanges : Migration
+    public partial class AddExchangeChangeQueue : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.AddColumn<bool>(
+                name: "AwaitsExchange",
+                table: "PendingExportAttributeValueChanges",
+                type: "boolean",
+                nullable: false,
+                defaultValue: false);
+
             migrationBuilder.CreateTable(
                 name: "PendingExchangeChanges",
                 columns: table => new
@@ -76,6 +84,12 @@ namespace JIM.PostgresData.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange",
+                table: "PendingExportAttributeValueChanges",
+                column: "PendingExportId",
+                filter: "\"AwaitsExchange\"");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_PendingExchangeChanges_ConnectedSystemId_Status_NextRetryAt",
                 table: "PendingExchangeChanges",
                 columns: new[] { "ConnectedSystemId", "Status", "NextRetryAt" });
@@ -125,6 +139,14 @@ namespace JIM.PostgresData.Migrations
 
             migrationBuilder.DropTable(
                 name: "PendingExchangeChanges");
+
+            migrationBuilder.DropIndex(
+                name: "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange",
+                table: "PendingExportAttributeValueChanges");
+
+            migrationBuilder.DropColumn(
+                name: "AwaitsExchange",
+                table: "PendingExportAttributeValueChanges");
         }
     }
 }

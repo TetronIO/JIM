@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261101203048_AddPendingExchangeChanges")]
-    partial class AddPendingExchangeChanges
+    [Migration("20261102213807_AddExchangeChangeQueue")]
+    partial class AddExchangeChangeQueue
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1295,9 +1295,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<bool>("SSOEnableLogOut")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("SSOSecret")
-                        .HasColumnType("text");
 
                     b.Property<string>("SSOUniqueIdentifierClaimType")
                         .HasColumnType("text");
@@ -3913,6 +3910,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("IsPendingExportStub")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsUnresolvedReference")
+                        .HasColumnType("boolean");
+
                     b.Property<long?>("LongValue")
                         .HasColumnType("bigint");
 
@@ -3936,6 +3936,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ConnectedSystemObjectChangeAttributeId");
 
                     b.HasIndex("ReferenceValueId");
+
+                    b.HasIndex(new[] { "ConnectedSystemObjectChangeAttributeId" }, "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+                        .HasFilter("\"IsUnresolvedReference\"");
 
                     b.ToTable("ConnectedSystemObjectChangeAttributeValues");
                 });
@@ -5148,6 +5152,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AwaitsExchange")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("AwaitsInitialPassword")
                         .HasColumnType("boolean");
 
@@ -5211,6 +5218,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PendingExportId")
                         .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+
+                    b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange")
+                        .HasFilter("\"AwaitsExchange\"");
 
                     b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
                         .HasFilter("\"AwaitsInitialPassword\"");
