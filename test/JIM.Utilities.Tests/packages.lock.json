@@ -212,7 +212,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.16.0, )"
+          "JIM.Models": "[0.17.0, )"
         }
       },
       "jim.models": {
@@ -225,8 +225,8 @@
       "jim.testsupport": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.16.0, )",
-          "JIM.Models": "[0.16.0, )",
+          "JIM.Data": "[0.17.0, )",
+          "JIM.Models": "[0.17.0, )",
           "NUnit": "[4.6.1, )",
           "Npgsql": "[10.0.3, )"
         }
@@ -234,7 +234,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.16.0, )",
+          "JIM.Models": "[0.17.0, )",
           "Serilog": "[4.4.0, )"
         }
       }
