@@ -55,8 +55,52 @@ public class LdapConnectorExportConnectorDefinedAttributeTests
         Assert.That(LdapConnectorExport.ConsolidateModifications(pendingExport, UserDn).Select(m => m.AttributeName), Is.EqualTo(new[] { "department" }));
     }
 
-    private static LdapConnectorExport Exporter() =>
-        new(new Mock<ILdapOperationExecutor>().Object,
+    /// <summary>
+    /// A shared, room or equipment mailbox lives on a disabled account (#2021, PRD requirement 14). Active Directory
+    /// creates an account disabled when no userAccountControl is given, so the export needs to add nothing; a
+    /// Synchronisation Rule flowing an enabled account instead is refused for that object rather than overridden, since
+    /// an override would be undone by the next confirming import and the account enabled.
+    /// </summary>
+    [TestCase("SharedMailbox")]
+    [TestCase("RoomMailbox")]
+    [TestCase("EquipmentMailbox")]
+    public void Execute_ResourceMailboxCreateFlowingAnEnabledAccount_IsRefusedWithoutWriting(string recipientType)
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        var pendingExport = Export(PendingExportChangeType.Create, Change("Exchange Recipient Type", recipientType, connectorDefined: true),
+            IntChange("userAccountControl", 512));
+
+        var result = Exporter(executor).Execute([pendingExport]).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("disabled").And.Contain("userAccountControl"));
+            executor.Verify(e => e.SendRequest(It.IsAny<DirectoryRequest>()), Times.Never);
+        }
+    }
+
+    [TestCase("SharedMailbox", 514)]
+    [TestCase("Mailbox", 512)]
+    public void Execute_CreateWhoseAccountStateFitsItsRecipientType_IsNotRefused(string recipientType, int userAccountControl)
+    {
+        var pendingExport = Export(PendingExportChangeType.Create, Change("Exchange Recipient Type", recipientType, connectorDefined: true),
+            IntChange("userAccountControl", userAccountControl));
+
+        Assert.That(Exporter().Execute([pendingExport]).Single().ErrorMessage ?? "", Does.Not.Contain("disabled account"));
+    }
+
+    [Test]
+    public void Execute_ResourceMailboxCreateWithNoAccountState_IsNotRefused()
+    {
+        var pendingExport = Export(PendingExportChangeType.Create, Change("Exchange Recipient Type", "RoomMailbox", connectorDefined: true));
+
+        Assert.That(Exporter().Execute([pendingExport]).Single().ErrorMessage ?? "", Does.Not.Contain("disabled account"),
+            "Active Directory creates the account disabled on its own");
+    }
+
+    private static LdapConnectorExport Exporter(Mock<ILdapOperationExecutor>? executor = null) =>
+        new((executor ?? new Mock<ILdapOperationExecutor>()).Object,
             [new ConnectedSystemSettingValue { Setting = new ConnectorDefinitionSetting { Name = "Delete Behaviour" }, StringValue = "Delete" }],
             Log.Logger, 1, LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, LdapDirectoryType.ActiveDirectory, placeholderMemberDn: null);
 
@@ -75,6 +119,17 @@ public class LdapConnectorExportConnectorDefinedAttributeTests
             },
             .. changes
         ]
+    };
+
+    private static PendingExportAttributeValueChange IntChange(string attributeName, int value) => new()
+    {
+        Attribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = Interlocked.Increment(ref _nextAttributeId), Name = attributeName, Type = AttributeDataType.Number,
+            AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = UserType
+        },
+        ChangeType = PendingExportAttributeChangeType.Update,
+        IntValue = value
     };
 
     private static int _nextAttributeId = 10;
