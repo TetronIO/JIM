@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -66,6 +67,20 @@ public class ConnectedSystemObjectChangeAttributeValue
     public bool IsUnresolvedReference { get; set; }
 
     /// <summary>
+    /// True when this reference names its object by display text, such as the object's display name or the Metaverse
+    /// Object id its reference was staged with, rather than by the object's identifier in the Connected System. No
+    /// identifier lookup can ever resolve such a value, so it is never marked <see cref="IsUnresolvedReference"/>.
+    /// </summary>
+    /// <remarks>
+    /// Decided where the value is built, by the code that knows where its text came from (#2700); the text's shape cannot
+    /// decide it, since an identifier need not be a distinguished name (SQL and SCIM Secondary External IDs are not). False
+    /// unless the builder says otherwise, so a value is treated as naming its object by identifier by default. Not
+    /// persisted: it only governs the mark the writers set as they write the value.
+    /// </remarks>
+    [NotMapped]
+    public bool NamesReferencedObjectByDisplayText { get; init; }
+
+    /// <summary>
     /// The export Synchronisation Rule whose mapping produced this value, copied from
     /// <see cref="JIM.Models.Transactional.PendingExportAttributeValueChange.SyncRuleId"/> by
     /// <c>JIM.Application.Utilities.ExportChangeHistoryBuilder</c>. Deliberately a soft pointer: no
@@ -86,15 +101,17 @@ public class ConnectedSystemObjectChangeAttributeValue
     /// <summary>
     /// Sets <see cref="IsUnresolvedReference"/> as the value is written: a value of a Reference attribute that holds an
     /// identifier in <see cref="StringValue"/> is marked when its referenced object's id is not written with it, and
-    /// nothing else is marked. Every writer of change values calls this, so they agree on which values the change
-    /// record reference fix-up resolves.
+    /// nothing else is marked; a value naming its object by display text (<see cref="NamesReferencedObjectByDisplayText"/>)
+    /// holds no identifier, so it is never marked. Every writer of change values calls this, so they agree on which values
+    /// the change record reference fix-up resolves.
     /// </summary>
     /// <param name="attributeType">The data type recorded on the change attribute this value belongs to.</param>
     /// <param name="referenceIdWritten">Whether the referenced object's id is written with the value; false when there
     /// is no referenced object, or when its row does not exist yet (an import writes its new objects in batches with
     /// their ids decided up front, so a reference can name an object a later batch writes).</param>
     public void SetUnresolvedReferenceMark(AttributeDataType attributeType, bool referenceIdWritten) =>
-        IsUnresolvedReference = attributeType == AttributeDataType.Reference && StringValue != null && !referenceIdWritten;
+        IsUnresolvedReference = attributeType == AttributeDataType.Reference && StringValue != null && !referenceIdWritten &&
+                                !NamesReferencedObjectByDisplayText;
 
     public override string ToString()
     {

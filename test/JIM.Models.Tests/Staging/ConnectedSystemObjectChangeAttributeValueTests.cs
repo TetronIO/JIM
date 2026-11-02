@@ -95,6 +95,23 @@ public class ConnectedSystemObjectChangeAttributeValueTests
         Assert.That(value.IsUnresolvedReference, Is.False);
     }
 
+    /// <summary>
+    /// A reference named by display text (the referenced object's display name, or the Metaverse Object id it was staged
+    /// with) can never be matched to an object by identifier, so the change record reference fix-up must never read it
+    /// (#2700). Whoever built the value says so; the text's shape does not, so even text shaped like a DN stays unmarked.
+    /// </summary>
+    [TestCase("Alice Smith (S8-0)")]
+    [TestCase("1f2c9a52-7e0b-4a8e-9a0d-6d1f3b2c4e5f")]
+    [TestCase("CN=Alice Smith,OU=People,DC=glitterband,DC=local")]
+    public void SetUnresolvedReferenceMark_ReferenceNamingItsObjectByDisplayText_LeavesTheValueUnmarked(string displayText)
+    {
+        var value = new ConnectedSystemObjectChangeAttributeValue { StringValue = displayText, NamesReferencedObjectByDisplayText = true };
+
+        value.SetUnresolvedReferenceMark(AttributeDataType.Reference, referenceIdWritten: false);
+
+        Assert.That(value.IsUnresolvedReference, Is.False, "display text never resolves to an object by identifier");
+    }
+
     [Test]
     public void ToString_WithLongAndDecimalValues_RendersLongValueFirst()
     {

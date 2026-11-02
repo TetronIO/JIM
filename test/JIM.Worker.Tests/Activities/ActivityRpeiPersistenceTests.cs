@@ -189,6 +189,11 @@ public class ActivityRpeiPersistenceTests
         var descriptionAttribute = new ConnectedSystemObjectTypeAttribute { Name = "description", Type = AttributeDataType.Text, ConnectedSystemObjectType = csoType, Selected = true };
         DbContext.ConnectedSystemAttributes.AddRange(memberAttribute, descriptionAttribute);
         await DbContext.SaveChangesAsync();
+        // The writer records a reference's id only where its object's row exists (#2700), so the object referred to by id
+        // is stored.
+        var referencedObject = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 5, TypeId = csoType.Id };
+        DbContext.ConnectedSystemObjects.Add(referencedObject);
+        await DbContext.SaveChangesAsync();
         var activity = await CreatePersistedActivityAsync();
 
         var change = new ConnectedSystemObjectChange
@@ -205,7 +210,7 @@ public class ActivityRpeiPersistenceTests
         memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.dn,ou=People,dc=glitterband,dc=local"));
         memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.id,ou=People,dc=glitterband,dc=local")
         {
-            ReferenceValue = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 5, TypeId = csoType.Id }
+            ReferenceValue = new ConnectedSystemObject { Id = referencedObject.Id }
         });
         var descriptionChange = new ConnectedSystemObjectChangeAttribute
         {
