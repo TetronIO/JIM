@@ -377,7 +377,7 @@ if ($stats.TotalObjectErrors -gt 0) {
 
 Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
-The underlying API returns a paginated response envelope, but this cmdlet unwraps it internally and still emits one object per child activity to the pipeline, so existing scripts that pipe its output are unaffected by the paginated response shape.
+The API pages its response; this cmdlet unwraps the pages and emits one object per child Activity to the pipeline.
 
 <!-- BEGIN GENERATED: Get-JIMActivityChildren -->
 ### Syntax
