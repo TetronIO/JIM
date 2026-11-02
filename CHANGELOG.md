@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
 - ⚡ Exports and imports into large Connected Systems no longer re-read all their change history to resolve references (about 20 seconds a run at 500,000 objects), and history naming a deleted object is no longer re-pointed at a later object reusing its DN. (#2690)
 - ⚡ An export now records each reference in its change history with the object it names as it writes it, instead of leaving them to be linked afterwards, which took 164 seconds after the first export of a 500,000-object Connected System. (#2700)
+- ⚡ OpenLDAP imports take their next watermark from what the accesslog gained since the last one: reading the whole log took 7 to 10 seconds per import at 500,000 objects, grew with the log, and on a size-limited directory could stop short of the latest change. (#2704)
 
 
 ## [0.17.0] - 2026-10-29

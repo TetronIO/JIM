@@ -17,10 +17,11 @@ namespace JIM.Connectors.LDAP;
 /// OpenLDAP enforces olcSizeLimit (default 500) as a hard cap for non-rootDN clients, even with paging controls.
 /// The bind account used by the connector is typically not the rootDN of the cn=accesslog database, so paging
 /// alone cannot bypass the limit. The watermark capture works within it: when the size limit is exceeded, the
-/// latest timestamp from the partial results narrows the next query, walking forward through the accesslog until
-/// all entries have been scanned. The change read does not: it pages under the directory's own cursor, and a
-/// directory that stops it at the limit fails the Delta Import, since resuming from a timestamp could miss an
-/// operation that started earlier and was logged later.
+/// latest timestamp from the partial results narrows the next query, walking forward through the accesslog from the
+/// previous watermark (from the start of the log on a first import) until every entry since has been scanned. The
+/// change read does not: it pages under the directory's own cursor, and a directory that stops it at the limit fails
+/// the Delta Import, since resuming from a timestamp could miss an operation that started earlier and was logged
+/// later.
 /// </para>
 /// <para>
 /// An accesslog that cannot be read is never taken for one that is empty. The readiness check reads the
@@ -57,12 +58,19 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     /// snapshot restore clears it there is genuinely nothing before now, and a baseline saves the next Delta Import
     /// an unnecessary Full Import.
     /// </para>
+    /// <para>
+    /// The previous record's watermark, when there is one, is where a directory that cannot sort starts looking, so
+    /// only what was written since is read rather than the whole log every suffix on the server shares (#2704). It
+    /// narrows the search and never decides it: when nothing is logged from there on, the whole log is read, so the
+    /// watermark, whether it names a logged entry, and what <see cref="VerifyContinuity"/> makes of it are what they
+    /// would be without it.
+    /// </para>
     /// </remarks>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
+    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, TimeSpan searchTimeout)
     {
         try
         {
-            rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp(searchTimeout);
+            rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp(previous?.LastAccesslogTimestamp, searchTimeout);
         }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
         {
@@ -115,12 +123,16 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     /// delta import watermark. Uses a multi-strategy approach to handle server-side size limits:
     /// 1. Server-side sort (reverse by reqStart) with SizeLimit=1 to get only the latest entry.
     ///    This requires the sssvlv overlay to be enabled on the server.
-    /// 2. If sorting is not supported, falls back to handling the SizeLimitExceeded exception
-    ///    by extracting partial results from the exception response.
+    /// 2. If sorting is not supported, walks forward through the log within the size limit (see
+    ///    <see cref="QueryAccesslogWithSizeLimitHandling"/>), starting from the previous watermark when there is one.
+    ///    The latest write is at or after the previous watermark whenever anything is logged there, so this finds
+    ///    what a walk of the whole log would while reading only what was written since (#2704). When nothing is
+    ///    logged there (the watermark's entry was purged with nothing newer, or the directory was restored to before
+    ///    it), the whole log is walked, exactly as on a first import.
     /// Null when the accesslog is readable and holds no write operations. A missing, refused or unreachable
     /// accesslog is left to the caller as the exception the directory raised.
     /// </summary>
-    private string? QueryAccesslogForLatestTimestamp(TimeSpan searchTimeout)
+    private string? QueryAccesslogForLatestTimestamp(string? previousTimestamp, TimeSpan searchTimeout)
     {
         // Strategy 1: Server-side sort (reverse) with SizeLimit=1
         // This gets only the single latest entry, avoiding size limit issues entirely.
@@ -128,11 +140,24 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         if (result != null)
             return result;
 
-        // Strategy 2: Simple query with size limit exceeded handling.
-        // If the accesslog has fewer entries than olcSizeLimit, this returns all entries normally.
-        // If it exceeds the limit, we catch the DirectoryOperationException and extract
-        // the latest timestamp from the partial results in the exception's response.
-        return QueryAccesslogWithSizeLimitHandling(searchTimeout);
+        // Strategy 2: a walk within the size limit, from the previous watermark when there is one.
+        if (string.IsNullOrEmpty(previousTimestamp))
+        {
+            _logger.Debug("QueryAccesslogForLatestTimestamp: No previous watermark to start from; walking the whole accesslog");
+            return QueryAccesslogWithSizeLimitHandling(fromTimestamp: null, searchTimeout);
+        }
+
+        result = QueryAccesslogWithSizeLimitHandling(previousTimestamp, searchTimeout);
+        if (result != null)
+        {
+            _logger.Debug("QueryAccesslogForLatestTimestamp: Watermark {Timestamp} taken from the writes at or after the previous watermark {PreviousTimestamp}",
+                LogSanitiser.Sanitise(result), LogSanitiser.Sanitise(previousTimestamp));
+            return result;
+        }
+
+        _logger.Debug("QueryAccesslogForLatestTimestamp: Nothing is logged at or after the previous watermark {PreviousTimestamp} (its entry was purged with nothing newer, " +
+            "or the directory was restored to before it); walking the whole accesslog", LogSanitiser.Sanitise(previousTimestamp));
+        return QueryAccesslogWithSizeLimitHandling(fromTimestamp: null, searchTimeout);
     }
 
     /// <summary>
@@ -183,21 +208,23 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// Queries the accesslog using an iterative approach that works within the server's size limit.
+    /// Queries the accesslog using an iterative approach that works within the server's size limit, from
+    /// <paramref name="fromTimestamp"/> on, or from the start of the log when it is null.
     /// When the size limit is exceeded, extracts the latest timestamp from partial results and
     /// re-queries with a narrower filter (reqStart >= latest_seen) to walk forward through the
     /// accesslog until all entries have been scanned. This effectively implements manual paging
     /// without requiring paging controls to bypass the size limit.
     /// </summary>
-    private string? QueryAccesslogWithSizeLimitHandling(TimeSpan searchTimeout)
+    private string? QueryAccesslogWithSizeLimitHandling(string? fromTimestamp, TimeSpan searchTimeout)
     {
         string? latestTimestamp = null;
         var totalEntries = 0;
         var iterations = 0;
+        var cutShort = false;
         const int maxIterations = 100; // Safety limit to prevent infinite loops
 
-        // Start with an unfiltered query to get the first batch
-        var currentFilter = WriteOperationsFilter;
+        // Start from the given timestamp, or from the start of the log when there is none
+        var currentFilter = WriteOperationsFrom(fromTimestamp);
 
         while (iterations < maxIterations)
         {
@@ -223,6 +250,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             }
 
             totalEntries += batchCount;
+            cutShort = hitSizeLimit;
 
             if (batchCount == 0 || batchLatest == null)
                 break;
@@ -241,20 +269,40 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
                 "Latest timestamp so far: {Timestamp}. Re-querying from that point.",
                 iterations, latestTimestamp);
 
-            currentFilter = $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={latestTimestamp}))";
+            currentFilter = WriteOperationsFrom(latestTimestamp);
         }
 
+        var startingPoint = fromTimestamp == null ? "the start of the log" : LogSanitiser.Sanitise(fromTimestamp);
         if (totalEntries == 0)
         {
-            _logger.Debug("QueryAccesslogWithSizeLimitHandling: No accesslog entries found");
+            _logger.Debug("QueryAccesslogWithSizeLimitHandling: No accesslog entries found from {StartingPoint}", startingPoint);
             return null;
         }
 
+        // The last search was cut short too, so the walk ended before the end of the log. The watermark is still a
+        // logged write, so nothing is missed: the next Delta Import reads from an earlier point than it needs to.
+        if (cutShort)
+        {
+            _logger.Warning("QueryAccesslogWithSizeLimitHandling: Stopped walking {AccesslogDn} after {Iterations} searches with the directory's size limit still cutting them short, " +
+                "so the watermark {Timestamp} may not be the latest write it logged. The next Delta Import starts from there, so it reads some changes twice rather than missing any; " +
+                "exempting the account JIM connects as from the size limit on {AccesslogDn} (olcLimits) avoids this.",
+                AccesslogDn, iterations, LogSanitiser.Sanitise(latestTimestamp), AccesslogDn);
+        }
+
         _logger.Debug("QueryAccesslogWithSizeLimitHandling: Latest accesslog timestamp: {Timestamp} " +
-            "(scanned {Count} entries in {Iterations} iterations)",
-            latestTimestamp, totalEntries, iterations);
+            "(scanned {Count} entries in {Iterations} iterations from {StartingPoint})",
+            latestTimestamp, totalEntries, iterations, startingPoint);
         return latestTimestamp;
     }
+
+    /// <summary>
+    /// The watermark walk's search: the successful write operations at or after a reqStart, or all of them when there
+    /// is none to start from.
+    /// </summary>
+    private static string WriteOperationsFrom(string? fromTimestamp) =>
+        fromTimestamp == null
+            ? WriteOperationsFilter
+            : $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={LdapConnectorUtilities.EscapeLdapFilterValue(fromTimestamp)}))";
 
     /// <summary>
     /// Extracts the latest reqStart timestamp from a search response containing accesslog entries.
