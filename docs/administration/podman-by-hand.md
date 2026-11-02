@@ -122,4 +122,4 @@ The installer does this for you on such a host.
 
 - [Running on Podman](podman.md): how JIM runs on Podman, and operating it day to day.
 - [Deployment Guide](deployment.md): the installer, certificates and reverse proxies.
-- [Deploying with Ansible](deploying-with-ansible.md): the same files, deployed by Red Hat's podman system role.
+- [Deploying on RHEL with Ansible](deploying-with-ansible.md): the same files, deployed by Red Hat's podman system role.

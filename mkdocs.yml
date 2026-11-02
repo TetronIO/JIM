@@ -181,7 +181,7 @@ nav:
       - TLS and Reverse Proxy: administration/tls-and-reverse-proxy.md
       - Running on Podman: administration/podman.md
       - Installing on Podman by Hand: administration/podman-by-hand.md
-      - Deploying with Ansible: administration/deploying-with-ansible.md
+      - Deploying on RHEL with Ansible: administration/deploying-with-ansible.md
       - SSO Setup:
           - administration/sso-setup.md
           - Microsoft Entra ID: administration/sso-setup/microsoft-entra-id.md
