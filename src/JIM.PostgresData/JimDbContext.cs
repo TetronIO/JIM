@@ -415,6 +415,21 @@ public class JimDbContext : DbContext
             .WithMany()
             .OnDelete(DeleteBehavior.SetNull);
 
+        // The references the change record reference fix-up still has to resolve (#2690), which it reads after every
+        // export and import. Partial, because a reference is marked only while its object's id is unwritten, so the
+        // index holds a sliver of a table that grows by tens of millions of rows at customer scale, and the fix-up reads
+        // that sliver instead of every string value of change history. Keyed on the parent attribute change, which the
+        // fix-up joins on to reach the change record's Connected System. Named, so it is a second index beside the
+        // foreign key's own rather than a filter applied to that one; the foreign key's index is declared explicitly
+        // beside it because EF's convention treats any index leading with the foreign key column as covering it,
+        // partial or not, and would otherwise drop the full index the cascade from a deleted attribute change relies on.
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex("ConnectedSystemObjectChangeAttributeId");
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex(["ConnectedSystemObjectChangeAttributeId"], "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasFilter("\"IsUnresolvedReference\"");
+
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);

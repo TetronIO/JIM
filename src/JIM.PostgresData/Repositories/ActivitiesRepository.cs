@@ -71,6 +71,13 @@ public partial class ActivityRepository : IActivityRepository
                     attributeChange.Attribute = null;
                 }
 
+                // Marked as the bulk change record writer marks them (#2690), so the change record reference fix-up
+                // resolves what this path writes too: a snapshot of staged or withdrawn reference values names its
+                // objects by identifier (a DN, where it has one) and carries no object. A reference that carries one is written with its id, and the
+                // save fails if that object has no row, so it is never marked.
+                foreach (var valueChange in attributeChange.ValueChanges)
+                    valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten: valueChange.ReferenceValue != null);
+
                 foreach (var valueChange in attributeChange.ValueChanges.Where(vc => vc.ReferenceValue != null))
                 {
                     severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue!.Id));

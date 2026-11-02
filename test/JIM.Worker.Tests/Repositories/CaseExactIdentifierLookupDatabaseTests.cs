@@ -261,7 +261,8 @@ public class CaseExactIdentifierLookupDatabaseTests
 
     /// <summary>
     /// A target object whose Secondary External ID (a DN, with the given declaration) is stored in upper case, an owner
-    /// object whose unresolved reference names it in lower case, and a change record doing the same.
+    /// object whose unresolved reference names it in lower case, and a change record doing the same, marked unresolved
+    /// as the change record writer leaves it.
     /// </summary>
     private async Task<SeededReference> SeedReferenceAsync(bool secondaryCaseExact)
     {
@@ -321,7 +322,8 @@ public class CaseExactIdentifierLookupDatabaseTests
         };
         var changeValue = new ConnectedSystemObjectChangeAttributeValue
         {
-            Id = Guid.NewGuid(), ConnectedSystemObjectChangeAttribute = memberChange, ValueChangeType = ValueChangeType.Add, StringValue = "cn=joe,dc=panoply"
+            Id = Guid.NewGuid(), ConnectedSystemObjectChangeAttribute = memberChange, ValueChangeType = ValueChangeType.Add, StringValue = "cn=joe,dc=panoply",
+            IsUnresolvedReference = true
         };
         memberChange.ValueChanges.Add(changeValue);
         change.AttributeChanges.Add(memberChange);

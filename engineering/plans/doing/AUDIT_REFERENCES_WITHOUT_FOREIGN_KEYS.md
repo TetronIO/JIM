@@ -433,7 +433,7 @@ These changes land together, in one PR, for surface parity.
 ### Phase 5: Change records write the reference ids they know
 
 - **The writer.** Remove the existence check in `BulkInsertCsoChangeAttributeValuesRawAsync`, and write `ReferenceValueId` whenever the id is known.
-- **The fix-up.** `FixupCrossBatchChangeRecordReferenceIdsAsync` keeps resolving rows that hold only a DN; its query already skips rows that have an id.
+- **The fix-up.** `FixupCrossBatchChangeRecordReferenceIdsAsync` keeps resolving rows that hold only a DN. It reads only the values the writer marks `IsUnresolvedReference` (#2690), and with the id written whenever it is known, the writer marks only values that hold a DN and no id.
 - **Measurement.** Measure the volume drop against Phase 0.
 - **Tests:** a round trip of a reference to an object a later batch writes; Scenario 032.
 

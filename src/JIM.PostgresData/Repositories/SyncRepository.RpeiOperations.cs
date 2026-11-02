@@ -280,7 +280,7 @@ public partial class SyncRepository
         // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
         var allValueChanges = changes
             .SelectMany(c => c.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChange: ac, Value: vc))))
             .ToList();
 
         if (allValueChanges.Count > 0)
@@ -347,7 +347,7 @@ public partial class SyncRepository
         // Step 3: INSERT ConnectedSystemObjectChangeAttributeValue rows
         var allValueChanges = changes
             .SelectMany(c => c.AttributeChanges
-                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChangeId: ac.Id, Value: vc))))
+                .SelectMany(ac => ac.ValueChanges.Select(vc => (AttrChange: ac, Value: vc))))
             .ToList();
 
         if (allValueChanges.Count > 0)
@@ -645,9 +645,6 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import.
-    /// </summary>
-    /// <summary>
     /// Which of the given Connected System Object ids have a row, read on the given connection inside the caller's
     /// transaction, so rows the caller's own transaction wrote count.
     /// </summary>
@@ -669,7 +666,12 @@ public partial class SyncRepository
         return existing;
     }
 
-    private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
+    /// <summary>
+    /// Bulk inserts ConnectedSystemObjectChangeAttributeValue rows using COPY binary import, each under the attribute
+    /// change it belongs to, whose recorded data type decides whether the value is marked as a reference still to
+    /// resolve.
+    /// </summary>
+    private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(ConnectedSystemObjectChangeAttribute AttrChange, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
@@ -677,8 +679,8 @@ public partial class SyncRepository
         // An import pre-generates every new object's id before writing them in batches, so a reference can point at
         // an object a later batch has yet to write (a manager, a nested group): its id is known, its row is not. Its
         // foreign key would fail the whole write with 23503 (#2492, found by Scenario 032), so only references to
-        // rows that exist are written; the rest keep their DN in StringValue, and
-        // FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
+        // rows that exist are written; the rest keep their DN in StringValue, are marked IsUnresolvedReference (#2690),
+        // and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
         // before the COPY below opens, since the connection cannot run another command while it is open.
         var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn, valueChanges
             .Select(vc => vc.Value.ReferenceValue?.Id)
@@ -692,11 +694,21 @@ public partial class SyncRepository
             ) FROM STDIN (FORMAT binary)
             """);
 
-        foreach (var (attrChangeId, v) in valueChanges)
+        // Values below are written in exactly the order of CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues.
+        foreach (var (attrChange, v) in valueChanges)
         {
+            // Write the ReferenceValueId FK only when the referenced CSO's row exists (see the lookup above). With
+            // the two-phase parallel writer (Part C), CSO rows from the current batch are committed before change
+            // records are persisted, so within-batch references are written; references to a future batch are
+            // written as null. A Reference value holding a DN whose id is not written, whether its object is in a
+            // later batch or named no object at all (an import reference that matched nothing yet), is marked for
+            // FixupCrossBatchChangeRecordReferenceIdsAsync to resolve; nothing else is.
+            Guid? writtenReferenceId = v.ReferenceValue?.Id is { } refId && writtenReferenceIds.Contains(refId) ? refId : null;
+            v.SetUnresolvedReferenceMark(attrChange.AttributeType, referenceIdWritten: writtenReferenceId.HasValue);
+
             await writer.StartRowAsync();
             await writer.WriteAsync(v.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
-            await writer.WriteAsync(attrChangeId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(attrChange.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
             await writer.WriteAsync((int)v.ValueChangeType, NpgsqlTypes.NpgsqlDbType.Integer);
             if (v.StringValue is not null)
                 await writer.WriteAsync(v.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
@@ -730,15 +742,11 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // Write the ReferenceValueId FK only when the referenced CSO's row exists (see the lookup above). With
-            // the two-phase parallel writer (Part C), CSO rows from the current batch are committed before change
-            // records are persisted, so within-batch references are written; references to a future batch are
-            // written as null and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them after all batches.
-            var refId = v.ReferenceValue?.Id;
-            if (refId.HasValue && writtenReferenceIds.Contains(refId.Value))
-                await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            if (writtenReferenceId is { } referenceId)
+                await writer.WriteAsync(referenceId, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(v.IsUnresolvedReference, NpgsqlTypes.NpgsqlDbType.Boolean);
             await writer.WriteAsync(v.IsPendingExportStub, NpgsqlTypes.NpgsqlDbType.Boolean);
             if (v.SyncRuleId.HasValue)
                 await writer.WriteAsync(v.SyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);

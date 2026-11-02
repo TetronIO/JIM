@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Diagnostics;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -585,126 +586,198 @@ public partial class SyncRepository
     /// Rows updated per statement by <see cref="FixupCrossBatchChangeRecordReferenceIdsAsync"/> when
     /// the caller does not specify a batch size. Sized so each UPDATE completes comfortably inside
     /// <see cref="PostgresDataRepository.BulkOperationCommandTimeoutSeconds"/>: the Scale500k25kGroups
-    /// run (2026-07-18) showed a single-statement update of 6.5M rows exceeds 300s, while the
-    /// matching join scan alone takes ~17s, so the write side dominates and must be bounded.
+    /// run (2026-07-18) showed a single-statement update of 6.5M rows exceeds 300s, so the write
+    /// side must be bounded however many resolutions the candidate step finds.
     /// </summary>
     private const int DefaultChangeRecordReferenceFixupBatchSize = 250_000;
 
+    /// <summary>
+    /// Spans for the sync write path's Connected System Object stages, from the same source as the Metaverse Object
+    /// stages' (<see cref="MvoActivitySource"/>), picked up by the Worker's diagnostic listener, which listens to every
+    /// source named "JIM.*".
+    /// </summary>
+    private static readonly ActivitySource CsoActivitySource = new("JIM.PostgresData.Sync");
+
     public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
-        // Change record attribute values (ConnectedSystemObjectChangeAttributeValues) store reference
-        // DN strings in StringValue but have ReferenceValueId nulled during COPY binary persistence
-        // to avoid FK violations when the referenced CSO is in a later batch. After all batches
-        // complete, this method resolves those references by matching StringValue against the
-        // secondary external ID attribute values of CSOs in the same Connected System.
+        // Change record attribute values (ConnectedSystemObjectChangeAttributeValues) hold a reference's DN in
+        // StringValue, and its referenced CSO's id in ReferenceValueId when the writer could write it. The writer
+        // cannot when the referenced CSO's row does not exist yet (an import writes new objects in batches with their
+        // ids decided up front, so a reference can name an object a later batch writes) or when the reference named no
+        // object at all (an import reference that matched nothing yet, or an export snapshot naming its objects by
+        // identifier). Every writer marks exactly those values IsUnresolvedReference
+        // (ConnectedSystemObjectChangeAttributeValue.SetUnresolvedReferenceMark), and this method resolves the marked
+        // values of the given Connected System's change records by matching StringValue against the secondary external
+        // ID attribute values of CSOs in the same Connected System: ignoring case per RFC 4514, hence the LOWER()
+        // comparison, unless the target's attribute is case-exact (#2051). Writing the id clears the mark.
         //
-        // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
-        // column on change records; the DN is stored in StringValue alongside regular string values.
-        // The resolution is safe because it only matches when StringValue equals a secondary external
-        // ID value (ignoring case per RFC 4514, hence the LOWER() comparison, unless the target's attribute
-        // is case-exact, #2051), so non-reference string values are naturally excluded by the JOIN.
+        // Only marked values are read (#2690), through the partial index on the mark, so the candidate step costs what
+        // is outstanding rather than a scan of every string value of change history (19.8 million rows, 20 to 40 s a
+        // run, on a 500,000-object database). A value whose id was written is never marked, so when its referenced
+        // CSO is later deleted and the foreign key's ON DELETE SET NULL clears the id, it keeps the DN it was recorded
+        // with and is not re-pointed at a later object that reuses the DN. A marked value that matches no CSO stays
+        // marked and is evaluated again by the next invocation, since its object may arrive in a later run.
         //
-        // Executed in two phases because a single UPDATE does not survive customer scale: the
-        // Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync and export stages
-        // and the previous single-statement UPDATE blew the bulk command timeout, hard-failing the
-        // confirming import. Phase 1 runs the expensive join once, materialising every resolution
-        // into a session-local temp table. Phase 2 applies them in bounded batches, each a separate
-        // auto-committed statement well inside the timeout. Partial progress is durable and the
-        // operation is idempotent (resolved rows drop out of the phase 1 join), so a failure part
-        // way through simply leaves less for the next invocation. The temp table only ever selects
-        // resolvable rows, so unresolvable DNs (deleted targets, placeholder members) cannot cause
-        // repeat work here; they are re-evaluated on the next invocation.
+        // The candidate step must not depend on the tables' statistics, because they are routinely stale exactly when
+        // it matters: an initial export writes thousands of marked references to objects it provisioned in the same
+        // run, and the statistics were last gathered (by autovacuum, during the import and synchronisation) while the
+        // target Connected System had no objects and nothing was marked. Planned as one join, the marked values and the
+        // target's objects were then each estimated at one row, and the planner paired every marked value with every
+        // target object, the LOWER() match a filter over the product rather than a lookup: Scenario 032 at Medium ran
+        // into the 300 s statement timeout during the export, and 12,000 marked values against 6,000 objects take 64 s
+        // (ChangeRecordReferenceFixupStaleStatisticsDatabaseTests). So the candidate step runs in three statements:
+        // 1. Read the Connected System's marked values into a session temp table. The partial index is the statement's
+        //    only selective condition, and every plan measured drives from it, probing each marked value's change
+        //    record by primary key. Nothing marked, which is the usual case, ends the method here without reading the
+        //    target side at all.
+        // 2. Index the temp table on the folded value and ANALYZE it, so the planner knows exactly how many marked
+        //    values there are. The index makes every join order a lookup: driven from the marked values it probes the
+        //    target's LOWER() index, and driven from the target's objects (still misestimated) it probes this one.
+        // 3. Join the temp table to the target side for the resolutions, with the same case-exact rule.
         //
-        // The temp table is scoped to the underlying connection, so every command below must run on
-        // the same physical connection: the RawSqlConnectionLease holds it open for the duration and
-        // Npgsql's pool reset (DISCARD ALL) clears any leftovers if we fail before the drop.
+        // The resolutions are applied in bounded batches because a single UPDATE does not survive
+        // customer scale: the Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync
+        // and export stages and a single-statement UPDATE blew the bulk command timeout, hard-failing
+        // the confirming import. Each batch is a separate auto-committed statement well inside the
+        // timeout. Partial progress is durable and the operation is idempotent (a resolved row loses
+        // its mark, so it drops out of the next candidate step), so a failure part way through simply
+        // leaves less for the next invocation.
+        //
+        // The temp tables are scoped to the underlying connection, so every command below must run on
+        // the same physical connection: the RawSqlConnectionLease holds it open for the duration. Both
+        // are dropped first and on every return; a failure part way leaves them to the next call's
+        // leading drop, or to Npgsql's pool reset (DISCARD ALL) when the connection goes back to the pool.
         var effectiveBatchSize = batchSize ?? DefaultChangeRecordReferenceFixupBatchSize;
         if (effectiveBatchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
+        using var resolveSpan = CsoActivitySource.StartActivity("Cso.ResolveChangeReferences");
+        resolveSpan?.SetTag("connectedSystemId", connectedSystemId);
+
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
-        const string tempTableName = "_jim_change_record_reference_fixup";
+        const string markedTableName = "_jim_change_record_reference_marked";
+        const string resolutionsTableName = "_jim_change_record_reference_fixup";
 
-        await using (var dropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
+        async Task<int> ExecuteAsync(string sql)
         {
-            dropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            await dropCmd.ExecuteNonQueryAsync();
+            await using var command = new NpgsqlCommand(sql, npgsqlConn);
+            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            if (sql.Contains("@connectedSystemId", StringComparison.Ordinal))
+                command.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
+            return await command.ExecuteNonQueryAsync();
         }
 
-        await using (var createCmd = new NpgsqlCommand($"""
-            CREATE TEMP TABLE "{tempTableName}" AS
-            SELECT row_number() OVER () AS rn, s.cav_id, s.target_id
-            FROM (
-                SELECT cav."Id" AS cav_id, target_cso."Id" AS target_id
+        async Task<long> CountAsync(string tableName)
+        {
+            await using var command = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tableName}";""", npgsqlConn);
+            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            return (long)(await command.ExecuteScalarAsync() ?? 0L);
+        }
+
+        Task DropTempTablesAsync() =>
+            ExecuteAsync($"""DROP TABLE IF EXISTS "{markedTableName}"; DROP TABLE IF EXISTS "{resolutionsTableName}";""");
+
+        long markedCount;
+        long candidateCount = 0;
+        using (var findSpan = CsoActivitySource.StartActivity("Cso.ResolveChangeReferences.FindCandidates"))
+        {
+            await DropTempTablesAsync();
+
+            // The mark alone says the value is a reference still to resolve: the writers set it only on values of a
+            // Reference attribute holding a DN and written without the id. The id test is belt and braces, so this
+            // only ever fills in a missing id and never replaces one.
+            await ExecuteAsync($"""
+                CREATE TEMP TABLE "{markedTableName}" AS
+                SELECT cav."Id" AS cav_id, cav."StringValue" AS string_value, LOWER(cav."StringValue") AS lower_value
                 FROM "ConnectedSystemObjectChangeAttributeValues" cav
-                JOIN "ConnectedSystemObjectChangeAttributes" ca ON cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
+                JOIN "ConnectedSystemObjectChangeAttributes" ca ON ca."Id" = cav."ConnectedSystemObjectChangeAttributeId"
                 JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
-                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = @connectedSystemId
-                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
-                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
-                    AND target_attr."IsSecondaryExternalId" = true
-                WHERE cc."ConnectedSystemId" = @connectedSystemId
-                  AND ca."AttributeType" = @referenceAttributeType
-                  AND cav."StringValue" IS NOT NULL
+                WHERE cav."IsUnresolvedReference"
                   AND cav."ReferenceValueId" IS NULL
-                  AND target_av."StringValue" IS NOT NULL
-                  AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
-                  AND (NOT target_attr."CaseExact" OR cav."StringValue" = target_av."StringValue")
-            ) s;
-            """, npgsqlConn))
-        {
-            createCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            createCmd.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
-            createCmd.Parameters.AddWithValue("referenceAttributeType", (int)AttributeDataType.Reference);
-            await createCmd.ExecuteNonQueryAsync();
-        }
+                  AND cc."ConnectedSystemId" = @connectedSystemId;
+                """);
+            markedCount = await CountAsync(markedTableName);
+            findSpan?.SetTag("markedCount", markedCount);
 
-        await using (var indexCmd = new NpgsqlCommand($"""CREATE INDEX ON "{tempTableName}" (rn);""", npgsqlConn))
-        {
-            indexCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            await indexCmd.ExecuteNonQueryAsync();
-        }
-
-        long totalToResolve;
-        await using (var countCmd = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tempTableName}";""", npgsqlConn))
-        {
-            countCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            totalToResolve = (long)(await countCmd.ExecuteScalarAsync() ?? 0L);
-        }
-
-        var totalResolved = 0;
-        if (totalToResolve > 0)
-        {
-            await using var updateCmd = new NpgsqlCommand($"""
-                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
-                SET "ReferenceValueId" = f.target_id
-                FROM "{tempTableName}" f
-                WHERE f.rn > @rangeStart AND f.rn <= @rangeEnd
-                  AND cav."Id" = f.cav_id
-                """, npgsqlConn);
-            updateCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            var rangeStartParam = updateCmd.Parameters.Add("rangeStart", NpgsqlTypes.NpgsqlDbType.Bigint);
-            var rangeEndParam = updateCmd.Parameters.Add("rangeEnd", NpgsqlTypes.NpgsqlDbType.Bigint);
-
-            for (long rangeStart = 0; rangeStart < totalToResolve; rangeStart += effectiveBatchSize)
+            if (markedCount > 0)
             {
-                rangeStartParam.Value = rangeStart;
-                rangeEndParam.Value = rangeStart + effectiveBatchSize;
-                totalResolved += await updateCmd.ExecuteNonQueryAsync();
-                Log.Information("FixupCrossBatchChangeRecordReferenceIdsAsync: Resolved {Resolved:N0} of {Total:N0} change record references for Connected System {ConnectedSystemId}",
-                    totalResolved, totalToResolve, connectedSystemId);
+                await ExecuteAsync($"""
+                    CREATE INDEX ON "{markedTableName}" (lower_value);
+                    ANALYZE "{markedTableName}";
+                    """);
+
+                await ExecuteAsync($"""
+                    CREATE TEMP TABLE "{resolutionsTableName}" AS
+                    SELECT row_number() OVER () AS rn, s.cav_id, s.target_id
+                    FROM (
+                        SELECT m.cav_id, target_cso."Id" AS target_id
+                        FROM "{markedTableName}" m
+                        JOIN "ConnectedSystemObjectAttributeValues" target_av ON LOWER(target_av."StringValue") = m.lower_value
+                        JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                            AND target_attr."IsSecondaryExternalId" = true
+                        JOIN "ConnectedSystemObjects" target_cso ON target_cso."Id" = target_av."ConnectedSystemObjectId"
+                            AND target_cso."ConnectedSystemId" = @connectedSystemId
+                        WHERE NOT target_attr."CaseExact" OR m.string_value = target_av."StringValue"
+                    ) s;
+                    CREATE INDEX ON "{resolutionsTableName}" (rn);
+                    """);
+                candidateCount = await CountAsync(resolutionsTableName);
             }
+
+            findSpan?.SetTag("candidateCount", candidateCount);
         }
 
-        await using (var finalDropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
+        resolveSpan?.SetTag("markedCount", markedCount);
+        resolveSpan?.SetTag("candidateCount", candidateCount);
+
+        if (markedCount == 0)
         {
-            finalDropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            await finalDropCmd.ExecuteNonQueryAsync();
+            await DropTempTablesAsync();
+            resolveSpan?.SetTag("resolvedCount", 0);
+            return 0;
         }
 
-        return totalResolved;
+        var resolvedCount = 0;
+        using (var applySpan = CsoActivitySource.StartActivity("Cso.ResolveChangeReferences.Apply"))
+        {
+            if (candidateCount > 0)
+            {
+                // Joined to the change values by primary key and nothing else, so each batch is one index probe per
+                // resolution whatever the statistics say. A predicate on the mark here would hand the planner the
+                // partial index, estimated (staleness again) at one row, to drive the join from, and it then rescans
+                // the batch once per marked value: 12,000 resolutions took 25 s that way. A value matching two objects
+                // with the same DN, which only a duplicated Secondary External ID produces, has two resolutions and
+                // takes one of them; when they fall in different batches it is updated, and counted, twice.
+                await using var updateCmd = new NpgsqlCommand($"""
+                    UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
+                    SET "ReferenceValueId" = f.target_id, "IsUnresolvedReference" = false
+                    FROM "{resolutionsTableName}" f
+                    WHERE f.rn > @rangeStart AND f.rn <= @rangeEnd
+                      AND cav."Id" = f.cav_id
+                    """, npgsqlConn);
+                updateCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+                var rangeStartParam = updateCmd.Parameters.Add("rangeStart", NpgsqlTypes.NpgsqlDbType.Bigint);
+                var rangeEndParam = updateCmd.Parameters.Add("rangeEnd", NpgsqlTypes.NpgsqlDbType.Bigint);
+
+                for (long rangeStart = 0; rangeStart < candidateCount; rangeStart += effectiveBatchSize)
+                {
+                    rangeStartParam.Value = rangeStart;
+                    rangeEndParam.Value = rangeStart + effectiveBatchSize;
+                    resolvedCount += await updateCmd.ExecuteNonQueryAsync();
+                    Log.Information("FixupCrossBatchChangeRecordReferenceIdsAsync: Resolved {Resolved:N0} of {Total:N0} change record references for Connected System {ConnectedSystemId}",
+                        resolvedCount, candidateCount, connectedSystemId);
+                }
+            }
+
+            applySpan?.SetTag("resolvedCount", resolvedCount);
+        }
+
+        await DropTempTablesAsync();
+
+        resolveSpan?.SetTag("resolvedCount", resolvedCount);
+        return resolvedCount;
     }
 
     #endregion

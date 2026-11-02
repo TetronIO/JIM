@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Globalization;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 namespace JIM.Models.Staging;
 
@@ -51,6 +52,20 @@ public class ConnectedSystemObjectChangeAttributeValue
     public bool IsPendingExportStub { get; set; }
 
     /// <summary>
+    /// True while this value is a reference whose referenced Connected System Object is known only by the identifier in
+    /// <see cref="StringValue"/> (such as its distinguished name), because the object's id was not recorded with it.
+    /// Such a reference may still be resolved to the object later; a reference recorded with the object's id never is,
+    /// even after that object is deleted.
+    /// </summary>
+    /// <remarks>
+    /// Set as the value is written, by <see cref="SetUnresolvedReferenceMark"/>, and cleared by the change record
+    /// reference fix-up when it writes the id (#2690). The fix-up reads only marked values, so it neither rescans every
+    /// string value of change history on each run nor re-points a reference whose object was deleted (the foreign key
+    /// clears the id and leaves the identifier) at a later object that reuses the identifier.
+    /// </remarks>
+    public bool IsUnresolvedReference { get; set; }
+
+    /// <summary>
     /// The export Synchronisation Rule whose mapping produced this value, copied from
     /// <see cref="JIM.Models.Transactional.PendingExportAttributeValueChange.SyncRuleId"/> by
     /// <c>JIM.Application.Utilities.ExportChangeHistoryBuilder</c>. Deliberately a soft pointer: no
@@ -67,6 +82,19 @@ public class ConnectedSystemObjectChangeAttributeValue
     /// </summary>
     public string? SyncRuleName { get; set; }
     #endregion
+
+    /// <summary>
+    /// Sets <see cref="IsUnresolvedReference"/> as the value is written: a value of a Reference attribute that holds an
+    /// identifier in <see cref="StringValue"/> is marked when its referenced object's id is not written with it, and
+    /// nothing else is marked. Every writer of change values calls this, so they agree on which values the change
+    /// record reference fix-up resolves.
+    /// </summary>
+    /// <param name="attributeType">The data type recorded on the change attribute this value belongs to.</param>
+    /// <param name="referenceIdWritten">Whether the referenced object's id is written with the value; false when there
+    /// is no referenced object, or when its row does not exist yet (an import writes its new objects in batches with
+    /// their ids decided up front, so a reference can name an object a later batch writes).</param>
+    public void SetUnresolvedReferenceMark(AttributeDataType attributeType, bool referenceIdWritten) =>
+        IsUnresolvedReference = attributeType == AttributeDataType.Reference && StringValue != null && !referenceIdWritten;
 
     public override string ToString()
     {

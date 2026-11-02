@@ -40,6 +40,6 @@ internal static class CsoChangeBulkColumns
         "Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType",
         "StringValue", "DateTimeValue", "IntValue", "LongValue",
         "DecimalValue", "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
-        "IsPendingExportStub", "SyncRuleId", "SyncRuleName"
+        "IsUnresolvedReference", "IsPendingExportStub", "SyncRuleId", "SyncRuleName"
     ];
 }

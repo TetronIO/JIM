@@ -76,9 +76,9 @@ public class ChangeRecordReferenceFixupDatabaseTests
 
     /// <summary>
     /// Seeds a target Connected System holding user CSOs whose secondary external ID attribute
-    /// carries their DN, plus change records with reference values stored as DN strings and
-    /// <c>ReferenceValueId</c> nulled, mirroring the state binary COPY persistence leaves for the
-    /// fixup to resolve. Also seeds rows the fixup must NOT touch: unresolvable DNs, a text-typed
+    /// carries their DN, plus change records with reference values stored as DN strings,
+    /// <c>ReferenceValueId</c> nulled and the unresolved reference mark set, mirroring the state
+    /// binary COPY persistence leaves for the fixup to resolve. Also seeds rows the fixup must NOT touch: unresolvable DNs, a text-typed
     /// change value whose string equals a real DN, and a matching value on another Connected System.
     /// </summary>
     private async Task<FixupSeed> SeedChangeRecordsWithUnresolvedReferencesAsync(int resolvableCount)
@@ -154,7 +154,8 @@ public class ChangeRecordReferenceFixupDatabaseTests
             Id = Guid.NewGuid(),
             ConnectedSystemObjectChangeAttribute = memberChangeAttr,
             ValueChangeType = ValueChangeType.Add,
-            StringValue = dn.ToLowerInvariant()
+            StringValue = dn.ToLowerInvariant(),
+            IsUnresolvedReference = true
         }).ToList();
         memberChangeAttr.ValueChanges.AddRange(resolvableValues);
         var resolvableValueIds = resolvableValues.Select(v => v.Id).ToList();
@@ -169,14 +170,15 @@ public class ChangeRecordReferenceFixupDatabaseTests
                 Id = Guid.NewGuid(),
                 ConnectedSystemObjectChangeAttribute = memberChangeAttr,
                 ValueChangeType = ValueChangeType.Add,
-                StringValue = $"CN=Ghost{i},OU=People,DC=glitterband,DC=local"
+                StringValue = $"CN=Ghost{i},OU=People,DC=glitterband,DC=local",
+                IsUnresolvedReference = true
             };
             memberChangeAttr.ValueChanges.Add(value);
             unresolvableValueIds.Add(value.Id);
         }
 
-        // A text-typed change value whose string happens to equal a real DN; the AttributeType
-        // filter must exclude it.
+        // A text-typed change value whose string happens to equal a real DN. The change record writer
+        // never marks a Text value as an unresolved reference (#2690), so the fixup must not touch it.
         var descriptionChangeAttr = new ConnectedSystemObjectChangeAttribute
         {
             Id = Guid.NewGuid(),
@@ -217,7 +219,8 @@ public class ChangeRecordReferenceFixupDatabaseTests
             Id = Guid.NewGuid(),
             ConnectedSystemObjectChangeAttribute = otherChangeAttr,
             ValueChangeType = ValueChangeType.Add,
-            StringValue = csoIdsByDn.Keys.First()
+            StringValue = csoIdsByDn.Keys.First(),
+            IsUnresolvedReference = true
         };
         otherChangeAttr.ValueChanges.Add(otherSystemValue);
         otherChange.AttributeChanges.Add(otherChangeAttr);
