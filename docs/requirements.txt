@@ -10,5 +10,5 @@
 # 5 May 2027) and MkDocs 2.0 is incompatible with it, so nothing here may float onto a
 # major. The planned move is to Zensical once its 0.1 release line ships.
 mkdocs==1.6.1
-mkdocs-material==9.7.7
-mkdocs-glightbox==0.5.2
+mkdocs-material==9.8.0
+mkdocs-glightbox==0.5.3
