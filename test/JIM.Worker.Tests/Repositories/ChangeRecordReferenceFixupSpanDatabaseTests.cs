@@ -88,8 +88,9 @@ public class ChangeRecordReferenceFixupSpanDatabaseTests
             {
                 "Cso.ResolveChangeReferences.FindCandidates", "Cso.ResolveChangeReferences.Apply"
             }), "one child for finding the resolutions and one for applying them");
-            Assert.That(children.Single(s => s.DisplayName == "Cso.ResolveChangeReferences.FindCandidates").GetTagItem("candidateCount"),
-                Is.EqualTo(1), "the finding step reports what it found");
+            var find = children.Single(s => s.DisplayName == "Cso.ResolveChangeReferences.FindCandidates");
+            Assert.That(find.GetTagItem("markedCount"), Is.EqualTo(2), "the finding step reports how many marked values it read");
+            Assert.That(find.GetTagItem("candidateCount"), Is.EqualTo(1), "the finding step reports what it found");
             Assert.That(children.Single(s => s.DisplayName == "Cso.ResolveChangeReferences.Apply").GetTagItem("resolvedCount"),
                 Is.EqualTo(1), "the applying step reports what it resolved");
         }

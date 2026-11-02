@@ -618,19 +618,35 @@ public partial class SyncRepository
         // with and is not re-pointed at a later object that reuses the DN. A marked value that matches no CSO stays
         // marked and is evaluated again by the next invocation, since its object may arrive in a later run.
         //
-        // Executed in two phases because a single UPDATE does not survive customer scale: the
-        // Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync and export stages
-        // and the previous single-statement UPDATE blew the bulk command timeout, hard-failing the
-        // confirming import. Phase 1 runs the matching join once, materialising every resolution
-        // into a session-local temp table. Phase 2 applies them in bounded batches, each a separate
-        // auto-committed statement well inside the timeout. Partial progress is durable and the
-        // operation is idempotent (a resolved row loses its mark, so it drops out of the phase 1 join
-        // and is skipped by any later batch naming it again), so a failure part way through simply
+        // The candidate step must not depend on the tables' statistics, because they are routinely stale exactly when
+        // it matters: an initial export writes thousands of marked references to objects it provisioned in the same
+        // run, and the statistics were last gathered (by autovacuum, during the import and synchronisation) while the
+        // target Connected System had no objects and nothing was marked. Planned as one join, the marked values and the
+        // target's objects were then each estimated at one row, and the planner paired every marked value with every
+        // target object, the LOWER() match a filter over the product rather than a lookup: Scenario 032 at Medium ran
+        // into the 300 s statement timeout during the export, and 12,000 marked values against 6,000 objects take 64 s
+        // (ChangeRecordReferenceFixupStaleStatisticsDatabaseTests). So the candidate step runs in three statements:
+        // 1. Read the Connected System's marked values into a session temp table. The partial index is the statement's
+        //    only selective condition, and every plan measured drives from it, probing each marked value's change
+        //    record by primary key. Nothing marked, which is the usual case, ends the method here without reading the
+        //    target side at all.
+        // 2. Index the temp table on the folded value and ANALYZE it, so the planner knows exactly how many marked
+        //    values there are. The index makes every join order a lookup: driven from the marked values it probes the
+        //    target's LOWER() index, and driven from the target's objects (still misestimated) it probes this one.
+        // 3. Join the temp table to the target side for the resolutions, with the same case-exact rule.
+        //
+        // The resolutions are applied in bounded batches because a single UPDATE does not survive
+        // customer scale: the Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync
+        // and export stages and a single-statement UPDATE blew the bulk command timeout, hard-failing
+        // the confirming import. Each batch is a separate auto-committed statement well inside the
+        // timeout. Partial progress is durable and the operation is idempotent (a resolved row loses
+        // its mark, so it drops out of the next candidate step), so a failure part way through simply
         // leaves less for the next invocation.
         //
-        // The temp table is scoped to the underlying connection, so every command below must run on
-        // the same physical connection: the RawSqlConnectionLease holds it open for the duration and
-        // Npgsql's pool reset (DISCARD ALL) clears any leftovers if we fail before the drop.
+        // The temp tables are scoped to the underlying connection, so every command below must run on
+        // the same physical connection: the RawSqlConnectionLease holds it open for the duration. Both
+        // are dropped first and on every return; a failure part way leaves them to the next call's
+        // leading drop, or to Npgsql's pool reset (DISCARD ALL) when the connection goes back to the pool.
         var effectiveBatchSize = batchSize ?? DefaultChangeRecordReferenceFixupBatchSize;
         if (effectiveBatchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
@@ -641,59 +657,86 @@ public partial class SyncRepository
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
-        const string tempTableName = "_jim_change_record_reference_fixup";
+        const string markedTableName = "_jim_change_record_reference_marked";
+        const string resolutionsTableName = "_jim_change_record_reference_fixup";
 
-        long candidateCount;
+        async Task<int> ExecuteAsync(string sql)
+        {
+            await using var command = new NpgsqlCommand(sql, npgsqlConn);
+            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            if (sql.Contains("@connectedSystemId", StringComparison.Ordinal))
+                command.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
+            return await command.ExecuteNonQueryAsync();
+        }
+
+        async Task<long> CountAsync(string tableName)
+        {
+            await using var command = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tableName}";""", npgsqlConn);
+            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            return (long)(await command.ExecuteScalarAsync() ?? 0L);
+        }
+
+        Task DropTempTablesAsync() =>
+            ExecuteAsync($"""DROP TABLE IF EXISTS "{markedTableName}"; DROP TABLE IF EXISTS "{resolutionsTableName}";""");
+
+        long markedCount;
+        long candidateCount = 0;
         using (var findSpan = CsoActivitySource.StartActivity("Cso.ResolveChangeReferences.FindCandidates"))
         {
-            await using (var dropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
-            {
-                dropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-                await dropCmd.ExecuteNonQueryAsync();
-            }
+            await DropTempTablesAsync();
 
             // The mark alone says the value is a reference still to resolve: the writers set it only on values of a
             // Reference attribute holding a DN and written without the id. The id test is belt and braces, so this
             // only ever fills in a missing id and never replaces one.
-            await using (var createCmd = new NpgsqlCommand($"""
-                CREATE TEMP TABLE "{tempTableName}" AS
-                SELECT row_number() OVER () AS rn, s.cav_id, s.target_id
-                FROM (
-                    SELECT cav."Id" AS cav_id, target_cso."Id" AS target_id
-                    FROM "ConnectedSystemObjectChangeAttributeValues" cav
-                    JOIN "ConnectedSystemObjectChangeAttributes" ca ON cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
-                    JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
-                    JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = @connectedSystemId
-                    JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
-                    JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
-                        AND target_attr."IsSecondaryExternalId" = true
-                    WHERE cav."IsUnresolvedReference"
-                      AND cav."ReferenceValueId" IS NULL
-                      AND cc."ConnectedSystemId" = @connectedSystemId
-                      AND target_av."StringValue" IS NOT NULL
-                      AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
-                      AND (NOT target_attr."CaseExact" OR cav."StringValue" = target_av."StringValue")
-                ) s;
-                """, npgsqlConn))
-            {
-                createCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-                createCmd.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
-                await createCmd.ExecuteNonQueryAsync();
-            }
+            await ExecuteAsync($"""
+                CREATE TEMP TABLE "{markedTableName}" AS
+                SELECT cav."Id" AS cav_id, cav."StringValue" AS string_value, LOWER(cav."StringValue") AS lower_value
+                FROM "ConnectedSystemObjectChangeAttributeValues" cav
+                JOIN "ConnectedSystemObjectChangeAttributes" ca ON ca."Id" = cav."ConnectedSystemObjectChangeAttributeId"
+                JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
+                WHERE cav."IsUnresolvedReference"
+                  AND cav."ReferenceValueId" IS NULL
+                  AND cc."ConnectedSystemId" = @connectedSystemId;
+                """);
+            markedCount = await CountAsync(markedTableName);
+            findSpan?.SetTag("markedCount", markedCount);
 
-            await using (var indexCmd = new NpgsqlCommand($"""CREATE INDEX ON "{tempTableName}" (rn);""", npgsqlConn))
+            if (markedCount > 0)
             {
-                indexCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-                await indexCmd.ExecuteNonQueryAsync();
-            }
+                await ExecuteAsync($"""
+                    CREATE INDEX ON "{markedTableName}" (lower_value);
+                    ANALYZE "{markedTableName}";
+                    """);
 
-            await using (var countCmd = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tempTableName}";""", npgsqlConn))
-            {
-                countCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-                candidateCount = (long)(await countCmd.ExecuteScalarAsync() ?? 0L);
+                await ExecuteAsync($"""
+                    CREATE TEMP TABLE "{resolutionsTableName}" AS
+                    SELECT row_number() OVER () AS rn, s.cav_id, s.target_id
+                    FROM (
+                        SELECT m.cav_id, target_cso."Id" AS target_id
+                        FROM "{markedTableName}" m
+                        JOIN "ConnectedSystemObjectAttributeValues" target_av ON LOWER(target_av."StringValue") = m.lower_value
+                        JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                            AND target_attr."IsSecondaryExternalId" = true
+                        JOIN "ConnectedSystemObjects" target_cso ON target_cso."Id" = target_av."ConnectedSystemObjectId"
+                            AND target_cso."ConnectedSystemId" = @connectedSystemId
+                        WHERE NOT target_attr."CaseExact" OR m.string_value = target_av."StringValue"
+                    ) s;
+                    CREATE INDEX ON "{resolutionsTableName}" (rn);
+                    """);
+                candidateCount = await CountAsync(resolutionsTableName);
             }
 
             findSpan?.SetTag("candidateCount", candidateCount);
+        }
+
+        resolveSpan?.SetTag("markedCount", markedCount);
+        resolveSpan?.SetTag("candidateCount", candidateCount);
+
+        if (markedCount == 0)
+        {
+            await DropTempTablesAsync();
+            resolveSpan?.SetTag("resolvedCount", 0);
+            return 0;
         }
 
         var resolvedCount = 0;
@@ -701,15 +744,18 @@ public partial class SyncRepository
         {
             if (candidateCount > 0)
             {
-                // Only a still-marked row is updated, so a value matching two objects with the same DN (two rows in
-                // the temp table, possibly in different batches) is resolved and counted once.
+                // Joined to the change values by primary key and nothing else, so each batch is one index probe per
+                // resolution whatever the statistics say. A predicate on the mark here would hand the planner the
+                // partial index, estimated (staleness again) at one row, to drive the join from, and it then rescans
+                // the batch once per marked value: 12,000 resolutions took 25 s that way. A value matching two objects
+                // with the same DN, which only a duplicated Secondary External ID produces, has two resolutions and
+                // takes one of them; when they fall in different batches it is updated, and counted, twice.
                 await using var updateCmd = new NpgsqlCommand($"""
                     UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
                     SET "ReferenceValueId" = f.target_id, "IsUnresolvedReference" = false
-                    FROM "{tempTableName}" f
+                    FROM "{resolutionsTableName}" f
                     WHERE f.rn > @rangeStart AND f.rn <= @rangeEnd
                       AND cav."Id" = f.cav_id
-                      AND cav."IsUnresolvedReference"
                     """, npgsqlConn);
                 updateCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
                 var rangeStartParam = updateCmd.Parameters.Add("rangeStart", NpgsqlTypes.NpgsqlDbType.Bigint);
@@ -728,13 +774,8 @@ public partial class SyncRepository
             applySpan?.SetTag("resolvedCount", resolvedCount);
         }
 
-        await using (var finalDropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
-        {
-            finalDropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            await finalDropCmd.ExecuteNonQueryAsync();
-        }
+        await DropTempTablesAsync();
 
-        resolveSpan?.SetTag("candidateCount", candidateCount);
         resolveSpan?.SetTag("resolvedCount", resolvedCount);
         return resolvedCount;
     }

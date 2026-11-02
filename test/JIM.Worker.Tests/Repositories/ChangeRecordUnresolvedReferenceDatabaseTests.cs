@@ -9,6 +9,7 @@ using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Repositories;
@@ -47,10 +48,12 @@ public class ChangeRecordUnresolvedReferenceDatabaseTests
     [SetUp]
     public async Task SetUpAsync() => await PostgresTestDatabase.ResetAsync(_connectionString);
 
-    private JimDbContext NewContext()
+    private JimDbContext NewContext() => NewContext(_connectionString);
+
+    private static JimDbContext NewContext(string connectionString)
     {
         var options = new DbContextOptionsBuilder<JimDbContext>()
-            .UseNpgsql(_connectionString)
+            .UseNpgsql(connectionString)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
         return new JimDbContext(options);
@@ -228,6 +231,35 @@ public class ChangeRecordUnresolvedReferenceDatabaseTests
             Assert.That(stored.StringValue, Is.EqualTo(ManagerDn), "the DN the value was recorded with is kept");
             Assert.That(stored.IsUnresolvedReference, Is.False, "a reference once resolved is never read as unresolved again");
         }
+    }
+
+    /// <summary>
+    /// The common case after most runs: nothing is marked, so the fix-up must not read the target side at all (#2690).
+    /// Another session holds the target side's tables exclusively, so a statement that so much as names them waits,
+    /// and the fix-up's short lock timeout turns that wait into a failure rather than a hang.
+    /// </summary>
+    [Test]
+    public async Task FixupCrossBatchChangeRecordReferenceIdsAsync_NothingMarked_DoesNotTouchTheTargetSideAsync()
+    {
+        var seed = await SeedSystemAsync();
+        var managerId = await AddPersonAsync(seed, ManagerDn);
+        await WriteValueAsync(seed, seed.Manager, ManagerDn, managerId);
+        await WriteValueAsync(seed, seed.Description, ManagerDn, referencedObjectId: null);
+
+        await using var locker = new NpgsqlConnection(_connectionString);
+        await locker.OpenAsync();
+        await using var lockTransaction = await locker.BeginTransactionAsync();
+        await using (var lockCommand = new NpgsqlCommand(
+            """LOCK TABLE "ConnectedSystemObjects", "ConnectedSystemObjectAttributeValues", "ConnectedSystemAttributes" IN ACCESS EXCLUSIVE MODE""",
+            locker, lockTransaction))
+            await lockCommand.ExecuteNonQueryAsync();
+
+        var shortLockTimeout = new NpgsqlConnectionStringBuilder(_connectionString) { Options = "-c lock_timeout=2s" };
+        int resolved;
+        await using (var ctx = NewContext(shortLockTimeout.ConnectionString))
+            resolved = await new PostgresDataRepository(ctx).Sync.FixupCrossBatchChangeRecordReferenceIdsAsync(seed.SystemId);
+
+        Assert.That(resolved, Is.Zero, "with nothing marked there is nothing to resolve, and nothing to read it from");
     }
 
     /// <summary>
