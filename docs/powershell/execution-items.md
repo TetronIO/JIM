@@ -349,6 +349,7 @@ Get-JIMActivityExecutionItem -Id "b2c3d4e5-f6a7-8901-bcde-f12345678901" -Consequ
 
 ## :material-book-open-variant-outline: See also
 
-- [Activities](activities.md): cmdlets for Activities, a run's statistics, and its child Activities
+- [Activities](activities.md): cmdlets for Activities and their child Activities
+- [Activity Statistics](activity-statistics.md): the cmdlet for a run's statistics
 - [Causality](../configuration/causality.md): what caused a change, and what it went on to cause, in the portal
 - [Run Profiles](run-profiles.md): cmdlets for managing and executing synchronisation Run Profiles
