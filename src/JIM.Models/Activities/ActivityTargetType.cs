@@ -145,5 +145,18 @@ public enum ActivityTargetType
     /// so an initial load of thousands of Users is one row rather than thousands. Attributed to the key; the journal
     /// holds the request-by-request detail.
     /// </summary>
-    ScimRequests = 26
+    ScimRequests = 26,
+
+    /// <summary>
+    /// An Exchange recipient change for one directory account (#2021): the mailbox, mail user, mail contact or
+    /// mail-enabled group its Synchronisation Rule declares, made in Exchange after the export that wrote the account.
+    /// A follow-up of that export's Run Profile Execution Item (<see cref="Activity.ParentRunProfileExecutionItemId"/>),
+    /// with <see cref="Activity.ConnectedSystemId"/> and <see cref="Activity.ConnectedSystemObjectId"/> naming the
+    /// account; staging, refusals, supersessions and delivery attempts are all recorded under it.
+    /// <para>
+    /// Categorised as identity data, beside <see cref="ConnectedSystemObject"/>: it changes an account, carries no
+    /// credential, and is kept for the general history period like the export item it hangs from.
+    /// </para>
+    /// </summary>
+    ExchangeRecipient = 27
 }

@@ -26,6 +26,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     // Read once per export connection, never assumed: a directory that does not understand the (critical) control
     // refuses every modify carrying it.
     private bool _exportDirectoryAdvertisesPermissiveModify;
+
+    /// <summary>
+    /// The RootDSE <c>dnsHostName</c> of the server the export connection is bound to, read by
+    /// <see cref="OpenExportConnection"/> and named on every result written over it (#2021, decision D3). Null before
+    /// the connection opens, after it closes, and for a directory whose RootDSE does not say.
+    /// </summary>
+    private string? _exportDirectoryServer;
+
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -1053,6 +1061,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     {
         _exportSettings = settings;
         _exportDirectoryAdvertisesPermissiveModify = false;
+        _exportDirectoryServer = null;
 
         // Reuse the same connection logic as import
         OpenImportConnection(settings.ToList(), persistedConnectorData, Log.Logger);
@@ -1063,6 +1072,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
             _directoryType = rootDse.DirectoryType;
             _exportDirectoryAdvertisesPermissiveModify = rootDse.AdvertisesPermissiveModify;
+
+            // The server this connection is actually bound to, whatever name it was reached by (#2021, decision D3):
+            // every result written over it says so, so the Exchange step can name the same domain controller.
+            _exportDirectoryServer = string.IsNullOrWhiteSpace(rootDse.DnsHostName) ? null : rootDse.DnsHostName;
             Log.Logger.Information("OpenExportConnection: Directory type {DirectoryType}; Permissive Modify control advertised: {AdvertisesPermissiveModify}. " +
                 "Without it, a modify the directory refuses because a value is already present or already absent is applied again in parts.",
                 rootDse.DirectoryType, rootDse.AdvertisesPermissiveModify);
@@ -1131,12 +1144,34 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn,
             _exportDirectoryAdvertisesPermissiveModify);
         _currentExport.SetManagedScope(_managedScope);
-        return _currentExport.ExecuteAsync(pendingExports, cancellationToken);
+        return StampDirectoryServerAsync(_currentExport.ExecuteAsync(pendingExports, cancellationToken), _exportDirectoryServer);
+    }
+
+    private static async Task<List<ConnectedSystemExportResult>> StampDirectoryServerAsync(Task<List<ConnectedSystemExportResult>> export, string? directoryServer)
+    {
+        var results = await export;
+        StampDirectoryServer(results, directoryServer);
+        return results;
+    }
+
+    /// <summary>
+    /// Names <paramref name="directoryServer"/> on every result that was written (#2021, decision D3): the domain
+    /// controller the export connection is bound to, which the Exchange step then points Exchange at. A result that
+    /// failed or was never attempted wrote nothing, so it names nothing.
+    /// </summary>
+    internal static void StampDirectoryServer(IList<ConnectedSystemExportResult> results, string? directoryServer)
+    {
+        if (string.IsNullOrEmpty(directoryServer))
+            return;
+
+        foreach (var result in results.Where(r => r.Success))
+            result.DirectoryServer = directoryServer;
     }
 
     public string? CloseExportConnection()
     {
         _exportSettings = null;
+        _exportDirectoryServer = null;
         _currentExport = null;
 
         // Pin invalidation takes priority: if the connection never succeeded, OpenExportConnection never

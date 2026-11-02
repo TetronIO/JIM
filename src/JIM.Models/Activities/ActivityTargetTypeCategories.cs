@@ -35,6 +35,9 @@ public static class ActivityTargetTypeCategories
         // belongs beside the Metaverse Object rather than in the Configuration filter.
         { ActivityTargetType.ConnectedSystemObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.PasswordSynchronisation, ActivityTargetCategory.PasswordSynchronisation },
+        // Making an account an Exchange recipient changes the account, as setting its password does, but carries no
+        // credential, so it sits with identity data rather than in a category of its own (#2021).
+        { ActivityTargetType.ExchangeRecipient, ActivityTargetCategory.IdentityData },
         // A SCIM client writing Users and Groups into a Connected System's store changes identity data, not JIM's
         // configuration.
         { ActivityTargetType.ScimRequests, ActivityTargetCategory.IdentityData },

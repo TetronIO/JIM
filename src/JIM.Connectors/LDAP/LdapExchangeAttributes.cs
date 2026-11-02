@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Staging;
 
 namespace JIM.Connectors.LDAP;
@@ -18,11 +19,12 @@ namespace JIM.Connectors.LDAP;
 /// </remarks>
 internal static class LdapExchangeAttributes
 {
-    internal const string RecipientType = "Exchange Recipient Type";
-    internal const string Alias = "Exchange Alias";
-    internal const string Database = "Exchange Database";
-    internal const string PrimarySmtpAddress = "Exchange Primary SMTP Address";
-    internal const string ExternalAddress = "Exchange External Address";
+    // The names come from JIM.Models, so export staging reads the declared state by the same ones.
+    internal const string RecipientType = ExchangeRecipientAttributes.RecipientType;
+    internal const string Alias = ExchangeRecipientAttributes.Alias;
+    internal const string Database = ExchangeRecipientAttributes.Database;
+    internal const string PrimarySmtpAddress = ExchangeRecipientAttributes.PrimarySmtpAddress;
+    internal const string ExternalAddress = ExchangeRecipientAttributes.ExternalAddress;
 
     private const string User = "user";
     private const string Group = "group";
@@ -83,19 +85,20 @@ internal static class LdapExchangeAttributes
 
     /// <summary>
     /// Exchange's <c>msExchRecipientTypeDetails</c> values for the recipient types JIM manages. Anything else (a linked
-    /// or remote mailbox, a dynamic group) is a recipient this release does not manage.
+    /// or remote mailbox, a dynamic group) is a recipient this release does not manage, imported as
+    /// <see cref="ExchangeRecipientTypes.Unmanaged"/>.
     /// </summary>
     private static readonly Dictionary<long, string> RecipientTypes = new()
     {
-        [1] = "Mailbox",
-        [4] = "SharedMailbox",
-        [16] = "RoomMailbox",
-        [32] = "EquipmentMailbox",
-        [64] = "MailContact",
-        [128] = "MailUser",
-        [256] = "MailEnabledGroup",  // a universal distribution group
-        [512] = "MailEnabledGroup",  // a non-universal group, which older Exchange versions mail-enabled
-        [1024] = "MailEnabledGroup"  // a universal security group
+        [1] = ExchangeRecipientTypes.Mailbox,
+        [4] = ExchangeRecipientTypes.SharedMailbox,
+        [16] = ExchangeRecipientTypes.RoomMailbox,
+        [32] = ExchangeRecipientTypes.EquipmentMailbox,
+        [64] = ExchangeRecipientTypes.MailContact,
+        [128] = ExchangeRecipientTypes.MailUser,
+        [256] = ExchangeRecipientTypes.MailEnabledGroup,  // a universal distribution group
+        [512] = ExchangeRecipientTypes.MailEnabledGroup,  // a non-universal group, which older Exchange versions mail-enabled
+        [1024] = ExchangeRecipientTypes.MailEnabledGroup  // a universal security group
     };
 
     /// <summary>
@@ -108,7 +111,9 @@ internal static class LdapExchangeAttributes
     /// Derives <paramref name="attributeNames"/> from what Exchange stamped on an object, read through
     /// <paramref name="read"/> (a directory attribute's values, empty when it has none). An attribute with nothing to
     /// derive from is left out rather than given an empty value, as an absent directory attribute is, with one
-    /// exception: no recipient type at all means the object is not a recipient, which is None.
+    /// exception: no recipient type at all means the object is not a recipient, which is None. A recipient type outside
+    /// the ones JIM manages, an unreadable one included, is Unmanaged: left out, it would read as None and invite JIM to
+    /// enable a recipient that already exists.
     /// </summary>
     internal static List<ConnectedSystemImportObjectAttribute> Derive(Func<string, IReadOnlyList<string>> read, IEnumerable<string> attributeNames)
     {
@@ -132,12 +137,14 @@ internal static class LdapExchangeAttributes
         return derived;
     }
 
-    private static string? DeriveRecipientType(IReadOnlyList<string> values)
+    private static string DeriveRecipientType(IReadOnlyList<string> values)
     {
         if (values.Count == 0)
-            return "None";
+            return ExchangeRecipientTypes.None;
 
-        return long.TryParse(values[0], out var details) && RecipientTypes.TryGetValue(details, out var recipientType) ? recipientType : null;
+        return long.TryParse(values[0], out var details) && RecipientTypes.TryGetValue(details, out var recipientType)
+            ? recipientType
+            : ExchangeRecipientTypes.Unmanaged;
     }
 
     /// <summary>The value of a distinguished name's first RDN: a database's name from its <c>homeMDB</c>.</summary>

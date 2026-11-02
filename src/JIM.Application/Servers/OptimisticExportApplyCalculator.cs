@@ -88,6 +88,17 @@ public static class OptimisticExportApplyCalculator
                 continue;
             }
 
+            // A connector-defined attribute (an Exchange recipient's declared state, #2021) is never written to the
+            // directory: export hands it to the Exchange queue, and Exchange may act long after, or not at all.
+            // Recording the declared value here would claim the recipient exists before an import has shown it (PRD
+            // requirement 12), would let export staging read it back as imported, and would let a later export
+            // evaluation find it already current. Only an import changes it.
+            if (change.Attribute.IsConnectorDefined)
+            {
+                delta.SkippedChangeCount++;
+                continue;
+            }
+
             if (!workingByAttribute.TryGetValue(change.AttributeId, out var existing))
             {
                 existing = [];

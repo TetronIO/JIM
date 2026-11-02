@@ -17,6 +17,7 @@ public class HelpersActivityTargetTypeNameTests
     [TestCase(ActivityTargetType.ScimRequests, "SCIM Requests")]
     [TestCase(ActivityTargetType.ConnectedSystemRunProfile, "Connected System Run Profile")]
     [TestCase(ActivityTargetType.Authentication, "Authentication")]
+    [TestCase(ActivityTargetType.ExchangeRecipient, "Exchange Recipient")]
     public void GetActivityTargetTypeName_TargetType_Name(ActivityTargetType targetType, string expected)
     {
         Assert.That(Helpers.GetActivityTargetTypeName(targetType), Is.EqualTo(expected));

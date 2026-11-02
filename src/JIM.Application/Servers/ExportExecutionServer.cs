@@ -12,6 +12,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -67,6 +68,13 @@ public class ExportExecutionServer
     /// them whether or not the run completes.
     /// </summary>
     private Action<IReadOnlyList<string>>? _containersCreated;
+
+    /// <summary>
+    /// Whether the current export run stages Exchange changes (#2021): <see cref="FeatureFlagCatalogue.ExchangeRecipients"/>,
+    /// read once at the start of a calls-based run (the developer guide's "gate at entry points") and handed to every
+    /// batch it processes, its parallel batches included, rather than read per batch or per object.
+    /// </summary>
+    private bool _stageExchangeChanges;
 
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
@@ -211,6 +219,8 @@ public class ExportExecutionServer
         }
 
         _containersCreated = containersCreated;
+        _stageExchangeChanges = connector is IConnectorExportUsingCalls
+                                && await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
         try
         {
             // Execute exports using the connector with batch-loading
@@ -227,6 +237,7 @@ public class ExportExecutionServer
             _collisionRemediation?.Complete();
             _collisionRemediation = null;
             _containersCreated = null;
+            _stageExchangeChanges = false;
         }
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -268,6 +279,17 @@ public class ExportExecutionServer
                 "{FailedCount} that could not be recorded, {MarkingFailedCount} whose written enabled state could not be recorded on the password still owed",
                 connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordsCarriedCount,
                 result.InitialPasswordStagingFailedCount, result.InitialPasswordMarkingFailedCount);
+        }
+
+        // #2021: only worth a line when the run declared any Exchange recipient state.
+        if (result.ExchangeChangesStagedCount > 0 || result.ExchangeChangesSupersededCount > 0 || result.ExchangeChangesUnchangedCount > 0
+            || result.ExchangeChangesRefusedCount > 0 || result.ExchangeTypeChangesNotMadeCount > 0 || result.ExchangeChangeStagingFailedCount > 0)
+        {
+            Log.Information("ExecuteExportsAsync: Exchange recipient summary for {SystemName}: {StagedCount} change(s) queued for Exchange, " +
+                "{SupersededCount} replacing one already queued, {UnchangedCount} already queued with the same declared state, {RefusedCount} refused " +
+                "because the recipient type does not fit the object, {TypeChangeCount} type change(s) not made, {FailedCount} that could not be recorded",
+                connectedSystem.Name, result.ExchangeChangesStagedCount, result.ExchangeChangesSupersededCount, result.ExchangeChangesUnchangedCount,
+                result.ExchangeChangesRefusedCount, result.ExchangeTypeChangesNotMadeCount, result.ExchangeChangeStagingFailedCount);
         }
 
         // Only when it happened: most export runs meet no value already in use.
@@ -903,7 +925,8 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, executingMark, cancellationToken, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, executingMark, cancellationToken, result, SyncRepo, connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds,
+                                    stageExchangeChanges: _stageExchangeChanges);
                             }
                         }
                         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1491,7 +1514,8 @@ public class ExportExecutionServer
                 using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                     .SetTag("batchSize", batch.Count))
                 {
-                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                    await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, result, SyncRepo, initialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds,
+                        _stageExchangeChanges, unresolvedReferenceNotes);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -1766,7 +1790,8 @@ public class ExportExecutionServer
                             .SetTag("batchSize", batch.Count))
                         {
                             await ProcessBatchSuccessAsync(batch, exportResults, executingMark, cancellationToken, batchResult, batchRepo,
-                                connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, unresolvedReferenceNotes);
+                                connectedSystem.EffectiveInitialPasswordTimeToLive, connectedSystem.Name, initialPasswordRuleIds, _stageExchangeChanges,
+                                unresolvedReferenceNotes);
                         }
 
                         // Aggregate results into shared result (thread-safe)
@@ -1966,6 +1991,12 @@ public class ExportExecutionServer
         into.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
         into.InitialPasswordMarkingFailedCount += batchResult.InitialPasswordMarkingFailedCount;
         into.InitialPasswordsCarriedCount += batchResult.InitialPasswordsCarriedCount;
+        into.ExchangeChangesStagedCount += batchResult.ExchangeChangesStagedCount;
+        into.ExchangeChangesSupersededCount += batchResult.ExchangeChangesSupersededCount;
+        into.ExchangeChangesUnchangedCount += batchResult.ExchangeChangesUnchangedCount;
+        into.ExchangeChangesRefusedCount += batchResult.ExchangeChangesRefusedCount;
+        into.ExchangeTypeChangesNotMadeCount += batchResult.ExchangeTypeChangesNotMadeCount;
+        into.ExchangeChangeStagingFailedCount += batchResult.ExchangeChangeStagingFailedCount;
         into.ClassMembershipRefusedCount += batchResult.ClassMembershipRefusedCount;
         into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
         into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
@@ -2330,6 +2361,10 @@ public class ExportExecutionServer
     /// The run's cancellation, read only to tell a not-attempted result (#2083) the run's cancellation explains from one
     /// it does not: a Connector reporting a change not attempted while the run carries on is failing to export it.
     /// </param>
+    /// <param name="stageExchangeChanges">
+    /// Whether the run stages Exchange changes (#2021): the feature flag, read once for the run when it starts
+    /// (<see cref="_stageExchangeChanges"/>).
+    /// </param>
     /// <param name="unresolvedReferenceNotes">
     /// Per Pending Export id, the message describing the references it could not write this run because
     /// the referenced object has no Connected System Object in the target (issue #1398), built by
@@ -2347,9 +2382,11 @@ public class ExportExecutionServer
         TimeSpan initialPasswordTimeToLive,
         string connectedSystemName,
         IReadOnlySet<int>? initialPasswordRuleIds,
+        bool stageExchangeChanges,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null)
     {
         var exportsToUpdate = new List<PendingExport>();
+        var exchangeDeclarations = new List<(PendingExport Export, ConnectedSystemExportResult ExportResult, ExchangeDeclaredState Declared, ExchangeRecipientDecision? Decision)>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
         var successfulNonDeleteExports = new List<PendingExport>();
         var provisionedAccounts = new List<PendingExport>();
@@ -2503,6 +2540,22 @@ public class ExportExecutionServer
             // persisted with the statuses below so the confirming import holds rather than retries them.
             MarkChangesAwaitingInitialPassword(export, writtenChanges, exportResult, connectedSystemName);
 
+            // #2021: a written Create or Update that declares Exchange recipient state is followed by an Exchange change.
+            // A Delete is not (requirement 18), and a failed export never reaches here (requirement 12). It is judged
+            // now, so the changes the Exchange queue owns are marked before the batch is written, with the statuses
+            // above, and the confirming import holds them rather than reporting them unconfirmed.
+            ExchangeRecipientDecision? exchangeDecision = null;
+            if (stageExchangeChanges && export.ConnectedSystemObject != null && export.ChangeType != PendingExportChangeType.Delete
+                && ExchangeDeclaredState.IsDeclaredBy(writtenChanges))
+            {
+                var declared = ExchangeDeclaredState.From(export, writtenChanges);
+                exchangeDecision = export.ConnectedSystemObject.Type?.Name is { } objectTypeName
+                    ? ExchangeRecipientRules.Decide(objectTypeName, declared.ImportedRecipientType, declared.RecipientType, declared.GroupType)
+                    : null;
+                exchangeDeclarations.Add((export, exportResult, declared, exchangeDecision));
+            }
+            MarkChangesAwaitingExchange(writtenChanges, exchangeDecision);
+
             exportsToUpdate.Add(export);
             result.SuccessCount++;
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
@@ -2520,6 +2573,7 @@ public class ExportExecutionServer
             // password reset nobody asked for.
             if (wasCreate && export.ConnectedSystemObject != null && export.ProvisioningSyncRuleId.HasValue)
                 provisionedAccounts.Add(export);
+
         }
 
         // The changes never started are put back first, so nothing that fails while the rest are persisted can count an
@@ -2600,6 +2654,12 @@ public class ExportExecutionServer
             // Only now, with their Initial Passwords queued, do the held Creates stop counting as in flight (#2270).
             await WritePendingExportsAsync(heldUntilStaged.ToList(), repository);
             heldUntilStaged.Clear();
+
+            // #2021: beside the Initial Passwords, after the External IDs are recorded (the delivery lane finds the object
+            // by them), and BEFORE the optimistic apply below, which lays the exported values over the object's own: the
+            // recipient type the last import read is what decides an enable from a type change.
+            if (exchangeDeclarations.Count > 0)
+                await StageExchangeChangesForBatchAsync(exchangeDeclarations, result, repository, connectedSystemName);
 
             // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
             // so its external-Id additions are already reflected in each CSO's in-memory AttributeValues
@@ -2991,12 +3051,12 @@ public class ExportExecutionServer
     /// </para>
     /// </summary>
     /// <summary>
-    /// Names the Run Profile Execution Item of each provisioning export before it exists (#2668), so the Activity of the
-    /// account's Initial Password can name it as its parent: the item takes <see cref="ProcessedExportItem.ExecutionItemId"/>
+    /// Names the Run Profile Execution Item of each export before it exists (#2668), so a follow-up Activity (the
+    /// account's Initial Password, its Exchange change) can name it as its parent: the item takes <see cref="ProcessedExportItem.ExecutionItemId"/>
     /// when the batch's items are written. An id already given (by Collision Remediation) is kept. The batch's items
     /// were added last, so the search runs from the end and stops once every export is found.
     /// </summary>
-    private static Dictionary<Guid, Guid> NameExecutionItems(ExportExecutionResult result, List<PendingExport> exports)
+    private static Dictionary<Guid, Guid> NameExecutionItems(ExportExecutionResult result, List<PendingExport> exports, string followUpName)
     {
         var wanted = exports.Select(pe => pe.Id).ToHashSet();
         var named = new Dictionary<Guid, Guid>(wanted.Count);
@@ -3011,8 +3071,8 @@ public class ExportExecutionServer
         }
 
         if (named.Count < wanted.Count)
-            Log.Warning("NameExecutionItems: {Missing} of {Count} provisioning exports had no execution item to follow up; their Initial Password Activities " +
-                "will have no parent item", wanted.Count - named.Count, wanted.Count);
+            Log.Warning("NameExecutionItems: {Missing} of {Count} exports had no execution item to follow up; their {FollowUp} Activities " +
+                "will have no parent item", wanted.Count - named.Count, wanted.Count, followUpName);
 
         return named;
     }
@@ -3065,7 +3125,7 @@ public class ExportExecutionServer
 
             // Each password's Activity is a follow-up of the export item that provisioned the account (#2668). That
             // item is only written after this batch, so it is named here, and takes this id when it is.
-            var executionItemIds = NameExecutionItems(result, eligible);
+            var executionItemIds = NameExecutionItems(result, eligible, "Initial Password");
             var executionItemByChange = new Dictionary<Guid, Guid?>(eligible.Count);
 
             foreach (var pe in eligible)
@@ -3233,6 +3293,235 @@ public class ExportExecutionServer
                 unrecordedAccounts.Count, provisionedAccounts[0].ConnectedSystemId, DescribeConnectedSystemObjectIds(unrecordedAccounts));
         }
     }
+
+    /// <summary>
+    /// Marks which of an export's written changes the Exchange queue now owns (#2021): every connector-defined Exchange
+    /// change of an export whose declared state staging considers (any decision but "not a recipient, and none
+    /// declared"), so the confirming import holds it while the object has a change on the queue rather than reporting
+    /// it unconfirmed. Every other written change is unmarked, so a change sent again after a release, or with the
+    /// feature off, carries no stale mark. Set before the batch is written, and persisted with the statuses beside it.
+    /// </summary>
+    /// <param name="writtenChanges">The changes the export wrote.</param>
+    /// <param name="decision">What staging decided for the export's declared state, or null when it declared none, or
+    /// the object could not be judged (nothing is queued then, so nothing would release a hold).</param>
+    private static void MarkChangesAwaitingExchange(List<PendingExportAttributeValueChange> writtenChanges, ExchangeRecipientDecision? decision)
+    {
+        var heldForExchange = decision is { Kind: not ExchangeRecipientDecisionKind.NotARecipient };
+        foreach (var change in writtenChanges)
+            change.AwaitsExchange = heldForExchange && ExchangeDeclaredState.IsExchangeAttributeChange(change);
+    }
+
+    /// <summary>
+    /// Queues an Exchange change for each written export in the batch that declares Exchange recipient state (#2021,
+    /// PRD requirements 5, 7, 8, 13 and 16, decision D9), and writes each one's follow-up Activity under its export item
+    /// (#2668).
+    /// <list type="bullet">
+    /// <item>The declared state is the object's current values of the five Exchange attributes overlaid with what the
+    /// export wrote (<see cref="ExchangeDeclaredState.From"/>), judged by <see cref="ExchangeRecipientRules.Decide"/>
+    /// when the batch's results were processed.</item>
+    /// <item>Nothing to do (declared None, and not a recipient): nothing is written.</item>
+    /// <item>A type that does not fit the object, a change of an existing recipient's type, or a recipient JIM does not
+    /// manage: a terminal row with status <see cref="PendingExchangeChangeStatus.Refused"/> and the reason, which the
+    /// delivery lane never claims, so the refusal is reported once, on its follow-up (an error for a refusal, a warning
+    /// for a type change), and holds until the declared state changes.</item>
+    /// <item>Anything else is staged for delivery, carrying the domain controller the write went to
+    /// (<see cref="ConnectedSystemExportResult.DirectoryServer"/>).</item>
+    /// </list>
+    /// A row inserted or superseding an earlier one gets a follow-up saying what became of it (and a superseded change's
+    /// own Activity is told it was replaced). A re-stage the queue finds already there, unchanged, is the same change, so
+    /// it gets no second follow-up: its Activity already says what became of it.
+    /// <para>
+    /// Contained like Initial Password staging, and never silent: the objects are written and their exports recorded as
+    /// successful, so nothing here may fail them. A failure is logged as an Error naming the objects and counted on the
+    /// result, for the export Activity to report.
+    /// </para>
+    /// </summary>
+    private static async Task StageExchangeChangesForBatchAsync(
+        List<(PendingExport Export, ConnectedSystemExportResult ExportResult, ExchangeDeclaredState Declared, ExchangeRecipientDecision? Decision)> declarations,
+        ExportExecutionResult result,
+        ISyncRepository repository,
+        string connectedSystemName)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("StageExchangeChanges")
+            .SetTag("count", declarations.Count);
+
+        var connectedSystemId = declarations[0].Export.ConnectedSystemId;
+        var now = DateTime.UtcNow;
+        var activities = new List<Activity>();
+        var staging = new List<PendingExchangeChange>();
+        var stagedBy = new Dictionary<Guid, (ConnectedSystemObject Cso, Guid? ExecutionItemId, ExchangeRecipientDecision Decision)>();
+        var unaddressable = 0;
+        List<ExchangeChangeStagingOutcome>? outcomes = null;
+        var (staged, superseded, unchanged, refused, typeChanges) = (0, 0, 0, 0, 0);
+
+        try
+        {
+            // Each follow-up is parented by the item the export writes after this batch, so the item is named now.
+            var executionItemIds = NameExecutionItems(result, declarations.Select(d => d.Export).ToList(), "Exchange recipient");
+
+            foreach (var (export, exportResult, declared, decision) in declarations)
+            {
+                var cso = export.ConnectedSystemObject!;
+                var executionItemId = executionItemIds.TryGetValue(export.Id, out var itemId) ? itemId : (Guid?)null;
+
+                // The fit is judged by the object's class; an object whose Object Type was not loaded cannot be judged,
+                // and is never queued on a guess.
+                if (decision == null)
+                {
+                    unaddressable++;
+                    Log.Error("StageExchangeChangesForBatchAsync: Connected System Object {CsoId} on Connected System {ConnectedSystemId} was exported " +
+                        "declaring Exchange recipient state, but its Object Type was not loaded, so the state cannot be judged and nothing was queued",
+                        cso.Id, connectedSystemId);
+                    continue;
+                }
+
+                if (decision.Kind == ExchangeRecipientDecisionKind.NotARecipient)
+                    continue;
+
+                var isRefusal = decision.Kind != ExchangeRecipientDecisionKind.Stage;
+                var change = new PendingExchangeChange
+                {
+                    Id = Guid.NewGuid(),
+                    ConnectedSystemId = export.ConnectedSystemId,
+                    ConnectedSystemObjectId = cso.Id,
+                    MetaverseObjectId = cso.MetaverseObjectId,
+                    SyncRuleId = declared.DeclaringSyncRuleId,
+                    // A type change to None declares no type; it is recorded as None, as the rules read it.
+                    RecipientType = declared.RecipientType ?? ExchangeRecipientTypes.None,
+                    Alias = declared.Alias,
+                    Database = declared.Database,
+                    PrimarySmtpAddress = declared.PrimarySmtpAddress,
+                    ExternalAddress = declared.ExternalAddress,
+                    DomainController = exportResult.DirectoryServer,
+                    Status = isRefusal ? PendingExchangeChangeStatus.Refused : PendingExchangeChangeStatus.Pending,
+                    FailureMessage = isRefusal ? decision.Reason : null,
+                    CreatedAt = now,
+                    ActivityId = Guid.NewGuid()
+                };
+                stagedBy[change.Id] = (cso, executionItemId, decision);
+                staging.Add(change);
+            }
+
+            // Looked up by the id each change was offered under: an outcome other than Inserted moves the change's own
+            // Id to the row already in the queue, so RequestedId is the only key still pointing back here.
+            var byRequestedId = staging.ToDictionary(c => c.Id);
+            if (staging.Count > 0)
+            {
+                outcomes = await repository.StageExchangeChangesAsync(staging);
+                foreach (var outcome in outcomes)
+                {
+                    var change = byRequestedId[outcome.RequestedId];
+                    var (cso, executionItemId, decision) = stagedBy[outcome.RequestedId];
+                    var declared = new ExchangeDeclaredState { RecipientType = change.RecipientType };
+
+                    // The same change already on the queue: its Activity already says what became of it.
+                    if (outcome.Disposition == ExchangeChangeStagingDisposition.Unchanged)
+                    {
+                        unchanged++;
+                        continue;
+                    }
+
+                    var superseding = outcome.Disposition == ExchangeChangeStagingDisposition.Superseded;
+                    switch (decision.Kind)
+                    {
+                        case ExchangeRecipientDecisionKind.Refused:
+                            refused++;
+                            activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
+                                ActivityStatus.CompleteWithError, decision.Reason!, errorMessage: decision.Reason));
+                            break;
+
+                        case ExchangeRecipientDecisionKind.TypeChangeNotSupported:
+                            typeChanges++;
+                            activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
+                                ActivityStatus.CompleteWithWarning, decision.Reason!));
+                            break;
+
+                        default:
+                            if (superseding)
+                                superseded++;
+                            else
+                                staged++;
+                            activities.Add(ExchangeFollowUp(change.ActivityId, cso, declared, connectedSystemName, executionItemId, now,
+                                ActivityStatus.Complete, ExchangeChangeStagingMessages.Queued(change.RecipientType, decision.Change!.Value, connectedSystemName)));
+                            break;
+                    }
+
+                    // The change it replaced is told so beneath its own Activity, where its attempts are.
+                    if (outcome.PreviousActivityId is { } previousActivityId)
+                    {
+                        var replaced = ExchangeFollowUp(Guid.NewGuid(), cso, declared, connectedSystemName, executionItemId: null, now,
+                            ActivityStatus.Complete, ExchangeChangeStagingMessages.Replaced(connectedSystemName));
+                        replaced.ParentActivityId = previousActivityId;
+                        activities.Add(replaced);
+                    }
+                }
+            }
+
+            result.ExchangeChangesStagedCount += staged;
+            result.ExchangeChangesSupersededCount += superseded;
+            result.ExchangeChangesUnchangedCount += unchanged;
+            result.ExchangeChangeStagingFailedCount += unaddressable;
+            if (activities.Count > 0)
+                await repository.CreateActivitiesAsync(activities);
+
+            result.ExchangeChangesRefusedCount += refused;
+            result.ExchangeTypeChangesNotMadeCount += typeChanges;
+
+            // Synchronisation Integrity: summary statistics for the batch.
+            Log.Information("StageExchangeChangesForBatchAsync: Exchange recipient state declared by {Count} export(s) to {ConnectedSystemName}: " +
+                "{Staged} queued, {Superseded} replacing a change already queued, {Unchanged} already queued as the same change, " +
+                "{Refused} refused, {TypeChanges} type change(s) not made, {Unaddressable} not judged",
+                declarations.Count, connectedSystemName, staged, superseded, unchanged, refused, typeChanges, unaddressable);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            if (outcomes != null)
+            {
+                // The changes are queued (the lane will deliver the deliverable ones, and the refusals hold), but their
+                // record could not be written, and it is reported nowhere else.
+                result.ExchangeChangeStagingFailedCount += outcomes.Count(o => o.Disposition != ExchangeChangeStagingDisposition.Unchanged);
+                Log.Error(ex, "StageExchangeChangesForBatchAsync: Queued {Queued} Exchange change(s) for Connected System {ConnectedSystemId} " +
+                    "({Refused} refusal(s) and {TypeChanges} type change(s) not made among them), but could not record their Activities. " +
+                    "Connected System Objects: {ConnectedSystemObjectIds}",
+                    outcomes.Count, connectedSystemId, refused, typeChanges,
+                    DescribeConnectedSystemObjectIds(declarations.Select(d => d.Export.ConnectedSystemObject!.Id)));
+                return;
+            }
+
+            result.ExchangeChangeStagingFailedCount += declarations.Count;
+            Log.Error(ex, "StageExchangeChangesForBatchAsync: Could not queue or report the Exchange recipient state {Count} export(s) to Connected System " +
+                "{ConnectedSystemId} declared. The objects were written to the directory successfully, but nothing will reach Exchange for them until " +
+                "their declared state is exported again. Connected System Objects: {ConnectedSystemObjectIds}",
+                declarations.Count, connectedSystemId, DescribeConnectedSystemObjectIds(declarations.Select(d => d.Export.ConnectedSystemObject!.Id)));
+        }
+    }
+
+    /// <summary>
+    /// A system-initiated follow-up Activity about one object's Exchange change, already complete: nobody waits at a
+    /// screen for it, because delivery happens on a later, unrelated pass.
+    /// </summary>
+    private static Activity ExchangeFollowUp(Guid id, ConnectedSystemObject cso, ExchangeDeclaredState declared, string connectedSystemName,
+        Guid? executionItemId, DateTime now, ActivityStatus status, string message, string? errorMessage = null) => new()
+    {
+        Id = id,
+        TargetType = ActivityTargetType.ExchangeRecipient,
+        TargetOperationType = ActivityTargetOperationType.SetExchangeRecipient,
+        TargetContext = declared.RecipientType,
+        TargetName = connectedSystemName,
+        ParentRunProfileExecutionItemId = executionItemId,
+        MetaverseObjectId = cso.MetaverseObjectId,
+        ConnectedSystemId = cso.ConnectedSystemId,
+        ConnectedSystemObjectId = cso.Id,
+        InitiatedByType = ActivityInitiatorType.System,
+        InitiatedByName = "System",
+        Status = status,
+        Message = message,
+        ErrorMessage = errorMessage,
+        Created = now,
+        Executed = now,
+        ExecutionTime = TimeSpan.Zero,
+        TotalActivityTime = TimeSpan.Zero
+    };
 
     /// <summary>
     /// Marks the owed first passwords of accounts whose enabled state an export other than their Create has just

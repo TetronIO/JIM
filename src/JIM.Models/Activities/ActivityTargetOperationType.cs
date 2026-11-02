@@ -124,5 +124,12 @@ public enum ActivityTargetOperationType
     /// A SCIM client's requests to a Connected System's SCIM 2.0 Service Provider endpoint within one window. Used
     /// with <see cref="ActivityTargetType.ScimRequests"/>.
     /// </summary>
-    Receive = 22
+    Receive = 22,
+
+    /// <summary>
+    /// Makes a directory account the Exchange recipient its Synchronisation Rule declares (#2021): enabling it as a
+    /// recipient, or updating its alias and addresses. Used with <see cref="ActivityTargetType.ExchangeRecipient"/>,
+    /// the way <see cref="SetPassword"/> is used with a password.
+    /// </summary>
+    SetExchangeRecipient = 23
 }

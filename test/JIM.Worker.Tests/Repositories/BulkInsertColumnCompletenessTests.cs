@@ -278,6 +278,22 @@ public class BulkInsertColumnCompletenessTests
             PendingPasswordChangeBulkColumns.PendingPasswordChangesUpdateExclusions);
     }
 
+    [Test]
+    public void PendingExchangeChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExchangeChange), "PendingExchangeChanges", PendingExchangeChangeBulkColumns.PendingExchangeChanges);
+    }
+
+    [Test]
+    public void PendingExchangeChangeUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingExchangeChanges",
+            PendingExchangeChangeBulkColumns.PendingExchangeChanges,
+            [PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate],
+            PendingExchangeChangeBulkColumns.PendingExchangeChangesUpdateExclusions);
+    }
+
     /// <summary>
     /// The retired values register's raw-SQL writers (#242, Phase 6: <c>RetiredGeneratedValueSql</c>) all project
     /// this list; a column the model gains and the list lacks would be left null on every retired value.

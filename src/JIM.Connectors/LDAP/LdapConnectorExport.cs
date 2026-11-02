@@ -4,6 +4,7 @@
 using System.DirectoryServices.Protocols;
 using System.Globalization;
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -223,6 +224,39 @@ internal class LdapConnectorExport
         return ConnectedSystemExportResult.Failed(message, ConnectedSystemExportErrorType.OutsideManagedScope);
     }
 
+    /// <summary>
+    /// Refuses to create a shared, room or equipment mailbox's account enabled (#2021, PRD requirement 14): such a
+    /// mailbox lives on a disabled account. Active Directory creates an account disabled when no
+    /// <c>userAccountControl</c> is given, so nothing needs adding; a Synchronisation Rule flowing an enabled account is
+    /// refused for the object rather than overridden, because the confirming import would find the override and the next
+    /// export would enable the account again.
+    /// </summary>
+    private ConnectedSystemExportResult? CheckResourceMailboxAccountIsDisabled(PendingExport pendingExport)
+    {
+        if (pendingExport.ChangeType != PendingExportChangeType.Create)
+            return null;
+
+        var recipientType = pendingExport.AttributeValueChanges
+            .Where(c => c.Attribute is { IsConnectorDefined: true, Name: ExchangeRecipientAttributes.RecipientType })
+            .Select(c => c.StringValue)
+            .LastOrDefault();
+        if (recipientType is not (ExchangeRecipientTypes.SharedMailbox or ExchangeRecipientTypes.RoomMailbox or ExchangeRecipientTypes.EquipmentMailbox))
+            return null;
+
+        var userAccountControl = pendingExport.AttributeValueChanges
+            .Where(c => c.Attribute != null && c.Attribute.Name.Equals(LdapConnectorConstants.UserAccountControlAttributeName, StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.IntValue ?? (int.TryParse(c.StringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : (int?)null))
+            .LastOrDefault(v => v.HasValue);
+        if (userAccountControl is not { } flags || (flags & LdapConnectorConstants.UAC_ACCOUNTDISABLE) != 0)
+            return null;
+
+        _logger.Warning("LdapConnectorExport: Refused to create a {RecipientType} on an enabled account", recipientType);
+        return ConnectedSystemExportResult.Failed(
+            $"A {recipientType} must be created on a disabled account, but the Synchronisation Rule flows an enabled " +
+            $"userAccountControl ({flags}). Flow a disabled value, or leave userAccountControl unset so Active Directory " +
+            "creates the account disabled.");
+    }
+
     private bool IsWithinManagedScope(string targetDn)
     {
         if (LdapConnectorUtilities.IsDnInScope(targetDn, _managedScope))
@@ -255,6 +289,10 @@ internal class LdapConnectorExport
         var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
         if (scopeFailure != null)
             return scopeFailure;
+
+        var accountStateFailure = CheckResourceMailboxAccountIsDisabled(pendingExport);
+        if (accountStateFailure != null)
+            return accountStateFailure;
 
         ConnectedSystemExportResult result;
         switch (pendingExport.ChangeType)
@@ -776,6 +814,10 @@ internal class LdapConnectorExport
         var scopeFailure = CheckTargetIsWithinManagedScope(GetExportDestinationDistinguishedName(pendingExport));
         if (scopeFailure != null)
             return scopeFailure;
+
+        var accountStateFailure = CheckResourceMailboxAccountIsDisabled(pendingExport);
+        if (accountStateFailure != null)
+            return accountStateFailure;
 
         var result = pendingExport.ChangeType switch
         {

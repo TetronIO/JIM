@@ -111,7 +111,34 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
         }
     }
 
-    private void SeedHeldChange(ConnectedSystem system, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value) =>
+    /// <summary>
+    /// The same for a change awaiting Exchange (#2021): until Exchange acts the object does not hold the declared value,
+    /// which reads as drift on every synchronisation. Corrected, it would replace the held change and send it again each
+    /// time, so nothing is staged and nothing is reported.
+    /// </summary>
+    [Test]
+    public async Task FullSync_DriftOnlyOnAnAttributeAwaitingExchange_RestatingTheHeldChange_StagesNothingAndKeepsTheHeldChangeAsync()
+    {
+        var (system, cso, _) = await ArrangeDriftedObjectAsync();
+        var descriptionAttr = cso.AttributeValues.Single(v => v.StringValue == DriftedValue).Attribute;
+        SeedHeldChange(system, cso, descriptionAttr, EnforcedValue, awaitsExchange: true);
+
+        var activity = await RunFullSyncAsync(system);
+
+        var changesForObject = await PendingChangesForAsync(system, cso);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changesForObject, Has.Count.EqualTo(1), "only the held change remains");
+            Assert.That(changesForObject.Single().AwaitsExchange, Is.True);
+            Assert.That(changesForObject.Single().Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(activity.RunProfileExecutionItems.Concat(SyncRepo.Rpeis.Values)
+                    .Any(i => i.ConnectedSystemObjectId == cso.Id && i.ObjectChangeType == ObjectChangeType.DriftCorrection),
+                Is.False, "restating the held change corrects nothing, so no Drift Correction is reported");
+        }
+    }
+
+    private void SeedHeldChange(ConnectedSystem system, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string value,
+        bool awaitsExchange = false) =>
         SyncRepo.SeedPendingExport(new PendingExport
         {
             Id = Guid.NewGuid(),
@@ -131,7 +158,8 @@ public class DriftCorrectionWorkflowTests : WorkflowTestBase
                     StringValue = value,
                     Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
                     ExportAttemptCount = 1,
-                    AwaitsInitialPassword = true
+                    AwaitsInitialPassword = !awaitsExchange,
+                    AwaitsExchange = awaitsExchange
                 }
             ]
         });
