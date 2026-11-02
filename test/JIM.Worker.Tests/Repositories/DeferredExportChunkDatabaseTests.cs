@@ -130,6 +130,32 @@ public class DeferredExportChunkDatabaseTests
         Assert.That(anchors, Is.Empty);
     }
 
+    [Test]
+    public async Task GetReferenceAnchorsByMetaverseObjectIdsAsync_OnTheWorkersTrackingContext_TracksNothingAsync()
+    {
+        // #2574: the full-object read this replaced said it did not track and did, so on the Worker's TrackAll context
+        // every referenced object and attribute value went into the change tracker (750,000 objects at 790k scale).
+        var s = await SeedSchemaAsync();
+        var mvoId = await SeedMetaverseObjectAsync(s);
+        await SeedConnectedSystemObjectAsync(s, s.SystemId, mvoId,
+            (s.ObjectGuidAttributeId, av => av.GuidValue = Guid.NewGuid()),
+            (s.DnAttributeId, av => av.StringValue = "CN=Ada Ashcroft,OU=Users,DC=glitterband,DC=local"));
+
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.TrackAll)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        await using var ctx = new JimDbContext(options);
+        var anchors = await new PostgresDataRepository(ctx).Sync.GetReferenceAnchorsByMetaverseObjectIdsAsync([mvoId], s.SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(anchors, Has.Count.EqualTo(1));
+            Assert.That(ctx.ChangeTracker.Entries().Count(), Is.Zero, "the anchor read must leave the Worker's change tracker as it found it");
+        }
+    }
+
     // ─── PersistResolvedReferencesAsync ───
 
     [Test]

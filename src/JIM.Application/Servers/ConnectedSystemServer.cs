@@ -9610,7 +9610,9 @@ public partial class ConnectedSystemServer
             return [];
 
         var mvoIds = unresolved.Select(u => u.MvoId).Distinct().ToList();
-        var csosByMvo = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(mvoIds, pendingExport.ConnectedSystemId);
+        // Anchors only (#2574): the classification needs whether an object exists and whether it holds an anchor,
+        // not the object's every attribute value.
+        var anchorsByMvo = await Application.Repository.ConnectedSystems.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, pendingExport.ConnectedSystemId);
         var names = await Application.Repository.Metaverse.GetMetaverseObjectDisplayNamesAsync(mvoIds);
 
         return unresolved.Select(u => new PendingExportUnresolvedReference
@@ -9619,25 +9621,22 @@ public partial class ConnectedSystemServer
             AttributeName = u.Change.Attribute?.Name ?? $"attribute {u.Change.AttributeId}",
             ReferencedMetaverseObjectId = u.MvoId,
             ReferencedMetaverseObjectDisplayName = names.TryGetValue(u.MvoId, out var name) ? name : null,
-            Reason = ClassifyUnresolvedReference(csosByMvo.TryGetValue(u.MvoId, out var cso) ? cso : null)
+            Reason = ClassifyUnresolvedReference(anchorsByMvo.GetValueOrDefault(u.MvoId))
         }).ToList();
     }
 
     /// <summary>
     /// The one classification the export's deferred pass and this detail share (issue #1398): no object in the
     /// target means the reference cannot resolve as things stand; an object without an anchor is waiting; an
-    /// object with an anchor resolves on the next run. The anchor is read the way export resolution reads it,
-    /// preferring the secondary external id (a DN) over the primary.
+    /// object with an anchor resolves on the next run. The anchor is the one export resolution writes, preferring
+    /// the secondary external id (a DN) over the primary.
     /// </summary>
-    internal static UnresolvedReferenceReason ClassifyUnresolvedReference(ConnectedSystemObject? referencedCso)
+    internal static UnresolvedReferenceReason ClassifyUnresolvedReference(ReferenceAnchorSummary? referencedObject)
     {
-        if (referencedCso == null)
+        if (referencedObject == null)
             return UnresolvedReferenceReason.NotInTargetSystem;
 
-        var anchor = referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsSecondaryExternalId == true)
-                     ?? referencedCso.AttributeValues.FirstOrDefault(av => av.Attribute?.IsExternalId == true);
-
-        return anchor?.ToReferenceValueString() != null
+        return referencedObject.AnchorValue != null
             ? UnresolvedReferenceReason.Resolvable
             : UnresolvedReferenceReason.AwaitingAnchor;
     }

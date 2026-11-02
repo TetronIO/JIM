@@ -6609,41 +6609,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Batch loads Connected System Objects by multiple Metaverse Object IDs within a single Connected System.
-    /// Uses a single database query instead of N+1 individual lookups.
-    /// </summary>
-    public async Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
-    {
-        var mvoIds = metaverseObjectIds.ToList();
-        if (mvoIds.Count == 0)
-            return new Dictionary<Guid, ConnectedSystemObject>();
-
-        // AsNoTracking: these CSOs are used for reference resolution display (snapshot/causality
-        // tree). Not tracking them avoids identity conflicts during cross-page reference
-        // resolution when the same CSO is loaded by multiple flush operations.
-        var csos = await Repository.Database.ConnectedSystemObjects
-            .Include(cso => cso.Type)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Where(cso => cso.MetaverseObjectId.HasValue
-                       && mvoIds.Contains(cso.MetaverseObjectId.Value)
-                       && cso.ConnectedSystemId == connectedSystemId)
-            .ToListAsync();
-
-        // Build dictionary keyed by MVO ID. If there are multiple CSOs for the same MVO
-        // (which shouldn't happen but defensive coding), take the first one.
-        var result = new Dictionary<Guid, ConnectedSystemObject>();
-        foreach (var cso in csos)
-        {
-            if (cso.MetaverseObjectId.HasValue)
-            {
-                result.TryAdd(cso.MetaverseObjectId.Value, cso);
-            }
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Per Metaverse Object joined to an object in the Connected System, that object's id and the anchor
     /// a reference to it is written as: the value of its secondary external ID where it holds one (the
     /// DN for LDAP), otherwise its primary external ID's; the same preference
