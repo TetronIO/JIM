@@ -131,7 +131,7 @@ audience: implementer
 | **STR-4** | Block | Exactly one H1 (a page with a `template` has none), and no heading skips a level. |
 | **STR-5** | Block | Every code block names its language; use `text` for output and messages. |
 | **STR-6** | Ratchet | No stub or placeholder pages. A page that does not exist yet stays out of the nav. |
-| **STR-7** | Warn | The page opens with a paragraph, directly under the H1, saying what this is and why it matters. Not a heading, admonition, table, list or included file. |
+| **STR-7** | Block | The page opens with a paragraph, directly under the H1, saying what this is and why it matters. Not a heading, admonition, table, list or included file. |
 | **STR-8** | Warn | The page is within its size budget: 5,000 words of prose (code excluded), or 3,000 for a conformant priority page. Over it, split one sub-feature per page; the parent keeps its URL and links on. |
 
 ## Voice
@@ -289,7 +289,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | STR-4 | One H1, no skipped heading levels | Block | `Test-DocsConformance.ps1` |
 | STR-5 | Code blocks name their language | Block | `Test-DocsConformance.ps1` |
 | STR-6 | No stub pages | Ratchet | `Test-DocsConformance.ps1` |
-| STR-7 | Opens with a paragraph | Warn | `Test-DocsConformance.ps1` |
+| STR-7 | Opens with a paragraph | Block | `Test-DocsConformance.ps1` |
 | STR-8 | Within its size budget | Warn | `Test-DocsConformance.ps1` |
 | TYP-1 | Has the shape its type requires | Block | `Test-DocsConformance.ps1` |
 | VOI-1 | Domain concept, never implementation | Review | |

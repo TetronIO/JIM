@@ -22,7 +22,7 @@
         'STR-4'  = 'Block'
         'STR-5'  = 'Block'
         'STR-6'  = 'Ratchet'
-        'STR-7'  = 'Warn'
+        'STR-7'  = 'Block'
         'STR-8'  = 'Warn'
         'MNT-3'  = 'Block'
         'A11Y-1' = 'Block'
