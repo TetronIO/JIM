@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phase 3 under way)
+- **Status:** Doing (Phases 3 and 4 complete; Phases 1, 2 and 5 onwards wait on the spike's go)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -150,7 +150,7 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
   - discovery parsing of `msExchExchangeServer`;
   - a harness test of the save-time check against the stand-in.
 
-### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25)
+### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25) ✅
 
 Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carries what the flag needs from Phase 2.
 
@@ -166,10 +166,10 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
   - export stripping on add and modify;
   - the flag gate on the REST API, the settings tab and the docs coverage rule (an In Development setting needs no public row).
 
-### Phase 4: The queue and export staging (6 days; requirements 5, 7, 8, 11 to 14, 16)
+### Phase 4: The queue and export staging (6 days; requirements 5, 7, 8, 11 to 14, 16) ✅
 
 - **Moved from Phase 3, where staging needs them:**
-  - shared, room and equipment mailboxes are created on disabled accounts; the export writes the account disabled whatever the flowed `userAccountControl` says, and reports the override on the item (requirement 14);
+  - shared, room and equipment mailboxes are created on disabled accounts (requirement 14). Active Directory creates an account disabled when no `userAccountControl` is given, so the export adds nothing. A Synchronisation Rule that flows an enabled account for one is refused for that object rather than overridden: an override would be found by the confirming import, and the next export would enable the account again (decided 2026-11-02);
   - the type-fit rules, as a pure function used by staging (requirement 5).
 - **The `PendingExchangeChange` entity and migration:**
   - target: Connected System, Connected System Object and Metaverse Object;
@@ -185,12 +185,13 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
   - writes one system-initiated Activity per change, parented by `NameExecutionItems` and `ParentRunProfileExecutionItemId` (#2668).
 - **The trigger and the `jim_exchange_change` NOTIFY channel.**
 - **Confirmation waits for Exchange** (D2): the `AwaitsExchange` mark and the import's hold and release, no optimistic apply of connector-defined values, no clearing change for an empty declared value, and `Unmanaged` recipients.
-- **Withdrawal:** when the object or the declaring Synchronisation Rule is removed first (requirement 11's Withdrawn), the lane withdraws it at claim time, as the password lane does.
+- **Withdrawal** moved to Phase 5. When the object or the declaring Synchronisation Rule is removed first (requirement 11's Withdrawn), the lane withdraws the change at claim time, as the password lane does. The queue already keeps the row with its references cleared, so the lane can find it.
 - **Tests:**
   - staging per disposition (inserted, superseded, coalesced, cancelled-and-held);
   - D9's misfit and type-change follow-ups;
   - the `DomainController` captured from a two-server setup;
-  - a `RequiresPostgres` test of the UPSERT and its unique key.
+  - a `RequiresPostgres` test of the UPSERT and its unique key;
+  - Scenarios 008 (Samba AD) and 032 (OpenLDAP) at Medium, since staging and reconciliation changed.
 
 ### Phase 5: The delivery lane (6 days; requirements 9 to 11, 26, 27, NFRs)
 
