@@ -421,6 +421,9 @@ function Get-PasswordDeliveryActivity {
         Activities created since -Since (which must be before the change was queued), keeps any that are themselves
         a delivery, and walks the children of the rest.
 
+        An Initial Password's Activity is not on the list at all: it is a follow-up of the export item that
+        provisioned the account (#2668), so its deliveries are reached through the items of -ExportActivityId.
+
     .PARAMETER Since
         A moment before the password change was queued, in UTC.
 
@@ -429,11 +432,15 @@ function Get-PasswordDeliveryActivity {
 
     .PARAMETER ConnectedSystemName
         The Connected System delivered to: a delivery's Activity is named after it.
+
+    .PARAMETER ExportActivityId
+        The exports that provisioned accounts with an Initial Password, whose items' follow-ups are walked too.
     #>
     param(
         [Parameter(Mandatory=$true)][datetime]$Since,
         [Parameter(Mandatory=$true)][datetime]$DeliveredFrom,
-        [Parameter(Mandatory=$true)][string]$ConnectedSystemName
+        [Parameter(Mandatory=$true)][string]$ConnectedSystemName,
+        [string[]]$ExportActivityId = @()
     )
 
     $candidates = [System.Collections.Generic.List[object]]::new()
@@ -442,6 +449,15 @@ function Get-PasswordDeliveryActivity {
         $childCount = Get-PropertyText -Object $root -Name 'childActivityCount'
         if ($childCount -and [int]$childCount -gt 0) {
             foreach ($child in @(Get-JIMActivityChildren -Id $root.id -All)) { $candidates.Add($child) }
+        }
+    }
+
+    foreach ($exportId in $ExportActivityId) {
+        foreach ($item in @(Get-JIMActivity -Id $exportId -ExecutionItems)) {
+            $detail = Get-JIMActivityExecutionItem -Id $item.id -IncludeFollowUps
+            foreach ($followUp in @($detail.followUps)) {
+                foreach ($child in @(Get-JIMActivityChildren -Id $followUp.activityId -All)) { $candidates.Add($child) }
+            }
         }
     }
 
@@ -995,6 +1011,7 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
             Write-Host "  [2/5] Directory Export (the pre-hire is created disabled, its Initial Password refused)..." -ForegroundColor DarkGray
             $r = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
             Assert-ActivitySuccess -ActivityId $r.activityId -Name "Directory Export (pre-hire created)"
+            $preHireExportId = $r.activityId
 
             $preHireParked = Wait-ParkedAndPendingChange -ConnectedSystemId $config.LDAPSystemId -ExpectedParked 1
             Add-TestResult -Name "The pre-hire's Initial Password is parked, so a password is still owed to the account" `
@@ -1075,8 +1092,11 @@ if ($lastStepIndex -ge $stepOrder.IndexOf("Discovery")) {
             # The delivery's Activity states why the account is enabled whatever the rule's Enable Account says:
             # the CompletesWithheldEnable basis. A delivery's Activity is a child of the Activity that queued the
             # password, and the Activity list returns only top-level Activities (#2288), so the search walks the
-            # children of everything since Test 9 began, when the pre-hire's password was queued.
-            $passwordActivities = @(Get-PasswordDeliveryActivity -Since $enableWhileOwedStartedAt -DeliveredFrom $correctedAt -ConnectedSystemName $DirectoryConfig.ConnectedSystemName)
+            # children of everything since Test 9 began, when the pre-hire's password was queued. The pre-hire's
+            # Initial Password is a follow-up of the export item that created the account (#2668), so the search
+            # walks that export's follow-ups as well.
+            $passwordActivities = @(Get-PasswordDeliveryActivity -Since $enableWhileOwedStartedAt -DeliveredFrom $correctedAt `
+                -ConnectedSystemName $DirectoryConfig.ConnectedSystemName -ExportActivityId $preHireExportId)
             $deliveryActivities = @($passwordActivities | Where-Object { (Get-PropertyText -Object $_ -Name 'message') -match 'held the enable back until the account had a password' })
             Add-TestResult -Name "The delivery's Activity says the enable was held back until the account had a password" `
                 -Passed ($deliveryActivities.Count -eq 1) `

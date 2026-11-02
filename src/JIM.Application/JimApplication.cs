@@ -282,7 +282,6 @@ public class JimApplication : IDisposable
     public async Task InitialiseSsoAsync(
         string ssoAuthority,
         string ssoClientId,
-        string ssoSecret,
         string uniqueIdentifierClaimType,
         string uniqueIdentifierMetaverseAttributeName)
     {
@@ -319,14 +318,8 @@ public class JimApplication : IDisposable
             Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOClientId to: {ssoClientId}");
         }
 
-        if (string.IsNullOrEmpty(serviceSettings.SSOSecret) || serviceSettings.SSOSecret != ssoSecret)
-        {
-            serviceSettings.SSOSecret = ssoSecret;
-            await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-
-            // don't print the secret to logs!
-            Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOSecret");
-        }
+        // The client secret is deliberately not mirrored here: it is held encrypted as the SSO.Secret service setting
+        // (seeded by SeedingServer), and a copy on this row was stored in clear (#2684).
 
         // INBOUND CLAIM MAPPING:
         // We want to make it easy for IDP and JIM admin teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.

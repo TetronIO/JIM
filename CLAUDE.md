@@ -191,6 +191,8 @@ For how every dependency layer (NuGet direct and transitive, container base imag
 
 Use `./test/integration/Run-IntegrationTests.ps1` (PowerShell) - never invoke scenario scripts directly. The runner handles setup, environment management, and teardown automatically.
 
+**A change to anything a scenario can observe updates every scenario that observes it, in the same PR.** No integration scenario runs on a pull request (unit and workflow tests do): scenarios run in Pre-Release and in the nightly AD lab, so a scenario a PR breaks fails on `main` a day or more later. Before opening a PR that changes an API or PowerShell response, which list or parent something appears under, an Activity's shape, status or message, or the order or timing of work, search `test/integration` for every reader of it and update each one, including scenarios you cannot run. Say in the PR's Testing section which scenarios you found, changed and ran. How to search, and the AD-lab-only scenarios: "Keeping scenarios in step with the code" in `test/CLAUDE.md`. (Rule added after #2677 moved Initial Password Activities under their export item and updated Scenario 017 but not Scenario 024, which runs only in the AD lab; the next nightly run failed.)
+
 > **Full commands, templates, runner details:** `test/CLAUDE.md`
 
 ## Feature Planning

@@ -949,7 +949,6 @@ static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
     // Environment variables were validated by ValidateSsoConfiguration before the host was built.
     var ssoAuthority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority)!;
     var ssoClientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId)!;
-    var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret)!;
     var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType)!;
     var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute)!;
 
@@ -966,7 +965,7 @@ static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
         var jimApplication = scope.ServiceProvider.GetRequiredService<JimApplication>();
         if (await jimApplication.IsApplicationReadyAsync())
         {
-            await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName);
+            await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName);
             await InitialiseInfrastructureApiKeyAsync(jimApplication);
             break;
         }
