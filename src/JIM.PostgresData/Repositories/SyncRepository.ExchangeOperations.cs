@@ -24,14 +24,13 @@ public partial class SyncRepository
 
     /// <summary>
     /// What a supersede sets each attempt, claim and cancellation column to, rather than the offered row's value: the
-    /// values of a change staged afresh, so the row is due at once whatever the caller passed. Every other column in
-    /// <see cref="PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate"/> takes the offered value.
+    /// values of a change staged afresh, so a deliverable row is due at once whatever the caller passed. Every other
+    /// column in <see cref="PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate"/> takes the offered
+    /// value, the status and failure fields included: Pending with no failure for a deliverable change, Refused and its
+    /// reason for a refusal.
     /// </summary>
     private static readonly Dictionary<string, string> ExchangeSupersedeResetValues = new()
     {
-        ["Status"] = ((int)PendingExchangeChangeStatus.Pending).ToString(),
-        ["FailureKind"] = "NULL",
-        ["FailureMessage"] = "NULL",
         ["AttemptCount"] = "0",
         ["LastAttemptedAt"] = "NULL",
         ["FirstFailedAt"] = "NULL",
@@ -110,10 +109,83 @@ public partial class SyncRepository
         return outcomes;
     }
 
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        // Raw SQL, asked once per reconciliation page holding a change awaiting Exchange. Served by the unique index on
+        // the account, so it reads at most one row per object asked. Every status counts: the row is the hold. A
+        // read-side projection, so exempt from the bulk column list rule.
+        const string sql = """
+            SELECT pec."ConnectedSystemObjectId"
+            FROM "PendingExchangeChanges" pec
+            WHERE pec."ConnectedSystemObjectId" = ANY(@connectedSystemObjectIds)
+              AND pec."ConnectedSystemId" = @connectedSystemId
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+    }
+
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        // Raw SQL, asked once per synchronisation page with drift to evaluate. Led by the partial index on the flag
+        // (IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange), so the probe is near-free where no
+        // change awaits Exchange; each hit joins to its Pending Export by primary key. A read-side projection, so exempt
+        // from the bulk column list rule.
+        const string sql = """
+            SELECT DISTINCT pe."ConnectedSystemObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            WHERE avc."AwaitsExchange"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ConnectedSystemObjectId" = ANY(@connectedSystemObjectIds)
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId },
+            new NpgsqlParameter("connectedSystemObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = connectedSystemObjectIds.ToArray() });
+    }
+
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
+    {
+        // Raw SQL, asked once per import after reconciliation. Led by the partial index on the flag
+        // (IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange), which holds only the changes awaiting
+        // Exchange, so where none exists the probe reads an empty index; each hit joins to its Pending Export by primary
+        // key and probes the queue by the unique index on its account. A read-side projection, so exempt from the bulk
+        // column list rule.
+        const string sql = """
+            SELECT DISTINCT pe."ConnectedSystemObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            WHERE avc."AwaitsExchange"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ConnectedSystemObjectId" IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM "PendingExchangeChanges" pec
+                  WHERE pec."ConnectedSystemObjectId" = pe."ConnectedSystemObjectId")
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+    }
+
     /// <summary>
     /// One statement per change, deciding against the row the queue already holds for the account, if any (#2021):
-    /// insert where there is none; leave a row declaring the same state untouched, whatever its status; supersede a row
-    /// declaring a different state in place.
+    /// insert where there is none; leave a row that is the same change (the same declared state, refused or not alike)
+    /// untouched, whatever its status; supersede any other row in place, taking the offered status and failure fields.
     /// <para>
     /// One statement rather than a read followed by a write, so no other writer (a parallel export batch staging the
     /// same account, or the delivery lane recording an attempt) can act between the decision and the write. The unique
@@ -136,6 +208,10 @@ public partial class SyncRepository
         var values = string.Join(",\n            ", update.Select(c => ExchangeSupersedeResetValues.GetValueOrDefault(c, $"EXCLUDED.\"{c}\"")));
         var sameDeclaredState = string.Join("\n              AND ", ExchangeDeclaredStateColumns
             .Select(c => $"COALESCE(existing.\"{c}\", '') = COALESCE(EXCLUDED.\"{c}\", '')"));
+        // A refusal is part of what the change is (PendingExchangeChange.IsSameChangeAs): refused before and not now,
+        // or the reverse, the same declared state is a different change.
+        var refused = (int)PendingExchangeChangeStatus.Refused;
+        var sameRefusal = $"(existing.\"Status\" = {refused}) = (EXCLUDED.\"Status\" = {refused})";
         var accountParameter = $"@p{Array.IndexOf(PendingExchangeChangeBulkColumns.PendingExchangeChanges, "ConnectedSystemObjectId")}";
 
         return $"""
@@ -144,7 +220,8 @@ public partial class SyncRepository
                 VALUES ({PendingExchangeChangeValuePlaceholders()})
                 ON CONFLICT ("ConnectedSystemObjectId") WHERE "ConnectedSystemObjectId" IS NOT NULL DO UPDATE SET ({BulkSqlHelpers.ToQuotedList(update)}) = (
                     {values})
-                WHERE NOT ({sameDeclaredState})
+                WHERE NOT ({sameDeclaredState}
+              AND {sameRefusal})
                 RETURNING new."Id", old."ActivityId"
             )
             SELECT staged."Id", FALSE, staged."ActivityId", NULL::integer FROM staged

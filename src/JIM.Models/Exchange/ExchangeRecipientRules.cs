@@ -45,6 +45,9 @@ public static class ExchangeRecipientRules
         return declared switch
         {
             ExchangeRecipientTypes.None => null,
+            ExchangeRecipientTypes.Unmanaged =>
+                $"'{ExchangeRecipientTypes.Unmanaged}' cannot be declared: it is what JIM reads for a recipient it does not manage. " +
+                $"Use one of {string.Join(", ", ExchangeRecipientTypes.All)}.",
             ExchangeRecipientTypes.Mailbox or ExchangeRecipientTypes.SharedMailbox or ExchangeRecipientTypes.RoomMailbox
                 or ExchangeRecipientTypes.EquipmentMailbox => Is(objectTypeName, User)
                     ? null
@@ -86,14 +89,30 @@ public static class ExchangeRecipientRules
     /// What export staging does with an object's declared recipient state. A type that does not fit the object is
     /// refused before a type change is considered, because the declaration cannot be right for this object whatever it
     /// is in Exchange today.
+    /// <para>
+    /// A recipient the import read as <see cref="ExchangeRecipientTypes.Unmanaged"/> (a kind this release does not
+    /// manage) is left as it is: declared None there is nothing to do, and any type JIM recognises is refused with a
+    /// sentence saying why, rather than attempted as an enable or reported as a type change. A declaration JIM does not
+    /// recognise, Unmanaged itself included, is refused as the type it is.
+    /// </para>
     /// </summary>
     public static ExchangeRecipientDecision Decide(string objectTypeName, string? importedRecipientType, string? declaredRecipientType, long? groupType)
     {
         var imported = Normalise(importedRecipientType);
         var declared = Normalise(declaredRecipientType);
 
-        if (imported == ExchangeRecipientTypes.None && declared == ExchangeRecipientTypes.None)
+        if ((imported is ExchangeRecipientTypes.None or ExchangeRecipientTypes.Unmanaged) && declared == ExchangeRecipientTypes.None)
             return new ExchangeRecipientDecision { Kind = ExchangeRecipientDecisionKind.NotARecipient };
+
+        if (imported == ExchangeRecipientTypes.Unmanaged && ExchangeRecipientTypes.All.Contains(declared))
+        {
+            return new ExchangeRecipientDecision
+            {
+                Kind = ExchangeRecipientDecisionKind.Refused,
+                Reason = $"This object is a kind of recipient JIM does not manage (for example a linked or remote mailbox), so it cannot be made {Describe(declared)}. " +
+                         "Nothing was changed in Exchange."
+            };
+        }
 
         if (TypeFitRefusal(objectTypeName, declared, groupType) is { } refusal)
             return new ExchangeRecipientDecision { Kind = ExchangeRecipientDecisionKind.Refused, Reason = refusal };
@@ -120,6 +139,7 @@ public static class ExchangeRecipientRules
     public static string Describe(string? recipientType) => Normalise(recipientType) switch
     {
         ExchangeRecipientTypes.None => "not a recipient",
+        ExchangeRecipientTypes.Unmanaged => "a recipient JIM does not manage",
         ExchangeRecipientTypes.EquipmentMailbox => $"an {Noun(recipientType)}",
         var type when ExchangeRecipientTypes.All.Contains(type) => $"a {Noun(type)}",
         var other => $"'{other}'"
@@ -139,6 +159,7 @@ public static class ExchangeRecipientRules
         ExchangeRecipientTypes.MailUser => "mail user",
         ExchangeRecipientTypes.MailContact => "mail contact",
         ExchangeRecipientTypes.MailEnabledGroup => "mail-enabled group",
+        ExchangeRecipientTypes.Unmanaged => "recipient JIM does not manage",
         var other => $"'{other}'"
     };
 

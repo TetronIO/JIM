@@ -290,6 +290,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, connectedSystemObjectIds);
 
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsWithExchangeChangeAsync(connectedSystemId, connectedSystemObjectIds);
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
+        => _inner.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(connectedSystemId);
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsAwaitingExchangeAsync(connectedSystemId, connectedSystemObjectIds);
+
     public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
         => _inner.GetAccountEnablementFactsAsync(connectedSystemId, pendingPasswordChangeId, connectedSystemObjectId, exportsInFlightSince);

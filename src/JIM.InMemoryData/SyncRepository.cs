@@ -2662,6 +2662,51 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(held);
     }
 
+    /// <summary>
+    /// How many times <see cref="GetConnectedSystemObjectIdsWithExchangeChangeAsync"/> has been called, so a test can
+    /// prove the confirming import asks only when a page holds a change awaiting Exchange (#2021).
+    /// </summary>
+    public int GetConnectedSystemObjectIdsWithExchangeChangeCallCount { get; private set; }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        GetConnectedSystemObjectIdsWithExchangeChangeCallCount++;
+        // Every status counts, as in the PostgreSQL query: the row is the hold.
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.ConnectedSystemObjectId is { } id && asked.Contains(id))
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(queued);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && asked.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
+    {
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemObjectId.HasValue)
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        var released = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && !queued.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(released);
+    }
+
     public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
     {
@@ -3779,9 +3824,9 @@ public class SyncRepository : ISyncRepository
             // The row keeps its own id, matching the real repository, so the caller adopts it.
             change.Id = existing.Id;
 
-            // The same declared state leaves the row as it is, whatever its status (a Parked row stays parked, a
-            // retrying row keeps its backoff, a cancellation holds), matching the real staging statement.
-            if (existing.HasSameDeclaredStateAs(change))
+            // The same change leaves the row as it is, whatever its status (a Parked row stays parked, a retrying row
+            // keeps its backoff, a cancellation or a refusal holds), matching the real staging statement.
+            if (existing.IsSameChangeAs(change))
             {
                 outcomes.Add(new ExchangeChangeStagingOutcome
                 {
@@ -3810,8 +3855,10 @@ public class SyncRepository : ISyncRepository
     /// <summary>
     /// What a newer declared state does to the row already held for the account: the in-memory twin of the staging
     /// statement's supersede (<c>PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate</c>). The
-    /// declared state and where and why it was declared are replaced; every trace of earlier attempts, the claim and
-    /// the cancellation is cleared, so the row is due at once and an in-flight attempt's result lands nowhere.
+    /// declared state and where and why it was declared are replaced, the status and failure fields take the offered
+    /// change's own (Pending for a deliverable change, Refused and its reason for a refusal), and every trace of earlier
+    /// attempts, the claim and the cancellation is cleared, so a deliverable row is due at once and an in-flight
+    /// attempt's result lands nowhere.
     /// </summary>
     private static void SupersedeExchangeChange(PendingExchangeChange row, PendingExchangeChange newer)
     {
@@ -3825,9 +3872,9 @@ public class SyncRepository : ISyncRepository
         row.DomainController = newer.DomainController;
         row.ActivityId = newer.ActivityId;
         row.CreatedAt = newer.CreatedAt;
-        row.Status = PendingExchangeChangeStatus.Pending;
-        row.FailureKind = null;
-        row.FailureMessage = null;
+        row.Status = newer.Status;
+        row.FailureKind = newer.FailureKind;
+        row.FailureMessage = newer.FailureMessage;
         row.AttemptCount = 0;
         row.LastAttemptedAt = null;
         row.FirstFailedAt = null;

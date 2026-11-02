@@ -101,7 +101,10 @@ public sealed record ExchangeDeclaredState
         };
     }
 
-    private static bool IsExchangeAttributeChange(PendingExportAttributeValueChange change) =>
+    /// <summary>
+    /// Whether <paramref name="change"/> sets one of the five connector-defined Exchange attributes.
+    /// </summary>
+    public static bool IsExchangeAttributeChange(PendingExportAttributeValueChange change) =>
         change.Attribute is { IsConnectorDefined: true } attribute && ExchangeRecipientAttributes.All.Contains(attribute.Name);
 
     private static bool IsRemoval(PendingExportAttributeValueChange change) =>

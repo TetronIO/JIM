@@ -539,6 +539,47 @@ public class OptimisticExportApplyCalculatorTests
         Assert.That(delta.RemovalValueIds, Is.Empty);
     }
 
+    /// <summary>
+    /// A connector-defined attribute (an Exchange recipient's declared state, #2021) is never written to the directory:
+    /// export hands it to Exchange, which may act long after, or not at all. Recording the declared value on the
+    /// Connected System Object would claim the recipient exists before any import has shown it (PRD requirement 12), and
+    /// staging would then read it back as imported. Only an import changes it.
+    /// </summary>
+    [TestCase(PendingExportAttributeChangeType.Add)]
+    [TestCase(PendingExportAttributeChangeType.Update)]
+    [TestCase(PendingExportAttributeChangeType.Remove)]
+    [TestCase(PendingExportAttributeChangeType.RemoveAll)]
+    public void CalculateDelta_ConnectorDefinedAttribute_RecordsNothingOnTheObject(PendingExportAttributeChangeType changeType)
+    {
+        var cso = CreateCso();
+        var imported = AddCsoValue(cso, 1, AttributeDataType.Text, stringValue: "None");
+        imported.Attribute.IsConnectorDefined = true;
+        var change = CreateChange(1, AttributeDataType.Text, changeType, stringValue: "Mailbox");
+        change.Attribute.IsConnectorDefined = true;
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty);
+            Assert.That(delta.RemovalValueIds, Is.Empty);
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ConnectorDefinedBesideADirectoryAttribute_RecordsOnlyTheDirectoryAttribute()
+    {
+        var cso = CreateCso();
+        var connectorDefined = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "Mailbox");
+        connectorDefined.Attribute.IsConnectorDefined = true;
+        var directory = CreateChange(2, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "Alice");
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, connectorDefined, directory)]);
+
+        Assert.That(delta.Additions.Select(v => (v.AttributeId, v.StringValue)), Is.EqualTo(new[] { (2, (string?)"Alice") }));
+    }
+
     [Test]
     public void CalculateDelta_ChangeWithNoAttributeNavigation_Skipped()
     {

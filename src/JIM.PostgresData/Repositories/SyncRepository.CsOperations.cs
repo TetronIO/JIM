@@ -898,6 +898,7 @@ public partial class SyncRepository
                         trackedAttr.ExportAttemptCount = attrChange.ExportAttemptCount;
                         trackedAttr.LastExportedAt = attrChange.LastExportedAt;
                         trackedAttr.AwaitsInitialPassword = attrChange.AwaitsInitialPassword;
+                        trackedAttr.AwaitsExchange = attrChange.AwaitsExchange;
                     }
                 }
             }
@@ -998,7 +999,8 @@ public partial class SyncRepository
                         "LastImportedValue" text,
                         "ExportAttemptCount" int,
                         "LastExportedAt" timestamptz,
-                        "AwaitsInitialPassword" boolean
+                        "AwaitsInitialPassword" boolean,
+                        "AwaitsExchange" boolean
                     ) ON COMMIT PRESERVE ROWS;
                     TRUNCATE _peavc_bulk_update
                     """;
@@ -1024,6 +1026,7 @@ public partial class SyncRepository
                     else
                         await writer.WriteNullAsync();
                     await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
+                    await writer.WriteAsync(avc.AwaitsExchange, NpgsqlTypes.NpgsqlDbType.Boolean);
                 }
                 await writer.CompleteAsync();
             }
@@ -1423,6 +1426,7 @@ public partial class SyncRepository
             else
                 await writer.WriteNullAsync();
             await writer.WriteAsync(avc.AwaitsInitialPassword, NpgsqlTypes.NpgsqlDbType.Boolean);
+            await writer.WriteAsync(avc.AwaitsExchange, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();

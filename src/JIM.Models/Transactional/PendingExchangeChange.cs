@@ -22,7 +22,7 @@ namespace JIM.Models.Transactional;
 /// <b>The row holds the latest declared state for its account, never a replayable sequence.</b> A unique index on the
 /// Connected System Object makes that a database guarantee: staging a different declared state supersedes the row in
 /// place (<see cref="ExchangeChangeStagingDisposition.Superseded"/>), so Exchange is only ever asked for what the account
-/// should be now, and staging the same declared state leaves the row as it is
+/// should be now, and staging the same change (the same declared state, refused or not alike) leaves the row as it is
 /// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>).
 /// </para>
 /// <para>
@@ -118,8 +118,9 @@ public class PendingExchangeChange
     public ExchangeChangeFailureKind? FailureKind { get; set; }
 
     /// <summary>
-    /// Exchange's own words on the last failure, or null. Why Exchange refused is the most useful thing an
-    /// administrator can be shown.
+    /// Exchange's own words on the last failure, or, for a change JIM refused before asking Exchange
+    /// (<see cref="PendingExchangeChangeStatus.Refused"/>), JIM's reason; null otherwise. Why it was refused is the most
+    /// useful thing an administrator can be shown.
     /// </summary>
     public string? FailureMessage { get; set; }
 
@@ -193,6 +194,22 @@ public class PendingExchangeChange
                && SameDeclaredValue(Database, other.Database)
                && SameDeclaredValue(PrimarySmtpAddress, other.PrimarySmtpAddress)
                && SameDeclaredValue(ExternalAddress, other.ExternalAddress);
+    }
+
+    /// <summary>
+    /// Whether staging <paramref name="offered"/> over this row is the same change, so the row is left as it is
+    /// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>): the same declared state
+    /// (<see cref="HasSameDeclaredStateAs"/>), refused or not alike. A refusal is part of what the change is: the same
+    /// declared state refused before and deliverable now (its cause gone, as a group made universal), or the reverse,
+    /// is a different change, and supersedes the row rather than leaving it refused, or deliverable, for ever. The
+    /// staging statement makes the same comparison in SQL; this is its in-memory twin.
+    /// </summary>
+    public bool IsSameChangeAs(PendingExchangeChange offered)
+    {
+        ArgumentNullException.ThrowIfNull(offered);
+
+        return HasSameDeclaredStateAs(offered)
+               && (Status == PendingExchangeChangeStatus.Refused) == (offered.Status == PendingExchangeChangeStatus.Refused);
     }
 
     private static bool SameDeclaredValue(string? a, string? b) =>

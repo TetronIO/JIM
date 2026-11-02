@@ -350,6 +350,84 @@ public class ExchangeChangeQueueDatabaseTests
     }
 
     /// <summary>
+    /// A supersede writes exactly the offered row's status and failure fields (a refusal records itself and its reason),
+    /// while attempts, claim and cancellation are still cleared.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_RefusalSupersedingAQueuedChange_WritesTheRefusalAndClearsTheAttemptsAsync()
+    {
+        var seeded = await SeedAsync();
+        await StageExistingAsync(seeded, row =>
+        {
+            row.Status = PendingExchangeChangeStatus.Delivering;
+            row.FailureKind = ExchangeChangeFailureKind.Unreachable;
+            row.AttemptCount = 2;
+            row.LastAttemptedAt = DateTime.UtcNow;
+            row.FirstFailedAt = DateTime.UtcNow.AddHours(-1);
+            row.NextRetryAt = DateTime.UtcNow.AddMinutes(4);
+            row.ClaimedAt = DateTime.UtcNow;
+            row.ClaimedBy = "worker-1a2b3c4d";
+            row.CancelledAt = DateTime.UtcNow;
+            row.CancelledByName = "Ada Lovelace";
+        });
+        var refusal = NewChange(seeded, recipientType: "SharedMailbox");
+        refusal.Status = PendingExchangeChangeStatus.Refused;
+        refusal.FailureMessage = "Changing a recipient's type is not supported in this release.";
+
+        var outcome = await StageAsync(refusal);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Refused));
+            Assert.That(stored.FailureMessage, Is.EqualTo("Changing a recipient's type is not supported in this release."));
+            Assert.That(stored.FailureKind, Is.Null);
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.LastAttemptedAt, Is.Null);
+            Assert.That(stored.FirstFailedAt, Is.Null);
+            Assert.That(stored.NextRetryAt, Is.Null);
+            Assert.That(stored.ClaimedAt, Is.Null);
+            Assert.That(stored.ClaimedBy, Is.Null);
+            Assert.That(stored.CancelledAt, Is.Null);
+            Assert.That(stored.CancelledByName, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Whether a change is refused is part of what it is: the same declared state refused before and deliverable now,
+    /// or the reverse, supersedes the row; refused again, it is left as it was.
+    /// </summary>
+    [TestCase(PendingExchangeChangeStatus.Refused, PendingExchangeChangeStatus.Pending, ExchangeChangeStagingDisposition.Superseded)]
+    [TestCase(PendingExchangeChangeStatus.Pending, PendingExchangeChangeStatus.Refused, ExchangeChangeStagingDisposition.Superseded)]
+    [TestCase(PendingExchangeChangeStatus.Refused, PendingExchangeChangeStatus.Refused, ExchangeChangeStagingDisposition.Unchanged)]
+    public async Task StageExchangeChangesAsync_SameDeclaredStateRefusedOrNot_SupersedesOnlyWhenTheRefusalChangedAsync(
+        PendingExchangeChangeStatus existingStatus, PendingExchangeChangeStatus offeredStatus, ExchangeChangeStagingDisposition expected)
+    {
+        var seeded = await SeedAsync();
+        await StageExistingAsync(seeded, row =>
+        {
+            row.Status = existingStatus;
+            row.FailureMessage = existingStatus == PendingExchangeChangeStatus.Refused ? "first" : null;
+        });
+        var offered = NewChange(seeded);
+        offered.Status = offeredStatus;
+        offered.FailureMessage = offeredStatus == PendingExchangeChangeStatus.Refused ? "second" : null;
+
+        var outcome = await StageAsync(offered);
+
+        await using var verify = NewContext();
+        var stored = await verify.PendingExchangeChanges.AsNoTracking().SingleAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.Disposition, Is.EqualTo(expected));
+            Assert.That(stored.Status, Is.EqualTo(offeredStatus));
+            Assert.That(stored.FailureMessage, Is.EqualTo(expected == ExchangeChangeStagingDisposition.Unchanged ? "first" : offered.FailureMessage));
+        }
+    }
+
+    /// <summary>
     /// A different declared state replaces a cancelled row like any other, and the cancellation goes with the state it
     /// cancelled.
     /// </summary>

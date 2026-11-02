@@ -1011,6 +1011,12 @@ public class SyncImportTaskProcessor
         {
             await JudgeUnreconciledInitialPasswordHoldsAsync(connectedSystemObjectsToBeUpdated);
         }
+
+        // Likewise a change awaiting Exchange whose queued change has gone without Exchange touching the object (#2021).
+        using (Diagnostics.Sync.StartSpan("JudgeUnreconciledExchangeHolds"))
+        {
+            await JudgeUnreconciledExchangeHoldsAsync(connectedSystemObjectsToBeUpdated);
+        }
         reconcileSw.Stop();
         Log.Information("PerformImportAsync: PHASE TIMING — Reconciliation: {ReconcileSeconds:F1}s ({UpdateCount} CSOs)",
             reconcileSw.Elapsed.TotalSeconds, connectedSystemObjectsToBeUpdated.Count);
@@ -5366,6 +5372,7 @@ public class SyncImportTaskProcessor
         var totalConfirmed = 0;
         var totalRetry = 0;
         var totalHeld = 0;
+        var totalHeldForExchange = 0;
         var totalReleased = 0;
         var exportsDeleted = 0;
 
@@ -5397,6 +5404,11 @@ public class SyncImportTaskProcessor
             // with an interim value until an Initial Password is delivered (#2039): the engine holds such a change while
             // one is owed and releases it once none is. Null otherwise, and then never read.
             var metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
+
+            // Which of this page's objects still have a change on the Exchange queue, read only when the page holds a
+            // connector-defined change awaiting Exchange (#2021): the engine holds such a change while one is queued and
+            // judges it as any other once none is. Null otherwise, and then never read.
+            var connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(pageCsos, allPendingExportsByCsoId);
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -5430,7 +5442,8 @@ public class SyncImportTaskProcessor
 
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
-                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword);
+                        _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword,
+                            connectedSystemObjectIdsWithExchangeChange);
 
                         if (isFirstPage)
                         {
@@ -5440,6 +5453,8 @@ public class SyncImportTaskProcessor
 
                         // A held change changes nothing and raises no item (#2039); it is counted for the summary only.
                         Interlocked.Add(ref totalHeld, result.HeldChanges.Count);
+                        // Likewise a change Exchange still owes (#2021).
+                        Interlocked.Add(ref totalHeldForExchange, result.HeldForExchangeChanges.Count);
 
                         if (result.HasChanges)
                         {
@@ -5676,11 +5691,12 @@ public class SyncImportTaskProcessor
         // Store the confirmed count on the activity for stats reporting
         _activity.PendingExportsConfirmed = exportsDeleted;
 
-        if (totalConfirmed > 0 || totalRetry > 0 || totalHeld > 0 || totalReleased > 0)
+        if (totalConfirmed > 0 || totalRetry > 0 || totalHeld > 0 || totalReleased > 0 || totalHeldForExchange > 0)
         {
             Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, " +
-                "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, Exports deleted: {Deleted}",
-                totalConfirmed, totalRetry, totalHeld, totalReleased, exportsDeleted);
+                "Held awaiting Initial Password: {Held}, Released (no Initial Password owed): {Released}, " +
+                "Held awaiting Exchange: {HeldForExchange}, Exports deleted: {Deleted}",
+                totalConfirmed, totalRetry, totalHeld, totalReleased, totalHeldForExchange, exportsDeleted);
         }
     }
 
@@ -5761,6 +5777,104 @@ public class SyncImportTaskProcessor
             "Connected System Object(s) this import did not return. Still held (Initial Password owed): {Held}, " +
             "Released (no Initial Password owed): {Released}, Left on a Parked or Executing export: {Left}",
             unreconciled.Count, stillOwedCount, releasedCount, unreconciled.Count - stillOwedCount - releasedCount);
+    }
+
+    /// <summary>
+    /// Judges every connector-defined change on this Connected System awaiting Exchange (#2021) whose object no longer has
+    /// a change on the Exchange queue and which this import did not reconcile, after ordinary reconciliation has judged
+    /// the ones it did. A queued change withdrawn or deleted without Exchange touching the object changes nothing a
+    /// Delta Import would report, and a Full Import skips the unchanged object by its hash, so without this the hold
+    /// would wait for ever on a queued change that no longer exists.
+    /// <para>
+    /// Each is confirmed if the object's last imported value shows it, and otherwise released to be sent again
+    /// (<see cref="ISyncEngine.JudgeChangesAwaitingExchangeNotReconciled"/>); nothing else on those objects is touched.
+    /// One set-based query per run, answered from the partial index on the flag, so a Connected System with nothing
+    /// held pays only that; the objects and their Pending Exports are read only for the holds it names. A release is
+    /// not reported as an item, since the import did not read the object: the next export sends it again and records it.
+    /// </para>
+    /// </summary>
+    /// <param name="reconciledConnectedSystemObjects">The objects this import updated, which reconciliation has judged.</param>
+    private async Task JudgeUnreconciledExchangeHoldsAsync(IReadOnlyCollection<ConnectedSystemObject> reconciledConnectedSystemObjects)
+    {
+        var released = await _syncRepo.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(_connectedSystem.Id);
+        if (released.Count == 0)
+            return;
+
+        var reconciledIds = reconciledConnectedSystemObjects.Select(cso => cso.Id).ToHashSet();
+        released.ExceptWith(reconciledIds);
+        if (released.Count == 0)
+            return;
+
+        var connectedSystemObjects = (await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(_connectedSystem.Id, released))
+            .ToDictionary(cso => cso.Id);
+        var pendingExportsByConnectedSystemObjectId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(released);
+
+        var pendingExportsToDelete = new List<PendingExport>();
+        var pendingExportsToUpdate = new List<PendingExport>();
+        var confirmedChangesToDelete = new List<PendingExportAttributeValueChange>();
+        var confirmed = 0;
+        var retried = 0;
+        foreach (var (connectedSystemObjectId, pendingExport) in pendingExportsByConnectedSystemObjectId)
+        {
+            if (!connectedSystemObjects.TryGetValue(connectedSystemObjectId, out var cso))
+                continue;
+
+            var result = new PendingExportReconciliationResult();
+            _syncEngine.JudgeChangesAwaitingExchangeNotReconciled(cso, pendingExport, result);
+            confirmed += result.ConfirmedChanges.Count;
+            retried += result.RetryChanges.Count;
+
+            if (result.PendingExportToDelete != null)
+            {
+                pendingExportsToDelete.Add(result.PendingExportToDelete);
+            }
+            else if (result.PendingExportToUpdate != null)
+            {
+                pendingExportsToUpdate.Add(result.PendingExportToUpdate);
+                confirmedChangesToDelete.AddRange(result.ConfirmedChanges);
+            }
+        }
+
+        // Persisted exactly as reconciliation persists its outcomes.
+        if (pendingExportsToDelete.Count > 0)
+            await _syncRepo.DeleteUntrackedPendingExportsAsync(pendingExportsToDelete);
+        if (confirmedChangesToDelete.Count > 0)
+            await _syncRepo.DeleteUntrackedPendingExportAttributeValueChangesAsync(confirmedChangesToDelete);
+        if (pendingExportsToUpdate.Count > 0)
+            await _syncRepo.UpdateUntrackedPendingExportsAsync(pendingExportsToUpdate);
+
+        // Anything neither confirmed nor retried sits on a Pending Export reconciliation leaves alone (a Create no import
+        // has confirmed, or a Parked or Executing export), or on an object that has gone, and is left alone here too.
+        Log.Information("JudgeUnreconciledExchangeHoldsAsync: Judged change(s) awaiting Exchange on {Count} Connected System Object(s) this import " +
+            "did not return and which have no change left on the Exchange queue. Confirmed: {Confirmed}, Not confirmed and sent again at the next " +
+            "export: {Retried}, Pending Exports completed: {Deleted}", released.Count, confirmed, retried, pendingExportsToDelete.Count);
+        if (retried > 0)
+        {
+            Log.Warning("JudgeUnreconciledExchangeHoldsAsync: {Retried} change(s) awaiting Exchange on Connected System {ConnectedSystemId} are no longer " +
+                "queued for Exchange and the last import does not show them; they will be exported again. Connected System Objects: {ConnectedSystemObjectIds}",
+                retried, _connectedSystem.Id, string.Join(", ", pendingExportsToUpdate.Select(pe => pe.ConnectedSystemObjectId)));
+        }
+    }
+
+    /// <summary>
+    /// The objects among this page's that still have a change on the Exchange queue (#2021), for the engine to hold or
+    /// judge a connector-defined change awaiting Exchange. Queries only when the page holds such a change, so a page
+    /// (and a Connected System) with none never pays for the lookup; returns null then, which the engine never reads
+    /// because nothing is flagged.
+    /// </summary>
+    private async Task<IReadOnlySet<Guid>?> GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(
+        IReadOnlyCollection<ConnectedSystemObject> pageCsos,
+        IReadOnlyDictionary<Guid, PendingExport> pendingExportsByCsoId)
+    {
+        var csoIdsWithAFlaggedChange = pageCsos
+            .Where(cso => pendingExportsByCsoId.TryGetValue(cso.Id, out var pendingExport) &&
+                pendingExport.AttributeValueChanges.Any(SyncEngine.IsAwaitingExchange))
+            .Select(cso => cso.Id)
+            .ToList();
+        if (csoIdsWithAFlaggedChange.Count == 0)
+            return null;
+
+        return await _syncRepo.GetConnectedSystemObjectIdsWithExchangeChangeAsync(_connectedSystem.Id, csoIdsWithAFlaggedChange);
     }
 
     /// <summary>

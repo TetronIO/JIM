@@ -85,7 +85,8 @@ internal static class LdapExchangeAttributes
 
     /// <summary>
     /// Exchange's <c>msExchRecipientTypeDetails</c> values for the recipient types JIM manages. Anything else (a linked
-    /// or remote mailbox, a dynamic group) is a recipient this release does not manage.
+    /// or remote mailbox, a dynamic group) is a recipient this release does not manage, imported as
+    /// <see cref="ExchangeRecipientTypes.Unmanaged"/>.
     /// </summary>
     private static readonly Dictionary<long, string> RecipientTypes = new()
     {
@@ -110,7 +111,9 @@ internal static class LdapExchangeAttributes
     /// Derives <paramref name="attributeNames"/> from what Exchange stamped on an object, read through
     /// <paramref name="read"/> (a directory attribute's values, empty when it has none). An attribute with nothing to
     /// derive from is left out rather than given an empty value, as an absent directory attribute is, with one
-    /// exception: no recipient type at all means the object is not a recipient, which is None.
+    /// exception: no recipient type at all means the object is not a recipient, which is None. A recipient type outside
+    /// the ones JIM manages, an unreadable one included, is Unmanaged: left out, it would read as None and invite JIM to
+    /// enable a recipient that already exists.
     /// </summary>
     internal static List<ConnectedSystemImportObjectAttribute> Derive(Func<string, IReadOnlyList<string>> read, IEnumerable<string> attributeNames)
     {
@@ -134,12 +137,14 @@ internal static class LdapExchangeAttributes
         return derived;
     }
 
-    private static string? DeriveRecipientType(IReadOnlyList<string> values)
+    private static string DeriveRecipientType(IReadOnlyList<string> values)
     {
         if (values.Count == 0)
             return ExchangeRecipientTypes.None;
 
-        return long.TryParse(values[0], out var details) && RecipientTypes.TryGetValue(details, out var recipientType) ? recipientType : null;
+        return long.TryParse(values[0], out var details) && RecipientTypes.TryGetValue(details, out var recipientType)
+            ? recipientType
+            : ExchangeRecipientTypes.Unmanaged;
     }
 
     /// <summary>The value of a distinguished name's first RDN: a database's name from its <c>homeMDB</c>.</summary>

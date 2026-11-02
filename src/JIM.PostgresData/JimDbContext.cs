@@ -953,6 +953,14 @@ public class JimDbContext : DbContext
             .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
             .HasFilter("\"AwaitsInitialPassword\"");
 
+        // The connector-defined changes Exchange may still owe (#2021), found by the confirming import's per-page lookup
+        // and by its sweep of the holds it did not reconcile. Partial for the same reason as the index above: a change
+        // carries the flag only between its export and its confirmation, on a Connected System that manages Exchange,
+        // so every other change adds nothing to it.
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange")
+            .HasFilter("\"AwaitsExchange\"");
+
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
         // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.

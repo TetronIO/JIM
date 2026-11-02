@@ -283,6 +283,96 @@ public class ExchangeChangeStagingTests
 
     #endregion
 
+    #region Awaiting Exchange (the confirming import's hold)
+
+    /// <summary>
+    /// The directory write did not make the Exchange changes: they are marked as awaiting Exchange, so the confirming
+    /// import holds them while the account's change is on the queue rather than reporting them unconfirmed. The
+    /// export's directory changes are confirmed as they always were.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateDeclaringAMailbox_MarksOnlyItsExchangeChangesAwaitingExchangeAsync()
+    {
+        var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
+        [
+            Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule),
+            Change(type, ExchangeRecipientAttributes.Alias, "ada.lovelace", rule),
+            Change(type, "displayName", "Ada Lovelace", rule)
+        ]);
+
+        await ExportAsync();
+
+        var changes = SyncRepo.PendingExports[account.Export.Id].AttributeValueChanges;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes.Where(c => c.AwaitsExchange).Select(c => c.Attribute.Name),
+                Is.EquivalentTo(new[] { ExchangeRecipientAttributes.RecipientType, ExchangeRecipientAttributes.Alias }));
+            Assert.That(changes.Select(c => c.Status), Is.All.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+        }
+    }
+
+    /// <summary>
+    /// A refusal is held too: it is a row on the queue, and until the declared state changes there is nothing an
+    /// import could confirm and nothing worth sending again.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_RefusedDeclaration_MarksItsExchangeChangeAwaitingExchangeAsync()
+    {
+        var account = Arrange("contact", PendingExportChangeType.Create, changes: (type, rule) =>
+            [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)]);
+
+        await ExportAsync();
+
+        Assert.That(SyncRepo.PendingExports[account.Export.Id].AttributeValueChanges.Single().AwaitsExchange, Is.True);
+    }
+
+    /// <summary>
+    /// Declared None on an object that is not a recipient asks Exchange for nothing, so nothing waits on Exchange.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeclaredNoneOnAnObjectThatIsNotARecipient_MarksNothingAsync()
+    {
+        var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
+            [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.None, rule)]);
+
+        await ExportAsync();
+
+        Assert.That(SyncRepo.PendingExports[account.Export.Id].AttributeValueChanges.Single().AwaitsExchange, Is.False);
+    }
+
+    [Test]
+    public async Task ExecuteExportsAsync_FlagOff_MarksNothingAsync()
+    {
+        ServiceSettingsData.Single(s => s.Key == FeatureFlagCatalogue.ExchangeRecipients.Key).Value = "false";
+        var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
+            [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)]);
+
+        await ExportAsync();
+
+        Assert.That(SyncRepo.PendingExports[account.Export.Id].AttributeValueChanges.Single().AwaitsExchange, Is.False);
+    }
+
+    /// <summary>
+    /// The declared values are not recorded on the Connected System Object at export: only an import shows what
+    /// Exchange made (PRD requirement 12), and staging must keep reading the imported recipient type.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_CreateDeclaringAMailbox_RecordsNoDeclaredValueOnTheObjectAsync()
+    {
+        var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
+        [
+            Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule),
+            Change(type, "displayName", "Ada Lovelace", rule)
+        ]);
+
+        await ExportAsync();
+
+        Assert.That(account.Cso.AttributeValues.Select(v => v.Attribute?.Name ?? v.AttributeId.ToString()),
+            Does.Not.Contain(ExchangeRecipientAttributes.RecipientType));
+    }
+
+    #endregion
+
     #region Refusals and type changes (decision D9)
 
     /// <summary>
@@ -300,9 +390,13 @@ public class ExchangeChangeStagingTests
 
         var activity = ExchangeActivities().Single();
         var item = result.ProcessedExportItems.Single(i => i.PendingExportId == account.Export.Id);
+        var row = SyncRepo.PendingExchangeChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.PendingExchangeChanges, Is.Empty);
+            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Refused), "recorded as a terminal row, never claimed by the lane");
+            Assert.That(row.FailureMessage, Is.EqualTo("Only universal groups can be mail-enabled; this group is not universal."));
+            Assert.That(row.RecipientType, Is.EqualTo(ExchangeRecipientTypes.MailEnabledGroup));
+            Assert.That(row.ActivityId, Is.EqualTo(activity.Id), "the row names the follow-up that reported it");
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithError));
             Assert.That(activity.Message, Is.EqualTo("Only universal groups can be mail-enabled; this group is not universal."));
             Assert.That(activity.ErrorMessage, Is.EqualTo(activity.Message));
@@ -343,7 +437,7 @@ public class ExchangeChangeStagingTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.PendingExchangeChanges, Is.Empty);
+            Assert.That(SyncRepo.PendingExchangeChanges.Values.Single().Status, Is.EqualTo(PendingExchangeChangeStatus.Refused));
             Assert.That(ExchangeActivities().Single().Message, Is.EqualTo("Only a user can have a mailbox; this object is a contact."));
         }
     }
@@ -362,9 +456,12 @@ public class ExchangeChangeStagingTests
         var result = await ExportAsync();
 
         var activity = ExchangeActivities().Single();
+        var row = SyncRepo.PendingExchangeChanges.Values.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(SyncRepo.PendingExchangeChanges, Is.Empty);
+            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Refused), "a type change this release does not make is never delivered");
+            Assert.That(row.FailureMessage, Is.EqualTo(activity.Message));
+            Assert.That(row.RecipientType, Is.EqualTo(ExchangeRecipientTypes.SharedMailbox));
             Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
             Assert.That(activity.Message, Does.Contain("not supported in this release"));
             Assert.That(activity.Message, Does.Contain("a shared mailbox"));
@@ -425,35 +522,116 @@ public class ExchangeChangeStagingTests
         var result = await ExportAsync();
 
         var row = SyncRepo.PendingExchangeChanges.Values.Single();
-        var note = ExchangeActivities().Single();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
             Assert.That(row.ActivityId, Is.EqualTo(cancelled.ActivityId), "the row is left as it is");
-            Assert.That(note.Id, Is.Not.EqualTo(cancelled.ActivityId));
-            Assert.That(note.Status, Is.EqualTo(ActivityStatus.Complete));
-            Assert.That(note.Message, Does.Contain("already declares this state"));
-            Assert.That(note.Message, Does.Contain("stays cancelled until the declared state changes"));
-            Assert.That(note.ParentRunProfileExecutionItemId, Is.Not.Null);
+            Assert.That(ExchangeActivities(), Is.Empty, "the same change, already reported: no second follow-up");
             Assert.That(result.ExchangeChangesUnchangedCount, Is.EqualTo(1));
         }
     }
 
-    [Test]
-    public async Task ExecuteExportsAsync_SameStateAsAPendingChange_SaysItIsAlreadyQueuedAsync()
+    /// <summary>
+    /// Re-staging the change already queued is the same change, not a new one: its Activity already says what became of
+    /// it, so the export writes no follow-up for it again.
+    /// </summary>
+    [TestCase(PendingExchangeChangeStatus.Pending)]
+    [TestCase(PendingExchangeChangeStatus.Parked)]
+    public async Task ExecuteExportsAsync_SameStateAsAQueuedChange_WritesNoNewActivityAsync(PendingExchangeChangeStatus status)
     {
         var account = Arrange("user", PendingExportChangeType.Update,
             imported: type => [Imported(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox)],
             changes: (type, rule) => [Change(type, ExchangeRecipientAttributes.Alias, "ada", rule)]);
-        await SeedQueuedAsync(account.Cso, alias: "ada", PendingExchangeChangeStatus.Pending);
+        await SeedQueuedAsync(account.Cso, alias: "ada", status);
 
-        await ExportAsync();
+        var result = await ExportAsync();
 
-        var note = ExchangeActivities().Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(note.Message, Does.Contain("already declares this state"));
-            Assert.That(note.Message, Does.Not.Contain("cancelled"));
+            Assert.That(ExchangeActivities(), Is.Empty);
+            Assert.That(SyncRepo.PendingExchangeChanges.Values.Single().Status, Is.EqualTo(status));
+            Assert.That(result.ExchangeChangesUnchangedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A refusal is reported once: re-staging the same declared state finds the refused row already there and says
+    /// nothing more, until the declared state changes.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SameStateAsARefusedChange_IsNotReportedAgainAsync()
+    {
+        var account = Arrange("contact", PendingExportChangeType.Update,
+            changes: (type, rule) => [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)]);
+        var refused = await SeedQueuedAsync(account.Cso, alias: null, PendingExchangeChangeStatus.Refused);
+
+        var result = await ExportAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ExchangeActivities(), Is.Empty);
+            Assert.That(SyncRepo.PendingExchangeChanges.Values.Single().ActivityId, Is.EqualTo(refused.ActivityId));
+            Assert.That(result.ExchangeChangesRefusedCount, Is.Zero, "already reported");
+            Assert.That(result.ExchangeChangesUnchangedCount, Is.EqualTo(1));
+        }
+    }
+
+    /// <summary>
+    /// A refusal whose cause has gone with the declared state unchanged (the group made universal) is no longer a
+    /// refusal: the refused row is superseded by the deliverable change, not left refused for ever.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_RefusedChangeNowDeliverableWithTheSameDeclaredState_SupersedesItAsync()
+    {
+        var account = Arrange("group", PendingExportChangeType.Update,
+            imported: type => [ImportedNumber(type, "groupType", GlobalSecurityGroup)],
+            changes: (type, rule) =>
+            [
+                ChangeNumber(type, "groupType", UniversalSecurityGroup, rule),
+                Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.MailEnabledGroup, rule)
+            ]);
+        var refused = await SeedQueuedAsync(account.Cso, alias: null, PendingExchangeChangeStatus.Refused, ExchangeRecipientTypes.MailEnabledGroup);
+        // Read now: superseding the row in place re-points its Activity.
+        var refusedActivityId = refused.ActivityId;
+
+        var result = await ExportAsync();
+
+        var row = SyncRepo.PendingExchangeChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(row.FailureMessage, Is.Null);
+            Assert.That(row.ActivityId, Is.Not.EqualTo(refusedActivityId));
+            Assert.That(result.ExchangeChangesSupersededCount, Is.EqualTo(1));
+            Assert.That(SyncRepo.Activities[row.ActivityId].Status, Is.EqualTo(ActivityStatus.Complete));
+        }
+    }
+
+    /// <summary>
+    /// A newer declared state that is refused supersedes a deliverable change still queued: the lane must not deliver
+    /// the earlier state, and the row carries the refusal and its reason.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_QueuedChangeSupersededByARefusal_RecordsTheRefusalOnTheRowAsync()
+    {
+        var account = Arrange("user", PendingExportChangeType.Update,
+            imported: type => [Imported(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox)],
+            changes: (type, rule) => [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.SharedMailbox, rule)]);
+        var earlier = await SeedQueuedAsync(account.Cso, alias: null, PendingExchangeChangeStatus.Pending);
+        var earlierActivityId = earlier.ActivityId;
+        earlier.AttemptCount = 3;
+
+        var result = await ExportAsync();
+
+        var row = SyncRepo.PendingExchangeChanges.Values.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Refused));
+            Assert.That(row.FailureMessage, Does.Contain("not supported in this release"));
+            Assert.That(row.AttemptCount, Is.Zero);
+            Assert.That(SyncRepo.Activities[row.ActivityId].Status, Is.EqualTo(ActivityStatus.CompleteWithWarning));
+            Assert.That(ExchangeActivities().Count(a => a.ParentActivityId == earlierActivityId), Is.EqualTo(1), "the earlier change is told it was replaced");
+            Assert.That(result.ExchangeTypeChangesNotMadeCount, Is.EqualTo(1));
         }
     }
 
@@ -600,7 +778,8 @@ public class ExchangeChangeStagingTests
     }
 
     /// <summary>A change already on the queue for the account, declaring a mailbox with <paramref name="alias"/>.</summary>
-    private async Task<PendingExchangeChange> SeedQueuedAsync(ConnectedSystemObject cso, string alias, PendingExchangeChangeStatus status)
+    private async Task<PendingExchangeChange> SeedQueuedAsync(ConnectedSystemObject cso, string? alias, PendingExchangeChangeStatus status,
+        string recipientType = ExchangeRecipientTypes.Mailbox)
     {
         var change = new PendingExchangeChange
         {
@@ -609,7 +788,7 @@ public class ExchangeChangeStagingTests
             ConnectedSystemObjectId = cso.Id,
             MetaverseObjectId = cso.MetaverseObjectId,
             SyncRuleId = UpdatingRuleId,
-            RecipientType = ExchangeRecipientTypes.Mailbox,
+            RecipientType = recipientType,
             Alias = alias,
             DomainController = DomainController,
             CreatedAt = DateTime.UtcNow.AddHours(-1),

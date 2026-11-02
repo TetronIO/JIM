@@ -5145,6 +5145,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("AwaitsExchange")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("AwaitsInitialPassword")
                         .HasColumnType("boolean");
 
@@ -5208,6 +5211,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("PendingExportId")
                         .HasDatabaseName("IX_PendingExportAttributeValueChanges_PendingExportId");
+
+                    b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange")
+                        .HasFilter("\"AwaitsExchange\"");
 
                     b.HasIndex(new[] { "PendingExportId" }, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
                         .HasFilter("\"AwaitsInitialPassword\"");

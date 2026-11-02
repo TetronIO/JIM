@@ -243,4 +243,74 @@ public class ExchangeRecipientRulesTests
     }
 
     #endregion
+
+    #region Recipients JIM does not manage
+
+    /// <summary>
+    /// Unmanaged is what the import reads for a recipient this release does not manage (a linked or remote mailbox, a
+    /// dynamic group). It describes Exchange, never a request, so declaring it is refused as a type nobody can ask for.
+    /// </summary>
+    [TestCase("user")]
+    [TestCase("group")]
+    [TestCase("contact")]
+    public void TypeFitRefusal_UnmanagedDeclared_IsRefusedAsATypeThatCannotBeDeclared(string objectTypeName)
+    {
+        var refusal = ExchangeRecipientRules.TypeFitRefusal(objectTypeName, ExchangeRecipientTypes.Unmanaged, UniversalSecurityGroup);
+
+        Assert.That(refusal, Is.Not.Null.And.Contains("cannot be declared"));
+    }
+
+    [TestCase(ExchangeRecipientTypes.Mailbox)]
+    [TestCase(ExchangeRecipientTypes.SharedMailbox)]
+    [TestCase(ExchangeRecipientTypes.MailUser)]
+    public void Decide_DeclaredTypeOverAnUnmanagedRecipient_IsRefusedSayingJimDoesNotManageIt(string declared)
+    {
+        var decision = ExchangeRecipientRules.Decide("user", ExchangeRecipientTypes.Unmanaged, declared, groupType: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Kind, Is.EqualTo(ExchangeRecipientDecisionKind.Refused));
+            Assert.That(decision.Reason, Does.Contain("a kind of recipient JIM does not manage"));
+        }
+    }
+
+    /// <summary>
+    /// A misfit over an unmanaged recipient is refused for the recipient it already is: whatever was declared, JIM will
+    /// not touch it.
+    /// </summary>
+    [Test]
+    public void Decide_MisfitOverAnUnmanagedRecipient_IsRefusedSayingJimDoesNotManageIt()
+    {
+        var decision = ExchangeRecipientRules.Decide("user", ExchangeRecipientTypes.Unmanaged, ExchangeRecipientTypes.MailContact, groupType: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Kind, Is.EqualTo(ExchangeRecipientDecisionKind.Refused));
+            Assert.That(decision.Reason, Does.Contain("a kind of recipient JIM does not manage"));
+        }
+    }
+
+    [TestCase(ExchangeRecipientTypes.None)]
+    [TestCase(null)]
+    [TestCase("")]
+    public void Decide_NoneDeclaredOverAnUnmanagedRecipient_IsNotARecipient(string? declared)
+    {
+        var decision = ExchangeRecipientRules.Decide("user", ExchangeRecipientTypes.Unmanaged, declared, groupType: null);
+
+        Assert.That(decision.Kind, Is.EqualTo(ExchangeRecipientDecisionKind.NotARecipient));
+    }
+
+    [Test]
+    public void Decide_UnmanagedDeclaredOverNothing_IsRefusedAsATypeThatCannotBeDeclared()
+    {
+        var decision = ExchangeRecipientRules.Decide("user", null, ExchangeRecipientTypes.Unmanaged, groupType: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.Kind, Is.EqualTo(ExchangeRecipientDecisionKind.Refused));
+            Assert.That(decision.Reason, Does.Contain("cannot be declared"));
+        }
+    }
+
+    #endregion
 }
