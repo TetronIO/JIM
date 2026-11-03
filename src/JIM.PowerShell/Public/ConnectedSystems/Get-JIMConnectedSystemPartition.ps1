@@ -17,6 +17,11 @@ function Get-JIMConnectedSystemPartition {
         containers Set-JIMConnectedSystemContainer returns. A container's ObjectCount of 0 means it was searched and
         found empty; $null means nobody has counted it.
 
+        For a Connector that keeps a Delta Import watermark for each partition, such as the LDAP Connector, each
+        partition's DeltaImportWatermark says where its next Delta Import reads changes after and when an import last
+        recorded it. It is read-only: imports record it. $null means the partition holds none, so its next Delta Import
+        reads every object in it, as a Full Import does, and records one; a partition that is not selected holds none.
+
     .EXAMPLE
         Get-JIMConnectedSystemPartition -ConnectedSystemId 1
 
@@ -30,6 +35,14 @@ function Get-JIMConnectedSystemPartition {
 
         Lists the Containers holding objects, largest branch first, to decide which are worth
         managing before selecting any of them.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemPartition -ConnectedSystemId 1 |
+            Where-Object { $_.selected -and -not $_.deltaImportWatermark } |
+            Select-Object name
+
+        Lists the selected partitions that hold no Delta Import watermark, whose next Delta Import therefore reads
+        every object in them.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "Samba AD*" | ForEach-Object {

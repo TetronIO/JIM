@@ -391,7 +391,8 @@ else if (_drift is { TrackingDisabled: true })
                 <ConnectedSystemPartitionsTab ConnectedSystem="_connectedSystem"
                                               PartitionsAndHierarchiesText="@_partitionsAndHierarchiesText"
                                               PartitionAndHierarchyText="@_partitionAndHierarchyText"
-                                              OnConnectedSystemChanged="ReloadConnectedSystemAsync" />
+                                              OnConnectedSystemChanged="ReloadConnectedSystemAsync"
+                                              PartitionWatermarks="@_partitionWatermarks" />
             </MudTabPanel>
         }
 
@@ -491,6 +492,8 @@ else if (_drift is { TrackingDisabled: true })
 
     private IList<MetaverseAttribute>? _metaverseAttributes;
 
+    private IReadOnlyDictionary<int, DescribedPartitionWatermark>? _partitionWatermarks;
+
     private AuxiliaryClassDiscoveryRun? _latestAuxiliaryClassDiscoveryRun;
 
     // A Simple mode Object Matching Rule has to name the Metaverse Object Type it searches, so the Matching tab
@@ -521,6 +524,12 @@ else if (_drift is { TrackingDisabled: true })
 
         _hasScimEndpoint = _connectedSystem.ConnectorDefinition.Name == JIM.Connectors.ConnectorConstants.ScimServiceProviderConnectorName
             && await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ScimServiceProvider.Key);
+
+        // Where each partition's next Delta Import starts (#2715), for the Scope tab. Read by id, on a Core load of its own:
+        // describing a watermark creates the Connector, which must never touch the instance this page edits.
+        _partitionWatermarks = _connectedSystem.ConnectorDefinition.SupportsPartitions
+            ? (await jim.ConnectedSystems.GetDescribedPartitionWatermarksAsync(Id))?.ToDictionary(watermark => watermark.PartitionId)
+            : null;
 
         _breadcrumbs =
         [

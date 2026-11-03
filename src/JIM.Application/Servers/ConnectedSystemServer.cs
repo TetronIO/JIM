@@ -4131,6 +4131,57 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Where each Partition of a Connected System's next Delta Import reads changes after (#2715, Decision 3): the
+    /// watermark JIM holds for it, when an import last recorded it, and what its Connector reads the value as. A Partition
+    /// missing from the result has no watermark, so its next Delta Import reads every object in it and records one.
+    /// <para>
+    /// Null when the Connected System does not exist or its Connector does not keep a watermark per Partition
+    /// (<see cref="IConnectorPartitionWatermarks"/>): there is nothing per Partition to show then, and the surfaces say
+    /// nothing rather than reporting every Partition as unrecorded. Empty when the Connector keeps them but none is held.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<DescribedPartitionWatermark>?> GetDescribedPartitionWatermarksAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        return connectedSystem == null ? null : await GetDescribedPartitionWatermarksAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Where each Partition of a Connected System the caller has already loaded (at least its Core) reads changes
+    /// after; see the overload taking an id. Null when its Connector does not keep a watermark per Partition.
+    /// </summary>
+    /// <remarks>
+    /// Pass a Connected System loaded for this call, never one a page is editing: creating its Connector encrypts any
+    /// credential setting it finds held in clear, in place.
+    /// </remarks>
+    public async Task<List<DescribedPartitionWatermark>?> GetDescribedPartitionWatermarksAsync(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        if (CreateConnector(connectedSystem) is not IConnectorPartitionWatermarks describer)
+            return null;
+
+        var watermarks = await Application.Repository.ConnectedSystems.GetPartitionWatermarksAsync(connectedSystem.Id);
+        return watermarks
+            .Select(watermark => new DescribedPartitionWatermark
+            {
+                PartitionId = watermark.PartitionId,
+                Value = watermark.Value,
+                RecordedAt = AsUtc(watermark.RecordedAt),
+                Description = describer.DescribePartitionWatermark(watermark.Value, Log.Logger)
+            })
+            .ToList();
+
+        // The column holds UTC; a read that comes back without its kind is UTC still, and must not be shifted as local.
+        static DateTime AsUtc(DateTime value) => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
+
+    /// <summary>
     /// #2715: an import's recorded Partition watermarks as one description, each Partition's points scoped to the name the
     /// Activity recorded for it. A Partition whose value its Connector finds no watermark in (none recorded, or one the
     /// Connector cannot read) contributes no point. Null when no Partition contributes one.

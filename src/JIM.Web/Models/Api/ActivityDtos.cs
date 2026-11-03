@@ -704,6 +704,24 @@ public class ActivityDetailDto
     public ImportReadRange? ImportReadRange { get; set; }
 
     /// <summary>
+    /// Imports by a Connector that keeps a Delta Import watermark for each partition (the LDAP Connector does): every
+    /// partition the import read, with the watermark it started from, exactly as the Connector keeps it. A partition
+    /// with no <c>Value</c> had none, so the import read every object in it. Empty for every other Activity.
+    /// <c>ImportReadRange</c> says what the values mean.
+    /// </summary>
+    public List<ImportPartitionWatermarkDto>? ImportPartitionWatermarksFrom { get; set; }
+
+    /// <summary>
+    /// Imports by a Connector that keeps a Delta Import watermark for each partition: every partition whose watermark
+    /// the import recorded once it had staged everything it read, with the value it recorded, which that partition's
+    /// next Delta Import reads changes after. A partition the import read but left out keeps the watermark it started
+    /// from; one with no <c>Value</c> had its watermark cleared, so its next Delta Import reads every object in it.
+    /// Empty when the import recorded no partition's watermark (it failed or was cancelled first, or it withheld the
+    /// deletions it detected), and for every other Activity.
+    /// </summary>
+    public List<ImportPartitionWatermarkDto>? ImportPartitionWatermarksTo { get; set; }
+
+    /// <summary>
     /// Saving an import Synchronisation Rule or an Object Matching Rule makes the Connected System's next synchronisation,
     /// Delta or Full, process every object of the Connected System Object Type, because the change can alter what existing
     /// objects produce. For a configuration change Activity, one entry per Object Type it saved changes for, saying whether a
@@ -786,6 +804,8 @@ public class ActivityDetailDto
             ImportWatermarkFrom = activity.ImportWatermarkFrom,
             ImportWatermarkTo = activity.ImportWatermarkTo,
             ImportReadRange = importReadRange,
+            ImportPartitionWatermarksFrom = activity.ImportPartitionWatermarksFrom?.Select(ImportPartitionWatermarkDto.FromEntity).ToList(),
+            ImportPartitionWatermarksTo = activity.ImportPartitionWatermarksTo?.Select(ImportPartitionWatermarkDto.FromEntity).ToList(),
             ConfigurationChangeSynchronisations = (configurationChangeSynchronisations ?? [])
                 .Select(ActivityObjectTypeSynchronisationDto.FromGroup).ToList()
         };

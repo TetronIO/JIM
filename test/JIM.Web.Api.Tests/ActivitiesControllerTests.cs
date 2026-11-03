@@ -823,6 +823,78 @@ public class ActivitiesControllerTests
         }
     }
 
+    [Test]
+    public async Task GetActivityAsync_ImportWithPartitionWatermarks_ReturnsEachPartitionsRecordedValuesAsync()
+    {
+        // #2715: read parity with the portal's Connector state table. Partners had no watermark before the run, so it read
+        // every object in it; the run recorded a value for each.
+        var activityId = Guid.NewGuid();
+        const string corpFrom = "{\"Kind\":\"Accesslog\",\"AccesslogTimestamp\":\"20261103092014.000000Z\",\"AccesslogTimestampIsLogged\":true}";
+        const string corpTo = "{\"Kind\":\"Accesslog\",\"AccesslogTimestamp\":\"20261103100541.000000Z\",\"AccesslogTimestampIsLogged\":true}";
+        const string partnersTo = "{\"Kind\":\"Accesslog\",\"AccesslogTimestamp\":\"20261103094002.000000Z\",\"AccesslogTimestampIsLogged\":true}";
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId,
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            ConnectedSystemId = 7,
+            ConnectedSystemRunType = ConnectedSystemRunType.DeltaImport,
+            ImportPartitionWatermarksFrom =
+            [
+                new ImportPartitionWatermark { PartitionId = 70, PartitionName = "dc=corp,dc=local", Value = corpFrom },
+                new ImportPartitionWatermark { PartitionId = 80, PartitionName = "dc=partners,dc=local", Value = null }
+            ],
+            ImportPartitionWatermarksTo =
+            [
+                new ImportPartitionWatermark { PartitionId = 70, PartitionName = "dc=corp,dc=local", Value = corpTo },
+                new ImportPartitionWatermark { PartitionId = 80, PartitionName = "dc=partners,dc=local", Value = partnersTo }
+            ]
+        });
+        var connectedSystems = new Mock<IConnectedSystemRepository>().StubConfigurationChangeSynchronisationReads();
+        connectedSystems.Setup(r => r.GetConnectedSystemCoreAsync(7, It.IsAny<bool>())).ReturnsAsync(new ConnectedSystem
+        {
+            Id = 7,
+            Name = "Directory",
+            ConnectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.LdapConnectorName }
+        });
+        _mockRepository.Setup(r => r.ConnectedSystems).Returns(connectedSystems.Object);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+        var detail = result?.Value as ActivityDetailDto;
+
+        Assert.That(detail, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(detail!.ImportPartitionWatermarksFrom?.Select(w => (w.PartitionId, w.PartitionName, w.Value)),
+                Is.EqualTo(new[] { (70, "dc=corp,dc=local", (string?)corpFrom), (80, "dc=partners,dc=local", null) }));
+            Assert.That(detail!.ImportPartitionWatermarksTo?.Select(w => (w.PartitionId, w.PartitionName, w.Value)),
+                Is.EqualTo(new[] { (70, "dc=corp,dc=local", (string?)corpTo), (80, "dc=partners,dc=local", partnersTo) }));
+
+            // The described range scopes each point by the partition's recorded name; Partners has no starting point.
+            Assert.That(detail!.ImportReadRange?.From?.Points.Select(p => p.Scope), Is.EqualTo(new[] { "dc=corp,dc=local" }));
+            Assert.That(detail!.ImportReadRange?.To?.Points.Select(p => p.Scope), Is.EqualTo(new[] { "dc=corp,dc=local", "dc=partners,dc=local" }));
+        }
+    }
+
+    [Test]
+    public void ActivityDetailDto_FromEntity_ImportThatRecordedNoPartitionWatermark_LeavesWhereItEndedEmpty()
+    {
+        // The run kept every watermark it started with, which the empty list and the empty value would otherwise blur.
+        var import = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            ImportPartitionWatermarksFrom = [new ImportPartitionWatermark { PartitionId = 70, PartitionName = "dc=corp,dc=local", Value = "corp-1" }]
+        };
+
+        var dto = ActivityDetailDto.FromEntity(import);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ImportPartitionWatermarksFrom?.Single().Value, Is.EqualTo("corp-1"));
+            Assert.That(dto.ImportPartitionWatermarksTo, Is.Null);
+        }
+    }
+
     #endregion
 
     #region GetActivityStatsAsync tests

@@ -1,5 +1,6 @@
-@using System.Globalization
+@using JIM.Models.Activities
 @using JIM.Models.Staging
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -11,7 +12,7 @@
     Renders a MudItem, so it sits in the Summary's MudGrid like the fields around it.
 *@
 
-@if (WatermarkFrom != null || WatermarkTo != null)
+@if (WatermarkFrom != null || WatermarkTo != null || HasPartitionWatermarks)
 {
     <MudItem xs="12" Class="jim-import-read-range">
         @if (_reading != null)
@@ -37,7 +38,43 @@
             @(_stateShown ? "Hide Connector state" : "Show Connector state")
         </MudButton>
 
-        @if (_stateShown)
+        @if (_stateShown && HasPartitionWatermarks)
+        {
+            @* A Connector that keeps a watermark per partition (#2715): one row each, every value in full. What it keeps for
+               the Connected System as a whole holds no position, so the partitions are the state worth reading. *@
+            <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-2">Watermark recorded for each partition:</MudText>
+            <div class="jim-import-partition-watermarks">
+                <MudSimpleTable Dense="true" Outlined="true" Elevation="0">
+                    <colgroup>
+                        <col class="jim-import-partition-watermarks-name-col" />
+                        <col />
+                        <col />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th scope="col">Partition</th>
+                            <th scope="col">Before this run</th>
+                            <th scope="col">After this run</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _partitionRows)
+                        {
+                            <tr @key="row.PartitionId" class="jim-import-partition-watermark-row">
+                                <th scope="row" class="jim-import-partition-watermark-name">@row.PartitionName</th>
+                                <td class="jim-import-partition-watermark-before" data-watermark-state="@StateName(row.BeforeState)">
+                                    @PartitionWatermarkCell(row.BeforeState, row.Before)
+                                </td>
+                                <td class="jim-import-partition-watermark-after" data-watermark-state="@StateName(row.AfterState)">
+                                    @PartitionWatermarkCell(row.AfterState, row.After)
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+        else if (_stateShown)
         {
             @if (WatermarkFrom != null)
             {
@@ -80,15 +117,68 @@
     [Parameter]
     public ImportReadRange? ReadRange { get; set; }
 
+    /// <summary>
+    /// For a Connector that keeps a watermark per Partition (#2715), each Partition's watermark the import started from,
+    /// as recorded on the Activity; null for every other Connector.
+    /// </summary>
+    [Parameter]
+    public List<ImportPartitionWatermark>? PartitionWatermarksFrom { get; set; }
+
+    /// <summary>
+    /// For a Connector that keeps a watermark per Partition, each Partition's watermark the import recorded; null where
+    /// it recorded none, and for every other Connector.
+    /// </summary>
+    [Parameter]
+    public List<ImportPartitionWatermark>? PartitionWatermarksTo { get; set; }
+
     private Reading? _reading;
     private bool _stateShown;
+    private IReadOnlyList<ImportPartitionWatermarkRow> _partitionRows = [];
 
     private sealed record Reading(string Label, IReadOnlyList<string> Lines, bool Scoped, string? Note);
+
+    private bool HasPartitionWatermarks => PartitionWatermarksFrom != null || PartitionWatermarksTo != null;
 
     protected override void OnParametersSet()
     {
         _reading = RunType == ConnectedSystemRunType.DeltaImport ? ReadDelta() : ReadFull();
+        _partitionRows = HasPartitionWatermarks ? ImportPartitionWatermarkRows.Compare(PartitionWatermarksFrom, PartitionWatermarksTo) : [];
     }
+
+    /// <summary>
+    /// A Partition watermark cell: the value in full where one is shown, otherwise what became of it, low-lighted.
+    /// </summary>
+    private static RenderFragment PartitionWatermarkCell(ImportPartitionWatermarkState state, string? value) => __builder =>
+    {
+        if (state == ImportPartitionWatermarkState.Recorded && value != null)
+        {
+            <div class="jim-json-syntax jim-import-partition-watermark-value">@((MarkupString)Helpers.HighlightJson(value))</div>
+        }
+        else
+        {
+            <span class="mud-text-secondary">@StateText(state)</span>
+        }
+    };
+
+    private static string StateText(ImportPartitionWatermarkState state) => state switch
+    {
+        ImportPartitionWatermarkState.None => "No watermark",
+        ImportPartitionWatermarkState.Unchanged => "Unchanged",
+        ImportPartitionWatermarkState.Cleared => "Cleared",
+        _ => "Nothing recorded"
+    };
+
+    /// <summary>
+    /// The state's name as the cell carries it, for styling and for tests that read what a cell says without its wording.
+    /// </summary>
+    private static string StateName(ImportPartitionWatermarkState state) => state switch
+    {
+        ImportPartitionWatermarkState.Recorded => "recorded",
+        ImportPartitionWatermarkState.None => "none",
+        ImportPartitionWatermarkState.Unchanged => "unchanged",
+        ImportPartitionWatermarkState.Cleared => "cleared",
+        _ => "not-recorded"
+    };
 
     /// <summary>
     /// Where the next Delta Import starts: the point this run reached or, where it recorded none, the one it started
@@ -157,9 +247,5 @@
     private static string WithScope(string? scope, string sentence) =>
         scope == null ? sentence : $"{scope}: {char.ToLowerInvariant(sentence[0])}{sentence[1..]}";
 
-    private static string Value(ImportWatermarkPoint point) =>
-        point.Number?.ToString("N0", CultureInfo.InvariantCulture)
-        ?? point.Time?.ToLocalTime().ToFriendlyDate()
-        ?? point.Text
-        ?? string.Empty;
+    private static string Value(ImportWatermarkPoint point) => ImportWatermarkText.Value(point);
 }

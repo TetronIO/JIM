@@ -44,7 +44,7 @@ internal sealed class PartitionWatermarkTestConnector(List<List<ConnectedSystemI
     }
 
     public ImportWatermarkDescription? DescribePartitionWatermark(string? value, ILogger logger) =>
-        value == null ? null : new ImportWatermarkDescription { Kind = "test position", Points = [new ImportWatermarkPoint { Text = value }] };
+        string.IsNullOrEmpty(value) ? null : new ImportWatermarkDescription { Kind = "test position", Points = [new ImportWatermarkPoint { Text = value }] };
 
     public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, string? persistedConnectorData, ILogger logger) =>
         Calls.Add("Open");
