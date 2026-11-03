@@ -1,6 +1,6 @@
 # Per-Partition Delta Import Watermarks
 
-- **Status:** Doing (Phase 1 underway)
+- **Status:** Doing (Phases 1 and 2 complete; the LDAP Connector, Phase 3 onwards, outstanding)
 - **Issue:** [#2715](https://github.com/TetronIO/JIM/issues/2715)
 - **Depends on:** [#2720](https://github.com/TetronIO/JIM/issues/2720) (merged in PR #2721, `ConnectedSystemImportResult.CompleteRead`)
 - **Related:** [#2723](https://github.com/TetronIO/JIM/issues/2723) (truthful `ConnectedSystemObject.PartitionId`), [#2724](https://github.com/TetronIO/JIM/issues/2724) (clearing leaves the SQL and SCIM watermarks)
@@ -265,7 +265,7 @@ A **current** watermark per Partition (Partitions tab, partition DTO, `Get-JIMCo
 
 Red first in every phase: each test below is written, run, and seen to fail for the stated reason before the code it covers. Targeted builds and tests per phase (`dotnet build test/JIM.Worker.Tests/`, `dotnet test test/JIM.Worker.Tests/`); the whole solution before the pull request.
 
-### Phase 1: Table, migration and repository
+### Phase 1: Table, migration and repository ✅
 
 - Entity, `JimDbContext` configuration, migration, `PartitionWatermarkBulkColumns`, `IConnectedSystemRepository` methods (`GetPartitionWatermarksAsync`, `RecordImportWatermarksAsync`, `DeleteWatermarksOfDeselectedPartitionsAsync`), the tracked-fallback delete, the clear, the deselection hook in `ConnectedSystemServer`, `ISyncServer` pass-throughs.
 - Tests:
@@ -287,7 +287,7 @@ Red first in every phase: each test below is written, run, and seen to fail for 
   - `ConfigurationChangeCaptureCoverageTests`: `RecordImportWatermarksAsync_DoesNotCreateActivityOrCaptureSnapshotAsync` (sibling of the existing persisted-data test, line 206).
   - `DeletePathForeignKeyCoverageTests`, `MigrationDesignerChainTests`, `ReleasedMigrationImmutabilityTests`: run, with the `RemovedTables` entry added.
 
-### Phase 2: Contract and processor
+### Phase 2: Contract and processor ✅
 
 - `IConnectorPartitionWatermarks`, `ConnectedSystemImportResult.PartitionWatermarks`, the Activity fields, processor steps 1 to 6 above.
 - Test connector: extend `test/JIM.Worker.Tests/Workflows/PagedImportConnector.cs` (or a sibling `PartitionWatermarkTestConnector`) to accept injected watermarks, return per-Partition values, and record what it was handed.
@@ -362,7 +362,7 @@ Red first in every phase: each test below is written, run, and seen to fail for 
 
 ### Phase 6: Activity, portal, REST API and PowerShell
 
-- `GetImportReadRangeAsync` merge, `ActivityDto` fields, `ImportReadRangeField` state toggle, PowerShell reference regeneration.
+- `ActivityDto` fields (the `GetImportReadRangeAsync` merge landed in Phase 2), `ImportReadRangeField` state toggle, PowerShell reference regeneration.
 - Tests: `ActivitiesControllerTests.GetActivityAsync_ImportWithPartitionWatermarks_ReturnsEachPartitionsRecordedValuesAsync`; `test/JIM.Web.Tests/ImportReadRangeFieldTests.cs`: `ImportReadRangeField_PartitionWatermarks_ShowsOneLinePerPartitionAsync` and `ImportReadRangeField_PartitionWithNoStartingWatermark_ReadsFromTheStartAsync` (behaviour, not wording).
 - Run `scripts/Generate-OpenApiDoc.ps1 -NoBuild` (new DTO members) and boot the stack once to confirm the Activity page.
 - Decision 3: the Partitions tab, partition DTO and `Get-JIMConnectedSystemPartition` gain the current watermark, with an artefact for the UI and Pester tests for the cmdlet's output shape.
@@ -493,3 +493,6 @@ Decided on 3 November 2026. Questions 1 to 3 were put to the user and accepted a
 | Capture once from the oldest W, for every source | Only the accesslog narrows from the oldest W, with an explicit second walk for quiet Partitions | USN and changelog captures never used the previous watermark; the accesslog needs the rule spelt out so a quiet Partition keeps advancing |
 | Watermark fields move out of `LdapConnectorRootDse` | Yes, but `InvocationId` and `DnsHostName` stay there too | Capabilities display, `ResolveEffectiveServer`, and Scenario 025 read them |
 | Source chosen as today | Explicitly kept on the start-of-run record | Later pages are handed the start-of-run record, so any other choice can diverge between pages |
+| Validate the page that first carries `PartitionWatermarks` | Every page's map is checked before its objects are processed; only the first map is recorded | A bad key on a later page would otherwise be ignored silently, though it is the same fault in the Connector |
+| Fail when a Connector without the capability returns watermarks | It must leave `PartitionWatermarks` null; any map, even an empty one, fails the run | One rule a Connector author can state, and no case where a non-null map from such a Connector is meaningful |
+| Sweep deselected Partitions at the end of every completed run | Only at the end of a run that may record; a run that records nothing (withheld deletes, incomplete deletion detection, the close override) writes nothing at all | "Record nothing" stays literal; the deselection hook (Decision 5) already covers those runs |
