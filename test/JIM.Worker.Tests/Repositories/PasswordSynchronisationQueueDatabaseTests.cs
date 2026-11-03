@@ -853,6 +853,71 @@ public class PasswordSynchronisationQueueDatabaseTests
     }
 
     /// <summary>
+    /// A retry narrowed by search text touches only the changes the same search lists (#2725): the portal's "Retry
+    /// shown" sends the search box's text, and the action ignored it, retrying every change the other criteria matched.
+    /// </summary>
+    [Test]
+    public async Task RetryPasswordChangesAsync_WithSearchText_RetriesOnlyTheMatchingIdentitysChangesAsync()
+    {
+        var (systemId, adaId, adaCso) = await SeedSystemIdentityAndAccountAsync();
+        var bobId = await SeedIdentityAsync();
+        var bobCso = await SeedAdditionalConnectedSystemObjectAsync(systemId, bobId);
+        await NameIdentityAsync(adaId, "Ada Lovelace");
+        await NameIdentityAsync(bobId, "Bob Smith");
+        var ada = await SeedChangeAsync(systemId, adaId, adaCso, change => change.Status = PendingPasswordChangeStatus.Parked);
+        var bob = await SeedChangeAsync(systemId, bobId, bobCso, change => change.Status = PendingPasswordChangeStatus.Parked);
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.RetryPasswordChangesAsync(
+                new PendingPasswordChangeFilter { Status = PendingPasswordChangeStatus.Parked, SearchText = "ada" });
+            Assert.That(affected, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        var statuses = await verify.PendingPasswordChanges.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Status);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(statuses[ada], Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(statuses[bob], Is.EqualTo(PendingPasswordChangeStatus.Parked));
+        }
+    }
+
+    /// <summary>
+    /// The search matches the Connected System's name as well as the identity's, as the list's does (#2725).
+    /// </summary>
+    [Test]
+    public async Task CancelPasswordChangesAsync_WithSearchText_CancelsOnlyTheMatchingSystemsChangesAsync()
+    {
+        var (corporateId, adaId, corporateCso) = await SeedSystemIdentityAndAccountAsync("Corporate AD");
+        var (hrId, graceId, hrCso) = await SeedSystemIdentityAndAccountAsync("HR Portal");
+        var corporate = await SeedChangeAsync(corporateId, adaId, corporateCso);
+        var hr = await SeedChangeAsync(hrId, graceId, hrCso);
+
+        await using (var act = NewContext())
+        {
+            var affected = await new PostgresDataRepository(act).Sync.CancelPasswordChangesAsync(
+                new PendingPasswordChangeFilter { SearchText = "hr portal" }, Guid.NewGuid(), "Ada Lovelace", DateTime.UtcNow);
+            Assert.That(affected, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        var statuses = await verify.PendingPasswordChanges.AsNoTracking().ToDictionaryAsync(c => c.Id, c => c.Status);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(statuses[hr], Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(statuses[corporate], Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    private async Task NameIdentityAsync(Guid metaverseObjectId, string displayName)
+    {
+        await using var write = NewContext();
+        await write.MetaverseObjects.Where(m => m.Id == metaverseObjectId)
+            .ExecuteUpdateAsync(set => set.SetProperty(m => m.CachedDisplayName, displayName));
+    }
+
+    /// <summary>
     /// An expired change has no password left to send, so a retry that swept it up would queue an empty delivery.
     /// </summary>
     [Test]
