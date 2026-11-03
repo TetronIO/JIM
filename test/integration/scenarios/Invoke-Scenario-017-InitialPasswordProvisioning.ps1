@@ -306,6 +306,13 @@ try {
                      @($followUpStates | Where-Object { $_ -ne 'Parked' }).Count -eq 0) `
             -Detail "Export items: $($exportItems.Count); follow-up states: $($followUpStates -join ', ') (expected $provisionedCount, all Parked)."
 
+        # The run counts its follow-ups by kind and state (#2021, Phase 6): the same parked passwords, read in one query.
+        $runFollowUps = @((Get-JIMActivityStats -Id $r.activityId).followUps | Where-Object { $_.kind -eq 'PasswordSynchronisation' })
+        $parkedCount = ($runFollowUps | Where-Object { $_.state -eq 'Parked' } | Measure-Object -Property count -Sum).Sum
+        Add-TestResult -Name "The export run's follow-up summary counts every Initial Password as parked" `
+            -Passed ($parkedCount -eq $provisionedCount -and $runFollowUps.Count -eq 1) `
+            -Detail "Run follow-ups: $(@($runFollowUps | ForEach-Object { "$($_.count) $($_.state)" }) -join ', ') (expected $provisionedCount Parked)."
+
         $topLevelPasswordActivities = @(Get-JIMActivity -PageSize 100 |
             Where-Object { $_.targetType -eq 'PasswordSynchronisation' -and $_.targetContext -eq 'Provisioned' })
         Add-TestResult -Name "No Initial Password Activity is listed at the top level of the Activity list" `

@@ -81,6 +81,7 @@ The Run Profile execution's statistics.
 | `TotalCreated` | `int` | Number of Metaverse Objects created directly (by example data generation or in the portal) rather than by projection. |
 | `EntriesDiscardedByExcludedContainer` | `hashtable` | How many entries this import read from the Connected System and discarded because an excluded Container carved them out, keyed by that Container's id. |
 | `TotalEntriesDiscardedByExclusion` | `int` | Entries discarded across every exclusion, which is the figure that answers "why was this import slow?". |
+| `FollowUps` | `object[]` | Where the work the run set in motion stands now, counted by kind and state: the Initial Passwords and Exchange recipient changes its exports queued. Unlike the counts above, which are final once the run has finished, these change as the work is delivered. Empty for a run that set nothing in motion. Each has `Kind`, `State` and `Count`. |
 <!-- END GENERATED: Get-JIMActivityStats -->
 
 An import that discarded entries because a [Container Scope exclusion](../connectors/jim-ldap-connector-topology.md#excluding-a-container) carved them out counts them in `TotalEntriesDiscardedByExclusion` and `EntriesDiscardedByExcludedContainer`, the latter keyed by the excluded Container's ID because the Container can be renamed after the run. Resolve an ID to a name with [`Get-JIMConnectedSystemPartition`](partitions-and-containers.md#get-jimconnectedsystempartition).
