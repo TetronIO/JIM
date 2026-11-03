@@ -416,4 +416,40 @@ public class ConnectedSystemDeletionDatabaseTests
                 Is.False, "the orphans go with it rather than being left behind");
         }
     }
+
+    /// <summary>
+    /// Partition watermarks (#2715) hang off both the Connected System and its Partitions. The clear helper the
+    /// sequence starts with removes them by a statement of its own, and both foreign keys cascade besides; either way,
+    /// a Connected System whose Partitions hold watermarks must delete cleanly and take them with it.
+    /// </summary>
+    [Test]
+    public async Task DeleteConnectedSystemAsync_PartitionsHoldWatermarks_DeletesThemWithTheSystemAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (systemId, _) = await SeedSystemAsync(suffix);
+        await using (var ctx = NewContext())
+        {
+            var system = await ctx.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == systemId);
+            var corp = new ConnectedSystemPartition { ConnectedSystem = system, ExternalId = $"dc=corp,dc=local-{suffix}", Name = "corp.local", Selected = true };
+            var partners = new ConnectedSystemPartition { ConnectedSystem = system, ExternalId = $"dc=partners,dc=local-{suffix}", Name = "partners.local", Selected = true };
+            ctx.ConnectedSystemPartitions.AddRange(corp, partners);
+            await ctx.SaveChangesAsync();
+            await new PostgresDataRepository(ctx).ConnectedSystems.RecordImportWatermarksAsync(systemId, null,
+                new Dictionary<int, string> { [corp.Id] = "corp-1", [partners.Id] = "partners-1" }, [], DateTime.UtcNow);
+        }
+
+        await using (var deleteCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(deleteCtx);
+            Assert.That(async () => await repository.ConnectedSystems.DeleteConnectedSystemAsync(systemId), Throws.Nothing);
+        }
+
+        await using var assertCtx = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await assertCtx.ConnectedSystems.AnyAsync(cs => cs.Id == systemId), Is.False);
+            Assert.That(await assertCtx.ConnectedSystemPartitionWatermarks.AnyAsync(w => w.ConnectedSystemId == systemId), Is.False,
+                "the Partition watermarks go with their Connected System");
+        }
+    }
 }

@@ -903,6 +903,48 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the Delta Import watermark JIM holds for each Partition of a Connected System that has one (#2715). A
+    /// Partition missing from the result has no watermark, so its next Delta Import reads every object in it.
+    /// </summary>
+    public async Task<List<ConnectedSystemPartitionWatermark>> GetConnectedSystemPartitionWatermarksAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPartitionWatermarksAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Records what a completed import reached (#2715), as runtime state for the same reasons as
+    /// <see cref="UpdateConnectedSystemPersistedConnectorDataAsync"/>: no Activity, no configuration snapshot. In one
+    /// transaction, it writes the persisted connector data unless <paramref name="persistedConnectorData"/> is null,
+    /// records each Partition's watermark (a null value clears the Partition's, so its next Delta Import reads every
+    /// object in it), and removes the watermarks of Partitions no longer selected.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System the import read; its persisted connector data is kept in step.</param>
+    /// <param name="persistedConnectorData">The new persisted connector data, or null to leave it as it is.</param>
+    /// <param name="partitionWatermarks">What the import reached for each Partition, by Partition id.</param>
+    public async Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(ConnectedSystem connectedSystem, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string?> partitionWatermarks)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(partitionWatermarks);
+
+        var toRecord = partitionWatermarks
+            .Where(watermark => watermark.Value != null)
+            .ToDictionary(watermark => watermark.Key, watermark => watermark.Value!);
+        var toClear = partitionWatermarks
+            .Where(watermark => watermark.Value == null)
+            .Select(watermark => watermark.Key)
+            .ToList();
+
+        var result = await Application.Repository.ConnectedSystems.RecordImportWatermarksAsync(
+            connectedSystem.Id, persistedConnectorData, toRecord, toClear, DateTime.UtcNow);
+
+        if (persistedConnectorData != null)
+            connectedSystem.PersistedConnectorData = persistedConnectorData;
+
+        return result;
+    }
+
+    /// <summary>
     /// Persists a runtime status change (e.g. resetting <see cref="ConnectedSystemStatus.Deleting"/> back to
     /// <see cref="ConnectedSystemStatus.Active"/> after a failed deletion) without creating an Activity or capturing a
     /// configuration snapshot. Status is runtime state, not configuration; routing it through the full
@@ -1786,6 +1828,7 @@ public partial class ConnectedSystemServer
     {
         ProtectEncryptedSettingValues(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystem.Id);
     }
 
     /// <summary>
@@ -1796,6 +1839,26 @@ public partial class ConnectedSystemServer
     {
         ProtectEncryptedSettingValues(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystem.Id);
+    }
+
+    /// <summary>
+    /// #2715, Decision 5: once a save has left a Partition deselected, its Delta Import watermark goes. A Partition
+    /// selected again later must read every object in it, not resume from a watermark taken before the objects it held
+    /// were obsoleted while it was out of scope. Called after every save that can change a Partition's selection: the
+    /// Connected System graph saves above and the single-Partition update. Removing it here, rather than only at the
+    /// end of the next import, also covers a deselect followed by an import that obsoletes the Partition's objects
+    /// but fails before recording anything, then a reselect. The import's end-of-run write sweeps with the same
+    /// statement, for any path that changes the selection without coming through here.
+    /// </summary>
+    private async Task RemoveWatermarksOfDeselectedPartitionsAsync(int connectedSystemId)
+    {
+        var removed = await Application.Repository.ConnectedSystems.DeleteWatermarksOfDeselectedPartitionsAsync(connectedSystemId);
+        if (removed > 0)
+        {
+            Log.Information("RemoveWatermarksOfDeselectedPartitionsAsync: Removed the Delta Import watermarks of {Count} deselected Partition(s) of Connected System {ConnectedSystemId}; each reads every object in it the next time it is selected and imported.",
+                removed, connectedSystemId);
+        }
     }
 
     /// <summary>
@@ -7268,7 +7331,7 @@ public partial class ConnectedSystemServer
         await ExecuteScopeConfigurationChangeAsync(
             connectedSystemId,
             $"Update partition: {partition.Name}",
-            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            () => UpdateConnectedSystemPartitionAndItsWatermarkAsync(partition, connectedSystemId),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
@@ -7284,8 +7347,18 @@ public partial class ConnectedSystemServer
         await ExecuteScopeConfigurationChangeAsync(
             connectedSystemId,
             $"Update partition: {partition.Name}",
-            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            () => UpdateConnectedSystemPartitionAndItsWatermarkAsync(partition, connectedSystemId),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Saves a Partition, then removes its Delta Import watermark if the save left it deselected (#2715, Decision 5;
+    /// see <see cref="RemoveWatermarksOfDeselectedPartitionsAsync"/>).
+    /// </summary>
+    private async Task UpdateConnectedSystemPartitionAndItsWatermarkAsync(ConnectedSystemPartition partition, int connectedSystemId)
+    {
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystemId);
     }
 
     /// <summary>

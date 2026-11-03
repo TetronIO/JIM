@@ -1862,6 +1862,47 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemPersistedConnectorDataAsync(int connectedSystemId, string? persistedConnectorData);
 
     /// <summary>
+    /// Gets the Delta Import watermark JIM holds for each Partition of a Connected System that has one (#2715). A
+    /// Partition with no row has no watermark. Untracked.
+    /// </summary>
+    public Task<List<ConnectedSystemPartitionWatermark>> GetPartitionWatermarksAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records what a completed import reached, in one transaction (enrolling in an ambient one where there is one):
+    /// the Connected System's persisted connector data, a watermark for each Partition in
+    /// <paramref name="partitionWatermarks"/> (written or replaced, <see cref="ConnectedSystemPartitionWatermark.RecordedAt"/>
+    /// set to <paramref name="recordedAt"/> whether or not the value changed), the removal of the watermark of each
+    /// Partition in <paramref name="partitionWatermarksToClear"/>, and the removal of every watermark whose Partition
+    /// is no longer selected (#2715).
+    /// <para>
+    /// A Partition that is not the Connected System's, or that was removed while the import ran, is skipped rather
+    /// than failing the write: the import has staged everything it read by now, and a refusal here would be the worst
+    /// possible moment. Two imports of one Connected System may record at once (parallel Schedule steps); the last
+    /// writer wins, which costs at most a re-read, never a skipped change.
+    /// </para>
+    /// <para>
+    /// Like <see cref="UpdateConnectedSystemPersistedConnectorDataAsync"/>, touches no tracked state, so it never
+    /// flushes the import's tracked graph.
+    /// </para>
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the import read.</param>
+    /// <param name="persistedConnectorData">The Connected System's new persisted connector data; null leaves it as it is.</param>
+    /// <param name="partitionWatermarks">The watermark to record for each Partition, by Partition id.</param>
+    /// <param name="partitionWatermarksToClear">The Partitions whose watermark the import cleared, by id.</param>
+    /// <param name="recordedAt">When the watermarks are recorded (UTC).</param>
+    /// <returns>What the write changed.</returns>
+    public Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(int connectedSystemId, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string> partitionWatermarks, IReadOnlyCollection<int> partitionWatermarksToClear, DateTime recordedAt);
+
+    /// <summary>
+    /// Removes the watermark of every Partition of a Connected System that is no longer selected (#2715), so a
+    /// Partition selected again later reads every object in it rather than resuming from a watermark taken before its
+    /// objects were obsoleted while it was out of scope.
+    /// </summary>
+    /// <returns>How many watermarks were removed.</returns>
+    public Task<int> DeleteWatermarksOfDeselectedPartitionsAsync(int connectedSystemId);
+
+    /// <summary>
     /// Persists a Connected System update including reconciliation of its ObjectTypes and their Attributes.
     /// Unlike <see cref="UpdateConnectedSystemAsync"/>, which only persists the root plus partitions and
     /// setting values, this method also adds newly-discovered object types/attributes and applies updates to

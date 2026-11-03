@@ -307,6 +307,26 @@ public class Activity
     /// </summary>
     public string? ImportWatermarkTo { get; set; }
 
+    /// <summary>
+    /// For an import of a Connected System whose Connector keeps a watermark per Partition, each Partition the import
+    /// read with the watermark it started from, null for a Partition that had none. Null for an import whose Connector
+    /// keeps no Partition watermarks.
+    /// </summary>
+    /// <remarks>
+    /// #2715. Stored as JSON on the Activity rather than in a child table: an Activity is an append-only audit record,
+    /// kept after its Connected System is deleted, and needs no foreign key to a Partition that may go.
+    /// </remarks>
+    public List<ImportPartitionWatermark>? ImportPartitionWatermarksFrom { get; set; }
+
+    /// <summary>
+    /// For an import of a Connected System whose Connector keeps a watermark per Partition, the Partition watermarks the
+    /// import recorded, which the next import of each Partition starts from; a null value is a watermark the import
+    /// cleared. A Partition left out kept the watermark it had. Null when the import recorded none: it failed or was
+    /// cancelled before staging everything it read, it withheld deletions, or its Connector returned none.
+    /// </summary>
+    /// <remarks>#2715. Stored as JSON, for the reasons on <see cref="ImportPartitionWatermarksFrom"/>.</remarks>
+    public List<ImportPartitionWatermark>? ImportPartitionWatermarksTo { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // security audit event fields (for Authentication activities: interactive sign-in, API key and SSO access token)
     // -----------------------------------------------------------------------------------------------------------------
