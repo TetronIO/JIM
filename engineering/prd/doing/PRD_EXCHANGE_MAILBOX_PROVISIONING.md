@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning (on-premises)
 
-- **Status:** Doing (Phase 3 of the implementation plan under way)
+- **Status:** Doing (Phases 3 to 5 of the implementation plan complete)
 - **Created:** 2026-10-31
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)

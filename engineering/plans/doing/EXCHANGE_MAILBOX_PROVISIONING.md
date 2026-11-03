@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 3 and 4 complete; Phases 1, 2 and 5 onwards wait on the spike's go)
+- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phases 1, 2 and 6 onwards wait on the spike's go)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -149,6 +149,7 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
   - principal and realm derivation for all three username forms;
   - discovery parsing of `msExchExchangeServer`;
   - a harness test of the save-time check against the stand-in.
+- **The LDAP Connector implements `IConnectorExchangeRecipients`** (moved from Phase 5, which built the lane against the interface): the session over the remoting library, `ConvergeAsync`'s read-then-converge, and the classification of the library's `RemoteFailure` into the five failure kinds from the spike's failure catalogue, with its table test. Also a harness test in which the stand-in server is preloaded with fake `Enable-Mailbox` / `Get-Recipient`, so CI exercises the lane end to end without Exchange.
 
 ### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25) ✅
 
@@ -193,26 +194,27 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
   - a `RequiresPostgres` test of the UPSERT and its unique key;
   - Scenarios 008 (Samba AD) and 032 (OpenLDAP) at Medium, since staging and reconciliation changed.
 
-### Phase 5: The delivery lane (6 days; requirements 9 to 11, 26, 27, NFRs)
+### Phase 5: The delivery lane (6 days; requirements 9 to 11, 26, 27, NFRs) ✅
 
-- Generalise `PasswordDeliveryScheduler` into `DeliveryScheduler` (D1). The password lane's behaviour is unchanged, and its tests prove it.
-- **`ExchangeDeliveryServer.DeliverLaneAsync`:**
-  - claims due rows with `FOR UPDATE SKIP LOCKED` and a lease;
-  - opens one Exchange session per lane through `IConnectorExchangeRecipients`, and converges each change;
-  - records the outcome as a child Activity of the change's Activity;
-  - deletes delivered rows;
-  - retries with backoff from 2 minutes, doubling to at most an hour, and parks Refused, Insufficient permissions and Authentication failures at once, and anything else after 24 hours of failures (requirement 11, decision 12).
-- **Concurrency:** parallel sessions per Connected System are bounded by the value Phase 3 of the spike measures, well below `PowerShellMaxConcurrency` (decision 4).
-- **Logging:** summary statistics per lane and per pass: delivered, retrying, parked, superseded and withdrawn, plus the session's `RemoteSessionStatistics` (Kerberos logins, connections, commands) (requirement 27).
+Built ahead of the spike's go, against the capability interface rather than Exchange (agreed 2026-11-03): the lane, the queue's delivery statements, the host and its health are complete, and the LDAP Connector's own implementation of the interface arrives with Phase 2. Until then a lane on an LDAP system gives its claims back unattempted, which is harmless because staging is behind the flag.
+
+- **The scheduler is shared (D1).** `PasswordDeliveryScheduler` became `DeliveryScheduler` over `IDeliveryWork`, with a `DeliveryService` base holding the readiness wait, the restart loop and the `NOTIFY` listener. The password lane's tests moved with it unchanged in substance.
+- **`IConnectorExchangeRecipients`** (D4) holds what the lane needs: open a session, converge, the session's statistics, close. `CheckSessionAsync` and `ReadRecipientAsync` arrive with Phase 2, which first needs them. A session that cannot be opened throws `ExchangeSessionException` with its failure kind.
+- **`ExchangeDeliveryServer`:**
+  - claims due rows with `FOR UPDATE SKIP LOCKED` under a two-minute lease (twice the password lane's, since one converge can take seconds), in batches of 100, at most 1,000 per pass;
+  - opens one session per lane (`MaximumSessionsPerConnectedSystem = 1`, raised once decision 4's measurement exists) and converges each change in order;
+  - deletes delivered rows; every lane write is guarded on the row still being Delivering under that lane's claim, so a supersession, a cancellation or another deliverer's reclaim survives;
+  - withdraws, without asking Exchange, a change whose account or declaring Synchronisation Rule was removed, or whose account's declaration has moved on since it was queued (below);
+  - records a session that cannot be opened against every change claimed, so it shows against the person as Retrying (Scenario 5);
+  - logs a per-lane summary with the session's Kerberos logins, connections and commands (requirement 27).
+- **Retry and parking, corrected against the PRD.** This plan said Refused, Insufficient permissions and Authentication failures park at once. The PRD (requirement 11, decision 12) parks only on "Exchange refused, or 24 hours of retries failed". So Refused and Insufficient permissions park at once, because a person must act, and Object not found, Unreachable and Authentication failed retry from 2 minutes, doubling to an hour, and park once 24 hours have passed since the first failure, with the last attempt booked for the 24-hour mark.
+- **Child Activities are written on change only (decided 2026-11-03).** A retrying change writes one on its first failure, whenever the failure kind or message changes, and on its final outcome (Delivered, Parked, Withdrawn). Repeats update only the queued row, which carries the latest attempt for Phase 6 to show. One per attempt, as the password lane writes, would be about 27 per change before parking, and about 27,000 during an outage over a 1,000-joiner batch.
+- **The stale change is closed, from both ends.** Export evaluation kept a change awaiting Exchange when the declaration went back to what Exchange last stamped, because a sent change awaiting its confirming import is exempt from already-current withdrawal; its queued change would then have made a recipient nobody declares. A change awaiting Exchange now follows the Initial Password hold's rule: withdrawn unless the evaluation restates it exactly. The lane, in turn, reads each account's declared state now (its imported Exchange values with the changes still held for Exchange laid over) and withdraws a queued change that no longer matches it. A change still owed after that is queued again by the account's next export, because its released hold is judged unconfirmed and retried.
 - **Health and retention:**
-  - Service Health shows a "Worker · Exchange" entry with current work and an outlook.
-  - Retention follows D10.
-- **Tests:**
-  - the state machine and backoff;
-  - the classification table, built from the spike's failure catalogue;
-  - lease expiry and recovery after a Worker restart;
-  - a `RequiresPostgres` claim test with two claimants;
-  - a harness test in which the stand-in server is preloaded with fake `Enable-Mailbox` / `Get-Recipient` functions, so CI exercises the lane end to end without Exchange.
+  - Service Health has a `WorkerExchange` service ("Worker · Exchange"), expected only while the flag is on and left out entirely while it is off; while off, the service runs no lane and writes no heartbeat. The portal's banners name it when it alone is down or stalled.
+  - Retention follows D10: Parked and Cancelled rows past the general period are removed with the Activities they follow up; Refused rows are kept, because they stop a misfit being reported again. A removed Parked row releases its hold, so a change still owed is attempted once more after the general period.
+- **Tests:** the state machine and backoff; the lane against a fake Connector (delivered, retrying, parked, the Activity rule, withdrawal three ways, a session failure, cancellation, the pass bound); a `RequiresPostgres` fixture for the claim with two claimants, the lease, every guard, the outlook, retention and the per-object read; health with the flag on and off; retention.
+- **Moved to Phase 2,** because they need the remoting library in production (Phase 1) or the spike's failure catalogue: the classification table from `RemoteFailure`, and the harness test with the stand-in server preloaded with fake `Enable-Mailbox` / `Get-Recipient`.
 
 ### Phase 6: Surfaces (6 days; requirements 4, 13, 28)
 
