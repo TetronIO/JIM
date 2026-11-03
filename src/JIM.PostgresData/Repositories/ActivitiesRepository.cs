@@ -820,7 +820,6 @@ public partial class ActivityRepository : IActivityRepository
                             CASE q."Status"
                                 WHEN {(int)PendingExchangeChangeStatus.Delivering} THEN 'Delivering'
                                 WHEN {(int)PendingExchangeChangeStatus.Parked} THEN 'Parked'
-                                WHEN {(int)PendingExchangeChangeStatus.Cancelled} THEN 'Cancelled'
                                 WHEN {(int)PendingExchangeChangeStatus.Refused} THEN
                                     CASE WHEN f."Status" = {(int)ActivityStatus.CompleteWithWarning} THEN 'NotMade' ELSE 'Refused' END
                                 ELSE CASE WHEN q."LastAttemptedAt" IS NOT NULL THEN 'Retrying' ELSE 'Queued' END
@@ -829,7 +828,6 @@ public partial class ActivityRepository : IActivityRepository
                             CASE c."TargetOperationType"
                                 WHEN {(int)ActivityTargetOperationType.WithdrawExchangeRecipient} THEN 'Withdrawn'
                                 WHEN {(int)ActivityTargetOperationType.ReplaceExchangeRecipient} THEN 'Replaced'
-                                WHEN {(int)ActivityTargetOperationType.CancelExchangeRecipient} THEN 'Cancelled'
                                 ELSE CASE WHEN c."Status" IN ({(int)ActivityStatus.CompleteWithError}, {(int)ActivityStatus.FailedWithError})
                                           THEN 'Parked' ELSE 'Delivered' END
                             END

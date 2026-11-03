@@ -41,16 +41,6 @@ public enum PendingExchangeChangeStatus
     Parked = 2,
 
     /// <summary>
-    /// An administrator decided the change should not be applied, so JIM stopped trying.
-    /// <para>
-    /// Recorded rather than deleted, and it holds the cancelled declared state: an export re-evaluated as unconfirmed
-    /// re-stages the same values, and that must leave the cancellation in place rather than quietly undo it
-    /// (<see cref="ExchangeChangeStagingDisposition.Unchanged"/>). Only a different declared state replaces it.
-    /// </para>
-    /// </summary>
-    Cancelled = 3,
-
-    /// <summary>
     /// JIM refused the declared state before asking Exchange anything: the recipient type does not fit the object (PRD
     /// requirement 5), it would change an existing recipient's type, which this release does not make (requirement 16),
     /// or the object is a kind of recipient JIM does not manage. The reason is in
@@ -119,7 +109,7 @@ public enum ExchangeChangeStagingDisposition
     /// A row existed for the account that is a different change (another declared state, or the same one refused where
     /// it was not, or the reverse), and the change replaced it in place: its declared state, its domain controller, its
     /// Activity, its creation time, and its status and failure fields (Pending for a deliverable change, Refused and its
-    /// reason for a refusal), with every other trace of the earlier attempt (attempts, claim, cancellation) cleared. The row keeps its own id, so a caller must adopt the row's id for anything it
+    /// reason for a refusal), with every other trace of the earlier attempt (attempts and claim) cleared. The row keeps its own id, so a caller must adopt the row's id for anything it
     /// does with the change afterwards. A row being delivered is superseded too, which is what makes the in-flight
     /// attempt's result land nowhere.
     /// </summary>
@@ -130,10 +120,10 @@ public enum ExchangeChangeStagingDisposition
     /// it is.
     /// <para>
     /// Re-staging the same declared state, as an export re-evaluated as unconfirmed does, must not reset the row: a
-    /// Parked or Cancelled change holds until a person acts or the declared state changes, a retrying change keeps its
+    /// Parked change holds until a person retries it or the declared state changes, a retrying change keeps its
     /// backoff, a refusal is not reported again, and a delivery in flight finishes. The row's status comes back on the outcome
     /// (<see cref="DTOs.ExchangeChangeStagingOutcome.ExistingStatus"/>), so a caller can say, for example, that a
-    /// cancellation still holds.
+    /// parked change still waits.
     /// </para>
     /// </summary>
     Unchanged = 2

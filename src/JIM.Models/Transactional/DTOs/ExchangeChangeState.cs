@@ -61,10 +61,5 @@ public enum ExchangeChangeState
     /// The declared state would change an existing recipient's type, which this release does not make. It is
     /// reported and holds until the declared state changes.
     /// </summary>
-    NotMade = 8,
-
-    /// <summary>
-    /// An administrator cancelled the change. It holds until the declared state changes.
-    /// </summary>
-    Cancelled = 9
+    NotMade = 8
 }

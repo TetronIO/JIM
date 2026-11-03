@@ -90,20 +90,19 @@ public class ExchangeDeliveryClaimDatabaseTests
     [Test]
     public async Task ClaimDueExchangeChangesAsync_OnlyDueChanges_AreClaimedAsync()
     {
-        var s = await SeedAsync(objectCount: 7);
+        var s = await SeedAsync(objectCount: 6);
         var due = await QueueAsync(s, s.CsoIds[0]);
         var dueRetry = await QueueAsync(s, s.CsoIds[1], c => c.NextRetryAt = AsOf.AddMinutes(-1));
         await QueueAsync(s, s.CsoIds[2], c => c.NextRetryAt = AsOf.AddMinutes(1));
         await QueueAsync(s, s.CsoIds[3], c => c.Status = PendingExchangeChangeStatus.Parked);
-        await QueueAsync(s, s.CsoIds[4], c => c.Status = PendingExchangeChangeStatus.Cancelled);
-        await QueueAsync(s, s.CsoIds[5], c => { c.Status = PendingExchangeChangeStatus.Refused; c.FailureMessage = "does not fit"; });
-        await QueueAsync(s, s.CsoIds[6], c => { c.Status = PendingExchangeChangeStatus.Delivering; c.ClaimedAt = AsOf.AddSeconds(-30); c.ClaimedBy = Them; });
+        await QueueAsync(s, s.CsoIds[4], c => { c.Status = PendingExchangeChangeStatus.Refused; c.FailureMessage = "does not fit"; });
+        await QueueAsync(s, s.CsoIds[5], c => { c.Status = PendingExchangeChangeStatus.Delivering; c.ClaimedAt = AsOf.AddSeconds(-30); c.ClaimedBy = Them; });
 
         await using var claim = NewContext();
         var claimed = await Repository(claim).Sync.ClaimDueExchangeChangesAsync(s.SystemId, Me, AsOf, Lease, 100);
 
         Assert.That(claimed.Select(c => c.Id), Is.EquivalentTo(new[] { due.Id, dueRetry.Id }),
-            "a future retry, Parked, Cancelled, Refused and a live claim are all stepped over");
+            "a future retry, Parked, Refused and a live claim are all stepped over");
     }
 
     [Test]
@@ -265,22 +264,21 @@ public class ExchangeDeliveryClaimDatabaseTests
     }
 
     [Test]
-    public async Task DeleteTerminalExchangeChangesAsync_RemovesOnlyOldParkedAndCancelledChangesAsync()
+    public async Task DeleteTerminalExchangeChangesAsync_RemovesOnlyOldParkedChangesAsync()
     {
-        var s = await SeedAsync(objectCount: 6);
+        var s = await SeedAsync(objectCount: 5);
         var oldParked = await QueueAsync(s, s.CsoIds[0], c => { c.Status = PendingExchangeChangeStatus.Parked; c.LastAttemptedAt = AsOf.AddDays(-100); });
-        var oldCancelled = await QueueAsync(s, s.CsoIds[1], c => { c.Status = PendingExchangeChangeStatus.Cancelled; c.CancelledAt = AsOf.AddDays(-100); });
-        await QueueAsync(s, s.CsoIds[2], c => { c.Status = PendingExchangeChangeStatus.Parked; c.LastAttemptedAt = AsOf.AddDays(-1); });
-        await QueueAsync(s, s.CsoIds[3], c => { c.Status = PendingExchangeChangeStatus.Refused; c.FailureMessage = "does not fit"; c.CreatedAt = AsOf.AddDays(-100); });
-        await QueueAsync(s, s.CsoIds[4], c => { c.Status = PendingExchangeChangeStatus.Delivering; c.ClaimedAt = AsOf.AddDays(-100); c.ClaimedBy = Them; c.CreatedAt = AsOf.AddDays(-100); });
-        await QueueAsync(s, s.CsoIds[5], c => c.CreatedAt = AsOf.AddDays(-100));
+        await QueueAsync(s, s.CsoIds[1], c => { c.Status = PendingExchangeChangeStatus.Parked; c.LastAttemptedAt = AsOf.AddDays(-1); });
+        await QueueAsync(s, s.CsoIds[2], c => { c.Status = PendingExchangeChangeStatus.Refused; c.FailureMessage = "does not fit"; c.CreatedAt = AsOf.AddDays(-100); });
+        await QueueAsync(s, s.CsoIds[3], c => { c.Status = PendingExchangeChangeStatus.Delivering; c.ClaimedAt = AsOf.AddDays(-100); c.ClaimedBy = Them; c.CreatedAt = AsOf.AddDays(-100); });
+        await QueueAsync(s, s.CsoIds[4], c => c.CreatedAt = AsOf.AddDays(-100));
 
         await using (var delete = NewContext())
-            Assert.That(await Repository(delete).Sync.DeleteTerminalExchangeChangesAsync(AsOf.AddDays(-90), 100), Is.EqualTo(2));
+            Assert.That(await Repository(delete).Sync.DeleteTerminalExchangeChangesAsync(AsOf.AddDays(-90), 100), Is.EqualTo(1));
 
         await using var verify = NewContext();
         var remaining = await verify.PendingExchangeChanges.AsNoTracking().Select(c => c.Id).ToListAsync();
-        Assert.That(remaining, Does.Not.Contain(oldParked.Id).And.Not.Contain(oldCancelled.Id).And.Count.EqualTo(4),
+        Assert.That(remaining, Does.Not.Contain(oldParked.Id).And.Count.EqualTo(4),
             "a recent park, a refusal, a delivery in flight and pending work are all kept");
     }
 

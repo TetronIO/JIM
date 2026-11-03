@@ -511,30 +511,6 @@ public class ExchangeChangeStagingTests
     }
 
     /// <summary>
-    /// An export re-evaluated as unconfirmed re-stages the state an administrator cancelled: the row stays cancelled,
-    /// and the follow-up says why nothing will reach Exchange (PRD decision 11).
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_SameStateAsACancelledChange_LeavesItCancelledAndSaysSoAsync()
-    {
-        var account = Arrange("user", PendingExportChangeType.Update,
-            imported: type => [Imported(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox)],
-            changes: (type, rule) => [Change(type, ExchangeRecipientAttributes.Alias, "ada", rule)]);
-        var cancelled = await SeedQueuedAsync(account.Cso, alias: "ada", PendingExchangeChangeStatus.Cancelled);
-
-        var result = await ExportAsync();
-
-        var row = SyncRepo.PendingExchangeChanges.Values.Single();
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
-            Assert.That(row.ActivityId, Is.EqualTo(cancelled.ActivityId), "the row is left as it is");
-            Assert.That(ExchangeActivities(), Is.Empty, "the same change, already reported: no second follow-up");
-            Assert.That(result.ExchangeChangesUnchangedCount, Is.EqualTo(1));
-        }
-    }
-
-    /// <summary>
     /// Re-staging the change already queued is the same change, not a new one: its Activity already says what became of
     /// it, so the export writes no follow-up for it again.
     /// </summary>
