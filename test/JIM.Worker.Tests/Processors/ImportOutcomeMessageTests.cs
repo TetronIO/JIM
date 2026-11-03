@@ -136,6 +136,20 @@ public class ImportOutcomeMessageTests
     }
 
     [Test]
+    public void ForRefusedDeletionDetection_DeltaImportThatReadEveryObject_SaysEachDeltaImportChecksAgain()
+    {
+        // #2720: the run that read everything was a Delta Import, which keeps its watermark when it refuses, so the
+        // remedy is not a Full Import: the next Delta Import reads everything and checks again.
+        var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 501, baseCount: 10000, maxCount: 500, maxPercent: null,
+            ConnectedSystemRunType.DeltaImport);
+
+        Assert.That(message, Is.EqualTo(
+            "Deletion detection found 501 objects (5% of 10,000) no longer in the Connected System, above this Run Profile's " +
+            "limit of 500; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise " +
+            "the limit. Each Delta Import will read every object and check again until this is resolved."));
+    }
+
+    [Test]
     public void ForRefusedDeletionDetection_PercentRoundsToNearestWholeNumber()
     {
         var message = ImportOutcomeMessage.ForRefusedDeletionDetection(count: 1, baseCount: 3, maxCount: 0, maxPercent: null);
@@ -393,5 +407,23 @@ public class ImportOutcomeMessageTests
             Assert.That(message, Does.Contain("'Group'").And.Contain("3 objects"));
             Assert.That(message, Does.Contain("None of its objects were marked as deleted"));
         }
+    }
+
+    [Test]
+    public void ForUnreadableExternalIds_FullImport_SaysToRunTheFullImportAgain()
+    {
+        var message = ImportOutcomeMessage.ForUnreadableExternalIds([("User", 1)]);
+
+        Assert.That(message, Does.EndWith("Correct the External IDs in the Connected System, then run the Full Import again."));
+    }
+
+    [Test]
+    public void ForUnreadableExternalIds_DeltaImportThatReadEveryObject_SaysEachDeltaImportChecksAgain()
+    {
+        // #2720: the Delta Import keeps its watermark, so the next one reads everything and checks the type again.
+        var message = ImportOutcomeMessage.ForUnreadableExternalIds([("User", 1)], ConnectedSystemRunType.DeltaImport);
+
+        Assert.That(message, Does.EndWith(
+            "Correct the External IDs in the Connected System. Each Delta Import will read every object and check again until they can be read."));
     }
 }

@@ -320,18 +320,19 @@ public interface ISyncEngine
     bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport);
 
     /// <summary>
-    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
-    /// Full Import's payload, must be marked for retry: a CSO genuinely absent from every subsequent
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from an
+    /// import that read every object in its scope, must be marked for retry: a CSO genuinely absent from every subsequent
     /// import never reaches <see cref="ReconcileCsoAgainstPendingExport"/> (which only ever runs for a
     /// CSO an import actually returned and matched), so without this decision its exported Create sits
-    /// Status Exported forever and the CSO never leaves Pending Provisioning. Only a Full Import can
-    /// prove absence, and only when the run genuinely read something (mirrors deletion detection's own
+    /// Status Exported forever and the CSO never leaves Pending Provisioning. Only a run that read every object
+    /// can prove absence (a Full Import, or a Delta Import whose Connector read everything instead of its changes,
+    /// #2720), and only when it genuinely read something (mirrors deletion detection's own
     /// "no objects imported means do nothing" guard).
     /// </summary>
-    /// <param name="runType">The import run's type.</param>
+    /// <param name="readEveryObjectInScope">Whether the run read every object in its scope.</param>
     /// <param name="totalObjectsImported">How many objects the run read from the Connected System in total.</param>
-    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full Import's payload.</param>
-    bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen);
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the run's payload.</param>
+    bool IsExportedCreateUnseenByCompleteRead(bool readEveryObjectInScope, int totalObjectsImported, bool wasSeen);
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp

@@ -120,11 +120,36 @@ public class SyncImportTaskProcessor
     private int _connectorReportedDeletionCount;
 
     /// <summary>
-    /// Objects a Full Import's deletion detection newly marked as deleted because it no longer found them. These are not
-    /// among the objects the run read. An object retired by an allowed Object Type change is not one of them: the run
-    /// read it under its new type and counted it as created.
+    /// Objects deletion detection newly marked as deleted because a run that read every object in its scope
+    /// (<see cref="ReadEveryObjectInScope"/>) no longer found them. These are not among the objects the run read. An
+    /// object retired by an allowed Object Type change is not one of them: the run read it under its new type and counted
+    /// it as created.
     /// </summary>
     private int _detectedDeletionCount;
+
+    /// <summary>
+    /// #2720: what the Connector said on the run's first page about whether it read every object in the Run Profile's
+    /// scope (<see cref="ConnectedSystemImportResult.CompleteRead"/>). Null until the first page arrives; every later page
+    /// must say the same, or the run fails (<see cref="RecordWhetherTheConnectorReadEveryObject"/>).
+    /// </summary>
+    private bool? _connectorReadEveryObject;
+
+    /// <summary>
+    /// #2720: whether this run read every object in its scope, so that an object JIM holds and the run did not return is
+    /// no longer in the Connected System. A Full Import always does. A Delta Import does when its Connector read everything
+    /// instead of its changes, as one does when it has no watermark or cannot continue from the one it has. Absence is
+    /// evidence of a deletion only on such a run, so deletion detection, and the retry of an exported Create no import has
+    /// confirmed, follow this rather than the Run Profile's type.
+    /// </summary>
+    private bool ReadEveryObjectInScope =>
+        _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport || _connectorReadEveryObject == true;
+
+    /// <summary>
+    /// #2720: a Delta Import whose Connector read every object instead of its changes. Its deletions are found by absence
+    /// rather than read from a change log, so its watermark advances only once that check has run to completion.
+    /// </summary>
+    private bool IsDeltaImportThatReadEveryObject =>
+        _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport && _connectorReadEveryObject == true;
 
     /// <summary>
     /// Deletes the Connector reported that a Delta Import withheld because, together, they exceeded the Run Profile's
@@ -497,6 +522,11 @@ public class SyncImportTaskProcessor
                         // as running; what happens next is JIM's.
                         await _phases.ExitConnectorPhasesAsync();
                         pageNumber++;
+
+                        // Decided from the first page, before any object is processed, and held to on every later one: whether
+                        // an object missing from this run is gone depends on it (#2720).
+                        RecordWhetherTheConnectorReadEveryObject(result, pageNumber);
+
                         totalObjectsImported += result.ImportObjects.Count;
 
                         Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
@@ -639,6 +669,7 @@ public class SyncImportTaskProcessor
                 }
 
                 await _phases.ExitConnectorPhasesAsync();
+                RecordWhetherTheConnectorReadEveryObject(result, pageNumber: 1);
                 objectsReadInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
@@ -688,13 +719,14 @@ public class SyncImportTaskProcessor
             watermarkReached = null;
         }
 
-        // process deletions
-        // note: only run deletion detection for Full Imports
-        // Delta Imports only return changed objects, so absence doesn't mean deletion
-        // Explicit deletes from delta imports are handled in ProcessImportObjectsAsync via ObjectChangeType.Deleted
-        // note: make sure it doesn't apply deletes if no objects were imported, as this suggests there was a problem collecting data from the Connected System?
-        // note: if it's expected that 0 imported objects means all objects were deleted, then an admin will have to clear the Connected System manually to achieve the same result.
-        if (totalObjectsImported > 0 && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+        // Deletion detection: an object JIM holds that the run did not return is gone, but only where the run read every
+        // object in its scope (#2720): a Full Import, or a Delta Import whose Connector read everything instead of its
+        // changes. A Delta Import that read changes returns only what changed, so absence from it says nothing; the deletes
+        // its Connector reports are applied in ProcessImportObjectsAsync, via ObjectChangeType.Deleted.
+        // A run that read nothing is not taken as proof that everything was deleted: it more likely failed to collect the
+        // data. If every object really has gone, an administrator clears the Connected System instead.
+        var deletionDetectionCompleted = false;
+        if (totalObjectsImported > 0 && ReadEveryObjectInScope)
         {
             // Get count of existing CSOs to determine how many we need to check for deletions.
             // Scope to the Run Profile's partition so that partition-scoped full imports only
@@ -707,15 +739,15 @@ public class SyncImportTaskProcessor
             var deletionsSw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("ProcessDeletions"))
             {
-                await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId);
+                deletionDetectionCompleted = await ProcessConnectedSystemObjectDeletionsAsync(externalIdsImported, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, deletionPartitionId);
             }
             deletionsSw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING — Deletion detection: {DeletionSeconds:F1}s ({ExistingCount} existing CSOs checked)",
                 deletionsSw.Elapsed.TotalSeconds, existingCsoCount);
 
-            // Retry an exported Create this Full Import never confirmed. Separate from deletion
+            // Retry an exported Create this complete read never confirmed. Separate from deletion
             // detection above, which deliberately excludes Pending Provisioning CSOs (an absent one must
-            // never be marked Obsolete); see SyncEngine.IsExportedCreateUnseenByFullImport.
+            // never be marked Obsolete); see SyncEngine.IsExportedCreateUnseenByCompleteRead.
             var retrySw = System.Diagnostics.Stopwatch.StartNew();
             using (Diagnostics.Sync.StartSpan("RetryUnconfirmedExportedCreates"))
             {
@@ -723,6 +755,21 @@ public class SyncImportTaskProcessor
             }
             retrySw.Stop();
             Log.Information("PerformImportAsync: PHASE TIMING: Unconfirmed Create retry: {RetrySeconds:F1}s", retrySw.Elapsed.TotalSeconds);
+        }
+
+        // A Delta Import that read every object stands in for a Full Import, and its deletions are found by absence rather
+        // than read from a change log (#2720). Where that check did not run to completion (refused by the Run Profile's
+        // deletion limits, an Object Type held back because an External ID could not be read, or nothing read at all),
+        // recording the new watermark would leave the next Delta Import reading only the changes after it, and the objects
+        // gone before it in JIM for good. The run keeps the watermark it started with instead, as one that withholds the
+        // deletes its Connector reported does (#2089), so the next Delta Import reads everything and checks again.
+        if (IsDeltaImportThatReadEveryObject && !deletionDetectionCompleted)
+        {
+            Log.Warning("PerformImportAsync: This Delta Import read every object in scope, but its deletion detection did not run to completion " +
+                "({ObjectsRead} objects read). The watermark the run started with is kept, so the next Delta Import reads every object and checks again.",
+                totalObjectsImported);
+            watermarkToRecord = null;
+            watermarkReached = null;
         }
 
         // An Object Type change is only carried out where deletion detection retired what it replaces (#2049). It
@@ -1121,6 +1168,7 @@ public class SyncImportTaskProcessor
         }
 
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
+        importSpan.SetTag("readEveryObjectInScope", ReadEveryObjectInScope);
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
         importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
@@ -1325,15 +1373,23 @@ public class SyncImportTaskProcessor
     /// refuses outright (Phase B leaves every candidate untouched, including the stale Pending Export
     /// cleanup for already-Obsolete ones) or applies exactly today's per-candidate behaviour.
     /// </summary>
-    private async Task ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
+    /// <returns>
+    /// True when deletion detection checked every Object Type it covers and applied what it found; false when it was
+    /// refused by the Run Profile's limits, or held an Object Type back because an External ID could not be read (#2066).
+    /// A Delta Import that read every object keeps its watermark on false (#2720). A deselected Object Type an enabled
+    /// Synchronisation Rule still manages does not count against it: no import reads that type, so no later read could
+    /// find what this one did not.
+    /// </returns>
+    private async Task<bool> ProcessConnectedSystemObjectDeletionsAsync(IReadOnlyCollection<ExternalIdPair> externalIdsImported, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, int? partitionId)
     {
         if (_connectedSystem.ObjectTypes == null)
-            return;
+            return false;
 
         var typeChangeRetirements = PrepareObjectTypeChangeRetirements();
 
-        var objectTypesToCheck = await ResolveDeletionDetectionObjectTypesAsync();
-        objectTypesToCheck = HoldBackObjectTypesWithUnreadableExternalIds(objectTypesToCheck);
+        var resolvedObjectTypes = await ResolveDeletionDetectionObjectTypesAsync();
+        var objectTypesToCheck = HoldBackObjectTypesWithUnreadableExternalIds(resolvedObjectTypes);
+        var everyObjectTypeChecked = objectTypesToCheck.Count == resolvedObjectTypes.Count;
         var candidates = await ResolveDeletionCandidatesAsync(externalIdsImported, connectedSystemObjectsToBeUpdated, partitionId, objectTypesToCheck);
 
         // The limits guard against objects the import did not find, which may mean the import itself is wrong. An
@@ -1359,10 +1415,11 @@ public class SyncImportTaskProcessor
             // Refused: nothing is touched, not even the stale Pending Export cleanup for candidates
             // already Obsolete. The import that fed this detection may itself be wrong (a broken filter
             // or base DN), so nothing about the Connector Space's existing state may be changed on the
-            // strength of it.
-            _activity.DetectedDeletionsWithheld = newlyMarkedCount;
+            // strength of it. A Delta Import that read every object may also have withheld deletes its
+            // Connector reported (#2089); the counter carries both.
+            _activity.DetectedDeletionsWithheld = _withheldDeletionCount + newlyMarkedCount;
 
-            var warning = ImportOutcomeMessage.ForRefusedDeletionDetection(newlyMarkedCount, existingCsoCount, maxCount, maxPercent);
+            var warning = ImportOutcomeMessage.ForRefusedDeletionDetection(newlyMarkedCount, existingCsoCount, maxCount, maxPercent, _connectedSystemRunProfile.RunType);
             _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
                 ? warning
                 : $"{_activity.WarningMessage}\n{warning}";
@@ -1378,10 +1435,10 @@ public class SyncImportTaskProcessor
             }
 
             ReconcileCarriedOutObjectTypeChanges(retiredByTypeChange, connectedSystemObjectsToBeCreated);
-            return;
+            return false;
         }
 
-        _activity.DetectedDeletionsWithheld = 0;
+        _activity.DetectedDeletionsWithheld = _withheldDeletionCount;
 
         // Applied: exactly today's per-candidate behaviour. Already-Obsolete candidates only ever
         // needed the stale Pending Export cleanup (they were Obsolete before this run started); newly
@@ -1405,6 +1462,8 @@ public class SyncImportTaskProcessor
         ReconcileCarriedOutObjectTypeChanges(
             candidates.NewlyMarked.Concat(candidates.AlreadyObsolete).Select(cso => cso.Id).ToHashSet(),
             connectedSystemObjectsToBeCreated);
+
+        return everyObjectTypeChecked;
     }
 
     /// <summary>
@@ -1465,7 +1524,8 @@ public class SyncImportTaskProcessor
     /// Takes out of deletion detection every Object Type with an object whose External ID the Connector could not read
     /// this run (#2066), and says so on the Activity. JIM cannot tell which object that was, so every object of the type
     /// it holds is a candidate for having been it; marking any of them deleted could remove one the source still holds.
-    /// Deletion detection resumes for the type on the next Full Import that reads every External ID.
+    /// Deletion detection resumes for the type on the next run that reads every object and every External ID: a Full
+    /// Import, or a Delta Import that reads everything, which this run's kept watermark makes the next one (#2720).
     /// </summary>
     private List<ConnectedSystemObjectType> HoldBackObjectTypesWithUnreadableExternalIds(List<ConnectedSystemObjectType> objectTypes)
     {
@@ -1479,7 +1539,7 @@ public class SyncImportTaskProcessor
         if (heldBack.Count == 0)
             return objectTypes;
 
-        var warning = ImportOutcomeMessage.ForUnreadableExternalIds(heldBack);
+        var warning = ImportOutcomeMessage.ForUnreadableExternalIds(heldBack, _connectedSystemRunProfile.RunType);
         _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
             ? warning
             : $"{_activity.WarningMessage}\n{warning}";
@@ -1774,7 +1834,8 @@ public class SyncImportTaskProcessor
     private const int UnseenExportedCreateRetryChunkSize = 1000;
 
     /// <summary>
-    /// Finds every exported Create Pending Export this Full Import did not confirm, and marks it for
+    /// Finds every exported Create Pending Export this complete read (<see cref="ReadEveryObjectInScope"/>: a Full
+    /// Import, or a Delta Import that read every object, #2720) did not confirm, and marks it for
     /// retry. Deliberately separate from <see cref="ProcessConnectedSystemObjectDeletionsAsync"/>:
     /// deletion detection excludes Pending Provisioning CSOs outright
     /// (<c>ConnectedSystemRepository.BuildDeletionDetectionQuery</c>), because an absent one must never
@@ -1782,14 +1843,14 @@ public class SyncImportTaskProcessor
     /// subsequent import is invisible to it, and nothing else ever revisits such an object: reconciliation
     /// (<see cref="SyncEngine.Reconciliation.ReconcileCsoAgainstPendingExport"/>) only runs for a CSO an
     /// import actually returned. Without this step the Pending Export sits Status Exported forever and
-    /// the CSO never leaves Pending Provisioning (see <see cref="ISyncEngine.IsExportedCreateUnseenByFullImport"/>'s
+    /// the CSO never leaves Pending Provisioning (see <see cref="ISyncEngine.IsExportedCreateUnseenByCompleteRead"/>'s
     /// own doc comment for the full mechanics of why).
     /// <para>
     /// Two-phase to stay cheap on the ordinary case, where every candidate was confirmed by the very next
     /// Full Import (measured 25 seconds loading the full graph for 100,000 such candidates): first, an
-    /// early exit skips every query outright when no candidate could possibly qualify (a Full Import
+    /// early exit skips every query outright when no candidate could possibly qualify (a complete read
     /// checked with <c>wasSeen: false</c>, the most permissive input
-    /// <see cref="ISyncEngine.IsExportedCreateUnseenByFullImport"/> can be given, since its runType and
+    /// <see cref="ISyncEngine.IsExportedCreateUnseenByCompleteRead"/> can be given, since its complete-read and
     /// totalObjectsImported checks do not depend on <c>wasSeen</c> and the <c>!wasSeen</c> term can only
     /// relax further by being true). Second, for each selected Object Type, a lean Summary-tier
     /// projection (<see cref="ISyncRepository.GetExportedCreatePendingExportRetryCandidateSummariesAsync"/>)
@@ -1813,10 +1874,10 @@ public class SyncImportTaskProcessor
         if (_connectedSystem.ObjectTypes == null)
             return;
 
-        // No candidate could possibly qualify unless this is a Full Import that read at least one
-        // object: see the class remarks above for why `wasSeen: false` is a safe stand-in for every
+        // No candidate could possibly qualify unless this run read every object in its scope, and at least
+        // one: see the class remarks above for why `wasSeen: false` is a safe stand-in for every
         // candidate's own (as yet unknown) wasSeen value at this point.
-        if (!_syncEngine.IsExportedCreateUnseenByFullImport(_connectedSystemRunProfile.RunType, totalObjectsImported, wasSeen: false))
+        if (!_syncEngine.IsExportedCreateUnseenByCompleteRead(ReadEveryObjectInScope, totalObjectsImported, wasSeen: false))
             return;
 
         var processedCsoIds = connectedSystemObjectsToBeUpdated.Select(cso => cso.Id).ToHashSet();
@@ -1881,7 +1942,7 @@ public class SyncImportTaskProcessor
                 ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = ObjectChangeType.Updated,
                 ErrorType = ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed,
-                ErrorMessage = "The Create export succeeded, but this Full Import did not report the object back at all. " +
+                ErrorMessage = "The Create export succeeded, but this import read every object and did not report this one back. " +
                     "The Create will be retried on the next export."
             };
             executionItem.SnapshotCsoDisplayFields(cso);
@@ -1892,7 +1953,7 @@ public class SyncImportTaskProcessor
             _activityRunProfileExecutionItems.Add(executionItem);
         }
 
-        Log.Information("RetryUnconfirmedExportedCreatesAsync: {Count} exported Create(s) not seen by this Full Import; marked for retry.",
+        Log.Information("RetryUnconfirmedExportedCreatesAsync: {Count} exported Create(s) not seen by this complete read; marked for retry.",
             retried.Count);
     }
 
@@ -4836,6 +4897,53 @@ public class SyncImportTaskProcessor
 
         item.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
         item.ErrorMessage = ImportOutcomeMessage.ForUnresolvedReferences(references);
+    }
+
+    /// <summary>
+    /// #2720: records what the Connector said on the run's first page about whether it read every object in the Run
+    /// Profile's scope, and holds every later page of a Delta Import to it. The first page decides, as it does the
+    /// watermark, because the answer governs how a Delta Import treats what it reads: whether an object JIM holds and the
+    /// run did not return is gone. A later page that contradicts it leaves JIM unable to say, so the run fails before
+    /// anything is staged and the watermark it started with stays in place.
+    /// <para>
+    /// Two runs are not held to it. A Full Import reads every object whatever its Connector says, so the answer cannot
+    /// change what it does, and a Connector need not give one there. A run being cancelled is abandoned before anything
+    /// uses the answer, and a Connector that notices the cancellation can hand back an empty page that says nothing
+    /// about how it reads; failing that run as a fault in the Connector would misreport it.
+    /// </para>
+    /// </summary>
+    /// <param name="result">The page the Connector has just returned.</param>
+    /// <param name="pageNumber">The page's number in the run, counting from 1.</param>
+    /// <exception cref="InvalidDataException">A later page of a Delta Import says otherwise than the first.</exception>
+    private void RecordWhetherTheConnectorReadEveryObject(ConnectedSystemImportResult result, int pageNumber)
+    {
+        if (_connectorReadEveryObject is not { } firstPageSaid)
+        {
+            _connectorReadEveryObject = result.CompleteRead;
+            if (IsDeltaImportThatReadEveryObject)
+            {
+                Log.Information("PerformImportAsync: The Connector read every object in scope instead of its changes, so this Delta Import detects deletions " +
+                    "by absence, as a Full Import does. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+                    _connectedSystem.Id, _connectedSystemRunProfile.Id);
+            }
+
+            return;
+        }
+
+        if (result.CompleteRead == firstPageSaid
+            || _connectedSystemRunProfile.RunType != ConnectedSystemRunType.DeltaImport
+            || _cancellationTokenSource.IsCancellationRequested)
+            return;
+
+        Log.Error("PerformImportAsync: The Connector said on page 1 that it {FirstPage} every object in scope, and on page {PageNumber} that it {LaterPage}. " +
+            "Stopping the import before anything is staged. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+            firstPageSaid ? "read" : "did not read", pageNumber, result.CompleteRead ? "did" : "did not", _connectedSystem.Id, _connectedSystemRunProfile.Id);
+
+        throw new InvalidDataException(
+            $"The Connector said on page 1 of this import that it {(firstPageSaid ? "read" : "did not read")} every object in the Run Profile's scope, " +
+            $"and on page {pageNumber:N0} that it {(result.CompleteRead ? "did" : "did not")}. Whether an object missing from the import has been deleted " +
+            "depends on that answer, so the import stopped before saving anything, and the next import starts from the same point. " +
+            "This is a fault in the Connector.");
     }
 
     /// <summary>

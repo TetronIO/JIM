@@ -896,7 +896,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Number of times <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> has
-    /// been called. Lets tests prove the two-phase Full Import unseen exported-Create retry step
+    /// been called. Lets tests prove the two-phase unseen exported-Create retry step
     /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) only promotes candidates to
     /// this full graph load when the lean Summary-tier projection decided at least one is genuinely
     /// unseen, and never for a run type or empty run the early guard already excludes.
@@ -923,7 +923,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Number of times <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> has been
-    /// called. Lets tests prove the retry step's early exit (not a Full Import, or nothing imported) skips
+    /// called. Lets tests prove the retry step's early exit (the run did not read every object, or read nothing) skips
     /// every repository query for this Connected System, including the lean projection.
     /// </summary>
     public int GetExportedCreatePendingExportRetryCandidateSummariesCallCount { get; private set; }

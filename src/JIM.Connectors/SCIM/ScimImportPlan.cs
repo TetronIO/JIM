@@ -25,6 +25,14 @@ internal sealed record ScimImportPlan(
     ActivityRunProfileExecutionItemErrorType? WarningErrorType)
 {
     /// <summary>
+    /// Whether the run reads every resource rather than only what changed: on a Full Import, and on a Delta Import that
+    /// cannot or should not filter, whether by choice (Change Detection set to Full Scan) or as a fallback. Every page the
+    /// run returns says so (<see cref="ConnectedSystemImportResult.CompleteRead"/>), and JIM then detects deletions by
+    /// absence, which is the only way a SCIM import can find one (#2720).
+    /// </summary>
+    public bool ReadsEveryResource => Strategy == ScimDeltaStrategy.FullScan;
+
+    /// <summary>
     /// Decides how the run will read, from what was asked for, what the provider can do, and what the
     /// last completed import left behind.
     /// </summary>
@@ -58,7 +66,8 @@ internal sealed record ScimImportPlan(
             return FullScan(
                 "Delta Import was requested, but the service provider is Keycloak, which does not update a resource's last-modified date for most changes " +
                 "(group membership and renames made through SCIM, and anything changed in the Admin Console, the Admin REST API, LDAP federation or by the user). " +
-                "Filtering on it would miss those changes, so every resource was read instead. Set Change Detection to 'Full Scan' on the Connected System to stop this warning.");
+                "Filtering on it would miss those changes, so every resource was read instead, and an object JIM holds that Keycloak no longer has is marked as deleted, " +
+                "within this Run Profile's deletion limits. Set Change Detection to 'Full Scan' on the Connected System to stop this warning.");
         }
 
         // Auto follows what the provider advertises. The explicit Last Modified Filter choice overrides
@@ -67,7 +76,8 @@ internal sealed record ScimImportPlan(
         {
             return FullScan(
                 "Delta Import was requested, but the service provider does not advertise filtering, so JIM cannot ask it for only what changed. " +
-                "Every resource was read instead. If the provider does support filtering, set Change Detection to 'Last Modified Filter' on the Connected System.");
+                "Every resource was read instead, and an object JIM holds that the provider no longer has is marked as deleted, within this Run Profile's deletion limits. " +
+                "If the provider does support filtering, set Change Detection to 'Last Modified Filter' on the Connected System.");
         }
 
         // The first Delta Import after a Connected System is configured has nothing to filter against.
@@ -77,7 +87,8 @@ internal sealed record ScimImportPlan(
         {
             return FullScan(
                 "Delta Import was requested, but no watermark from a previous import was available, so JIM had nothing to ask for changes since. " +
-                "Every resource was read instead, and a watermark has been recorded. Later Delta Imports will read only what changed.");
+                "Every resource was read instead, and an object JIM holds that the provider no longer has is marked as deleted, within this Run Profile's deletion limits. " +
+                "Once a run like this has finished that check, it records a watermark and later Delta Imports read only what changed.");
         }
 
         return new ScimImportPlan(ScimDeltaStrategy.LastModifiedFilter, BuildFilter(watermark.Value), null, null);
@@ -93,7 +104,8 @@ internal sealed record ScimImportPlan(
     {
         return FullScan(
             "Delta Import was requested and the service provider advertises filtering, but it rejected the filter JIM sent. " +
-            "Every resource was read instead. Set Change Detection to 'Full Scan' on the Connected System to stop JIM attempting the filter each run.");
+            "Every resource was read instead, and an object JIM holds that the provider no longer has is marked as deleted, within this Run Profile's deletion limits. " +
+            "Set Change Detection to 'Full Scan' on the Connected System to stop JIM attempting the filter each run.");
     }
 
     private static ScimImportPlan FullScan(string? warningMessage = null)

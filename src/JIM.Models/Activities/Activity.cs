@@ -587,7 +587,8 @@ public class Activity
     /// For Full Import activities that ran deletion detection, and every Delta Import activity that
     /// staged what it read: how many Connected System Objects the Run Profile's Max detected
     /// deletions/Max detected deletions percent limits withheld this run, from being marked deleted
-    /// because the Full Import no longer found them or the Delta Import's Connector reported them deleted.
+    /// because the run no longer found them (a Full Import, or a Delta Import that read every object instead
+    /// of its changes) or the Delta Import's Connector reported them deleted.
     /// Zero on a run that applied its deletions (whether or not there were any); the withheld count on
     /// one that refused; null on every other activity, including a Full Import that imported zero
     /// objects and so skipped detection entirely.

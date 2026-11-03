@@ -168,7 +168,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         if (_connectedSystem.ObjectTypes == null)
             throw new ArgumentException("_connectedSystem.ObjectTypes is null. Cannot continue.");
 
-        var result = new ConnectedSystemImportResult();
+        // Every page of a full read reads every object in the Run Profile's scope, whether a Full Import asked for it or a
+        // Delta Import fell back to it, and says so: that is what has JIM detect deletions by absence on the fallback (#2720).
+        var result = new ConnectedSystemImportResult { CompleteRead = true };
 
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -349,17 +351,19 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         {
             // The last import recorded no watermark: its change source could not be read at the time (a changelog
             // not yet enabled, an accesslog the account could not see), or the record predates this version. The
-            // source is readable now, or the readiness check above would have refused the run, so a Full Import
+            // source is readable now, or the readiness check above would have refused the run, so a full read
             // both imports everything and records the watermark the next Delta Import reads from. Falling back
             // rather than failing is what the SQL and SCIM connectors already do; the run says so in its warning.
+            // The full read reports itself complete, so JIM detects deletions by absence as on a Full Import (#2720).
             _logger.Warning("GetDeltaImportObjects: The last import recorded no change watermark. " +
                 "Falling back to a full import to establish the baseline; future delta imports read from it.");
 
             result = await GetFullImportObjectsAsync();
             result.WarningMessage = "A Delta Import was requested, but the last import recorded no change watermark for this directory " +
                 "(its change source could not be read at the time, or the record predates this version of JIM). " +
-                "A Full Import was performed instead, which also detects deletions by absence; it recorded the watermark, " +
-                "and the next Delta Import will read from it.";
+                "Every object was read instead, as a Full Import does, and an object JIM holds that the directory no longer has " +
+                "is marked as deleted, within this Run Profile's deletion limits. Once a run like this has finished that check, " +
+                "it records a watermark and the next Delta Import reads only the changes after it.";
             result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
             return result;
         }

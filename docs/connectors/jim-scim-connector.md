@@ -102,8 +102,8 @@ Against Keycloak, which advertises filtering but does not update the last-modifi
 
 Where a Delta Import cannot filter, it reads every resource instead and reports a warning on the Activity rather than failing. This is deliberate: only a completed import can record a watermark, so failing the first Delta Import after a Connected System is configured would leave it permanently unable to import.
 
-!!! important "Deletions are only detected by a Full Import"
-    A deleted SCIM resource stops being returned; the protocol offers no way to ask what went. Only a Full Import, which reads everything, can tell that an object has gone. Schedule a Full Import regularly alongside your Delta Imports.
+!!! important "Deletions are only detected by a run that reads every resource"
+    A deleted SCIM resource stops being returned; the protocol offers no way to ask what went. Only a run that reads every resource can tell that an object has gone: a Full Import, or a Delta Import that reads everything, because Change Detection is Full Scan, the provider is Keycloak, or it could not filter. Such a Delta Import marks the missing objects as deleted as a Full Import does, within the Run Profile's [deletion limits](../configuration/run-profiles.md#delta-import). A Delta Import that filters by last-modified date never sees a deletion, so alongside one, schedule a Full Import regularly.
 
 The watermark is recorded only when a run finishes, and is deliberately set a minute behind the point the run started reading. A run that fails or is cancelled part way through therefore leaves the watermark where the last completed import put it, and the next run re-reads a small overlap. Re-reading an unchanged resource is harmless; missing a change would not be.
 
@@ -265,13 +265,13 @@ The Base URL is probably pointing at a resource endpoint rather than the root of
 Check the Activity for a warning. Either the provider does not advertise filtering (set Change Detection to Last Modified Filter if you know it supports it anyway), or the provider rejected the filter, or the provider is Keycloak (whose last-modified dates cannot be filtered on safely; set Change Detection to Full Scan), or no watermark had been recorded yet, in which case the next Delta Import will be incremental.
 
 **An import fails with "returned an empty page ... while its totalResults says"**<br />
-The provider counted resources it then did not return. JIM stops rather than finish a Full Import that would treat the missing resources as deleted. Check that the credential can read every resource of the type, and whether the provider counts resources it hides.
+The provider counted resources it then did not return. JIM stops rather than finish a read of every resource that would treat the missing ones as deleted. Check that the credential can read every resource of the type, and whether the provider counts resources it hides.
 
 **Exports to some objects fail with 403 while others succeed**<br />
 The provider protects those objects; Keycloak, for one, refuses any change to an account or group holding an administrative role. Scope them out of the Synchronisation Rule. Where every export fails with 403, the credential lacks the permission instead.
 
 **Objects go missing from JIM after a Delta Import**<br />
-They should not: deletion detection runs only on a Full Import. If objects are being marked obsolete, the run in question was a Full Import that could not see them.
+Only a run that read every resource marks an object as deleted: a Full Import, or a Delta Import that read everything (its Activity says so, unless Change Detection is Full Scan). If it marked objects obsolete that the provider still holds, it could not see them: check that the credential can read every resource of the type.
 
 **Updates fail with a concurrency conflict**<br />
 Something changed the resource in the provider between JIM reading it and writing it back. Run an import to pick up the current state; the change will be re-evaluated against it.

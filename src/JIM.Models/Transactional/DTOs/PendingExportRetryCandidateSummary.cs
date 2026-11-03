@@ -5,7 +5,7 @@ namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
 /// Summary-tier projection of an exported Create Pending Export targeting a Pending Provisioning
-/// Connected System Object, used only by a Full Import's unseen exported-Create retry step
+/// Connected System Object, used only by the unseen exported-Create retry step of an import that read every object
 /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>). Carries just enough to decide,
 /// in memory, whether this run saw the Connected System Object: its own primary External Id value, held
 /// as typed nullable columns rather than a materialised

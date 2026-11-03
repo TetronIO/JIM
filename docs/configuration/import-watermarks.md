@@ -25,8 +25,8 @@ steps:
 |-----|----------|---------|---------|
 | Delta Import | **Read Changes** | After 8, up to 15 (change sequence) | The range of changes the run read. |
 | Delta Import | **Read Changes** | No changes after 8 (change sequence) | The run found nothing newer than its watermark. |
-| Delta Import | **Read Changes** | From the start, up to 15 (change sequence) | There was no watermark to start from, so the run read everything. |
-| Delta Import | **Read Changes** | After 8 (change sequence), with a note | The run recorded no new watermark (it failed, was cancelled, or withheld detected deletions), so the next Delta Import reads from the same point. |
+| Delta Import | **Read Changes** | From the start, up to 15 (change sequence) | There was no watermark to start from, so the run read everything, and detected deletions as a Full Import does. |
+| Delta Import | **Read Changes** | After 8 (change sequence), with a note | The run recorded no new watermark (it failed, was cancelled, withheld detected deletions, or read everything without finishing its check for deleted objects), so the next Delta Import reads from the same point. |
 | Full Import | **Next Delta Import Reads Changes After** | 24 Oct 2026 21:21:13 (access log) | A Full Import reads everything; this is the point it set up for the next Delta Import. |
 
 A Connector that keeps a watermark for each Object Type or source shows one line for each, such as "User: after 10, up to 25 (change log sequence)". A time is shown in local time.

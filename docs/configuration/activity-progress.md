@@ -16,7 +16,7 @@ While a Run Profile executes, its progress is available in real time on every su
 ```jim-diagram
 archetype: lifecycle
 title: How each step of a run is shown
-desc: 'A Run Profile execution shows every one of its steps. A step still to come is greyed. When its turn comes it is highlighted as the step running now, and its progress bar counts its work. When it finishes it is a completed step, carrying how long it took. A step not needed on this run, such as deletion detection in a Delta Import, is marked with a green ring and a dash. A failed run marks the step it failed in.'
+desc: 'A Run Profile execution shows every one of its steps. A step still to come is greyed. When its turn comes it is highlighted as the step running now, and its progress bar counts its work. When it finishes it is a completed step, carrying how long it took. A step not needed on this run, such as deletion detection in a Delta Import that read only changes, is marked with a green ring and a dash. A failed run marks the step it failed in.'
 container: {label: A step of a run, note: the progress bar always counts the running step}
 states:
 - {id: skipped, label: Not needed, sub: 'green ring, dash'}
@@ -41,7 +41,7 @@ A Run Profile execution is a journey through several steps, and the Activity sho
 - **Completed steps** carry how long they took, so a run that took four hours can be read afterwards to see where the four hours went.
 - **The step running now** is highlighted. The steps inside it and the message describing what it is doing appear beneath, under the line naming the step and above the figures measuring it, so each reads after the thing it belongs to.
 - **Steps still to come** are greyed, so "how much is left" is answerable at a glance.
-- **A green ring with a dash** marks a step that was not needed on this run: a Delta Import performs no deletion detection, for example. It is green because the run is past it; it is a ring rather than a filled tick because it did no work of its own. Hovering the step says so. This is normal, not a problem. Work a run could never do at all (a file-based import opens no connection) is not shown as a step.
+- **A green ring with a dash** marks a step that was not needed on this run: a Delta Import that read only changes performs no deletion detection, for example. It is green because the run is past it; it is a ring rather than a filled tick because it did no work of its own. Hovering the step says so. This is normal, not a problem. Work a run could never do at all (a file-based import opens no connection) is not shown as a step.
 - **A failed run** marks the step it failed in, which is where to look first.
 
 The progress bar beneath the steps counts the work of the step currently running, and the leg of the rail leaving that step fills to match, so the same progress reads at a glance and in exact numbers. Most steps count objects. A Synchronisation's **Resolving cross-page references** step counts reference values instead, because its work grows with them: a group of 750,000 members is that much more work than a group of three. The portal labels the count **Reference values processed**, `Start-JIMRunProfile -Wait` and `Get-JIMActivity -Follow` say "reference values", and the progress endpoint reports `countUnit` as `ReferenceValues`. The step's progress message still gives the number of objects.

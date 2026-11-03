@@ -217,6 +217,8 @@ public class ScimServiceProviderConnectorTests
             Assert.That(store.Reads.Select(q => q.ChangedUpTo), Has.All.EqualTo((long?)horizon));
             Assert.That(results.SelectMany(r => r.ImportObjects).Select(o => Text(o, "userName")), Does.Not.Contain("dave"));
             Assert.That(Watermark(results), Is.EqualTo(horizon));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.False,
+                "a read of changes has not read every resource, so absence from it says nothing (#2720)");
         }
     }
 
@@ -234,8 +236,27 @@ public class ScimServiceProviderConnectorTests
             Assert.That(store.Reads.Select(q => q.ChangedAfter), Has.All.Null);
             Assert.That(results[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
             Assert.That(results[0].WarningMessage, Is.Not.Null);
+            Assert.That(results[0].WarningMessage, Does.Contain("Every resource was read instead").And.Contain("marked as deleted"));
             Assert.That(results.SelectMany(r => r.ImportObjects).Select(o => Text(o, "userName")), Is.EquivalentTo(new[] { "alice" }));
             Assert.That(Watermark(results), Is.EqualTo(horizon));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True, "every resource was read, so JIM detects deletions by absence (#2720)");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_DeltaImportWithoutWatermarkAcrossSeveralPages_SaysOnEveryPageThatItReadEveryResourceAsync()
+    {
+        var store = new FakeScimResourceStore();
+        store.AddLive("User", """{"userName":"alice"}""");
+        store.AddLive("User", """{"userName":"bob"}""");
+        store.AddLive("User", """{"userName":"carol"}""");
+
+        var results = await RunAsync(Connector(store), store, DeltaImport(pageSize: 2), persistedConnectorData: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.GreaterThan(1));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
         }
     }
 
