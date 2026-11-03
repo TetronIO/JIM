@@ -212,6 +212,21 @@ public class PendingExchangeChange
                && (Status == PendingExchangeChangeStatus.Refused) == (offered.Status == PendingExchangeChangeStatus.Refused);
     }
 
+    /// <summary>
+    /// Whether this change declares exactly <paramref name="state"/>'s five values, null and empty alike: the delivery
+    /// lane's test that the change is still what the object's declaration asks for, before it converges it.
+    /// </summary>
+    public bool Declares(Exchange.ExchangeDeclaredState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        return SameDeclaredValue(RecipientType, state.RecipientType)
+               && SameDeclaredValue(Alias, state.Alias)
+               && SameDeclaredValue(Database, state.Database)
+               && SameDeclaredValue(PrimarySmtpAddress, state.PrimarySmtpAddress)
+               && SameDeclaredValue(ExternalAddress, state.ExternalAddress);
+    }
+
     private static bool SameDeclaredValue(string? a, string? b) =>
         string.Equals(a ?? string.Empty, b ?? string.Empty, StringComparison.Ordinal);
 

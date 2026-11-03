@@ -7821,6 +7821,16 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
     }
 
+    public async Task<ConnectedSystem?> GetConnectedSystemForExchangeDeliveryAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystems
+            .AsNoTracking()
+            .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.SettingValues)
+                .ThenInclude(sv => sv.Setting)
+            .SingleOrDefaultAsync(cs => cs.Id == connectedSystemId);
+    }
+
     public async Task<Dictionary<int, string>> GetSyncRuleNamesByIdsAsync(IReadOnlyCollection<int> syncRuleIds)
     {
         if (syncRuleIds.Count == 0)
