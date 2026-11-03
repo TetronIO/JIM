@@ -28,8 +28,13 @@ internal interface ILdapDeltaSource
     /// </summary>
     /// <param name="previous">The record the last import left, on every import that has one it can read; null on the
     /// first import, or when the record could not be read. A source may use it to narrow the search for the new
-    /// watermark, but never to decide it: the watermark taken must be the same with or without it.</param>
-    Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, TimeSpan searchTimeout);
+    /// watermark. Narrowing may leave the watermark earlier than an unnarrowed search would, which costs the next
+    /// Delta Import a re-read, but never later, which would cost it a change.</param>
+    /// <param name="namingContexts">The partitions this run imports from, the ones its change read is confined to.
+    /// A source whose log is shared by every partition on the server may confine the watermark search to them too,
+    /// on the same terms as <paramref name="previous"/>. Empty when none is known, and the search is then not
+    /// confined.</param>
+    Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout);
 
     /// <summary>
     /// Establishes that the persisted watermark still means something against the directory just reached, and

@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
+- 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
 
 ### Fixed
 
@@ -49,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ An export now records each reference in its change history with the object it names as it writes it, instead of leaving them to be linked afterwards, which took 164 seconds after the first export of a 500,000-object Connected System. (#2700)
 - ⚡ OpenLDAP imports take their next watermark from what the accesslog gained since the last one: reading the whole log took 7 to 10 seconds per import at 500,000 objects, grew with the log, and on a size-limited directory could stop short of the latest change. (#2704)
 - ⚡ An import that creates objects no longer spends seconds linking up the few references it could not resolve as it wrote them: a Delta Import creating one group in a 500,000-object Connected System spent 8.8 seconds on 3 of them. (#2706)
+- ⚡ An OpenLDAP Delta Import is no longer slowed by heavy writes to other suffixes on the same server, which cost it 12 seconds at 500,000 objects after an initial export to another suffix: it now looks for where to start among the selected partitions' changes first. (#2712)
 
 
 ## [0.17.0] - 2026-10-29
