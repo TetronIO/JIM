@@ -379,6 +379,51 @@ public class LdapConnectorImportPartitionWatermarkTests
     }
 
     [Test]
+    public async Task GetDeltaImportObjectsAsync_Capture_WalksFromTheOldestTargetWatermarkAsync()
+    {
+        // The directory cannot sort, so the next watermarks are found by walking the log. Every write any target
+        // partition has yet to read is at or after the oldest of their watermarks, so the walk starts there (#2704),
+        // within the run's partitions (#2712), once for the run rather than once per partition.
+        Log(At0900, Alice);
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        Log(At0930, Pat);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0920), (2, At0900)));
+
+        var result = await import.GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Walks(), Is.EqualTo(new[] { WalkFrom(At0900, CorpDn, PartnersDn) }));
+            Assert.That(ReachedFor(result, 1), Is.EqualTo(At0930), "the latest write within the run's partitions is after corp.local's watermark");
+            Assert.That(ReachedFor(result, 2), Is.EqualTo(At0930), "and after partners.local's");
+        }
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_NothingNewWithinAQuietPartition_AdvancesItWithTheLogAsync()
+    {
+        // partners.local has been quiet: its last import took 09:30, another suffix's write. corp.local's latest write
+        // is 09:10, older than that, so it is no watermark for partners.local; nor is standing still, which the purge
+        // would overtake (#2712). partners.local takes the latest write anywhere from its own watermark instead.
+        Log(At0900, Alice);
+        Log(At0910, Cal);
+        Log(At0930, UnderAnotherSuffix);
+        Log(At0940, UnderAnotherSuffix);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0900), (2, At0930)));
+
+        var result = await import.GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ReachedFor(result, 1), Is.EqualTo(At0910), "corp.local takes its latest write");
+            Assert.That(ReachedFor(result, 2), Is.EqualTo(At0940), "partners.local advances with the log, never back to an older write");
+            Assert.That(Walks(), Is.EqualTo(new[] { WalkFrom(At0900, CorpDn, PartnersDn), WalkFrom(At0930) }),
+                "the quiet partition's walk starts from its own watermark");
+        }
+    }
+
+    [Test]
     public async Task GetDeltaImportObjectsAsync_LaterPage_SendsTheSameFilterSoThePagingCookieStaysValidAsync()
     {
         // OpenLDAP rejects a paging cookie presented with a search other than the one it was issued for. Page 2 is
