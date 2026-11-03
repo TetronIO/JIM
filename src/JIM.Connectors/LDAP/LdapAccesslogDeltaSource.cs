@@ -402,8 +402,8 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             "may be gone too. The usual cause is that the accesslog's purge (olcAccessLogPurge) removed entries older than its maximum age because " +
             "Delta Imports did not run for longer than that; it also happens when the directory is restored from a backup or snapshot. If nothing " +
             "was written in that time nothing was lost, but JIM cannot tell, and a Delta Import would silently miss any changes that were. Run a " +
-            "Full Import, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than the longest " +
-            "gap between Delta Imports.");
+            "Full Import, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than twice the " +
+            "longest gap between Delta Imports.");
     }
 
     /// <summary>
