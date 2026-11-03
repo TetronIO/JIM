@@ -7,6 +7,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -3935,6 +3936,176 @@ public class SyncRepository : ISyncRepository
         row.CancelledByName = null;
     }
 
+    // ---- Exchange queue delivery (#2021, Phase 5) ----------------------------------------------------------------
+    // Twins of the PostgreSQL delivery statements. Every write is guarded as there: on the row still being Delivering
+    // under the writer's claim. A claim hands back copies, so a lane must go back through these methods for the store
+    // to see what it did, exactly as it must against PostgreSQL.
+
+    public Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease) =>
+        Task.FromResult(_pendingExchangeChanges.Values
+            .Where(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease))
+            .Select(c => c.ConnectedSystemId)
+            .Distinct()
+            .ToList());
+
+    public Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    {
+        var retrying = _pendingExchangeChanges.Values
+            .Where(c => c.Status == PendingExchangeChangeStatus.Pending && c.NextRetryAt > asOf)
+            .ToList();
+        return Task.FromResult(new DeliveryQueueOutlook
+        {
+            DueCount = _pendingExchangeChanges.Values.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
+            RetryingCount = retrying.Count,
+            NextAttemptAt = retrying.Min(c => c.NextRetryAt)
+        });
+    }
+
+    public Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
+        var claimed = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.Id)
+            .Take(Math.Max(maximum, 0))
+            .ToList();
+
+        foreach (var change in claimed)
+            change.Claim(claimedBy, asOf);
+
+        return Task.FromResult(claimed.Select(CopyExchangeChange).ToList());
+    }
+
+    public Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var released = 0;
+        foreach (var stored in StoredExchangeChangesClaimedBy(ids, claimedBy))
+        {
+            stored.ReleaseClaim();
+            released++;
+        }
+
+        return Task.FromResult(released);
+    }
+
+    public Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
+    {
+        var byId = changes.ToDictionary(c => c.Id);
+        foreach (var stored in StoredExchangeChangesClaimedBy(byId.Keys, claimedBy))
+        {
+            // The columns of PendingExchangeChangesAttemptUpdate, and only those.
+            var attempt = byId[stored.Id];
+            stored.Status = attempt.Status;
+            stored.FailureKind = attempt.FailureKind;
+            stored.FailureMessage = attempt.FailureMessage;
+            stored.AttemptCount = attempt.AttemptCount;
+            stored.LastAttemptedAt = attempt.LastAttemptedAt;
+            stored.FirstFailedAt = attempt.FirstFailedAt;
+            stored.NextRetryAt = attempt.NextRetryAt;
+            stored.ClaimedAt = attempt.ClaimedAt;
+            stored.ClaimedBy = attempt.ClaimedBy;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var deleting = StoredExchangeChangesClaimedBy(ids, claimedBy).ToList();
+        foreach (var stored in deleting)
+            _pendingExchangeChanges.Remove(stored.Id);
+
+        return Task.FromResult(deleting.Count);
+    }
+
+    public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
+    {
+        var deleting = _pendingExchangeChanges.Values
+            .Where(c => c.Status is PendingExchangeChangeStatus.Parked or PendingExchangeChangeStatus.Cancelled
+                        && (c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt)
+            .Take(maxRecords)
+            .Select(c => c.Id)
+            .ToList();
+        foreach (var id in deleting)
+            _pendingExchangeChanges.Remove(id);
+
+        return Task.FromResult(deleting.Count);
+    }
+
+    public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var objects = new List<ExchangeDeliveryObject>();
+        foreach (var id in connectedSystemObjectIds)
+        {
+            if (!_csos.TryGetValue(id, out var cso))
+                continue;
+
+            var anchor = cso.AttributeValues.FirstOrDefault(v => v.AttributeId == cso.ExternalIdAttributeId);
+            var secondary = cso.SecondaryExternalIdAttributeId is { } secondaryId
+                ? cso.AttributeValues.FirstOrDefault(v => v.AttributeId == secondaryId)
+                : null;
+            var held = _pendingExports.Values
+                .Where(pe => pe.ConnectedSystemObjectId == id)
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .Where(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+                .Select(c => new ExchangeHeldChange(c.Attribute.Name, c.ChangeType, c.StringValue))
+                .ToList();
+
+            objects.Add(new ExchangeDeliveryObject
+            {
+                ConnectedSystemObjectId = cso.Id,
+                ObjectType = cso.Type?.Name ?? string.Empty,
+                ObjectGuid = anchor?.GuidValue,
+                DistinguishedName = secondary?.StringValue ?? anchor?.StringValue,
+                ImportedValues = cso.AttributeValues
+                    .Where(v => v.Attribute is { IsConnectorDefined: true } a && ExchangeRecipientAttributes.All.Contains(a.Name))
+                    .GroupBy(v => v.Attribute.Name, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().StringValue, StringComparer.Ordinal),
+                HeldChanges = held
+            });
+        }
+
+        return Task.FromResult(objects);
+    }
+
+    private IEnumerable<PendingExchangeChange> StoredExchangeChangesClaimedBy(IEnumerable<Guid> ids, string claimedBy) =>
+        ids.Select(id => _pendingExchangeChanges.GetValueOrDefault(id))
+            .Where(c => c is { Status: PendingExchangeChangeStatus.Delivering } && c.ClaimedBy == claimedBy)
+            .Select(c => c!)
+            .ToList();
+
+    private static PendingExchangeChange CopyExchangeChange(PendingExchangeChange source) => new()
+    {
+        Id = source.Id,
+        ConnectedSystemId = source.ConnectedSystemId,
+        ConnectedSystemObjectId = source.ConnectedSystemObjectId,
+        MetaverseObjectId = source.MetaverseObjectId,
+        SyncRuleId = source.SyncRuleId,
+        RecipientType = source.RecipientType,
+        Alias = source.Alias,
+        Database = source.Database,
+        PrimarySmtpAddress = source.PrimarySmtpAddress,
+        ExternalAddress = source.ExternalAddress,
+        DomainController = source.DomainController,
+        Status = source.Status,
+        FailureKind = source.FailureKind,
+        FailureMessage = source.FailureMessage,
+        AttemptCount = source.AttemptCount,
+        CreatedAt = source.CreatedAt,
+        LastAttemptedAt = source.LastAttemptedAt,
+        FirstFailedAt = source.FirstFailedAt,
+        NextRetryAt = source.NextRetryAt,
+        ClaimedAt = source.ClaimedAt,
+        ClaimedBy = source.ClaimedBy,
+        ActivityId = source.ActivityId,
+        CancelledAt = source.CancelledAt,
+        CancelledById = source.CancelledById,
+        CancelledByName = source.CancelledByName
+    };
+
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (FailInitialPasswordMarkingWith != null)
@@ -4057,14 +4228,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(released);
     }
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // As with the due-systems read above, this fake has no Connected System configuration to restrict to
         // enabled systems by; every queued change counts.
         var changes = _pendingPasswordChanges.Values.ToList();
         var retrying = changes.Where(c => c.Status == PendingPasswordChangeStatus.Pending && c.NextRetryAt > asOf).ToList();
 
-        return Task.FromResult(new PasswordQueueDeliveryOutlook
+        return Task.FromResult(new DeliveryQueueOutlook
         {
             DueCount = changes.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
             RetryingCount = retrying.Count,

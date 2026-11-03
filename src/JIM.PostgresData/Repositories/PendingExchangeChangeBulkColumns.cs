@@ -54,6 +54,19 @@ internal static class PendingExchangeChangeBulkColumns
     ];
 
     /// <summary>
+    /// Update columns for recording a failed delivery attempt (#2021, Phase 5): how it failed, the attempt count and
+    /// failure clock, when the next attempt falls due, and the status it leaves the change in (Pending to retry, Parked
+    /// to wait for a person). The claim columns are included because an attempt ends the claim: the writer sets them to
+    /// null. The declared state, the account and its Activity are untouched: an attempt changes how the change stands,
+    /// never what it is.
+    /// </summary>
+    internal static readonly string[] PendingExchangeChangesAttemptUpdate =
+    [
+        "Status", "FailureKind", "FailureMessage", "AttemptCount", "LastAttemptedAt", "FirstFailedAt", "NextRetryAt",
+        "ClaimedAt", "ClaimedBy"
+    ];
+
+    /// <summary>
     /// Columns deliberately excluded from every update list. The row's identity, and the account it coalesces on, are
     /// facts about which work this row represents; a write that changed either would be creating different work rather
     /// than updating this. The Connected System follows from the account, so a supersede cannot change it either.

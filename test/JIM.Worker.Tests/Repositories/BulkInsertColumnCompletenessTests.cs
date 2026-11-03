@@ -290,7 +290,7 @@ public class BulkInsertColumnCompletenessTests
         AssertUpdateListsCoverInsertList(
             "PendingExchangeChanges",
             PendingExchangeChangeBulkColumns.PendingExchangeChanges,
-            [PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate],
+            [PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate, PendingExchangeChangeBulkColumns.PendingExchangeChangesAttemptUpdate],
             PendingExchangeChangeBulkColumns.PendingExchangeChangesUpdateExclusions);
     }
 

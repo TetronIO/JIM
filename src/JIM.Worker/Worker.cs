@@ -1652,6 +1652,7 @@ public class Worker : BackgroundService
         Add(result.SecurityEventActivitiesDeleted, "security event Activity", "security event Activities");
         Add(result.PasswordEventActivitiesDeleted, "Password Synchronisation Activity", "Password Synchronisation Activities");
         Add(result.PasswordQueueRecordsDeleted, "queued password change", "queued password changes");
+        Add(result.ExchangeQueueRecordsDeleted, "queued Exchange change", "queued Exchange changes");
 
         return parts.Count == 0
             ? "Nothing had reached its retention period."

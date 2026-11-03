@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -214,7 +215,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, claimLease);
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetPasswordQueueDeliveryOutlookAsync(asOf, claimLease);
 
     public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)
@@ -298,6 +299,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsAwaitingExchangeAsync(connectedSystemId, connectedSystemObjectIds);
+
+    public Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetConnectedSystemIdsWithDueExchangeChangesAsync(asOf, claimLease);
+
+    public Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetExchangeQueueDeliveryOutlookAsync(asOf, claimLease);
+
+    public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetExchangeDeliveryObjectsAsync(connectedSystemObjectIds);
 
     public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
@@ -582,6 +592,21 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes)
         => throw new PreviewWriteAttemptedException(nameof(StageExchangeChangesAsync));
+
+    public Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+        => throw new PreviewWriteAttemptedException(nameof(ClaimDueExchangeChangesAsync));
+
+    public Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(ReleaseExchangeChangeClaimsAsync));
+
+    public Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(RecordExchangeChangeAttemptsAsync));
+
+    public Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteExchangeChangesAsync));
+
+    public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteTerminalExchangeChangesAsync));
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
         => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));
