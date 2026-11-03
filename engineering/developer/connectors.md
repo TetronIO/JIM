@@ -67,12 +67,46 @@ With it set, an object that arrives under one Object Type with an External ID JI
 
 ## Describing your import watermark
 
-Whatever your Connector returns as persisted connector data is stored on the Connected System and recorded on every import's Activity, before and after the run. JIM never reads it, so the Activity page cannot say what it means unless you do. Implement `IConnectorImportWatermarkDescription` if your Connector keeps a Delta Import watermark there: `DescribeImportWatermark` parses one recorded value and returns an `ImportWatermarkDescription`, its `Kind` (what the watermark counts in, phrased to follow a value: `access log`, `change sequence`) and one `ImportWatermarkPoint` per position you keep, each a `Number`, a UTC `Time` or a `Text`.
+Whatever your Connector returns as persisted connector data is stored on the Connected System and recorded on every import's Activity, before and after the run. JIM never reads it, so the Activity page cannot say what it means unless you do. Implement `IConnectorImportWatermarkDescription` if your Connector keeps a Delta Import watermark there (a Connector with Partitions keeps one per Partition instead; see [Keeping a watermark per Partition](#keeping-a-watermark-per-partition)): `DescribeImportWatermark` parses one recorded value and returns an `ImportWatermarkDescription`, its `Kind` (what the watermark counts in, phrased to follow a value: `access log`, `change sequence`) and one `ImportWatermarkPoint` per position you keep, each a `Number`, a UTC `Time` or a `Text`.
 
-- **Describe only the watermark.** Persisted data often carries more (the LDAP Connector's holds its detected view of the directory); leave the rest to `IConnectorDetectedCapabilities`.
+- **Describe only the watermark.** Persisted data can carry more; leave the rest to `IConnectorDetectedCapabilities`, as the LDAP Connector does with the detected view of the directory it keeps there.
 - **Give each position its own point, with a `Scope`, when you keep more than one.** The SQL Connector keeps one per Object Type and related table; one value standing for all of them would misstate what the next Delta Import reads.
 - **A date you only compare against its own column is `Text`, not `Time`.** `Time` is shown in the reader's local time, which is right only for a real point in time.
 - **Never throw.** It runs while a page or an API response is being built; return null for anything you cannot read, including values recorded before your Connector kept a watermark. Cover each shape in `ConnectorImportWatermarkDescriptionTests` (JIM.Worker.Tests), whose shared case checks null, empty and unreadable data for every built-in Connector listed in it.
+
+## Keeping a watermark per Partition
+
+A Connector whose Connected System has Partitions, and whose Run Profiles can each target one, must not keep its Delta Import watermark in persisted connector data. That value belongs to the whole Connected System, so an import of one Partition would move the starting point of every other past changes their own Delta Imports have not read yet: they would skip them for good, and JIM would report success. Implement `IConnectorPartitionWatermarks` (`JIM.Models.Interfaces`) instead. JIM then keeps one opaque value per Partition, hands each run the values of the Partitions it targets, and records what the run reached. The LDAP Connector is the worked example.
+
+| Member | What it does |
+|--------|--------------|
+| `IConnectorPartitionWatermarks.SetPartitionWatermarks` | JIM hands over the watermark it holds for every Partition the run targets, by Partition id, null where it holds none. Called once per run, before `OpenImportConnection`, and only for a Connector that imports using calls (`IConnectorImportUsingCalls`). |
+| `IConnectorPartitionWatermarks.DescribePartitionWatermark` | Describes one recorded value for the Activity page, the REST API and PowerShell, by the rules for `DescribeImportWatermark` above. JIM scopes each point you return to the Partition's name; a `Scope` you set yourself is nested under it. |
+| `ConnectedSystemImportResult.PartitionWatermarks` | What the run reached for each Partition it read, by Partition id. |
+
+What JIM hands you:
+
+- **Every target Partition is a key, and nothing else is.** A null value means read that Partition in full: it has never been imported, or its watermark was cleared (the Connector Space was cleared, or the Partition deselected). The map is empty when the run targets no Partition; read nothing then rather than claim a complete read of nothing, as the LDAP Connector does, with a warning saying why.
+- **The map is fixed for the run.** Every page is handed the same values, so whatever you build from them on the first page stays valid on the next: the LDAP Connector's accesslog search names each Partition's watermark in its filter, and its paging cookie is valid only for that filter. Decide whether to read changes or every object from the map alone, not from anything a page reads, so every page decides alike.
+
+What you return in `PartitionWatermarks`:
+
+- **A value records it, null clears it, and a Partition left out keeps what it has.** A cleared Partition's next Delta Import reads every object in it. A value equal to the one you were handed is still recorded, which refreshes when JIM says the Partition was last read.
+- **JIM takes the map from the first page that carries one** and ignores the maps of later pages, as it does `PersistedConnectorData`. Take the watermarks on the first page, before you read anything, so that a change made while the run reads is read again by the next run rather than missed.
+- **Every page's map is checked before that page's objects are processed.** Each key must be one of the Partitions JIM handed you; any other fails the run as a fault in the Connector, before anything is staged, because recording it would move a Partition this run did not read past changes no import of it has read. A Connector that does not implement the interface must leave the property null: any map from it, even an empty one, fails the run the same way.
+
+When JIM records it:
+
+- **Only at the end of a run that staged everything it read**, in one write with the Connected System's persisted connector data. Nothing is recorded when the run fails or is cancelled, when a Delta Import withholds the deletes you reported (the Run Profile's deletion limits), when a Delta Import that read every object does not finish deletion detection, or when `CloseImportConnection` returns data. A run that records also removes the watermarks of Partitions that are no longer selected; deselecting a Partition and clearing the Connector Space remove them too.
+
+Reading in full, and refusing:
+
+- **`CompleteRead` covers every Partition the run targets, and is the whole answer.** A run cannot say it read some Partitions in full and others by their changes: deletion detection is scoped to the Run Profile's Partition, or to the whole Connected System, because JIM does not reliably know which Partition each object it holds is in (an object an unscoped import created records none). So when any target Partition has no usable watermark, read every target Partition in full, set `CompleteRead` on every page, say so with `WarningMessage` (and `WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport`) naming the Partitions that had none, and return a watermark for every Partition you read, so the next Delta Import reads changes.
+- **Refuse rather than read from a watermark that no longer applies**, naming the Partitions that hold it and asking for a Full Import that reads them: a Full Import of another Partition does not re-establish this one's baseline. Check every distinct watermark before refusing, so one run names every Partition to repair (`LdapConnectorImport.VerifyEveryWatermark`).
+
+Keep `PersistedConnectorData` for anything else you need between runs: the LDAP Connector keeps its record of the directory there (its type, capabilities and pinned domain controller), with no watermark in it.
+
+The processor's side of the contract is covered by `ImportPartitionWatermarkTests`, driving `PartitionWatermarkTestConnector` (`test/JIM.Worker.Tests/Workflows/`). Cover your Connector's side with a scripted directory holding two Partitions with different watermarks, showing that a Delta Import of one leaves the other's change for the other's Delta Import to read; `LdapConnectorImportPartitionWatermarkTests` is the pattern.
 
 ## Describing what your source contains
 
@@ -267,7 +301,7 @@ Do not use this channel for a problem that affects the whole run; throw instead,
 
 Set `ConnectedSystemImportResult.WarningMessage` (with an optional `WarningErrorType`) for a non-fatal operational note about **how** the run was performed. The run completes, and the warning is recorded on the Activity.
 
-The canonical example is JIM's LDAP Connector: when a Delta Import finds no usable watermark, it performs a Full Import instead and says so, rather than failing or silently returning a surprising number of objects.
+The canonical example is JIM's LDAP Connector: when a Partition a Delta Import reads has no usable watermark, it reads every object in the run's Partitions instead and says so, naming the Partitions, rather than failing or silently returning a surprising number of objects.
 
 ### Failing the run
 
