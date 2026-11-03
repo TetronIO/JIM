@@ -318,8 +318,8 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
         }
         catch (Exception error) when (error is not OutOfMemoryException)
         {
-            // This includes a request timing out, which is an OperationCanceledException nobody here asked for: it
-            // must reach PowerShell as an error, or the command would wait for output that never comes.
+            // This includes a request timing out, which the connection reports as a TimeoutException: it must reach
+            // PowerShell as an error, or the command would wait for output that never comes.
             if (!_closing && pipeline?.Receive.IsCancellationRequested != true)
                 _onError(error);
         }
