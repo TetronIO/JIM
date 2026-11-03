@@ -22,11 +22,34 @@
     3. UnscopedImport - Full Import without PartitionId (all selected partitions)
     4. Comparison     - Verify counts are consistent (scoped subsets sum to unscoped total)
 
+    Then the Delta Import steps (#2715: each partition keeps its own Delta Import watermark). Every run they make
+    is checked against the watermarks JIM holds before and after it: the run starts each partition it reads from
+    that partition's watermark, records one for each, and leaves every other partition's exactly as it was.
+    5. DeltaBaseline       - after the Full Imports, both Delta Import Run Profiles read changes, with no warning
+    6. CrossPartitionDelta - change users in each partition; Delta Import (Scoped) imports the first partition's
+                             changes only, and Delta Import (Scoped - Second) then imports the second's (the #2715
+                             regression: it used to start from where the first run ended, past them)
+    7. ScopedFullThenDelta - change users in the second partition; Full Import (Scoped); the second partition's
+                             Delta Import still imports them
+    8. UnscopedDelta       - change users in each partition; Delta Import (Unscoped) imports both, with a read range
+                             point per partition; the scoped Delta Imports then import nothing
+    9. PartitionDeletion   - delete a user in the second partition; only the second partition's Delta Import
+                             marks it deleted
+    10. ReselectedPartition - deselect and reselect the second partition, which clears its watermark; Delta Import
+                             (Unscoped) reads every object instead, warns naming that partition and deletes nothing;
+                             the second partition's Delta Import then reads changes again
+
+    OpenLDAP and 389 Directory Server run every Delta Import step. Samba AD (and the Active Directory lab) has one
+    domain partition, so it runs DeltaBaseline, CrossPartitionDelta and UnscopedDelta only, with Delta Import
+    (Unscoped) as the second Run Profile: both target the one partition and share its watermark, which proves the
+    Update Sequence Number path end to end.
+
 .PARAMETER Step
-    Which test step to execute (ScopedImport, UnscopedImport, Comparison, All)
+    Which test step to execute. A Delta Import step on its own first runs the scoped Full Imports it builds on.
 
 .PARAMETER Template
-    Data scale template (Nano or Micro recommended; Nano for SambaAD fixed data)
+    Data scale template. The Delta Import steps on OpenLDAP and 389 Directory Server need five users in each
+    partition, so Micro or larger; Samba AD uses fixed test users whatever the template.
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -49,7 +72,8 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("ScopedImport", "UnscopedImport", "Comparison", "All")]
+    [ValidateSet("ScopedImport", "UnscopedImport", "Comparison", "DeltaBaseline", "CrossPartitionDelta", "ScopedFullThenDelta",
+        "UnscopedDelta", "PartitionDeletion", "ReselectedPartition", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -115,13 +139,39 @@ $testResults = @{
 }
 
 # For SambaAD, we create fixed test users. For OpenLDAP, we use the pre-populated data.
+# Eight, so CrossPartitionDelta can change two disjoint sets of four, one before each of its two Delta Imports.
 $sambaTestUsers = @(
     @{ Sam = "partition.test1"; FirstName = "Partition"; LastName = "TestOne"; Department = "Engineering" },
     @{ Sam = "partition.test2"; FirstName = "Partition"; LastName = "TestTwo"; Department = "Marketing" },
-    @{ Sam = "partition.test3"; FirstName = "Partition"; LastName = "TestThree"; Department = "Finance" }
+    @{ Sam = "partition.test3"; FirstName = "Partition"; LastName = "TestThree"; Department = "Finance" },
+    @{ Sam = "partition.test4"; FirstName = "Partition"; LastName = "TestFour"; Department = "Engineering" },
+    @{ Sam = "partition.test5"; FirstName = "Partition"; LastName = "TestFive"; Department = "Marketing" },
+    @{ Sam = "partition.test6"; FirstName = "Partition"; LastName = "TestSix"; Department = "Finance" },
+    @{ Sam = "partition.test7"; FirstName = "Partition"; LastName = "TestSeven"; Department = "Engineering" },
+    @{ Sam = "partition.test8"; FirstName = "Partition"; LastName = "TestEight"; Department = "Marketing" }
 )
 
 $testUsersOU = "OU=TestUsers"
+
+# The Delta Import steps (#2715) each directory type runs. OpenLDAP and 389 Directory Server host two partitions
+# (Yellowstone and Glitterband), each with its own scoped Run Profiles, so they run every one. Samba AD and Active
+# Directory have one domain partition: the second Delta Import Run Profile there is Delta Import (Unscoped), which
+# targets that same partition, so the two share one watermark, and the steps that need a second partition do not
+# apply.
+$deltaStepsByDirectoryFamily = @{
+    Rfc      = @("DeltaBaseline", "CrossPartitionDelta", "ScopedFullThenDelta", "UnscopedDelta", "PartitionDeletion", "ReselectedPartition")
+    AdFamily = @("DeltaBaseline", "CrossPartitionDelta", "UnscopedDelta")
+}
+$deltaSteps = if ($isRfcDirectory) { $deltaStepsByDirectoryFamily.Rfc } else { $deltaStepsByDirectoryFamily.AdFamily }
+if ($Step -in $deltaStepsByDirectoryFamily.Rfc -and $Step -notin $deltaSteps) {
+    throw "Step '$Step' needs a second partition, which $($DirectoryConfig.DirectoryType) does not have in this scenario. It runs these Delta Import steps: $($deltaSteps -join ', ')."
+}
+$runsDeltaSteps = ($Step -eq "All") -or ($Step -in $deltaSteps)
+
+# How many users each Delta Import step changes in a partition: one more than the Delta Import Run Profiles' page size
+# (Setup-Scenario-009.ps1), so the change read of every Delta Import crosses a Connector page boundary (on Samba AD,
+# which the LDAP Connector reads unpaged, every read comes back in one page).
+$changedUsersPerPartition = 4
 
 # Calculate expected user counts for OpenLDAP multi-partition testing
 $expectedYellowstoneUsers = $null
@@ -135,6 +185,244 @@ if ($isRfcDirectory) {
     $expectedTotalUsers = $scale.Users
     Write-Host "Expected users: Yellowstone=$expectedYellowstoneUsers, Glitterband=$expectedGlitterbandUsers, Total=$expectedTotalUsers" -ForegroundColor Gray
     Write-Host ""
+}
+
+# The users the Delta Import steps change, by partition. On OpenLDAP and 389 Directory Server the scenario adds five of
+# its own to each partition (four to change, a fifth for PartitionDeletion to delete), so the steps work at any
+# template, Nano included, and change only objects the scenario owns; on Samba AD they are the fixed test users.
+$rfcDeltaUsersPerPartition = $changedUsersPerPartition + 1
+$deltaUsers = @{ Primary = @(); Second = @() }
+$secondPartitionConfig = $null
+if ($isRfcDirectory) {
+    # Glitterband's administrator, for the second partition's users: on OpenLDAP each suffix has its own rootDN; on
+    # 389 Directory Server both are the Directory Manager.
+    $secondPartitionConfig = $DirectoryConfig.Clone()
+    $secondPartitionConfig.BindDN = $DirectoryConfig.SecondBindDN
+    $secondPartitionConfig.BaseDN = $DirectoryConfig.SecondSuffix
+}
+$deltaUserPartitions = @(
+    @{ Key = "Primary"; Label = "yellowstone"; Config = $DirectoryConfig; Suffix = $DirectoryConfig.BaseDN }
+    @{ Key = "Second"; Label = "glitterband"; Config = $secondPartitionConfig; Suffix = $DirectoryConfig['SecondSuffix'] }
+)
+
+# ---------------------------------------------------------------------------------------------
+# Delta Import step helpers (#2715)
+# ---------------------------------------------------------------------------------------------
+
+function Get-PartitionUserDn {
+    <#
+    .SYNOPSIS
+        The distinguished names of the users in an RFC directory partition's People container, sorted, read as that
+        partition's administrator.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Suffix
+    )
+
+    $entries = @(Find-DirectoryEntry -DirectoryConfig $Config -BaseDn "ou=People,$Suffix" -Scope sub `
+        -Filter "(objectClass=$($DirectoryConfig.UserObjectClass))" -Attributes @('dn'))
+    return @($entries | ForEach-Object { [string]$_['dn'] } | Sort-Object)
+}
+
+function Set-PartitionUserDisplayName {
+    <#
+    .SYNOPSIS
+        Writes "<Prefix> <n>" to each user's displayName in one ldapmodify (one modify per user, in the order given)
+        and returns the values written, sorted: the names the next import of their partition must report as updated.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string[]]$Dn,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Prefix
+    )
+
+    $values = [System.Collections.Generic.List[string]]::new()
+    $ldif = [System.Text.StringBuilder]::new()
+    for ($index = 0; $index -lt $Dn.Count; $index++) {
+        $value = "$Prefix $($index + 1)"
+        $values.Add($value)
+        [void]$ldif.Append("dn: $($Dn[$index])`nchangetype: modify`nreplace: displayName`ndisplayName: $value`n-`n`n")
+    }
+
+    $result = Invoke-DirectoryLdif -DirectoryConfig $Config -Ldif $ldif.ToString() -Operation modify
+    if (-not $result.Success) {
+        throw "Could not change the display names of $($Dn.Count) user(s) for '$Prefix': $($result.Output)"
+    }
+    Write-Host "  Changed $($Dn.Count) user(s) in the directory: $Prefix 1..$($Dn.Count)" -ForegroundColor Gray
+    return @($values | Sort-Object)
+}
+
+function Invoke-ImportRunProfile {
+    <#
+    .SYNOPSIS
+        Runs one of the Connected System's import Run Profiles and returns what it did, with the partition watermarks
+        JIM held immediately before and after it.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ProfileName
+    )
+
+    $runProfile = $profiles | Where-Object { $_.name -eq $ProfileName } | Select-Object -First 1
+    if (-not $runProfile) {
+        throw "Run Profile '$ProfileName' not found. Ensure Setup-Scenario-009.ps1 completed successfully."
+    }
+
+    $before = Get-PartitionDeltaImportWatermark -ConnectedSystemId $ldapSystem.id
+    Write-Host "Running $ProfileName..." -ForegroundColor Gray
+    $run = Start-JIMRunProfile -ConnectedSystemId $ldapSystem.id -RunProfileId $runProfile.id -Wait -PassThru
+    Start-Sleep -Seconds $WaitSeconds
+    $after = Get-PartitionDeltaImportWatermark -ConnectedSystemId $ldapSystem.id
+
+    $activityId = "$($run.activityId)"
+    $counts = Get-ImportObjectCount -ActivityId $activityId
+    Write-Host "  Added $($counts.Added), updated $($counts.Updated), deleted $($counts.Deleted), unchanged $($counts.Unchanged)" -ForegroundColor Gray
+
+    return @{
+        Name       = $ProfileName
+        ActivityId = $activityId
+        Activity   = Get-JIMActivity -Id $activityId
+        Before     = $before
+        After      = $after
+        Counts     = $counts
+    }
+}
+
+function Format-PartitionName {
+    param([int]$PartitionId)
+    $partition = $partitionsById[$PartitionId]
+    return $(if ($partition) { "'$($partition.name)'" } else { "partition $PartitionId" })
+}
+
+function Assert-RunKeptToItsPartitions {
+    <#
+    .SYNOPSIS
+        The #2715 contract for one run: it started each partition it read from the watermark JIM held for it, recorded
+        a watermark for each of them (what JIM now holds), and left every other partition's watermark as it was.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Run,
+
+        [Parameter(Mandatory=$true)]
+        [int[]]$TargetPartitionIds
+    )
+
+    $label = $Run.Name
+    $expectedIds = ($TargetPartitionIds | Sort-Object) -join ','
+
+    $from = Get-ActivityPartitionWatermark -Activity $Run.Activity -Direction From
+    if ($null -eq $from) { throw "$label recorded no partition it started from (importPartitionWatermarksFrom is empty)" }
+    $fromIds = (@($from.Keys) | Sort-Object) -join ','
+    if ($fromIds -ne $expectedIds) { throw "$label started from the watermarks of partitions [$fromIds]; expected [$expectedIds]" }
+
+    $to = Get-ActivityPartitionWatermark -Activity $Run.Activity -Direction To
+    if ($null -eq $to) { throw "$label recorded no partition watermark (importPartitionWatermarksTo is empty)" }
+    $toIds = (@($to.Keys) | Sort-Object) -join ','
+    if ($toIds -ne $expectedIds) { throw "$label recorded watermarks for partitions [$toIds]; expected [$expectedIds]" }
+
+    foreach ($partitionId in $TargetPartitionIds) {
+        $name = Format-PartitionName -PartitionId $partitionId
+        if ($from[$partitionId] -ne $Run.Before[$partitionId]) {
+            throw "$label started $name from '$($from[$partitionId])', but JIM held '$($Run.Before[$partitionId])' for it"
+        }
+        if ([string]::IsNullOrEmpty($to[$partitionId])) {
+            throw "$label recorded no watermark for $name"
+        }
+        if ($Run.After[$partitionId] -ne $to[$partitionId]) {
+            throw "$label recorded '$($to[$partitionId])' for $name, but JIM now holds '$($Run.After[$partitionId])'"
+        }
+    }
+
+    foreach ($partitionId in @($Run.Before.Keys | Where-Object { $_ -notin $TargetPartitionIds })) {
+        if ($Run.After[$partitionId] -ne $Run.Before[$partitionId]) {
+            throw "$label does not read $(Format-PartitionName -PartitionId $partitionId), but moved its watermark from '$($Run.Before[$partitionId])' to '$($Run.After[$partitionId])' (#2715)"
+        }
+    }
+
+    Write-Host "  OK $label started from and recorded the watermark of $(($TargetPartitionIds | ForEach-Object { Format-PartitionName -PartitionId $_ }) -join ' and ') only; every other partition's is unchanged" -ForegroundColor Green
+}
+
+function Assert-ImportedExactly {
+    <#
+    .SYNOPSIS
+        What a run imported, exactly: the objects it updated and deleted by display name, nothing added, and how many
+        it read unchanged (0 for a Delta Import that read only changes; every object for one that read in full).
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Run,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Updated = @(),
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$Deleted = @(),
+
+        [Parameter(Mandatory=$false)]
+        [int]$Unchanged = 0
+    )
+
+    $label = $Run.Name
+    $counts = $Run.Counts
+    if ($counts.Added -ne 0) { throw "$label added $($counts.Added) object(s); expected none" }
+    if ($counts.Updated -ne @($Updated).Count) { throw "$label updated $($counts.Updated) object(s); expected $(@($Updated).Count) ($(@($Updated) -join ', '))" }
+    if ($counts.Deleted -ne @($Deleted).Count) { throw "$label deleted $($counts.Deleted) object(s); expected $(@($Deleted).Count) ($(@($Deleted) -join ', '))" }
+    if ($counts.Unchanged -ne $Unchanged) { throw "$label read $($counts.Unchanged) unchanged object(s); expected $Unchanged" }
+
+    if (@($Updated).Count -gt 0) {
+        $updatedNames = @(Get-ActivityItemDisplayName -ActivityId $Run.ActivityId -ObjectChangeType Updated)
+        $expected = @($Updated | Sort-Object)
+        if (($updatedNames -join '|') -ne ($expected -join '|')) {
+            throw "$label updated [$($updatedNames -join ', ')]; expected [$($expected -join ', ')]"
+        }
+    }
+    if (@($Deleted).Count -gt 0) {
+        $deletedNames = @(Get-ActivityItemDisplayName -ActivityId $Run.ActivityId -ObjectChangeType Deleted)
+        $expected = @($Deleted | Sort-Object)
+        if (($deletedNames -join '|') -ne ($expected -join '|')) {
+            throw "$label deleted [$($deletedNames -join ', ')]; expected [$($expected -join ', ')]"
+        }
+    }
+
+    Write-Host "  OK $label imported exactly what was expected (updated $(@($Updated).Count), deleted $(@($Deleted).Count), unchanged $Unchanged)" -ForegroundColor Green
+}
+
+function Invoke-DeltaStep {
+    <#
+    .SYNOPSIS
+        Runs one Delta Import step when it was asked for and applies to this directory type, recording its result.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Name,
+
+        [Parameter(Mandatory=$true)]
+        [scriptblock]$Body
+    )
+
+    if (($Step -ne "All" -and $Step -ne $Name) -or $Name -notin $deltaSteps) {
+        return
+    }
+
+    Write-TestSection "Delta Import step: $Name"
+    try {
+        & $Body
+        $testResults.Steps += @{ Name = $Name; Success = $true }
+    }
+    catch {
+        Write-Host "  FAIL $Name`: $_" -ForegroundColor Red
+        $testResults.Steps += @{ Name = $Name; Success = $false; Error = $_.ToString() }
+    }
 }
 
 try {
@@ -175,6 +463,33 @@ try {
             throw "No users found in Yellowstone suffix — Populate-OpenLDAP.ps1 may not have run"
         }
         Write-Host "  OK OpenLDAP has pre-populated test data" -ForegroundColor Green
+
+        if ($runsDeltaSteps) {
+            Write-Host "Creating the Delta Import steps' users in each partition..." -ForegroundColor Gray
+            foreach ($partitionUsers in $deltaUserPartitions) {
+                $dns = @(1..$rfcDeltaUsersPerPartition | ForEach-Object { "uid=s009-delta-$($partitionUsers.Label)-$_,ou=People,$($partitionUsers.Suffix)" })
+                foreach ($dn in $dns) {
+                    $removed = Remove-DirectoryEntry -DirectoryConfig $partitionUsers.Config -Dn $dn
+                    if (-not $removed.Success) { throw "Could not remove '$dn' left by an earlier run: $($removed.Output)" }
+                }
+
+                $ldif = ($dns | ForEach-Object {
+                    $uid = ($_ -split ',')[0] -replace '^uid=', ''
+                    @("dn: $_", "objectClass: inetOrgPerson", "uid: $uid", "cn: $uid", "sn: Delta", "givenName: Scenario",
+                      "displayName: $uid", "departmentNumber: Delta") -join "`n"
+                }) -join "`n`n"
+                $added = Invoke-DirectoryLdif -DirectoryConfig $partitionUsers.Config -Ldif $ldif -Operation add
+                if ($added.Outcome -ne 'Created') { throw "Could not create the Delta Import steps' users in $($partitionUsers.Suffix): $($added.Output)" }
+
+                $deltaUsers[$partitionUsers.Key] = $dns
+                Write-Host "  OK Created $($dns.Count) users in $($partitionUsers.Suffix)" -ForegroundColor Green
+            }
+
+            # The Full Import steps import these too.
+            $expectedYellowstoneUsers += $rfcDeltaUsersPerPartition
+            $expectedGlitterbandUsers += $rfcDeltaUsersPerPartition
+            $expectedTotalUsers += 2 * $rfcDeltaUsersPerPartition
+        }
     }
     else {
         # Samba AD or Active Directory: wait for the directory and create test users
@@ -205,8 +520,10 @@ try {
             # Delete if exists from previous run
             Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user.Sam | Out-Null
 
+            $userDn = "CN=$($user.FirstName) $($user.LastName),$testUsersOU,$($DirectoryConfig.BaseDN)"
+            $deltaUsers.Primary += $userDn
             $createResult = New-DirectoryUser -DirectoryConfig $DirectoryConfig `
-                -Dn "CN=$($user.FirstName) $($user.LastName),$testUsersOU,$($DirectoryConfig.BaseDN)" `
+                -Dn $userDn `
                 -SamAccountName $user.Sam `
                 -Password "Password123!" `
                 -Attributes ([ordered]@{
@@ -260,6 +577,44 @@ try {
 
     if ($isRfcDirectory -and -not $scopedImport2Profile) {
         throw "OpenLDAP second scoped import profile not found. Ensure Setup-Scenario-009.ps1 completed successfully."
+    }
+
+    # The partitions the Delta Import steps read, and their Run Profiles. On Samba AD and Active Directory the second
+    # Run Profile is Delta Import (Unscoped), which reads the one domain partition the first does.
+    $partitions = @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id)
+    $partitionsById = @{}
+    foreach ($partition in $partitions) { $partitionsById[[int]$partition.id] = $partition }
+    $selectedPartitions = @($partitions | Where-Object { $_.selected })
+    $primaryPartition = $partitions | Where-Object { $_.name -eq $DirectoryConfig.BaseDN -or $_.externalId -eq $DirectoryConfig.BaseDN } | Select-Object -First 1
+    if (-not $primaryPartition -and $selectedPartitions.Count -eq 1) { $primaryPartition = $selectedPartitions[0] }
+    $secondPartition = if ($isRfcDirectory) {
+        $partitions | Where-Object { $_.name -eq $DirectoryConfig.SecondSuffix -or $_.externalId -eq $DirectoryConfig.SecondSuffix } | Select-Object -First 1
+    } else { $null }
+
+    $secondDeltaProfileName = if ($isRfcDirectory) { "Delta Import (Scoped - Second)" } else { "Delta Import (Unscoped)" }
+    if ($runsDeltaSteps) {
+        if (-not $primaryPartition -or ($isRfcDirectory -and -not $secondPartition)) {
+            throw "The Delta Import steps could not find the partitions Setup-Scenario-009.ps1 selected."
+        }
+        foreach ($profileName in @("Delta Import (Scoped)", "Delta Import (Unscoped)", $secondDeltaProfileName)) {
+            if (-not ($profiles | Where-Object { $_.name -eq $profileName })) {
+                throw "Run Profile '$profileName' not found. Ensure Setup-Scenario-009.ps1 completed successfully."
+            }
+        }
+    }
+    $primaryPartitionId = if ($primaryPartition) { [int]$primaryPartition.id } else { 0 }
+    $secondPartitionId = if ($secondPartition) { [int]$secondPartition.id } else { 0 }
+    $secondRunPartitionId = if ($isRfcDirectory) { $secondPartitionId } else { $primaryPartitionId }
+
+    # A Delta Import step on its own builds on what the Full Import steps leave behind: Connected System Objects
+    # stamped with the partition they were imported from, and a watermark for each partition.
+    if ($Step -in $deltaSteps) {
+        Write-TestSection "Prerequisite: scoped Full Imports for $Step"
+        $baselineProfiles = @("Full Import (Scoped)") + $(if ($isRfcDirectory) { @("Full Import (Scoped - Second)") } else { @() })
+        foreach ($profileName in $baselineProfiles) {
+            $baseline = Invoke-ImportRunProfile -ProfileName $profileName
+            Assert-ActivitySuccess -ActivityId $baseline.ActivityId -Name $profileName
+        }
     }
 
     # Track CSO counts from each import for comparison
@@ -451,6 +806,195 @@ try {
         }
     }
 
+    # ---------------------------------------------------------------------------------------------
+    # Delta Import steps (#2715): each partition keeps its own Delta Import watermark
+    # ---------------------------------------------------------------------------------------------
+
+    $primaryUsers = @($deltaUsers.Primary)
+    $secondUsers = @($deltaUsers.Second)
+    $firstChangeSet = @($primaryUsers | Select-Object -First $changedUsersPerPartition)
+    $secondChangeSet = @($secondUsers | Select-Object -First $changedUsersPerPartition)
+
+    Invoke-DeltaStep -Name "DeltaBaseline" -Body {
+        # The Full Imports recorded a watermark for each partition they read, so both Delta Imports read changes.
+        $held = Get-PartitionDeltaImportWatermark -ConnectedSystemId $ldapSystem.id
+        foreach ($partitionId in @($primaryPartitionId, $secondRunPartitionId) | Select-Object -Unique) {
+            if ([string]::IsNullOrEmpty($held[$partitionId])) {
+                throw "The Full Imports recorded no Delta Import watermark for $(Format-PartitionName -PartitionId $partitionId)"
+            }
+        }
+        Write-Host "  OK The Full Imports recorded a watermark for every partition they read" -ForegroundColor Green
+
+        $first = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped)"
+        Assert-ActivitySuccess -ActivityId $first.ActivityId -Name $first.Name
+        Assert-ImportedExactly -Run $first
+        Assert-RunKeptToItsPartitions -Run $first -TargetPartitionIds @($primaryPartitionId)
+
+        $second = Invoke-ImportRunProfile -ProfileName $secondDeltaProfileName
+        Assert-ActivitySuccess -ActivityId $second.ActivityId -Name $second.Name
+        Assert-ImportedExactly -Run $second
+        Assert-RunKeptToItsPartitions -Run $second -TargetPartitionIds @($secondRunPartitionId)
+    }
+
+    Invoke-DeltaStep -Name "CrossPartitionDelta" -Body {
+        if ($isRfcDirectory) {
+            # The #2715 timeline: the second partition changes first, then the first. A watermark shared by the whole
+            # Connected System moved past the second partition's changes when the first partition's Delta Import
+            # recorded where it had read to, so the second partition's Delta Import never imported them.
+            $secondNames = Set-PartitionUserDisplayName -Config $secondPartitionConfig -Dn $secondChangeSet -Prefix "S009 CrossPartitionDelta Second"
+            $primaryNames = Set-PartitionUserDisplayName -Config $DirectoryConfig -Dn $firstChangeSet -Prefix "S009 CrossPartitionDelta Primary"
+
+            $first = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped)"
+            Assert-ActivitySuccess -ActivityId $first.ActivityId -Name $first.Name
+            Assert-ImportedExactly -Run $first -Updated $primaryNames
+
+            # What an administrator sees first: the second partition's changes are imported. Checked before either
+            # run's watermarks, so a regression reports the changes it loses, not only the watermark it moved.
+            $second = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped - Second)"
+            Assert-ActivitySuccess -ActivityId $second.ActivityId -Name $second.Name
+            Assert-ImportedExactly -Run $second -Updated $secondNames
+
+            Assert-RunKeptToItsPartitions -Run $first -TargetPartitionIds @($primaryPartitionId)
+            Assert-RunKeptToItsPartitions -Run $second -TargetPartitionIds @($secondPartitionId)
+        }
+        else {
+            # One partition, two Run Profiles, one watermark: the second Run Profile starts where the first ended,
+            # so it imports the changes made since, and not the first run's again.
+            $firstNames = Set-PartitionUserDisplayName -Config $DirectoryConfig -Dn $firstChangeSet -Prefix "S009 CrossPartitionDelta First"
+            $first = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped)"
+            Assert-ActivitySuccess -ActivityId $first.ActivityId -Name $first.Name
+            Assert-ImportedExactly -Run $first -Updated $firstNames
+            Assert-RunKeptToItsPartitions -Run $first -TargetPartitionIds @($primaryPartitionId)
+
+            $laterUsers = @($primaryUsers | Select-Object -Skip $changedUsersPerPartition -First $changedUsersPerPartition)
+            $laterNames = Set-PartitionUserDisplayName -Config $DirectoryConfig -Dn $laterUsers -Prefix "S009 CrossPartitionDelta Later"
+            $second = Invoke-ImportRunProfile -ProfileName "Delta Import (Unscoped)"
+            Assert-ActivitySuccess -ActivityId $second.ActivityId -Name $second.Name
+            Assert-ImportedExactly -Run $second -Updated $laterNames
+            Assert-RunKeptToItsPartitions -Run $second -TargetPartitionIds @($primaryPartitionId)
+
+            $firstReached = (Get-ActivityPartitionWatermark -Activity $first.Activity -Direction To)[$primaryPartitionId]
+            $secondStarted = (Get-ActivityPartitionWatermark -Activity $second.Activity -Direction From)[$primaryPartitionId]
+            if ($secondStarted -ne $firstReached) {
+                throw "Delta Import (Unscoped) started from '$secondStarted', not from where Delta Import (Scoped) ended ('$firstReached'), though both read the one partition"
+            }
+            Write-Host "  OK Both Run Profiles share the partition's one watermark" -ForegroundColor Green
+        }
+    }
+
+    Invoke-DeltaStep -Name "ScopedFullThenDelta" -Body {
+        # A Full Import of the first partition records the first partition's watermark only, so the second
+        # partition's Delta Import still imports what changed there before it.
+        $secondNames = Set-PartitionUserDisplayName -Config $secondPartitionConfig -Dn $secondChangeSet -Prefix "S009 ScopedFullThenDelta Second"
+
+        $full = Invoke-ImportRunProfile -ProfileName "Full Import (Scoped)"
+        Assert-ActivitySuccess -ActivityId $full.ActivityId -Name $full.Name
+        if ($full.Counts.Added -ne 0 -or $full.Counts.Updated -ne 0 -or $full.Counts.Deleted -ne 0) {
+            throw "Full Import (Scoped) changed objects in a partition nothing changed in (added $($full.Counts.Added), updated $($full.Counts.Updated), deleted $($full.Counts.Deleted))"
+        }
+        Assert-RunKeptToItsPartitions -Run $full -TargetPartitionIds @($primaryPartitionId)
+
+        $delta = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped - Second)"
+        Assert-ActivitySuccess -ActivityId $delta.ActivityId -Name $delta.Name
+        Assert-ImportedExactly -Run $delta -Updated $secondNames
+        Assert-RunKeptToItsPartitions -Run $delta -TargetPartitionIds @($secondPartitionId)
+    }
+
+    Invoke-DeltaStep -Name "UnscopedDelta" -Body {
+        # Delta Import (Unscoped) reads every selected partition from its own watermark and records one for each, so
+        # the scoped Delta Imports after it find nothing new.
+        $expectedNames = @(Set-PartitionUserDisplayName -Config $DirectoryConfig -Dn $firstChangeSet -Prefix "S009 UnscopedDelta Primary")
+        $targetIds = @($primaryPartitionId)
+        if ($isRfcDirectory) {
+            $expectedNames += Set-PartitionUserDisplayName -Config $secondPartitionConfig -Dn $secondChangeSet -Prefix "S009 UnscopedDelta Second"
+            $targetIds += $secondPartitionId
+        }
+
+        $unscoped = Invoke-ImportRunProfile -ProfileName "Delta Import (Unscoped)"
+        Assert-ActivitySuccess -ActivityId $unscoped.ActivityId -Name $unscoped.Name
+        Assert-ImportedExactly -Run $unscoped -Updated $expectedNames
+        Assert-RunKeptToItsPartitions -Run $unscoped -TargetPartitionIds $targetIds
+
+        # The read range has one point per partition, scoped by the partition's name.
+        $expectedScopes = (@($targetIds | ForEach-Object { "$($partitionsById[$_].name)" }) | Sort-Object) -join ' | '
+        foreach ($direction in @("From", "To")) {
+            $scopes = @(Get-ImportReadRangeScope -Activity $unscoped.Activity -Direction $direction) -join ' | '
+            if ($scopes -ne $expectedScopes) {
+                throw "Delta Import (Unscoped)'s importReadRange.$($direction.ToLowerInvariant()) has points for [$scopes]; expected one per partition, [$expectedScopes]"
+            }
+        }
+        Write-Host "  OK importReadRange has one point per partition on both sides" -ForegroundColor Green
+
+        $scopedProfiles = @("Delta Import (Scoped)") + $(if ($isRfcDirectory) { @("Delta Import (Scoped - Second)") } else { @() })
+        $scopedTargets = @($primaryPartitionId) + $(if ($isRfcDirectory) { @($secondPartitionId) } else { @() })
+        for ($index = 0; $index -lt $scopedProfiles.Count; $index++) {
+            $scoped = Invoke-ImportRunProfile -ProfileName $scopedProfiles[$index]
+            Assert-ActivitySuccess -ActivityId $scoped.ActivityId -Name $scoped.Name
+            Assert-ImportedExactly -Run $scoped
+            Assert-RunKeptToItsPartitions -Run $scoped -TargetPartitionIds @($scopedTargets[$index])
+        }
+    }
+
+    Invoke-DeltaStep -Name "PartitionDeletion" -Body {
+        # Deleted in the second partition: the first partition's Delta Import does not read the deletion (and so
+        # cannot pass it), and the second partition's marks the object deleted (OpenLDAP's access log carries the
+        # entry's reqEntryUUID; 389 Directory Server's changelog a copy of the deleted entry).
+        $deletedDn = $secondUsers[$changedUsersPerPartition]
+        $deletedEntry = Get-DirectoryEntry -DirectoryConfig $secondPartitionConfig -Dn $deletedDn -Attributes @('displayName')
+        if (-not $deletedEntry) { throw "The user to delete, '$deletedDn', is not in the directory" }
+        $deletedName = [string]@($deletedEntry['displayName'])[0]
+        $removed = Remove-DirectoryEntry -DirectoryConfig $secondPartitionConfig -Dn $deletedDn
+        if ($removed.Outcome -ne 'Deleted') { throw "Could not delete '$deletedDn': $($removed.Output)" }
+        Write-Host "  Deleted $deletedDn ('$deletedName') from the directory" -ForegroundColor Gray
+
+        $first = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped)"
+        Assert-ActivitySuccess -ActivityId $first.ActivityId -Name $first.Name
+        Assert-ImportedExactly -Run $first
+        Assert-RunKeptToItsPartitions -Run $first -TargetPartitionIds @($primaryPartitionId)
+
+        $second = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped - Second)"
+        Assert-ActivitySuccess -ActivityId $second.ActivityId -Name $second.Name
+        Assert-ImportedExactly -Run $second -Deleted @($deletedName)
+        Assert-RunKeptToItsPartitions -Run $second -TargetPartitionIds @($secondPartitionId)
+    }
+
+    Invoke-DeltaStep -Name "ReselectedPartition" -Body {
+        # Deselecting a partition removes its watermark: objects can be judged deleted while it is out of scope, so a
+        # reselected partition must not resume from a watermark taken before that. With no run in between, the next
+        # Delta Import that reads it falls back to reading every object in its partitions.
+        Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $secondPartitionId -Selected $false | Out-Null
+        $held = Get-PartitionDeltaImportWatermark -ConnectedSystemId $ldapSystem.id
+        if ($null -ne $held[$secondPartitionId]) { throw "Deselecting $(Format-PartitionName -PartitionId $secondPartitionId) left its watermark in place" }
+        if ([string]::IsNullOrEmpty($held[$primaryPartitionId])) { throw "Deselecting the second partition removed $(Format-PartitionName -PartitionId $primaryPartitionId)'s watermark too" }
+        Set-JIMConnectedSystemPartition -ConnectedSystemId $ldapSystem.id -PartitionId $secondPartitionId -Selected $true | Out-Null
+        $held = Get-PartitionDeltaImportWatermark -ConnectedSystemId $ldapSystem.id
+        if ($null -ne $held[$secondPartitionId]) { throw "Reselecting $(Format-PartitionName -PartitionId $secondPartitionId) brought a watermark back" }
+        Write-Host "  OK Deselecting the second partition removed its watermark, and reselecting it brought none back" -ForegroundColor Green
+
+        $everyUser = @(Get-PartitionUserDn -Config $DirectoryConfig -Suffix $DirectoryConfig.BaseDN) +
+            @(Get-PartitionUserDn -Config $secondPartitionConfig -Suffix $DirectoryConfig.SecondSuffix)
+
+        $secondName = "$($secondPartition.name)"
+        $fallbackPattern = '^A Delta Import was requested, but JIM holds no Delta Import watermark for the partition ' +
+            [regex]::Escape($secondName) + ' to read changes from\. .+'
+        $unscoped = Invoke-ImportRunProfile -ProfileName "Delta Import (Unscoped)"
+        if ($unscoped.Activity.status -ne 'CompleteWithWarning') {
+            throw "Delta Import (Unscoped) ended '$($unscoped.Activity.status)'; expected CompleteWithWarning, for the fallback to reading every object"
+        }
+        Assert-ActivitySuccess -ActivityId $unscoped.ActivityId -Name $unscoped.Name -AllowedWarningMessagePattern $fallbackPattern
+        if ("$($unscoped.Activity.warningMessage)" -match [regex]::Escape("$($primaryPartition.name)")) {
+            throw "Delta Import (Unscoped)'s warning names $(Format-PartitionName -PartitionId $primaryPartitionId), which has a watermark: $($unscoped.Activity.warningMessage)"
+        }
+        # Every object in both partitions read, none of them changed or missing: the earlier Delta Imports missed nothing.
+        Assert-ImportedExactly -Run $unscoped -Unchanged $everyUser.Count
+        Assert-RunKeptToItsPartitions -Run $unscoped -TargetPartitionIds @($primaryPartitionId, $secondPartitionId)
+
+        $next = Invoke-ImportRunProfile -ProfileName "Delta Import (Scoped - Second)"
+        Assert-ActivitySuccess -ActivityId $next.ActivityId -Name $next.Name
+        Assert-ImportedExactly -Run $next
+        Assert-RunKeptToItsPartitions -Run $next -TargetPartitionIds @($secondPartitionId)
+    }
+
     # Calculate overall success
     $failedSteps = @($testResults.Steps | Where-Object { $_.Success -eq $false })
     $testResults.Success = ($failedSteps.Count -eq 0)
@@ -471,6 +1015,17 @@ finally {
             Remove-DirectoryUser -DirectoryConfig $DirectoryConfig -SamAccountName $user.Sam | Out-Null
         }
         Write-Host "  OK Test users cleaned up" -ForegroundColor Green
+    }
+    elseif (@($deltaUsers.Primary).Count + @($deltaUsers.Second).Count -gt 0) {
+        # The pre-populated data stays; the users the Delta Import steps added go (one is already deleted).
+        Write-Host ""
+        Write-Host "Cleaning up the Delta Import steps' users..." -ForegroundColor Gray
+        foreach ($partitionUsers in $deltaUserPartitions) {
+            foreach ($dn in @($deltaUsers[$partitionUsers.Key])) {
+                Remove-DirectoryEntry -DirectoryConfig $partitionUsers.Config -Dn $dn | Out-Null
+            }
+        }
+        Write-Host "  OK Delta Import steps' users cleaned up" -ForegroundColor Green
     }
 }
 

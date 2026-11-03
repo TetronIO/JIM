@@ -8,13 +8,15 @@
 .DESCRIPTION
     Sets up a single LDAP Connected System to test partition-scoped import run profiles.
     Creates:
-    - LDAP Connected System pointing to the configured directory (Samba AD or OpenLDAP)
+    - LDAP Connected System pointing to the configured directory (Samba AD, OpenLDAP or 389 Directory Server)
     - Two Full Import run profiles: one scoped to a specific partition, one unscoped
+    - Delta Import (Scoped) and Delta Import (Unscoped), each reading three objects per page (#2715)
     - A Full Sync run profile (no partition, as sync is partition-agnostic)
     - A simple sync rule to project imported users to the Metaverse
 
-    For OpenLDAP, both partitions (Yellowstone + Glitterband) are selected so that
-    scoped vs unscoped imports produce different results — proving true partition filtering.
+    For OpenLDAP and 389 Directory Server, both partitions (Yellowstone + Glitterband) are selected so that
+    scoped vs unscoped imports produce different results, proving true partition filtering, and each partition
+    has its own scoped Full Import and Delta Import (the "Scoped - Second" Run Profiles target Glitterband).
 
 .PARAMETER JIMUrl
     The URL of the JIM instance (default: http://localhost:5200)
@@ -69,6 +71,10 @@ if (-not $DirectoryConfig) {
 
 $isRfcDirectory = Test-IsRfcDirectory $DirectoryConfig
 $systemName = if ($isRfcDirectory) { "Partition Test OpenLDAP" } else { "Partition Test AD" }
+
+# The page size of every Delta Import Run Profile: small enough that the four changes the scenario makes in a partition
+# span more than one Connector page.
+$deltaImportPageSize = 3
 
 Write-TestSection "Scenario 009 Setup: Partition-Scoped Imports ($systemName)"
 
@@ -495,6 +501,38 @@ try {
             Write-Host "  'Full Import (Scoped - Second)' already exists" -ForegroundColor Yellow
         }
     }
+
+    # 5. Delta Imports (#2715): each partition keeps its own Delta Import watermark. Every one reads a page of
+    # $deltaImportPageSize objects at a time, so the change read of each (four changes per partition per step) crosses
+    # a Connector page boundary at any template, which is what exercises the paging cookie built from the per-partition
+    # read. Samba AD does not page (its Connector reads it unpaged), so there each read comes back whole.
+    $deltaImportProfiles = [ordered]@{
+        "Delta Import (Scoped)"   = $script:DomainPartitionId
+        "Delta Import (Unscoped)" = $null
+    }
+    if ($isRfcDirectory -and $script:SecondPartitionId) {
+        $deltaImportProfiles["Delta Import (Scoped - Second)"] = $script:SecondPartitionId
+    }
+
+    foreach ($profileName in $deltaImportProfiles.Keys) {
+        if ($existingProfiles | Where-Object { $_.name -eq $profileName }) {
+            Write-Host "  '$profileName' already exists" -ForegroundColor Yellow
+            continue
+        }
+
+        $profileParams = @{
+            Name              = $profileName
+            ConnectedSystemId = $ldapSystem.id
+            RunType           = "DeltaImport"
+            PageSize          = $deltaImportPageSize
+        }
+        $partitionId = $deltaImportProfiles[$profileName]
+        if ($partitionId) { $profileParams.PartitionId = $partitionId }
+
+        New-JIMRunProfile @profileParams | Out-Null
+        $target = if ($partitionId) { "PartitionId $partitionId" } else { "all selected partitions" }
+        Write-Host "  OK Created '$profileName' ($target, page size $deltaImportPageSize)" -ForegroundColor Green
+    }
 }
 catch {
     Write-Host "  FAIL Failed to create run profiles: $_" -ForegroundColor Red
@@ -511,6 +549,9 @@ Write-Host "  Run Profiles:" -ForegroundColor Cyan
 Write-Host "    - Full Import (Scoped)   - targets primary partition $($script:DomainPartitionId)" -ForegroundColor Cyan
 Write-Host "    - Full Import (Unscoped) - all selected partitions" -ForegroundColor Cyan
 Write-Host "    - Full Synchronisation   - partition-agnostic" -ForegroundColor Cyan
+Write-Host "    - Delta Import (Scoped)   - targets primary partition $($script:DomainPartitionId)" -ForegroundColor Cyan
+Write-Host "    - Delta Import (Unscoped) - all selected partitions" -ForegroundColor Cyan
 if ($isRfcDirectory -and $script:SecondPartitionId) {
-    Write-Host "    - Full Import (Scoped - Second) - targets second partition $($script:SecondPartitionId)" -ForegroundColor Cyan
+    Write-Host "    - Full Import (Scoped - Second)  - targets second partition $($script:SecondPartitionId)" -ForegroundColor Cyan
+    Write-Host "    - Delta Import (Scoped - Second) - targets second partition $($script:SecondPartitionId)" -ForegroundColor Cyan
 }
