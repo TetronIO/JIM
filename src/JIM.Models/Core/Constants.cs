@@ -464,6 +464,13 @@ public static class Constants
         /// retry from the queue page or a released hold is delivered within a second rather than on a poll.
         /// </summary>
         public const string PasswordChange = "jim_password_change";
+
+        /// <summary>
+        /// Raised when an Exchange queue row is inserted, updated or deleted (#2021). Payload: the row's Connected
+        /// System id as text. The Exchange delivery lane listens here so a staged change or a retry from the queue
+        /// page is delivered promptly rather than on a poll.
+        /// </summary>
+        public const string ExchangeChange = "jim_exchange_change";
     }
 
     /// <summary>

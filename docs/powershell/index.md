@@ -124,7 +124,8 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |
 | [Schedule Executions](schedule-executions.md) | 3 | Run a Schedule now, and watch or stop its runs |
-| [Activities](activities.md) | 3 | Monitor operation history, a run's statistics, and child Activities |
+| [Activities](activities.md) | 2 | Monitor operation history, and the child Activities an operation spawned |
+| [Activity Statistics](activity-statistics.md) | 1 | Read a Run Profile execution's counts of what it processed, changed and failed |
 | [Execution Items](execution-items.md) | 2 | Read what happened to one object in a run, what caused it, and what it went on to cause |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
 | [Certificates](certificates.md) | 8 | Manage trusted certificates for connector authentication, and approve the certificate a Connected System's server presents |

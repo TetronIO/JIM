@@ -782,6 +782,15 @@ public partial class SyncEngine
                         }
                     }
 
+                    // A connector-defined attribute (an Exchange recipient's declared state, #2021) is never cleared: an
+                    // empty value means "let Exchange decide", so a flow with nothing to give it says nothing (#2021).
+                    if (IsConnectorDefinedClear(attributeChange))
+                    {
+                        Log.Debug("CreateAttributeValueChanges: Attribute {AttrName} is connector-defined and the flow gives it no value; " +
+                            "nothing is staged, leaving the choice to Exchange", mapping.TargetConnectedSystemAttribute.Name);
+                        continue;
+                    }
+
                     // No-net-change detection for direct attribute mappings
                     // Reference attributes: Pending Export stores MVO GUIDs in UnresolvedReferenceValue,
                     // CSO stores resolved references via ReferenceValue.MetaverseObjectId. The ValuesMatch
@@ -1100,6 +1109,11 @@ public partial class SyncEngine
                 });
                 return [];
         }
+
+        // A connector-defined attribute (an Exchange recipient's declared state, #2021) is never cleared: an empty value
+        // means "let Exchange decide", so an expression yielding one stages nothing, here and in Drift Detection alike.
+        if (target.IsConnectorDefined && resolution.Values.All(value => value is string { Length: 0 }))
+            return [];
 
         // A single value keeps the Update an expression has always staged; how a single value meets a multi-valued
         // target is the target-plurality rule (#2182). A list is never routed here by its length: an Update is compared
@@ -1823,7 +1837,7 @@ public partial class SyncEngine
     /// replaces the one holding it. It takes a new id, because the original's row is deleted with its Pending Export,
     /// and keeps its place in the export lifecycle (#2039 Phase 0): one already sent stays awaiting confirmation with
     /// its attempt count, and a held change stays held, or the next import would retry a value the target refuses
-    /// until the Initial Password is delivered.
+    /// until the Initial Password is delivered, or report a change Exchange has yet to make (#2021).
     /// </summary>
     internal static PendingExportAttributeValueChange CarryOverSurvivingChange(PendingExportAttributeValueChange change) => new()
     {
@@ -1847,7 +1861,8 @@ public partial class SyncEngine
         ExportAttemptCount = change.ExportAttemptCount,
         LastExportedAt = change.LastExportedAt,
         LastImportedValue = change.LastImportedValue,
-        AwaitsInitialPassword = change.AwaitsInitialPassword
+        AwaitsInitialPassword = change.AwaitsInitialPassword,
+        AwaitsExchange = change.AwaitsExchange
     };
 
     /// <summary>
@@ -1923,9 +1938,11 @@ public partial class SyncEngine
     /// <summary>
     /// The newly evaluated changes, less any that restates exactly what a held change on the existing Pending Export
     /// already asserts (#2039): a change written with an interim value until an Initial Password is delivered
-    /// (<see cref="IsAwaitingInitialPassword"/>). "Exactly" means the same merge key, value and change type. Such a
+    /// (<see cref="IsAwaitingInitialPassword"/>), or a connector-defined change awaiting Exchange
+    /// (<see cref="IsAwaitingExchange"/>, #2021). "Exactly" means the same merge key, value and change type. Such a
     /// change is no change at all, but merged in it would supersede the held one and go out as a Pending write of the
-    /// very value the target refuses until the password arrives. Expression mappings are re-evaluated on any Metaverse
+    /// very value the target refuses until the password arrives, or re-stage on the Exchange queue the state it already
+    /// holds. Expression mappings are re-evaluated on any Metaverse
     /// Object change, so this restatement is the ordinary case for every change to the person between the account's
     /// creation and its password's delivery. An incoming change with a different value is a genuine change and still
     /// supersedes the held one.
@@ -1944,7 +1961,7 @@ public partial class SyncEngine
         ArgumentNullException.ThrowIfNull(existingChanges);
 
         var heldAssertions = existingChanges
-            .Where(IsAwaitingInitialPassword)
+            .Where(IsHeldAgainstRestatement)
             .Select(HeldChangeAssertion)
             .ToHashSet();
         if (heldAssertions.Count == 0)
@@ -1955,6 +1972,15 @@ public partial class SyncEngine
             kept.Add(change);
         return kept;
     }
+
+    /// <summary>
+    /// A change whose asserted value the target is not recorded as holding while it waits, so an evaluation restates it:
+    /// one held until an Initial Password is delivered (<see cref="IsAwaitingInitialPassword"/>, #2039), or a
+    /// connector-defined change awaiting Exchange (<see cref="IsAwaitingExchange"/>, #2021), whose value optimistic apply
+    /// never records. A restatement of either is dropped rather than merged (<see cref="WithoutChangesRestatingAHeldChange"/>).
+    /// </summary>
+    private static bool IsHeldAgainstRestatement(PendingExportAttributeValueChange change) =>
+        IsAwaitingInitialPassword(change) || IsAwaitingExchange(change);
 
     /// <summary>
     /// What a change asserts, for <see cref="WithoutChangesRestatingAHeldChange"/>: its merge key (the attribute, plus

@@ -1,18 +1,18 @@
 ---
 title: Activities
-description: "The cmdlets that list and read Activities, a Run Profile execution's statistics, and the child Activities an operation spawned."
+description: "The cmdlets that list and read Activities, the Run Profile Execution Items a run recorded, and the child Activities an operation spawned."
 type: reference
 audience: automation-author
 ---
 
 # Activities
 
-Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is recorded as a **Data Generation** Activity, separate from changes to an Example Data Template. Use these cmdlets to review Activities, retrieve a Run Profile execution's statistics, and inspect the child Activities a parent operation spawned. To find out what happened to one object in a run, and why, see [Execution Items](execution-items.md).
+Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is recorded as a **Data Generation** Activity, separate from changes to an Example Data Template. Use these cmdlets to review Activities and inspect the child Activities a parent operation spawned. For a Run Profile execution's counts of what it processed, changed and failed, see [Activity Statistics](activity-statistics.md); to find out what happened to one object in a run, and why, see [Execution Items](execution-items.md).
 
 ```jim-diagram
 archetype: decision
 title: Which Activity cmdlet answers your question
-desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
+desc: "Without an Activity's ID, list Activities with Get-JIMActivity, filtering by -Status, -ConnectedSystem, -RunProfile, dates and more. With its ID, which you get from Start-JIMRunProfile -PassThru or from the list: to watch it until it completes, use Get-JIMActivity -Id with -Follow; for the Activity in full, Get-JIMActivity -Id; for a Run Profile execution's counts of processed items and errors, Get-JIMActivityStats, documented on Activity Statistics; for what happened to each object, Get-JIMActivity -Id -ExecutionItems; and for the child Activities a parent operation such as a Schedule Execution spawned, Get-JIMActivityChildren."
 questions:
   - { id: id, label: "Do you have its ID?", sub: "an `ActivityId`, as a run returns" }
   - { id: need, label: "What do you need?" }
@@ -20,7 +20,7 @@ outcomes:
   - { id: list, label: "`Get-JIMActivity`", sub: "filtered by `-Status` and more" }
   - { id: follow, label: "`Get-JIMActivity -Follow`", sub: progress until it completes }
   - { id: full, label: "`Get-JIMActivity -Id`", sub: the Activity in full }
-  - { id: stats, label: "`Get-JIMActivityStats`", sub: a run's counts and timings }
+  - { id: stats, label: "`Get-JIMActivityStats`", sub: "a run's counts; see Activity Statistics" }
   - { id: items, label: "`-ExecutionItems`", sub: "with `-Id`: one row per object" }
   - { id: children, label: "`Get-JIMActivityChildren`", sub: one row per child Activity }
 answers:
@@ -95,8 +95,8 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
-| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation` or `ScimRequests`. |
-| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `Receive`. |
+| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation`, `ScimRequests` or `ExchangeRecipient`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue`, `Receive` or `SetExchangeRecipient`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
@@ -148,8 +148,8 @@ An Activity read in full carries ConfigurationChangeSynchronisations. For a conf
 | `Created` | `datetime` | When the Activity was created. |
 | `Executed` | `datetime` | When the Activity started executing. |
 | `Status` | `string` | The current status of the Activity. One of `NotSet`, `InProgress`, `Complete`, `CompleteWithWarning`, `CompleteWithError`, `FailedWithError` or `Cancelled`. |
-| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation` or `ScimRequests`. |
-| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue` or `Receive`. |
+| `TargetType` | `string` | The type of target this Activity operates on. One of `NotSet`, `ExampleDataTemplate`, `ConnectedSystem`, `ConnectedSystemRunProfile`, `SynchronisationRule`, `MetaverseObject`, `TrustedCertificate`, `ObjectMatchingRule`, `MetaverseAttribute`, `ServiceSetting`, `HistoryRetentionCleanup`, `MetaverseObjectType`, `System`, `Schedule`, `TemporalScopeReconciliation`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`, `SystemInitialisation`, `DataGeneration`, `Authentication`, `MetaverseObjectHousekeeping`, `ConnectedSystemObject`, `PasswordSynchronisation`, `ScimRequests` or `ExchangeRecipient`. |
+| `TargetOperationType` | `string` | The operation being performed. One of `Create`, `Read`, `Update`, `Delete`, `Clear`, `Execute`, `ImportHierarchy`, `ImportSchema`, `Revert`, `Reset`, `Authenticate`, `Preview`, `SetPassword`, `SchemaRefreshRemoval`, `RetryPasswordDelivery`, `CancelPasswordDelivery`, `DiscoverAuxiliaryClasses`, `RecallAttributeValues`, `Deprovision`, `RestartGeneratedValues`, `AllowGeneratedValueRename`, `RetryGeneratedValue`, `Receive` or `SetExchangeRecipient`. |
 | `TargetName` | `string` | The name of the target object. |
 | `TargetContext` | `string` | Additional context for the target, such as the parent entity name. For example, for a Run Profile Activity this would be the Connected System name. |
 | `Message` | `string` | Progress message for the Activity. |
@@ -286,98 +286,11 @@ Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
 
 ---
 
-## :material-chart-box-outline: Get-JIMActivityStats
-
-Retrieves execution statistics for a Run Profile activity, including counts of processed items, errors, and timing information. This is useful for monitoring synchronisation health and identifying performance trends.
-
-<!-- BEGIN GENERATED: Get-JIMActivityStats -->
-### Syntax
-
-```powershell
-Get-JIMActivityStats -Id <guid>
-```
-
-### Parameters
-
-| Name | Type | Required | Default | Description |
-|------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes |  | The Run Profile Activity to get statistics for. Accepts pipeline input by property name, `Id` or `ActivityId`. |
-
-### Output
-
-The Run Profile execution's statistics.
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `TotalObjectsProcessed` | `int` | Total number of objects that were in scope for processing. |
-| `TotalObjectChangeCount` | `int` | Total number of object changes (Run Profile Execution Items created). |
-| `TotalUnchanged` | `int` | Number of objects that were unchanged. Calculated as TotalObjectsProcessed - TotalObjectChangeCount. |
-| `TotalObjectErrors` | `int` | Number of objects with errors. |
-| `TotalObjectTypes` | `int` | Number of distinct object types affected. |
-| `TotalCsoAdds` | `int` | Number of Connected System Objects added to the Connector Space during import. |
-| `TotalCsoUpdates` | `int` | Number of existing Connected System Objects updated during import. |
-| `TotalCsoDeletes` | `int` | Number of Connected System Objects marked as deleted. |
-| `TotalProjections` | `int` | Number of new Metaverse Objects created via projection. |
-| `TotalJoins` | `int` | Number of Connected System Objects joined to existing Metaverse Objects. |
-| `TotalAttributeFlows` | `int` | Number of Attribute Flows between Connected System Objects and Metaverse Objects. |
-| `TotalDisconnections` | `int` | Number of Connected System Objects disconnected from Metaverse Objects. |
-| `TotalDisconnectedOutOfScope` | `int` | Number of Connected System Objects disconnected from Metaverse Objects because they fell out of scope of import Synchronisation Rule scoping criteria. |
-| `TotalOutOfScopeRetainJoin` | `int` | Number of Connected System Objects that fell out of scope but remained joined (InboundOutOfScopeAction = RemainJoined). |
-| `TotalDriftCorrections` | `int` | Number of Connected System Objects where drift was detected and corrective Pending Exports were created. |
-| `TotalProvisioned` | `int` | Number of Connected System Objects provisioned to target Connected Systems during synchronisation. |
-| `TotalGeneratedValues` | `int` | Number of values JIM generated for a target attribute during synchronisation. |
-| `TotalGeneratedValueFailures` | `int` | Number of Run Profile Execution Items whose error type is a Unique Value Generation failure (exhausted, width exceeded, or an unresolved collision). |
-| `TotalGeneratedValuesRemediated` | `int` | Number of generated values Collision Remediation corrected after a target rejected them as already in use. |
-| `TotalGeneratedValuesNeedingDecision` | `int` | Number of rejected generated values that could not safely be corrected and wait on an administrator's decision. |
-| `TotalGeneratedValuesWaiting` | `int` | Number of generated values held back because a value built from them needs another input the object has no value for yet. Not a failure: a later synchronisation generates the value once the input arrives. |
-| `TotalExported` | `int` | Number of objects exported to target systems (includes both initial creation and subsequent updates). |
-| `TotalDeprovisioned` | `int` | Number of objects deprovisioned from target systems. |
-| `TotalPendingExports` | `int` | Number of Pending Exports staged for the next export run. These are exports that were previously executed but not yet confirmed, giving operators visibility into what changes will be made to Connected Systems. |
-| `TotalPendingExportsConfirmed` | `int` | Number of Pending Exports that were fully confirmed and deleted. The exported attribute values matched the imported values. |
-| `TotalPendingExportsRetrying` | `int` | Number of Pending Exports with unconfirmed attributes that will be retried. Some attribute values did not match; they will be re-exported on the next export run. |
-| `TotalPendingExportsFailed` | `int` | Number of Pending Exports that failed after their last retry. JIM does not attempt one again; it clears once an import shows its values in place, for example after the change is made in the Connected System directly. |
-| `TotalCreated` | `int` | Number of Metaverse Objects created directly (by example data generation or in the portal) rather than by projection. |
-| `EntriesDiscardedByExcludedContainer` | `hashtable` | How many entries this import read from the Connected System and discarded because an excluded Container carved them out, keyed by that Container's id. |
-| `TotalEntriesDiscardedByExclusion` | `int` | Entries discarded across every exclusion, which is the figure that answers "why was this import slow?". |
-<!-- END GENERATED: Get-JIMActivityStats -->
-
-An import that discarded entries because a [Container Scope exclusion](../connectors/jim-ldap-connector-topology.md#excluding-a-container) carved them out counts them in `TotalEntriesDiscardedByExclusion` and `EntriesDiscardedByExcludedContainer`, the latter keyed by the excluded Container's ID because the Container can be renamed after the run. Resolve an ID to a name with [`Get-JIMConnectedSystemPartition`](partitions-and-containers.md#get-jimconnectedsystempartition).
-
-### Examples
-
-```powershell title="Get statistics by activity ID"
-Get-JIMActivityStats -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-```
-
-```powershell title="Pipeline from Get-JIMActivity"
-Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
-    Get-JIMActivityStats
-```
-
-```powershell title="Get stats after a Run Profile completes"
-$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
-Get-JIMActivityStats -Id $result.ActivityId
-```
-
-```powershell title="Check for errors after execution"
-$result = Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Wait -PassThru
-$stats = Get-JIMActivityStats -Id $result.ActivityId
-if ($stats.TotalObjectErrors -gt 0) {
-    Write-Warning "Sync completed with $($stats.TotalObjectErrors) errors"
-    Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-        Where-Object { $_.ErrorType -and $_.ErrorType -ne 'NotSet' } |
-        Get-JIMActivityExecutionItem |
-        Select-Object DisplayNameSnapshot, ErrorType, ErrorMessage
-}
-```
-
----
-
 ## :material-file-tree-outline: Get-JIMActivityChildren
 
 Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
-The underlying API returns a paginated response envelope, but this cmdlet unwraps it internally and still emits one object per child activity to the pipeline, so existing scripts that pipe its output are unaffected by the paginated response shape.
+The API pages its response; this cmdlet unwraps the pages and emits one object per child Activity to the pipeline.
 
 <!-- BEGIN GENERATED: Get-JIMActivityChildren -->
 ### Syntax
@@ -434,6 +347,8 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
     Where-Object { $_.Status -eq "FailedWithError" }
 ```
 
+For each child's statistics, pipe the children to [`Get-JIMActivityStats`](activity-statistics.md#get-jimactivitystats):
+
 ```powershell title="Get statistics for each child activity"
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
     ForEach-Object { Get-JIMActivityStats -Id $_.Id }
@@ -443,6 +358,7 @@ Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
 
 ## :material-book-open-variant-outline: See also
 
+- [Activity Statistics](activity-statistics.md): the cmdlet for a Run Profile execution's statistics
 - [Activities](../configuration/activities.md): what activities are, lifecycle, summary statistics, and parent/child execution model
 - [Execution Items](execution-items.md): cmdlets for what happened to each object in a Run Profile execution, and what caused it
 - [Run Profiles](run-profiles.md): cmdlets for managing and executing synchronisation Run Profiles

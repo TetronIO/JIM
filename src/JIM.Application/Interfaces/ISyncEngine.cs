@@ -224,11 +224,27 @@ public interface ISyncEngine
     /// an interim value until an Initial Password is delivered is held or released (#2039). Null when the caller did
     /// not look, in which case such a change is held: the safe answer, since releasing re-sends a value the target
     /// refuses. Read only for a flagged change, so callers whose objects carry none need not supply it.</param>
+    /// <param name="connectedSystemObjectIdsWithExchangeChange">The Connected System Objects with a change on the
+    /// Exchange queue in any status (<c>ISyncRepository.GetConnectedSystemObjectIdsWithExchangeChangeAsync</c>), deciding
+    /// whether a connector-defined change Exchange still owes (#2021) is held or judged as any other. Null when the
+    /// caller did not look, in which case such a change is held: the safe answer, since judging it would report and
+    /// re-send a change Exchange may simply not have made yet. Read only for a flagged change.</param>
     void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
-        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null);
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null);
+
+    /// <summary>
+    /// Judges the connector-defined changes a Pending Export holds while Exchange may still owe them (#2021) when the
+    /// import that has just run did not return its Connected System Object, and the object has no change left on the
+    /// Exchange queue: each is confirmed if the object's last imported value shows it, and otherwise released to be sent
+    /// again. No other change is touched, since the import did not read the object; a Create no import has confirmed,
+    /// and a Parked or Executing export, are left as they are.
+    /// This method does NOT perform any database operations; the caller persists the result.
+    /// </summary>
+    void JudgeChangesAwaitingExchangeNotReconciled(ConnectedSystemObject connectedSystemObject, PendingExport pendingExport, PendingExportReconciliationResult result);
 
     /// <summary>
     /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run

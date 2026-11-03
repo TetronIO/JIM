@@ -55,6 +55,8 @@ public class PartialExportUnresolvedReferencesTests
 
         MockJimDbContext = new Mock<JimDbContext>();
         TestUtilities.SetUpEmptyConnectedSystemGraphMocks(MockJimDbContext);
+        // An export run reads the Exchange recipients flag as it starts; tests run with flags on.
+        TestUtilities.SetUpFeatureFlagsEnabled(MockJimDbContext);
         MockJimDbContext.Setup(m => m.ConnectedSystems).Returns(ConnectedSystemsData.BuildMockDbSet().Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjectTypes).Returns(ConnectedSystemObjectTypesData.BuildMockDbSet().Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemObjects).Returns(ConnectedSystemObjectsData.BuildMockDbSet().Object);

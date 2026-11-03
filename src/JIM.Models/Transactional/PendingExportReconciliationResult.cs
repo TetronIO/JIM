@@ -41,6 +41,15 @@ public class PendingExportReconciliationResult
     public List<PendingExportAttributeValueChange> ReleasedChanges { get; } = new();
 
     /// <summary>
+    /// Connector-defined Exchange changes (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, #2021) the
+    /// import did not find confirmed while the Connected System Object still has a change on the Exchange queue. Left
+    /// exactly as they were: not retried, not reported as unconfirmed, and nothing to persist. Counted in the
+    /// reconciliation summary. Once the object has no queued change, such a change is confirmed or retried like any
+    /// other, and is counted there instead.
+    /// </summary>
+    public List<PendingExportAttributeValueChange> HeldForExchangeChanges { get; } = new();
+
+    /// <summary>
     /// Whether the PendingExport was deleted (all changes confirmed).
     /// </summary>
     public bool PendingExportDeleted { get; set; }

@@ -38,6 +38,16 @@ public class ActivityTargetCategoryTests
     }
 
     [Test]
+    public void GetCategory_ExchangeRecipient_MapsToIdentityData()
+    {
+        // An Exchange recipient change makes a directory account a mailbox, mail user, mail contact or mail-enabled group:
+        // it changes the account, as an administrator setting its password does (ConnectedSystemObject), not JIM's
+        // configuration. Unlike a password it carries no credential, so it needs no category of its own.
+        Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExchangeRecipient),
+            Is.EqualTo(ActivityTargetCategory.IdentityData));
+    }
+
+    [Test]
     public void GetCategory_ConfigurationObjects_MapToConfiguration()
     {
         using (Assert.EnterMultipleScope())

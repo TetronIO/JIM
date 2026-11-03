@@ -119,6 +119,19 @@ internal static class ExportOutcomeMessage
               "Connected System Object; the service log names the accounts and the cause.";
 
     /// <summary>
+    /// The warning for exported objects whose declared Exchange recipient state JIM could not queue or report (#2021).
+    /// A warning, not a failure: the objects were written to the directory, but nothing will reach Exchange for them
+    /// until their declared state is exported again.
+    /// </summary>
+    /// <param name="objects">How many objects' Exchange changes could not be recorded.</param>
+    internal static string ForExchangeChangesNotStaged(int objects) =>
+        objects == 1
+            ? "1 exported object declares Exchange recipient state that JIM could not queue or report, so nothing will reach Exchange for it " +
+              "until its declared state is exported again. The service log names the object and the cause."
+            : $"{objects:N0} exported objects declare Exchange recipient state that JIM could not queue or report, so nothing will reach " +
+              "Exchange for them until their declared state is exported again. The service log names the objects and the cause.";
+
+    /// <summary>
     /// The warning for accounts whose enabled state an export wrote where JIM could not check, and record against, any
     /// Initial Password still owed to them (#2064). Delivering such a password would then follow the Synchronisation
     /// Rule's setting rather than the Attribute Flow, which is why the export run says so; most accounts are owed

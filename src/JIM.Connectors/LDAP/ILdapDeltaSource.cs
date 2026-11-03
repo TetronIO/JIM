@@ -26,7 +26,10 @@ internal interface ILdapDeltaSource
     /// Writes this source's watermark onto the record about to be persisted, reading whatever the rootDSE entry
     /// does not itself carry. Runs on every import, Full and Delta.
     /// </summary>
-    Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout);
+    /// <param name="previous">The record the last import left, on every import that has one it can read; null on the
+    /// first import, or when the record could not be read. A source may use it to narrow the search for the new
+    /// watermark, but never to decide it: the watermark taken must be the same with or without it.</param>
+    Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, TimeSpan searchTimeout);
 
     /// <summary>
     /// Establishes that the persisted watermark still means something against the directory just reached, and

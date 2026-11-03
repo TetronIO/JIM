@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phase 3 under way)
+- **Status:** Doing (Phases 3 and 4 complete; Phases 1, 2 and 5 onwards wait on the spike's go)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -50,9 +50,14 @@ The five attributes (requirement 4) are added to Active Directory Object Types b
 
 This is what makes requirement 7 ("when declared state differs from its last imported state") and Scenario 7 ("nothing to do") fall out of JIM's ordinary export evaluation: a recipient that already matches produces no Pending Export change, so nothing is queued and Exchange is never contacted. It also gives export confirmation something to confirm against, so the change is confirmed only when an import shows Exchange has it (requirement 12).
 
-**Two smaller points:**
-- **Unconfirmed re-export.** If an export is re-evaluated as unconfirmed while its Exchange change is still queued, it re-stages the same declared state. That coalesces onto the existing row through the queue's unique key, so it does no harm. A Cancelled row with the same declared state is left Cancelled (decision 11).
-- **Primary SMTP Address while Email Address Policies apply.** An empty declared value means "let policy decide", so an imported address that policy set never counts as a difference.
+**Confirmation waits for Exchange.** The directory write does not make a connector-defined change, so it must not be confirmed, retried or reported like one:
+- **The hold.** Export marks each connector-defined change it hands to the queue `AwaitsExchange` (any decision but "not a recipient"), persisted with the batch. The confirming import holds such a change (not confirmed, not retried, no item) while the object has a queue row in any status, and judges it as any other change once it has none (the lane deletes a delivered row). An import that does not return the object judges a hold whose row has gone after reconciliation, against the last imported value, so a withdrawn or deleted row never strands it. Export evaluation and Drift Detection do not restate a held change, as for a change awaiting an Initial Password.
+- **No optimistic apply.** Export never records a declared value on the Connected System Object; only an import changes one (requirement 12), so staging always reads what Exchange last stamped.
+- **Re-staging is the same change.** A re-stage the queue finds unchanged writes no new follow-up. A Cancelled row with the same declared state is left Cancelled (decision 11).
+
+**An empty declared value lets Exchange decide.** Exchange chooses the database, Email Address Policies the primary SMTP address, and `mailNickname` gives the alias. No flow, export evaluation or drift correction stages a clearing change for a connector-defined attribute, and reconciliation confirms one that sets no value whatever the import shows. So an imported address that policy set never counts as a difference.
+
+**Recipients JIM does not manage.** The import derives "Exchange Recipient Type" as `Unmanaged` for any `msExchRecipientTypeDetails` value outside the managed map (a linked or remote mailbox, a dynamic group), rather than leaving it absent, which would read as None. `Unmanaged` cannot be declared; declaring any type over it is refused, and None over it is nothing to do.
 
 ### D3. The domain controller written to travels on the export result
 
@@ -103,7 +108,7 @@ The resolution runs at save time (Phase 2), and its result is shown among the de
 - **Requirement 5** (a recipient type that does not fit the object) is checked during staging, where the object class and `groupType` are known.
 - **Requirement 16** (a change of type on an existing recipient) is checked against the imported Exchange Recipient Type.
 
-Neither queues a change. Each writes a follow-up Activity under the export item, CompleteWithError for a misfit and CompleteWithWarning for a type change, so it shows in the item's Follow-up section, the Lineage and the timeline with its reason (Scenarios 6 and 8).
+Neither is delivered. Each is staged as a terminal queue row with status Refused and the reason, which the lane never claims, and writes a follow-up Activity under the export item, CompleteWithError for a misfit and CompleteWithWarning for a type change, so it shows in the item's Follow-up section, the Lineage and the timeline with its reason (Scenarios 6 and 8). The row is what makes the refusal reported once: a later export re-staging the same declared state finds it unchanged and writes nothing. It holds until the declared state changes, or the refusal's cause goes (a group made universal), when the deliverable change supersedes it.
 
 ### D10. Retention: Exchange follow-ups use the general history period (confirmed)
 
@@ -145,7 +150,7 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
   - discovery parsing of `msExchExchangeServer`;
   - a harness test of the save-time check against the stand-in.
 
-### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25)
+### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25) ✅
 
 Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carries what the flag needs from Phase 2.
 
@@ -161,15 +166,15 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
   - export stripping on add and modify;
   - the flag gate on the REST API, the settings tab and the docs coverage rule (an In Development setting needs no public row).
 
-### Phase 4: The queue and export staging (6 days; requirements 5, 7, 8, 11 to 14, 16)
+### Phase 4: The queue and export staging (6 days; requirements 5, 7, 8, 11 to 14, 16) ✅
 
 - **Moved from Phase 3, where staging needs them:**
-  - shared, room and equipment mailboxes are created on disabled accounts; the export writes the account disabled whatever the flowed `userAccountControl` says, and reports the override on the item (requirement 14);
+  - shared, room and equipment mailboxes are created on disabled accounts (requirement 14). Active Directory creates an account disabled when no `userAccountControl` is given, so the export adds nothing. A Synchronisation Rule that flows an enabled account for one is refused for that object rather than overridden: an override would be found by the confirming import, and the next export would enable the account again (decided 2026-11-02);
   - the type-fit rules, as a pure function used by staging (requirement 5).
 - **The `PendingExchangeChange` entity and migration:**
   - target: Connected System, Connected System Object and Metaverse Object;
   - declared state (the five values) and the `DomainController` (D3);
-  - `Status` (Pending, Delivering, Parked, Cancelled), failure kind, attempt count, `FirstFailedAt` (for the 24-hour park), `NextRetryAt`;
+  - `Status` (Pending, Delivering, Parked, Cancelled, and Refused for D9's terminal refusals), failure kind, attempt count, `FirstFailedAt` (for the 24-hour park), `NextRetryAt`;
   - claim fields and the parent `ActivityId`;
   - cancellation, holding the cancelled declared state so an identical re-stage stays Cancelled (decision 11).
   - A unique key on the Connected System Object gives "Superseded" by UPSERT, as the password queue does.
@@ -179,12 +184,14 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
   - UPSERTs the changes;
   - writes one system-initiated Activity per change, parented by `NameExecutionItems` and `ParentRunProfileExecutionItemId` (#2668).
 - **The trigger and the `jim_exchange_change` NOTIFY channel.**
-- **Withdrawal:** when the object or the declaring Synchronisation Rule is removed first (requirement 11's Withdrawn), the lane withdraws it at claim time, as the password lane does.
+- **Confirmation waits for Exchange** (D2): the `AwaitsExchange` mark and the import's hold and release, no optimistic apply of connector-defined values, no clearing change for an empty declared value, and `Unmanaged` recipients.
+- **Withdrawal** moved to Phase 5. When the object or the declaring Synchronisation Rule is removed first (requirement 11's Withdrawn), the lane withdraws the change at claim time, as the password lane does. The queue already keeps the row with its references cleared, so the lane can find it.
 - **Tests:**
   - staging per disposition (inserted, superseded, coalesced, cancelled-and-held);
   - D9's misfit and type-change follow-ups;
   - the `DomainController` captured from a two-server setup;
-  - a `RequiresPostgres` test of the UPSERT and its unique key.
+  - a `RequiresPostgres` test of the UPSERT and its unique key;
+  - Scenarios 008 (Samba AD) and 032 (OpenLDAP) at Medium, since staging and reconciliation changed.
 
 ### Phase 5: The delivery lane (6 days; requirements 9 to 11, 26, 27, NFRs)
 
@@ -247,7 +254,7 @@ The PRD's acceptance criteria, unchanged. Two are only provable on the lab: a wo
 | Risk | Mitigation |
 |---|---|
 | The spike's re-run finds another framing difference | The decoder's diagnostics now identify a mismatch in one run; Phase 1 does not start until it passes |
-| Export confirmation treats a queued-but-undelivered change as unconfirmed and re-exports it | D2: re-staging coalesces onto the same row, and a held cancellation stays held; covered by a Phase 4 test |
+| Export confirmation treats a queued-but-undelivered change as unconfirmed and re-exports it | D2: the import holds a change awaiting Exchange while its object has a queue row, and releases it once the row has gone; covered by Phase 4 tests |
 | Exchange throttling under a large joiner batch | Concurrency set by measurement (decision 4); backoff and parking already cover throttling failures |
 | `contact` is hidden by the Active Directory schema filter | Checked first in Phase 3; including it is a filter exception, not a design change |
 | `exchange-source` is not ready for the GAL scenario | Phase 7's logic is unit-tested without it; only the end-to-end GAL run waits |

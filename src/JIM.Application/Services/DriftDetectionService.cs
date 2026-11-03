@@ -210,6 +210,11 @@ public class DriftDetectionService
 
                     var expectedValue = GetExpectedAttributeValue(targetMvo, source, mapping.TargetConnectedSystemAttribute);
 
+                    // An empty connector-defined value (an Exchange recipient's declared state, #2021) means "let Exchange
+                    // decide", never "clear it": whatever Exchange chose is not drift, and no clearing correction exists.
+                    if (mapping.TargetConnectedSystemAttribute.IsConnectorDefined && expectedValue is null or "")
+                        continue;
+
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
 
@@ -719,7 +724,8 @@ public class DriftDetectionService
 
     /// <summary>
     /// Drops the corrections that restate a change the object's Pending Export holds until an Initial Password is
-    /// delivered (#2039, #2501), and the drifted attributes left with no correction. The target holds an interim value
+    /// delivered (#2039, #2501), or a connector-defined change awaiting Exchange (#2021), and the drifted attributes left
+    /// with no correction. The target holds an interim value
     /// for such a change on purpose: staged, the correction would supersede the held change and re-send the value the
     /// target refuses until the password arrives (Active Directory's <c>0000052D</c>). A correction to any other
     /// attribute stands. The run and the synchronisation preview both apply it, so the preview proposes what the run

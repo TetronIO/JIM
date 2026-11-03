@@ -1080,6 +1080,64 @@ public interface ISyncRepository
 
     #endregion
 
+    #region Exchange queue (#2021)
+
+    /// <summary>
+    /// Offers Exchange changes to the queue, one per exported account, coalescing on the Connected System Object: the
+    /// queue holds at most one change per account, the latest declared state.
+    /// <para>
+    /// Decided per change in one statement against the row already there, if any
+    /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a row that is the same
+    /// change (the five declared values, null and empty alike, and refused or not alike:
+    /// <see cref="PendingExchangeChange.IsSameChangeAs"/>) is left untouched whatever its status, so re-staging does not
+    /// unpark a Parked change, undo a cancellation, report a refusal again, wipe a retrying change's backoff or disturb
+    /// a delivery in flight, and its status is reported on the outcome; any other row, including one being delivered,
+    /// is superseded in place, keeping its id, taking the change's declared state, domain controller, Metaverse Object,
+    /// Synchronisation Rule, Activity, creation time, status and failure fields, and clearing every trace of earlier
+    /// attempts, the claim and the cancellation, so a deliverable change is due at once.
+    /// </para>
+    /// <para>
+    /// Each change must name its account (<see cref="PendingExchangeChange.ConnectedSystemObjectId"/>). A change whose
+    /// row already existed is given that row's id, so the caller holds the id actually in the table.
+    /// </para>
+    /// </summary>
+    /// <returns>One outcome per change, in the order offered.</returns>
+    Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those with a change on the Exchange queue of
+    /// <paramref name="connectedSystemId"/> (#2021), in any status: Pending, Delivering, Parked, Cancelled or Refused.
+    /// The confirming import holds a connector-defined change Exchange may still owe
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>) while its object is among them, and judges it as
+    /// any other change once it is not. Asked once per reconciliation page, and only for a page holding such a change.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// The Connected System Objects on <paramref name="connectedSystemId"/> whose Pending Export holds a connector-defined
+    /// change awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021) but which no longer have a
+    /// change on the Exchange queue: the hold has nothing left to wait for.
+    /// <para>
+    /// Asked once per import, after reconciliation, so such a change is judged even when the import did not return its
+    /// object (a queued change withdrawn or deleted without Exchange touching the object changes nothing a Delta Import
+    /// would report). Answered from the partial index on the flag, so it costs nothing where no change awaits Exchange.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a connector-defined change
+    /// awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021). Drift Detection reads those
+    /// objects' Pending Exports, so its correction neither restates the held change nor drops it when it replaces the
+    /// Pending Export holding it, as for a change awaiting an Initial Password. Answered from a partial index, so it
+    /// costs nothing where no change carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    #endregion
+
     /// <summary>
     /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.

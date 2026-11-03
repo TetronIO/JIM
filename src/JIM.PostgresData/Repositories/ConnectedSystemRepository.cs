@@ -9404,7 +9404,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
     /// to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
     /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup, and the
-    /// AwaitsInitialPassword mark the export run sets from the Connector's report (#2039).
+    /// AwaitsInitialPassword mark the export run sets from the Connector's report (#2039), and the
+    /// AwaitsExchange mark export staging sets on the connector-defined changes it hands to the Exchange queue (#2021).
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -9415,7 +9416,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 9; // Id + 8 mutable columns
+        const int columnsPerRow = 10; // Id + 9 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
@@ -9431,7 +9432,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid, {{{offset + 8}}}::boolean)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid, {{{offset + 8}}}::boolean, {{{offset + 9}}}::boolean)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -9443,6 +9444,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(avc.AwaitsInitialPassword);
+                parameters.Add(avc.AwaitsExchange);
             }
 
             sql.Append(@") AS v(""Id"", ");

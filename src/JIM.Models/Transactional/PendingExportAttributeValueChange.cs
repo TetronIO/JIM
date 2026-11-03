@@ -137,5 +137,23 @@ public class PendingExportAttributeValueChange
     /// </summary>
     public bool AwaitsInitialPassword { get; set; }
 
+    /// <summary>
+    /// This change sets a connector-defined Exchange attribute (#2021) that the directory write did not make: export
+    /// staging handed the declared state to the Exchange queue, and only Exchange acting on it, then an import reading
+    /// what Exchange stamped, can confirm it. Set by the export run for every connector-defined Exchange change it
+    /// writes for an object whose declared state staging considered (anything but "not a recipient, and none
+    /// declared"), while the change is <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>.
+    /// <para>
+    /// A confirming import that does not find the declared value holds the change (unchanged, not retried, nothing
+    /// reported) while the Connected System Object has a change on the Exchange queue in any status: Exchange still owes
+    /// it, or an administrator or a refusal is holding it there. Once the object has none (the delivery lane deletes a
+    /// delivered change), the change is judged as any other: confirmed if the import shows it, otherwise not confirmed
+    /// and sent again. Export evaluation does not supersede it with an equal value, Drift Detection stages no
+    /// correction restating it, and optimistic apply never records a connector-defined value. False for every other
+    /// change, which makes all of that inert; a partial index on the flag keeps the lookups free when none carries it.
+    /// </para>
+    /// </summary>
+    public bool AwaitsExchange { get; set; }
+
     #endregion
 }

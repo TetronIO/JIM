@@ -394,7 +394,7 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 4321 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -411,7 +411,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = request => WatermarkEntryAnswer(request, "changeNumber=4321,cn=changelog", "20261007190130Z");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 4321 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         var read = _sent.Single(s => s.Request.DistinguishedName == "changeNumber=4321,cn=changelog");
         using (Assert.EnterMultipleScope())
@@ -429,7 +429,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = request => WatermarkEntryAnswer(request, $"changeNumber=7,{AdvertisedChangelogDn}", "20261007190130Z");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 7, ChangelogDn = AdvertisedChangelogDn };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeTime, Is.EqualTo("20261007190130Z"));
     }
@@ -441,7 +441,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw NoSuchObject();
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -456,7 +456,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw new LdapException(81, "The LDAP server is unavailable.");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -470,7 +470,7 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -485,7 +485,7 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangelogEntry(7), ChangelogEntry(12), ChangelogEntry(9));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         var enumeration = _sent.Single(s => s.Request.Scope != SearchScope.Base);
         using (Assert.EnterMultipleScope())
@@ -505,7 +505,7 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => throw SizeLimitExceeded(ChangelogEntry(30), ChangelogEntry(45), ChangelogEntry(31));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeNumber, Is.EqualTo(45), "below the truth is the safe direction: the next Delta Import re-reads a few changes rather than skipping any");
     }
@@ -515,7 +515,7 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeNumber, Is.Zero, "a readable, empty changelog is a baseline: every change from here on is numbered above zero");
     }
@@ -526,7 +526,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw NoSuchObject();
         var rootDse = new LdapConnectorRootDse { LastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -541,7 +541,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw Refused("insufficient access rights");
         var rootDse = new LdapConnectorRootDse { LastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeNumber, Is.Null);
     }
@@ -552,7 +552,7 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw new LdapException(81, "The LDAP server is unavailable.");
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeNumber, Is.Null);
     }
@@ -563,7 +563,7 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangelogEntry(3));
         var rootDse = new LdapConnectorRootDse { ChangelogDn = AdvertisedChangelogDn };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -580,7 +580,7 @@ public class LdapChangelogDeltaSourceTests
             LdapTestResponses.Entry("changeNumber=abc,cn=changelog", ("changeNumber", "abc")));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, Timeout);
 
         Assert.That(rootDse.LastChangeNumber, Is.EqualTo(8));
     }

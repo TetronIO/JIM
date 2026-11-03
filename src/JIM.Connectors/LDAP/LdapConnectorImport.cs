@@ -180,9 +180,10 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         {
             // initial-page call. we have no paging tokens to use (yet) to resume a query
 
-            // get information about the directory we're connected to
+            // get information about the directory we're connected to. A Delta Import that fell back to this has
+            // already read the last import's record; a Full Import reads it only to narrow the watermark search.
             await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
-            _currentRootDse = await GetRootDseInformationAsync();
+            _currentRootDse = await GetRootDseInformationAsync(_previousRootDse ?? ReadPreviousRootDse());
 
             // Serialise the rootDSE info to JSON for persistence
             // This captures the current USN/changelog position for use in future delta imports
@@ -321,7 +322,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         {
             // Initial page - get the current RootDSE info
             await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
-            _currentRootDse = await GetRootDseInformationAsync();
+            _currentRootDse = await GetRootDseInformationAsync(_previousRootDse);
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
 
             // Guard against a delta import silently reading its watermark against a directory it no longer
@@ -689,7 +690,34 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         await ReportObjectsReadAsync(result.ImportObjects.Count - readBefore);
     }
 
-    private async Task<LdapConnectorRootDse> GetRootDseInformationAsync()
+    /// <summary>
+    /// The record the last import left, for a Full Import, which takes nothing from it but where the watermark search
+    /// can start (#2704). Null when there is none or it cannot be read, which costs only that narrowing; the Full
+    /// Import replaces it with a record of its own either way. A Delta Import reads the record for itself.
+    /// </summary>
+    private LdapConnectorRootDse? ReadPreviousRootDse()
+    {
+        if (string.IsNullOrEmpty(_persistedConnectorData))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<LdapConnectorRootDse>(_persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            _logger.Debug(ex, "GetFullImportObjects: The record the last import left could not be read, so the watermark is searched for from the start of the change log");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the rootDSE of the directory reached: its type and capabilities, and the watermark the next Delta Import
+    /// will read from.
+    /// </summary>
+    /// <param name="previousRootDse">The record the last import left, which the change source may use to narrow its
+    /// search for the new watermark; null on a first import, or when the record could not be read.</param>
+    private async Task<LdapConnectorRootDse> GetRootDseInformationAsync(LdapConnectorRootDse? previousRootDse)
     {
         var request = new SearchRequest()
         {
@@ -739,8 +767,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         // committed USN and the domain controller's invocationId for Active Directory, the latest accesslog
         // timestamp for OpenLDAP, the last change number for a changelog. This must run during BOTH full and
         // delta imports: a full import establishes the baseline for the first delta import, and a delta import
-        // captures the position the next one starts from.
-        await DeltaSourceFor(rootDse).CaptureWatermarkAsync(rootDseEntry, rootDse, _searchTimeout);
+        // captures the position the next one starts from. The last import's record, on every import that has one,
+        // lets the source search from the last watermark rather than from the start of its change log (#2704).
+        await DeltaSourceFor(rootDse).CaptureWatermarkAsync(rootDseEntry, rootDse, previousRootDse, _searchTimeout);
 
         // Pin creation and self-healing (issue #230 Phase 2): the connection that answered this rootDSE
         // query was itself opened via the resolved pin (or Host, on a first connection or after a pin was

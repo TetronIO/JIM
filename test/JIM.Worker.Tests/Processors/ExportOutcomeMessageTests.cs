@@ -148,6 +148,17 @@ public class ExportOutcomeMessageTests
         Assert.That(ExportOutcomeMessage.ForInitialPasswordsNotStaged(accounts), Does.StartWith(expectedStart));
     }
 
+    /// <summary>
+    /// Exchange recipient state JIM could not queue or report (#2021) reaches the export Activity as a warning rather
+    /// than only the service log.
+    /// </summary>
+    [TestCase(1, "1 ")]
+    [TestCase(1_250, "1,250 ")]
+    public void ForExchangeChangesNotStaged_StartsWithTheCount(int objects, string expectedStart)
+    {
+        Assert.That(ExportOutcomeMessage.ForExchangeChangesNotStaged(objects), Does.StartWith(expectedStart));
+    }
+
     [TestCase(1, "1 ")]
     [TestCase(1_250, "1,250 ")]
     public void ForInitialPasswordMarkingFailed_StartsWithTheCount(int accounts, string expectedStart)

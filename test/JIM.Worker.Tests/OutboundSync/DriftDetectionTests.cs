@@ -400,6 +400,80 @@ public class DriftDetectionTests
     }
 
     /// <summary>
+    /// An empty connector-defined value (an Exchange recipient's declared state, #2021) means "let Exchange decide",
+    /// never "clear it": the Metaverse Object having no value for it while Exchange chose one is not drift, and no
+    /// clearing correction is staged.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_ConnectorDefinedAttributeTheMetaverseLeavesEmpty_IsNotDrift()
+    {
+        DisplayNameCsoAttr.IsConnectorDefined = true;
+        var mvo = CreateTestMvo();
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "MDB-01"
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var result = Jim.DriftDetection.EvaluateDrift(cso, mvo, [CreateExportRule(enforceState: true)], null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasDrift, Is.False);
+            Assert.That(result.CorrectiveExports, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Until Exchange acts, the object does not hold the declared value, which reads as drift. A correction restating a
+    /// change still awaiting Exchange (#2021) would replace it and send it again on every synchronisation, so it is
+    /// dropped, as a correction restating a change awaiting an Initial Password is.
+    /// </summary>
+    [Test]
+    public void DropCorrectionsRestatingHeldChanges_CorrectionRestatingAChangeAwaitingExchange_IsDropped()
+    {
+        DisplayNameCsoAttr.IsConnectorDefined = true;
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = mvo, Attribute = DisplayNameMvAttr, AttributeId = DisplayNameMvAttr.Id, StringValue = "Mailbox"
+        });
+        var cso = CreateTestCso(mvo);
+        mvo.ConnectedSystemObjects.Add(cso);
+        var drift = Jim.DriftDetection.EvaluateDrift(cso, mvo, [CreateExportRule(enforceState: true)], null);
+        Assert.That(drift.HasDrift, Is.True, "precondition: the object does not hold the declared value yet");
+        var held = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystemObjectId = cso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Exported,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(), Attribute = DisplayNameCsoAttr, AttributeId = DisplayNameCsoAttr.Id, StringValue = "Mailbox",
+                    ChangeType = PendingExportAttributeChangeType.Update, Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    AwaitsExchange = true
+                }
+            ]
+        };
+
+        DriftDetectionService.DropCorrectionsRestatingHeldChanges(drift, held);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(drift.CorrectiveExports, Is.Empty);
+            Assert.That(drift.HasDrift, Is.False);
+        }
+    }
+
+    /// <summary>
     /// A distinguished name the directory reports in the case it stored names the entry JIM asked for (#2195), so
     /// Enforce State must not see a case-only difference on an identifier as drift. Without this, every import stages
     /// a corrective export of the same DN, which the LDAP Connector then skips as unchanged. An ordinary attribute, and

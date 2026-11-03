@@ -611,6 +611,10 @@ public class SyncExportTaskProcessor
         if (result.InitialPasswordMarkingFailedCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
 
+        // #2021: contained so the exports stay successful, but never left to the service log alone.
+        if (result.ExchangeChangeStagingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForExchangeChangesNotStaged(result.ExchangeChangeStagingFailedCount));
+
         // #2160: an Initial Password not queued because another account's change holds the queue's one row.
 
         // Set completion message based on mode and results

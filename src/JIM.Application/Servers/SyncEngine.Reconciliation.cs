@@ -29,11 +29,15 @@ public partial class SyncEngine
     /// <param name="metaverseObjectIdsOwedPassword">The Metaverse Objects still owed a password on this Connected System,
     /// or null when the caller did not look; read only for a change written with an interim value until an Initial
     /// Password is delivered (see <see cref="HoldOrReleaseChangeAwaitingInitialPassword"/>).</param>
+    /// <param name="connectedSystemObjectIdsWithExchangeChange">The Connected System Objects that have a change on the
+    /// Exchange queue in any status, or null when the caller did not look; read only for a change awaiting Exchange
+    /// (see <see cref="HoldOrReleaseChangeAwaitingExchange"/>).</param>
     public void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
-        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null)
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null)
     {
         if (pendingExport == null)
         {
@@ -126,6 +130,10 @@ public partial class SyncEngine
                 HoldOrReleaseChangeAwaitingInitialPassword(connectedSystemObject.Id, connectedSystemObject.MetaverseObjectId, attrChange,
                     metaverseObjectIdsOwedPassword, result);
             }
+            else if (HoldOrReleaseChangeAwaitingExchange(connectedSystemObject.Id, attrChange, connectedSystemObjectIdsWithExchangeChange, result))
+            {
+                // Held: Exchange still owes it, so the import not showing it is expected rather than a failed write.
+            }
             else
             {
                 // Never given up on (#2119): however many imports have not seen it, the change is sent again at the
@@ -182,6 +190,57 @@ public partial class SyncEngine
     /// </summary>
     public static bool IsAwaitingInitialPassword(PendingExportAttributeValueChange change) =>
         change.AwaitsInitialPassword && change.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+    /// <summary>
+    /// A connector-defined change export staging handed to the Exchange queue (#2021), still awaiting the confirming
+    /// import that judges it: the only kind of change <see cref="HoldOrReleaseChangeAwaitingExchange"/> applies to.
+    /// Every other change, including one that carries the flag but has since left
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, is reconciled as it always was.
+    /// </summary>
+    public static bool IsAwaitingExchange(PendingExportAttributeValueChange change) =>
+        change.AwaitsExchange && change.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+
+    /// <summary>
+    /// Decides an unconfirmed connector-defined change Exchange may still owe (#2021, PRD requirement 12). The directory
+    /// write did not make it: export staging queued the declared state for the Exchange delivery lane, and only Exchange
+    /// acting on it, then an import reading what Exchange stamped, can confirm it.
+    /// <list type="bullet">
+    /// <item><b>Held</b> while the Connected System Object has a change on the Exchange queue in any status (Pending or
+    /// Delivering on its way, Parked waiting for a person, Cancelled or Refused holding until the declared state
+    /// changes): left exactly as it is, neither retried (re-sending would only re-stage the same declared state) nor
+    /// reported as unconfirmed. Returns true.</item>
+    /// <item><b>Released</b> once the object has none (the lane deletes a delivered change; a withdrawn or deleted one
+    /// goes too): the flag is cleared and false is returned, so the caller judges it as any other unconfirmed change,
+    /// against what the import now shows. A change that reaches here was not confirmed, so it is reported and sent
+    /// again, which re-stages it on the queue.</item>
+    /// </list>
+    /// A caller that did not look up the queue (<paramref name="connectedSystemObjectIdsWithExchangeChange"/> null) gets
+    /// a hold, the safe side of not knowing.
+    /// </summary>
+    /// <returns>True when the change is held; false when it is not awaiting Exchange, or has been released.</returns>
+    private static bool HoldOrReleaseChangeAwaitingExchange(
+        Guid connectedSystemObjectId,
+        PendingExportAttributeValueChange attrChange,
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange,
+        PendingExportReconciliationResult result)
+    {
+        if (!IsAwaitingExchange(attrChange))
+            return false;
+
+        if (connectedSystemObjectIdsWithExchangeChange == null || connectedSystemObjectIdsWithExchangeChange.Contains(connectedSystemObjectId))
+        {
+            result.HeldForExchangeChanges.Add(attrChange);
+            Log.Debug("HoldOrReleaseChangeAwaitingExchange: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} is still on the " +
+                "Exchange queue; held, not retried", attrChange.Id, attrChange.Attribute?.Name ?? "unknown", connectedSystemObjectId);
+            return true;
+        }
+
+        attrChange.AwaitsExchange = false;
+        Log.Debug("HoldOrReleaseChangeAwaitingExchange: Attribute change {AttrChangeId} (Attr: {AttrName}) on CSO {CsoId} is no longer on the " +
+            "Exchange queue; released to be judged against what the import shows", attrChange.Id, attrChange.Attribute?.Name ?? "unknown",
+            connectedSystemObjectId);
+        return false;
+    }
 
     /// <summary>
     /// Decides an unconfirmed change the Connector wrote with an interim value until an Initial Password is delivered
@@ -290,6 +349,81 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Judges the connector-defined changes a Pending Export holds while Exchange may still owe them (#2021) when the
+    /// import that has just run did not return the Connected System Object, and the caller has established that the
+    /// object has no change left on the Exchange queue. A queued change withdrawn or deleted without Exchange touching
+    /// the object changes nothing a Delta Import would report, and a Full Import skips the unchanged object by its hash,
+    /// so without this the hold would wait for ever on a queued change that no longer exists.
+    /// <para>
+    /// Each such change is judged against the object's last imported value, which for a connector-defined attribute is
+    /// exactly what an import last read: optimistic apply never records one. Shown, it is confirmed; otherwise it is
+    /// released as reconciliation releases it (<see cref="HoldOrReleaseChangeAwaitingExchange"/>) and not confirmed, so
+    /// the next export sends it again and re-stages it. Nothing else is touched: the import did not read the object, and
+    /// confirming or retrying a directory attribute against values that may predate the export would be a guess.
+    /// </para>
+    /// <para>
+    /// The Pending Exports reconciliation leaves alone are left alone here too (Parked and Executing), and so is a Create
+    /// no import has confirmed: confirming a Create is what turns it into an Update, and sent again it would create the
+    /// object a second time. Its held change is judged by the import that confirms the Create.
+    /// </para>
+    /// </summary>
+    public void JudgeChangesAwaitingExchangeNotReconciled(ConnectedSystemObject connectedSystemObject, PendingExport pendingExport, PendingExportReconciliationResult result)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObject);
+        ArgumentNullException.ThrowIfNull(pendingExport);
+        ArgumentNullException.ThrowIfNull(result);
+
+        if (pendingExport.Status is PendingExportStatus.Parked or PendingExportStatus.Executing || pendingExport.ChangeType == PendingExportChangeType.Create)
+        {
+            Log.Debug("JudgeChangesAwaitingExchangeNotReconciled: Pending Export {ExportId} ({ChangeType}, {Status}) is left for the import that " +
+                "reconciles it; its change(s) awaiting Exchange are left as they are", pendingExport.Id, pendingExport.ChangeType, pendingExport.Status);
+            return;
+        }
+
+        var held = pendingExport.AttributeValueChanges.Where(IsAwaitingExchange).ToList();
+        if (held.Count == 0)
+            return;
+
+        var attrValuesByAttrId = connectedSystemObject.AttributeValues
+            .GroupBy(av => av.AttributeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var change in held)
+        {
+            if (IsAttributeChangeConfirmed(attrValuesByAttrId, change))
+            {
+                result.ConfirmedChanges.Add(change);
+                continue;
+            }
+
+            // Not on the queue any more (the caller established that), so the hold releases.
+            change.AwaitsExchange = false;
+            change.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+            change.LastImportedValue = GetImportedValueAsString(attrValuesByAttrId, change);
+            result.RetryChanges.Add(change);
+        }
+
+        if (result.ConfirmedChanges.Count > 0)
+        {
+            var confirmed = new HashSet<PendingExportAttributeValueChange>(result.ConfirmedChanges);
+            pendingExport.AttributeValueChanges.RemoveAll(confirmed.Contains);
+        }
+
+        var hasRemainingChanges = pendingExport.AttributeValueChanges.Any(ac =>
+            ac.Status is PendingExportAttributeChangeStatus.Pending or PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+                or PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        if (!hasRemainingChanges)
+        {
+            result.PendingExportDeleted = true;
+            result.PendingExportToDelete = pendingExport;
+            return;
+        }
+
+        UpdatePendingExportStatus(pendingExport);
+        result.PendingExportToUpdate = pendingExport;
+    }
+
+    /// <summary>
     /// Determines if an attribute change has been confirmed. Convenience overload that builds
     /// a per-attribute lookup from the CSO's attribute values. For batch reconciliation of
     /// multiple attributes on the same CSO, use the dictionary-based overload to avoid
@@ -312,6 +446,10 @@ public partial class SyncEngine
     {
         if (attrChange.Attribute == null)
             return false;
+
+        // An empty connector-defined value lets Exchange decide, so whatever the import shows is what was asked for (#2021).
+        if (IsConnectorDefinedClear(attrChange))
+            return true;
 
         attrValuesByAttrId.TryGetValue(attrChange.AttributeId, out var csoAttrValues);
         csoAttrValues ??= new List<ConnectedSystemObjectAttributeValue>();
@@ -684,6 +822,10 @@ public partial class SyncEngine
         if (attrChange.Attribute == null)
             return false;
 
+        // An empty connector-defined value lets Exchange decide, so whatever the import shows is what was asked for (#2021).
+        if (IsConnectorDefinedClear(attrChange))
+            return true;
+
         attrIndexByAttrId.TryGetValue(attrChange.AttributeId, out var index);
         var count = index?.Count ?? 0;
 
@@ -715,6 +857,20 @@ public partial class SyncEngine
                 return false;
         }
     }
+
+    /// <summary>
+    /// Whether a change sets a connector-defined attribute (an Exchange recipient's declared state, #2021) to nothing:
+    /// a removal, or an Update or Add carrying no value or an empty text value. For these attributes an empty value
+    /// means "let Exchange decide" (Exchange chooses the database, Email Address Policies the primary SMTP address,
+    /// <c>mailNickname</c> gives the alias), never "clear it", so export staging never stages one, and reconciliation
+    /// confirms one whatever the import shows.
+    /// </summary>
+    public static bool IsConnectorDefinedClear(PendingExportAttributeValueChange change) =>
+        change.Attribute is { IsConnectorDefined: true } &&
+        (change.ChangeType is PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll ||
+         IsPendingChangeEmpty(change) ||
+         change is { StringValue.Length: 0, IntValue: null, LongValue: null, DecimalValue: null, DateTimeValue: null, BoolValue: null,
+             GuidValue: null, ByteValue: null, UnresolvedReferenceValue: null });
 
     /// <summary>
     /// Checks if a Pending Export attribute value change represents an empty/null value
