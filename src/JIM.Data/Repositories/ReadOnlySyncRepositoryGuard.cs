@@ -355,9 +355,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
         => _inner.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
 
-    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
-        => _inner.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
-
     public Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
         => _inner.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
@@ -541,7 +538,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => throw new PreviewWriteAttemptedException(nameof(DeleteConnectedSystemObjectsAsync));
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
         => throw new PreviewWriteAttemptedException(nameof(FixupCrossBatchReferenceIdsAsync));
 
     public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)

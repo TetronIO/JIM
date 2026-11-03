@@ -11,13 +11,17 @@ The **Metaverse** is JIM's central identity store. It contains object types (the
 
 The Metaverse schema is administrator-defined. JIM does not impose a fixed schema, so you can model any identity domain that fits your organisation, from the built-in `User` and `Group` types through to bespoke types like `serviceAccount`, `mailbox`, or `device`.
 
---8<-- "assets/diagrams/metaverse-anatomy.svg"
+--8<-- "assets/diagrams/metaverse-flow.svg"
 
-<p class="jim-diagram-caption">An illustrative Metaverse. Object Types define the Attributes their Objects carry; Objects are Metaverse Objects, joined to their Connected System Objects by connector links.<span class="jimdg-caption-motion"> Moving dots trace identity data crossing the links during synchronisation.</span></p>
+<p class="jim-diagram-caption">Illustrative names. The tag beside each value names the Connected System it came from; your Synchronisation Rules decide which system supplies each value and which systems receive it. Active Directory is both a source and a target.<span class="jimdg-caption-motion"> Moving dots trace values being imported and exported.</span></p>
 
 ## :material-file-tree-outline: Object types
 
 **Object types** define the schema categories in the Metaverse. Typical examples are the built-in `User` and `Group`, but you can define any types your organisation needs. Each object type has its own attribute set and configurable deletion behaviour.
+
+--8<-- "assets/diagrams/metaverse-anatomy.svg"
+
+<p class="jim-diagram-caption">The Metaverse's schema and objects, illustrated. Object Types define the Attributes their Objects carry; Objects are Metaverse Objects, joined to their Connected System Objects by connector links.<span class="jimdg-caption-motion"> Moving dots trace identity data crossing the links during synchronisation.</span></p>
 
 ### Deletion behaviour
 

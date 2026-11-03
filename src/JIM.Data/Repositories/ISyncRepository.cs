@@ -451,11 +451,18 @@ public interface ISyncRepository
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
-    /// Resolves cross-batch reference attribute values that could not be resolved during initial import
-    /// because the target CSO was in a later batch. Uses raw SQL JOIN with partial indexes.
-    /// Returns the count of resolved references.
+    /// Resolves the given Connected System's outstanding CSO reference values: those holding a reference by identifier
+    /// (<see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>) but no referenced object's id,
+    /// because the import could not resolve them when it wrote them (the object arrives in a later run, or a later
+    /// batch). Each is matched against the Secondary External ID values of CSOs in the same Connected System, ignoring
+    /// case unless the target's attribute is case-exact; a value that matches nothing stays outstanding for a later run,
+    /// and a value already holding an id is never re-pointed. When nothing is outstanding, which is the usual case, the
+    /// objects references could name are not read at all. Resolutions are applied in bounded batches so each statement
+    /// stays inside the bulk command timeout regardless of backlog size. Returns the count of resolved references.
     /// </summary>
-    Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose reference values to resolve.</param>
+    /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
+    Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null);
 
     /// <summary>
     /// Resolves the reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues) that were
@@ -1821,14 +1828,6 @@ public interface ISyncRepository
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
-
-    /// <summary>
-    /// Gets CSOs joined to multiple MVOs within a Connected System.
-    /// Returns a dictionary keyed by MVO ID for O(1) lookup.
-    /// Used for reference resolution during export processing.
-    /// </summary>
-    Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
     /// Per Metaverse Object joined to an object in the Connected System, the identifier a change record shows for a
