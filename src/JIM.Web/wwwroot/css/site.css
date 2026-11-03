@@ -6559,7 +6559,8 @@ html[lang] .jim-scope-text .mud-input-slot {
    toned as one follow-up in it would be. Wraps to two lines on a narrow screen. */
 .jim-follow-up-summary-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 10rem) minmax(7.5rem, 1fr) auto;
+    /* A fixed bar width, so every row's bar and legend line up under the row above. */
+    grid-template-columns: auto minmax(0, 10rem) minmax(7.5rem, 18rem) 1fr;
     align-items: center;
     gap: 0.5rem 0.875rem;
     padding: 0.5rem 0;
@@ -6576,7 +6577,7 @@ html[lang] .jim-scope-text .mud-input-slot {
 .jim-follow-up-summary-states {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.375rem;
 }
 
@@ -6613,6 +6614,7 @@ html[lang] .jim-scope-text .mud-input-slot {
 /* A run's follow-up on its Activity list row: a small label, then chips per kind and tone. */
 .jim-follow-up-chips {
     display: inline-flex;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 0.25rem;
     padding-left: 0.5rem;
@@ -6621,6 +6623,7 @@ html[lang] .jim-scope-text .mud-input-slot {
 }
 
 .jim-follow-up-chips-label {
+    white-space: nowrap;
     font-size: 0.6875rem;
     font-weight: 700;
     letter-spacing: 0.06em;
