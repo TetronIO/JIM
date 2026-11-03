@@ -14,7 +14,8 @@
     # Block: every finding fails. Ratchet: findings beyond the baseline fail, and the baseline only
     # shrinks. Warn: reported, never fails. Promote a Warn rule to Ratchet or Block once it has run
     # a release without a false positive; see the standard's "How the standard is enforced".
-    # MNT-3 blocks now that no page is over budget, so none can grow past it unnoticed.
+    # MNT-3 blocks now that no page is over budget, so none can grow past it unnoticed, and STR-8
+    # blocks so that no page can cross the budget either.
     Rules                   = @{
         'STR-1'  = 'Block'
         'STR-2'  = 'Ratchet'
@@ -22,8 +23,8 @@
         'STR-4'  = 'Block'
         'STR-5'  = 'Block'
         'STR-6'  = 'Ratchet'
-        'STR-7'  = 'Warn'
-        'STR-8'  = 'Warn'
+        'STR-7'  = 'Block'
+        'STR-8'  = 'Block'
         'MNT-3'  = 'Block'
         'A11Y-1' = 'Block'
         'A11Y-2' = 'Block'

@@ -130,6 +130,7 @@ nav:
       - Password Synchronisation: concepts/password-synchronisation.md
       - Expressions: concepts/expressions.md
       - Nulls and Missing Inputs: concepts/expression-nulls.md
+      - Expression Recipes: concepts/expression-recipes.md
       - Case Sensitivity: concepts/case-sensitivity.md
       - Object Naming: concepts/object-naming.md
   - Configuration:
