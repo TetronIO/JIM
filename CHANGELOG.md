@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ An export now records each reference in its change history with the object it names as it writes it, instead of leaving them to be linked afterwards, which took 164 seconds after the first export of a 500,000-object Connected System. (#2700)
 - ⚡ OpenLDAP imports take their next watermark from what the accesslog gained since the last one: reading the whole log took 7 to 10 seconds per import at 500,000 objects, grew with the log, and on a size-limited directory could stop short of the latest change. (#2704)
 - ⚡ An import that creates objects no longer spends seconds linking up the few references it could not resolve as it wrote them: a Delta Import creating one group in a 500,000-object Connected System spent 8.8 seconds on 3 of them. (#2706)
+- ⚡ An OpenLDAP Delta Import is no longer slowed by heavy writes to other suffixes on the same server, which cost it 12 seconds at 500,000 objects after an initial export to another suffix: it now looks for where to start among the selected partitions' changes first. (#2712)
 
 
 ## [0.17.0] - 2026-10-29

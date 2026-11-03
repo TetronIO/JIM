@@ -91,7 +91,7 @@ public class LdapUsnDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "123456")), rootDse, previous: null, Timeout);
+        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "123456")), rootDse, previous: null, namingContexts: [], Timeout);
 
         Assert.That(rootDse.HighestCommittedUsn, Is.EqualTo(123456));
     }
@@ -103,7 +103,7 @@ public class LdapUsnDeltaSourceTests
         _answers[NtdsSettingsDn] = _ => LdapTestResponses.SearchResponseWithBinary(NtdsSettingsDn, ("invocationId", [invocationId.ToByteArray()]));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, Timeout);
+        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, namingContexts: [], Timeout);
 
         var ntdsRead = _sent.Single();
         using (Assert.EnterMultipleScope())
@@ -123,7 +123,7 @@ public class LdapUsnDeltaSourceTests
             LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights");
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, Timeout);
+        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -137,7 +137,7 @@ public class LdapUsnDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1")), rootDse, previous: null, Timeout);
+        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1")), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
