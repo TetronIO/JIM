@@ -8,7 +8,7 @@
 # from PyPI, hash-pinned. krb5 publishes no Linux wheels, so it is compiled from its hash-pinned source in a build
 # stage, with its build tools hash-pinned too.
 
-ARG BASE_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa
+ARG BASE_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b
 
 FROM ${BASE_IMAGE} AS krb5-build
 # EXTRA_CA_CERTS_BASE64: an optional PEM bundle for TLS-intercepting proxies, as JIM's own images accept.

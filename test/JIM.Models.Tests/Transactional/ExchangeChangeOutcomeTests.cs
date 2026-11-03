@@ -66,7 +66,6 @@ public class ExchangeChangeOutcomeTests
 
     [TestCase(PendingExchangeChangeStatus.Delivering, ExchangeChangeState.Delivering, false)]
     [TestCase(PendingExchangeChangeStatus.Parked, ExchangeChangeState.Parked, true)]
-    [TestCase(PendingExchangeChangeStatus.Cancelled, ExchangeChangeState.Cancelled, true)]
     public void Describe_RowInAState_ReadsAsThatState(PendingExchangeChangeStatus status, ExchangeChangeState expected, bool settled)
     {
         var outcome = ExchangeChangeOutcome.Describe(ChangeActivity(), Row(status), []);
@@ -151,7 +150,6 @@ public class ExchangeChangeOutcomeTests
 
     [TestCase(ActivityTargetOperationType.WithdrawExchangeRecipient, ExchangeChangeState.Withdrawn)]
     [TestCase(ActivityTargetOperationType.ReplaceExchangeRecipient, ExchangeChangeState.Replaced)]
-    [TestCase(ActivityTargetOperationType.CancelExchangeRecipient, ExchangeChangeState.Cancelled)]
     public void Describe_NoRowAndAnOutcome_ReadsAsWhatThatOutcomeWas(ActivityTargetOperationType operation, ExchangeChangeState expected)
     {
         var events = new List<ExchangeChangeEvent> { Event(operation, ActivityStatus.Complete, Queued.AddMinutes(1), message: "said so") };

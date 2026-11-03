@@ -71,6 +71,13 @@ public sealed partial record RemoteFailure
         if (state == PSInvocationState.Stopped || Find<PipelineStoppedException>(error) is not null)
             return Transport(RemoteFailureKind.Stopped, error);
 
+        // A timeout decides wherever it sits. HttpClient reports its own as a cancellation wrapping a TimeoutException
+        // wrapping the cancellation (or the aborted read) that ended the request, so the causes beneath it say only
+        // "A task was canceled" and would read as the caller stopping or a broken connection. The outermost words are
+        // the ones to keep: the connection writes them to name the server that did not answer.
+        if (Find<TimeoutException>(error) is not null)
+            return Transport(RemoteFailureKind.Timeout, error);
+
         // The innermost cause the transport recognises decides: a timeout or a refused socket is often wrapped in a
         // more general exception that says less.
         var causes = new List<Exception>();
@@ -101,7 +108,7 @@ public sealed partial record RemoteFailure
         SocketException => RemoteFailureKind.Connection,
         IOException => RemoteFailureKind.Connection,
         HttpRequestException => RemoteFailureKind.Connection,
-        // Cancelled by the caller; a request that timed out carries a TimeoutException, which is found first.
+        // Cancelled by the caller: a request that timed out carries a TimeoutException, which decides before this.
         OperationCanceledException => RemoteFailureKind.Stopped,
         _ => null
     };

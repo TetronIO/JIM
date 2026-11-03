@@ -3943,9 +3943,6 @@ public class SyncRepository : ISyncRepository
         row.NextRetryAt = null;
         row.ClaimedAt = null;
         row.ClaimedBy = null;
-        row.CancelledAt = null;
-        row.CancelledById = null;
-        row.CancelledByName = null;
     }
 
     // ---- Exchange queue delivery (#2021, Phase 5) ----------------------------------------------------------------
@@ -4035,9 +4032,8 @@ public class SyncRepository : ISyncRepository
     public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
     {
         var deleting = _pendingExchangeChanges.Values
-            .Where(c => c.Status is PendingExchangeChangeStatus.Parked or PendingExchangeChangeStatus.Cancelled
-                        && (c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
-            .OrderBy(c => c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt)
+            .Where(c => c.Status == PendingExchangeChangeStatus.Parked && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.LastAttemptedAt ?? c.CreatedAt)
             .Take(maxRecords)
             .Select(c => c.Id)
             .ToList();
@@ -4112,10 +4108,7 @@ public class SyncRepository : ISyncRepository
         NextRetryAt = source.NextRetryAt,
         ClaimedAt = source.ClaimedAt,
         ClaimedBy = source.ClaimedBy,
-        ActivityId = source.ActivityId,
-        CancelledAt = source.CancelledAt,
-        CancelledById = source.CancelledById,
-        CancelledByName = source.CancelledByName
+        ActivityId = source.ActivityId
     };
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)

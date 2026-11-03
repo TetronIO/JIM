@@ -162,20 +162,6 @@ public class PendingExchangeChange
     public Guid ActivityId { get; set; }
 
     /// <summary>
-    /// When an administrator cancelled this change, or null if nobody has.
-    /// </summary>
-    public DateTime? CancelledAt { get; set; }
-
-    /// <summary>
-    /// Who cancelled it, mirroring the Activity initiator fields, as the Password Synchronisation queue does. Both are
-    /// nullable because the API-key path has no person behind it.
-    /// </summary>
-    public Guid? CancelledById { get; set; }
-
-    /// <inheritdoc cref="CancelledById"/>
-    public string? CancelledByName { get; set; }
-
-    /// <summary>
     /// Whether <paramref name="other"/> declares exactly the state this row declares: the recipient type, alias,
     /// database, primary SMTP address and external address, compared ordinally, with null and empty treated as the
     /// same (both mean "nothing declared").
@@ -268,7 +254,7 @@ public class PendingExchangeChange
 
     /// <summary>
     /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is pending, and either has no
-    /// retry scheduled or has reached it. A claimed, parked, cancelled or refused change is not due.
+    /// retry scheduled or has reached it. A claimed, parked or refused change is not due.
     /// </summary>
     public bool IsDue(DateTime asOf) =>
         Status == PendingExchangeChangeStatus.Pending && (NextRetryAt == null || NextRetryAt <= asOf);

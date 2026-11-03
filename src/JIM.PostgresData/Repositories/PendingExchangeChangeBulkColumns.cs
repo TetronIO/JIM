@@ -20,7 +20,7 @@ internal static class PendingExchangeChangeBulkColumns
         "Id", "ConnectedSystemId", "ConnectedSystemObjectId", "MetaverseObjectId", "SyncRuleId", "RecipientType",
         "Alias", "Database", "PrimarySmtpAddress", "ExternalAddress", "DomainController", "Status", "FailureKind",
         "FailureMessage", "AttemptCount", "CreatedAt", "LastAttemptedAt", "FirstFailedAt", "NextRetryAt", "ClaimedAt",
-        "ClaimedBy", "ActivityId", "CancelledAt", "CancelledById", "CancelledByName"
+        "ClaimedBy", "ActivityId"
     ];
 
     /// <summary>
@@ -34,9 +34,8 @@ internal static class PendingExchangeChangeBulkColumns
     /// <para>
     /// So does every trace of the earlier attempts (the status, the failure, the attempt count and the failure clock),
     /// which is why they are here rather than in the exclusions: carrying them forward would let a newer declared state
-    /// inherit a park, or a 24-hour failure window, earned by a request nobody is making any more. The cancellation
-    /// goes for the same reason: it cancelled a state that no longer exists on this row. The staging statement sets
-    /// the attempt, failure-clock, claim and cancellation columns to their initial values rather than copying the
+    /// inherit a park, or a 24-hour failure window, earned by a request nobody is making any more. The staging
+    /// statement sets the attempt, failure-clock and claim columns to their initial values rather than copying the
     /// offered row's, so a deliverable row is due at once whatever the caller passed; the status and failure fields
     /// take the offered row's own, so a refusal superseding a queued change records itself and its reason.
     /// </para>
@@ -49,8 +48,7 @@ internal static class PendingExchangeChangeBulkColumns
     [
         "MetaverseObjectId", "SyncRuleId", "RecipientType", "Alias", "Database", "PrimarySmtpAddress", "ExternalAddress",
         "DomainController", "Status", "FailureKind", "FailureMessage", "AttemptCount", "CreatedAt", "LastAttemptedAt",
-        "FirstFailedAt", "NextRetryAt", "ClaimedAt", "ClaimedBy", "ActivityId", "CancelledAt", "CancelledById",
-        "CancelledByName"
+        "FirstFailedAt", "NextRetryAt", "ClaimedAt", "ClaimedBy", "ActivityId"
     ];
 
     /// <summary>

@@ -1,10 +1,10 @@
 # Exchange Mailbox Provisioning (on-premises)
 
-- **Status:** Doing (Phases 3 to 5 of the implementation plan complete)
+- **Status:** Doing (Phases 3 to 5 and 6a of the implementation plan complete)
 - **Created:** 2026-10-31
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
-- **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md). Phases 0, 1a and 2 are complete; the go/no-go waits on Phases 1b and 3 against the AD lab's Exchange server.
+- **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md). It decided go on 2026-11-03, against the AD lab's Exchange server.
 - **Implementation plan:** [`engineering/plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md`](../../plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md)
 
 ## Problem Statement
@@ -94,13 +94,14 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
     - **Parked:** Exchange refused, or 24 hours of retries failed. Nothing changes until a person retries it or the declared state changes. Parking is not expiry: the change is kept, because unlike a queued password, a declared recipient does not go stale.
     - **Superseded:** a newer declared state for the same object replaces it, so only the latest is ever delivered.
     - **Withdrawn:** the object, or the Synchronisation Rule that declared it, was removed first. This is not a failure.
-    - **Cancelled:** an administrator decided it should not be delivered. Like Parked, this holds until the object's declared state changes: later exports do not queue the same change again.
+
+    An administrator can retry a retrying or parked change, but cannot cancel one (decision 16): a change is stopped or corrected by changing the declared state, which supersedes it.
 12. A failed change never rolls back or hides the directory write, and JIM never treats the recipient as existing until an import shows it.
 13. Each queued change's Activity has the export's Run Profile Execution Item for the object as its parent (#2668), so an administrator goes straight up from "Mailbox for Alice" to Alice's export, and that item's Follow-up section shows the mailbox with its current outcome. Delivery attempts are children of the change's Activity. These Activities never appear at the top level of the Activities list, and the run's own status is final: a follow-up that fails later never changes it. In the portal, as the [mock](https://claude.ai/artifact/WJDkMng3Ji2G7iPB4BG6cR) shows:
     - The run's row in the Activities list, and the run's own page, sum its follow-ups by outcome.
     - The Causality Explorer's Lineage shows each follow-up in the account's own column under "After this run", with its live outcome and attempts, and says while any follow-up is still running.
     - The object's timeline ("What happened to it") gives each follow-up one row that updates in place; its attempts are on its Activity.
-    - Operations has an Exchange tab beside Passwords, listing every queued change not yet delivered, across all Connected Systems, with retry and cancel. Service Health covers both delivery lanes.
+    - Operations has an Exchange tab beside Passwords, listing every queued change not yet delivered, across all Connected Systems, with retry. Service Health covers both delivery lanes.
     - The Connected System Object shows its declared recipient state beside what the last import read back from Exchange, with any outstanding change.
 14. Shared, room and equipment mailboxes are created on disabled directory accounts, and JIM writes the account disabled.
 
@@ -131,7 +132,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **Surface parity**
 
-28. Exchange settings, the connector-defined attributes, and the queued Exchange changes with their outcomes (including retry and cancel) are available in the portal, the REST API and PowerShell, with tests and docs on each.
+28. Exchange settings, the connector-defined attributes, and the queued Exchange changes with their outcomes (including retry) are available in the portal, the REST API and PowerShell, with tests and docs on each.
 
 ### Non-Functional Requirements
 
@@ -208,8 +209,8 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 | Models and database | A durable queue of Exchange changes (like `PendingPasswordChange`) and the failure classifications; a migration. The Exchange settings are Connector settings and need no model of their own |
 | Worker | Queueing after directory writes, and a delivery lane beside the Password Delivery Service's |
 | Application | Export execution (`ExportExecutionServer`), and settings validation, which also opens an Exchange session |
-| API and PowerShell | Queued Exchange changes, with retry and cancel. The settings and the recipients panel need nothing new: they are Connector settings and Attribute Flows |
-| Portal | The Exchange settings among the LDAP Connector's settings and detected facts; the Exchange recipients panel on export Synchronisation Rules; queued Exchange changes and their outcomes on Activities, in Operations and on the object, with retry and cancel |
+| API and PowerShell | Queued Exchange changes, with retry. The settings and the recipients panel need nothing new: they are Connector settings and Attribute Flows |
+| Portal | The Exchange settings among the LDAP Connector's settings and detected facts; the Exchange recipients panel on export Synchronisation Rules; queued Exchange changes and their outcomes on Activities, in Operations and on the object, with retry |
 | Worker image | `XDG_CACHE_HOME` and `POWERSHELL_TELEMETRY_OPTOUT` |
 | Integration tests | New scenarios against the AD lab's Exchange servers, including GAL sync both ways |
 
@@ -226,7 +227,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 ## Dependencies
 
-- The spike's go/no-go: Phases 1b and 3 against the AD lab ([plan](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md)).
+- The spike's go/no-go, decided go on 2026-11-03 ([plan](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md)).
 - Follow-up Activities parented by their execution item (#2668), done first for initial passwords and reused here.
 - The AD lab's Exchange servers (#2412): `exchange-primary` in PANOPLY exists; `exchange-source` in RESURGAM is needed for GAL sync in both directions.
 
@@ -247,7 +248,7 @@ Made on 2026-11-01, in review of the [portal mock](https://claude.ai/artifact/WJ
 
 9. **Follow-ups sit in the account's own Lineage column**, under "After this run". A separate Exchange column would read as a second object when the recipient is the same directory account, and would split the password from the mailbox (requirement 13).
 10. **The object timeline has one row per follow-up**, updated in place. A row per attempt would flood the timeline exactly when someone is investigating (requirement 13).
-11. **A cancellation holds until the declared state changes**, the same rule as Parked. Otherwise the next export would queue the cancelled change again (requirement 11).
+11. ~~**A cancellation holds until the declared state changes**, the same rule as Parked. Otherwise the next export would queue the cancelled change again (requirement 11).~~ Superseded by decision 16 on 2026-11-03: there is no Cancel.
 12. **The retry policy is fixed for the first release**: backoff from 2 minutes to an hour, parked after 24 hours of failures, revisited after the integration tests (requirement 11).
 13. **JIM warns about the GAL loop** rather than leaving it to the docs (requirement 23).
 14. **Exchange gets its own Operations tab**, separate from Passwords, whose lifecycle differs (requirement 13).
@@ -256,9 +257,13 @@ Made on 2026-11-01, in review of the [implementation plan](../../plans/doing/EXC
 
 15. **An `https://` endpoint is trusted through JIM's Certificates store**, as LDAPS is, rather than through a certificate setting of its own (requirement 1). The plan's other decisions (a separate Exchange queue on a shared delivery scheduler, 90-day retention for Exchange follow-ups, and delivery behind a feature flag) change no requirement and are recorded in the plan.
 
+Made on 2026-11-03, in building Phase 6:
+
+16. **An Exchange change cannot be cancelled; Retry is the only administrator action.** JIM is a desired-state engine: a Cancel that held against a restated declaration would leave the declaration and Exchange out of step with nothing to say so, and no rule for what a later declaration should then do. Nothing is lost without it. A parked change has already stopped (JIM parks after 24 hours of failures, or at once on a refusal or missing permissions). A wrong change is fixed by changing the declaration (the source data or the Attribute Flow), which supersedes the queued change. A change nobody is owed any more is withdrawn by the delivery lane. Supersedes decision 11 (requirements 11, 13 and 28).
+
 ## Open Questions
 
-None. The portal mock's review settled decisions 6 to 14, and the PRD is locked for the implementation plan. The transport's go/no-go still waits on the spike's Phases 1b and 3 (see Dependencies).
+None. The portal mock's review settled decisions 6 to 14, and the PRD is locked for the implementation plan. The spike decided go on 2026-11-03.
 
 ## Acceptance Criteria
 
@@ -272,7 +277,7 @@ None. The portal mock's review settled decisions 6 to 14, and the PRD is locked 
 - [ ] Mail users and mail contacts are created with their external address.
 - [ ] GAL sync between PANOPLY and RESURGAM works both ways: contacts carry the `X500:` proxy, none is projected back as a person, and each is deleted when its source leaves scope.
 - [ ] A queued Exchange change is delivered within seconds of the export, survives a Worker restart, retries what a retry can cure, parks what needs a person, and never leaves JIM believing the recipient exists.
-- [ ] A cancelled change is not queued again until the object's declared state changes.
+- [ ] A retrying or parked change can be retried from the portal, the REST API and PowerShell; a parked change is replaced by changing its declared state; no change can be cancelled.
 - [ ] Follow-ups show in the Activities list, on the export item, in the Causality Explorer's Lineage and timeline, in Operations and on the object, as requirement 13 describes, and none appears at the top level of the Activities list.
 - [ ] JIM warns when an importing Connected System's scope includes a container it provisions GAL contacts into.
 - [ ] Re-running against a recipient already in its declared state changes nothing.

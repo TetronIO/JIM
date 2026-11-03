@@ -151,11 +151,5 @@ public enum ActivityTargetOperationType
     /// An administrator asked JIM to attempt queued Exchange changes again, having fixed whatever stopped them (#2021),
     /// as <see cref="RetryPasswordDelivery"/> does for passwords.
     /// </summary>
-    RetryExchangeRecipient = 26,
-
-    /// <summary>
-    /// An administrator stopped queued Exchange changes being delivered (#2021), as <see cref="CancelPasswordDelivery"/>
-    /// does for passwords. The cancellation holds until the account's declared state changes.
-    /// </summary>
-    CancelExchangeRecipient = 27
+    RetryExchangeRecipient = 26
 }

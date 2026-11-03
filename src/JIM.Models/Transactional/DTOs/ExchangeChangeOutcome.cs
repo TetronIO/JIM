@@ -89,7 +89,6 @@ public class ExchangeChangeOutcome
         {
             PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
             PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
-            PendingExchangeChangeStatus.Cancelled => ExchangeChangeState.Cancelled,
             // Staging records both kinds of refusal as a refused row; a type change this release does not make is
             // the one recorded under a warning rather than an error.
             PendingExchangeChangeStatus.Refused => changeActivity.Status == ActivityStatus.CompleteWithWarning
@@ -139,7 +138,6 @@ public class ExchangeChangeOutcome
             {
                 ActivityTargetOperationType.WithdrawExchangeRecipient => ExchangeChangeState.Withdrawn,
                 ActivityTargetOperationType.ReplaceExchangeRecipient => ExchangeChangeState.Replaced,
-                ActivityTargetOperationType.CancelExchangeRecipient => ExchangeChangeState.Cancelled,
                 _ => failed ? ExchangeChangeState.Parked : ExchangeChangeState.Delivered
             };
             message = failed ? newest.ErrorMessage ?? newest.Message : newest.Message ?? newest.ErrorMessage;

@@ -85,10 +85,10 @@ public class PendingExchangeChangeTests
     public void HasSameDeclaredStateAs_IgnoresEverythingButTheDeclaredState()
     {
         // The domain controller, the account, the rule and the Activity describe where and why the state was declared,
-        // not what was declared, so a re-stage that differs only in those still matches what was cancelled.
+        // not what was declared, so a re-stage that differs only in those still matches what was parked.
         var row = Declared();
         row.DomainController = "dc01.corp.example";
-        row.Status = PendingExchangeChangeStatus.Cancelled;
+        row.Status = PendingExchangeChangeStatus.Parked;
         var other = Declared();
         other.DomainController = "dc02.corp.example";
         other.SyncRuleId = 9;
@@ -115,7 +115,6 @@ public class PendingExchangeChangeTests
 
     [TestCase(PendingExchangeChangeStatus.Delivering)]
     [TestCase(PendingExchangeChangeStatus.Parked)]
-    [TestCase(PendingExchangeChangeStatus.Cancelled)]
     [TestCase(PendingExchangeChangeStatus.Refused)]
     public void IsDue_AnythingButPending_IsNotDue(PendingExchangeChangeStatus status)
     {

@@ -7,7 +7,7 @@ namespace JIM.Models.Transactional.DTOs;
 
 /// <summary>
 /// One Activity recorded under a queued Exchange change's own Activity (#2021): an attempt that failed in a new way, a
-/// park, a delivery, a withdrawal, a replacement, or an administrator's retry or cancellation. A projection, so the
+/// park, a delivery, a withdrawal, a replacement, or an administrator's retry. A projection, so the
 /// outcome read never materialises the Activities themselves.
 /// </summary>
 public class ExchangeChangeEvent
@@ -23,7 +23,7 @@ public class ExchangeChangeEvent
     public Guid ActivityId { get; set; }
 
     /// <summary>
-    /// What it records: a delivery or a failed attempt, a withdrawal, a replacement, a retry or a cancellation.
+    /// What it records: a delivery or a failed attempt, a withdrawal, a replacement or a retry.
     /// </summary>
     public ActivityTargetOperationType Operation { get; set; }
 

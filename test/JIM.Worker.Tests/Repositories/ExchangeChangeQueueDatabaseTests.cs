@@ -93,10 +93,7 @@ public class ExchangeChangeQueueDatabaseTests
             NextRetryAt = createdAt.AddMinutes(3),
             ClaimedAt = createdAt.AddMinutes(4),
             ClaimedBy = "worker-1a2b3c4d",
-            ActivityId = Guid.NewGuid(),
-            CancelledAt = createdAt.AddMinutes(5),
-            CancelledById = Guid.NewGuid(),
-            CancelledByName = "Ada Lovelace"
+            ActivityId = Guid.NewGuid()
         };
 
         var outcome = await StageAsync(change);
@@ -132,9 +129,6 @@ public class ExchangeChangeQueueDatabaseTests
             Assert.That(stored.ClaimedAt, Is.EqualTo(change.ClaimedAt));
             Assert.That(stored.ClaimedBy, Is.EqualTo("worker-1a2b3c4d"));
             Assert.That(stored.ActivityId, Is.EqualTo(change.ActivityId));
-            Assert.That(stored.CancelledAt, Is.EqualTo(change.CancelledAt));
-            Assert.That(stored.CancelledById, Is.EqualTo(change.CancelledById));
-            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
         }
     }
 
@@ -231,25 +225,21 @@ public class ExchangeChangeQueueDatabaseTests
     }
 
     /// <summary>
-    /// Re-staging exactly what an administrator cancelled, as an export re-evaluated as unconfirmed does, leaves the
-    /// cancellation in place, untouched. Null and empty declare the same thing, in every one of the five values.
+    /// Re-staging exactly what a held row declares, as an export re-evaluated as unconfirmed does, leaves it untouched.
+    /// Null and empty declare the same thing, in every one of the five values.
     /// </summary>
     [Test]
-    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
+    public async Task StageExchangeChangesAsync_SameDeclaredStateNullAndEmptyAlike_LeavesItUnchangedAsync()
     {
         var seeded = await SeedAsync();
-        var cancelledAt = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);
-        var cancelledById = Guid.NewGuid();
         var existing = await StageExistingAsync(seeded, row =>
         {
             row.Alias = null;
             row.Database = "";
             row.PrimarySmtpAddress = null;
             row.ExternalAddress = "";
-            row.Status = PendingExchangeChangeStatus.Cancelled;
-            row.CancelledAt = cancelledAt;
-            row.CancelledById = cancelledById;
-            row.CancelledByName = "Ada Lovelace";
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
         });
         var restaged = NewChange(seeded, alias: "");
         restaged.Database = null;
@@ -264,15 +254,12 @@ public class ExchangeChangeQueueDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
-            Assert.That(outcome.ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
+            Assert.That(outcome.ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Parked));
             Assert.That(outcome.RowId, Is.EqualTo(existing.Id));
             Assert.That(outcome.RequestedId, Is.Not.EqualTo(existing.Id));
             Assert.That(outcome.PreviousActivityId, Is.Null);
             Assert.That(restaged.Id, Is.EqualTo(existing.Id));
-            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
-            Assert.That(stored.CancelledAt, Is.EqualTo(cancelledAt));
-            Assert.That(stored.CancelledById, Is.EqualTo(cancelledById));
-            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Parked));
             Assert.That(stored.ActivityId, Is.EqualTo(existing.ActivityId), "a held row keeps its own Activity");
             Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"), "a held row is left untouched");
             Assert.That(stored.Database, Is.EqualTo(""));
@@ -352,7 +339,7 @@ public class ExchangeChangeQueueDatabaseTests
 
     /// <summary>
     /// A supersede writes exactly the offered row's status and failure fields (a refusal records itself and its reason),
-    /// while attempts, claim and cancellation are still cleared.
+    /// while attempts and claim are still cleared.
     /// </summary>
     [Test]
     public async Task StageExchangeChangesAsync_RefusalSupersedingAQueuedChange_WritesTheRefusalAndClearsTheAttemptsAsync()
@@ -368,8 +355,6 @@ public class ExchangeChangeQueueDatabaseTests
             row.NextRetryAt = DateTime.UtcNow.AddMinutes(4);
             row.ClaimedAt = DateTime.UtcNow;
             row.ClaimedBy = "worker-1a2b3c4d";
-            row.CancelledAt = DateTime.UtcNow;
-            row.CancelledByName = "Ada Lovelace";
         });
         var refusal = NewChange(seeded, recipientType: "SharedMailbox");
         refusal.Status = PendingExchangeChangeStatus.Refused;
@@ -391,8 +376,6 @@ public class ExchangeChangeQueueDatabaseTests
             Assert.That(stored.NextRetryAt, Is.Null);
             Assert.That(stored.ClaimedAt, Is.Null);
             Assert.That(stored.ClaimedBy, Is.Null);
-            Assert.That(stored.CancelledAt, Is.Null);
-            Assert.That(stored.CancelledByName, Is.Null);
         }
     }
 
@@ -429,23 +412,25 @@ public class ExchangeChangeQueueDatabaseTests
     }
 
     /// <summary>
-    /// A different declared state replaces a cancelled row like any other, and the cancellation goes with the state it
-    /// cancelled.
+    /// A different declared state replaces a parked row like any other, and the park goes with the state it was earned
+    /// by: changing the declaration is how an administrator moves a change JIM has stopped on (PRD decision 11).
     /// </summary>
     [TestCase("RecipientType")]
     [TestCase("Alias")]
     [TestCase("Database")]
     [TestCase("PrimarySmtpAddress")]
     [TestCase("ExternalAddress")]
-    public async Task StageExchangeChangesAsync_CancelledRowWithADifferentDeclaredState_SupersedesItAsync(string differing)
+    public async Task StageExchangeChangesAsync_ParkedRowWithADifferentDeclaredState_SupersedesItAsync(string differing)
     {
         var seeded = await SeedAsync();
         var existing = await StageExistingAsync(seeded, row =>
         {
-            row.Status = PendingExchangeChangeStatus.Cancelled;
-            row.CancelledAt = DateTime.UtcNow;
-            row.CancelledById = Guid.NewGuid();
-            row.CancelledByName = "Ada Lovelace";
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
+            row.FailureMessage = "The alias is already in use.";
+            row.AttemptCount = 4;
+            row.LastAttemptedAt = DateTime.UtcNow;
+            row.FirstFailedAt = DateTime.UtcNow.AddHours(-25);
         });
         var newer = NewChange(seeded);
         switch (differing)
@@ -466,9 +451,11 @@ public class ExchangeChangeQueueDatabaseTests
             Assert.That(outcome.Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded), $"{differing} differs");
             Assert.That(outcome.PreviousActivityId, Is.EqualTo(existing.ActivityId));
             Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
-            Assert.That(stored.CancelledAt, Is.Null);
-            Assert.That(stored.CancelledById, Is.Null);
-            Assert.That(stored.CancelledByName, Is.Null);
+            Assert.That(stored.FailureKind, Is.Null);
+            Assert.That(stored.FailureMessage, Is.Null);
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.LastAttemptedAt, Is.Null);
+            Assert.That(stored.FirstFailedAt, Is.Null, "the newer state does not inherit the 24-hour failure window");
             Assert.That(stored.ActivityId, Is.EqualTo(newer.ActivityId));
         }
     }
@@ -743,7 +730,7 @@ public class ExchangeChangeQueueDatabaseTests
 
     /// <summary>
     /// A row already on the queue for the seeded account, in the state an earlier attempt or an administrator left it:
-    /// inserted through staging, then adjusted directly, as the delivery lane or a cancellation would leave it.
+    /// inserted through staging, then adjusted directly, as the delivery lane would leave it.
     /// </summary>
     private async Task<PendingExchangeChange> StageExistingAsync(Seeded seeded, Action<PendingExchangeChange> leftAs)
     {

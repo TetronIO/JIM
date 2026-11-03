@@ -59,6 +59,20 @@ public class RemoteFailureTests
     }
 
     [Test]
+    public void FromException_RequestTimeout_SpeaksInTheOutermostWords()
+    {
+        // Every cause beneath a timeout says only "A task was canceled"; the words worth reading are the outermost ones,
+        // which the connection writes to name the server that did not answer.
+        var named = new TimeoutException("The WinRM server at http://ex1.panoply.local:5985 did not answer within 6 seconds.",
+            new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 6 seconds elapsing.",
+                new TimeoutException("A task was canceled.", new TaskCanceledException("A task was canceled."))));
+
+        var failure = RemoteFailure.FromException(new PSRemotingTransportException(named.Message, named));
+
+        Assert.That(failure.Message, Is.EqualTo("The WinRM server at http://ex1.panoply.local:5985 did not answer within 6 seconds."));
+    }
+
+    [Test]
     public void FromException_RemoteExceptionFromAStoppedInvocation_IsStopped()
     {
         var failure = RemoteFailure.FromException(new RemoteException("The pipeline has been stopped."), PSInvocationState.Stopped);
@@ -95,6 +109,11 @@ public class RemoteFailureTests
         yield return new TestCaseData(Wrapped(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 6 seconds elapsing.",
             new TimeoutException("The operation was canceled."))),
             RemoteFailureKind.Timeout, true).SetName("Request timeout");
+        // HttpClient's real shape: the timeout wraps the cancellation that ended the request, so the innermost cause is
+        // a cancellation nobody asked for. Classifying innermost first once read this as the caller stopping.
+        yield return new TestCaseData(Wrapped(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 6 seconds elapsing.",
+            new TimeoutException("A task was canceled.", new TaskCanceledException("A task was canceled.")))),
+            RemoteFailureKind.Timeout, true).SetName("Request timeout, as HttpClient reports it");
         yield return new TestCaseData(Wrapped(new WSManFaultException(2150858817, "w:ActionNotSupported", "Unsupported action")),
             RemoteFailureKind.Protocol, false).SetName("WS-Management fault");
         yield return new TestCaseData(Wrapped(new HttpRequestException("An error occurred while sending the request.",

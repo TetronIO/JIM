@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Security;
@@ -59,7 +60,7 @@ internal sealed class WinRMConnection : IDisposable
                     await AuthenticateAsync(cancellationToken).ConfigureAwait(false);
 
                 using var request = BuildRequest(envelope);
-                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                using var response = await SendHttpAsync(request, cancellationToken).ConfigureAwait(false);
                 var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
                 // A 401 after authenticating usually means the server no longer knows this connection: it closed it
@@ -99,6 +100,24 @@ internal sealed class WinRMConnection : IDisposable
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Sends one HTTP request. HttpClient reports its own timeout as a cancellation, which reads like the caller
+    /// stopping and names no server; it is rethrown as the timeout it is, saying which server did not answer.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendHttpAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TaskCanceledException error) when (error.InnerException is TimeoutException && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"The WinRM server at {_options.ConnectionUri.GetLeftPart(UriPartial.Authority)} did not answer within " +
+                $"{_options.RequestTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)} seconds.", error);
         }
     }
 
@@ -165,7 +184,7 @@ internal sealed class WinRMConnection : IDisposable
             using var request = NewPost(_options.ConnectionUri);
             request.Content = new ByteArrayContent([]);
             request.Headers.Authorization = new AuthenticationHeaderValue("Kerberos", Convert.ToBase64String(token));
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            using var response = await SendHttpAsync(request, cancellationToken).ConfigureAwait(false);
 
             var reply = response.Headers.WwwAuthenticate.FirstOrDefault(h => h.Scheme.Equals("Kerberos", StringComparison.OrdinalIgnoreCase))?.Parameter;
             if (response.StatusCode != HttpStatusCode.OK && string.IsNullOrEmpty(reply))
