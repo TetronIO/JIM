@@ -215,6 +215,131 @@ public class PendingExchangeChange
     private static bool SameDeclaredValue(string? a, string? b) =>
         string.Equals(a ?? string.Empty, b ?? string.Empty, StringComparison.Ordinal);
 
+    // ---- Delivery: the state machine the Exchange delivery lane drives (Phase 5) ---------------------------------
+    // The repository's claim, release and attempt statements make these transitions in SQL; these are their in-memory
+    // twins, and what the delivery server decides with. The retry policy is fixed for the first release (PRD
+    // requirement 11, decision 12): no setting, revisited after the integration tests.
+
+    /// <summary>
+    /// How long a claim is honoured before the change is claimable again. Twice the password lane's minute: one
+    /// change can take Exchange several seconds to converge (a read, then an enable, then the addresses), and a lane
+    /// claims a batch at a time.
+    /// </summary>
+    public static readonly TimeSpan ClaimLease = TimeSpan.FromMinutes(2);
+
+    /// <summary>The wait before the first retry; each failure after it doubles the wait.</summary>
+    public static readonly TimeSpan InitialRetryDelay = TimeSpan.FromMinutes(2);
+
+    /// <summary>The longest wait between attempts.</summary>
+    public static readonly TimeSpan MaximumRetryDelay = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// How long a run of failures that may clear by themselves is retried before the change is parked
+    /// (<see cref="FirstFailedAt"/>).
+    /// </summary>
+    public static readonly TimeSpan ParkAfter = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// The wait after the <paramref name="attemptCount"/>th consecutive failure: two minutes, doubling, at most an
+    /// hour.
+    /// </summary>
+    public static TimeSpan RetryDelay(int attemptCount)
+    {
+        // Doubling past the cap is pointless and, left unbounded, overflows; the exponent stops where the cap is met.
+        var exponent = Math.Clamp(attemptCount - 1, 0, 16);
+        var delay = InitialRetryDelay * Math.Pow(2, exponent);
+        return delay > MaximumRetryDelay ? MaximumRetryDelay : delay;
+    }
+
+    /// <summary>
+    /// Whether a delivery pass at <paramref name="asOf"/> should attempt this change: it is pending, and either has no
+    /// retry scheduled or has reached it. A claimed, parked, cancelled or refused change is not due.
+    /// </summary>
+    public bool IsDue(DateTime asOf) =>
+        Status == PendingExchangeChangeStatus.Pending && (NextRetryAt == null || NextRetryAt <= asOf);
+
+    /// <summary>
+    /// Whether a claim on this change has outlived <paramref name="lease"/>, so the change is claimable again: it is
+    /// <see cref="PendingExchangeChangeStatus.Delivering"/> and was claimed at least a lease ago. False for a change
+    /// nobody holds, whatever its status.
+    /// </summary>
+    public bool IsClaimExpired(DateTime asOf, TimeSpan lease) =>
+        Status == PendingExchangeChangeStatus.Delivering && ClaimedAt != null && ClaimedAt + lease <= asOf;
+
+    /// <summary>
+    /// Takes the change for delivery. Only the status and the claim stamp change: a claim is a promise to attempt,
+    /// not an attempt.
+    /// </summary>
+    public void Claim(string claimedBy, DateTime asOf)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
+        Status = PendingExchangeChangeStatus.Delivering;
+        ClaimedAt = asOf;
+        ClaimedBy = claimedBy;
+    }
+
+    /// <summary>
+    /// Gives a claimed change back unattempted: the Connector cannot manage Exchange recipients, or the lane was
+    /// cancelled before reaching the change. Nothing was tried, so nothing is counted; the change is due again at once.
+    /// </summary>
+    public void ReleaseClaim()
+    {
+        if (Status != PendingExchangeChangeStatus.Delivering)
+            return;
+
+        Status = PendingExchangeChangeStatus.Pending;
+        ClaimedAt = null;
+        ClaimedBy = null;
+    }
+
+    /// <summary>
+    /// Whether a failure of <paramref name="kind"/> with <paramref name="message"/> would repeat the last one exactly.
+    /// The delivery lane writes a child Activity for a failure only when it says something new (the first failure, or
+    /// a different kind or message), so an outage retried for a day records one Activity per change rather than one
+    /// per attempt; the row always carries the latest attempt.
+    /// </summary>
+    public bool RepeatsLastFailure(ExchangeChangeFailureKind kind, string? message) =>
+        FirstFailedAt != null && FailureKind == kind && string.Equals(FailureMessage, message, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Records a failed attempt, and decides from how it failed whether to retry or to park (PRD requirements 11 and
+    /// 26). Exchange refusing the change, or JIM lacking the permissions to make it, parks it at once: the same request
+    /// earns the same answer until a person acts. Anything else (the object not visible yet, Exchange unreachable or
+    /// timing out, a sign-in failure) is retried with backoff, and parked once it has been failing for
+    /// <see cref="ParkAfter"/>.
+    /// </summary>
+    /// <param name="kind">How the attempt failed.</param>
+    /// <param name="message">Exchange's own words, or JIM's where Exchange gave none.</param>
+    /// <param name="asOf">The instant of the attempt.</param>
+    public void RecordFailure(ExchangeChangeFailureKind kind, string? message, DateTime asOf)
+    {
+        AttemptCount++;
+        LastAttemptedAt = asOf;
+        FailureKind = kind;
+        FailureMessage = message;
+        FirstFailedAt ??= asOf;
+
+        // An attempt ends the claim whichever way it went: a stale stamp on a waiting row would read as a deliverer
+        // that never let go.
+        ClaimedAt = null;
+        ClaimedBy = null;
+
+        var parkAt = FirstFailedAt.Value + ParkAfter;
+        if (kind is ExchangeChangeFailureKind.Refused or ExchangeChangeFailureKind.InsufficientPermissions || asOf >= parkAt)
+        {
+            Status = PendingExchangeChangeStatus.Parked;
+            NextRetryAt = null;
+            return;
+        }
+
+        // Never book an attempt for after the change should have parked: the last attempt lands on the 24-hour mark,
+        // and parks the change there if it fails too.
+        var scheduled = asOf + RetryDelay(AttemptCount);
+        Status = PendingExchangeChangeStatus.Pending;
+        NextRetryAt = scheduled > parkAt ? parkAt : scheduled;
+    }
+
     public override string ToString() =>
         $"Exchange change {Id} ({RecipientType}) for Connected System Object {ConnectedSystemObjectId}: {Status}";
 }
