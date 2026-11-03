@@ -4093,24 +4093,92 @@ public partial class ConnectedSystemServer
     /// and the point it reached. The recorded values are the Connected System's persisted connector data, in whatever
     /// form its Connector keeps it, so only that Connector can say what they mean.
     /// <para>
+    /// A Connector that keeps a watermark per Partition (<see cref="IConnectorPartitionWatermarks"/>, #2715) describes
+    /// each Partition's recorded value, and the points are merged into the one <see cref="ImportReadRange.From"/> and
+    /// <see cref="ImportReadRange.To"/>, each scoped to the Partition's name as the Activity recorded it, so the range
+    /// still reads correctly after the Partition is renamed or removed. A Partition that had no watermark before the run
+    /// has no point in <see cref="ImportReadRange.From"/>: its read started from the beginning.
+    /// </para>
+    /// <para>
     /// Null when the Activity recorded no watermark, its Connected System has since been deleted, or its Connector
-    /// does not implement <see cref="IConnectorImportWatermarkDescription"/>; the raw values are all there is then.
+    /// describes neither kind of watermark; the raw values are all there is then.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
     public async Task<ImportReadRange?> GetImportReadRangeAsync(Activity activity)
     {
-        if ((activity.ImportWatermarkFrom == null && activity.ImportWatermarkTo == null) || !activity.ConnectedSystemId.HasValue)
+        var hasPartitionWatermarks = activity.ImportPartitionWatermarksFrom != null || activity.ImportPartitionWatermarksTo != null;
+        if ((activity.ImportWatermarkFrom == null && activity.ImportWatermarkTo == null && !hasPartitionWatermarks) || !activity.ConnectedSystemId.HasValue)
             return null;
 
         var connectedSystem = await GetConnectedSystemCoreAsync(activity.ConnectedSystemId.Value);
-        if (connectedSystem == null || CreateConnector(connectedSystem) is not IConnectorImportWatermarkDescription describer)
+        if (connectedSystem == null)
+            return null;
+
+        var connector = CreateConnector(connectedSystem);
+        var describer = connector as IConnectorImportWatermarkDescription;
+        var partitionDescriber = hasPartitionWatermarks ? connector as IConnectorPartitionWatermarks : null;
+        if (describer == null && partitionDescriber == null)
             return null;
 
         return new ImportReadRange
         {
-            From = describer.DescribeImportWatermark(activity.ImportWatermarkFrom, Log.Logger),
-            To = describer.DescribeImportWatermark(activity.ImportWatermarkTo, Log.Logger)
+            From = MergeImportWatermarkDescriptions(describer?.DescribeImportWatermark(activity.ImportWatermarkFrom, Log.Logger),
+                DescribePartitionWatermarks(partitionDescriber, activity.ImportPartitionWatermarksFrom)),
+            To = MergeImportWatermarkDescriptions(describer?.DescribeImportWatermark(activity.ImportWatermarkTo, Log.Logger),
+                DescribePartitionWatermarks(partitionDescriber, activity.ImportPartitionWatermarksTo))
+        };
+    }
+
+    /// <summary>
+    /// #2715: an import's recorded Partition watermarks as one description, each Partition's points scoped to the name the
+    /// Activity recorded for it. A Partition whose value its Connector finds no watermark in (none recorded, or one the
+    /// Connector cannot read) contributes no point. Null when no Partition contributes one.
+    /// </summary>
+    private static ImportWatermarkDescription? DescribePartitionWatermarks(IConnectorPartitionWatermarks? describer, List<ImportPartitionWatermark>? watermarks)
+    {
+        if (describer == null || watermarks == null)
+            return null;
+
+        var described = watermarks
+            .Select(watermark => (watermark.PartitionName, Description: describer.DescribePartitionWatermark(watermark.Value, Log.Logger)))
+            .Where(partition => partition.Description != null)
+            .Select(partition => (partition.PartitionName, Description: partition.Description!))
+            .ToList();
+        if (described.Count == 0)
+            return null;
+
+        return new ImportWatermarkDescription
+        {
+            Kind = string.Join(", ", described.Select(partition => partition.Description.Kind).Distinct(StringComparer.OrdinalIgnoreCase)),
+            Points = described
+                .SelectMany(partition => partition.Description.Points.Select(point => new ImportWatermarkPoint
+                {
+                    // A Connector that keeps more than one position per Partition scopes each within the Partition.
+                    Scope = point.Scope == null ? partition.PartitionName : $"{partition.PartitionName}: {point.Scope}",
+                    Number = point.Number,
+                    Time = point.Time,
+                    Text = point.Text
+                }))
+                .ToList()
+        };
+    }
+
+    /// <summary>
+    /// One description of an import's watermarks from its Connected System-level and its Partition descriptions, either
+    /// of which may be absent.
+    /// </summary>
+    private static ImportWatermarkDescription? MergeImportWatermarkDescriptions(ImportWatermarkDescription? connectedSystemLevel, ImportWatermarkDescription? partitions)
+    {
+        if (connectedSystemLevel == null || partitions == null)
+            return connectedSystemLevel ?? partitions;
+
+        return new ImportWatermarkDescription
+        {
+            Kind = string.Equals(connectedSystemLevel.Kind, partitions.Kind, StringComparison.OrdinalIgnoreCase)
+                ? connectedSystemLevel.Kind
+                : $"{connectedSystemLevel.Kind}, {partitions.Kind}",
+            Points = [.. connectedSystemLevel.Points, .. partitions.Points]
         };
     }
 
