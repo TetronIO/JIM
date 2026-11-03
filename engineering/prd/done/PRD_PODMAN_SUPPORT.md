@@ -1,10 +1,10 @@
 # Podman Support
 
-- **Status:** Doing (plan Phases 1 to 3 complete, and Phase 4's CI check required; the RHEL acceptance run remains)
+- **Status:** Done (every phase complete; the RHEL acceptance run is made by the deployment lab, #2698)
 - **Created:** 2026-09-24
 - **Author:** Jay
 - **Issue:** #1808
-- **Plan:** [PODMAN_SUPPORT.md](../../plans/doing/PODMAN_SUPPORT.md)
+- **Plan:** [PODMAN_SUPPORT.md](../../plans/done/PODMAN_SUPPORT.md)
 
 ## Problem Statement
 
@@ -186,7 +186,7 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ## Open Questions
 
-*All seven are answered by decisions D1 to D7 in the [implementation plan](../../plans/doing/PODMAN_SUPPORT.md#decisions).*
+*All seven are answered by decisions D1 to D7 in the [implementation plan](../../plans/done/PODMAN_SUPPORT.md#decisions).*
 
 1. **Secrets mechanism:** Podman secrets (`podman secret create`) referenced from the pod file, a Kubernetes `Secret` document played alongside it, or a generated file with restricted permissions?
 2. **Configuration supply:** a Kubernetes `ConfigMap` passed with `podman kube play --configmap` (and Quadlet `ConfigMap=`), or `setup.sh` generating it from the `.env` an administrator already knows?
@@ -207,9 +207,9 @@ JIM is pre-release with no installed base, so this is the cheapest point at whic
 
 ### Phase 2: Podman path
 
-- [ ] `deploy/podman/` pod file and `.kube` unit boot JIM rootful on RHEL 9 and 10, with the same hardening as Docker (verified on CentOS Stream 9 with Podman 5.8, and on Podman 4.9; awaiting the RHEL acceptance run)
+- [x] `deploy/podman/` pod file and `.kube` unit boot JIM rootful on RHEL 9 and 10, with the same hardening as Docker (verified on CentOS Stream 9 with Podman 5.8, and on Podman 4.9; and by the deployment lab on AlmaLinux 9 with Podman 5.8 and CentOS Stream 10 with Podman 6.1, SELinux enforcing, #2698)
 - [x] JIM restarts after a reboot under the `.kube` unit
-- [ ] Rootless install verified on a real RHEL host (verified on CentOS Stream 9; awaiting the RHEL acceptance run)
+- [x] Rootless install verified on a real RHEL host (verified on CentOS Stream 9, and by the deployment lab on AlmaLinux 9 and CentOS Stream 10 standing in for RHEL 9 and 10, #2698)
 - [x] Secrets are not stored in plain text in the pod file
 - [x] Bundled and external PostgreSQL both work
 - [x] HTTPS remote sign-in works with a certificate file and behind a reverse proxy (the proxy verified on Docker; a rootless Podman JIM cannot tell a proxy from a client, see the plan's Phase 3)

@@ -4,7 +4,8 @@
 # The deployment lab's matrix (#1876): every operating system, container runtime and network a customer installs JIM
 # on, one cell each, each on a fresh VM. The images are built on the lab host by TetronIO/ci-runners
 # (scripts/deploy-lab/build-lab-images.sh): the distribution's cloud image with only the container runtime added, as a
-# customer's host has. AlmaLinux stands in for Red Hat Enterprise Linux 9, with SELinux enforcing and firewalld on.
+# customer's host has. AlmaLinux stands in for Red Hat Enterprise Linux 9, and CentOS Stream 10 for
+# Red Hat Enterprise Linux 10, each with SELinux enforcing and firewalld on.
 #
 # A cell's MemoryGiB is what its VM is given, and an ExternalDatabase cell's DatabaseMemoryGiB its database server's;
 # the runner starts as many cells at once as the host's memory holds.
@@ -14,6 +15,7 @@
         'u24-docker-classic' = @{ Image = 'jimlab/u24-docker-classic'; Os = 'Ubuntu 24.04' }
         'u24-podman' = @{ Image = 'jimlab/u24-podman'; Os = 'Ubuntu 24.04' }
         'alma9-podman' = @{ Image = 'jimlab/alma9-podman'; Os = 'AlmaLinux 9' }
+        'cs10-podman' = @{ Image = 'jimlab/cs10-podman'; Os = 'CentOS Stream 10' }
     }
 
     # The oldest release a customer can upgrade from, straight to the latest, as the upgrade guides say (upgrading.md,
@@ -32,6 +34,8 @@
         @{ Name = 'u24-podrl-ag'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'ubuntu') }
         @{ Name = 'alma9-podrf-ag'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrl-ag'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'cs10-podrf-ag'; Image = 'cs10-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'cs10-podrl-ag'; Image = 'cs10-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Install'; MemoryGiB = 6; Tags = @('install', 'airgap', 'podman', 'rhel') }
 
         # Upgrades from the previous release, with its data, by the Upgrading guide, then a rollback by it. 12 GiB, as
         # v0.16.0's database does not start below about 9 GB (#1943); 6 will do once the previous release is later.
@@ -64,6 +68,14 @@
         @{ Name = 'u24-docker-ctrd-proxy'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
         @{ Name = 'alma9-podrf-proxy'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'podman', 'rhel') }
         @{ Name = 'u24-docker-ctrd-proxy-local'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Local'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
+
+        # Deployed by Deploying on RHEL with Ansible's own playbook, rootful and (with the page's Rootless changes)
+        # rootless, on each RHEL stand-in, air-gapped: Ansible and the RHEL System Roles from the distribution's packages,
+        # JIM's images loaded from the bundle first, as the page says for an air-gapped server.
+        @{ Name = 'alma9-podrf-ansible'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Ansible'; MemoryGiB = 6; Tags = @('ansible', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrl-ansible'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Ansible'; MemoryGiB = 6; Tags = @('ansible', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'cs10-podrf-ansible'; Image = 'cs10-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Ansible'; MemoryGiB = 6; Tags = @('ansible', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'cs10-podrl-ansible'; Image = 'cs10-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'Ansible'; MemoryGiB = 6; Tags = @('ansible', 'airgap', 'podman', 'rhel') }
 
         # Online, as a customer with internet access installs and upgrades: the installation guide's one-line install
         # of the latest published release, and an upgrade to it from the release before it by the guide's connected

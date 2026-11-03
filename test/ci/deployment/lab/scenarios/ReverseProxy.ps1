@@ -65,40 +65,16 @@ if (-not $installedNginx) {
     throw 'stopped: nginx did not install'
 }
 
-function New-ProxyCertificate {
-    # The proxy's own certificate for the name users type, from a certificate authority made for the cell, as an
-    # organisation's own CA would issue it. Only the CA's certificate is kept; the keys go once they are in place.
-    $work = Join-Path $OutputPath 'proxy-tls'
-    New-Item -ItemType Directory -Path $work -Force | Out-Null
-    $extensions = Join-Path $work 'server.ext'
-    "subjectAltName=DNS:$hostName`nbasicConstraints=critical,CA:FALSE`nkeyUsage=critical,digitalSignature,keyEncipherment`nextendedKeyUsage=serverAuth" |
-        Set-Content $extensions
-    $commands = @(
-        ,@('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', "$work/ca.key", '-out', $proxyCaPath, '-days', '2',
-            '-subj', '/CN=JIM deployment lab proxy CA', '-addext', 'basicConstraints=critical,CA:TRUE',
-            '-addext', 'keyUsage=critical,keyCertSign,cRLSign')
-        ,@('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', "$work/server.key", '-out', "$work/server.csr", '-subj', "/CN=$hostName")
-        ,@('x509', '-req', '-in', "$work/server.csr", '-CA', $proxyCaPath, '-CAkey', "$work/ca.key", '-CAcreateserial',
-            '-out', "$work/server.crt", '-days', '2', '-extfile', $extensions)
-    )
-    foreach ($arguments in $commands) {
-        $output = $null | & openssl @arguments 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "openssl $($arguments[0]) failed: $output"
-        }
-    }
-    Remove-Item "$work/ca.key"
-    $work
-}
-
 function Install-ProxyConfig {
     # The guide's example, with the lab's names, on the proxy: its certificate and key, the CA it checks JIM's
     # certificate by (re-encrypting only), and the configuration, which nginx must accept.
     param([string]$Config)
     $files = Get-LabProxyFile -Config $Config
-    $tls = New-ProxyCertificate
-    Copy-LabFile -Source "$tls/server.crt" -Destination "${nginxVm}:$($files.Certificate)"
-    Copy-LabFile -Source "$tls/server.key" -Destination "${nginxVm}:$($files.Key)"
+    # The proxy's own certificate for the name users type, as an organisation's own CA would issue it.
+    $tls = Join-Path $OutputPath 'proxy-tls'
+    $issued = New-LabCertificate -Folder $tls -CaPath $proxyCaPath -Name $hostName -CaName 'JIM deployment lab proxy CA'
+    Copy-LabFile -Source $issued.Certificate -Destination "${nginxVm}:$($files.Certificate)"
+    Copy-LabFile -Source $issued.Key -Destination "${nginxVm}:$($files.Key)"
     Remove-Item -Recurse $tls
     if ($files.TrustedCa) {
         Copy-LabFile -Source $jimCaPath -Destination "${nginxVm}:$($files.TrustedCa)"

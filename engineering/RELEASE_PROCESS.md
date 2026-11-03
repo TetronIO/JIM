@@ -50,8 +50,8 @@ A release is also refused unless the exact commit being tagged has a `success` c
 
 - **It starts by itself,** nightly on `main` and on every push to `main` that changes `VERSION`, as the pre-release suite does, so merging the release PR starts it on the release commit with nothing to dispatch. It can also be dispatched (`gh workflow run deploy-lab.yml --ref main`), with a choice of cells.
 - **It is enforced twice, behind one switch,** like the other gates: the `/release` skill runs `scripts/Test-DeployLabReleaseGate.ps1` before it tags, and the `jim-deploy-lab-gate` job in `release.yml` runs the same script, which `validate` needs. Both run only while the repository variable `JIM_DEPLOY_LAB_GATE_ENFORCED` is `true`; set it after the lab's first green run in Actions (`gh variable set JIM_DEPLOY_LAB_GATE_ENFORCED --body true`). Once set there is no override.
-- **Reading a result:** `pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`. The status description carries the cell count ("25 of 25 cells passed"); each run's job summary holds the full report, and its artefact every cell's logs for 30 days.
-- **It overlaps the others.** It runs on its own host in about 45 minutes, so it finishes well inside the pre-release suite's time and adds nothing to a release's wait.
+- **Reading a result:** `pwsh -File ./scripts/Test-DeployLabReleaseGate.ps1 -Sha <full sha>` exits 0 only for `success`. The status description carries the cell count ("31 of 31 cells passed"); each run's job summary holds the full report, and its artefact every cell's logs for 30 days.
+- **It overlaps the others.** It runs on its own host in about 60 minutes, so it finishes well inside the pre-release suite's time and adds nothing to a release's wait.
 
 ## Release History
 
