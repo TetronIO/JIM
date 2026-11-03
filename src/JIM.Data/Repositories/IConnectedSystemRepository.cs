@@ -1461,6 +1461,14 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId);
 
     /// <summary>
+    /// Loads a Connected System for an Exchange delivery pass (#2021): its Connector Definition, which the Connector is
+    /// built from, and its setting values, which the Exchange session signs in with. Untracked, because the pass writes
+    /// only to the queue, through raw SQL of its own.
+    /// </summary>
+    /// <returns>The Connected System, or null where it no longer exists.</returns>
+    public Task<ConnectedSystem?> GetConnectedSystemForExchangeDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.
     /// </summary>
     public Task<int> GetConnectedSystemObjectCountAsync();

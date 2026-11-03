@@ -102,6 +102,54 @@ public sealed record ExchangeDeclaredState
     }
 
     /// <summary>
+    /// An object's declared state as it stands now, for the delivery lane (Phase 5): the values the last import read
+    /// for the five Exchange attributes (<paramref name="importedValues"/>), with the changes its Pending Export still
+    /// holds for Exchange (<paramref name="heldChanges"/>) laid over, removals first, as <see cref="From"/> lays an
+    /// export's changes over. Only the five values are set; the rules' inputs are staging's business.
+    /// </summary>
+    public static ExchangeDeclaredState Of(IReadOnlyDictionary<string, string?> importedValues, IEnumerable<ExchangeHeldChange> heldChanges)
+    {
+        ArgumentNullException.ThrowIfNull(importedValues);
+        ArgumentNullException.ThrowIfNull(heldChanges);
+
+        var values = new Dictionary<string, string?>(importedValues, StringComparer.Ordinal);
+        var held = heldChanges.Where(c => ExchangeRecipientAttributes.All.Contains(c.AttributeName)).ToList();
+        foreach (var change in held.Where(c => IsRemovalType(c.ChangeType)))
+            values[change.AttributeName] = null;
+        foreach (var change in held.Where(c => !IsRemovalType(c.ChangeType)))
+            values[change.AttributeName] = change.StringValue;
+
+        return new ExchangeDeclaredState
+        {
+            RecipientType = values.GetValueOrDefault(ExchangeRecipientAttributes.RecipientType),
+            Alias = values.GetValueOrDefault(ExchangeRecipientAttributes.Alias),
+            Database = values.GetValueOrDefault(ExchangeRecipientAttributes.Database),
+            PrimarySmtpAddress = values.GetValueOrDefault(ExchangeRecipientAttributes.PrimarySmtpAddress),
+            ExternalAddress = values.GetValueOrDefault(ExchangeRecipientAttributes.ExternalAddress)
+        };
+    }
+
+    /// <summary>
+    /// The state a queued change declares, as the five values Exchange is asked to converge on.
+    /// </summary>
+    public static ExchangeDeclaredState Of(PendingExchangeChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        return new ExchangeDeclaredState
+        {
+            RecipientType = change.RecipientType,
+            Alias = change.Alias,
+            Database = change.Database,
+            PrimarySmtpAddress = change.PrimarySmtpAddress,
+            ExternalAddress = change.ExternalAddress
+        };
+    }
+
+    private static bool IsRemovalType(PendingExportAttributeChangeType changeType) =>
+        changeType is PendingExportAttributeChangeType.Remove or PendingExportAttributeChangeType.RemoveAll;
+
+    /// <summary>
     /// Whether <paramref name="change"/> sets one of the five connector-defined Exchange attributes.
     /// </summary>
     public static bool IsExchangeAttributeChange(PendingExportAttributeValueChange change) =>

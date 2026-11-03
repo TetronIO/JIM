@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Exchange;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using Microsoft.EntityFrameworkCore;
@@ -180,6 +181,234 @@ public partial class SyncRepository
         return await ReadGuidSetAsync(sql,
             new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
             new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+    }
+
+    // ---- Delivery (Phase 5) ----------------------------------------------------------------------------------------
+    // Modelled on the Password Synchronisation queue's delivery statements (SyncRepository.PasswordOperations.cs), with
+    // the Exchange queue's own status ordinals. Every write a lane makes is guarded on the row still being Delivering
+    // under that lane's claim: a supersession clears the claim, a cancellation changes the status, and another
+    // deliverer reclaiming an expired lease re-stamps it, and each of those is an outcome that must survive.
+
+    /// <inheritdoc />
+    public async Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease)
+    {
+        var claimExpiredBefore = asOf - claimLease;
+        return await _context.PendingExchangeChanges
+            .AsNoTracking()
+            .Where(c => c.Status == PendingExchangeChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
+                        || c.Status == PendingExchangeChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore)
+            .Select(c => c.ConnectedSystemId)
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    {
+        // One grouped round trip, read on every iteration of the delivery loop.
+        var claimExpiredBefore = asOf - claimLease;
+        var outlook = await _context.PendingExchangeChanges.AsNoTracking()
+            .Where(c => c.Status == PendingExchangeChangeStatus.Pending || c.Status == PendingExchangeChangeStatus.Delivering)
+            .GroupBy(_ => 1)
+            .Select(g => new DeliveryQueueOutlook
+            {
+                DueCount = g.Count(c => c.Status == PendingExchangeChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
+                                        || c.Status == PendingExchangeChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore),
+                RetryingCount = g.Count(c => c.Status == PendingExchangeChangeStatus.Pending && c.NextRetryAt != null && c.NextRetryAt > asOf),
+                NextAttemptAt = g.Where(c => c.Status == PendingExchangeChangeStatus.Pending && c.NextRetryAt != null && c.NextRetryAt > asOf)
+                    .Min(c => c.NextRetryAt)
+            })
+            .SingleOrDefaultAsync();
+
+        // An empty queue groups to nothing rather than to a row of zeroes, which is the answer the caller wants.
+        return outlook ?? new DeliveryQueueOutlook();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+        if (maximum < 1)
+            return [];
+
+        // Select and update in one statement, which is what makes the claim safe against a second deliverer: the
+        // sub-select locks the rows it chooses, SKIP LOCKED makes a concurrent claimer step over them rather than wait
+        // and then re-read them, and the update lands before the lock is released at commit. Parked, Cancelled and
+        // Refused rows are never chosen.
+        //
+        // Deliberately hand-written rather than driven from the bulk-columns constant: it marks exactly three
+        // call-site-computed columns (a status mark and the claim stamp), and a future column must not be swept into it.
+        // RETURNING c.* hands the rows back in the entity's own shape, so the caller holds exactly what it claimed.
+        var claimExpiredBefore = asOf - lease;
+        const string sql = """
+            WITH due AS (
+                SELECT "Id"
+                FROM "PendingExchangeChanges"
+                WHERE "ConnectedSystemId" = {0}
+                  AND (("Status" = {1} AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {2}))
+                    OR ("Status" = {3} AND "ClaimedAt" IS NOT NULL AND "ClaimedAt" <= {4}))
+                ORDER BY "CreatedAt", "Id"
+                LIMIT {5}
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE "PendingExchangeChanges" AS c
+            SET "Status" = {3}, "ClaimedAt" = {2}, "ClaimedBy" = {6}
+            FROM due
+            WHERE c."Id" = due."Id"
+            RETURNING c.*
+            """;
+
+        return await _context.PendingExchangeChanges
+            .FromSqlRaw(sql,
+                connectedSystemId,
+                (int)PendingExchangeChangeStatus.Pending,
+                new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz, Value = asOf },
+                (int)PendingExchangeChangeStatus.Delivering,
+                new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.TimestampTz, Value = claimExpiredBefore },
+                maximum,
+                claimedBy)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var releasing = ids.ToList();
+        if (releasing.Count == 0)
+            return 0;
+
+        return await _context.PendingExchangeChanges
+            .Where(c => releasing.Contains(c.Id) && c.Status == PendingExchangeChangeStatus.Delivering && c.ClaimedBy == claimedBy)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.Status, PendingExchangeChangeStatus.Pending)
+                .SetProperty(c => c.ClaimedAt, (DateTime?)null)
+                .SetProperty(c => c.ClaimedBy, (string?)null));
+    }
+
+    /// <inheritdoc />
+    public async Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
+    {
+        var recording = changes.ToList();
+        if (recording.Count == 0)
+            return;
+
+        // Assignment list from the constant, so a migration adding a column an attempt can change fails the completeness
+        // test rather than silently going unwritten. The guard's parameters follow the assignments.
+        var columns = PendingExchangeChangeBulkColumns.PendingExchangeChangesAttemptUpdate;
+        var assignments = string.Join(", ", columns.Select((c, i) => $"\"{c}\" = {{{i}}}"));
+        var idPlaceholder = $"{{{columns.Length}}}";
+        var deliveringPlaceholder = $"{{{columns.Length + 1}}}";
+        var claimedByPlaceholder = $"{{{columns.Length + 2}}}";
+        var sql = $"""UPDATE "PendingExchangeChanges" SET {assignments} WHERE "Id" = {idPlaceholder} AND "Status" = {deliveringPlaceholder} AND "ClaimedBy" = {claimedByPlaceholder}""";
+
+        foreach (var change in recording)
+        {
+            // Values in exactly the order of PendingExchangeChangesAttemptUpdate.
+            await _context.Database.ExecuteSqlRawAsync(sql,
+                (int)change.Status,
+                BulkSqlHelpers.NullableParam((int?)change.FailureKind, NpgsqlTypes.NpgsqlDbType.Integer),
+                BulkSqlHelpers.NullableParam(change.FailureMessage, NpgsqlTypes.NpgsqlDbType.Text),
+                change.AttemptCount,
+                BulkSqlHelpers.NullableParam(change.LastAttemptedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(change.FirstFailedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(change.NextRetryAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(change.ClaimedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz),
+                BulkSqlHelpers.NullableParam(change.ClaimedBy, NpgsqlTypes.NpgsqlDbType.Text),
+                change.Id,
+                (int)PendingExchangeChangeStatus.Delivering,
+                claimedBy);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var deleting = ids.ToList();
+        if (deleting.Count == 0)
+            return 0;
+
+        return await _context.PendingExchangeChanges
+            .Where(c => deleting.Contains(c.Id) && c.Status == PendingExchangeChangeStatus.Delivering && c.ClaimedBy == claimedBy)
+            .ExecuteDeleteAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
+    {
+        // Batched through a sub-select so one pass cannot become a long transaction; oldest first, so a repeated pass
+        // drains rather than churning the same rows.
+        return await _context.PendingExchangeChanges
+            .Where(c => _context.PendingExchangeChanges
+                .Where(t => (t.Status == PendingExchangeChangeStatus.Parked || t.Status == PendingExchangeChangeStatus.Cancelled)
+                            && (t.CancelledAt ?? t.LastAttemptedAt ?? t.CreatedAt) < olderThan)
+                .OrderBy(t => t.CancelledAt ?? t.LastAttemptedAt ?? t.CreatedAt)
+                .Take(maxRecords)
+                .Select(t => t.Id)
+                .Contains(c.Id))
+            .ExecuteDeleteAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return [];
+
+        var ids = connectedSystemObjectIds.ToList();
+
+        // Read once per claimed batch (at most a hundred objects), off the synchronisation path, so EF projections.
+        var objects = await _context.ConnectedSystemObjects.AsNoTracking()
+            .Where(o => ids.Contains(o.Id))
+            .Select(o => new { o.Id, ObjectType = o.Type.Name, o.ExternalIdAttributeId, o.SecondaryExternalIdAttributeId })
+            .ToListAsync();
+        if (objects.Count == 0)
+            return [];
+
+        var identifierAttributeIds = objects.Select(o => o.ExternalIdAttributeId)
+            .Concat(objects.Where(o => o.SecondaryExternalIdAttributeId.HasValue).Select(o => o.SecondaryExternalIdAttributeId!.Value))
+            .Distinct()
+            .ToList();
+        var exchangeAttributeNames = ExchangeRecipientAttributes.All.ToList();
+
+        var values = await _context.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .Where(v => ids.Contains(v.ConnectedSystemObject.Id)
+                        && (identifierAttributeIds.Contains(v.AttributeId)
+                            || v.Attribute.IsConnectorDefined && exchangeAttributeNames.Contains(v.Attribute.Name)))
+            .Select(v => new { ObjectId = v.ConnectedSystemObject.Id, v.AttributeId, AttributeName = v.Attribute.Name, v.Attribute.IsConnectorDefined, v.StringValue, v.GuidValue })
+            .ToListAsync();
+
+        var held = await (
+                from c in _context.PendingExportAttributeValueChanges.AsNoTracking()
+                join pe in _context.PendingExports on c.PendingExportId equals (Guid?)pe.Id
+                where c.AwaitsExchange
+                      && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+                      && pe.ConnectedSystemObjectId != null
+                      && ids.Contains(pe.ConnectedSystemObjectId.Value)
+                select new { ObjectId = pe.ConnectedSystemObjectId!.Value, AttributeName = c.Attribute.Name, c.ChangeType, c.StringValue })
+            .ToListAsync();
+
+        var valuesByObject = values.ToLookup(v => v.ObjectId);
+        var heldByObject = held.ToLookup(h => h.ObjectId);
+        return objects.Select(o =>
+        {
+            var own = valuesByObject[o.Id].ToList();
+            var anchor = own.FirstOrDefault(v => v.AttributeId == o.ExternalIdAttributeId && !v.IsConnectorDefined);
+            var secondary = o.SecondaryExternalIdAttributeId is { } secondaryId
+                ? own.FirstOrDefault(v => v.AttributeId == secondaryId && !v.IsConnectorDefined)
+                : null;
+            return new ExchangeDeliveryObject
+            {
+                ConnectedSystemObjectId = o.Id,
+                ObjectType = o.ObjectType,
+                ObjectGuid = anchor?.GuidValue,
+                DistinguishedName = secondary?.StringValue ?? anchor?.StringValue,
+                ImportedValues = own.Where(v => v.IsConnectorDefined && exchangeAttributeNames.Contains(v.AttributeName))
+                    .GroupBy(v => v.AttributeName, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().StringValue, StringComparer.Ordinal),
+                HeldChanges = heldByObject[o.Id].Select(h => new ExchangeHeldChange(h.AttributeName, h.ChangeType, h.StringValue)).ToList()
+            };
+        }).ToList();
     }
 
     /// <summary>

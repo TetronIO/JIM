@@ -491,12 +491,12 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public async Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // One grouped round trip, read on every iteration of the delivery loop: three numbers from one scan of a
         // table that is small whenever the service is keeping up. Restricted to what a lane would claim, so a
         // paused system's held propagated changes neither inflate the counts nor wake the service for retries it
-        // will not make (see PasswordQueueDeliveryOutlook); anything but a propagated change counts wherever it
+        // will not make (see DeliveryQueueOutlook); anything but a propagated change counts wherever it
         // is (#1635; widened by #1697).
         var claimExpiredBefore = asOf - claimLease;
         var outlook = await _context.PendingPasswordChanges.AsNoTracking()
@@ -505,7 +505,7 @@ public partial class SyncRepository
                         || _context.ConnectedSystemPasswordSynchronisations
                             .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
             .GroupBy(_ => 1)
-            .Select(g => new PasswordQueueDeliveryOutlook
+            .Select(g => new DeliveryQueueOutlook
             {
                 DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
                                         || c.Status == PendingPasswordChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore),
@@ -516,7 +516,7 @@ public partial class SyncRepository
             .SingleOrDefaultAsync();
 
         // An empty queue groups to nothing rather than to a row of zeroes, which is the answer the caller wants.
-        return outlook ?? new PasswordQueueDeliveryOutlook();
+        return outlook ?? new DeliveryQueueOutlook();
     }
 
     /// <inheritdoc />

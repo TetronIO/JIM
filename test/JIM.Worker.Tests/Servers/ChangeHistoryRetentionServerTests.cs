@@ -67,6 +67,7 @@ public class ChangeHistoryRetentionServerTests
         _changeHistoryRepo.Setup(r => r.DeleteExpiredPasswordEventActivitiesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(11);
         _syncRepo.Setup(r => r.DeleteTerminalPasswordChangesAsync(cutoffs.PasswordEvent, 100)).ReturnsAsync(13);
         _scimStoreRepo.Setup(r => r.DeleteJournalEntriesOlderThanAsync(cutoffs.General, 100, It.IsAny<CancellationToken>())).ReturnsAsync(17);
+        _syncRepo.Setup(r => r.DeleteTerminalExchangeChangesAsync(cutoffs.General, 100)).ReturnsAsync(19);
 
         var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffs);
 
@@ -78,7 +79,11 @@ public class ChangeHistoryRetentionServerTests
             Assert.That(result.PasswordEventActivitiesDeleted, Is.EqualTo(11));
             Assert.That(result.PasswordQueueRecordsDeleted, Is.EqualTo(13));
             Assert.That(result.ScimJournalEntriesDeleted, Is.EqualTo(17));
+            Assert.That(result.ExchangeQueueRecordsDeleted, Is.EqualTo(19));
         }
+
+        _syncRepo.Verify(r => r.DeleteTerminalExchangeChangesAsync(cutoffs.General, 100), Times.Once,
+            "parked and cancelled Exchange changes go at the general cutoff, with the Activities they follow up (#2021, D10)");
 
         _scimStoreRepo.Verify(r => r.DeleteJournalEntriesOlderThanAsync(cutoffs.General, 100, It.IsAny<CancellationToken>()), Times.Once,
             "the SCIM store's journal is change history, so it goes at the general retention cutoff");

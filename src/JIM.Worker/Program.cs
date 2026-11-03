@@ -77,19 +77,22 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
         services.AddSingleton<IConnectorFactory, ConnectorFactory>();
 
-        // Database notification listener (LISTEN/NOTIFY): the Password Delivery Service wakes on the Password
-        // Synchronisation queue's changes through it, as the Scheduler does on Worker Task changes. A dedicated
-        // non-pooled connection; see JimDbContext.BuildListenerConnectionString.
+        // Database notification listener (LISTEN/NOTIFY): the delivery services wake on their queues' changes through
+        // it (the Password Synchronisation queue, and the Exchange queue, #2021), as the Scheduler does on Worker Task
+        // changes. Each listen opens a dedicated non-pooled connection of its own; see
+        // JimDbContext.BuildListenerConnectionString.
         services.AddSingleton<IDatabaseNotificationListener>(_ =>
             new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
 
-        // Worker hosted services: the synchronisation loop, and the Password Delivery Service alongside it (#1635).
+        // Worker hosted services: the synchronisation loop, and the Password (#1635) and Exchange (#2021) Delivery
+        // Services alongside it.
         // The host keeps its default BackgroundServiceExceptionBehavior (StopHost) deliberately: the delivery
         // service never lets a fault escape (see its catch-all), and a synchronisation loop that failed to start
         // must take the container down for a restart rather than leave the process idling with only password
         // delivery alive; the container's restart policy acts on exit, not on an unhealthy check.
         services.AddHostedService<Worker>();
         services.AddHostedService<PasswordDeliveryService>();
+        services.AddHostedService<ExchangeDeliveryService>();
     })
     .Build();
 

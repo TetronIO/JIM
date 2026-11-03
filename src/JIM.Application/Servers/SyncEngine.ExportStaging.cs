@@ -1923,13 +1923,19 @@ public partial class SyncEngine
     /// restatement <see cref="WithoutChangesRestatingAHeldChange"/> drops from the incoming side: then it does reflect
     /// the Metaverse, and withdrawing it on a record of the target its confirming import has yet to judge could leave
     /// the account disabled with nothing to enable it.</item>
+    /// <item>And, for the same reason, one awaiting Exchange (<see cref="IsAwaitingExchange"/>, #2021). The directory
+    /// write carried none of it, so "already current" means the declaration has gone back to what Exchange last stamped
+    /// before Exchange acted. Kept, the change would leave its queued Exchange change standing, and the delivery lane
+    /// would make a recipient nobody declares any more; withdrawn, the lane finds the declared state has moved and
+    /// withdraws the queued change. It stands when the evaluation restates exactly what it asserts: Exchange has acted
+    /// and the import read the result back.</item>
     /// </list>
     /// </summary>
     private static bool IsKeptAgainstAlreadyCurrent(
         PendingExportAttributeValueChange existing,
         HashSet<(string MergeKey, string ValueKey, PendingExportAttributeChangeType ChangeType)> currentAssertions)
     {
-        if (IsAwaitingInitialPassword(existing))
+        if (IsAwaitingInitialPassword(existing) || IsAwaitingExchange(existing))
             return currentAssertions.Contains(HeldChangeAssertion(existing));
 
         return existing.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation;

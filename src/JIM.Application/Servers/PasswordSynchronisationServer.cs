@@ -1477,7 +1477,7 @@ public class PasswordSynchronisationServer
     /// scheduled attempt, in one query. The service sleeps until that attempt (or its safety poll, whichever is
     /// sooner) and writes the counts into its heartbeat.
     /// </summary>
-    public async Task<PasswordQueueDeliveryOutlook> GetDeliveryOutlookAsync(DateTime asOf)
+    public async Task<DeliveryQueueOutlook> GetDeliveryOutlookAsync(DateTime asOf)
     {
         return await _syncRepo.GetPasswordQueueDeliveryOutlookAsync(asOf, ClaimLease);
     }

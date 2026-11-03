@@ -7,10 +7,11 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
 using Serilog;
 
-namespace JIM.Worker.PasswordDelivery;
+namespace JIM.Worker.Delivery;
 
 /// <summary>
-/// The Password Delivery Service's loop (#1635), separated from its host so the wake and dispatch rules can be
+/// A delivery service's loop (passwords #1635, Exchange recipients #2021), separated from its host so the wake and
+/// dispatch rules can be
 /// tested with a fake clock and a fake queue.
 /// <para>
 /// One iteration is <see cref="DispatchAsync"/> followed by <see cref="WaitAsync"/>. Dispatch reads what is due,
@@ -18,10 +19,10 @@ namespace JIM.Worker.PasswordDelivery;
 /// systems, never more than one per system), writes the heartbeat, and says how long to wait: until the earliest
 /// scheduled retry, or the safety poll, whichever is sooner. The wait ends early on a wake: a queue notification,
 /// or a lane finishing. Lanes run on their own tasks; a lane that throws is logged and forgotten, and the loop
-/// carries on, because one directory's fault must never delay another's passwords.
+/// carries on, because one directory's fault must never delay another's deliveries.
 /// </para>
 /// </summary>
-internal sealed class PasswordDeliveryScheduler
+internal sealed class DeliveryScheduler
 {
     /// <summary>
     /// How long the loop sleeps with nothing scheduled and no notification. Notifications are hints delivered on
@@ -32,34 +33,38 @@ internal sealed class PasswordDeliveryScheduler
     /// <summary>
     /// How many Connected Systems are delivered to at once. Lanes are bounded so a burst across many systems does
     /// not open many directory connections together; sequential within a system, because one system's changes
-    /// share one password channel.
+    /// share one channel (a password connection, an Exchange session).
     /// </summary>
     public const int MaximumParallelLanes = 4;
 
-    private readonly IPasswordDeliveryWork _work;
+    private readonly string _name;
+    private readonly IDeliveryWork _work;
     private readonly Func<DateTime> _utcNow;
     private readonly TimeSpan _safetyPoll;
     private readonly TimeSpan _heartbeatSlice;
     private readonly AsyncWakeSignal _wake = new();
     private readonly SemaphoreSlim _laneSlots;
     private readonly Lock _lanesLock = new();
-    private readonly Dictionary<int, PasswordDeliveryLane> _lanesInFlight = [];
+    private readonly Dictionary<int, DeliveryLane> _lanesInFlight = [];
     private readonly Dictionary<int, DateTime> _heldOffUntil = [];
     private readonly List<Task> _laneTasks = [];
-    private PasswordQueueDeliveryOutlook _lastOutlook = new();
+    private DeliveryQueueOutlook _lastOutlook = new();
 
+    /// <param name="name">The service's name in its log lines ("Password delivery", "Exchange delivery").</param>
     /// <param name="work">The queue, the lanes and the heartbeat.</param>
     /// <param name="utcNow">The clock; tests pin it.</param>
     /// <param name="safetyPoll">The longest the loop sleeps; null takes <see cref="SafetyPoll"/>.</param>
     /// <param name="maximumParallelLanes">How many lanes may run at once; null takes <see cref="MaximumParallelLanes"/>.</param>
     /// <param name="heartbeatSlice">How often the wait writes the heartbeat; null takes the heartbeat interval.</param>
-    public PasswordDeliveryScheduler(
-        IPasswordDeliveryWork work,
+    public DeliveryScheduler(
+        string name,
+        IDeliveryWork work,
         Func<DateTime>? utcNow = null,
         TimeSpan? safetyPoll = null,
         int? maximumParallelLanes = null,
         TimeSpan? heartbeatSlice = null)
     {
+        _name = name;
         _work = work;
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
         _safetyPoll = safetyPoll ?? SafetyPoll;
@@ -71,7 +76,7 @@ internal sealed class PasswordDeliveryScheduler
     /// <summary>
     /// The lanes currently running, for the heartbeat and for tests.
     /// </summary>
-    public IReadOnlyList<PasswordDeliveryLane> LanesInFlight
+    public IReadOnlyList<DeliveryLane> LanesInFlight
     {
         get
         {
@@ -143,7 +148,7 @@ internal sealed class PasswordDeliveryScheduler
             {
                 // Resilience boundary (filtered form): whatever the queue reads did, the loop must come round
                 // again. The next iteration re-reads everything, so nothing is lost by dropping this one.
-                Log.Error(ex, "PasswordDeliveryScheduler: An iteration failed; the service will look again after the safety poll.");
+                Log.Error(ex, "{Scheduler}: An iteration failed; the service will look again after the safety poll.", _name);
                 waitFor = _safetyPoll;
             }
 
@@ -200,7 +205,7 @@ internal sealed class PasswordDeliveryScheduler
         }
 
         if (started > 0 || deferred > 0)
-            Log.Debug("PasswordDeliveryScheduler: {Due} Connected System(s) with work due; {Started} lane(s) started, {Deferred} waiting for a slot, {InFlight} in flight.",
+            Log.Debug("{Scheduler}: {Due} Connected System(s) with work due; {Started} lane(s) started, {Deferred} waiting for a slot, {InFlight} in flight.", _name,
                 dueSystems.Count, started, deferred, LanesInFlight.Count);
 
         await WriteHeartbeatAsync(cancellationToken);
@@ -253,10 +258,10 @@ internal sealed class PasswordDeliveryScheduler
     private LaneStart TryStartLane(int connectedSystemId, DateTime now, CancellationToken cancellationToken, out DateTime heldOffUntil)
     {
         heldOffUntil = default;
-        PasswordDeliveryLane lane;
+        DeliveryLane lane;
         lock (_lanesLock)
         {
-            // One lane per system at a time: a system's changes share one password channel, and two lanes would
+            // One lane per system at a time: a system's changes share one channel, and two lanes would
             // race each other for the same rows (harmlessly, thanks to the claim, but pointlessly).
             if (_lanesInFlight.ContainsKey(connectedSystemId))
                 return LaneStart.AlreadyRunning;
@@ -273,7 +278,7 @@ internal sealed class PasswordDeliveryScheduler
             if (!_laneSlots.Wait(0, CancellationToken.None))
                 return LaneStart.Deferred;
 
-            lane = new PasswordDeliveryLane(connectedSystemId, now);
+            lane = new DeliveryLane(connectedSystemId, now);
             _lanesInFlight[connectedSystemId] = lane;
         }
 
@@ -287,16 +292,16 @@ internal sealed class PasswordDeliveryScheduler
         return LaneStart.Started;
     }
 
-    private async Task RunLaneAsync(PasswordDeliveryLane lane, CancellationToken cancellationToken)
+    private async Task RunLaneAsync(DeliveryLane lane, CancellationToken cancellationToken)
     {
         var holdOff = false;
         try
         {
-            holdOff = await _work.RunLaneAsync(lane, cancellationToken) == PasswordDeliveryLaneOutcome.CouldNotDeliver;
+            holdOff = await _work.RunLaneAsync(lane, cancellationToken) == DeliveryLaneOutcome.CouldNotDeliver;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Log.Information("PasswordDeliveryScheduler: The lane for {ConnectedSystem} was cancelled; its unattempted claims were released.",
+            Log.Information("{Scheduler}: The lane for {ConnectedSystem} was cancelled; its unattempted claims were released.", _name,
                 LogSanitiser.Sanitise(lane.Describe()));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -305,7 +310,7 @@ internal sealed class PasswordDeliveryScheduler
             // Activities; what reaches here is a fault of the lane as a whole, and it must not take the loop or
             // the other lanes with it. The rows it held come back after the claim lease, at the latest. Held off
             // for the same reason a lane that could not deliver is: a fault that repeats must not spin.
-            Log.Error(ex, "PasswordDeliveryScheduler: The lane for {ConnectedSystem} failed. Its claimed changes are released when the claim lease runs out, and the service carries on.",
+            Log.Error(ex, "{Scheduler}: The lane for {ConnectedSystem} failed. Its claimed changes are released when the claim lease runs out, and the service carries on.", _name,
                 LogSanitiser.Sanitise(lane.Describe()));
             holdOff = true;
         }
@@ -336,7 +341,7 @@ internal sealed class PasswordDeliveryScheduler
     /// The lanes in flight as one CurrentWork string ("Delivering to Corporate Directory, HR System") and the
     /// earliest start among them; null and null when idle.
     /// </summary>
-    internal static (string? CurrentWork, DateTime? StartedAt) DescribeCurrentWork(IReadOnlyList<PasswordDeliveryLane> lanes)
+    internal static (string? CurrentWork, DateTime? StartedAt) DescribeCurrentWork(IReadOnlyList<DeliveryLane> lanes)
     {
         if (lanes.Count == 0)
             return (null, null);
@@ -349,7 +354,7 @@ internal sealed class PasswordDeliveryScheduler
     /// queue has nothing ahead. Absolute rather than relative time, because the detail is read for up to a poll
     /// after it was written.
     /// </summary>
-    internal static string? DescribeOutlook(PasswordQueueDeliveryOutlook outlook)
+    internal static string? DescribeOutlook(DeliveryQueueOutlook outlook)
     {
         if (outlook.DueCount == 0 && outlook.RetryingCount == 0 && outlook.NextAttemptAt == null)
             return null;
@@ -379,7 +384,7 @@ internal sealed class PasswordDeliveryScheduler
         if (running.Length == 0)
             return;
 
-        Log.Information("PasswordDeliveryScheduler: Waiting for {Count} lane(s) to stop...", running.Length);
+        Log.Information("{Scheduler}: Waiting for {Count} lane(s) to stop...", _name, running.Length);
         try
         {
             await Task.WhenAll(running);
@@ -387,7 +392,7 @@ internal sealed class PasswordDeliveryScheduler
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Every lane task already logs its own fault; nothing is left to report here.
-            Log.Debug(ex, "PasswordDeliveryScheduler: A lane faulted while stopping.");
+            Log.Debug(ex, "{Scheduler}: A lane faulted while stopping.", _name);
         }
     }
 }
