@@ -1,6 +1,6 @@
 # Per-Partition Delta Import Watermarks
 
-- **Status:** Doing (Phases 1 to 5 complete; the Activity, portal, REST API and PowerShell surfaces, Phase 6 onwards, outstanding)
+- **Status:** Doing (Phases 1 to 6 complete; integration scenarios, documentation and changelog, Phase 7 onwards, outstanding)
 - **Issue:** [#2715](https://github.com/TetronIO/JIM/issues/2715)
 - **Depends on:** [#2720](https://github.com/TetronIO/JIM/issues/2720) (merged in PR #2721, `ConnectedSystemImportResult.CompleteRead`)
 - **Related:** [#2723](https://github.com/TetronIO/JIM/issues/2723) (truthful `ConnectedSystemObject.PartitionId`), [#2724](https://github.com/TetronIO/JIM/issues/2724) (clearing leaves the SQL and SCIM watermarks)
@@ -363,7 +363,7 @@ Red first in every phase: each test below is written, run, and seen to fail for 
 - `LdapConnectorImportPartitionWatermarkTests`: `GetDeltaImportObjectsAsync_ChangelogDeltaOfOnePartitionThenAnother_TheSecondImportsTheChangeTheFirstPassedAsync`.
 - `DirectoryServer389LdapTests` re-expressed where they read `LastChangeNumber`.
 
-### Phase 6: Activity, portal, REST API and PowerShell
+### Phase 6: Activity, portal, REST API and PowerShell ✅
 
 - `ActivityDto` fields (the `GetImportReadRangeAsync` merge landed in Phase 2), `ImportReadRangeField` state toggle, PowerShell reference regeneration.
 - Tests: `ActivitiesControllerTests.GetActivityAsync_ImportWithPartitionWatermarks_ReturnsEachPartitionsRecordedValuesAsync`; `test/JIM.Web.Tests/ImportReadRangeFieldTests.cs`: `ImportReadRangeField_PartitionWatermarks_ShowsOneLinePerPartitionAsync` and `ImportReadRangeField_PartitionWithNoStartingWatermark_ReadsFromTheStartAsync` (behaviour, not wording).
@@ -517,3 +517,9 @@ Decided on 3 November 2026. Questions 1 to 3 were put to the user and accepted a
 | Drop an entry whose Partition's watermark is at or above its change number | An entry whose change number cannot be read is judged by Partition only, and kept | The search returns only numbers past the oldest watermark. Importing it twice costs a re-read; dropping it could lose a change. Today's read kept it too |
 | Drop a changelog entry outside every target Partition | An entry no named Partition claims goes to a target Partition with no distinguished name, if there is one (of several, the one with the oldest watermark), through `LdapConnectorUtilities.PartitionJudging`, which the accesslog source uses too | One rule for both directory-wide logs; dropping them would have a run read nothing for such a Partition, silently. Unreachable for an advertised naming context |
 | `DirectoryServer389LdapTests` re-expressed where they read `LastChangeNumber` | No change | The fixture covers LDAPS certificate validation only and never read the field |
+| `ActivityDto` gains `importPartitionWatermarksFrom` / `importPartitionWatermarksTo` | `ActivityDetailDto` gains them (no `ActivityDto` exists; the detail DTO is where `importWatermarkFrom` lives), each element an `ImportPartitionWatermarkDto` (`partitionId`, `partitionName`, `value`) | A DTO of its own rather than the model type, so the published summaries keep "partition" lower case, as the customer vocabulary has it |
+| Show Connector state lists each Partition's values (the plan said "also") | For an Activity holding Partition watermarks the table replaces the Connected System-level boxes; an Activity without them keeps the boxes. The field also renders for an Activity whose only watermarks are per Partition | The approved shape is a table, not boxes; LDAP's Connected System-level record holds no position any more, so the boxes would show capabilities beside the table |
+| After this run: a value, "Unchanged", or "nothing recorded" | Also "Cleared" (the run recorded a null), told apart from Unchanged; Before this run reads "No watermark" for a Partition that had none | A cleared watermark makes the next Delta Import read in full, which "Unchanged" would hide; neither case was drawn |
+| Partitions tab | The Scope tab (`ConnectedSystemPartitionsTab`), through a `PartitionDeltaImportWatermark` component placed under each Partition's head; the page reads the watermarks with the Connected System and hands them to the tab | The tab is called Scope; it reaches the application layer only to save, which its tests hold it to |
+| (not covered) A row whose value its Connector cannot read | The Scope tab says the watermark could not be read and the next Delta Import reads in full; REST and PowerShell return it with `description` empty | The Connector reads such a value as none, so the run does read in full; hiding the row would leave the raw value unexplained |
+| `deltaImportWatermark` on the partition DTO | On `GET .../partitions` and the `PUT .../partitions/{id}` response alike: `{ value, recordedAt, description }`, `description` being the `ImportWatermarkDescription` `importReadRange` uses | One shape for both responses, so `Set-JIMConnectedSystemPartition -PassThru` returns what `Get-JIMConnectedSystemPartition` does; reusing the described type keeps one reading of a watermark across the API |
