@@ -926,7 +926,7 @@ public interface ISyncRepository
     /// loop iteration to decide how long to sleep, and written into the service's heartbeat. Counts what a lane
     /// would claim: every change on an enabled system, and everything but propagated changes elsewhere.
     /// </summary>
-    Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
+    Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
 
     /// <summary>
     /// Every queue row a password change produced, by the Activity that recorded the change. Rows a newer change

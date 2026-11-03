@@ -214,7 +214,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, claimLease);
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetPasswordQueueDeliveryOutlookAsync(asOf, claimLease);
 
     public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)

@@ -1,12 +1,12 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-namespace JIM.Worker.PasswordDelivery;
+namespace JIM.Worker.Delivery;
 
 /// <summary>
 /// How a lane ended, as far as the scheduler needs to know.
 /// </summary>
-internal enum PasswordDeliveryLaneOutcome
+internal enum DeliveryLaneOutcome
 {
     /// <summary>
     /// The lane attempted what it claimed (or found nothing to claim). Whatever is left is retrying on its own

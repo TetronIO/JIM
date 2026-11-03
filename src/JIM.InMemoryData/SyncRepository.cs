@@ -4056,14 +4056,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(released);
     }
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // As with the due-systems read above, this fake has no Connected System configuration to restrict to
         // enabled systems by; every queued change counts.
         var changes = _pendingPasswordChanges.Values.ToList();
         var retrying = changes.Where(c => c.Status == PendingPasswordChangeStatus.Pending && c.NextRetryAt > asOf).ToList();
 
-        return Task.FromResult(new PasswordQueueDeliveryOutlook
+        return Task.FromResult(new DeliveryQueueOutlook
         {
             DueCount = changes.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
             RetryingCount = retrying.Count,
