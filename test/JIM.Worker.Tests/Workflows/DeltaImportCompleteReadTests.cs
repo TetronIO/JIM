@@ -235,6 +235,52 @@ public class DeltaImportCompleteReadTests : WorkflowTestBase
         }
     }
 
+    [Test]
+    public async Task FullImport_LaterPageContradictsTheFirstOnReadingEveryObject_CompletesAndDetectsDeletionsAsync()
+    {
+        // A Full Import reads every object whatever its Connector says, so the answer cannot change what the run does, and
+        // a Connector need not give one there; a contradiction is no reason to fail it.
+        var (connectedSystem, type) = await ArrangeAsync();
+        var held = SeedHeld(connectedSystem, type, 3);
+
+        var (activity, _) = await RunImportAsync(connectedSystem, [[Present(type, held[0])], [Present(type, held[1])]],
+            completeReadByPage: [true, false], runType: ConnectedSystemRunType.FullImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await StatusesAsync(connectedSystem, held), Is.EqualTo(new[]
+            {
+                ConnectedSystemObjectStatus.Normal, ConnectedSystemObjectStatus.Normal, ConnectedSystemObjectStatus.Obsolete
+            }));
+            Assert.That(DeletionItems(activity), Has.Count.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public async Task DeltaImport_CancelledWhileALaterPageContradictsTheFirst_IsCancelledNotFailedAsync()
+    {
+        // A Connector that notices the cancellation hands back an empty page that says nothing about how it reads. The
+        // run is abandoned before anything uses the answer, so it ends as cancelled, not as a fault in the Connector.
+        var (connectedSystem, type) = await ArrangeAsync();
+        connectedSystem.PersistedConnectorData = "original-watermark";
+        var held = SeedHeld(connectedSystem, type, 3);
+        using var cancellation = new CancellationTokenSource();
+
+        await RunImportAsync(connectedSystem, [[Present(type, held[0], "Changed")], []], completeReadByPage: [true, false],
+            firstPageWatermark: "new-watermark", cancellation: cancellation, beforePage: page =>
+            {
+                if (page == 1)
+                    cancellation.Cancel();
+            });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await StatusesAsync(connectedSystem, held), Is.All.EqualTo(ConnectedSystemObjectStatus.Normal));
+            Assert.That(await DisplayNamesAsync(connectedSystem, held[0]), Is.EqualTo(new[] { "User 1" }), "nothing read was staged");
+            Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("original-watermark"));
+        }
+    }
+
     #region Helpers
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType Type)> ArrangeAsync()
@@ -252,15 +298,22 @@ public class DeltaImportCompleteReadTests : WorkflowTestBase
         return partition;
     }
 
-    private async Task<(Activity Activity, ConnectedSystemRunProfile RunProfile)> RunDeltaImportAsync(ConnectedSystem connectedSystem,
+    private Task<(Activity Activity, ConnectedSystemRunProfile RunProfile)> RunDeltaImportAsync(ConnectedSystem connectedSystem,
         List<List<ConnectedSystemImportObject>> pages, IReadOnlyList<bool>? completeReadByPage = null, int? maxCount = null, int? maxPercent = null,
-        string? firstPageWatermark = null, ConnectedSystemPartition? partition = null)
+        string? firstPageWatermark = null, ConnectedSystemPartition? partition = null) =>
+        RunImportAsync(connectedSystem, pages, completeReadByPage, maxCount, maxPercent, firstPageWatermark, partition);
+
+    private async Task<(Activity Activity, ConnectedSystemRunProfile RunProfile)> RunImportAsync(ConnectedSystem connectedSystem,
+        List<List<ConnectedSystemImportObject>> pages, IReadOnlyList<bool>? completeReadByPage = null, int? maxCount = null, int? maxPercent = null,
+        string? firstPageWatermark = null, ConnectedSystemPartition? partition = null,
+        ConnectedSystemRunType runType = ConnectedSystemRunType.DeltaImport, CancellationTokenSource? cancellation = null,
+        Action<int>? beforePage = null)
     {
-        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, "Delta Import", ConnectedSystemRunType.DeltaImport);
+        var runProfile = await CreateRunProfileAsync(connectedSystem.Id, runType == ConnectedSystemRunType.FullImport ? "Full Import" : "Delta Import", runType);
         runProfile.MaxDetectedDeletions = maxCount;
         runProfile.MaxDetectedDeletionsPercent = maxPercent;
         runProfile.Partition = partition;
-        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, ConnectedSystemRunType.DeltaImport);
+        var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, runType);
         var workerTask = new SynchronisationWorkerTask(connectedSystem.Id, runProfile.Id)
         {
             Id = Guid.NewGuid(),
@@ -270,7 +323,8 @@ public class DeltaImportCompleteReadTests : WorkflowTestBase
 
         var processor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
-            new PagedImportConnector(pages, firstPageWatermark, completeReadByPage), connectedSystem, runProfile, workerTask, new CancellationTokenSource());
+            new PagedImportConnector(pages, firstPageWatermark, completeReadByPage, beforePage), connectedSystem, runProfile, workerTask,
+            cancellation ?? new CancellationTokenSource());
         await processor.PerformImportAsync();
         return (activity, runProfile);
     }

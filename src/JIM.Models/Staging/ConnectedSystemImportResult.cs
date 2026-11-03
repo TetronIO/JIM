@@ -41,9 +41,10 @@ public class ConnectedSystemImportResult
     /// JIM treats every Full Import as a complete read whatever this says, so a Connector need not set it there; a
     /// Connector whose fallback runs its Full Import code may set it in that code, and so on both run types.
     ///
-    /// JIM decides from the first page, before it processes a single object, because how the run treats what it reads
-    /// depends on the answer, and every later page must give the same answer: a page that contradicts the first fails the
-    /// run before anything is saved. A Connector cannot change how it reads part-way through a run.
+    /// JIM decides from the first page, before it processes a single object, because how a Delta Import treats what it
+    /// reads depends on the answer, and every later page of a Delta Import must give the same answer: a page that
+    /// contradicts the first fails the run before anything is saved. A Connector cannot change how it reads part-way
+    /// through a run. A page returned once the run is being cancelled is not held to it.
     ///
     /// This covers every Partition the Run Profile reads. #2715 generalises it to the set of Partitions read completely,
     /// so that a run reading some Partitions in full and others by their changes detects deletions only in the former;

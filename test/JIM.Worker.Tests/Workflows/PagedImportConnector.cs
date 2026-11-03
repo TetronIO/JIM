@@ -13,9 +13,11 @@ namespace JIM.Worker.Tests.Workflows;
 /// the first page, as a Connector's new Delta Import watermark is. <paramref name="completeReadByPage"/> says, page by
 /// page, whether the Connector read every object in the run's scope (<see cref="ConnectedSystemImportResult.CompleteRead"/>),
 /// as one that falls back to a full read does; a page beyond the list, and every page when it is null, says it did not.
+/// <paramref name="beforePage"/>, when given, is called with each page's index (from 0) before that page is returned, so a
+/// test can act part-way through a run, as an administrator cancelling it does.
 /// </summary>
 internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject>> pages, string? firstPageWatermark = null,
-    IReadOnlyList<bool>? completeReadByPage = null) : IConnector, IConnectorImportUsingCalls
+    IReadOnlyList<bool>? completeReadByPage = null, Action<int>? beforePage = null) : IConnector, IConnectorImportUsingCalls
 {
     private int _nextPage;
 
@@ -37,6 +39,7 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
         IConnectorProgress progress)
     {
         var pageIndex = _nextPage++;
+        beforePage?.Invoke(pageIndex);
         var page = pages[pageIndex];
         var result = new ConnectedSystemImportResult
         {

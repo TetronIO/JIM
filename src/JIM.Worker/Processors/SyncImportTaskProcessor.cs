@@ -4901,14 +4901,20 @@ public class SyncImportTaskProcessor
 
     /// <summary>
     /// #2720: records what the Connector said on the run's first page about whether it read every object in the Run
-    /// Profile's scope, and holds every later page to it. The first page decides, as it does the watermark, because the
-    /// answer governs how the run treats what it reads: whether an object JIM holds and the run did not return is gone.
-    /// A later page that contradicts it leaves JIM unable to say, so the run fails before anything is staged and the
-    /// watermark it started with stays in place.
+    /// Profile's scope, and holds every later page of a Delta Import to it. The first page decides, as it does the
+    /// watermark, because the answer governs how a Delta Import treats what it reads: whether an object JIM holds and the
+    /// run did not return is gone. A later page that contradicts it leaves JIM unable to say, so the run fails before
+    /// anything is staged and the watermark it started with stays in place.
+    /// <para>
+    /// Two runs are not held to it. A Full Import reads every object whatever its Connector says, so the answer cannot
+    /// change what it does, and a Connector need not give one there. A run being cancelled is abandoned before anything
+    /// uses the answer, and a Connector that notices the cancellation can hand back an empty page that says nothing
+    /// about how it reads; failing that run as a fault in the Connector would misreport it.
+    /// </para>
     /// </summary>
     /// <param name="result">The page the Connector has just returned.</param>
     /// <param name="pageNumber">The page's number in the run, counting from 1.</param>
-    /// <exception cref="InvalidDataException">A later page says otherwise than the first.</exception>
+    /// <exception cref="InvalidDataException">A later page of a Delta Import says otherwise than the first.</exception>
     private void RecordWhetherTheConnectorReadEveryObject(ConnectedSystemImportResult result, int pageNumber)
     {
         if (_connectorReadEveryObject is not { } firstPageSaid)
@@ -4924,7 +4930,9 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        if (result.CompleteRead == firstPageSaid)
+        if (result.CompleteRead == firstPageSaid
+            || _connectedSystemRunProfile.RunType != ConnectedSystemRunType.DeltaImport
+            || _cancellationTokenSource.IsCancellationRequested)
             return;
 
         Log.Error("PerformImportAsync: The Connector said on page 1 that it {FirstPage} every object in scope, and on page {PageNumber} that it {LaterPage}. " +
