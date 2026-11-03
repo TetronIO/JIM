@@ -85,7 +85,10 @@ public class ReferenceDisplayIdentifierDatabaseTests
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
         var identifiers = await repository.Sync.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(shapes, s.SystemId);
-        var fullyLoaded = await repository.Sync.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(shapes, s.SystemId);
+        var fullyLoaded = await ctx.ConnectedSystemObjects.AsNoTracking()
+            .Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == s.SystemId && cso.MetaverseObjectId.HasValue && shapes.Contains(cso.MetaverseObjectId.Value))
+            .ToDictionaryAsync(cso => cso.MetaverseObjectId!.Value);
 
         using (Assert.EnterMultipleScope())
         {

@@ -27,7 +27,8 @@ namespace JIM.Web.Api.Tests;
 /// Issue #1398: the Pending Export detail (portal, REST, PowerShell all read this one result) explains each
 /// reference that has not been written yet, computed against the target's current state: the referenced object
 /// has an object with an anchor (will resolve next run), an object without one (waiting), or no object at all
-/// (cannot resolve as things stand).
+/// (cannot resolve as things stand). The target's state is read as anchors only (#2574): the full objects, with
+/// every attribute value, are never loaded for this.
 /// </summary>
 [TestFixture]
 public class PendingExportUnresolvedReferenceDetailTests
@@ -67,13 +68,8 @@ public class PendingExportUnresolvedReferenceDetailTests
         Status = PendingExportAttributeChangeStatus.Pending
     };
 
-    private ConnectedSystemObject TargetCso(bool withAnchor)
-    {
-        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = ConnectedSystemId, ExternalIdAttributeId = _anchorAttr.Id };
-        if (withAnchor)
-            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { Attribute = _anchorAttr, AttributeId = _anchorAttr.Id, IntValue = 42 });
-        return cso;
-    }
+    private static ReferenceAnchorSummary TargetAnchor(bool withAnchor) =>
+        new(Guid.NewGuid(), withAnchor ? "42" : null, IsSecondaryExternalId: false);
 
     private PendingExport SetupDetail(params PendingExportAttributeValueChange[] changes)
     {
@@ -111,13 +107,13 @@ public class PendingExportUnresolvedReferenceDetailTests
         var pe = SetupDetail(resolvable, awaiting, missing);
 
         _connectedSystems
-            .Setup(r => r.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-                It.Is<IEnumerable<Guid>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { resolvableMvo, awaitingMvo, missingMvo }.OrderBy(i => i))),
+            .Setup(r => r.GetReferenceAnchorsByMetaverseObjectIdsAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.OrderBy(i => i).SequenceEqual(new[] { resolvableMvo, awaitingMvo, missingMvo }.OrderBy(i => i))),
                 ConnectedSystemId))
-            .ReturnsAsync(new Dictionary<Guid, ConnectedSystemObject>
+            .ReturnsAsync(new Dictionary<Guid, ReferenceAnchorSummary>
             {
-                [resolvableMvo] = TargetCso(withAnchor: true),
-                [awaitingMvo] = TargetCso(withAnchor: false)
+                [resolvableMvo] = TargetAnchor(withAnchor: true),
+                [awaitingMvo] = TargetAnchor(withAnchor: false)
             });
         _metaverse
             .Setup(r => r.GetMetaverseObjectDisplayNamesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
@@ -159,7 +155,7 @@ public class PendingExportUnresolvedReferenceDetailTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(dto.UnresolvedReferences, Is.Empty);
-            _connectedSystems.Verify(r => r.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<int>()), Times.Never);
+            _connectedSystems.Verify(r => r.GetReferenceAnchorsByMetaverseObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<int>()), Times.Never);
             _metaverse.Verify(r => r.GetMetaverseObjectDisplayNamesAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Never);
         }
     }

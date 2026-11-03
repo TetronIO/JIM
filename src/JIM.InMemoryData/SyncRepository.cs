@@ -3219,13 +3219,12 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> or
-    /// <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/> has been asked for, in call order, so a test
-    /// can prove a lookup is not repeated (#2492).
+    /// Every (Metaverse Object, Connected System) <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/>
+    /// has been asked for, in call order, so a test can prove a lookup is not repeated (#2492).
     /// </summary>
     public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
 
-    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+    private Dictionary<Guid, ConnectedSystemObject> FindConnectedSystemObjectsByMetaverseObjectIds(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
     {
         var result = new Dictionary<Guid, ConnectedSystemObject>();
@@ -3246,15 +3245,15 @@ public class SyncRepository : ISyncRepository
             }
         }
 
-        return Task.FromResult(result);
+        return result;
     }
 
-    public async Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
+    public Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
     {
         // The store's objects carry every value, so the identifier is the model's own rule over the whole object.
-        var objects = await GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
-        return objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString());
+        var objects = FindConnectedSystemObjectsByMetaverseObjectIds(metaverseObjectIds, connectedSystemId);
+        return Task.FromResult(objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString()));
     }
 
     public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(

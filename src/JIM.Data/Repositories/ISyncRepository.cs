@@ -1763,14 +1763,6 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
 
     /// <summary>
-    /// Gets CSOs joined to multiple MVOs within a Connected System.
-    /// Returns a dictionary keyed by MVO ID for O(1) lookup.
-    /// Used for reference resolution during export processing.
-    /// </summary>
-    Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
-
-    /// <summary>
     /// Per Metaverse Object joined to an object in the Connected System, the identifier a change record shows for a
     /// reference to that object: exactly what <c>ExportChangeHistoryBuilder.GetCsoDisplayIdentifier</c> gives for the
     /// object (its name, else its external id, else its secondary external id, else its id). Summary tier (#2598): a
