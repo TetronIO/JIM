@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.LDAP;
+using JIM.Models.Activities;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using Moq;
@@ -16,8 +17,9 @@ namespace JIM.Worker.Tests.Connectors;
 /// An OpenLDAP import takes its next watermark from cn=accesslog on its first page, and on a directory without the
 /// sssvlv overlay that means walking the log. These tests drive the whole import against a scripted directory to show
 /// that the walk starts from the watermark the last import left, on a Delta Import and on a Full Import after the
-/// first (#2704); that it is confined to the partitions the run imports from, as the change read is (#2712); and that
-/// the checks which read that watermark back behave as they always did.
+/// first (#2704); that it is confined to the partitions the run imports from, as the change read is (#2712); that
+/// the checks which read that watermark back behave as they always did; and that a Delta Import with no watermark to
+/// read changes after reads every object instead, and says that it did (#2720).
 /// </summary>
 [TestFixture]
 public class LdapConnectorImportAccesslogWatermarkTests
@@ -204,6 +206,48 @@ public class LdapConnectorImportAccesslogWatermarkTests
         }
     }
 
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_PreviousWatermark_ReadsOnlyChangesAsync()
+    {
+        Log(EarlierWrite, Watermark, LaterWrite);
+
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark)).GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CompleteRead, Is.False, "a Delta Import that reads changes has not read every object, so absence says nothing");
+            Assert.That(result.WarningErrorType, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_PreviousRecordHoldsNoWatermark_ReadsEveryObjectInsteadAndSaysSoAsync()
+    {
+        // The last import's record has no accesslog position, so there is nothing to read changes after: the Delta
+        // Import reads everything, and tells JIM so, which is what has JIM detect deletions by absence.
+        Log(EarlierWrite, Watermark);
+
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(lastAccesslogTimestamp: null)).GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.CompleteRead, Is.True);
+            Assert.That(result.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
+            Assert.That(result.WarningMessage, Does.Contain("Every object was read instead").And.Contain("marked as deleted"));
+            Assert.That(_changeRead, Is.Null, "no changes were read: the run read every object instead");
+        }
+    }
+
+    [Test]
+    public async Task GetFullImportObjectsAsync_ReadsEveryObjectAsync()
+    {
+        Log(EarlierWrite, Watermark);
+
+        var result = await NewImport(ConnectedSystemRunType.FullImport, PersistedState(Watermark)).GetFullImportObjectsAsync();
+
+        Assert.That(result.CompleteRead, Is.True);
+    }
+
     #region Helpers
 
     /// <summary>Logs writes to an entry within the partition, in the order given.</summary>
@@ -275,13 +319,13 @@ public class LdapConnectorImportAccesslogWatermarkTests
         return import;
     }
 
-    private static string PersistedState(string lastAccesslogTimestamp) =>
+    private static string PersistedState(string? lastAccesslogTimestamp) =>
         JsonSerializer.Serialize(new LdapConnectorRootDse
         {
             DirectoryType = LdapDirectoryType.OpenLDAP,
             VendorName = "OpenLDAP",
             LastAccesslogTimestamp = lastAccesslogTimestamp,
-            LastAccesslogTimestampIsLogged = true
+            LastAccesslogTimestampIsLogged = lastAccesslogTimestamp != null
         });
 
     private static LdapConnectorRootDse Read(string? json)

@@ -187,7 +187,9 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
             ChangedUpTo = _run.ChangedAfter == null ? null : _run.Horizon
         }, cancellationToken);
 
-        var result = new ConnectedSystemImportResult();
+        // A run with no range to read changes after reads every live resource, on a Full Import and on a Delta Import with no
+        // watermark alike, and every page says so: that is what has JIM detect deletions by absence on the latter (#2720).
+        var result = new ConnectedSystemImportResult { CompleteRead = _run.ChangedAfter == null };
         var overflows = new List<string>();
         result.ImportObjects.AddRange(page.Resources
             .Select(resource => ToImportObject(resource, page.References, overflows))
@@ -232,7 +234,9 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
         {
             if (previous == null)
             {
-                warning = "A Delta Import was requested, but no previous import has recorded how far it read. Every resource was read instead, which has established the watermark, so the next Delta Import should run normally.";
+                warning = "A Delta Import was requested, but no previous import has recorded how far it read. Every resource was read instead, as a Full Import does, " +
+                          "and an object JIM holds that the store no longer has is marked as deleted, within this Run Profile's deletion limits. Once a run like this " +
+                          "has finished that check, it records how far it read and the next Delta Import reads only the changes after it.";
                 logger.Warning("SCIM 2.0 Service Provider import: {Warning}", warning);
             }
             else if (previous < purgeFloor)

@@ -398,8 +398,13 @@ public class SqlConnectorDeltaImportTests
 
         var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 10, Store(PersonWatermark(SqlDeltaImportMode.ChangeLogTable, "2")));
 
-        Assert.That(AnchorValues(run), Is.EqualTo(new[] { 3 }),
-            "A Delta Import reads what changed since it last looked, which is the entire point of persisting a watermark.");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(AnchorValues(run), Is.EqualTo(new[] { 3 }),
+                "A Delta Import reads what changed since it last looked, which is the entire point of persisting a watermark.");
+            Assert.That(run.Pages.Select(page => page.CompleteRead), Is.All.False,
+                "A read of changes has not read every object, so an object it did not return says nothing about whether it is gone.");
+        }
     }
 
     [Test]
@@ -727,6 +732,25 @@ public class SqlConnectorDeltaImportTests
             Assert.That(run.ImportObjects.Select(importObject => importObject.ChangeType), Is.All.EqualTo(ObjectChangeType.NotSet),
                 "The run really is a Full Import, so what is a create and what is an update stays JIM's to work out.");
             Assert.That(PersonWatermarkValueOf(store.Value), Is.EqualTo("1"), "Falling back forever would be the worst of both; the fallback leaves a watermark behind.");
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_DeltaWithNoPersistedWatermarkAcrossSeveralPages_SaysOnEveryPageThatItReadEveryObject()
+    {
+        // #2720: JIM detects deletions by absence only on a run that read everything, and every page of the run must
+        // say the same, so the fallback says it on every page it returns.
+        var provider = ChangeLogProvider(
+            employees: [[1, "Ada"], [2, "Grace"], [3, "Katherine"]],
+            changes: [[1, 1, "I"]]);
+
+        var run = await RunDeltaAsync(provider, ChangeLogDocument, PersonSystem(), pageSize: 1, Store(null));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.Pages, Has.Count.GreaterThan(1), "the fallback has to page for this test to mean anything");
+            Assert.That(run.Pages.Select(page => page.CompleteRead), Is.All.True);
+            Assert.That(run.Pages[0].WarningMessage, Does.Contain("Every object was read instead").And.Contain("marked as deleted"));
         }
     }
 

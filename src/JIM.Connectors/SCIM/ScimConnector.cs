@@ -376,6 +376,10 @@ public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorImpor
             result = await import.ImportPageAsync(position, filter: null, cancellationToken);
         }
 
+        // Every page says whether the run reads every resource, the first included, so JIM can hold the run to one answer
+        // and detect deletions by absence where it does (#2720). Read after the retry above, which can change the plan.
+        result.CompleteRead = _importPlan.ReadsEveryResource;
+
         // Reported on the first page, because JIM keeps the first warning a run produces. Where the page
         // has one of its own, both are kept: a fallback to a full scan and an attribute JIM could not
         // hold are separate things an administrator needs to know about.

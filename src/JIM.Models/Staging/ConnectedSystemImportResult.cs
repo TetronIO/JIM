@@ -31,6 +31,27 @@ public class ConnectedSystemImportResult
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
+    /// Whether this import read every object in the Run Profile's scope, as a Full Import does, rather than only what has
+    /// changed. Set it on every page of a Delta Import that reads everything instead of its changes: one that falls back
+    /// to a full read because it has no watermark, or cannot continue from the one it has, and one configured to read
+    /// everything. JIM then detects deletions by absence, exactly as it does on a Full Import: an object JIM holds that
+    /// the run did not return is marked as deleted, within the Run Profile's deletion limits and the Partition it targets.
+    /// </summary>
+    /// <remarks>
+    /// JIM treats every Full Import as a complete read whatever this says, so a Connector need not set it there; a
+    /// Connector whose fallback runs its Full Import code may set it in that code, and so on both run types.
+    ///
+    /// JIM decides from the first page, before it processes a single object, because how the run treats what it reads
+    /// depends on the answer, and every later page must give the same answer: a page that contradicts the first fails the
+    /// run before anything is saved. A Connector cannot change how it reads part-way through a run.
+    ///
+    /// This covers every Partition the Run Profile reads. #2715 generalises it to the set of Partitions read completely,
+    /// so that a run reading some Partitions in full and others by their changes detects deletions only in the former;
+    /// a Connector setting this today is saying that set is every Partition the run targets.
+    /// </remarks>
+    public bool CompleteRead { get; set; }
+
+    /// <summary>
     /// Optional warning message from the connector. When set, the import completes and the message is
     /// recorded on the Activity itself, deliberately not as an RPEI (a phantom RPEI with no CSO
     /// association would inflate the error counts). Use this to communicate non-fatal operational

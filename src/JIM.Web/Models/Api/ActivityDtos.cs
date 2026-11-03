@@ -620,10 +620,11 @@ public class ActivityDetailDto
     /// How many Connected System Objects the Run Profile's Max detected deletions and Max detected deletions
     /// percent limits withheld this run; those objects are left as they are, not marked as deleted. Populated (zero
     /// when nothing was withheld) on every Full Import Activity that ran deletion detection and every Delta Import
-    /// Activity that completed, where it counts the deletes the Connector reported; null on every other Activity,
+    /// Activity that completed, where it counts the deletes the Connector reported, and the objects deletion detection
+    /// no longer found when the Delta Import read every object instead of its changes; null on every other Activity,
     /// including a Full Import that imported zero objects and so skipped detection entirely.
     /// </summary>
-    /// <remarks>Run Profile Safeguards (#1618), Layer 2.</remarks>
+    /// <remarks>Run Profile Safeguards (#1618), Layer 2; a Delta Import that read every object, #2720.</remarks>
     public int? DetectedDeletionsWithheld { get; set; }
 
     /// <summary>

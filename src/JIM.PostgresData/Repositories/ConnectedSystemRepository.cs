@@ -4236,7 +4236,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// identical eligibility, but projects only the Pending Export id, the Connected System Object id,
     /// and the Connected System Object's primary External Id value as typed nullable columns, without
     /// materialising the Pending Export / attribute-change / Connected System Object / attribute-value
-    /// graph the full query loads. A Full Import's unseen exported-Create retry step
+    /// graph the full query loads. The unseen exported-Create retry step of an import that read every object
     /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) uses this to decide "was
     /// this candidate seen this run?" for every candidate, then loads the full graph only for the
     /// (usually far smaller, often empty) subset genuinely unseen.
