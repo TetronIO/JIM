@@ -158,6 +158,53 @@ public class WSManMessagesTests
         Assert.That(first, Is.Not.EqualTo(second).And.StartsWith("uuid:"));
     }
 
+    /// <summary>
+    /// The service may ignore the ShellId the client proposes and assign its own; Exchange does (2026-11-01 lab
+    /// window, w:InvalidSelectors on the first Receive). Every later message must select the shell by the one the
+    /// service returned.
+    /// </summary>
+    [Test]
+    public void ParseCreate_ServiceAssignedItsOwnShellId_ReturnsTheServicesId()
+    {
+        var assigned = Guid.Parse("c0ffee00-3333-4d44-8e55-aabbccddeeff");
+        var reply = Reply(
+            $"<x:ResourceCreated xmlns:x=\"http://schemas.xmlsoap.org/ws/2004/09/transfer\"><a:Address>http://ex1/wsman</a:Address>" +
+            $"<a:ReferenceParameters><w:ResourceURI xmlns:w=\"{W}\">http://schemas.microsoft.com/powershell/Microsoft.Exchange</w:ResourceURI>" +
+            $"<w:SelectorSet xmlns:w=\"{W}\"><w:Selector Name=\"ShellId\">{assigned.ToString().ToUpperInvariant()}</w:Selector></w:SelectorSet>" +
+            "</a:ReferenceParameters></x:ResourceCreated>" +
+            $"<rsp:Shell xmlns:rsp=\"{Rsp}\"><rsp:ShellId>{assigned.ToString().ToUpperInvariant()}</rsp:ShellId></rsp:Shell>");
+
+        Assert.That(WSManMessages.ParseCreate(reply, proposedShellId: ShellId), Is.EqualTo(assigned));
+    }
+
+    [Test]
+    public void ParseCreate_OnlyTheEndpointReference_ReturnsItsShellIdSelector()
+    {
+        var assigned = Guid.Parse("c0ffee00-3333-4d44-8e55-aabbccddeeff");
+        var reply = Reply(
+            $"<x:ResourceCreated xmlns:x=\"http://schemas.xmlsoap.org/ws/2004/09/transfer\"><a:ReferenceParameters>" +
+            $"<w:SelectorSet xmlns:w=\"{W}\"><w:Selector Name=\"ShellId\">{assigned}</w:Selector></w:SelectorSet>" +
+            "</a:ReferenceParameters></x:ResourceCreated>");
+
+        Assert.That(WSManMessages.ParseCreate(reply, proposedShellId: ShellId), Is.EqualTo(assigned));
+    }
+
+    [Test]
+    public void ParseCreate_NoShellIdInTheReply_KeepsTheProposedOne()
+    {
+        var reply = Reply("<x:ResourceCreated xmlns:x=\"http://schemas.xmlsoap.org/ws/2004/09/transfer\"/>");
+
+        Assert.That(WSManMessages.ParseCreate(reply, proposedShellId: ShellId), Is.EqualTo(ShellId));
+    }
+
+    [Test]
+    public void ParseCreate_Fault_Throws()
+    {
+        var reply = Fault(5, "w:AccessDenied", "Access is denied.");
+
+        Assert.That(() => WSManMessages.ParseCreate(reply, proposedShellId: ShellId), Throws.TypeOf<WSManFaultException>());
+    }
+
     [Test]
     public void ParseReceive_StreamsForTheCommand_ReturnsTheirDecodedBytesInOrder()
     {

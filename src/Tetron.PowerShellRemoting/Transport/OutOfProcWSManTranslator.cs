@@ -34,7 +34,11 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
     private readonly RemoteSessionOptions _options;
     private readonly RemoteSessionStatistics _statistics;
     private readonly WSManSessionSettings _settings;
-    private readonly Guid _shellId;
+    private readonly Guid _proposedShellId;
+
+    // The ShellId every message after the Create selects the shell by: the one the service assigned, which need not
+    // be the one proposed (Exchange assigns its own). Written once, by the Create, before any Receive starts.
+    private Guid _shellId;
     private readonly Action<string> _onPacket;
     private readonly Action<Exception> _onError;
     private readonly BlockingCollection<string> _requests = new();
@@ -54,6 +58,7 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
     {
         _options = options;
         _statistics = statistics;
+        _proposedShellId = shellId;
         _shellId = shellId;
         _onPacket = onPacket;
         _onError = onError;
@@ -180,7 +185,9 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
             _sessionOpening.Append(data);
             if (_sessionOpening.IsComplete)
             {
-                Call(WSManMessages.Create(_settings, _shellId, Convert.ToBase64String(_sessionOpening.TakeAll())));
+                var reply = _control.SendAsync(WSManMessages.Create(_settings, _proposedShellId, Convert.ToBase64String(_sessionOpening.TakeAll())), _lifetime.Token)
+                    .GetAwaiter().GetResult();
+                _shellId = WSManMessages.ParseCreate(reply, _proposedShellId);
                 _shellCreated = true;
                 StartReceive(pipeline: null);
             }

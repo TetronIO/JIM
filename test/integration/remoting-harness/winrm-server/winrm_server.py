@@ -262,7 +262,10 @@ def handle(envelope_bytes: bytes) -> bytes:
     if action == ACTION_CREATE:
         resource_uri = envelope.findtext("s:Header/w:ResourceURI", namespaces=NS)
         shell_element = envelope.find("s:Body/rsp:Shell", NS)
-        shell_id = (shell_element.get("ShellId") or str(uuid.uuid4())).upper()
+        # Exchange's IIS-hosted WinRM ignores the ShellId the client proposes and assigns its own, returned in this
+        # reply, and refuses any later message selecting the proposed one with w:InvalidSelectors. This server does the
+        # same, so the harness catches a client that keeps using its own.
+        shell_id = str(uuid.uuid4()).upper()
         creation = shell_element.findtext("{http://schemas.microsoft.com/powershell}creationXml") or ""
         shell = Shell(shell_id, resource_uri)
         with SHELLS_LOCK:

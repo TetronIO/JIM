@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b has proven Kerberos, encryption and framing against Exchange, and found an OptionSet fault in the shell Create, now fixed and awaiting re-test; Phase 3 waits for the next Exchange window)
+- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b has proven Kerberos, encryption, framing and the shell Create against Exchange, and found that Exchange assigns its own ShellId, now handled and awaiting re-test; Phase 3 waits for the next Exchange window)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -208,6 +208,19 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 1b: third run against Exchange (2026-11-01)
+
+**The OptionSet fix holds: Exchange now accepts the shell Create. Every test then failed on the first Receive, because Exchange assigns its own ShellId; the client now uses it.** One read-only run of `ExchangeLabTests` at `191537be5` (which carries the fix, `0ea4d75a0`), from 20:52 to 20:59 UTC, against `ex1.panoply.local` as svc-jim:
+
+- **What failed:** all six tests, at the step after the Create. The first Receive was refused with `w:InvalidSelectors` (WinRM fault 2150858843, PowerShell's `WSMan-InvalidShellID`), deterministically across a rerun. The write suite did not run.
+- **The cause:** Exchange ignores the ShellId the client proposes in the Create and assigns its own, returned in the Create reply. The client kept selecting the shell by the id it proposed. Windows' own remoting client, run against ex1 as the control, took the id Exchange returned.
+- **Fixed:**
+  - The client reads the ShellId from the Create reply (the `rsp:Shell` element, else the endpoint reference's selector) and selects the shell by it in every later message.
+  - The stand-in server now assigns its own ShellId as Exchange does. With the client fix reverted, the harness reproduces the lab's fault exactly (2150858843, `w:InvalidSelectors`); with it, the whole suite passes against the harness.
+- **Cleanup:** none needed. No `jimspike*` object was left in Exchange or Active Directory, ex1 was shut down, and the svc-jim password file on the runner was deleted.
+
+The next window needs about 30 minutes: the read-only suite, then the write suite.
 
 ### Phase 1b: second run against Exchange (2026-11-01)
 

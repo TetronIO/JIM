@@ -116,6 +116,19 @@ public static class WSManMessages
         throw new WSManFaultException(code, subcode, message.Trim());
     }
 
+    /// <summary>
+    /// Parses a Create reply into the ShellId every later message must select the shell by. The service may ignore the
+    /// id the client proposed and assign its own (Exchange's IIS-hosted WinRM does), so the reply's id wins: the
+    /// <c>rsp:Shell</c> element's, else the endpoint reference's ShellId selector, else the proposed one.
+    /// </summary>
+    public static Guid ParseCreate(byte[] reply, Guid proposedShellId)
+    {
+        var body = ThrowIfFault(reply).Root?.Element(S + "Body");
+        var assigned = body?.Element(Rsp + "Shell")?.Element(Rsp + "ShellId")?.Value
+                       ?? body?.Descendants(W + "Selector").FirstOrDefault(s => s.Attribute("Name")?.Value == "ShellId")?.Value;
+        return Guid.TryParse(assigned?.Trim(), out var shellId) ? shellId : proposedShellId;
+    }
+
     /// <summary>Parses a Receive reply into its stdout payloads and whether the command has finished.</summary>
     public static WSManReceiveResult ParseReceive(byte[] reply)
     {
