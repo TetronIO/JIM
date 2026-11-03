@@ -1,7 +1,7 @@
 # Podman Support - RHEL Acceptance Run
 
-- **Status:** Doing (written; not yet run)
-- **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
+- **Status:** Done (run by the deployment lab, 2026-11-03; see [Results](#results))
+- **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808); results recorded by [#2698](https://github.com/TetronIO/JIM/issues/2698)
 - **Plan:** [PODMAN_SUPPORT.md](PODMAN_SUPPORT.md) (D5, D12, Phase 4 step 6)
 
 The last open item on #1808. CI's `deployment-boot` installs JIM on Podman, rootful and rootless, on every pull request, but on GitHub's Ubuntu runner: not RHEL, not SELinux-enforcing, no NetworkManager managing the network, and no machine other than the server itself signing in. This run covers what CI cannot, on the platform the work is for.
@@ -133,6 +133,39 @@ Deviations from the documentation, and issues filed:
 
 The same pull request then:
 
-- ticks the two open Phase 2 criteria in `engineering/prd/doing/PRD_PODMAN_SUPPORT.md` (booting on RHEL 9 and 10, and rootless on a real RHEL host);
+- ticks the two open Phase 2 criteria in `engineering/prd/done/PRD_PODMAN_SUPPORT.md` (booting on RHEL 9 and 10, and rootless on a real RHEL host);
 - marks Phase 4 step 6 of the plan ✅, and moves this file, the plan and the PRD to `done/` with `Status: Done`, updating the links between them;
 - says `Closes #1808`.
+
+## Results
+
+Recorded 2026-11-03 ([#2698](https://github.com/TetronIO/JIM/issues/2698)). The run was not made by hand on a RHEL virtual machine, as written above: it is made by the deployment lab (`test/ci/deployment/lab/`, `deploy-lab.yml`), nightly and on every release, so it does not go stale. AlmaLinux 9 stands in for RHEL 9 and CentOS Stream 10 for RHEL 10 (LXD's image server has no AlmaLinux or Rocky Linux 10 image). Every cell is air-gapped, and checks from the lab host, another machine, trusting only the certificate authority JIM's certificate came from.
+
+| Host | OS | Kernel | Podman | SELinux | firewalld | systemd-container | Memory |
+|------|----|--------|--------|---------|-----------|-------------------|--------|
+| `alma9-podman` | AlmaLinux 9.8 | 5.14.0-687 | 5.8.2 | Enforcing | active | not added | 6 GB |
+| `cs10-podman` | CentOS Stream 10 | 6.12.0-279 | 6.1.0 | Enforcing | active | not added | 6 GB |
+
+| Route | 1 Ready | 2 No AVCs | 3 HTTPS | 4 Sign-in | 5 File Connector | 6 Restart | 7 Reboot | 8 firewalld | 9 NM | 10 Renew |
+|-------|---------|-----------|---------|-----------|------------------|-----------|----------|-------------|------|----------|
+| A, RHEL 10 (`cs10-podrf-ag`) | ✅ | ✅ | ✅ | ✅ | volume only | ✅ | ✅ | not run | not run | not run |
+| A, RHEL 9 (`alma9-podrf-ag`, `-cases`, `-soak`) | ✅ | ✅ | ✅ | ✅ | volume only | ✅ (20 in the soak) | ✅ (5 in the soak) | not run | by the soak | ✅ |
+| B, RHEL 10 (`cs10-podrl-ag`) | ✅ | ✅ | ✅ | ✅ | volume only | ✅ | ✅ | n/a | n/a | not run |
+| B, RHEL 9 (`alma9-podrl-ag`, `-cases`) | ✅ | ✅ | ✅ | ✅ | volume only | ✅ | ✅ | n/a | n/a | ✅ |
+| C rootful (`alma9-podrf-ansible`, `cs10-podrf-ansible`) | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | ✅ | ✅ | not run | n/a |
+| C rootless (`alma9-podrl-ansible`, `cs10-podrl-ansible`) | ✅ | ✅ | ✅ | ✅ | n/a | ✅ | ✅ | n/a | n/a | n/a |
+| D (`alma9-podrf-up-oldest`) | ✅ | ✅ | ✅ | ✅ | n/a | n/a | ✅ | not run | not run | n/a |
+| E (Apache httpd) | not run | | | | | | | | | |
+
+- **Check 2** reads the journal (`journalctl -b | grep 'avc: denied'`) rather than `ausearch`: the lab's images, like LXD's, have no auditd, so the kernel logs denials itself. Every AlmaLinux and CentOS Stream cell runs it as it ends, and the Ansible cells also before their reboot.
+- **Check 5** is covered only as far as the File Connector volume keeping a file through a restart (`Invoke-DeploymentBoot.ps1`); a labelled `hostPath` folder is not tested.
+- **Check 9** is not checked directly; the Soak cell's 20 restarts are what #2009 (the fault it guards) failed.
+- **Route D** is also run by `alma9-podrf-up` and `alma9-podrl-up`, from the previous release, with their firewalld reload service and NetworkManager notes.
+
+Deviations from the documentation, all fixed in `docs/administration/deploying-with-ansible.md`:
+
+- An air-gapped server: the podman role downloads every image even when it is already loaded (`podman_pull_image` defaults to true, and the role pulls with `force`), so the page now has `podman_pull_image: false` to uncomment; rootless, the images go into the `jim` account's Podman, so the account must exist before they are loaded.
+- The firewall role asks the package manager for firewalld on every run, which fails while a repository it cannot reach is enabled: the page now says so.
+- Where the vault file goes was not said: `group_vars/jim_servers/vault.yml`.
+
+Found in the lab rather than in JIM: the CentOS Stream 10 image needed a relabel while permissive, then an enforcing boot of its own, and a timezone (`build-lab-images.sh` in `TetronIO/ci-runners`). Nothing was filed against JIM.

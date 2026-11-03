@@ -736,7 +736,7 @@ jobs:
     # is the only check that boots the production deployment of either runtime.
     #
     # A required check on main since 2026-09-29, after 40 green runs and none failed (D6 of
-    # engineering/plans/doing/PODMAN_SUPPORT.md). It pulls Keycloak from quay.io and PostgreSQL from Docker
+    # engineering/plans/done/PODMAN_SUPPORT.md). It pulls Keycloak from quay.io and PostgreSQL from Docker
     # Hub on every run, so an outage at either blocks merges while it lasts.
     #
     # Always on a GitHub-hosted runner, pushes to main included: a fresh VM with systemd, Docker and Podman,

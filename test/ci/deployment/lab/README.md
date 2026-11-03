@@ -16,7 +16,7 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 |------|---------|--------------|
 | `Invoke-DeploymentLab.ps1` | Lab host | Runs the matrix, or part of it, against one bundle, as many cells at once as the host's memory holds, and writes `report.md` |
 | `Invoke-LabCell.ps1` | Lab host | Runs one cell on its own VM; the runner starts one per cell |
-| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase`, `Soak`, `ReverseProxy` |
+| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase`, `Soak`, `ReverseProxy`, `Ansible` |
 | `Invoke-LabUpgradeData.ps1` | Lab host | Gives an upgrade cell's JIM real data, and checks it is all there afterwards |
 | `Build-LabBundle.ps1` | Lab host | Builds a bundle from a commit, as the release workflow does, on a throwaway online VM |
 | `Cells.psd1` | | The matrix: each cell's image, runtime, network, scenario and memory |
@@ -30,8 +30,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 Every cell a run takes by default is air-gapped: its VM sits on a bridge with no route out, and proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
 some are also an InstallerCases cell (`-cases`), an ExternalDatabase cell (`-extdb`), a ReverseProxy cell (`-proxy`,
-`-proxy-local`), or an Upgrade cell from the oldest release a customer can upgrade from (`-up-oldest`), and one is the
-Soak cell (`alma9-podrf-soak`).
+`-proxy-local`), an Ansible cell (`-ansible`), or an Upgrade cell from the oldest release a customer can upgrade from
+(`-up-oldest`), and one is the Soak cell (`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
@@ -39,8 +39,10 @@ Soak cell (`alma9-podrf-soak`).
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
 | `u24-podrl-ag`, `-up`, `-up-oldest` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb`, `-proxy`, `-soak` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
-| `alma9-podrl-ag`, `-up`, `-cases` | AlmaLinux 9 | Podman, rootless |
+| `alma9-podrf-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb`, `-proxy`, `-soak`, `-ansible` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrl-ag`, `-up`, `-cases`, `-ansible` | AlmaLinux 9 | Podman, rootless |
+| `cs10-podrf-ag`, `-ansible` | CentOS Stream 10 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `cs10-podrl-ag`, `-ansible` | CentOS Stream 10 | Podman, rootless |
 
 The online cells install and upgrade as a customer with internet access does, downloading from GitHub and ghcr.io, so
 they test the **latest published release**, not the bundle or commit under test. A run takes them only when asked for
@@ -55,7 +57,8 @@ table:
 | `alma9-podrf-on`, `-on-up` | AlmaLinux 9 | Podman, rootful |
 | `u24-podrl-on`, `-on-up` | Ubuntu 24.04 | Podman, rootless |
 
-AlmaLinux stands in for Red Hat Enterprise Linux 9. The images are each distribution's cloud image with only the
+AlmaLinux stands in for Red Hat Enterprise Linux 9, and CentOS Stream 10 for Red Hat Enterprise Linux 10 (LXD's image
+server has no AlmaLinux or Rocky Linux 10 image). The images are each distribution's cloud image with only the
 container runtime added, so they are as bare as a customer's new host.
 
 ## What an Install cell checks
@@ -77,7 +80,9 @@ container runtime added, so they are as bare as a customer's new host.
    again.
 6. **Nothing crashed quietly**: no container has restarted, and the kernel has logged no fault or AppArmor denial of a
    container since the reboot. A crashing service is restarted and soon looks healthy again, so readiness alone
-   cannot show it (#1953).
+   cannot show it (#1953). On AlmaLinux and CentOS Stream, SELinux is still enforcing and the journal holds no denial
+   since the reboot (the images have no auditd, so the kernel logs denials itself), as every RHEL-family cell checks
+   as it ends.
 
 An online Install cell proves instead that its VM reaches `github.com`, and carries no bundle in: in place of steps 2
 and 3 it runs the installation guide's one-line install (`curl -fsSL https://junctional.io/get | bash`, read from the
@@ -216,6 +221,32 @@ only that CA, so every one of them goes through the proxy.
 A rootless JIM behind a proxy is not tested, as the guide says not to run one; nor is Apache httpd, or more than one
 JIM server behind a load balancer, which is not supported. Both kinds end by checking that nothing crashed quietly.
 
+## What an Ansible cell checks
+
+[Deploying on RHEL with Ansible](../../../../docs/administration/deploying-with-ansible.md) gives a playbook for Red
+Hat's podman system role in place of the installer. An Ansible cell (Podman on an RHEL-family image only; the matrix
+checks this) runs that page's own playbook, taken from the page at run time, on the cell's air-gapped VM:
+
+1. **Ansible and the RHEL System Roles from the distribution's own packages**: a helper VM, `jl-<cell>-ansible`, on the
+   online network (2 GiB), downloads `ansible-core` and `rhel-system-roles` with their dependencies, and the cell
+   installs them with every repository disabled.
+2. **Air-gapped, as the page's air-gapped bullets say**: the release's images loaded with Installing on Podman by
+   Hand's command (rootless, into the `jim` account Rootless, by hand creates), `podman_pull_image: false`
+   uncommented, and the package repositories disabled.
+3. **The playbook folder the page describes**: `files/` from the bundle, `jim-config.yaml` filled in, a certificate
+   from a CA made for the cell, and the secrets in an Ansible Vault file under `group_vars/jim_servers/`, encrypted on
+   the VM. Rootless cells add the page's Rootless `vars` and `pre_tasks`.
+4. **The page's `ansible-playbook` command** runs with no failed task; JIM is ready (trusting only the cell's CA, as
+   the organisation's), its health check passes, the administrator signs in, and the journal holds no SELinux denial.
+5. **Rootful only: a firewalld reload** leaves JIM ready and signing in (the play's `post_tasks`).
+6. **The play run again**, as after a change, with no failed task, and JIM still ready.
+7. **Restarted** as Operating JIM says, and **the host rebooted**: JIM comes back each time with its data (rootless
+   through lingering), signs in, and the journal still holds no SELinux denial (the check every RHEL-family cell
+   ends with).
+
+A helper VM's packages come from the distribution's mirrors, so an Ansible cell needs the online network for its
+first minute, though JIM's own VM never leaves the air-gapped one.
+
 ## What a Soak cell checks
 
 A fault that strikes one restart in a few passes a single restart most of the time: #2009 (NetworkManager unplugging
@@ -266,9 +297,9 @@ shell on it, and `lxc delete --force jl-<cell>` removes it. It keeps its memory 
 count, so a run that keeps several can leave too little for the cells after them.
 
 **How many cells run at once** is decided by memory: each cell's VM is given its `MemoryGiB` (an ExternalDatabase
-cell's database server its `DatabaseMemoryGiB`, and a ReverseProxy cell's proxy its `ProxyMemoryGiB`), and the runner starts cells, largest first, while they fit in the
-host's memory less `ReserveGiB` (Lab.psd1). `-BudgetGiB` and
-`-MaxParallel` override that.
+cell's database server its `DatabaseMemoryGiB`, a ReverseProxy cell's proxy its `ProxyMemoryGiB`, and an Ansible
+cell's helper 2 GiB), and the runner starts cells, largest first, while they fit in the host's memory less
+`ReserveGiB` (Lab.psd1). `-BudgetGiB` and `-MaxParallel` override that.
 
 ## In GitHub Actions
 

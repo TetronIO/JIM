@@ -289,7 +289,7 @@ Rules that keep the two in step:
 - **A setting added to the compose files needs adding to the pod file.** Hardening, environment, mounts and volumes should match; `docker-compose.yml` stays the single source of the PostgreSQL image, which `scripts/Build-PodmanFiles.ps1` renders into the pod files at release.
 - **Nothing is mounted under `/run/secrets`.** On RHEL, Podman mounts a read-only `/run/secrets` of its own into every container, so JIM's certificate is at `/run/jim-tls` on both runtimes.
 
-See [Running on Podman](../docs/administration/podman.md) for the operator's view, and the [Podman support plan](plans/doing/PODMAN_SUPPORT.md) for the decisions behind the design.
+See [Running on Podman](../docs/administration/podman.md) for the operator's view, and the [Podman support plan](plans/done/PODMAN_SUPPORT.md) for the decisions behind the design.
 
 ### Testing
 - **NUnit**: Unit testing framework
