@@ -2731,6 +2731,18 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(queued);
     }
 
+    public Task<List<PendingExchangeChange>> GetExchangeChangesByActivityAsync(IReadOnlyCollection<Guid> activityIds)
+    {
+        var asked = activityIds.ToHashSet();
+        return Task.FromResult(_pendingExchangeChanges.Values.Where(c => asked.Contains(c.ActivityId)).Select(CopyExchangeChange).ToList());
+    }
+
+    public Task<PendingExchangeChange?> GetExchangeChangeForConnectedSystemObjectAsync(Guid connectedSystemObjectId)
+    {
+        var change = _pendingExchangeChanges.Values.SingleOrDefault(c => c.ConnectedSystemObjectId == connectedSystemObjectId);
+        return Task.FromResult(change == null ? null : CopyExchangeChange(change));
+    }
+
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         var asked = connectedSystemObjectIds.ToHashSet();

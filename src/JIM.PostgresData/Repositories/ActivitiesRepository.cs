@@ -763,6 +763,32 @@ public partial class ActivityRepository : IActivityRepository
         };
 
     /// <inheritdoc />
+    public async Task<List<ExchangeChangeEvent>> GetExchangeChangeEventsAsync(IReadOnlyCollection<Guid> changeActivityIds)
+    {
+        if (changeActivityIds.Count == 0)
+            return [];
+
+        // A handful per change at most: the lane records an Activity only when an outcome says something new. Served by
+        // the index on ParentActivityId; projected, so no Activity is materialised.
+        return await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.ParentActivityId != null && changeActivityIds.Contains(a.ParentActivityId.Value))
+            .OrderBy(a => a.Created)
+            .ThenBy(a => a.Id)
+            .Select(a => new ExchangeChangeEvent
+            {
+                ChangeActivityId = a.ParentActivityId!.Value,
+                ActivityId = a.Id,
+                Operation = a.TargetOperationType,
+                Status = a.Status,
+                Message = a.Message,
+                ErrorMessage = a.ErrorMessage,
+                OccurredAt = a.Created
+            })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds)
     {
         if (executionItemIds.Count == 0)

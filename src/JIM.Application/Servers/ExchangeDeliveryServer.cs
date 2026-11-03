@@ -56,6 +56,7 @@ public class ExchangeDeliveryServer
 
     private readonly ISyncRepository _syncRepo;
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
+    private readonly Func<IActivityRepository> _activityRepo;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
@@ -65,6 +66,7 @@ public class ExchangeDeliveryServer
 
     /// <param name="syncRepository">The queue.</param>
     /// <param name="connectedSystemRepository">Loads the Connected System a lane delivers to; resolved per pass.</param>
+    /// <param name="activityRepository">Reads what was recorded under each change, for where a change stands.</param>
     /// <param name="createConnector">Builds the Connector, configured as every other path builds it.</param>
     /// <param name="createSystemActivity">Creates an outcome Activity attributed to JIM itself: delivery runs unattended,
     /// long after whoever exported the account has gone.</param>
@@ -75,6 +77,7 @@ public class ExchangeDeliveryServer
     internal ExchangeDeliveryServer(
         ISyncRepository syncRepository,
         Func<IConnectedSystemRepository> connectedSystemRepository,
+        Func<IActivityRepository> activityRepository,
         Func<ConnectedSystem, IConnector> createConnector,
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
@@ -84,6 +87,7 @@ public class ExchangeDeliveryServer
     {
         _syncRepo = syncRepository;
         _connectedSystemRepo = connectedSystemRepository;
+        _activityRepo = activityRepository;
         _createConnector = createConnector;
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
@@ -106,6 +110,46 @@ public class ExchangeDeliveryServer
     /// </summary>
     public Task<int> DeleteExpiredQueueRecordsAsync(DateTime olderThan, int maxRecords) =>
         _syncRepo.DeleteTerminalExchangeChangesAsync(olderThan, maxRecords);
+
+    /// <summary>
+    /// Where each of <paramref name="changeActivities"/> stands now (#2021, Phase 6), keyed by Activity id: the
+    /// follow-ups of an export's items, an account's outstanding change, a change's own page. Activities that are not
+    /// a queued Exchange change's own (a password follow-up, or a notice recorded under a change) are left out.
+    /// <para>
+    /// Two reads whatever the number asked about: the queue rows still carrying the changes, and the Activities
+    /// recorded under them.
+    /// </para>
+    /// </summary>
+    public async Task<Dictionary<Guid, ExchangeChangeOutcome>> GetChangeOutcomesAsync(IReadOnlyCollection<Activity> changeActivities)
+    {
+        var changes = changeActivities
+            .Where(a => a is { TargetType: ActivityTargetType.ExchangeRecipient, ParentActivityId: null })
+            .DistinctBy(a => a.Id)
+            .ToList();
+        if (changes.Count == 0)
+            return [];
+
+        var ids = changes.Select(a => a.Id).ToList();
+        // One row per change at most: IX_PendingExchangeChanges_ActivityId_Unique.
+        var rows = (await _syncRepo.GetExchangeChangesByActivityAsync(ids)).ToDictionary(r => r.ActivityId);
+        var events = (await _activityRepo().GetExchangeChangeEventsAsync(ids)).ToLookup(e => e.ChangeActivityId);
+
+        return changes.ToDictionary(a => a.Id, a => ExchangeChangeOutcome.Describe(a, rows.GetValueOrDefault(a.Id), events[a.Id]));
+    }
+
+    /// <summary>
+    /// Where one queued Exchange change stands now, or null where <paramref name="changeActivityId"/> is not a queued
+    /// Exchange change's own Activity.
+    /// </summary>
+    public async Task<ExchangeChangeOutcome?> GetChangeOutcomeAsync(Guid changeActivityId)
+    {
+        var activity = await _activityRepo().GetActivityAsync(changeActivityId);
+        if (activity == null)
+            return null;
+
+        var outcomes = await GetChangeOutcomesAsync([activity]);
+        return outcomes.GetValueOrDefault(changeActivityId);
+    }
 
     /// <summary>
     /// Runs one lane on <paramref name="connectedSystemId"/>: claims what is due, converges it over one Exchange session,

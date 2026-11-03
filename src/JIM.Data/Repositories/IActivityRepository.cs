@@ -100,6 +100,13 @@ public interface IActivityRepository
     public Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId);
 
     /// <summary>
+    /// What became of each of the given Exchange changes (#2021, Phase 6): the Activities recorded under each change's
+    /// own Activity, oldest first, as projections. Empty for a change nothing has been recorded under yet.
+    /// </summary>
+    /// <param name="changeActivityIds">The Activities recording the Exchange changes.</param>
+    public Task<List<ExchangeChangeEvent>> GetExchangeChangeEventsAsync(IReadOnlyCollection<Guid> changeActivityIds);
+
+    /// <summary>
     /// The follow-up Activities of the given Run Profile Execution Items (#2668): those whose parent is one of the
     /// items, oldest first. Untracked; empty when none of the items has any.
     /// </summary>

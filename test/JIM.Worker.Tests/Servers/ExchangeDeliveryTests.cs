@@ -57,6 +57,7 @@ public class ExchangeDeliveryTests
     private ExchangeDeliveryServer NewServer(int claimBatchSize = ExchangeDeliveryServer.ClaimBatchSize, int maximumChangesPerPass = ExchangeDeliveryServer.MaximumChangesPerPass) => new(
         _syncRepository,
         () => _connectedSystemRepository.Object,
+        () => new Mock<IActivityRepository>().Object,
         _ => _resolvedConnector,
         activity =>
         {

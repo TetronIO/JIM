@@ -1122,6 +1122,19 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// The Exchange queue rows carrying the changes recorded by <paramref name="activityIds"/> (#2021, Phase 6), in any
+    /// status. A change delivered or withdrawn has no row; a change a newer declared state replaced has had its row
+    /// re-pointed at the newer change's Activity, so is not returned for its own.
+    /// </summary>
+    Task<List<PendingExchangeChange>> GetExchangeChangesByActivityAsync(IReadOnlyCollection<Guid> activityIds);
+
+    /// <summary>
+    /// The Exchange queue row for one account, in any status, or null where nothing is queued for it (#2021, Phase 6).
+    /// The queue holds at most one change per account.
+    /// </summary>
+    Task<PendingExchangeChange?> GetExchangeChangeForConnectedSystemObjectAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// The Connected System Objects on <paramref name="connectedSystemId"/> whose Pending Export holds a connector-defined
     /// change awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
     /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021) but which no longer have a
