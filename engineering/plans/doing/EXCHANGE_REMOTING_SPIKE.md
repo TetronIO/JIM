@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phase 0 complete; option A2 approved; Phase 1a next)
+- **Status:** Doing (go decided 2026-11-03; the prototype lands as the basis of #2021's connector phases, and this plan moves to done with it)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -102,33 +102,32 @@ Operators do not mount a `krb5.conf`. JIM generates one from the settings of eve
 - Answer Q0. If a candidate passes, present the comparison and stop for the user's dependency decision before writing protocol code.
 - Read MS-WSMV, MS-PSRP and the WinRM message encryption details. Note which sections the minimal subset needs.
 
-### Phase 1a: Sandbox harness (days 2 to 4)
+### Phase 1a: Sandbox harness (days 2 to 4) ✅
 
-Runs entirely in a Claude Code on the web sandbox, and in CI. The sandbox runs Docker, builds JIM's images (with the proxy CA passed in, per root `CLAUDE.md`) and builds the repository's Samba AD image. What it cannot run is a Windows host, so this phase proves our code, not Windows' behaviour.
+Runs entirely in a Claude Code on the web sandbox, and is set up to run in CI. What it cannot run is a Windows host, so this phase proves our code against an independent implementation, not Windows' behaviour. Everything lives in `test/integration/remoting-harness/`, started by `Start-RemotingHarness.ps1`.
 
-- **KDC:** the Samba AD image from `test/integration/docker/samba-ad-prebuilt/`, with a service principal `HTTP/winrm-harness` and a keytab exported for the stand-in.
-- **Stand-in WinRM server:** a small ASP.NET Core test host in `test/integration/remoting-harness/`.
-  - It accepts Kerberos (Negotiate authentication with the keytab) and decrypts and encrypts the `HTTP-Kerberos-session-encrypted` payload with the same GSSAPI calls, so both directions of the framing are exercised. An HTTPS listener with a test CA covers Q3.
-  - It implements the WS-Management shell operations.
-  - It pipes the PSRP payload to and from `pwsh -s`, PowerShell's own out-of-process PSRP server.
-- **Client:** the transport under hosted `System.Management.Automation`, running in the **Worker image**, with a generated `krb5.conf` pointing at the Samba realm (Q1, Q2).
-- **Exit:** a remote runspace opens; `Get-Date` and a failing command return output and an error record; the connection refuses an untrusted certificate and a wrong SPN.
-- **Known limit:** the stand-in is ours, so it can share our reading of MS-WSMV. Phase 1b on a real Windows host is what proves conformance.
+- **KDC:** Samba AD (the public `diegogslomp/samba-ad-dc` image, digest-pinned) as a self-contained `HARNESS.TEST` realm, with a client account `svc-winrm` and an `HTTP/winrm-harness.harness.test` service principal whose keytab is exported for the stand-in.
+- **Stand-in WinRM server:** a Python server (`winrm-server/winrm_server.py`).
+  - Kerberos and WinRM message encryption through **pyspnego** (decision 6), an implementation independent of ours, so the framing is checked against code already proven against Windows.
+  - The WS-Management shell operations, with the PSRP payload passed to and from `pwsh -s`, PowerShell's own out-of-process server.
+  - An HTTPS listener with a harness test CA for Q3.
+- **Client:** the transport under hosted `System.Management.Automation` 7.6.7, with a generated `krb5.conf` pointing at the harness realm (Q1, Q2). It ran natively on the sandbox's Ubuntu 24.04, which has the same MIT `libgssapi-krb5-2` as the Worker image, not yet inside the Worker image itself.
+- **Known limit:** our client and the stand-in's framing and WS-Management code share an author, so they can share a misreading of MS-WSMV. pyspnego covers the Kerberos layer independently; Phase 1b on a real Windows host is what proves the rest.
 
-### Phase 1b: Real Windows WinRM (days 5 to 6)
+### Phase 1b: Real Windows WinRM (days 5 to 6) ✅
 
 Runs on the lab's Linux runner VM, which reaches the lab network.
 - Repeat Q1 and Q2 against `dc1.panoply.local`'s WinRM over HTTP (5985) with message encryption, from the Worker image, then Q3 over HTTPS (5986).
 - Prove the framing against Windows' real implementation: AES256 payloads of several sizes, including ones that span WinRM's 16 KB encryption chunks.
 - Capture the real WinRM exchanges as recorded fixtures for the unit tests.
 
-### Phase 2: Hardening probes (day 7)
+### Phase 2: Hardening probes (day 7) ✅
 
 - Cancellation, operation timeouts, and runspace reuse across many commands (Q6).
 - Logging without secrets.
 - Error mapping from PowerShell error records into structured results ready for RPEIs (Q5, Windows-side cases).
 
-### Phase 3: Exchange (days 8 to 9)
+### Phase 3: Exchange (days 8 to 9) ✅
 
 **Prerequisite:** the lab's Exchange Server SE mailbox server, `exchange-primary` (`ex1.panoply.local`), built by [#2412](https://github.com/TetronIO/JIM/issues/2412).
 
@@ -136,7 +135,7 @@ Runs on the lab's Linux runner VM, which reaches the lab network.
 - Answer Q3 against Exchange: whether HTTPS works from the Worker image, and if not, that the transport fails fast with a clear error.
 - Collect Q5's Exchange-side failure catalogue and Q6's timings.
 
-### Phase 4: Decision and write-up (day 10)
+### Phase 4: Decision and write-up (day 10) ✅
 
 - Record the result of every question under "Spike Results" below.
 - Make a go / no-go call against the criteria below, and update #2021: revised estimates, the Kerberos settings the Connected System must expose, and the error types.
@@ -201,8 +200,177 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
    - **What it costs:** `gss_wrap_iov` interop is now required, not a reserve.
    - **Security:** approved as a documented exception to TLS in transit (`engineering/COMPLIANCE_MAPPING.md`, SC-8).
 5. **Sandbox harness (2026-10-21):** Phase 1a is added, using a Samba KDC and a `pwsh -s` stand-in WinRM server, so most transport work is built and debugged without the lab.
+6. **Stand-in server on pyspnego (2026-10-30):** the harness's stand-in WinRM server uses pyspnego for Kerberos and WinRM message encryption, so our client is tested against an independent implementation rather than against itself. These are test-only dependencies, approved under dependency governance and never shipped:
+   - pyspnego 0.12.4 and krb5 0.10.0 from PyPI. krb5 publishes no Linux wheels, so it is compiled from hash-pinned source with hash-pinned Cython and setuptools in a build stage.
+   - python3-gssapi and python3-cryptography from Ubuntu.
+
+   Everything is version-pinned.
+7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
+8. **Go (2026-11-03):** option A2 is a go, against the success criteria:
+   - **Criteria 1 and 2:** Kerberos, message encryption and PSRP work against real Exchange, and every Q4 cmdlet the criteria name ran under svc-jim's least-privilege roles.
+   - **Criterion 3:** the hardening that remains fits the three-week threshold. It is estimated at about two weeks:
+     - classify RBAC's hidden cmdlets and parameters as insufficient permissions;
+     - `XDG_CACHE_HOME` in the Worker image, and the Worker image's own lab run;
+     - an end-to-end test of renewing an expired ticket-granting ticket;
+     - quiet session close.
+   - **Criterion 4:** nothing weakened the security baseline.
+   - **What follows:** the prototype becomes the transport for #2021's Exchange connector. The open items under the fourth run's results carry into that work.
 
 ## Spike Results
+
+### Phase 3: fourth run against Exchange (2026-11-03)
+
+**Every Q4 cmdlet the go criteria name works against Exchange, with svc-jim's least-privilege roles. The one failure was the test's own set-up, and it is fixed.** Both suites ran at `f0ad013b6`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` as svc-jim:
+- **Read-only suite:** 6 of 6 passed, in 7.5 s.
+- **Write suite:** 10 of 11 passed, in 16.1 s. The write suite runs only once the read-only suite passes.
+
+| Test | Result |
+|---|---|
+| `New-Mailbox -Shared` | Passed, 2 s |
+| `Disable-Mailbox`, then `Enable-Mailbox` without `-Database` (Exchange chose MDB01) | Passed, 809 ms |
+| `Set-Mailbox -Type Shared` on a user mailbox | Passed, 1 s |
+| `Enable-Mailbox -Database` | Passed, 568 ms |
+| `Enable-Mailbox -Shared` on a plain account | Passed, 435 ms |
+| `Enable-MailUser` | Passed, 674 ms |
+| `Enable-MailContact` | Passed, 632 ms |
+| `Enable-DistributionGroup` on a universal group | **Failed in set-up**, 153 ms |
+| Failure classification from Exchange's own records | Passed, 453 ms |
+| `Get-Recipient` 50 times on one session | Passed, 4 s |
+| Eight concurrent sessions | Passed, 1 s |
+
+**The failure:**
+- **What happened:** the test builds its group with `New-DistributionGroup -Type Distribution`. Exchange refused the call: "A parameter cannot be found that matches parameter name 'Type'."
+- **Why:** svc-jim holds Recipient Management, whose Distribution Groups role offers `New-DistributionGroup` without `-Type`. `-Type` belongs to the Security Group Creation and Membership role, which only Organization Management holds. Exchange refused the call while binding parameters, before the cmdlet ran, so ex1's cmdlet log has no line for it.
+- **The fix:** leave `-Type` out, since Distribution is the default. It is a fixture fix only: in JIM the group comes from the directory export, and the lane only ever runs `Enable-DistributionGroup` on it.
+
+**Timings (Q6):**
+- `Get-Recipient`, 50 calls on one session: median 93 ms, p95 115 ms, maximum 128 ms.
+- Eight concurrent sessions opened in 650 ms, and each ran `Get-Recipient` within 367 ms.
+- No throttling was seen. Exchange's cmdlet log recorded no throttling delay, and none of the eight sessions was held back.
+
+**Exchange's failure catalogue (Q5):**
+
+| Failure | What Exchange returns | Proposed RPEI error type and retry |
+|---|---|---|
+| Already enabled | An error record: `Cmdlet-RecipientTaskException`, error ID `9679C438,Microsoft.Exchange.Management.RecipientTasks.EnableMailbox`, "This task does not support recipients of this type ... is of type UserMailbox" | Not an error to retry. The lane reads the recipient's state again and treats it as converged or conflicting |
+| Object not found (replication lag) | An error record: `Cmdlet-ManagementObjectNotFoundException`, error ID `4D962A57,...EnableMailbox`, "couldn't be found on 'dc1.PANOPLY.LOCAL'" | Transient; retry with backoff |
+| A cmdlet outside svc-jim's roles | A thrown `RemoteException` with no error record: "The term 'Get-ExchangeCertificate' is not recognized as the name of a cmdlet" | Insufficient permissions; park, no retry |
+| A parameter outside svc-jim's roles | A thrown `RemoteException`: "A parameter cannot be found that matches parameter name '...'" | Insufficient permissions; park, no retry |
+
+**RBAC never says "access denied". It hides what an account may not use.** So the delivery lane must class the last two as insufficient permissions, never as bad input. That rule goes into #2021's Phase 2 connector.
+
+**Ping errors at session close:** ex1's front-end logs showed HTTP 500s on `Ping` for svc-jim, between 12:03:57.9 and 12:03:59.3 UTC.
+- **What they were:** the keep-alives of the eight concurrent sessions, aborted as each session closed ("The I/O operation has been aborted because of either a thread exit or an application request").
+- **Effect:** the test passed, and the client raised nothing for them, so they are harmless.
+
+**Cleanup:** none needed. Exchange shows no `jimspike*` recipient, and PANOPLY has no live `jimspike*` object. The four tombstones found came from this run's own cleanup. ex1 is shut down, and the svc-jim password file is shredded.
+
+**Lab lesson:** the first attempt that morning overlapped the nightly lab run. That run restores dc-primary from checkpoints mid-run, and one restore crashed ex1's services. The lab agent now checks that no lab run is in progress or due before starting ex1.
+
+**Still open, none of them a go criterion:**
+- **`Enable-DistributionGroup`:** re-run on a universal distribution group with the fixed fixture.
+- **A non-universal group refused by `Enable-DistributionGroup`:** test it, since the group test failed before it got there.
+- **A universal security group:** check whether svc-jim can mail-enable one, or whether that also needs Security Group Creation and Membership. JIM manages membership through the directory, not through Exchange, so it may not.
+- **Serialisation payload signing:** a read-only check that it is on in ex1. It has been on by default since the November 2023 SU, and nothing in the runs suggests otherwise, but no run has read the setting.
+- **Q3 against Exchange:** HTTPS. HTTP with Kerberos message encryption is the decided default, so this concerns the optional path only.
+- **A run from the Worker image against Exchange:** the lab runs used the .NET SDK container. The Worker image passed against the harness with its own hardening, and both images carry MIT `libgssapi-krb5-2`. #2021's Phase 2 lab tests close this, since the connector runs in the Worker.
+
+### Phase 1b: third run against Exchange (2026-11-01)
+
+**The OptionSet fix holds: Exchange now accepts the shell Create. Every test then failed on the first Receive, because Exchange assigns its own ShellId; the client now uses it.** One read-only run of `ExchangeLabTests` at `191537be5` (which carries the fix, `0ea4d75a0`), from 20:52 to 20:59 UTC, against `ex1.panoply.local` as svc-jim:
+
+- **What failed:** all six tests, at the step after the Create. The first Receive was refused with `w:InvalidSelectors` (WinRM fault 2150858843, PowerShell's `WSMan-InvalidShellID`), deterministically across a rerun. The write suite did not run.
+- **The cause:** Exchange ignores the ShellId the client proposes in the Create and assigns its own, returned in the Create reply. The client kept selecting the shell by the id it proposed. Windows' own remoting client, run against ex1 as the control, took the id Exchange returned.
+- **Fixed:**
+  - The client reads the ShellId from the Create reply (the `rsp:Shell` element, else the endpoint reference's selector) and selects the shell by it in every later message.
+  - The stand-in server now assigns its own ShellId as Exchange does. With the client fix reverted, the harness reproduces the lab's fault exactly (2150858843, `w:InvalidSelectors`); with it, the whole suite passes against the harness.
+- **Cleanup:** none needed. No `jimspike*` object was left in Exchange or Active Directory, ex1 was shut down, and the svc-jim password file on the runner was deleted.
+
+The next window needs about 30 minutes: the read-only suite, then the write suite.
+
+### Phase 1b: second run against Exchange (2026-11-01)
+
+**Kerberos, message encryption, the decoder fix and Exchange's authorisation all work against real Exchange; the shell Create was refused, and the cause is fixed.** One read-only run of `ExchangeLabTests` at `e7ea0b1c2`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` (Exchange 15.2 build 2562.17), as svc-jim:
+
+- **What worked:**
+  - Kerberos authentication (178 ms), and Exchange's front end authenticating `PANOPLY\svc-jim` and proxying the request to its back-end WinRM.
+  - The reply was decrypted and parsed, so the decoder fix (`3d98ec412`) holds against Exchange's real framing.
+- **What failed:** all six tests failed in set-up. The back end refused the PSRP Create (`New-PSSession`) with `w:InvalidOptions` (WinRM fault 2150858809, HTTP 500): "the SOAP packet that was received contained a invalid WS-Management OptionSet element, or it was duplicated". A rerun failed the same way, so it is deterministic. The write suite did not run.
+- **The control worked:** a native Windows `New-PSSession` to the same endpoint opened in 3.9 s.
+- **The cause:** WS-Management requires an OptionSet that holds an option marked `MustComply="true"` (the Create's `protocolversion`) to be `s:mustUnderstand="true"` itself. The client left the attribute off. The native client, pypsrp and PSWSMan all set it. The stand-in server did not check, so the harness passed.
+- **Fixed:**
+  - The client now marks such an OptionSet `mustUnderstand`.
+  - The stand-in server now refuses one that is not, with Exchange's own fault. With the client fix reverted, the harness reproduces the lab's error exactly.
+- **Cleanup:** none needed. No `jimspike*` recipient or directory object was left.
+
+The next window needs about 30 minutes: the read-only suite, then the write suite.
+
+### Phase 1b: first run against Exchange (2026-10-31)
+
+**Kerberos to the real Exchange server works; reading its first encrypted reply did not.** One read-only run of `ExchangeLabTests`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` (Exchange Server SE), as svc-jim:
+
+- Kerberos authentication with message encryption completed: `gss_acquire_cred_with_password` against `dc1`, the `Authorization: Kerberos` handshake, and mutual authentication. No failed logon was recorded.
+- The first encrypted request (the PSRP Create) got a reply the client could not decode: "The encrypted WinRM response has no data part." The decoder matched one exact byte sequence, the WinRM service's own (`--Encrypted Boundary` then a tab-indented `Content-Type: application/octet-stream`). The stand-in server writes exactly that, so the harness could never catch it. This is the shared-author risk this phase exists for.
+- All six tests failed in set-up for that reason. The write suite (`ExchangeLabProvisioningTests`) did not run.
+
+**Fixed, not yet re-tested against Exchange.** The decoder now follows pypsrp, the reference client that already works with Exchange:
+- It uses the boundary the Content-Type names.
+- It accepts part headers with or without indentation, and whitespace after a boundary's dashes.
+- Every request sends `Accept-Encoding: identity`, because IIS, which hosts Exchange's endpoint, compresses replies when a client allows it.
+- An unreadable reply's error now gives its HTTP status, Content-Type, Content-Encoding, length and the start of its plain-text framing, so a further mismatch identifies itself in one run.
+
+The lab window closed before the re-run (commits `3d98ec412` and `8c9d56a33`). The next window needs about 30 minutes: the read-only suite, then the write suite.
+
+### Phase 2: hardening probes (2026-10-31)
+
+**Everything Phase 2 set out to prove holds through the harness, after fixing six faults it found in the transport.** `Tetron.PowerShellRemoting.Tests` passes 106 of 106 with the harness up (about 50 seconds), skipping only the 6 Exchange lab tests; CI now runs the harness tier on every pull request that touches the library or the harness (`remoting-harness-tests` in `ci.yml`), and fails rather than skips if the harness does not come up.
+
+| Proven | How |
+|---|---|
+| Stopping a command (Q6) | A stopped `Start-Sleep 120` ends within seconds and the runspace carries on. A remote stop surfaces as a `RemoteException` ("The pipeline has been stopped.") with the invocation in the Stopped state, not as a local `PipelineStoppedException`; callers must judge it by the state |
+| Long commands and timeouts (Q6) | A command that outlasts the server's `OperationTimeout` still returns its output; a closed port fails at once; an endpoint that never answers fails within the request timeout; cancelling an open throws `OperationCanceledException` |
+| One runspace for a batch (Q6) | 200 commands on one runspace cost **1 Kerberos login and 3 connections** (from 202 of each before the fix); about 100 ms a command against the stand-in, which says nothing about Exchange's own cost |
+| Idle connections | When the server closes an idle connection (HTTP.sys does after 120 seconds; the harness after 5), the next request authenticates a new one and is sent again, with no new login |
+| Secrets | The library logs nothing, and no exception it raises carries the password, a token or a message body. `RemoteSessionOptions` cannot give its password back, so logging or serialising the options cannot leak it. A `SecureString` parameter, as `New-Mailbox -Password` needs, arrives intact through PowerShell's own session-key encryption |
+| Failures for reporting and retry (Q5, transport side) | `RemoteFailure` classifies each failure as Command, Stopped, Authentication, Certificate, Connection, Timeout or Protocol, with `IsTransient` for the two a retry may cure, and keeps the error ID, reason, target and Exchange's own `FailureCategory`. Each kind is checked against the real exception chain |
+
+**Faults found and fixed, all in the client:**
+- Every command's Receive opened a new connection, and every connection logged in to the KDC again with the password. A session now shares one ticket-granting ticket (a reference-counted `SafeHandle`, so closing mid-handshake cannot free it in use), renews it once if it expires, and hands finished connections to the next command.
+- A 401 after authenticating, which is what an idle connection the server has closed produces, failed the command as access denied. It now re-authenticates and sends again, once.
+- An exception while the session closed escaped the transport's own thread, **which ends the host process**: in JIM, the Worker. Nothing escapes that thread now.
+- A request timing out inside a Receive was swallowed, so the command waited for output for ever. It is now reported.
+- Per-command cancellation sources were never disposed, and every connection ever opened was kept until the session ended.
+- The harness script failed silently in a new shell and then waited 20 minutes for a KDC that had not started.
+
+**Still open:** Exchange's own error records (object not found, already enabled, insufficient RBAC, throttling) and their mapping to JIM's activity error types are Phase 3's, captured from the lab. Renewal of an expired ticket-granting ticket is classified and handled, but untested end to end; the lab's long runs will exercise it.
+
+### Phase 1a: sandbox harness (2026-10-30)
+
+**Q1 and Q2 pass against the harness: PowerShell remoting runs from Linux through our transport, Kerberos-authenticated and Kerberos-encrypted.** `Tetron.PowerShellRemoting.Tests` passes 72 of 72 with the harness up (about 6 seconds), and skips its 15 harness tests without it.
+
+| Proven | How |
+|---|---|
+| Kerberos from a username and password, no keytab, with a generated `krb5.conf` and an in-memory credential cache (Q1) | `KerberosClientContext` against the Samba KDC; a wrong password fails with GSSAPI's own explanation and never echoes the password |
+| WinRM message encryption both ways (Q2) | Our `gss_wrap_iov` / `gss_unwrap_iov` against a test acceptor, and then against **pyspnego** in the stand-in server, which decrypts our requests and whose encrypted replies we decrypt |
+| Refusal of anything unencrypted | Our decoder refuses unencrypted replies; the stand-in refuses unencrypted requests once authenticated, as `AllowUnencrypted=false` does |
+| PSRP through the custom transport (Q2) | A remote runspace opens; `Get-Date` with bound parameters returns typed output; a failing `Get-Item` returns its error record; three commands run in turn on one runspace |
+| HTTPS (Q3, harness side) | A command runs over TLS with the harness CA supplied; without it the connection is refused for the certificate |
+
+The faults the harness found were all in the stand-in server, and all are fixed:
+- it read pwsh's `<DataAck/>` as `<Data>`, which stalled every command 30 seconds;
+- it dispatched unknown actions before looking up the shell;
+- it demanded message encryption on its TLS listener.
+
+None was in the client. That is weak evidence: the stand-in and the client share an author for everything above the Kerberos layer, which is exactly what Phase 1b exists to test.
+
+**Inside the Worker image (2026-10-31): works, with one change the Worker needs.** A throwaway client ran a command through the harness from the Worker's `base` stage, with the Worker's own hardening: UID 1654, a read-only root filesystem, `/tmp` as the only writable path, all capabilities dropped and `no-new-privileges`.
+- **What breaks without the change:** `System.Management.Automation` creates its cache folder under `$HOME/.cache` (`/home/app/.cache`) the first time it runs. On the read-only root filesystem that throws, and every type that depends on it fails to initialise, so no session can open.
+- **The fix:** set `XDG_CACHE_HOME=/tmp/.cache` in the Worker image. With only that, the session opens and the command runs, and the only things written are an empty `/tmp/.cache/powershell` folder and the generated `krb5.conf` under `/tmp`. Neither `XDG_CONFIG_HOME` nor `XDG_DATA_HOME` is needed. This belongs in the #2021 implementation, in the PR where the Worker first references the library.
+- **Already in place:** the image's pinned `libgssapi-krb5-2` loads, and an in-memory credential cache needs nothing written.
+
+**Not yet done, carried forward:**
+- **A CI job for the harness.** The tests skip without it today.
+- **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
 ### Phase 0: prior-art survey (2026-10-21)
 

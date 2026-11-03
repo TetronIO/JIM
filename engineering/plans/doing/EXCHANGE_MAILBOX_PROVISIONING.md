@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phases 1, 2 and 6 onwards wait on the spike's go)
+- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 under way; the spike's go on 2026-11-03 unblocks Phases 1 and 2)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
