@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.
 - 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
 - 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)
 - 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)

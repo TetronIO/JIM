@@ -86,10 +86,12 @@ function Stop-JIMPendingPasswordChange {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High')]
     [OutputType('JIM.PasswordQueueActionResponse')]
     param(
+        # The only parameter a piped row binds, for the reason Resume-JIMPendingPasswordChange gives: a piped row's
+        # ConnectedSystemId would narrow every piped change to the last row's system.
         [Parameter(ValueFromPipelineByPropertyName)]
         [guid[]]$Id,
 
-        [Parameter(ValueFromPipelineByPropertyName)]
+        [Parameter()]
         [int]$ConnectedSystemId,
 
         [Parameter()]
@@ -134,7 +136,7 @@ function Stop-JIMPendingPasswordChange {
         }
 
         # An empty pipeline is a successful no-op: there was nothing matching to cancel.
-        if ($collectedIds.Count -eq 0 -and $PSCmdlet.MyInvocation.ExpectingInput -and -not $PSBoundParameters.ContainsKey('ConnectedSystemId')) {
+        if ($collectedIds.Count -eq 0 -and $PSCmdlet.MyInvocation.ExpectingInput) {
             Write-Verbose "Nothing reached Stop-JIMPendingPasswordChange from the pipeline; there is nothing to cancel."
             return
         }
