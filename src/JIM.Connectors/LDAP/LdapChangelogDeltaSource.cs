@@ -14,8 +14,9 @@ namespace JIM.Connectors.LDAP;
 /// <summary>
 /// The change source for directories that publish a draft-good-ldap-changelog (389 Directory Server, and the
 /// generic fallback). The changelog is a flat container of numbered entries, one per write, each naming what
-/// changed (targetDN) and how (changeType); the highest change number the last import saw is the watermark, and
-/// a Delta Import reads the entries numbered after it, fetching each target's current state by DN.
+/// changed (targetDN) and how (changeType). Each partition's watermark is the highest change number its last import
+/// saw; a Delta Import reads the entries numbered after the oldest of its partitions' watermarks, passes over each
+/// entry its own partition has already read (#2715), and fetches each remaining target's current state by DN.
 /// <para>
 /// Where the changelog is comes from the rootDSE (<c>changelog</c>), falling back to the conventional
 /// <c>cn=changelog</c>. So does the watermark, when the rootDSE advertises <c>lastChangeNumber</c>; otherwise the
@@ -284,32 +285,39 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// <summary>
     /// Refuses to read from a watermark the changelog no longer continues from: one it has been trimmed past, one it
     /// has gone back behind (#2004), or one whose own change it no longer holds (#2008). Either way a Delta Import
-    /// reading from the watermark would skip changes without noticing.
+    /// reading from the watermark would skip changes without noticing. Called once for each distinct watermark among
+    /// the run's partitions, so a refusal names every partition holding it, and its remedy is a Full Import that reads
+    /// them: a Full Import of another partition leaves their watermark where it is (#2715).
     /// </summary>
     public void VerifyContinuity(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        VerifyNotTrimmedPast(previous, current);
-        VerifyNotGoneBackwards(previous, current);
-        VerifyWatermarkChangeStillHeld(previous, current);
+        var described = LdapConnectorUtilities.DescribePartitions(partitions);
+        VerifyNotTrimmedPast(described, previous, current);
+        VerifyNotGoneBackwards(described, previous, current);
+        VerifyWatermarkChangeStillHeld(described, previous, current);
     }
+
+    /// <summary>What every continuity refusal asks for: a Full Import that reads the partitions whose watermark no longer holds.</summary>
+    private static string Remedy(string described) =>
+        $"Run a Full Import that reads {described} to re-establish the baseline; a Full Import also detects deletions by absence.";
 
     /// <summary>
     /// When the rootDSE advertises the oldest change number still held and it is beyond the one after the watermark,
     /// the changes between were discarded (389 Directory Server: the Retro Changelog plug-in's maximum age). A
     /// directory that does not advertise its first change number cannot be checked here.
     /// </summary>
-    private void VerifyNotTrimmedPast(LdapPartitionWatermark previous, LdapConnectorRootDse current)
+    private void VerifyNotTrimmedPast(string described, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
         if (current.FirstChangeNumber is not { } first || previous.ChangeNumber is not { } last || last + 1 >= first)
             return;
 
-        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog now starts at change number {First} and the last import ended at {Last}",
-            first, last);
+        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog now starts at change number {First} and the last import of {Partitions} ended at {Last}",
+            first, LogSanitiser.Sanitise(described), last);
 
         throw new CannotPerformDeltaImportException(
-            $"The directory's changelog no longer holds the changes since the last import: it starts at change number {first}, " +
-            $"and the last import ended at {last}, so changes between them were trimmed (389 Directory Server: the Retro Changelog plug-in's maximum age) " +
-            "and cannot be imported. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+            $"The directory's changelog no longer holds the changes since the last import of {described}: it starts at change number {first}, " +
+            $"and that import ended at {last}, so changes between them were trimmed (389 Directory Server: the Retro Changelog plug-in's maximum age) " +
+            $"and cannot be imported. {Remedy(described)}");
     }
 
     /// <summary>
@@ -323,19 +331,19 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// and on, so neither is mistaken for one. Once numbering overtakes the watermark again the rollback can no
     /// longer be seen here.
     /// </summary>
-    private void VerifyNotGoneBackwards(LdapPartitionWatermark previous, LdapConnectorRootDse current)
+    private void VerifyNotGoneBackwards(string described, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
         if (current.AdvertisedLastChangeNumber is not { } newest || previous.ChangeNumber is not { } last || newest >= last)
             return;
 
-        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog's newest change number is {Newest} and the last import ended at {Last}",
-            newest, last);
+        _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog's newest change number is {Newest} and the last import of {Partitions} ended at {Last}",
+            newest, LogSanitiser.Sanitise(described), last);
 
         throw new CannotPerformDeltaImportException(
-            $"The directory's changelog has gone back since the last import: its newest change number is {newest}, and the last import ended at {last}. " +
+            $"The directory's changelog has gone back since the last import of {described}: its newest change number is {newest}, and that import ended at {last}. " +
             "Change numbers only ever increase, so the usual cause is that the directory was restored from a backup or snapshot; it also happens when " +
-            "Host reaches a different server, since each server numbers its own changelog. Changes made since reuse numbers the last import has already " +
-            "passed, so a Delta Import would silently miss them. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+            "Host reaches a different server, since each server numbers its own changelog. Changes made since reuse numbers that import has already " +
+            $"passed, so a Delta Import would silently miss them. {Remedy(described)}");
     }
 
     /// <summary>
@@ -349,7 +357,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// advertise where its changelog starts the two cannot be told apart, so neither is refused. Nothing is read
     /// without a recorded changeTime, and a refused read concludes nothing; the readiness check names a refusal.
     /// </summary>
-    private void VerifyWatermarkChangeStillHeld(LdapPartitionWatermark previous, LdapConnectorRootDse current)
+    private void VerifyWatermarkChangeStillHeld(string described, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
         if (previous.ChangeNumber is not { } last || string.IsNullOrEmpty(previous.ChangeTime))
             return;
@@ -359,28 +367,28 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
 
         if (read.Outcome == WatermarkChangeOutcome.Present && read.ChangeTime != null && !string.Equals(read.ChangeTime, recorded, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber} was recorded at {Recorded} and now names a change recorded at {Now}",
-                last, LogSanitiser.Sanitise(recorded), LogSanitiser.Sanitise(read.ChangeTime));
+            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber}, where the last import of {Partitions} ended, was recorded at {Recorded} and now names a change recorded at {Now}",
+                last, LogSanitiser.Sanitise(described), LogSanitiser.Sanitise(recorded), LogSanitiser.Sanitise(read.ChangeTime));
 
             throw new CannotPerformDeltaImportException(
-                $"The directory's changelog no longer holds the change the last import ended at: change number {last} was recorded at {recorded}, " +
+                $"The directory's changelog no longer holds the change the last import of {described} ended at: change number {last} was recorded at {recorded}, " +
                 $"and now names a change recorded at {read.ChangeTime}, so its numbering has been reused. The usual cause is that the directory was " +
                 "restored from a backup or snapshot and then written to; it also happens when Host reaches a different server, since each server numbers " +
                 "its own changelog. Objects and values the restore took away are gone without any change recording it, so a Delta Import would silently " +
-                "miss that. Run a Full Import, which also detects deletions by absence, to re-establish the baseline.");
+                $"miss that. {Remedy(described)}");
         }
 
         if (read.Outcome == WatermarkChangeOutcome.Missing && current.FirstChangeNumber is { } first && first <= last)
         {
-            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber} is no longer in the changelog, which still starts at {First}",
-                last, first);
+            _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; change number {ChangeNumber}, where the last import of {Partitions} ended, is no longer in the changelog, which still starts at {First}",
+                last, LogSanitiser.Sanitise(described), first);
 
             throw new CannotPerformDeltaImportException(
-                $"The directory's changelog no longer holds the change the last import ended at (change number {last}), though it still holds older " +
+                $"The directory's changelog no longer holds the change the last import of {described} ended at (change number {last}), though it still holds older " +
                 $"changes from change number {first}. The usual cause is that the directory was restored from a backup or snapshot: 389 Directory " +
                 "Server's online restore takes the changes made after the backup out of its changelog and carries on numbering after them. Objects " +
-                "and values the restore took away are gone without any change recording it, so a Delta Import would silently miss that. Run a Full " +
-                "Import, which also detects deletions by absence, to re-establish the baseline.");
+                "and values the restore took away are gone without any change recording it, so a Delta Import would silently miss that. " +
+                Remedy(described));
         }
     }
 
@@ -671,8 +679,12 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     public bool HasBaseline(LdapPartitionWatermark? watermark) => watermark is { Kind: LdapDeltaSourceKind.Changelog, ChangeNumber: not null };
 
     /// <summary>
-    /// Reads one page of the changelog entries numbered after the watermark and turns each into an import object: a
-    /// deletion from its own record, anything else by fetching the target's current state. An object the page names
+    /// Reads one page of the changelog entries numbered after the oldest of the run's partition watermarks and turns
+    /// each into an import object: a deletion from its own record, anything else by fetching the target's current state.
+    /// The changelog is one log for every partition, so it is read once, from the earliest point any of the run's
+    /// partitions has not read past, and each entry is then judged by the partition its object lies in (the new DN on a
+    /// rename): passed over when that partition's own watermark is at or above its change number, since that
+    /// partition's last import read it, and when it lies in none of the run's partitions (#2715). An object the page names
     /// more than once is fetched once, on its first record, since the fetch reads its current state either way;
     /// deletions are never skipped for that reason. A page holds at most the Run Profile's page size, fewer if the
     /// directory's own size limit is lower; when the read is cut short it leaves a pagination token holding the
@@ -684,9 +696,10 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// <exception cref="CannotPerformDeltaImportException">The changelog was not found, or the directory refused to read it, or it answered nothing within its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
-        // The shell has already established HasBaseline for every target Partition before calling. Until each Partition's
-        // changes are judged against its own watermark (#2715, phase 5), the read starts after the oldest, which re-reads
-        // what a Partition with a later watermark already read and misses nothing.
+        // The shell has already established HasBaseline for every target Partition before calling. The read starts after
+        // the oldest watermark, so no partition misses a change; what a partition with a later watermark has already read
+        // is passed over entry by entry (ProcessEntries). The cursor and its pagination token are change numbers in the
+        // one log, so they are the same on every page whatever the partitions' watermarks.
         var previousChangeNumber = context.OldestWatermark(watermark => watermark.ChangeNumber!.Value, Comparer<long>.Default);
         var changelogDn = ChangelogDnFor(context.CurrentRootDse ?? context.PreviousRootDse);
 
@@ -724,6 +737,10 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken(PaginationTokenName, (highestSeen.Value + 1).ToString(CultureInfo.InvariantCulture)));
         }
 
+        if (progress.SkippedOutsideTargetPartitions > 0)
+            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects outside every partition this run reads", progress.SkippedOutsideTargetPartitions);
+        if (progress.SkippedAlreadyRead > 0)
+            _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries the last import of their partition already read", progress.SkippedAlreadyRead);
         if (progress.SkippedOutOfScope > 0)
             _logger.Information("LdapChangelogDeltaSource: Skipped {SkippedCount} changelog entries for objects outside the selected Container scope", progress.SkippedOutOfScope);
         if (progress.SkippedAlreadyFetched > 0)
@@ -746,6 +763,12 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
         /// importing it again would have the import report a duplicate external id.
         /// </summary>
         public HashSet<string> FetchedDns { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Changes to objects in none of the run's partitions: another partition, or a suffix JIM does not manage.</summary>
+        public int SkippedOutsideTargetPartitions { get; set; }
+
+        /// <summary>Changes the last import of the object's partition already read: at or below that partition's watermark.</summary>
+        public int SkippedAlreadyRead { get; set; }
 
         public int SkippedOutOfScope { get; set; }
 
@@ -810,7 +833,8 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             if (cancellationToken.IsCancellationRequested)
                 return highestSeen;
 
-            if (TryReadChangeNumber(changeEntry, out var changeNumber) && (highestSeen == null || changeNumber > highestSeen))
+            var hasChangeNumber = TryReadChangeNumber(changeEntry, out var changeNumber);
+            if (hasChangeNumber && (highestSeen == null || changeNumber > highestSeen))
                 highestSeen = changeNumber;
 
             var changeType = LdapConnectorUtilities.GetEntryAttributeStringValue(changeEntry, "changeType")?.ToLowerInvariant();
@@ -834,6 +858,24 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             // against scope: a move out of the selected Containers is not an update, a move into them is.
             var isRename = changeType is "modrdn" or "moddn";
             var subjectDn = isRename ? RenamedDn(changeEntry, targetDn) : targetDn;
+
+            // Judge the change by the partition the object now lies in (#2715). The log is directory-wide, so it records
+            // writes to partitions this run does not read and to suffixes JIM does not manage; and it is read from the
+            // oldest of the run's watermarks, so it repeats changes a partition with a later watermark has already read.
+            // A change whose number cannot be read is kept: the search only answers numbers past the oldest watermark,
+            // and importing a change twice costs a re-read where passing one over would lose it.
+            var partition = LdapConnectorUtilities.PartitionForDn(subjectDn, context.TargetPartitions);
+            if (partition == null)
+            {
+                progress.SkippedOutsideTargetPartitions++;
+                continue;
+            }
+
+            if (hasChangeNumber && changeNumber <= context.Watermarks[partition.Id].ChangeNumber!.Value)
+            {
+                progress.SkippedAlreadyRead++;
+                continue;
+            }
 
             // Filter by Container scope: the changelog is directory-wide, so it reports changes to objects this
             // Connected System does not import. A full import only reads the selected Containers, each to its own
