@@ -1,6 +1,6 @@
 # Per-Partition Delta Import Watermarks
 
-- **Status:** Doing (Phases 1 and 2 complete; the LDAP Connector, Phase 3 onwards, outstanding)
+- **Status:** Doing (Phases 1 to 3 complete; the accesslog and changelog sources, Phase 4 onwards, outstanding)
 - **Issue:** [#2715](https://github.com/TetronIO/JIM/issues/2715)
 - **Depends on:** [#2720](https://github.com/TetronIO/JIM/issues/2720) (merged in PR #2721, `ConnectedSystemImportResult.CompleteRead`)
 - **Related:** [#2723](https://github.com/TetronIO/JIM/issues/2723) (truthful `ConnectedSystemObject.PartitionId`), [#2724](https://github.com/TetronIO/JIM/issues/2724) (clearing leaves the SQL and SCIM watermarks)
@@ -312,7 +312,7 @@ Red first in every phase: each test below is written, run, and seen to fail for 
 - Existing `ImportPersistedConnectorDataTests` and `DeltaImportCompleteReadTests` stay green unchanged: that is the proof the Connected System-level path and #2720 are untouched.
 - `test/JIM.Worker.Tests/Servers/ConnectedSystemImportReadRangeTests.cs`: `GetImportReadRangeAsync_PartitionWatermarks_DescribesOnePointPerPartitionScopedByItsNameAsync`, `GetImportReadRangeAsync_PartitionDeletedSinceTheRun_ScopesByTheRecordedNameAsync`.
 
-### Phase 3: LDAP model, contract and the USN source
+### Phase 3: LDAP model, contract and the USN source ✅
 
 - `LdapPartitionWatermark`, the `LdapConnectorRootDse` field removal, the `ILdapDeltaSource` and `LdapDeltaReadContext` changes, `LdapConnector` implementing the contract, the fallback and source-selection rules in `LdapConnectorImport`, the DN-to-Partition helper, the USN source.
 - Tests:
@@ -331,6 +331,8 @@ Red first in every phase: each test below is written, run, and seen to fail for 
     - `GetDeltaImportObjectsAsync_WatermarkOfAnotherKind_ReadsEveryObjectAsync`
     - `GetDeltaImportObjectsAsync_FallbackOnALaterPage_StaysAFullReadAsync`
     - `GetFullImportObjectsAsync_ScopedToOnePartition_ReturnsAWatermarkForThatPartitionOnlyAsync`
+
+- **Interim left for Phases 4 and 5.** The contract change forced both sources onto the per-Partition signatures, so each now does the simplest thing that cannot skip a change: `CaptureWatermarksAsync` takes one watermark exactly as the single Connected System-level one was taken (the accesslog walk starts from the **oldest** target Partition's watermark, or the whole log when any target Partition has none; the changelog capture is unchanged) and gives that one value to every target Partition; `ReadChangesAsync` reads every target Partition from the **oldest** target watermark (`LdapDeltaReadContext.OldestWatermark`), keeping today's exact-match skip and today's raw `EndsWith` partition check in the accesslog read; `VerifyContinuity` checks each distinct watermark against today's rules, but its refusal text does not yet name the Partitions (the USN source's does). This re-reads what a Partition with a later watermark already read and misses nothing. The single-value captures survive as internal `CaptureWatermarkAsync` methods so the existing #2004, #2008, #2704 and #2712 tests still drive them unchanged. Phases 4 and 5 replace all of this with the per-Partition rules above; `LdapConnectorUtilities.PartitionForDn` is ready for them.
 
 ### Phase 4: The accesslog source
 
@@ -499,3 +501,9 @@ Decided on 3 November 2026. Questions 1 to 3 were put to the user and accepted a
 | Validate the page that first carries `PartitionWatermarks` | Every page's map is checked before its objects are processed; only the first map is recorded | A bad key on a later page would otherwise be ignored silently, though it is the same fault in the Connector |
 | Fail when a Connector without the capability returns watermarks | It must leave `PartitionWatermarks` null; any map, even an empty one, fails the run | One rule a Connector author can state, and no case where a non-null map from such a Connector is meaningful |
 | Sweep deselected Partitions at the end of every completed run | Only at the end of a run that may record; a run that records nothing (withheld deletes, incomplete deletion detection, the close override) writes nothing at all | "Record nothing" stays literal; the deselection hook (Decision 5) already covers those runs |
+| `VerifyContinuity(partition, previous, current)`, called per Partition | `VerifyContinuity(partitions, previous, current)`, called once for each distinct watermark with every target Partition that holds it (`LdapPartitionWatermark` is a record, so equal watermarks group) | One read per distinct watermark rather than per Partition, and a refusal names every Partition it affects; Phases 4 and 5 ask for exactly "each distinct `W_p`" |
+| `LdapConnectorRootDse` loses `HighestCommittedUsn` | It does, from the persisted record; the USN this run's rootDSE read found is held on the in-memory record as `CurrentHighestCommittedUsn` (`[JsonIgnore]`) | The gone-backwards check (#1869) compares each Partition's USN with the directory's current one, which is a fact about the directory now, not a position, and is never persisted |
+| No Connected System record: fall back like a Partition without a watermark | Also an unreadable record | It used to fail the run with a JSON error; an unreadable record says no more about the directory than a missing one |
+| (not covered) A run whose Run Profile targets no Partition (Phase 2 hands an empty map) | Reads nothing, returns the rootDSE record and an empty `PartitionWatermarks`, `CompleteRead` false, and warns "This Delta Import read nothing: its Run Profile targets no selected partition", with or without a record | Before, the USN source read nothing silently, the accesslog and changelog sources read every change in the directory unconfined, and no record threw "Run a full import first". A full read here would read nothing while claiming a complete read, and an unconfined read is impossible without a Connected System-level watermark; the task-creation partition validation still blocks such a run by default |
+| Refusals keep today's remedy | The USN refusals say "Run a Full Import that reads the partition X" | A Full Import scoped to another Partition no longer repairs this one, so the remedy names which one; "invocationId has changed", both ids and "Full Import" stay for Scenario 025 |
+| (not covered) The fallback full read | Carries on from the first page's rootDSE read and capture instead of reading the directory and taking the watermarks a second time; its searches on the import's own connection go through the `ILdapOperationExecutor` seam | One read and one capture per run; the seam lets the tests show which Partitions a fallback read |
