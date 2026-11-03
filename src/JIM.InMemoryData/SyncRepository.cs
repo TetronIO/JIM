@@ -4476,14 +4476,7 @@ public class SyncRepository : ISyncRepository
             })
             .ToList();
 
-        if (!string.IsNullOrWhiteSpace(filter.SearchText))
-        {
-            var search = filter.SearchText.Trim();
-            headers = headers
-                .Where(h => (h.MetaverseObjectDisplayName ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
-                            || h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
+        // The search is applied by FilterPasswordChanges, which retry and cancel share, so all three narrow alike.
 
         IOrderedEnumerable<PendingPasswordChangeHeader> ordered = sortBy?.ToLowerInvariant() switch
         {
@@ -4608,6 +4601,17 @@ public class SyncRepository : ISyncRepository
         {
             var ids = filter.Ids.ToList();
             query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        // The same search the list applies, so retry and cancel act on the changes shown and no others (#2725).
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            query = query.Where(c =>
+                (_mvos.TryGetValue(c.MetaverseObjectId, out var mvo) ? mvo.CachedDisplayName ?? string.Empty : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (_connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
         return query.ToList();

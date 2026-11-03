@@ -254,6 +254,22 @@ Describe 'Resume-JIMPendingPasswordChange' {
             }
         }
 
+        It 'Should send -Search as the request''s search text, which the retry then honours' {
+            # #2725: the server ignored it and retried every change the other criteria matched. The cmdlet's half is
+            # to send it; the server's half is covered by the controller and repository tests.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AffectedCount = 1 } }
+
+                Resume-JIMPendingPasswordChange -Search 'Ada' -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/password-synchronisation/queue/retry' -and $Body.searchText -eq 'Ada'
+                }
+            }
+        }
+
         It 'Should refuse to act when nothing narrows the request' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
