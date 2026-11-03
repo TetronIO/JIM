@@ -31,7 +31,7 @@ steps:
 
 A Connector that keeps more than one watermark shows one line for each: the LDAP Connector one for each partition the run read, such as "DC=corp,DC=local: after 81,520, up to 81,733 (Update Sequence Number)", and the SQL Connector one for each Object Type or related table, such as "User: after 10, up to 25 (change log sequence)". A Delta Import that finds any of its partitions without a watermark reads every object in all of them, so that partition's line reads "from the start", and the run's warning names it. A time is shown in local time.
 
-**Show Connector state** reveals what was recorded before and after the run, exactly as the Connector keeps it, which is often more than the watermark: the LDAP Connector's holds what it detected about the directory. For the LDAP Connector, a table beneath it gives each partition's watermark **Before this run** and **After this run**, in full. **After this run** reads **Unchanged** where the run left that partition's watermark as it was, and the table says so when the run recorded no watermark at all.
+**Show Connector state** reveals what was recorded before and after the run, exactly as the Connector keeps it, which is often more than the watermark. For the LDAP Connector it is a table giving each partition's watermark **Before this run** and **After this run**, in full. **Before this run** reads **No watermark** for a partition that had none. **After this run** reads **Unchanged** where the run left the watermark as it was, **Cleared** where it removed it, and **Nothing recorded** for every partition when the run recorded no watermark at all.
 
 ## :material-power-plug-outline: By Connector
 
