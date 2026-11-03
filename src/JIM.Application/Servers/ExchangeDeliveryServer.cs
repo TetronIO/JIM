@@ -159,7 +159,7 @@ public class ExchangeDeliveryServer
             Log.Information(
                 "ExchangeDeliveryServer: Connected System {ConnectedSystem}: {Delivered} delivered ({AlreadyInState} already in their declared state), " +
                 "{Retrying} retrying, {Parked} parked, {Withdrawn} withdrawn, {Released} released unattempted. Exchange session: {KerberosLogins} Kerberos " +
-                "login(s), {Connections} connection(s), {Commands} command(s).{Problem}",
+                "login(s), {Connections} connection(s), {Commands} command(s).{Problem:l}",
                 LogSanitiser.Sanitise(connectedSystem.Name), result.DeliveredCount, result.AlreadyInStateCount, result.RetryingCount, result.ParkedCount,
                 result.WithdrawnCount, result.ReleasedCount, result.SessionStatistics.KerberosLogins, result.SessionStatistics.Connections,
                 result.SessionStatistics.Commands, DescribeProblem(result));
