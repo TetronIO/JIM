@@ -21,6 +21,7 @@ using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
+using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -54,7 +55,7 @@ public class ActivitiesControllerTests
             .ReturnsAsync(new Dictionary<Guid, int>());
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
         _mockEtaTracker = new Mock<IActivityEtaTracker>();
-        _application = new JimApplication(_mockRepository.Object);
+        _application = new JimApplication(_mockRepository.Object, new JIM.InMemoryData.SyncRepository());
         _controller = new ActivitiesController(_mockLogger.Object, _application, _mockEtaTracker.Object);
     }
 
@@ -902,6 +903,33 @@ public class ActivitiesControllerTests
 
         var dto = result?.Value as ActivityDetailDto;
         Assert.That(dto?.ExecutionStats?.FollowUps.Single().State, Is.EqualTo("Parked"));
+    }
+
+    /// <summary>
+    /// A queued Exchange change's own Activity carries where the change stands now (#2021, Phase 6): the Activity was
+    /// complete the moment the change was queued, so its status alone says nothing about the mailbox.
+    /// </summary>
+    [Test]
+    public async Task GetActivityAsync_ExchangeChange_CarriesWhereTheChangeStandsAsync()
+    {
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(activityId)).ReturnsAsync(new Activity
+        {
+            Id = activityId, TargetType = ActivityTargetType.ExchangeRecipient, TargetOperationType = ActivityTargetOperationType.SetExchangeRecipient,
+            TargetContext = "Mailbox", Status = ActivityStatus.Complete, Created = DateTime.UtcNow
+        });
+        _mockActivityRepo.Setup(r => r.GetExchangeChangeEventsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync(
+        [
+            new ExchangeChangeEvent
+            {
+                ChangeActivityId = activityId, ActivityId = Guid.NewGuid(), Operation = ActivityTargetOperationType.SetExchangeRecipient,
+                Status = ActivityStatus.Complete, Message = "Exchange recipient set: Mailbox.", OccurredAt = DateTime.UtcNow
+            }
+        ]);
+
+        var result = await _controller.GetActivityAsync(activityId) as OkObjectResult;
+
+        Assert.That((result?.Value as ActivityDetailDto)?.ExchangeOutcome?.State, Is.EqualTo(ExchangeChangeState.Delivered));
     }
 
     [Test]
