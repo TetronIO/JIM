@@ -101,6 +101,13 @@ public class ExchangeDeliveryServer
         _syncRepo.GetExchangeQueueDeliveryOutlookAsync(asOf, PendingExchangeChange.ClaimLease);
 
     /// <summary>
+    /// Removes Exchange changes left Parked or Cancelled since before <paramref name="olderThan"/>, at most
+    /// <paramref name="maxRecords"/>, for history retention (plan D10).
+    /// </summary>
+    public Task<int> DeleteExpiredQueueRecordsAsync(DateTime olderThan, int maxRecords) =>
+        _syncRepo.DeleteTerminalExchangeChangesAsync(olderThan, maxRecords);
+
+    /// <summary>
     /// Runs one lane on <paramref name="connectedSystemId"/>: claims what is due, converges it over one Exchange session,
     /// and records every outcome. Outcomes already recorded stay recorded when the lane is cancelled; what it had not
     /// reached is given back unattempted.

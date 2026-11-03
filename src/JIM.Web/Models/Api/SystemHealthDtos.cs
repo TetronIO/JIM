@@ -30,8 +30,9 @@ public class ServiceHealthResponse
     public DateTime GeneratedAt { get; set; }
 
     /// <summary>
-    /// One entry per service, always present and always in the order WorkerSync, WorkerDelivery,
-    /// Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing.
+    /// One entry per service the deployment runs, in the order WorkerSync, WorkerDelivery, WorkerExchange (only while
+    /// the feature using it is switched on), Scheduler. A service that has never reported is present as Unhealthy
+    /// (NeverStarted) rather than missing.
     /// </summary>
     public List<ServiceHealthEntryResponse> Services { get; set; } = [];
 
@@ -59,7 +60,8 @@ public class ServiceHealthEntryResponse
 {
     /// <summary>
     /// Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's
-    /// password delivery loop) or Scheduler.
+    /// password delivery loop), WorkerExchange (the Worker's Exchange delivery loop, reported only while the feature
+    /// using it is switched on) or Scheduler.
     /// </summary>
     public JimService Service { get; set; }
 

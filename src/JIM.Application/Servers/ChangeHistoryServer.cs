@@ -51,6 +51,13 @@ public class ChangeHistoryServer
         public int PasswordQueueRecordsDeleted { get; set; }
 
         /// <summary>
+        /// Queued Exchange changes (#2021) left Parked or Cancelled for longer than the general retention period, which
+        /// is also how long the Activities they follow up are kept (plan D10). A removed Parked change releases the
+        /// hold on its export's changes, so the next import judges them and a later export may queue the change again.
+        /// </summary>
+        public int ExchangeQueueRecordsDeleted { get; set; }
+
+        /// <summary>
         /// SCIM store journal entries (#124) past the general retention period: the record of which SCIM requests
         /// changed which resources, by which API key, between imports.
         /// </summary>
@@ -448,6 +455,11 @@ public class ChangeHistoryServer
             Log.Information("ChangeHistoryCleanup: Removing password changes terminal before {PasswordOlderThan}", passwordOlderThan);
             result.PasswordQueueRecordsDeleted = await _application.PasswordSynchronisation.DeleteExpiredQueueRecordsAsync(passwordOlderThan, maxRecordsPerType);
 
+            // Parked and Cancelled Exchange changes at the general cutoff, the same as the Activities they follow up (#2021,
+            // plan D10). Refused changes are kept: they are what stops a misfit being reported on every export.
+            Log.Information("ChangeHistoryCleanup: Removing Exchange changes parked or cancelled before {OlderThan}", olderThan);
+            result.ExchangeQueueRecordsDeleted = await _application.ExchangeDelivery.DeleteExpiredQueueRecordsAsync(olderThan, maxRecordsPerType);
+
             // The SCIM store's journal is change history between imports, so it goes with the general history.
             Log.Information("ChangeHistoryCleanup: Deleting expired SCIM store journal entries (older than {OlderThan})", olderThan);
             result.ScimJournalEntriesDeleted = await _application.Repository.ScimStore.DeleteJournalEntriesOlderThanAsync(olderThan, maxRecordsPerType);
@@ -473,8 +485,8 @@ public class ChangeHistoryServer
             if (completeActivity)
                 await _application.Activities.CompleteActivityAsync(activity);
 
-            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes, {ScimJournalCount} SCIM store journal entries deleted",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted, result.ScimJournalEntriesDeleted);
+            Log.Information("ChangeHistoryCleanup: Completed - {CsoCount} CSO changes, {MvoCount} MVO changes, {PreviewCount} preview results, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities, {PasswordActivityCount} Password Synchronisation activities, {PasswordQueueCount} queued password changes, {ExchangeQueueCount} queued Exchange changes, {ScimJournalCount} SCIM store journal entries deleted",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.PreviewsDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted, result.PasswordEventActivitiesDeleted, result.PasswordQueueRecordsDeleted, result.ExchangeQueueRecordsDeleted, result.ScimJournalEntriesDeleted);
 
             return result;
         }

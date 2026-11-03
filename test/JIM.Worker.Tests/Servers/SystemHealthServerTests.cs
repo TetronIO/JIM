@@ -31,7 +31,44 @@ public class SystemHealthServerTests
         _mockRepository = new Mock<IRepository>();
         _mockSystemRepository = new Mock<ISystemRepository>();
         _mockRepository.Setup(r => r.System).Returns(_mockSystemRepository.Object);
+        // Flags off unless a test turns them on: the report's three always-expected services are what these assert on.
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(new JIM.TestSupport.InMemoryServiceSettingsRepository());
         _jim = new JimApplication(_mockRepository.Object);
+    }
+
+    private void GivenFeatureFlagsOn() =>
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
+
+    // ---- The Exchange Delivery Service (#2021, behind the ExchangeRecipients flag) ----
+
+    [Test]
+    public async Task GetServiceHealthAsync_ExchangeRecipientsOn_ExpectsTheExchangeDeliveryServiceBesideTheOtherWorkerServicesAsync()
+    {
+        GivenFeatureFlagsOn();
+        GivenHeartbeats();
+
+        var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
+            {
+                JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler
+            }), "the Worker's services sit together, whatever their enum values");
+            Assert.That(report.Services.Single(s => s.Service == JimService.WorkerExchange).Condition, Is.EqualTo(ServiceHealthCondition.NeverStarted));
+        }
+    }
+
+    [Test]
+    public async Task GetServiceHealthAsync_ExchangeRecipientsOff_LeavesTheExchangeDeliveryServiceOutEvenWithAHeartbeatAsync()
+    {
+        // A heartbeat written while the flag was on outlives it by up to a day; reported, it would surface a feature
+        // that is switched off, and as Stale or Unhealthy at that.
+        GivenHeartbeats(Heartbeat(JimService.WorkerExchange, TimeSpan.FromHours(2)));
+
+        var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
+
+        Assert.That(report.Services.Select(s => s.Service), Does.Not.Contain(JimService.WorkerExchange));
     }
 
     [TearDown]

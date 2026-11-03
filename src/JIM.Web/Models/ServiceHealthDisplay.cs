@@ -21,13 +21,14 @@ namespace JIM.Web.Models;
 public static class ServiceHealthDisplay
 {
     /// <summary>
-    /// The card title for a service. The two Worker services share a prefix because they share a process; an
-    /// administrator looking for "the Worker" finds both cards at once.
+    /// The card title for a service. The Worker's services share a prefix because they share a process; an
+    /// administrator looking for "the Worker" finds every one of its cards at once.
     /// </summary>
     public static string Label(JimService service) => service switch
     {
         JimService.WorkerSync => "Worker · Sync",
         JimService.WorkerDelivery => "Worker · Passwords",
+        JimService.WorkerExchange => "Worker · Exchange",
         JimService.Scheduler => "Scheduler",
         _ => service.ToString()
     };
@@ -300,7 +301,7 @@ public static class ServiceHealthDisplay
 
         var down = considered.Where(s => s.Status == ServiceHealthStatus.Unhealthy).ToList();
         if (down.Count > 0)
-            return OutageBanner(down, deliveryReported, report.GeneratedAt);
+            return OutageBanner(down, deliveryReported, considered.Select(s => s.Service).ToHashSet(), report.GeneratedAt);
 
         var stalled = considered.Where(s => s.Condition == ServiceHealthCondition.Stalled).ToList();
         if (stalled.Count > 0)
@@ -326,7 +327,7 @@ public static class ServiceHealthDisplay
     }
 
     /// <summary>
-    /// A warning when a service is short of memory, before it is stopped part-way through its work. The two Worker
+    /// A warning when a service is short of memory, before it is stopped part-way through its work. The Worker's
     /// services share one process, so they are named once as the Worker, with the synchronisation loop's figures;
     /// the Worker's own remedy (it stops its running work at <see cref="MemoryPressure.StopShare"/>) is said only
     /// when the Worker is the one short.
@@ -336,7 +337,8 @@ public static class ServiceHealthDisplay
         var sentences = new List<string>();
 
         var worker = memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerSync)
-                     ?? memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerDelivery);
+                     ?? memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerDelivery)
+                     ?? memoryLow.FirstOrDefault(s => s.Service == JimService.WorkerExchange);
         if (worker != null && ReadingOf(worker) is { } workerReading)
         {
             sentences.Add($"Memory is low for the Worker: {MemoryPressure.Describe(workerReading, "the Worker")}.");
@@ -360,22 +362,34 @@ public static class ServiceHealthDisplay
             : null;
 
 
-    private static ServiceHealthBannerContent OutageBanner(List<ServiceHealth> down, bool deliveryReported, DateTime asOf)
+    private static ServiceHealthBannerContent OutageBanner(List<ServiceHealth> down, bool deliveryReported, IReadOnlySet<JimService> reportedServices, DateTime asOf)
     {
         var syncDown = down.Any(s => s.Service == JimService.WorkerSync);
         // With no delivery loop in the report, the synchronisation loop down is the whole Worker down.
         var passwordsDown = down.Any(s => s.Service == JimService.WorkerDelivery) || (syncDown && !deliveryReported);
+        // The Exchange delivery service is only in the report while its feature is on (#2021); absent, it is no part
+        // of whether the whole Worker is down.
+        var exchangeReported = reportedServices.Contains(JimService.WorkerExchange);
+        var exchangeDown = down.Any(s => s.Service == JimService.WorkerExchange);
         var schedulerDown = down.Any(s => s.Service == JimService.Scheduler);
 
-        // Both Worker services down is the Worker down: name it once. One of them alone is named precisely, because
-        // the other half of the process is still alive and the remedy is different.
+        // Every Worker service down is the Worker down: name it once. Any of them alone is named precisely, because
+        // the rest of the process is still alive and the remedy is different.
         var names = new List<string>();
-        if (syncDown && passwordsDown)
+        if (syncDown && passwordsDown && (exchangeDown || !exchangeReported))
+        {
             names.Add("the Worker");
-        else if (syncDown)
-            names.Add("the Worker's synchronisation service");
-        else if (passwordsDown)
-            names.Add("the Worker's password delivery service");
+        }
+        else
+        {
+            if (syncDown)
+                names.Add("the Worker's synchronisation service");
+            if (passwordsDown)
+                names.Add("the Worker's password delivery service");
+            if (exchangeDown)
+                names.Add("the Worker's Exchange delivery service");
+        }
+
         if (schedulerDown)
             names.Add("the Scheduler");
 
@@ -392,7 +406,7 @@ public static class ServiceHealthDisplay
         var stopped = new List<string>();
         if (syncDown)
             stopped.Add("synchronised");
-        if (passwordsDown)
+        if (passwordsDown || exchangeDown)
             stopped.Add("delivered");
         if (schedulerDown)
             stopped.Add("scheduled");
@@ -411,6 +425,7 @@ public static class ServiceHealthDisplay
             {
                 JimService.WorkerSync => "The Worker",
                 JimService.WorkerDelivery => "The Worker's password delivery service",
+                JimService.WorkerExchange => "The Worker's Exchange delivery service",
                 _ => "The Scheduler"
             };
             var since = s.LastProgressAt is { } lastProgressAt ? $" for {LongDuration(asOf - lastProgressAt)}" : string.Empty;
