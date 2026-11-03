@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 3 has run against Exchange, and its results meet the go criteria; Phase 4, the go / no-go call, is recommended as go and awaits confirmation)
+- **Status:** Doing (go decided 2026-11-03; the prototype lands as the basis of #2021's connector phases, and this plan moves to done with it)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -114,7 +114,7 @@ Runs entirely in a Claude Code on the web sandbox, and is set up to run in CI. W
 - **Client:** the transport under hosted `System.Management.Automation` 7.6.7, with a generated `krb5.conf` pointing at the harness realm (Q1, Q2). It ran natively on the sandbox's Ubuntu 24.04, which has the same MIT `libgssapi-krb5-2` as the Worker image, not yet inside the Worker image itself.
 - **Known limit:** our client and the stand-in's framing and WS-Management code share an author, so they can share a misreading of MS-WSMV. pyspnego covers the Kerberos layer independently; Phase 1b on a real Windows host is what proves the rest.
 
-### Phase 1b: Real Windows WinRM (days 5 to 6)
+### Phase 1b: Real Windows WinRM (days 5 to 6) ✅
 
 Runs on the lab's Linux runner VM, which reaches the lab network.
 - Repeat Q1 and Q2 against `dc1.panoply.local`'s WinRM over HTTP (5985) with message encryption, from the Worker image, then Q3 over HTTPS (5986).
@@ -127,7 +127,7 @@ Runs on the lab's Linux runner VM, which reaches the lab network.
 - Logging without secrets.
 - Error mapping from PowerShell error records into structured results ready for RPEIs (Q5, Windows-side cases).
 
-### Phase 3: Exchange (days 8 to 9)
+### Phase 3: Exchange (days 8 to 9) ✅
 
 **Prerequisite:** the lab's Exchange Server SE mailbox server, `exchange-primary` (`ex1.panoply.local`), built by [#2412](https://github.com/TetronIO/JIM/issues/2412).
 
@@ -135,7 +135,7 @@ Runs on the lab's Linux runner VM, which reaches the lab network.
 - Answer Q3 against Exchange: whether HTTPS works from the Worker image, and if not, that the transport fails fast with a clear error.
 - Collect Q5's Exchange-side failure catalogue and Q6's timings.
 
-### Phase 4: Decision and write-up (day 10)
+### Phase 4: Decision and write-up (day 10) ✅
 
 - Record the result of every question under "Spike Results" below.
 - Make a go / no-go call against the criteria below, and update #2021: revised estimates, the Kerberos settings the Connected System must expose, and the error types.
@@ -206,6 +206,15 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 
    Everything is version-pinned.
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
+8. **Go (2026-11-03):** option A2 is a go, against the success criteria:
+   - **Criteria 1 and 2:** Kerberos, message encryption and PSRP work against real Exchange, and every Q4 cmdlet the criteria name ran under svc-jim's least-privilege roles.
+   - **Criterion 3:** the hardening that remains fits the three-week threshold. It is estimated at about two weeks:
+     - classify RBAC's hidden cmdlets and parameters as insufficient permissions;
+     - `XDG_CACHE_HOME` in the Worker image, and the Worker image's own lab run;
+     - an end-to-end test of renewing an expired ticket-granting ticket;
+     - quiet session close.
+   - **Criterion 4:** nothing weakened the security baseline.
+   - **What follows:** the prototype becomes the transport for #2021's Exchange connector. The open items under the fourth run's results carry into that work.
 
 ## Spike Results
 
