@@ -132,7 +132,7 @@ audience: implementer
 | **STR-5** | Block | Every code block names its language; use `text` for output and messages. |
 | **STR-6** | Ratchet | No stub or placeholder pages. A page that does not exist yet stays out of the nav. |
 | **STR-7** | Block | The page opens with a paragraph, directly under the H1, saying what this is and why it matters. Not a heading, admonition, table, list or included file. |
-| **STR-8** | Warn | The page is within its size budget: 5,000 words of prose (code excluded), or 3,000 for a conformant priority page. Over it, split one sub-feature per page; the parent keeps its URL and links on. |
+| **STR-8** | Block | The page is within its size budget: 5,000 words of prose (code excluded), or 3,000 for a conformant priority page. Over it, split one sub-feature per page; the parent keeps its URL and links on. |
 
 ## Voice
 
@@ -183,7 +183,7 @@ The cross-cutting rules in the root `CLAUDE.md` apply to every page exactly as t
 
 **MNT-2 (Review). Find what is now wrong before writing what is new.** The likelier failure is not writing something false, it is *leaving* something true-when-written. The LDAP Connector reference told readers JIM "will not stop you" sending a password over an unencrypted connection for two releases after the setting that does stop you shipped, because the change added a new page and nobody searched for the old claim. When you change behaviour, search `docs/` for the sentence that is now wrong before you search for where to describe the new thing.
 
-**MNT-3 (Block). A page over its size budget cannot grow.** A pull request may not increase the word count of a page that was over its size budget (STR-8) on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch, so trimming a large page never needs a baseline update. A page that only now crosses the budget gets a warning (STR-8), not a failure. The rule warned until the eleven pages already over budget were split, since blocking sooner would have failed most feature pull requests; with none over budget, it blocks.
+**MNT-3 (Block). A page over its size budget cannot grow.** A pull request may not increase the word count of a page that was over its size budget (STR-8) on the base branch, unless it also splits the page or removes as much as it adds. The comparison is against the base branch, so trimming a large page never needs a baseline update. A page that only now crosses the budget fails STR-8 instead. The rule warned until the eleven pages already over budget were split, since blocking sooner would have failed most feature pull requests; with none over budget, it blocks.
 
 ## Accuracy and links
 
@@ -290,7 +290,7 @@ Scope each checkpoint to the tutorial's own objects, since the pre-release suite
 | STR-5 | Code blocks name their language | Block | `Test-DocsConformance.ps1` |
 | STR-6 | No stub pages | Ratchet | `Test-DocsConformance.ps1` |
 | STR-7 | Opens with a paragraph | Block | `Test-DocsConformance.ps1` |
-| STR-8 | Within its size budget | Warn | `Test-DocsConformance.ps1` |
+| STR-8 | Within its size budget | Block | `Test-DocsConformance.ps1` |
 | TYP-1 | Has the shape its type requires | Block | `Test-DocsConformance.ps1` |
 | VOI-1 | Domain concept, never implementation | Review | |
 | VOI-2 | Present tense, active voice, "you" | Review | |
