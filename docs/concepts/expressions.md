@@ -309,9 +309,9 @@ When an expression references an attribute the object does not have, it sees **n
 
 ---
 
-## :material-lightbulb-outline: Common Scenarios
+## :material-lightbulb-outline: Expression Recipes
 
-Worked expressions for the Attribute Flows most deployments need, such as enabling Active Directory accounts from an employment status, building email addresses and distinguished names, and splitting delimited values into a list, are in [Expression Recipes](expression-recipes.md).
+Worked expressions for the Attribute Flows most deployments need, such as enabling Active Directory accounts from an employment status, building email addresses and distinguished names, and splitting delimited values into a list, are on [Expression Recipes](expression-recipes.md).
 
 ## :material-wrench-outline: Validation and Troubleshooting
 
