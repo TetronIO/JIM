@@ -760,7 +760,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
             // The search is confined to the target partitions on the server; this keeps the selection exact whatever
             // the directory made of the filter, and finds the partition whose watermark the write is judged by.
-            var partition = PartitionOf(reqDn, context.TargetPartitions, readFrom);
+            var partition = LdapConnectorUtilities.PartitionJudging(reqDn, context.TargetPartitions, candidate => readFrom[candidate.Id], StringComparer.Ordinal);
             if (partition == null)
             {
                 skippedOutOfScope++;
@@ -841,17 +841,6 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             "Skipped {SkippedOutOfScope} entries outside the selected scope, and {SkippedAlreadyRead} its partition's last import had read.",
             totalEntries, skippedOutOfScope, skippedAlreadyRead);
     }
-
-    /// <summary>
-    /// The target partition a logged write lies in, whose watermark it is judged by: the one whose suffix is the
-    /// longest match for its DN, compared RDN by RDN (<see cref="LdapConnectorUtilities.PartitionForDn"/>). A partition
-    /// with no distinguished name, whose clause reads every write from its watermark, takes what no other claims; of
-    /// several such, the one with the oldest watermark, so nothing one of them has yet to read is judged read. Null when
-    /// the write lies in none of them.
-    /// </summary>
-    private static ConnectedSystemPartition? PartitionOf(string reqDn, IReadOnlyList<ConnectedSystemPartition> targetPartitions, IReadOnlyDictionary<int, string> readFrom) =>
-        LdapConnectorUtilities.PartitionForDn(reqDn, targetPartitions)
-        ?? targetPartitions.Where(partition => string.IsNullOrEmpty(partition.ExternalId)).MinBy(partition => readFrom[partition.Id], StringComparer.Ordinal);
 
     /// <summary>
     /// The failure a Delta Import stops with when the directory stopped the change read at its size limit: an account

@@ -55,9 +55,9 @@ internal sealed class LdapDeltaReadContext
     internal required ILdapDeltaImportHost Host { get; init; }
 
     /// <summary>
-    /// The oldest of the target Partitions' positions, by the order the given position sorts in. Until a source reads
-    /// each Partition from its own watermark, reading every target Partition from the oldest is what keeps a change
-    /// from being skipped: it re-reads what a Partition with a later watermark already read, and misses nothing.
+    /// The oldest of the target Partitions' positions, by the order the given position sorts in: where a source whose
+    /// one log every Partition shares (the changelog) starts its read, so no Partition misses a change. The source then
+    /// passes over, entry by entry, what a Partition with a later watermark has already read.
     /// </summary>
     internal T OldestWatermark<T>(Func<LdapPartitionWatermark, T> position, IComparer<T> order)
     {

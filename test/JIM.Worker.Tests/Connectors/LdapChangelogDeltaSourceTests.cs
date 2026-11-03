@@ -1039,6 +1039,28 @@ public class LdapChangelogDeltaSourceTests
     }
 
     [Test]
+    public async Task ReadChangesAsync_PartitionWithNoDistinguishedName_TakesTheEntriesNoNamedPartitionClaimsAsync()
+    {
+        // A partition with no distinguished name cannot be told apart by suffix, so it takes what no named partition
+        // claims, as the accesslog source does; dropping those entries would have the run read nothing for it, silently.
+        // Of two such, the one with the older watermark judges them, so neither has a change passed over it has yet to read.
+        ChangelogHolds(
+            ChangeEntry("modify", CorpPerson("cal"), 1250),
+            ChangeEntry("modify", "uid=sam,ou=people,dc=other,dc=local", 1300),
+            ChangeEntry("modify", "uid=old,ou=people,dc=other,dc=local", 1150));
+        var (host, fetched) = FetchingHost();
+        var unnamed = new ConnectedSystemPartition { Id = 3, ExternalId = "", Name = "unnamed", Selected = true };
+        var alsoUnnamed = new ConnectedSystemPartition { Id = 4, ExternalId = "", Name = "also unnamed", Selected = true };
+
+        await Source().ReadChangesAsync(
+            PartitionsContext(host, new LdapDeltaSourceNotes(), containersStateScope: false, (Corp(), 1200), (alsoUnnamed, 1400), (unnamed, 1100)),
+            new ConnectedSystemImportResult(), CancellationToken.None);
+
+        Assert.That(fetched, Is.EqualTo(new[] { CorpPerson("cal"), "uid=sam,ou=people,dc=other,dc=local", "uid=old,ou=people,dc=other,dc=local" }),
+            "cal lies in corp.local; sam and old lie in no named partition, so the unnamed partition with the older watermark, 1100, judges them");
+    }
+
+    [Test]
     public async Task ReadChangesAsync_EntryWhoseChangeNumberCannotBeRead_IsStillImportedAsync()
     {
         // The directory answered it for a search from 1201, so it is newer than the oldest watermark, but whether

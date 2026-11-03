@@ -864,7 +864,8 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
             // oldest of the run's watermarks, so it repeats changes a partition with a later watermark has already read.
             // A change whose number cannot be read is kept: the search only answers numbers past the oldest watermark,
             // and importing a change twice costs a re-read where passing one over would lose it.
-            var partition = LdapConnectorUtilities.PartitionForDn(subjectDn, context.TargetPartitions);
+            var partition = LdapConnectorUtilities.PartitionJudging(subjectDn, context.TargetPartitions,
+                candidate => context.Watermarks[candidate.Id].ChangeNumber!.Value, Comparer<long>.Default);
             if (partition == null)
             {
                 progress.SkippedOutsideTargetPartitions++;

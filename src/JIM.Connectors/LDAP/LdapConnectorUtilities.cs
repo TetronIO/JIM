@@ -502,6 +502,22 @@ internal static class LdapConnectorUtilities
         partitions.Select(partition => string.IsNullOrWhiteSpace(partition.Name) ? partition.ExternalId : partition.Name).ToList();
 
     /// <summary>
+    /// The target Partition whose watermark a logged change is judged by: the Partition its DN lies in
+    /// (<see cref="PartitionForDn"/>), or else a Partition with no distinguished name, which cannot be told apart by
+    /// suffix and so takes what no named Partition claims; of several such, the one whose watermark sorts oldest, so
+    /// nothing one of them has yet to read is judged read. Null when the change lies in none of them.
+    /// </summary>
+    /// <remarks>
+    /// One rule for every change source that reads a directory-wide log (#2715): dropping what no named Partition
+    /// claims would have a run read nothing for a Partition with no DN, and say nothing. Unreachable for a naming
+    /// context a directory advertises, which always has a DN.
+    /// </remarks>
+    internal static ConnectedSystemPartition? PartitionJudging<T>(string? distinguishedName, IReadOnlyCollection<ConnectedSystemPartition> partitions,
+        Func<ConnectedSystemPartition, T> watermark, IComparer<T> order) =>
+        PartitionForDn(distinguishedName, partitions)
+        ?? partitions.Where(partition => string.IsNullOrEmpty(partition.ExternalId)).MinBy(watermark, order);
+
+    /// <summary>
     /// The Partition a distinguished name lies in: the one whose DN is the longest suffix of it, compared RDN by RDN as
     /// LDAP compares names. Null when it lies in none of them, or does not read as a distinguished name.
     /// </summary>
