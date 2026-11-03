@@ -435,15 +435,16 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     /// <inheritdoc />
     /// <remarks>
-    /// The watermark is the reqStart of the last write the last import read, which is also the RDN of that write's
-    /// accesslog entry, so whether the accesslog still reaches back to it is one base read away (#2008). When the
-    /// entry is gone, the accesslog was purged past it (olcAccessLogPurge removes entries older than its maximum age,
-    /// so this happens when Delta Imports stop for longer than that) or the directory was restored to before it;
-    /// either way the writes between it and the oldest entry still held may be gone too, and a timestamp watermark
-    /// cannot otherwise tell. When nothing was written in that time nothing was lost, but no read can tell that
-    /// apart, so the run is refused all the same. A generated watermark names no entry and is not checked; nor is a
-    /// record from before JIM kept which kind it is. Where cn=accesslog itself is missing or refused, the readiness
-    /// check that runs next names that, so this one says nothing.
+    /// The watermark is the reqStart of a write the last import of these partitions read to, which is also the RDN of
+    /// that write's accesslog entry, so whether the accesslog still reaches back to it is one base read away (#2008).
+    /// When the entry is gone, the accesslog was purged past it (olcAccessLogPurge removes entries older than its
+    /// maximum age, so this happens when a partition's Delta Imports stop for longer than that) or the directory was
+    /// restored to before it; either way the writes between it and the oldest entry still held may be gone too, and a
+    /// timestamp watermark cannot otherwise tell. When nothing was written in that time nothing was lost, but no read
+    /// can tell that apart, so the run is refused all the same, naming the partitions holding the watermark, since only
+    /// a Full Import that reads them re-establishes their baseline (#2715). A generated watermark names no entry and is
+    /// not checked; nor is a record from before JIM kept which kind it is. Where cn=accesslog itself is missing or
+    /// refused, the readiness check that runs next names that, so this one says nothing.
     /// </remarks>
     public void VerifyContinuity(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
@@ -454,16 +455,17 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         if (IsStillLogged(watermark) != false || ProbeAccesslog().Outcome != LdapDeltaSourceOutcome.Available)
             return;
 
-        _logger.Warning("LdapAccesslogDeltaSource: Refusing the Delta Import; the accesslog no longer holds the entry the last import ended at ({Watermark})",
-            LogSanitiser.Sanitise(watermark));
+        var described = LdapConnectorUtilities.DescribePartitions(partitions);
+        _logger.Warning("LdapAccesslogDeltaSource: Refusing the Delta Import; the accesslog no longer holds the entry the last import of {Partitions} ended at ({Watermark})",
+            LogSanitiser.Sanitise(described), LogSanitiser.Sanitise(watermark));
 
         throw new CannotPerformDeltaImportException(
-            $"The directory's accesslog no longer holds the change the last import ended at (reqStart {watermark}), so the changes logged after it " +
+            $"The directory's accesslog no longer holds the change the last import of {described} ended at (reqStart {watermark}), so the changes logged after it " +
             "may be gone too. The usual cause is that the accesslog's purge (olcAccessLogPurge) removed entries older than its maximum age because " +
             "Delta Imports did not run for longer than that; it also happens when the directory is restored from a backup or snapshot. If nothing " +
             "was written in that time nothing was lost, but JIM cannot tell, and a Delta Import would silently miss any changes that were. Run a " +
-            "Full Import, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than twice the " +
-            "longest gap between Delta Imports.");
+            $"Full Import that reads {described}, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than twice the " +
+            "longest gap between Delta Imports of any one partition.");
     }
 
     /// <summary>

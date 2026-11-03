@@ -12,6 +12,7 @@ using Serilog;
 using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
@@ -414,13 +415,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
     {
         // Guard against a delta import silently reading a watermark against a directory it no longer applies to, such
         // as a USN watermark read back from a different domain controller than the one that issued it (see #230). This
-        // must run before any delta querying below, on the same connection that just answered the rootDSE query. Each
-        // distinct watermark is checked once, naming every Partition that holds it.
+        // must run before any delta querying below, on the same connection that just answered the rootDSE query.
         if (watermarks != null)
-        {
-            foreach (var holders in targetPartitions.GroupBy(partition => watermarks[partition.Id]))
-                source.VerifyContinuity(holders.ToList(), holders.Key, currentRootDse);
-        }
+            VerifyEveryWatermark(source, currentRootDse, targetPartitions, watermarks);
 
         // Guard against silently importing zero objects from a Partition the connected domain
         // controller does not host (see #230). AD-family only; a no-op for other directory types.
@@ -432,6 +429,36 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         // JIM could prove stops the run; one it could not confirm becomes a warning.
         var findings = await source.VerifyReadinessAsync(currentRootDse, NamingContextsOf(targetPartitions), _cancellationToken);
         _deltaSourceNotes = LdapDeltaSourceFindings.ThrowOnUnavailableOrNote(findings, _logger);
+    }
+
+    /// <summary>
+    /// Checks each distinct watermark among the target Partitions once, with every Partition that holds it, and refuses
+    /// the run once, naming every Partition whose watermark no longer applies: a refusal that stopped at the first would
+    /// have the administrator repair one Partition only to be refused for the next on the following run. One refusal
+    /// is thrown as the change source raised it; several become one whose message is each of theirs in turn, since
+    /// each names its Partitions and the remedy for them.
+    /// </summary>
+    private static void VerifyEveryWatermark(ILdapDeltaSource source, LdapConnectorRootDse currentRootDse,
+        List<ConnectedSystemPartition> targetPartitions, IReadOnlyDictionary<int, LdapPartitionWatermark> watermarks)
+    {
+        var refusals = new List<CannotPerformDeltaImportException>();
+        foreach (var holders in targetPartitions.GroupBy(partition => watermarks[partition.Id]))
+        {
+            try
+            {
+                source.VerifyContinuity(holders.ToList(), holders.Key, currentRootDse);
+            }
+            catch (CannotPerformDeltaImportException refusal)
+            {
+                refusals.Add(refusal);
+            }
+        }
+
+        if (refusals.Count == 1)
+            ExceptionDispatchInfo.Throw(refusals[0]);
+
+        if (refusals.Count > 1)
+            throw new CannotPerformDeltaImportException(string.Join(" ", refusals.Select(refusal => refusal.Message)));
     }
 
     /// <summary>

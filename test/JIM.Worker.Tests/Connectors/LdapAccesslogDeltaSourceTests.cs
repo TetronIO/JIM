@@ -620,11 +620,26 @@ public class LdapAccesslogDeltaSourceTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(ex!.Message, Does.Contain(Watermark), "the change the last import ended at");
+            Assert.That(ex.Message, Does.Contain($"the last import of the partition {PartitionDn} ended at"), "whose last import it was (#2715)");
             Assert.That(ex.Message, Does.Contain("olcAccessLogPurge"), "the usual cause, by the setting that controls it");
             Assert.That(ex.Message, Does.Contain("restored from a backup or snapshot"), "the other cause");
             Assert.That(ex.Message, Does.Contain("silently miss"), "why the run must not carry on");
-            Assert.That(ex.Message, Does.Contain("Run a Full Import"), "what to do");
+            Assert.That(ex.Message, Does.Contain($"Run a Full Import that reads the partition {PartitionDn}"),
+                "what to do: a Full Import of another partition re-establishes that partition's baseline, not this one's");
         }
+    }
+
+    [Test]
+    public void VerifyContinuity_PartitionsHoldingOnePurgedWatermark_RefusalNamesEveryOne()
+    {
+        var executor = ExecutorWhereTheWatermarkEntryIsMissingButTheAccesslogIsThere(
+            new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object"));
+        var partners = new ConnectedSystemPartition { Id = 2, ExternalId = SecondPartitionDn, Name = SecondPartitionDn, Selected = true };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() =>
+            Source(executor).VerifyContinuity([Partition(), partners], LoggedWatermark(), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP }));
+
+        Assert.That(ex!.Message, Does.Contain($"the partitions {PartitionDn} and {SecondPartitionDn}"));
     }
 
     [Test]

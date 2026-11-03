@@ -424,6 +424,47 @@ public class LdapConnectorImportPartitionWatermarkTests
     }
 
     [Test]
+    public void GetDeltaImportObjectsAsync_OnePartitionsWatermarkPurged_RefusesNamingThatPartitionAsync()
+    {
+        // corp.local was last read to 09:00 by a Delta Import that has not run since, and the accesslog's purge has
+        // removed that entry; partners.local was read to 09:10 more recently, and its entry is still logged. A Full
+        // Import of partners.local would not repair corp.local, so the refusal says which partition needs one.
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0900), (2, At0910)));
+
+        var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Message, Does.Contain("the last import of the partition corp.local ended at").And.Contain(At0900));
+            Assert.That(failure.Message, Does.Contain("olcAccessLogPurge").And.Contain("restored from a backup or snapshot"));
+            Assert.That(failure.Message, Does.Contain("Run a Full Import that reads the partition corp.local"));
+            Assert.That(failure.Message, Does.Not.Contain("partners.local"), "partners.local's watermark is still logged");
+            Assert.That(ChangeReads(), Is.Empty, "nothing is read while a watermark is untrustworthy");
+        }
+    }
+
+    [Test]
+    public void GetDeltaImportObjectsAsync_TwoPartitionsWatermarksPurged_RefusesOnceNamingBothAsync()
+    {
+        // Both partitions' entries are gone, each a different one. A refusal that named only the first would have the
+        // administrator repair corp.local only to be refused for partners.local on the next run.
+        Log(At0920, Cal);
+        Log(At0930, Pat);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0900), (2, At0910)));
+
+        var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Message, Does.Contain("the partition corp.local").And.Contain(At0900));
+            Assert.That(failure.Message, Does.Contain("the partition partners.local").And.Contain(At0910));
+            Assert.That(ChangeReads(), Is.Empty);
+        }
+    }
+
+    [Test]
     public async Task GetDeltaImportObjectsAsync_LaterPage_SendsTheSameFilterSoThePagingCookieStaysValidAsync()
     {
         // OpenLDAP rejects a paging cookie presented with a search other than the one it was issued for. Page 2 is
@@ -482,6 +523,24 @@ public class LdapConnectorImportPartitionWatermarkTests
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
 
         Assert.That(failure!.Message, Does.Contain("the partitions corp.local and partners.local"));
+    }
+
+    [Test]
+    public void GetDeltaImportObjectsAsync_PartitionsHoldingDifferentWatermarksFromAnotherDomainController_RefusesOnceNamingEachAsync()
+    {
+        // Each distinct watermark is verified, and every one that no longer applies is named in the one refusal,
+        // whichever change source refused it.
+        _directoryType = LdapDirectoryType.ActiveDirectory;
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.ActiveDirectory),
+            new Dictionary<int, string?> { [1] = UsnWatermark(100, Dc2InvocationId), [2] = UsnWatermark(300, Dc2InvocationId) });
+
+        var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failure!.Message, Does.Contain("the partition corp.local").And.Contain("the partition partners.local"));
+            Assert.That(failure.Message, Does.Contain("invocationId has changed").And.Contain("Full Import"));
+        }
     }
 
     [Test]
