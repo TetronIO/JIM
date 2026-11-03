@@ -96,8 +96,9 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     ///
     /// One entry is returned per service, in the order **WorkerSync** (the Worker's synchronisation loop,
     /// which runs Run Profiles and other queued work), **WorkerDelivery** (the Worker's password delivery
-    /// loop), **WorkerExchange** (the Worker's Exchange delivery loop, present only while the feature using it is
-    /// switched on) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>status</c> is one of:
+    /// loop), **WorkerExchange** (the Worker's Exchange delivery loop, present only while the in-development Exchange
+    /// recipients feature is switched on, so never in a production deployment) and **Scheduler** (which starts
+    /// Schedules when they fall due). Each entry's <c>status</c> is one of:
     ///
     /// - **Healthy**: heartbeating within the last 15 seconds. Nothing to do.
     /// - **Degraded**: alive, but something is not right. Its <c>condition</c> says what: **HeartbeatOverdue**

@@ -10,8 +10,8 @@ function Get-JIMServiceHealth {
         Reads the heartbeat every JIM background service writes to the database every 5 seconds and returns one
         object per service: WorkerSync (the Worker's synchronisation loop, which runs Run Profiles and other
         queued work), WorkerDelivery (the Worker's password delivery loop), WorkerExchange (the Worker's Exchange
-        delivery loop, present only while the feature using it is switched on) and Scheduler (which starts
-        Schedules when they fall due). This is the same report the Service Health strip on the Operations page
+        delivery loop, present only while the in-development Exchange recipients feature is switched on, so never in a
+        production deployment) and Scheduler (which starts Schedules when they fall due). This is the same report the Service Health strip on the Operations page
         shows, so a script and an administrator always see the same verdict.
 
         Each service's Status is one of:
@@ -50,10 +50,11 @@ function Get-JIMServiceHealth {
         service.
 
     .OUTPUTS
-        One object per service the deployment runs, in the order WorkerSync, WorkerDelivery, WorkerExchange (only
-        while the feature using it is switched on), Scheduler. A service that has never reported is present as
-        Unhealthy (NeverStarted), with the fields it cannot supply set to null. With -Summary, one object whose
-        Services holds them.
+        One object per service the deployment runs, in the order WorkerSync, WorkerDelivery, WorkerExchange,
+        Scheduler. WorkerExchange is present only while the in-development Exchange recipients feature is switched on,
+        so a production deployment never returns it. A service that has never reported is present as Unhealthy
+        (NeverStarted), with the fields it cannot supply set to null. With -Summary, one object whose Services holds
+        them.
 
     .EXAMPLE
         Get-JIMServiceHealth
