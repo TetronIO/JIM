@@ -1088,8 +1088,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
                 .Distinct()
                 .ToList();
 
+            // Through the executor seam, like every other read a change source makes, so a test can script it
             var searchRequest = new SearchRequest(dn, "(objectClass=*)", SearchScope.Base, allAttributes.ToArray());
-            var searchResponse = (SearchResponse)_connection.SendRequest(searchRequest, _searchTimeout);
+            var searchResponse = (SearchResponse)Executor.SendRequest(searchRequest, _searchTimeout);
 
             if (searchResponse.Entries.Count == 0)
             {

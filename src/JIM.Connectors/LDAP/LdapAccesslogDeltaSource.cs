@@ -348,23 +348,44 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// The accesslog search both the watermark walk and the change read make: the successful write operations at or
-    /// after a reqStart (all of them when there is none to start from), to entries within the given partitions (any
-    /// entry when none is given). dnSubtreeMatch keeps the other databases' writes on the server.
+    /// The watermark walk's search: the successful write operations at or after a reqStart (all of them when there is
+    /// none to start from), to entries within the given partitions (any entry when none is given). dnSubtreeMatch keeps
+    /// the other databases' writes on the server.
     /// </summary>
     private static string WriteOperations(string? fromTimestamp, IReadOnlyList<string> partitionSuffixes)
     {
         if (fromTimestamp == null && partitionSuffixes.Count == 0)
             return WriteOperationsFilter;
 
-        var from = fromTimestamp == null
-            ? string.Empty
-            : $"(reqStart>={LdapConnectorUtilities.EscapeLdapFilterValue(fromTimestamp)})";
+        var from = fromTimestamp == null ? string.Empty : AtOrAfter(fromTimestamp);
         var withinPartitions = partitionSuffixes.Count == 0
             ? string.Empty
-            : $"(|{string.Concat(partitionSuffixes.Select(s => $"(reqDN:dnSubtreeMatch:={LdapConnectorUtilities.EscapeLdapFilterValue(s)})"))})";
+            : $"(|{string.Concat(partitionSuffixes.Select(Within))})";
         return $"(&(objectClass=auditWriteObject)(reqResult=0){from}{withinPartitions})";
     }
+
+    /// <summary>
+    /// The change read's search: the successful write operations to entries within each partition at or after that
+    /// partition's own watermark, one clause per partition, any of them matching (#2715). dnSubtreeMatch keeps the other
+    /// databases' writes on the server, and each bound keeps what a partition's last import already read there too. A
+    /// partition with no distinguished name to confine its clause to is read from its watermark wherever a write was
+    /// made, as the read always was when no partition could be named.
+    /// </summary>
+    /// <param name="partitionsFrom">Each partition's distinguished name and watermark, in the run's partition order,
+    /// which is the same on every page, so every page asks the question its paging cookie was issued for.</param>
+    private static string WriteOperations(IEnumerable<(string Suffix, string FromTimestamp)> partitionsFrom)
+    {
+        var clauses = partitionsFrom.Select(partition => string.IsNullOrEmpty(partition.Suffix)
+            ? AtOrAfter(partition.FromTimestamp)
+            : $"(&{Within(partition.Suffix)}{AtOrAfter(partition.FromTimestamp)})");
+        return $"(&(objectClass=auditWriteObject)(reqResult=0)(|{string.Concat(clauses)}))";
+    }
+
+    /// <summary>A write started at or after the given reqStart.</summary>
+    private static string AtOrAfter(string timestamp) => $"(reqStart>={LdapConnectorUtilities.EscapeLdapFilterValue(timestamp)})";
+
+    /// <summary>A write to an entry within the given partition, its own entry included.</summary>
+    private static string Within(string partitionSuffix) => $"(reqDN:dnSubtreeMatch:={LdapConnectorUtilities.EscapeLdapFilterValue(partitionSuffix)})";
 
     /// <summary>
     /// The partitions an accesslog search is confined to, by distinguished name: those named, less any without one.
@@ -613,32 +634,36 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     /// <inheritdoc />
     /// <remarks>
-    /// Queries cn=accesslog for write operations at or after the previous watermark timestamp, one page per call. For
-    /// each change, fetches the current state of the affected object through the host; a deletion is built from its
-    /// own accesslog entry, because the object is no longer there to fetch.
+    /// Queries cn=accesslog for the write operations within each target partition at or after that partition's own
+    /// watermark, one page per call (#2715). For each change, fetches the current state of the affected object
+    /// through the host; a deletion is built from its own accesslog entry, because the object is no longer there to
+    /// fetch.
     /// <para>
-    /// cn=accesslog is shared by every database on the server, so the read is confined to the target partitions on
-    /// the server rather than read whole and filtered here. The pages come from RFC 2696 Simple Paged Results: the
-    /// directory's cursor carries the read from one page to the next, so nothing falls between pages however the
-    /// log's entries are ordered. A directory that stops the read at its size limit fails it, because an account the
-    /// limit applies to cannot read the whole log.
+    /// cn=accesslog is shared by every database on the server, so the read is confined on the server, each partition
+    /// by a clause carrying its own watermark, rather than read whole and filtered here. Each write the directory
+    /// returns is then judged here by the watermark of the partition it lies in, the one whose suffix is its longest
+    /// match: one suffix can be hosted beneath another, and the enclosing partition's clause then returns the nested
+    /// partition's writes since the enclosing partition's watermark. The pages come from RFC 2696 Simple Paged
+    /// Results: the directory's cursor carries the read from one page to the next, so nothing falls between pages
+    /// however the log's entries are ordered, and every page asks the same question, since every page is handed the
+    /// same watermarks. A directory that stops the read at its size limit fails it, because an account the limit
+    /// applies to cannot read the whole log.
     /// </para>
     /// </remarks>
     /// <exception cref="CannotPerformDeltaImportException">The directory refused the accesslog search, has no accesslog to search, or stopped the search at its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
-        // The import establishes HasBaseline for every target Partition before calling, so each has a timestamp. Until
-        // each Partition is read from its own (#2715, phase 4), every one is read from the oldest, which re-reads what a
-        // Partition with a later watermark already read and misses nothing.
-        var previousTimestamp = context.OldestWatermark(watermark => watermark.AccesslogTimestamp!, StringComparer.Ordinal);
+        // The import establishes HasBaseline for every target Partition before calling, so each has a timestamp.
+        var readFrom = context.TargetPartitions.ToDictionary(partition => partition.Id, partition => context.Watermarks[partition.Id].AccesslogTimestamp!);
+        var distinctWatermarks = readFrom.Values.Distinct(StringComparer.Ordinal).ToList();
 
-        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since {previousTimestamp}...");
+        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, distinctWatermarks.Count == 1
+            ? $"Querying changes since {distinctWatermarks[0]}..."
+            : $"Querying changes in {context.TargetPartitions.Count:N0} partitions, each since its own watermark...");
 
-        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes in each partition since its own watermark: {Watermarks}",
+            LogSanitiser.Sanitise(string.Join("; ", context.TargetPartitions.Select(partition => $"{partition.ExternalId} since {readFrom[partition.Id]}"))));
 
-        // Build partition suffix list for filtering: OpenLDAP shares cn=accesslog across
-        // all databases, so we must exclude entries from other suffixes.
-        var partitionSuffixes = PartitionSuffixes(context.TargetPartitions.Select(p => p.ExternalId));
         // Partition filtering alone is not the same selection a full import makes: within a partition, only the
         // selected Containers are imported from, and each carries its own scope. Applying that here keeps a delta
         // import to the objects a full import would have returned.
@@ -646,9 +671,12 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
         var cookie = context.PaginationTokens.SingleOrDefault(t => t.Name == PaginationTokenName)?.ByteValue;
 
-        // LDAP only supports >= (not >), so we use >= and skip the watermark's own entry in code. Confined to the
-        // target partitions on the server; with no partition to name, the read is not narrowed.
-        var request = new SearchRequest(AccesslogDn, WriteOperations(previousTimestamp, partitionSuffixes), SearchScope.OneLevel, ChangeAttributes);
+        // LDAP only supports >= (not >), so each partition's clause asks for >= and the watermark's own entry is
+        // skipped in code. OpenLDAP shares cn=accesslog across all databases, so each clause is also confined to its
+        // partition, leaving the other suffixes' writes on the server.
+        var request = new SearchRequest(AccesslogDn,
+            WriteOperations(context.TargetPartitions.Select(partition => (partition.ExternalId, readFrom[partition.Id]))),
+            SearchScope.OneLevel, ChangeAttributes);
         var pageControl = new PageResultRequestControl(context.PageSize) { IsCritical = false };
         if (cookie is { Length: > 0 })
             pageControl.Cookie = cookie;
@@ -688,6 +716,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         var objectsReadBefore = result.ImportObjects.Count;
         var totalEntries = 0;
         var skippedOutOfScope = 0;
+        var skippedAlreadyRead = 0;
         // Track processed DNs to avoid importing the same object multiple times when the
         // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
         // the same group). Since we fetch current state rather than replaying individual
@@ -710,10 +739,10 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
                 continue;
 
-            // The search is confined to the target partitions on the server; this keeps the selection exact
-            // whatever the directory made of the filter, at the cost of a string comparison.
-            if (partitionSuffixes.Count > 0 &&
-                !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            // The search is confined to the target partitions on the server; this keeps the selection exact whatever
+            // the directory made of the filter, and finds the partition whose watermark the write is judged by.
+            var partition = PartitionOf(reqDn, context.TargetPartitions, readFrom);
+            if (partition == null)
             {
                 skippedOutOfScope++;
                 continue;
@@ -727,9 +756,14 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
                 continue;
             }
 
-            // Skip the exact timestamp match from the previous watermark
-            if (reqStart == previousTimestamp)
+            // The partition's last import read everything up to its watermark: the watermark's own entry, which the
+            // read's >= returns, and a write before it, which an enclosing partition's clause returns when this
+            // partition's suffix is nested beneath that one's.
+            if (string.CompareOrdinal(reqStart, readFrom[partition.Id]) <= 0)
+            {
+                skippedAlreadyRead++;
                 continue;
+            }
 
             totalEntries++;
 
@@ -785,9 +819,20 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken(PaginationTokenName, pageResponse.Cookie));
 
         _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries on this page. " +
-            "Skipped {SkippedOutOfScope} entries outside the selected scope.",
-            totalEntries, skippedOutOfScope);
+            "Skipped {SkippedOutOfScope} entries outside the selected scope, and {SkippedAlreadyRead} its partition's last import had read.",
+            totalEntries, skippedOutOfScope, skippedAlreadyRead);
     }
+
+    /// <summary>
+    /// The target partition a logged write lies in, whose watermark it is judged by: the one whose suffix is the
+    /// longest match for its DN, compared RDN by RDN (<see cref="LdapConnectorUtilities.PartitionForDn"/>). A partition
+    /// with no distinguished name, whose clause reads every write from its watermark, takes what no other claims; of
+    /// several such, the one with the oldest watermark, so nothing one of them has yet to read is judged read. Null when
+    /// the write lies in none of them.
+    /// </summary>
+    private static ConnectedSystemPartition? PartitionOf(string reqDn, IReadOnlyList<ConnectedSystemPartition> targetPartitions, IReadOnlyDictionary<int, string> readFrom) =>
+        LdapConnectorUtilities.PartitionForDn(reqDn, targetPartitions)
+        ?? targetPartitions.Where(partition => string.IsNullOrEmpty(partition.ExternalId)).MinBy(partition => readFrom[partition.Id], StringComparer.Ordinal);
 
     /// <summary>
     /// The failure a Delta Import stops with when the directory stopped the change read at its size limit: an account

@@ -31,6 +31,8 @@ public class LdapAccesslogDeltaSourceTests
 {
     private const string PartitionDn = "dc=corp,dc=local";
     private const string PeopleDn = "ou=people,dc=corp,dc=local";
+    private const string SecondPartitionDn = "dc=partners,dc=local";
+    private const string SecondPeopleDn = "ou=people," + SecondPartitionDn;
     private const string WithinThePartition = "uid=alice," + PeopleDn;
     private const string UnderAnotherSuffix = "uid=bob,ou=people,dc=other,dc=local";
     private const string Watermark = "20260921080000.000000Z";
@@ -839,7 +841,7 @@ public class LdapAccesslogDeltaSourceTests
     #region Reading changes: request shape and phase
 
     [Test]
-    public async Task ReadChangesAsync_Always_QueriesWriteOperationsAtOrAfterTheWatermarkWithinTheTargetPartitionsOneLevelUnderCnAccesslog()
+    public async Task ReadChangesAsync_Always_QueriesTheWriteOperationsWithinEachTargetPartitionAtOrAfterItsWatermarkOneLevelUnderCnAccesslog()
     {
         var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
         var host = new Mock<ILdapDeltaImportHost>();
@@ -850,9 +852,35 @@ public class LdapAccesslogDeltaSourceTests
         {
             Assert.That(sent.Value!.DistinguishedName, Is.EqualTo("cn=accesslog"));
             Assert.That(sent.Value.Scope, Is.EqualTo(SearchScope.OneLevel));
-            Assert.That(sent.Value.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})))"),
+            Assert.That(sent.Value.Filter, Is.EqualTo(ChangeRead((PartitionDn, Watermark))),
                 "cn=accesslog is shared by every database on the server, so the other databases' writes are left on the server rather than read and discarded");
         }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoPartitionsWithDifferentWatermarks_GivesEachItsOwnClause()
+    {
+        // corp.local's last import read to 09:00 and partners.local's to 08:00 (#2715). One clause each, so the
+        // directory returns neither partition's writes that its own last import read.
+        const string corpsWatermark = "20260921090000.000001Z";
+        var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out var sent);
+
+        await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), (PartitionDn, corpsWatermark), (SecondPartitionDn, Watermark)),
+            new ConnectedSystemImportResult(), CancellationToken.None);
+
+        Assert.That(sent.Value!.Filter, Is.EqualTo(ChangeRead((PartitionDn, corpsWatermark), (SecondPartitionDn, Watermark))));
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoPartitionsWithDifferentWatermarks_EntersTheQueryChangesPhaseSayingEachReadsFromItsOwn()
+    {
+        var executor = ExecutorReturning(LdapTestResponses.EmptySearchResponse(), out _);
+        var host = new Mock<ILdapDeltaImportHost>();
+
+        await Source(executor).ReadChangesAsync(Context(host, (PartitionDn, "20260921090000.000001Z"), (SecondPartitionDn, Watermark)),
+            new ConnectedSystemImportResult(), CancellationToken.None);
+
+        host.Verify(h => h.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, "Querying changes in 2 partitions, each since its own watermark..."), Times.Once);
     }
 
     [Test]
@@ -874,7 +902,7 @@ public class LdapAccesslogDeltaSourceTests
 
         await Source(executor).ReadChangesAsync(Context(new Mock<ILdapDeltaImportHost>(), partitionDn: partitionDn), new ConnectedSystemImportResult(), CancellationToken.None);
 
-        Assert.That(sent.Value!.Filter, Does.EndWith(@"(|(reqDN:dnSubtreeMatch:=o=R&D \28Lab\2a\29,dc=corp,dc=local)))"));
+        Assert.That(sent.Value!.Filter, Does.EndWith($@"(|(&(reqDN:dnSubtreeMatch:=o=R&D \28Lab\2a\29,dc=corp,dc=local)(reqStart>={Watermark}))))"));
     }
 
     [Test]
@@ -906,6 +934,78 @@ public class LdapAccesslogDeltaSourceTests
         {
             Assert.That(result.ImportObjects, Is.Empty, "the watermark entry was imported by the run that recorded it; LDAP has no > so >= is narrowed here");
             host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Never);
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_EntryAtExactlyItsOwnPartitionsWatermark_IsSkippedThoughAnotherPartitionsIsOlder()
+    {
+        // The skip is each partition's own (#2715): the entry corp.local's last import ended at was imported by that
+        // import, however much older partners.local's watermark is.
+        const string corpsWatermark = "20260921090000.000001Z";
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            ModifyEntry(corpsWatermark, "uid=alice," + PeopleDn)), out _);
+        var host = HostReturningObjects();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(executor).ReadChangesAsync(Context(host, (PartitionDn, corpsWatermark), (SecondPartitionDn, Watermark)), result, CancellationToken.None);
+
+        Assert.That(result.ImportObjects, Is.Empty);
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_EntryBeforeItsOwnPartitionsWatermark_IsSkippedWhateverTheDirectoryReturned()
+    {
+        // The directory confines each partition's writes to those after its own watermark; a write it returns from
+        // before that point anyway (an enclosing partition's clause returns a nested one's) was read by the run that
+        // took the watermark, so it is judged here by the watermark of the partition it lies in.
+        const string corpsWatermark = "20260921090000.000001Z";
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            ModifyEntry("20260921083000.000001Z", "uid=alice," + PeopleDn),
+            ModifyEntry("20260921083000.000002Z", "uid=pat," + SecondPeopleDn)), out _);
+        var host = HostReturningObjects();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(executor).ReadChangesAsync(Context(host, (PartitionDn, corpsWatermark), (SecondPartitionDn, Watermark)), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            host.Verify(h => h.GetObjectByDn("uid=alice," + PeopleDn, It.IsAny<ObjectChangeType>()), Times.Never, "corp.local's last import read it");
+            host.Verify(h => h.GetObjectByDn("uid=pat," + SecondPeopleDn, ObjectChangeType.Updated), Times.Once, "partners.local's last import had not");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_EntryWhoseDnEndsWithThePartitionsTextButNotItsRdns_IsSkipped()
+    {
+        // adc=corp,dc=local ends with the text dc=corp,dc=local but is not within it; a raw suffix comparison would
+        // have taken its write for corp.local's. No Container states an opinion, so the partition alone decides.
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            ModifyEntry("20260921090000.000001Z", "uid=bob,ou=people,adc=corp,dc=local")), out _);
+        var host = HostReturningObjects();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(executor).ReadChangesAsync(ContextOf(host, [(PartitionDn, Watermark)], containersDecideScope: false), result, CancellationToken.None);
+
+        host.Verify(h => h.GetObjectByDn(It.IsAny<string>(), It.IsAny<ObjectChangeType>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_PartitionWithoutADistinguishedName_ReadsEveryWriteAfterItsWatermarkAsBefore()
+    {
+        // A partition with no distinguished name cannot be named in the filter, so its clause is a bound alone, as the
+        // read always was when no partition could be named, and it takes every write it returns.
+        var executor = ExecutorReturning(LdapTestResponses.SearchResponseWithEntries(
+            ModifyEntry("20260921090000.000001Z", "uid=alice," + PeopleDn)), out var sent);
+        var host = HostReturningObjects();
+        var result = new ConnectedSystemImportResult();
+
+        await Source(executor).ReadChangesAsync(Context(host, (string.Empty, Watermark)), result, CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sent.Value!.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(|(reqStart>={Watermark})))"));
+            host.Verify(h => h.GetObjectByDn("uid=alice," + PeopleDn, ObjectChangeType.Updated), Times.Once);
         }
     }
 
@@ -1075,7 +1175,7 @@ public class LdapAccesslogDeltaSourceTests
             Assert.That(firstResult.PaginationTokens, Has.Count.EqualTo(1), "the import calls again while a token is left");
             Assert.That(sent.Value!.Controls.OfType<PageResultRequestControl>().Single().Cookie, Is.EqualTo(cookie),
                 "the directory's own cursor carries the read on, so no entry can fall between two pages");
-            Assert.That(sent.Value.Filter, Is.EqualTo($"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})))"),
+            Assert.That(sent.Value.Filter, Is.EqualTo(ChangeRead((PartitionDn, Watermark))),
                 "a paged search is continued with the question it started with");
             Assert.That(secondResult.PaginationTokens, Is.Empty, "an empty cookie is the directory saying that page was the last");
             Assert.That(secondResult.ImportObjects, Has.Count.EqualTo(1));
@@ -1258,6 +1358,45 @@ public class LdapAccesslogDeltaSourceTests
             Host = host.Object
         };
     }
+
+    /// <summary>
+    /// A change read of the given partitions, by distinguished name, each with its own watermark and a selected people
+    /// Container beneath it (Containers decide scope only for a partition with a DN).
+    /// </summary>
+    private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, params (string Dn, string Watermark)[] partitions) =>
+        ContextOf(host, partitions, containersDecideScope: true);
+
+    /// <param name="containersDecideScope">False for a run in which no Container states an opinion about scope, so
+    /// that the partitions alone decide what is read.</param>
+    private static LdapDeltaReadContext ContextOf(Mock<ILdapDeltaImportHost> host, (string Dn, string Watermark)[] partitions, bool containersDecideScope)
+    {
+        var targets = partitions.Select((partition, index) => new ConnectedSystemPartition { Id = index + 1, ExternalId = partition.Dn, Name = partition.Dn, Selected = true }).ToList();
+        return new LdapDeltaReadContext
+        {
+            PreviousRootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP },
+            Watermarks = targets.ToDictionary(partition => partition.Id, partition => new LdapPartitionWatermark
+            {
+                Kind = LdapDeltaSourceKind.Accesslog,
+                AccesslogTimestamp = partitions[partition.Id - 1].Watermark,
+                AccesslogTimestampIsLogged = true
+            }),
+            CurrentRootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP },
+            TargetPartitions = targets,
+            ScopeDecidingContainers = targets.Where(partition => containersDecideScope && partition.ExternalId.Length > 0)
+                .Select(partition => new ConnectedSystemContainer { Id = partition.Id, ExternalId = "ou=people," + partition.ExternalId, Name = "people", Selected = true, Scope = ConnectedSystemContainerScope.Subtree })
+                .ToList(),
+            ObjectTypes = [InetOrgPerson()],
+            PaginationTokens = [],
+            PageSize = 500,
+            SearchTimeout = Timeout,
+            Notes = new LdapDeltaSourceNotes(),
+            Host = host.Object
+        };
+    }
+
+    /// <summary>The change read's filter: one clause per partition, by its DN, carrying that partition's own watermark.</summary>
+    private static string ChangeRead(params (string PartitionDn, string Watermark)[] partitions) =>
+        $"(&(objectClass=auditWriteObject)(reqResult=0)(|{string.Concat(partitions.Select(p => $"(&(reqDN:dnSubtreeMatch:={p.PartitionDn})(reqStart>={p.Watermark}))"))}))";
 
     private static ConnectedSystemObjectType InetOrgPerson()
     {

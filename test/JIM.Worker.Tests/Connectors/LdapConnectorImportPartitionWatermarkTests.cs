@@ -31,6 +31,22 @@ public class LdapConnectorImportPartitionWatermarkTests
     private const string NtdsSettingsDn = "CN=NTDS Settings,CN=DC1,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=local";
     private const string Dc1 = "dc1.corp.local";
     private const string Watermark = "20260921080000.000000Z";
+    private const string EmeaDn = "dc=emea," + CorpDn;
+    private const string EmeaPeopleDn = "ou=people," + EmeaDn;
+    private const string Alice = "uid=alice," + CorpPeopleDn;
+    private const string Cal = "uid=cal," + CorpPeopleDn;
+    private const string Dan = "uid=dan," + CorpPeopleDn;
+    private const string Pat = "uid=pat," + PartnersPeopleDn;
+    private const string Eve = "uid=eve," + EmeaPeopleDn;
+    private const string Zoe = "uid=zoe," + EmeaPeopleDn;
+    private const string Max = "uid=max," + EmeaPeopleDn;
+    private const string UnderAnotherSuffix = "uid=bob,ou=people,dc=other,dc=local";
+    private const string At0900 = "20260921090000.000001Z";
+    private const string At0910 = "20260921091000.000001Z";
+    private const string At0915 = "20260921091500.000001Z";
+    private const string At0920 = "20260921092000.000001Z";
+    private const string At0930 = "20260921093000.000001Z";
+    private const string At0940 = "20260921094000.000001Z";
     private static readonly Guid Dc1InvocationId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Dc2InvocationId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly byte[] Cookie = [1, 2, 3, 4];
@@ -40,11 +56,19 @@ public class LdapConnectorImportPartitionWatermarkTests
     private List<SearchRequest> _sent = null!;
     private Mock<ILdapOperationExecutor> _executor = null!;
 
+    /// <summary>Each write the scripted OpenLDAP accesslog holds, in the order it logged them.</summary>
+    private List<LoggedWrite> _logged = null!;
+
+    /// <summary>Whether the scripted change read leaves a cookie on its first page, so the run reads a second.</summary>
+    private bool _changeReadHasASecondPage;
+
     [SetUp]
     public void SetUp()
     {
         _directoryType = LdapDirectoryType.OpenLDAP;
         _sent = [];
+        _logged = [];
+        _changeReadHasASecondPage = false;
 
         _executor = new Mock<ILdapOperationExecutor>();
         _executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>()))
@@ -241,6 +265,146 @@ public class LdapConnectorImportPartitionWatermarkTests
 
     #endregion
 
+    #region Reading each Partition's changes from its own watermark (OpenLDAP accesslog)
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_TwoPartitionsWithDifferentWatermarks_ReadsEachFromItsOwnAsync()
+    {
+        // corp.local was last read at 09:20 and partners.local at 09:00. Each partition's clause carries its own
+        // watermark, so the directory returns only what each has not read, rather than corp.local's writes since 09:00.
+        Log(At0900, Alice);
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0920), (2, At0900)));
+
+        await import.GetDeltaImportObjectsAsync();
+
+        Assert.That(ChangeReads().Single().Filter, Is.EqualTo(ChangeReadFilter((CorpDn, At0920), (PartnersDn, At0900))));
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_WriteBeforeOrAtItsPartitionsWatermark_IsNotImportedAsync()
+    {
+        // Dan's 09:10 write is before corp.local's watermark and Cal's 09:20 write is the one it names, so the run that
+        // read corp.local to 09:20 imported both; Pat's 09:15 write is after partners.local's 09:00 watermark.
+        Log(At0900, Alice);
+        Log(At0910, Dan);
+        Log(At0915, Pat);
+        Log(At0920, Cal);
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0920), (2, At0900)));
+
+        await import.GetDeltaImportObjectsAsync();
+
+        Assert.That(Fetched(), Is.EqualTo(new[] { Pat }));
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_NestedSuffixes_JudgesAWriteByTheLongestMatchingPartitionAsync()
+    {
+        // emea.corp.local is a suffix of its own beneath corp.local (a subordinate database), so its entries lie
+        // within both, and corp.local's clause returns emea.corp.local's writes since corp.local's watermark. Each is
+        // judged by emea.corp.local's own watermark: Eve's 09:20 write was read by the run that took 09:30.
+        Log(At0900, Alice);
+        Log(At0910, Cal);
+        Log(At0920, Eve);
+        Log(At0930, Zoe);
+        Log(At0940, Max);
+        var connectedSystem = ConnectedSystemWith(Partition(1, CorpDn, "corp.local", CorpPeopleDn), Partition(3, EmeaDn, "emea.corp.local", EmeaPeopleDn));
+        var import = NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), WatermarksOf((1, At0900), (3, At0930)), connectedSystem);
+
+        await import.GetDeltaImportObjectsAsync();
+
+        Assert.That(Fetched(), Is.EqualTo(new[] { Cal, Max }));
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_DeltaOfOnePartitionThenDeltaOfAnother_TheSecondImportsTheChangeTheFirstPassedAsync()
+    {
+        // The timeline #2715 was found by. An unscoped Full Import at 09:00 left both partitions a watermark. Pat
+        // changed in partners.local at 09:10 and Cal in corp.local at 09:20. Delta Import (Corp) at 09:30 reads Cal's
+        // change and moves corp.local's watermark past Pat's; Delta Import (Partners) at 09:40 must still read Pat's.
+        Log(At0900, Alice);
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        var held = WatermarksOf((1, At0900), (2, At0900));
+        var connectedSystem = ConnectedSystemWith(Partition(1, CorpDn, "corp.local", CorpPeopleDn), Partition(2, PartnersDn, "partners.local", PartnersPeopleDn));
+        var corp = connectedSystem.Partitions![0];
+        var partners = connectedSystem.Partitions![1];
+
+        var corpsRun = await NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), HandedTo(held, corp), connectedSystem, corp)
+            .GetDeltaImportObjectsAsync();
+        var corpsFetches = Fetched();
+        Record(held, corpsRun);
+        _sent.Clear();
+
+        var partnersRun = await NewImport(ConnectedSystemRunType.DeltaImport, corpsRun.PersistedConnectorData, HandedTo(held, partners), connectedSystem, partners)
+            .GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(corpsFetches, Is.EqualTo(new[] { Cal }), "Delta Import (Corp) reads corp.local's change alone");
+            Assert.That(ReachedFor(corpsRun, 1), Is.EqualTo(At0920), "and moves corp.local's watermark past Pat's write");
+            Assert.That(held[2], Is.EqualTo(AccesslogWatermark(At0900)), "partners.local keeps the watermark it had");
+            Assert.That(Fetched(), Is.EqualTo(new[] { Pat }), "Delta Import (Partners) imports the change Delta Import (Corp) passed");
+            Assert.That(partnersRun.WarningErrorType, Is.Null);
+        }
+    }
+
+    [Test]
+    public async Task GetFullImportObjectsAsync_ScopedFullImportThenDeltaOfAnotherPartition_TheDeltaImportsTheChangeTheFullImportPassedAsync()
+    {
+        // The scoped Full Import half of #2715: a Full Import of corp.local at 09:30 reads every object in corp.local
+        // and takes a watermark past Pat's 09:10 write to partners.local, which it never read.
+        Log(At0900, Alice);
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        var held = WatermarksOf((1, At0900), (2, At0900));
+        var connectedSystem = ConnectedSystemWith(Partition(1, CorpDn, "corp.local", CorpPeopleDn), Partition(2, PartnersDn, "partners.local", PartnersPeopleDn));
+        var corp = connectedSystem.Partitions![0];
+        var partners = connectedSystem.Partitions![1];
+
+        var fullImport = await NewImport(ConnectedSystemRunType.FullImport, RecordOf(LdapDirectoryType.OpenLDAP), HandedTo(held, corp), connectedSystem, corp)
+            .GetFullImportObjectsAsync();
+        Record(held, fullImport);
+        _sent.Clear();
+
+        await NewImport(ConnectedSystemRunType.DeltaImport, fullImport.PersistedConnectorData, HandedTo(held, partners), connectedSystem, partners)
+            .GetDeltaImportObjectsAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(fullImport.PartitionWatermarks!.Keys, Is.EquivalentTo(new[] { 1 }), "the Full Import gives a watermark to the partition it read alone");
+            Assert.That(Fetched(), Is.EqualTo(new[] { Pat }));
+        }
+    }
+
+    [Test]
+    public async Task GetDeltaImportObjectsAsync_LaterPage_SendsTheSameFilterSoThePagingCookieStaysValidAsync()
+    {
+        // OpenLDAP rejects a paging cookie presented with a search other than the one it was issued for. Page 2 is
+        // handed the same watermarks as page 1 (JIM fixes them for the run), so it asks exactly the same question.
+        _changeReadHasASecondPage = true;
+        Log(At0900, Alice);
+        Log(At0910, Pat);
+        Log(At0920, Cal);
+        var handed = WatermarksOf((1, At0920), (2, At0900));
+
+        var firstPage = await NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), handed).GetDeltaImportObjectsAsync();
+        var firstPagesRead = ChangeReads().Single();
+        _sent.Clear();
+        await NewImport(ConnectedSystemRunType.DeltaImport, RecordOf(LdapDirectoryType.OpenLDAP), handed, paginationTokens: firstPage.PaginationTokens).GetDeltaImportObjectsAsync();
+        var secondPagesRead = ChangeReads().Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(secondPagesRead.Controls.OfType<PageResultRequestControl>().Single().Cookie, Is.EqualTo(Cookie), "page 2 resumes from the directory's cursor");
+            Assert.That(secondPagesRead.Filter, Is.EqualTo(firstPagesRead.Filter), "with the question page 1 asked");
+            Assert.That(firstPagesRead.Filter, Is.EqualTo(ChangeReadFilter((CorpDn, At0920), (PartnersDn, At0900))));
+        }
+    }
+
+    #endregion
+
     #region Continuity of each Partition's watermark (Active Directory)
 
     [Test]
@@ -298,8 +462,8 @@ public class LdapConnectorImportPartitionWatermarkTests
     #region Helpers
 
     /// <summary>
-    /// The scripted directory: OpenLDAP with an empty accesslog and no sssvlv overlay, or Active Directory reached at
-    /// dc1; either way every search of a container finds nothing.
+    /// The scripted directory: OpenLDAP with no sssvlv overlay and an accesslog holding <see cref="_logged"/>, or
+    /// Active Directory reached at dc1. Every search of a container, and every read of an object, finds nothing.
     /// </summary>
     private DirectoryResponse Answer(DirectoryRequest directoryRequest)
     {
@@ -315,12 +479,101 @@ public class LdapConnectorImportPartitionWatermarkTests
         if (request.Controls.OfType<SortRequestControl>().Any())
             throw new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.UnavailableCriticalExtension), "critical extension is unavailable");
 
-        // The accesslog readiness check, and the continuity check of a watermark's own entry: both are logged.
-        if (request.Scope == SearchScope.Base && request.DistinguishedName.EndsWith(AccesslogDn, StringComparison.OrdinalIgnoreCase))
-            return LdapTestResponses.SearchResponseWith(request.DistinguishedName);
+        if (!request.DistinguishedName.EndsWith(AccesslogDn, StringComparison.OrdinalIgnoreCase))
+            return LdapTestResponses.EmptySearchResponse();
 
-        return LdapTestResponses.EmptySearchResponse();
+        // The readiness check reads cn=accesslog itself, and the continuity check a watermark's own entry, which is
+        // there while the write it names is still logged.
+        if (request.Scope == SearchScope.Base)
+        {
+            var held = string.Equals(request.DistinguishedName, AccesslogDn, StringComparison.OrdinalIgnoreCase)
+                || _logged.Any(write => string.Equals(request.DistinguishedName, EntryDnOf(write.ReqStart), StringComparison.OrdinalIgnoreCase));
+            return held
+                ? LdapTestResponses.SearchResponseWith(request.DistinguishedName)
+                : throw new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.NoSuchObject), "no such object");
+        }
+
+        var filter = request.Filter.ToString()!;
+        var matching = _logged.Where(write => ScriptedAccesslogFilter.Matches(filter, write.ReqStart, write.ReqDn)).ToList();
+
+        // The watermark walk asks for reqStart alone.
+        var paging = request.Controls.OfType<PageResultRequestControl>().SingleOrDefault();
+        if (paging == null)
+            return LdapTestResponses.SearchResponseWithEntries(matching.Select(write => LdapTestResponses.Entry(EntryDnOf(write.ReqStart), ("reqStart", write.ReqStart))).ToArray());
+
+        // The change read: every matching write on its first page, and, when scripted to, a cookie for a second page,
+        // which the directory then answers with nothing more.
+        var firstPage = paging.Cookie is not { Length: > 0 };
+        return LdapTestResponses.SearchResponseWithPagingCookie(firstPage && _changeReadHasASecondPage ? Cookie : [],
+            firstPage ? matching.Select(ChangeEntryOf).ToArray() : []);
     }
+
+    private static string EntryDnOf(string reqStart) => $"reqStart={reqStart},{AccesslogDn}";
+
+    private static SearchResultEntry ChangeEntryOf(LoggedWrite write) => write.EntryUuid == null
+        ? LdapTestResponses.Entry(EntryDnOf(write.ReqStart), ("reqStart", write.ReqStart), ("reqType", write.ReqType), ("reqDN", write.ReqDn))
+        : LdapTestResponses.Entry(EntryDnOf(write.ReqStart), ("reqStart", write.ReqStart), ("reqType", write.ReqType), ("reqDN", write.ReqDn), ("reqEntryUUID", write.EntryUuid));
+
+    /// <summary>A write the scripted accesslog holds: when it started, the entry it was made to, and what kind of write it was.</summary>
+    private sealed record LoggedWrite(string ReqStart, string ReqDn, string ReqType = "modify", string? EntryUuid = null);
+
+    /// <summary>Logs a modify of the given entry.</summary>
+    private void Log(string reqStart, string reqDn) => _logged.Add(new LoggedWrite(reqStart, reqDn));
+
+    /// <summary>The objects the change read kept, by the reads of their current state it made, in the order it made them.</summary>
+    private List<string> Fetched() =>
+        _sent.Where(r => r.Scope == SearchScope.Base
+                && !string.IsNullOrEmpty(r.DistinguishedName)
+                && !r.DistinguishedName.EndsWith(AccesslogDn, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(r.DistinguishedName, NtdsSettingsDn, StringComparison.OrdinalIgnoreCase))
+            .Select(r => r.DistinguishedName)
+            .ToList();
+
+    /// <summary>The filters of the accesslog watermark walk's searches, in the order the import sent them.</summary>
+    private List<string> Walks() =>
+        _sent.Where(r => string.Equals(r.DistinguishedName, AccesslogDn, StringComparison.OrdinalIgnoreCase)
+                && r.Scope == SearchScope.OneLevel
+                && !r.Controls.OfType<PageResultRequestControl>().Any()
+                && !r.Controls.OfType<SortRequestControl>().Any())
+            .Select(r => r.Filter.ToString()!)
+            .ToList();
+
+    /// <summary>The filter of a change read that gives each partition, by its DN, its own reqStart bound.</summary>
+    private static string ChangeReadFilter(params (string PartitionDn, string From)[] partitions) =>
+        $"(&(objectClass=auditWriteObject)(reqResult=0)(|{string.Concat(partitions.Select(p => $"(&(reqDN:dnSubtreeMatch:={p.PartitionDn})(reqStart>={p.From}))"))}))";
+
+    /// <summary>The watermark walk's search for the writes at or after a reqStart, anywhere or within the given partitions.</summary>
+    private static string WalkFrom(string reqStart, params string[] partitionDns) => partitionDns.Length == 0
+        ? $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart}))"
+        : $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart})(|{string.Concat(partitionDns.Select(dn => $"(reqDN:dnSubtreeMatch:={dn})"))}))";
+
+    /// <summary>The accesslog watermark JIM holds for each partition, by id: a logged write's reqStart.</summary>
+    private static Dictionary<int, string?> WatermarksOf(params (int PartitionId, string ReqStart)[] watermarks) =>
+        watermarks.ToDictionary(w => w.PartitionId, w => (string?)AccesslogWatermark(w.ReqStart));
+
+    /// <summary>
+    /// What the import processor records at the end of a run that completes: each watermark the run returned replaces
+    /// the one JIM held for that partition, a null clears it, and a partition the run left out keeps what it has.
+    /// </summary>
+    private static void Record(Dictionary<int, string?> held, ConnectedSystemImportResult result)
+    {
+        Assert.That(result.PartitionWatermarks, Is.Not.Null, "the run returned no partition watermarks");
+        foreach (var (partitionId, value) in result.PartitionWatermarks!)
+        {
+            if (value == null)
+                held.Remove(partitionId);
+            else
+                held[partitionId] = value;
+        }
+    }
+
+    /// <summary>What the import processor hands a run: the watermark JIM holds for each partition it targets, or null.</summary>
+    private static Dictionary<int, string?> HandedTo(Dictionary<int, string?> held, params ConnectedSystemPartition[] targetPartitions) =>
+        targetPartitions.ToDictionary(partition => partition.Id, partition => held.GetValueOrDefault(partition.Id));
+
+    /// <summary>The accesslog position a run reached for a partition.</summary>
+    private static string? ReachedFor(ConnectedSystemImportResult result, int partitionId) =>
+        LdapPartitionWatermark.Parse(result.PartitionWatermarks?.GetValueOrDefault(partitionId), Logger)?.AccesslogTimestamp;
 
     private static SearchResponse OpenLdapRootDse() =>
         LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(string.Empty, ("vendorName", "OpenLDAP")));

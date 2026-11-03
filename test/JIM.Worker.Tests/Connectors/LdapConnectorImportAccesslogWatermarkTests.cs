@@ -186,7 +186,7 @@ public class LdapConnectorImportAccesslogWatermarkTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }));
-            Assert.That(_changeRead, Does.EndWith($"(|(reqDN:dnSubtreeMatch:={PartitionDn})))"), "the change read is confined the same way");
+            Assert.That(_changeRead, Does.EndWith($"(|(&(reqDN:dnSubtreeMatch:={PartitionDn})(reqStart>={Watermark}))))"), "the change read is confined the same way");
             Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite));
             Assert.That(result.PartitionWatermarks!.Keys, Is.EquivalentTo(new[] { 1 }), "the partition the run did not read keeps the watermark it has");
         }
