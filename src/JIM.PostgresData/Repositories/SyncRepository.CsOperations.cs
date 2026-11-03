@@ -531,65 +531,14 @@ public partial class SyncRepository
 
     #region Cross-Batch Reference Fixup
 
-    public async Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
-    {
-        // Resolve ReferenceValueId FKs for attribute values where:
-        // - UnresolvedReferenceValue is set (contains the raw DN/secondary external ID string)
-        // - ReferenceValueId is null (reference not yet resolved to a CSO ID)
-        //
-        // Defence-in-depth for cross-run reference resolution (e.g., groups imported in a later
-        // run referencing users from a prior run). Within a single import run, upfront CSO ID
-        // pre-generation in SyncImportTaskProcessor should resolve all FKs before persistence.
-        //
-        // Same thing? Ignoring case unless the target's secondary external id attribute is case-exact
-        // (#2051): LDAP Distinguished Names are case-insensitive per RFC 4514, and different connector
-        // runs or LDAP servers may return DNs with different capitalisation. The LOWER() equality stays
-        // the join condition so the functional indexes serve it; a case-exact target additionally needs
-        // the exact value.
-        var previousTimeout = _context.Database.GetCommandTimeout();
-        _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
-        try
-        {
-            // Fast early exit: skip the expensive multi-table JOIN UPDATE when there are no
-            // unresolved references. This is the common case for CSV imports, training imports,
-            // and confirming imports — only LDAP imports with out-of-order batched groups need fixup.
-            var unresolvedCount = await _repo.ConnectedSystems.GetUnresolvedReferenceCountAsync(connectedSystemId);
-            if (unresolvedCount == 0)
-                return 0;
-
-            return await _context.Database.ExecuteSqlRawAsync(
-                """
-                UPDATE "ConnectedSystemObjectAttributeValues" av
-                SET "ReferenceValueId" = target_cso."Id"
-                FROM "ConnectedSystemObjects" owner_cso
-                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
-                JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
-                JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
-                    AND target_attr."IsSecondaryExternalId" = true
-                WHERE owner_cso."ConnectedSystemId" = {0}
-                  AND av."ConnectedSystemObjectId" = owner_cso."Id"
-                  AND av."UnresolvedReferenceValue" IS NOT NULL
-                  AND av."ReferenceValueId" IS NULL
-                  AND target_av."StringValue" IS NOT NULL
-                  AND LOWER(av."UnresolvedReferenceValue") = LOWER(target_av."StringValue")
-                  AND (NOT target_attr."CaseExact" OR av."UnresolvedReferenceValue" = target_av."StringValue")
-                """,
-                connectedSystemId);
-        }
-        finally
-        {
-            _context.Database.SetCommandTimeout(previousTimeout);
-        }
-    }
-
     /// <summary>
-    /// Rows updated per statement by <see cref="FixupCrossBatchChangeRecordReferenceIdsAsync"/> when
-    /// the caller does not specify a batch size. Sized so each UPDATE completes comfortably inside
-    /// <see cref="PostgresDataRepository.BulkOperationCommandTimeoutSeconds"/>: the Scale500k25kGroups
-    /// run (2026-07-18) showed a single-statement update of 6.5M rows exceeds 300s, so the write
+    /// Rows updated per statement by the reference fix-ups (<see cref="FixupCrossBatchReferenceIdsAsync"/> and
+    /// <see cref="FixupCrossBatchChangeRecordReferenceIdsAsync"/>) when the caller does not specify a batch size. Sized
+    /// so each UPDATE completes comfortably inside <see cref="PostgresDataRepository.BulkOperationCommandTimeoutSeconds"/>:
+    /// the Scale500k25kGroups run (2026-07-18) showed a single-statement update of 6.5M rows exceeds 300s, so the write
     /// side must be bounded however many resolutions the candidate step finds.
     /// </summary>
-    private const int DefaultChangeRecordReferenceFixupBatchSize = 250_000;
+    private const int DefaultReferenceFixupBatchSize = 250_000;
 
     /// <summary>
     /// Spans for the sync write path's Connected System Object stages, from the same source as the Metaverse Object
@@ -597,6 +546,201 @@ public partial class SyncRepository
     /// source named "JIM.*".
     /// </summary>
     private static readonly ActivitySource CsoActivitySource = new("JIM.PostgresData.Sync");
+
+    public async Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
+    {
+        // A Connected System Object's Reference attribute value holds the reference as the connector gave it (a DN, or
+        // another Secondary External ID) in UnresolvedReferenceValue, and the referenced CSO's id in ReferenceValueId
+        // once the import knows it. The import resolves most references in memory before writing; a value it could not
+        // resolve (its object arrives in a later run, or a later batch of this one) is written without the id, and this
+        // method resolves those outstanding values of the given Connected System by matching UnresolvedReferenceValue
+        // against the Secondary External ID values of CSOs in the same Connected System: ignoring case per RFC 4514,
+        // hence the LOWER() comparison, unless the target's attribute is case-exact (#2051). A value that matches no CSO
+        // stays outstanding for a later run; a value that already holds an id is never re-pointed.
+        //
+        // Every reference value keeps its UnresolvedReferenceValue once resolved, so "outstanding" is the pair
+        // UnresolvedReferenceValue IS NOT NULL AND ReferenceValueId IS NULL, and two partial indexes hold exactly those
+        // rows. The pair is what makes the planner's estimates unusable here, whatever state the statistics are in. With
+        // fresh statistics it multiplies the two columns' null fractions as though they were independent, when they are
+        // all but exclusive (a reference value almost always has its id, and no other value has either): at most a
+        // quarter of the table, hundreds of thousands of rows when a handful are outstanding. With statistics gathered
+        // before the outstanding values and their objects arrived, both are estimated at one row. A single statement
+        // joining the outstanding values to the Connected System's objects and their Secondary External IDs therefore
+        // went wrong both ways (#2706). A Delta Import creating one group on a 500,000-object system spent 8.8 s in it
+        // to fix three references. On fresh statistics over 3.3 million values, the UPDATE matched three values by
+        // walking the whole LOWER("StringValue") index, and spent 1.4 s of its 2 s compiling JIT code for the cost it
+        // had inflated. On stale ones, both the early-exit count and the UPDATE paired every outstanding value with
+        // every object in the system, the join condition a filter over the product: 12,000 values and 6,000 objects ran
+        // past a 5 s statement timeout in the count alone (CsoReferenceFixupStaleStatisticsDatabaseTests). So, as
+        // FixupCrossBatchChangeRecordReferenceIdsAsync does for change records:
+        // 1. Read the Connected System's outstanding values into a session temp table, and count them in the same round
+        //    trip. The partial index drives the read, and each value's owner is checked by primary key in a scalar
+        //    subquery, which the planner evaluates per row rather than turning into a join it could plan as a hash of
+        //    every object in the system. Nothing outstanding, the usual case after an import, ends the method here
+        //    without reading the target side at all; this replaces the separate early-exit count, which was the
+        //    product above.
+        // 2. Index the temp table on the folded value and ANALYZE it, so the planner knows exactly how many values are
+        //    outstanding. The index makes every join order a lookup: driven from the outstanding values it probes the
+        //    target's LOWER() index, and driven from the target's objects it probes this one.
+        // 3. Join the temp table to the target side for the resolutions, with the same case-exact rule.
+        // Steps 1 and 3 run with JIT off: their estimates are the misestimates above, and on the inflated ones the
+        // planner compiles every expression to save time it will not spend (125 ms of compilation to read three rows on
+        // a 3.3 million value test table). SET LOCAL holds for the command's own implicit transaction and no longer.
+        //
+        // The resolutions are applied by primary key in bounded batches, so each statement stays well inside the bulk
+        // command timeout however large the backlog (294,000 outstanding values were recorded when the LOWER() indexes
+        // were added). Each batch is a separate auto-committed statement; partial progress is durable and the operation
+        // is idempotent (a resolved value holds its id, so it drops out of the next invocation's first step), so a
+        // failure part way through simply leaves less for the next invocation.
+        //
+        // The spans carry the change record fix-up's tag names, so the two read alike in a breakdown: markedCount is
+        // the number of outstanding values read.
+        //
+        // The temp tables are scoped to the underlying connection, so every command below must run on the same physical
+        // connection: the RawSqlConnectionLease holds it open for the duration. Both are dropped first and on every
+        // return; a failure part way leaves them to the next call's leading drop, or to Npgsql's pool reset (DISCARD
+        // ALL) when the connection goes back to the pool.
+        var effectiveBatchSize = batchSize ?? DefaultReferenceFixupBatchSize;
+        if (effectiveBatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+
+        using var resolveSpan = CsoActivitySource.StartActivity("Cso.ResolveReferences");
+        resolveSpan?.SetTag("connectedSystemId", connectedSystemId);
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+
+        const string outstandingTableName = "_jim_cso_reference_outstanding";
+        const string resolutionsTableName = "_jim_cso_reference_fixup";
+        var dropTempTablesSql = $"""DROP TABLE IF EXISTS "{outstandingTableName}"; DROP TABLE IF EXISTS "{resolutionsTableName}";""";
+
+        long outstandingCount;
+        long candidateCount = 0;
+        using (var findSpan = CsoActivitySource.StartActivity("Cso.ResolveReferences.FindCandidates"))
+        {
+            // The id test is what makes a value outstanding, so this only ever fills in a missing id and never replaces
+            // one. Every value belongs to a CSO, so the scalar subquery always returns exactly one row.
+            outstandingCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+                {dropTempTablesSql}
+                SET LOCAL jit = off;
+                CREATE TEMP TABLE "{outstandingTableName}" AS
+                SELECT av."Id" AS av_id, av."UnresolvedReferenceValue" AS reference_value, LOWER(av."UnresolvedReferenceValue") AS lower_value
+                FROM "ConnectedSystemObjectAttributeValues" av
+                WHERE av."UnresolvedReferenceValue" IS NOT NULL
+                  AND av."ReferenceValueId" IS NULL
+                  AND (SELECT owner_cso."ConnectedSystemId" FROM "ConnectedSystemObjects" owner_cso
+                       WHERE owner_cso."Id" = av."ConnectedSystemObjectId") = @connectedSystemId;
+                SELECT COUNT(*) FROM "{outstandingTableName}";
+                """);
+            findSpan?.SetTag("markedCount", outstandingCount);
+
+            if (outstandingCount > 0)
+            {
+                candidateCount = await ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""
+                    CREATE INDEX ON "{outstandingTableName}" (lower_value);
+                    ANALYZE "{outstandingTableName}";
+                    SET LOCAL jit = off;
+                    CREATE TEMP TABLE "{resolutionsTableName}" AS
+                    SELECT row_number() OVER () AS rn, s.av_id, s.target_id
+                    FROM (
+                        SELECT o.av_id, target_cso."Id" AS target_id
+                        FROM "{outstandingTableName}" o
+                        JOIN "ConnectedSystemObjectAttributeValues" target_av ON LOWER(target_av."StringValue") = o.lower_value
+                            AND target_av."StringValue" IS NOT NULL
+                        JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
+                            AND target_attr."IsSecondaryExternalId" = true
+                        JOIN "ConnectedSystemObjects" target_cso ON target_cso."Id" = target_av."ConnectedSystemObjectId"
+                            AND target_cso."ConnectedSystemId" = @connectedSystemId
+                        WHERE NOT target_attr."CaseExact" OR o.reference_value = target_av."StringValue"
+                    ) s;
+                    CREATE INDEX ON "{resolutionsTableName}" (rn);
+                    SELECT COUNT(*) FROM "{resolutionsTableName}";
+                    """);
+            }
+
+            findSpan?.SetTag("candidateCount", candidateCount);
+        }
+
+        resolveSpan?.SetTag("markedCount", outstandingCount);
+        resolveSpan?.SetTag("candidateCount", candidateCount);
+
+        if (outstandingCount == 0)
+        {
+            await ExecuteReferenceFixupSqlAsync(npgsqlConn, connectedSystemId, dropTempTablesSql);
+            resolveSpan?.SetTag("resolvedCount", 0);
+            return 0;
+        }
+
+        var resolvedCount = 0;
+        using (var applySpan = CsoActivitySource.StartActivity("Cso.ResolveReferences.Apply"))
+        {
+            if (candidateCount > 0)
+            {
+                // Joined to the attribute values by primary key, so each batch is one index probe per resolution whatever
+                // the statistics say. The id test only rechecks the probed row: on its own it implies neither partial
+                // index's predicate, so it cannot hand the planner an outstanding-values index to drive the join from
+                // (the misestimate FixupCrossBatchChangeRecordReferenceIdsAsync records for its mark). It is also what
+                // keeps a value naming two objects, which only a duplicated Secondary External ID produces, to one of
+                // them, updated and counted once as the single UPDATE did, when its two resolutions fall in different
+                // batches.
+                await using var updateCmd = new NpgsqlCommand($"""
+                    UPDATE "ConnectedSystemObjectAttributeValues" av
+                    SET "ReferenceValueId" = f.target_id
+                    FROM "{resolutionsTableName}" f
+                    WHERE f.rn > @rangeStart AND f.rn <= @rangeEnd
+                      AND av."Id" = f.av_id
+                      AND av."ReferenceValueId" IS NULL
+                    """, npgsqlConn);
+                updateCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+                var rangeStartParam = updateCmd.Parameters.Add("rangeStart", NpgsqlTypes.NpgsqlDbType.Bigint);
+                var rangeEndParam = updateCmd.Parameters.Add("rangeEnd", NpgsqlTypes.NpgsqlDbType.Bigint);
+
+                for (long rangeStart = 0; rangeStart < candidateCount; rangeStart += effectiveBatchSize)
+                {
+                    rangeStartParam.Value = rangeStart;
+                    rangeEndParam.Value = rangeStart + effectiveBatchSize;
+                    resolvedCount += await updateCmd.ExecuteNonQueryAsync();
+                    Log.Information("FixupCrossBatchReferenceIdsAsync: Resolved {Resolved:N0} of {Total:N0} references for Connected System {ConnectedSystemId}",
+                        resolvedCount, candidateCount, connectedSystemId);
+                }
+            }
+
+            applySpan?.SetTag("resolvedCount", resolvedCount);
+        }
+
+        await ExecuteReferenceFixupSqlAsync(npgsqlConn, connectedSystemId, dropTempTablesSql);
+
+        resolveSpan?.SetTag("resolvedCount", resolvedCount);
+        return resolvedCount;
+    }
+
+    /// <summary>
+    /// Runs one of the reference fix-ups' statements (or a batch of them, one implicit transaction) on the given
+    /// connection under the bulk command timeout, binding <c>@connectedSystemId</c> where the SQL uses it.
+    /// </summary>
+    private static async Task<int> ExecuteReferenceFixupSqlAsync(NpgsqlConnection connection, int connectedSystemId, string sql)
+    {
+        await using var command = NewReferenceFixupCommand(connection, connectedSystemId, sql);
+        return await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// As <see cref="ExecuteReferenceFixupSqlAsync"/>, returning the count the batch's final <c>SELECT COUNT(*)</c>
+    /// reads; the statements before it return no rows.
+    /// </summary>
+    private static async Task<long> ExecuteReferenceFixupScalarAsync(NpgsqlConnection connection, int connectedSystemId, string sql)
+    {
+        await using var command = NewReferenceFixupCommand(connection, connectedSystemId, sql);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static NpgsqlCommand NewReferenceFixupCommand(NpgsqlConnection connection, int connectedSystemId, string sql)
+    {
+        var command = new NpgsqlCommand(sql, connection) { CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds };
+        if (sql.Contains("@connectedSystemId", StringComparison.Ordinal))
+            command.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
+        return command;
+    }
 
     public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
@@ -647,7 +791,7 @@ public partial class SyncRepository
         // the same physical connection: the RawSqlConnectionLease holds it open for the duration. Both
         // are dropped first and on every return; a failure part way leaves them to the next call's
         // leading drop, or to Npgsql's pool reset (DISCARD ALL) when the connection goes back to the pool.
-        var effectiveBatchSize = batchSize ?? DefaultChangeRecordReferenceFixupBatchSize;
+        var effectiveBatchSize = batchSize ?? DefaultReferenceFixupBatchSize;
         if (effectiveBatchSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
 
@@ -660,21 +804,10 @@ public partial class SyncRepository
         const string markedTableName = "_jim_change_record_reference_marked";
         const string resolutionsTableName = "_jim_change_record_reference_fixup";
 
-        async Task<int> ExecuteAsync(string sql)
-        {
-            await using var command = new NpgsqlCommand(sql, npgsqlConn);
-            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            if (sql.Contains("@connectedSystemId", StringComparison.Ordinal))
-                command.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
-            return await command.ExecuteNonQueryAsync();
-        }
+        Task<int> ExecuteAsync(string sql) => ExecuteReferenceFixupSqlAsync(npgsqlConn, connectedSystemId, sql);
 
-        async Task<long> CountAsync(string tableName)
-        {
-            await using var command = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tableName}";""", npgsqlConn);
-            command.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
-            return (long)(await command.ExecuteScalarAsync() ?? 0L);
-        }
+        Task<long> CountAsync(string tableName) =>
+            ExecuteReferenceFixupScalarAsync(npgsqlConn, connectedSystemId, $"""SELECT COUNT(*) FROM "{tableName}";""");
 
         Task DropTempTablesAsync() =>
             ExecuteAsync($"""DROP TABLE IF EXISTS "{markedTableName}"; DROP TABLE IF EXISTS "{resolutionsTableName}";""");

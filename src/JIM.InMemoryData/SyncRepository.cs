@@ -1380,8 +1380,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toDelete.Count);
     }
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
+        // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // resolution below is a single pass either way.
         var resolved = 0;
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {

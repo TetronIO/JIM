@@ -528,7 +528,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => throw new PreviewWriteAttemptedException(nameof(DeleteConnectedSystemObjectsAsync));
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
         => throw new PreviewWriteAttemptedException(nameof(FixupCrossBatchReferenceIdsAsync));
 
     public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
