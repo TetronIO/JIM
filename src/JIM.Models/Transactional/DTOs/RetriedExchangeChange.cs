@@ -18,6 +18,9 @@ public class RetriedExchangeChange
     /// <summary>The Connected System whose Exchange the change is for.</summary>
     public int ConnectedSystemId { get; init; }
 
+    /// <summary>That Connected System's name, which names the change in its history.</summary>
+    public string ConnectedSystemName { get; init; } = string.Empty;
+
     /// <summary>The account the change is for.</summary>
     public Guid? ConnectedSystemObjectId { get; init; }
 

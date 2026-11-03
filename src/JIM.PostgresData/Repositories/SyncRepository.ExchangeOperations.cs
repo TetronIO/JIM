@@ -605,10 +605,11 @@ public partial class SyncRepository
         var candidates = await ApplyExchangeChangeFilter(ExchangeChangeHeaders(), filter)
             .Where(h => h.Status == PendingExchangeChangeStatus.Parked
                         || (h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null))
-            .Select(h => h.Id)
-            .ToArrayAsync();
-        if (candidates.Length == 0)
+            .Select(h => new { h.Id, h.ConnectedSystemName })
+            .ToListAsync();
+        if (candidates.Count == 0)
             return [];
+        var systemNames = candidates.ToDictionary(c => c.Id, c => c.ConnectedSystemName);
 
         // The reset rechecks each row is still retryable as it writes it, so a change a deliverer claimed after the list
         // was read is left to that deliverer. The columns cleared here MUST stay in step with PendingExchangeChange.Retry(),
@@ -626,7 +627,7 @@ public partial class SyncRepository
             """;
 
         var retried = await _context.PendingExchangeChanges
-            .FromSqlRaw(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid, Value = candidates })
+            .FromSqlRaw(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid, Value = systemNames.Keys.ToArray() })
             .AsNoTracking()
             .ToListAsync();
 
@@ -636,6 +637,7 @@ public partial class SyncRepository
                 Id = c.Id,
                 ActivityId = c.ActivityId,
                 ConnectedSystemId = c.ConnectedSystemId,
+                ConnectedSystemName = systemNames[c.Id],
                 ConnectedSystemObjectId = c.ConnectedSystemObjectId,
                 MetaverseObjectId = c.MetaverseObjectId,
                 RecipientType = c.RecipientType

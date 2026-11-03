@@ -193,7 +193,7 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
 
         // A queued Exchange change's own Activity (#2021, Phase 6): where the change stands now. Nothing is read for
         // any other Activity.
-        if (activity is { TargetType: ActivityTargetType.ExchangeRecipient, ParentActivityId: null })
+        if (JIM.Models.Transactional.DTOs.ExchangeChangeOutcome.IsChangeActivity(activity))
             dto.ExchangeOutcome = (await _application.ExchangeDelivery.GetChangeOutcomesAsync([activity])).GetValueOrDefault(activity.Id);
 
         return Ok(dto);

@@ -4094,17 +4094,23 @@ public class SyncRepository : ISyncRepository
         ArgumentNullException.ThrowIfNull(filter);
 
         // Chosen through the list's own filter, as the PostgreSQL twin does, then retried through the row's own transition.
-        var retried = FilterExchangeChangeHeaders(filter)
-            .Select(h => _pendingExchangeChanges[h.Id])
-            .Where(c => c.Retry())
-            .Select(c => new RetriedExchangeChange
+        var retrying = FilterExchangeChangeHeaders(filter)
+            .Select(h => (h.ConnectedSystemName, Row: _pendingExchangeChanges[h.Id]))
+            .Where(x => x.Row.CanRetry)
+            .ToList();
+        foreach (var (_, row) in retrying)
+            row.Retry();
+
+        var retried = retrying
+            .Select(x => new RetriedExchangeChange
             {
-                Id = c.Id,
-                ActivityId = c.ActivityId,
-                ConnectedSystemId = c.ConnectedSystemId,
-                ConnectedSystemObjectId = c.ConnectedSystemObjectId,
-                MetaverseObjectId = c.MetaverseObjectId,
-                RecipientType = c.RecipientType
+                Id = x.Row.Id,
+                ActivityId = x.Row.ActivityId,
+                ConnectedSystemId = x.Row.ConnectedSystemId,
+                ConnectedSystemName = x.ConnectedSystemName,
+                ConnectedSystemObjectId = x.Row.ConnectedSystemObjectId,
+                MetaverseObjectId = x.Row.MetaverseObjectId,
+                RecipientType = x.Row.RecipientType
             })
             .ToList();
 

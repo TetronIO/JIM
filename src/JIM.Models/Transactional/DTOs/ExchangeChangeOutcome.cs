@@ -80,6 +80,24 @@ public class ExchangeChangeOutcome
     }
 
     /// <summary>
+    /// Whether <paramref name="activity"/> is a queued Exchange change's own Activity: the top-level
+    /// <see cref="ActivityTargetOperationType.SetExchangeRecipient"/> export staging writes for it. Not an Activity recorded
+    /// under a change (an attempt, a withdrawal, a retry), nor an administrator's retry, which is a top-level Exchange
+    /// Activity too but an action over changes rather than a change.
+    /// </summary>
+    public static bool IsChangeActivity(Activity activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        return activity is
+        {
+            TargetType: ActivityTargetType.ExchangeRecipient,
+            TargetOperationType: ActivityTargetOperationType.SetExchangeRecipient,
+            ParentActivityId: null
+        };
+    }
+
+    /// <summary>
     /// Where a change still on the queue stands, from its row's status and last attempt and its own Activity's status:
     /// the reading every surface shares, the queue list's included, so a row never reads one way in a list and another
     /// on its follow-up.

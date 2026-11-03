@@ -1435,7 +1435,7 @@
         }
 
         _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
-        _exchangeOutcome = _activity is { TargetType: ActivityTargetType.ExchangeRecipient, ParentActivityId: null }
+        _exchangeOutcome = JIM.Models.Transactional.DTOs.ExchangeChangeOutcome.IsChangeActivity(_activity)
             ? await jim.ExchangeDelivery.GetChangeOutcomeAsync(_activity.Id)
             : null;
 

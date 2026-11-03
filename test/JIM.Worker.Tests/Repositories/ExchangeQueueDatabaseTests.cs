@@ -197,6 +197,7 @@ public class ExchangeQueueDatabaseTests
             {
                 Assert.That(parked.ActivityId, Is.EqualTo(s.ParkedActivity), "what the retry records its child Activity under");
                 Assert.That(parked.ConnectedSystemId, Is.EqualTo(s.Resurgam));
+                Assert.That(parked.ConnectedSystemName, Is.EqualTo("Resurgam AD"));
                 Assert.That(parked.MetaverseObjectId, Is.EqualTo(s.Alan));
                 Assert.That(parked.RecipientType, Is.EqualTo(ExchangeRecipientTypes.SharedMailbox));
             }
