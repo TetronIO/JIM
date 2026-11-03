@@ -36,6 +36,19 @@ public sealed record ExecutionItemFollowUpDisplay(
     /// <summary>The follow-up's own Activity page.</summary>
     public string ActivityHref => $"/activity/{ActivityId}";
 
+    /// <summary>
+    /// A queued Exchange change, read as its follow-up reads: for a surface that has the change but not the export item
+    /// it followed, such as an account's Exchange recipient panel.
+    /// </summary>
+    public static ExecutionItemFollowUpDisplay ForExchangeChange(ExchangeChangeOutcome outcome, string? targetName, DateTime created)
+    {
+        ArgumentNullException.ThrowIfNull(outcome);
+
+        var (label, modifier, running) = ExchangeChangeOutcomeDisplay.Pill(outcome.State);
+        return new(outcome.ActivityId, ExchangeChangeOutcomeDisplay.Title(outcome.RecipientType), targetName, label, modifier,
+            ExchangeChangeOutcomeDisplay.Words(outcome), running, created, ActivityTargetType.ExchangeRecipient);
+    }
+
     public static ExecutionItemFollowUpDisplay From(ExecutionItemFollowUp followUp)
     {
         ArgumentNullException.ThrowIfNull(followUp);
@@ -65,11 +78,7 @@ public sealed record ExecutionItemFollowUpDisplay(
         }
 
         if (followUp is { TargetType: ActivityTargetType.ExchangeRecipient, ExchangeOutcome: { } exchange })
-        {
-            var (label, modifier, running) = ExchangeChangeOutcomeDisplay.Pill(exchange.State);
-            return new(followUp.ActivityId, ExchangeChangeOutcomeDisplay.Title(exchange.RecipientType), followUp.TargetName, label, modifier,
-                ExchangeChangeOutcomeDisplay.Words(exchange), running, followUp.Created, followUp.TargetType);
-        }
+            return ForExchangeChange(exchange, followUp.TargetName, followUp.Created);
 
         var statusModifier = followUp.Status switch
         {

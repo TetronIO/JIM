@@ -152,6 +152,35 @@ public class ExchangeDeliveryServer
     }
 
     /// <summary>
+    /// One account's Exchange recipient (#2021, Phase 6): what is declared for it now, what the last import read back,
+    /// and the change still on the Exchange queue for it, with where that stands. Null where Exchange has no part in
+    /// the account: no Exchange attribute imported, nothing held for Exchange, and nothing queued.
+    /// </summary>
+    public async Task<ExchangeRecipientState?> GetRecipientStateAsync(Guid connectedSystemObjectId)
+    {
+        // The read the lane makes before converging a change: the imported values and the held changes.
+        var account = (await _syncRepo.GetExchangeDeliveryObjectsAsync([connectedSystemObjectId])).SingleOrDefault();
+        if (account == null)
+            return null;
+
+        var row = await _syncRepo.GetExchangeChangeForConnectedSystemObjectAsync(connectedSystemObjectId);
+        if (account.ImportedValues.Count == 0 && account.HeldChanges.Count == 0 && row == null)
+            return null;
+
+        ExchangeChangeOutcome? queued = null;
+        if (row != null && await _activityRepo().GetActivityAsync(row.ActivityId) is { } changeActivity)
+            queued = (await GetChangeOutcomesAsync([changeActivity])).GetValueOrDefault(changeActivity.Id);
+
+        return new ExchangeRecipientState
+        {
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            Declared = ExchangeDeclaredState.Of(account.ImportedValues, account.HeldChanges),
+            Imported = ExchangeDeclaredState.Of(account.ImportedValues, []),
+            QueuedChange = queued
+        };
+    }
+
+    /// <summary>
     /// Runs one lane on <paramref name="connectedSystemId"/>: claims what is due, converges it over one Exchange session,
     /// and records every outcome. Outcomes already recorded stay recorded when the lane is cancelled; what it had not
     /// reached is given back unattempted.

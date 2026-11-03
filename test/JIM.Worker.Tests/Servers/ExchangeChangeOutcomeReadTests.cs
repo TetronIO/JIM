@@ -108,6 +108,89 @@ public class ExchangeChangeOutcomeReadTests
         }
     }
 
+    // ---- An account's Exchange recipient ---------------------------------------------------------------------------
+
+    [Test]
+    public async Task GetRecipientStateAsync_AccountWithAChangeQueued_IsDeclaredAheadOfWhatWasImportedAsync()
+    {
+        var change = ChangeActivity();
+        _activityRepository.Setup(r => r.GetActivityAsync(change.Id)).ReturnsAsync(change);
+        var account = SeedAccount(imported: ExchangeRecipientTypes.None, held: ExchangeRecipientTypes.Mailbox);
+        await _syncRepository.StageExchangeChangesAsync([Row(change.Id, account.Id)]);
+
+        var state = await _server.GetRecipientStateAsync(account.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(state, Is.Not.Null);
+            Assert.That(state!.Declared.RecipientType, Is.EqualTo(ExchangeRecipientTypes.Mailbox), "the held change, laid over the import");
+            Assert.That(state.Imported.RecipientType, Is.EqualTo(ExchangeRecipientTypes.None), "not a recipient until an import shows one");
+            Assert.That(state.QueuedChange?.State, Is.EqualTo(ExchangeChangeState.Queued));
+            Assert.That(state.IsInStep, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task GetRecipientStateAsync_AccountAlreadyTheDeclaredRecipient_IsInStepAsync()
+    {
+        var account = SeedAccount(imported: ExchangeRecipientTypes.Mailbox, held: null);
+
+        var state = await _server.GetRecipientStateAsync(account.Id);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(state?.QueuedChange, Is.Null);
+            Assert.That(state?.IsInStep, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task GetRecipientStateAsync_AccountWithNothingForExchange_IsNullAsync()
+    {
+        var account = SeedAccount(imported: null, held: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await _server.GetRecipientStateAsync(account.Id), Is.Null, "nothing to show for an account Exchange has no part in");
+            Assert.That(await _server.GetRecipientStateAsync(Guid.NewGuid()), Is.Null);
+        }
+    }
+
+    private JIM.Models.Staging.ConnectedSystemObject SeedAccount(string? imported, string? held)
+    {
+        var type = new JIM.Models.Staging.ConnectedSystemObjectType { Id = 10, Name = "user", ConnectedSystemId = 1 };
+        var recipientType = new JIM.Models.Staging.ConnectedSystemObjectTypeAttribute
+        {
+            Id = 3, Name = ExchangeRecipientAttributes.RecipientType, Type = JIM.Models.Core.AttributeDataType.Text,
+            AttributePlurality = JIM.Models.Core.AttributePlurality.SingleValued, IsConnectorDefined = true, ConnectedSystemObjectType = type
+        };
+        var cso = new JIM.Models.Staging.ConnectedSystemObject { Id = Guid.NewGuid(), ConnectedSystemId = 1, Type = type, TypeId = type.Id };
+        if (imported != null)
+            cso.AttributeValues.Add(new JIM.Models.Staging.ConnectedSystemObjectAttributeValue { AttributeId = 3, StringValue = imported, Attribute = recipientType });
+        _syncRepository.SeedConnectedSystemObject(cso);
+
+        if (held != null)
+        {
+            _syncRepository.SeedPendingExport(new JIM.Models.Transactional.PendingExport
+            {
+                Id = Guid.NewGuid(), ConnectedSystemId = 1, ConnectedSystemObjectId = cso.Id, ConnectedSystemObject = cso,
+                ChangeType = JIM.Models.Transactional.PendingExportChangeType.Update, Status = JIM.Models.Transactional.PendingExportStatus.Exported,
+                AttributeValueChanges =
+                [
+                    new JIM.Models.Transactional.PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(), Attribute = recipientType, AttributeId = 3, StringValue = held,
+                        ChangeType = JIM.Models.Transactional.PendingExportAttributeChangeType.Update,
+                        Status = JIM.Models.Transactional.PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                        ExportAttemptCount = 1, AwaitsExchange = true
+                    }
+                ]
+            });
+        }
+
+        return cso;
+    }
+
     private static Activity ChangeActivity(ActivityTargetType targetType = ActivityTargetType.ExchangeRecipient) => new()
     {
         Id = Guid.NewGuid(),
@@ -119,10 +202,10 @@ public class ExchangeChangeOutcomeReadTests
         Created = Queued
     };
 
-    private static PendingExchangeChange Row(Guid activityId) => new()
+    private static PendingExchangeChange Row(Guid activityId, Guid? accountId = null) => new()
     {
         ConnectedSystemId = 1,
-        ConnectedSystemObjectId = Guid.NewGuid(),
+        ConnectedSystemObjectId = accountId ?? Guid.NewGuid(),
         RecipientType = ExchangeRecipientTypes.Mailbox,
         CreatedAt = Queued,
         ActivityId = activityId

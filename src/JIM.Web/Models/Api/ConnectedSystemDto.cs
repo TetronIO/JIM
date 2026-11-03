@@ -813,6 +813,13 @@ public class ConnectedSystemObjectDetailDto
     /// </summary>
     public List<AttributeValueSummaryDto>? AttributeValueSummaries { get; set; }
 
+    /// <summary>
+    /// The account's Exchange recipient: what is declared, what the last import read back, and any change still owed
+    /// to Exchange. Null where Exchange has no part in the account, and always null while Exchange recipient
+    /// management is not available.
+    /// </summary>
+    public ExchangeRecipientStateDto? ExchangeRecipient { get; set; }
+
     public static ConnectedSystemObjectDetailDto FromEntity(ConnectedSystemObject entity)
     {
         return new ConnectedSystemObjectDetailDto

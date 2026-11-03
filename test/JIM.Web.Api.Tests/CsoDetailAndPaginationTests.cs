@@ -21,6 +21,7 @@ using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
+using JIM.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -42,6 +43,8 @@ public class CsoDetailAndPaginationTests
     private IExpressionEvaluator _expressionEvaluator = null!;
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
+    private InMemoryServiceSettingsRepository _serviceSettings = null!;
+    private JIM.InMemoryData.SyncRepository _syncRepository = null!;
 
     [SetUp]
     public void SetUp()
@@ -58,7 +61,12 @@ public class CsoDetailAndPaginationTests
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
-        _application = new JimApplication(_mockRepository.Object);
+        // Feature flags off unless a test switches one on; the Exchange queue in memory.
+        _serviceSettings = new InMemoryServiceSettingsRepository();
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(() => _serviceSettings);
+        _mockActivityRepo.Setup(r => r.GetExchangeChangeEventsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
+        _syncRepository = new JIM.InMemoryData.SyncRepository();
+        _application = new JimApplication(_mockRepository.Object, _syncRepository);
         _controller = new SynchronisationController(_mockLogger.Object, _application, _expressionEvaluator, _mockCredentialProtection.Object);
 
         var apiKeyId = Guid.NewGuid();
@@ -88,6 +96,83 @@ public class CsoDetailAndPaginationTests
             HttpContext = new DefaultHttpContext { User = principal }
         };
     }
+
+    #region GetConnectedSystemObjectAsync: the Exchange recipient (#2021, Phase 6)
+
+    [Test]
+    public async Task GetConnectedSystemObjectAsync_ExchangeRecipientsOn_ReturnsTheAccountsDeclaredAndImportedStateAsync()
+    {
+        _serviceSettings = InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled();
+        var (csId, cso) = ArrangeObjectWithAQueuedMailbox();
+
+        var result = await _controller.GetConnectedSystemObjectAsync(csId, cso.Id) as OkObjectResult;
+
+        var recipient = (result?.Value as ConnectedSystemObjectDetailDto)?.ExchangeRecipient;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recipient, Is.Not.Null);
+            Assert.That(recipient!.Declared.RecipientType, Is.EqualTo("Mailbox"));
+            Assert.That(recipient.Imported.RecipientType, Is.Null, "not a recipient until an import shows one");
+            Assert.That(recipient.QueuedChange?.State, Is.EqualTo(ExchangeChangeState.Queued));
+            Assert.That(recipient.IsInStep, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectAsync_ExchangeRecipientsOff_SaysNothingAboutExchangeAsync()
+    {
+        var (csId, cso) = ArrangeObjectWithAQueuedMailbox();
+
+        var result = await _controller.GetConnectedSystemObjectAsync(csId, cso.Id) as OkObjectResult;
+
+        Assert.That((result?.Value as ConnectedSystemObjectDetailDto)?.ExchangeRecipient, Is.Null);
+    }
+
+    private (int ConnectedSystemId, ConnectedSystemObject Cso) ArrangeObjectWithAQueuedMailbox()
+    {
+        const int csId = 1;
+        var cso = CreateTestCso(Guid.NewGuid(), csId);
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemObjectDetailAsync(csId, cso.Id, CsoAttributeLoadStrategy.CappedMva))
+            .ReturnsAsync(new CsoDetailResult { ConnectedSystemObject = cso, AttributeValueTotalCounts = new Dictionary<string, int>() });
+        _syncRepository.SeedConnectedSystemObject(cso);
+
+        var recipientType = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 3, Name = JIM.Models.Exchange.ExchangeRecipientAttributes.RecipientType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, IsConnectorDefined = true
+        };
+        _syncRepository.SeedPendingExport(new PendingExport
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = csId, ConnectedSystemObjectId = cso.Id, ConnectedSystemObject = cso,
+            ChangeType = PendingExportChangeType.Create, Status = PendingExportStatus.Exported,
+            AttributeValueChanges =
+            [
+                new PendingExportAttributeValueChange
+                {
+                    Id = Guid.NewGuid(), Attribute = recipientType, AttributeId = 3, StringValue = "Mailbox",
+                    ChangeType = PendingExportAttributeChangeType.Add, Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+                    ExportAttemptCount = 1, AwaitsExchange = true
+                }
+            ]
+        });
+
+        var changeActivity = new JIM.Models.Activities.Activity
+        {
+            Id = Guid.NewGuid(), TargetType = JIM.Models.Activities.ActivityTargetType.ExchangeRecipient,
+            TargetOperationType = JIM.Models.Activities.ActivityTargetOperationType.SetExchangeRecipient, TargetContext = "Mailbox",
+            Status = JIM.Models.Activities.ActivityStatus.Complete, Created = DateTime.UtcNow
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(changeActivity.Id)).ReturnsAsync(changeActivity);
+        _syncRepository.StageExchangeChangesAsync([new PendingExchangeChange
+        {
+            ConnectedSystemId = csId, ConnectedSystemObjectId = cso.Id, RecipientType = "Mailbox", CreatedAt = DateTime.UtcNow, ActivityId = changeActivity.Id
+        }]).GetAwaiter().GetResult();
+
+        return (csId, cso);
+    }
+
+    #endregion
 
     #region GetConnectedSystemObjectAsync (detail endpoint with CappedMva)
 
