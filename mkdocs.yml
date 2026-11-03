@@ -259,6 +259,7 @@ nav:
       - Metaverse Attributes: powershell/metaverse-attributes.md
       - Password Synchronisation: powershell/password-synchronisation.md
       - Password Queue: powershell/password-queue.md
+      - Exchange Queue: powershell/exchange-queue.md
       - Generated Values: powershell/generated-values.md
       - Predefined Searches: powershell/predefined-searches.md
       - Schedules: powershell/schedules.md

@@ -24,7 +24,7 @@ public class ExchangeQueueSummary
     /// <summary>Changes JIM refused before asking Exchange, which hold until their declared state changes.</summary>
     public int RefusedCount { get; set; }
 
-    /// <summary>Changes that would change an existing recipient's type, which this release does not make.</summary>
+    /// <summary>Changes that would change an existing recipient's type, which JIM does not do.</summary>
     public int NotMadeCount { get; set; }
 
     /// <summary>How many queued or retrying changes a delivery pass would attempt now.</summary>
