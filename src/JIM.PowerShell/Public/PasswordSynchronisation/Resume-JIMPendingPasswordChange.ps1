@@ -84,10 +84,12 @@ function Resume-JIMPendingPasswordChange {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType('JIM.PasswordQueueActionResponse')]
     param(
+        # The only parameter a piped row binds. A row's ConnectedSystemId, bound from the pipeline, would hold the last
+        # row's value by the time the request is built, and the server would retry only that system's changes.
         [Parameter(ValueFromPipelineByPropertyName)]
         [guid[]]$Id,
 
-        [Parameter(ValueFromPipelineByPropertyName)]
+        [Parameter()]
         [int]$ConnectedSystemId,
 
         [Parameter()]
@@ -134,7 +136,7 @@ function Resume-JIMPendingPasswordChange {
 
         # An empty pipeline is a successful no-op, not a failure: "retry everything parked" on a day when
         # nothing is parked is exactly the outcome the caller wanted.
-        if ($collectedIds.Count -eq 0 -and $PSCmdlet.MyInvocation.ExpectingInput -and -not $PSBoundParameters.ContainsKey('ConnectedSystemId')) {
+        if ($collectedIds.Count -eq 0 -and $PSCmdlet.MyInvocation.ExpectingInput) {
             Write-Verbose "Nothing reached Resume-JIMPendingPasswordChange from the pipeline; there is nothing to retry."
             return
         }
