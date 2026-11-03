@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Exchange;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -1135,6 +1136,65 @@ public interface ISyncRepository
     /// costs nothing where no change carries the flag.
     /// </summary>
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// The Connected Systems with Exchange changes a delivery lane would attempt now: pending and due, or claimed under
+    /// a lease that has run out. Parked, Cancelled and Refused changes are never due.
+    /// </summary>
+    Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// What the Exchange Delivery Service has ahead of it, in one query: changes due now, changes waiting out a backoff,
+    /// and the earliest scheduled attempt still ahead.
+    /// </summary>
+    Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// Claims up to <paramref name="maximum"/> due Exchange changes on <paramref name="connectedSystemId"/> for
+    /// <paramref name="claimedBy"/>, oldest first, in one statement: each becomes
+    /// <see cref="PendingExchangeChangeStatus.Delivering"/> under a lease from <paramref name="asOf"/>. Rows another
+    /// claimant holds are stepped over rather than waited for, so two deliverers never claim the same change. A claim
+    /// whose lease has run out is claimable again.
+    /// </summary>
+    /// <returns>The changes claimed, in the order they were claimed.</returns>
+    Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum);
+
+    /// <summary>
+    /// Gives claimed changes back unattempted: each still Delivering under <paramref name="claimedBy"/>'s claim goes
+    /// back to Pending with its claim cleared. A change superseded, cancelled or reclaimed by another deliverer since is
+    /// left alone.
+    /// </summary>
+    /// <returns>How many were released.</returns>
+    Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy);
+
+    /// <summary>
+    /// Records failed attempts: each change's status, failure, attempt count, failure clock, next attempt and cleared
+    /// claim. Written only where the row is still Delivering under <paramref name="claimedBy"/>'s claim, so an outcome
+    /// a supersession, a cancellation or another deliverer gave the row meanwhile survives.
+    /// </summary>
+    Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy);
+
+    /// <summary>
+    /// Removes changes that were delivered or withdrawn, where each is still Delivering under
+    /// <paramref name="claimedBy"/>'s claim: a row superseded meanwhile carries newer work and is kept.
+    /// </summary>
+    /// <returns>How many were removed.</returns>
+    Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy);
+
+    /// <summary>
+    /// Removes Parked and Cancelled Exchange changes last touched before <paramref name="olderThan"/>, oldest first, at
+    /// most <paramref name="maxRecords"/>, for history retention. A Delivering change is in a deliverer's hands and a
+    /// Refused one is what stops a misfit being reported again, so neither is ever removed here.
+    /// </summary>
+    /// <returns>How many were removed.</returns>
+    Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
+    /// What the delivery lane needs about each of <paramref name="connectedSystemObjectIds"/> before converging its
+    /// queued change: its identifiers, and its declared state now (the imported Exchange values and the changes its
+    /// Pending Export still holds for Exchange). An id with no object is absent from the result.
+    /// </summary>
+    Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     #endregion
 
