@@ -43,7 +43,6 @@ public static class ExchangeChangeOutcomeDisplay
         ExchangeChangeState.Parked => ("Parked", "err", false),
         ExchangeChangeState.Refused => ("Refused", "err", false),
         ExchangeChangeState.NotMade => ("Not made", "warn", false),
-        ExchangeChangeState.Cancelled => ("Cancelled", "err", false),
         _ => (state.ToString(), "neutral", false)
     };
 
@@ -83,9 +82,6 @@ public static class ExchangeChangeOutcomeDisplay
 
             case ExchangeChangeState.Replaced:
                 return message ?? "Replaced by a newer declared state before it was delivered";
-
-            case ExchangeChangeState.Cancelled:
-                return message ?? "Cancelled; it holds until the account's declared state changes";
 
             default:
                 return message ?? Pill(outcome.State).Label;

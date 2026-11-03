@@ -103,7 +103,6 @@ public class ExecutionItemFollowUpDisplayTests
     [TestCase(ExchangeChangeState.Parked, "Parked", "err", false)]
     [TestCase(ExchangeChangeState.Refused, "Refused", "err", false)]
     [TestCase(ExchangeChangeState.NotMade, "Not made", "warn", false)]
-    [TestCase(ExchangeChangeState.Cancelled, "Cancelled", "err", false)]
     public void From_ExchangeChange_ReadsItsStateFromItsOutcome(ExchangeChangeState state, string label, string modifier, bool running)
     {
         var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome { State = state, RecipientType = "Mailbox" }));

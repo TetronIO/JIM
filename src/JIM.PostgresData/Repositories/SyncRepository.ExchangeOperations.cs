@@ -24,7 +24,7 @@ public partial class SyncRepository
     ];
 
     /// <summary>
-    /// What a supersede sets each attempt, claim and cancellation column to, rather than the offered row's value: the
+    /// What a supersede sets each attempt and claim column to, rather than the offered row's value: the
     /// values of a change staged afresh, so a deliverable row is due at once whatever the caller passed. Every other
     /// column in <see cref="PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate"/> takes the offered
     /// value, the status and failure fields included: Pending with no failure for a deliverable change, Refused and its
@@ -37,10 +37,7 @@ public partial class SyncRepository
         ["FirstFailedAt"] = "NULL",
         ["NextRetryAt"] = "NULL",
         ["ClaimedAt"] = "NULL",
-        ["ClaimedBy"] = "NULL",
-        ["CancelledAt"] = "NULL",
-        ["CancelledById"] = "NULL",
-        ["CancelledByName"] = "NULL"
+        ["ClaimedBy"] = "NULL"
     };
 
     /// <inheritdoc />
@@ -208,8 +205,8 @@ public partial class SyncRepository
     // ---- Delivery (Phase 5) ----------------------------------------------------------------------------------------
     // Modelled on the Password Synchronisation queue's delivery statements (SyncRepository.PasswordOperations.cs), with
     // the Exchange queue's own status ordinals. Every write a lane makes is guarded on the row still being Delivering
-    // under that lane's claim: a supersession clears the claim, a cancellation changes the status, and another
-    // deliverer reclaiming an expired lease re-stamps it, and each of those is an outcome that must survive.
+    // under that lane's claim: a supersession clears the claim, and another deliverer reclaiming an expired lease
+    // re-stamps it, and each of those is an outcome that must survive.
 
     /// <inheritdoc />
     public async Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease)
@@ -255,8 +252,8 @@ public partial class SyncRepository
 
         // Select and update in one statement, which is what makes the claim safe against a second deliverer: the
         // sub-select locks the rows it chooses, SKIP LOCKED makes a concurrent claimer step over them rather than wait
-        // and then re-read them, and the update lands before the lock is released at commit. Parked, Cancelled and
-        // Refused rows are never chosen.
+        // and then re-read them, and the update lands before the lock is released at commit. Parked and Refused
+        // rows are never chosen.
         //
         // Deliberately hand-written rather than driven from the bulk-columns constant: it marks exactly three
         // call-site-computed columns (a status mark and the claim stamp), and a future column must not be swept into it.
@@ -362,9 +359,8 @@ public partial class SyncRepository
         // drains rather than churning the same rows.
         return await _context.PendingExchangeChanges
             .Where(c => _context.PendingExchangeChanges
-                .Where(t => (t.Status == PendingExchangeChangeStatus.Parked || t.Status == PendingExchangeChangeStatus.Cancelled)
-                            && (t.CancelledAt ?? t.LastAttemptedAt ?? t.CreatedAt) < olderThan)
-                .OrderBy(t => t.CancelledAt ?? t.LastAttemptedAt ?? t.CreatedAt)
+                .Where(t => t.Status == PendingExchangeChangeStatus.Parked && (t.LastAttemptedAt ?? t.CreatedAt) < olderThan)
+                .OrderBy(t => t.LastAttemptedAt ?? t.CreatedAt)
                 .Take(maxRecords)
                 .Select(t => t.Id)
                 .Contains(c.Id))
@@ -517,9 +513,6 @@ public partial class SyncRepository
         command.Parameters.Add(new NpgsqlParameter("p19", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.ClaimedAt ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("p20", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.ClaimedBy ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("p21", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = change.ActivityId });
-        command.Parameters.Add(new NpgsqlParameter("p22", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.CancelledAt ?? DBNull.Value });
-        command.Parameters.Add(new NpgsqlParameter("p23", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)change.CancelledById ?? DBNull.Value });
-        command.Parameters.Add(new NpgsqlParameter("p24", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.CancelledByName ?? DBNull.Value });
     }
 
     #endregion

@@ -43,7 +43,6 @@ public class ExchangeRecipientStateDisplayTests
 
     [TestCase(ExchangeChangeState.Parked, "err")]
     [TestCase(ExchangeChangeState.Refused, "err")]
-    [TestCase(ExchangeChangeState.Cancelled, "err")]
     [TestCase(ExchangeChangeState.NotMade, "warn")]
     public void Headline_AChangeWaitingForAPerson_SaysWhereItStands(ExchangeChangeState state, string modifier)
     {

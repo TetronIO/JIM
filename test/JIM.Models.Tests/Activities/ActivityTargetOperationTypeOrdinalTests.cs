@@ -58,8 +58,7 @@ public class ActivityTargetOperationTypeOrdinalTests
         [ActivityTargetOperationType.SetExchangeRecipient] = 23,
         [ActivityTargetOperationType.WithdrawExchangeRecipient] = 24,
         [ActivityTargetOperationType.ReplaceExchangeRecipient] = 25,
-        [ActivityTargetOperationType.RetryExchangeRecipient] = 26,
-        [ActivityTargetOperationType.CancelExchangeRecipient] = 27
+        [ActivityTargetOperationType.RetryExchangeRecipient] = 26
     };
 
     [Test]

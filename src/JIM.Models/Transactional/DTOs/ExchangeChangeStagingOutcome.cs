@@ -29,8 +29,8 @@ public class ExchangeChangeStagingOutcome
     public Guid? PreviousActivityId { get; init; }
 
     /// <summary>
-    /// The status of the row left as it was, so a caller can tell a cancellation that still holds, or a parked change,
-    /// from one still being worked. Null unless the disposition is
+    /// The status of the row left as it was, so a caller can tell a parked or refused change, which holds, from one
+    /// still being worked. Null unless the disposition is
     /// <see cref="ExchangeChangeStagingDisposition.Unchanged"/>.
     /// </summary>
     public PendingExchangeChangeStatus? ExistingStatus { get; init; }

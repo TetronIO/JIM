@@ -4982,15 +4982,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CancelledById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CancelledByName")
-                        .HasColumnType("text");
-
                     b.Property<DateTime?>("ClaimedAt")
                         .HasColumnType("timestamp with time zone");
 

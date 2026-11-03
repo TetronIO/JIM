@@ -206,8 +206,7 @@ public partial class SyncEngine
     /// acting on it, then an import reading what Exchange stamped, can confirm it.
     /// <list type="bullet">
     /// <item><b>Held</b> while the Connected System Object has a change on the Exchange queue in any status (Pending or
-    /// Delivering on its way, Parked waiting for a person, Cancelled or Refused holding until the declared state
-    /// changes): left exactly as it is, neither retried (re-sending would only re-stage the same declared state) nor
+    /// Delivering on its way, Parked waiting for a person, Refused holding until the declared state changes): left exactly as it is, neither retried (re-sending would only re-stage the same declared state) nor
     /// reported as unconfirmed. Returns true.</item>
     /// <item><b>Released</b> once the object has none (the lane deletes a delivered change; a withdrawn or deleted one
     /// goes too): the flag is cleared and false is returned, so the caller judges it as any other unconfirmed change,

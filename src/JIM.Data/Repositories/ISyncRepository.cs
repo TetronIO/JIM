@@ -1098,11 +1098,11 @@ public interface ISyncRepository
     /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a row that is the same
     /// change (the five declared values, null and empty alike, and refused or not alike:
     /// <see cref="PendingExchangeChange.IsSameChangeAs"/>) is left untouched whatever its status, so re-staging does not
-    /// unpark a Parked change, undo a cancellation, report a refusal again, wipe a retrying change's backoff or disturb
+    /// unpark a Parked change, report a refusal again, wipe a retrying change's backoff or disturb
     /// a delivery in flight, and its status is reported on the outcome; any other row, including one being delivered,
     /// is superseded in place, keeping its id, taking the change's declared state, domain controller, Metaverse Object,
     /// Synchronisation Rule, Activity, creation time, status and failure fields, and clearing every trace of earlier
-    /// attempts, the claim and the cancellation, so a deliverable change is due at once.
+    /// attempts and the claim, so a deliverable change is due at once.
     /// </para>
     /// <para>
     /// Each change must name its account (<see cref="PendingExchangeChange.ConnectedSystemObjectId"/>). A change whose
@@ -1114,7 +1114,7 @@ public interface ISyncRepository
 
     /// <summary>
     /// Narrows a set of Connected System Object ids to those with a change on the Exchange queue of
-    /// <paramref name="connectedSystemId"/> (#2021), in any status: Pending, Delivering, Parked, Cancelled or Refused.
+    /// <paramref name="connectedSystemId"/> (#2021), in any status: Pending, Delivering, Parked or Refused.
     /// The confirming import holds a connector-defined change Exchange may still owe
     /// (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>) while its object is among them, and judges it as
     /// any other change once it is not. Asked once per reconciliation page, and only for a page holding such a change.
@@ -1159,7 +1159,7 @@ public interface ISyncRepository
 
     /// <summary>
     /// The Connected Systems with Exchange changes a delivery lane would attempt now: pending and due, or claimed under
-    /// a lease that has run out. Parked, Cancelled and Refused changes are never due.
+    /// a lease that has run out. Parked and Refused changes are never due.
     /// </summary>
     Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease);
 
@@ -1181,8 +1181,8 @@ public interface ISyncRepository
 
     /// <summary>
     /// Gives claimed changes back unattempted: each still Delivering under <paramref name="claimedBy"/>'s claim goes
-    /// back to Pending with its claim cleared. A change superseded, cancelled or reclaimed by another deliverer since is
-    /// left alone.
+    /// back to Pending with its claim cleared. A change superseded or reclaimed by another deliverer since is left
+    /// alone.
     /// </summary>
     /// <returns>How many were released.</returns>
     Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy);
@@ -1190,7 +1190,7 @@ public interface ISyncRepository
     /// <summary>
     /// Records failed attempts: each change's status, failure, attempt count, failure clock, next attempt and cleared
     /// claim. Written only where the row is still Delivering under <paramref name="claimedBy"/>'s claim, so an outcome
-    /// a supersession, a cancellation or another deliverer gave the row meanwhile survives.
+    /// a supersession or another deliverer gave the row meanwhile survives.
     /// </summary>
     Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy);
 
@@ -1202,7 +1202,7 @@ public interface ISyncRepository
     Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy);
 
     /// <summary>
-    /// Removes Parked and Cancelled Exchange changes last touched before <paramref name="olderThan"/>, oldest first, at
+    /// Removes Parked Exchange changes last touched before <paramref name="olderThan"/>, oldest first, at
     /// most <paramref name="maxRecords"/>, for history retention. A Delivering change is in a deliverer's hands and a
     /// Refused one is what stops a misfit being reported again, so neither is ever removed here.
     /// </summary>

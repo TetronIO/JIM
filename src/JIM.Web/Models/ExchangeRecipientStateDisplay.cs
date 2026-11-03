@@ -21,7 +21,7 @@ public static class ExchangeRecipientStateDisplay
         if (state.QueuedChange is { IsSettled: false })
             return ("1 change outstanding", "warn");
 
-        // A settled change still on the queue is one JIM has stopped on: parked, refused, not made or cancelled.
+        // A settled change still on the queue is one JIM has stopped on: parked, refused or not made.
         if (state.QueuedChange is { } stopped && stopped.State is not (JIM.Models.Transactional.DTOs.ExchangeChangeState.Delivered
                 or JIM.Models.Transactional.DTOs.ExchangeChangeState.Withdrawn or JIM.Models.Transactional.DTOs.ExchangeChangeState.Replaced))
         {

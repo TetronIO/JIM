@@ -48,7 +48,7 @@ public class SyncRepositoryExchangeHoldTests
         var noLongerAwaitingConfirmation = await AddPendingExportAsync(SystemId, held: true, PendingExportAttributeChangeStatus.ExportedNotConfirmed);
         await AddPendingExportAsync(SystemId, held: false);
         await AddPendingExportAsync(OtherSystemId, held: true);
-        await _repo.StageExchangeChangesAsync([Queued(SystemId, stillQueued, PendingExchangeChangeStatus.Cancelled)]);
+        await _repo.StageExchangeChangesAsync([Queued(SystemId, stillQueued, PendingExchangeChangeStatus.Parked)]);
 
         var released = await _repo.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(SystemId);
 

@@ -88,7 +88,6 @@ public class FollowUpStateCountDatabaseTests
             ("exchange delivering", "Delivering", item => ExchangeAsync(item, row: r => r.Status = PendingExchangeChangeStatus.Delivering)),
             ("exchange retrying", "Retrying", item => ExchangeAsync(item, row: r => { r.LastAttemptedAt = At.AddMinutes(1); r.AttemptCount = 1; })),
             ("exchange parked row", "Parked", item => ExchangeAsync(item, row: r => r.Status = PendingExchangeChangeStatus.Parked)),
-            ("exchange cancelled row", "Cancelled", item => ExchangeAsync(item, row: r => r.Status = PendingExchangeChangeStatus.Cancelled)),
             ("exchange refused row", "Refused", item => ExchangeAsync(item, ActivityStatus.CompleteWithError, r => r.Status = PendingExchangeChangeStatus.Refused)),
             ("exchange not made row", "NotMade", item => ExchangeAsync(item, ActivityStatus.CompleteWithWarning, r => r.Status = PendingExchangeChangeStatus.Refused)),
             // ---- Exchange: off the queue ----
@@ -98,7 +97,6 @@ public class FollowUpStateCountDatabaseTests
                 [(ActivityTargetOperationType.SetExchangeRecipient, ActivityStatus.Complete), (ActivityTargetOperationType.RetryExchangeRecipient, ActivityStatus.Complete)])),
             ("exchange withdrawn", "Withdrawn", item => ExchangeAsync(item, events: [(ActivityTargetOperationType.WithdrawExchangeRecipient, ActivityStatus.Complete)])),
             ("exchange replaced", "Replaced", item => ExchangeAsync(item, events: [(ActivityTargetOperationType.ReplaceExchangeRecipient, ActivityStatus.Complete)])),
-            ("exchange cancelled", "Cancelled", item => ExchangeAsync(item, events: [(ActivityTargetOperationType.CancelExchangeRecipient, ActivityStatus.Complete)])),
             ("exchange parked, pruned", "Parked", item => ExchangeAsync(item, events: [(ActivityTargetOperationType.SetExchangeRecipient, ActivityStatus.CompleteWithError)])),
             ("exchange refused, nothing after", "Refused", item => ExchangeAsync(item, ActivityStatus.CompleteWithError)),
             ("exchange not made, nothing after", "NotMade", item => ExchangeAsync(item, ActivityStatus.CompleteWithWarning)),
