@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Management.Automation;
+using System.Net;
+using System.Net.Sockets;
 using Tetron.PowerShellRemoting.Tests.Kerberos;
 
 namespace Tetron.PowerShellRemoting.Tests;
@@ -72,6 +74,32 @@ public class RemoteFailureHarnessTests
         {
             Assert.That(failure.Kind, Is.EqualTo(RemoteFailureKind.Timeout).Or.EqualTo(RemoteFailureKind.Connection));
             Assert.That(failure.IsTransient, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task OpenAsync_EndpointThatAcceptsAndNeverAnswers_IsATransientTimeoutNamingTheServerAsync()
+    {
+        // A listener that never accepts still completes the TCP handshake from its backlog, so the request is sent and
+        // nothing answers it: HttpClient's own timeout ends it, on any network.
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var failure = await OpenFailureAsync(KerberosHarness.SessionOptions(host: "127.0.0.1", port: port,
+                operationTimeout: TimeSpan.FromSeconds(1), requestTimeout: TimeSpan.FromSeconds(3)));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(failure.Kind, Is.EqualTo(RemoteFailureKind.Timeout));
+                Assert.That(failure.IsTransient, Is.True);
+                Assert.That(failure.Message, Does.Contain($"127.0.0.1:{port}").And.Contain("did not answer within 3 seconds"));
+            }
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 
