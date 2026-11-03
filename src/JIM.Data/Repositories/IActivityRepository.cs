@@ -113,6 +113,14 @@ public interface IActivityRepository
     public Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds);
 
     /// <summary>
+    /// Where the follow-ups of each of the given runs stand, counted by kind and state (#2021, Phase 6): Initial
+    /// Passwords and Exchange recipient changes, each judged exactly as its own follow-up reads. One grouped read
+    /// whatever the size of the runs; a run with no follow-ups contributes nothing.
+    /// </summary>
+    /// <param name="runActivityIds">The runs' Activities.</param>
+    public Task<List<FollowUpStateCount>> GetFollowUpStateCountsAsync(IReadOnlyCollection<Guid> runActivityIds);
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>

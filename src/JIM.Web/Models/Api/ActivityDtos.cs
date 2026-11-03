@@ -984,6 +984,15 @@ public class ActivityRunProfileExecutionStatsDto
     public int TotalEntriesDiscardedByExclusion { get; set; }
     #endregion
 
+    #region Follow-up Stats
+    /// <summary>
+    /// Where the work the run set in motion stands now, counted by kind and state: the Initial Passwords and Exchange
+    /// recipient changes its exports queued. Unlike the counts above, which are final once the run has finished, these
+    /// change as the work is delivered. Empty for a run that set nothing in motion.
+    /// </summary>
+    public List<FollowUpStateCountDto> FollowUps { get; set; } = [];
+    #endregion
+
     /// <summary>
     /// Creates a DTO from the stats entity.
     /// </summary>

@@ -5,11 +5,16 @@
 namespace JIM.PostgresData.Migrations
 {
     /// <inheritdoc />
-    public partial class AddExchangeChangeAndChildActivityIndexes : Migration
+    public partial class AddFollowUpReadIndexes : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateIndex(
+                name: "IX_PendingPasswordChanges_ActivityId",
+                table: "PendingPasswordChanges",
+                column: "ActivityId");
+
             migrationBuilder.CreateIndex(
                 name: "IX_PendingExchangeChanges_ActivityId_Unique",
                 table: "PendingExchangeChanges",
@@ -26,6 +31,10 @@ namespace JIM.PostgresData.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "IX_PendingPasswordChanges_ActivityId",
+                table: "PendingPasswordChanges");
+
             migrationBuilder.DropIndex(
                 name: "IX_PendingExchangeChanges_ActivityId_Unique",
                 table: "PendingExchangeChanges");

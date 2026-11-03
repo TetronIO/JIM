@@ -6555,6 +6555,79 @@ html[lang] .jim-scope-text .mud-input-slot {
     color: var(--mud-palette-text-secondary);
 }
 
+/* A run's follow-up summary (#2021, Phase 6): per kind of work, a bar of its states, then each state's count as a pill
+   toned as one follow-up in it would be. Wraps to two lines on a narrow screen. */
+.jim-follow-up-summary-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 10rem) minmax(7.5rem, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem 0.875rem;
+    padding: 0.5rem 0;
+}
+
+.jim-follow-up-summary-row + .jim-follow-up-summary-row {
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-follow-up-summary-title {
+    font-weight: 500;
+}
+
+.jim-follow-up-summary-states {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.375rem;
+}
+
+.jim-follow-up-bar {
+    display: flex;
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    background: var(--mud-palette-lines-default);
+}
+
+.jim-follow-up-bar i {
+    display: block;
+    height: 100%;
+}
+
+.jim-follow-up-bar--ok { background: var(--mud-palette-success); }
+.jim-follow-up-bar--warn { background: var(--mud-palette-warning); }
+.jim-follow-up-bar--err { background: var(--mud-palette-error); }
+.jim-follow-up-bar--neutral { background: var(--mud-palette-text-disabled); }
+
+@media (max-width: 640px) {
+    .jim-follow-up-summary-row {
+        grid-template-columns: auto 1fr;
+    }
+
+    .jim-follow-up-bar,
+    .jim-follow-up-summary-states {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+}
+
+/* A run's follow-up on its Activity list row: a small label, then chips per kind and tone. */
+.jim-follow-up-chips {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding-left: 0.5rem;
+    margin-left: 0.25rem;
+    border-left: 1px solid var(--mud-palette-lines-default);
+}
+
+.jim-follow-up-chips-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
 .jim-follow-up-link {
     flex: none;
     white-space: nowrap;

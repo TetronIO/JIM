@@ -187,7 +187,10 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         // kind that can have none.
         var configurationChangeSynchronisations = await _application.ConnectedSystems.GetConfigurationChangeSynchronisationsForActivityAsync(activity);
 
-        return Ok(ActivityDetailDto.FromEntity(activity, stats, phases, importReadRange, configurationChangeSynchronisations));
+        var dto = ActivityDetailDto.FromEntity(activity, stats, phases, importReadRange, configurationChangeSynchronisations);
+        if (dto.ExecutionStats != null)
+            dto.ExecutionStats.FollowUps = await GetFollowUpCountsAsync(id);
+        return Ok(dto);
     }
 
     /// <summary>
@@ -220,7 +223,18 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         }
 
         var stats = await _application.Activities.GetActivityRunProfileExecutionStatsAsync(id);
-        return Ok(ActivityRunProfileExecutionStatsDto.FromEntity(stats));
+        var dto = ActivityRunProfileExecutionStatsDto.FromEntity(stats);
+        dto.FollowUps = await GetFollowUpCountsAsync(id);
+        return Ok(dto);
+    }
+
+    /// <summary>
+    /// Where the work a run set in motion stands now (#2021, Phase 6), for its statistics.
+    /// </summary>
+    private async Task<List<FollowUpStateCountDto>> GetFollowUpCountsAsync(Guid runActivityId)
+    {
+        var summaries = await _application.Activities.GetFollowUpSummariesAsync([runActivityId]);
+        return summaries.TryGetValue(runActivityId, out var counts) ? counts.Select(FollowUpStateCountDto.FromModel).ToList() : [];
     }
 
     /// <summary>

@@ -669,6 +669,9 @@
                                              Class="mt-6" />
             }
 
+            @* What the export set in motion, and where it stands now (#2021, Phase 6). *@
+            <RunFollowUpSummaryPanel Lines="_followUpLines" Class="mt-6" />
+
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
             <MudStack Row="true" Class="mt-4 mb-5 flex-wrap" Spacing="3">
@@ -1262,6 +1265,7 @@
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
+    private IReadOnlyList<FollowUpSummaryLine> _followUpLines = [];
 
     /// <summary>
     /// The excluded Containers this run discarded entries through, named. Loaded only when there are any, which
@@ -1480,6 +1484,7 @@
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
             _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
             await LoadExcludedContainerNamesAsync(jim);
+            await LoadFollowUpSummaryAsync(jim, _activity.Id);
             _executionItemsRefreshGate.Seed(_activityRunProfileExecutionStats.TotalObjectChangeCount, DateTime.UtcNow);
         }
 
@@ -1844,6 +1849,22 @@
     /// <summary>
     /// Checks if this is an Export run.
     /// </summary>
+    /// <summary>
+    /// What an export run set in motion and where it stands now (#2021, Phase 6): its Initial Passwords and Exchange
+    /// recipient changes. Nothing is read for any other kind of run, which sets nothing in motion.
+    /// </summary>
+    private async Task LoadFollowUpSummaryAsync(JimApplication jim, Guid runActivityId)
+    {
+        if (!IsExportRun())
+        {
+            _followUpLines = [];
+            return;
+        }
+
+        var summaries = await jim.Activities.GetFollowUpSummariesAsync([runActivityId]);
+        _followUpLines = summaries.TryGetValue(runActivityId, out var counts) ? FollowUpSummaryDisplay.From(counts) : [];
+    }
+
     private bool IsExportRun()
     {
         if (IsHousekeepingActivity)
@@ -1993,6 +2014,7 @@
                 _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
                 _phases = await jim.Activities.GetActivityPhasesAsync(updated.Id);
                 await LoadExcludedContainerNamesAsync(jim);
+                await LoadFollowUpSummaryAsync(jim, updated.Id);
             }
 
             await InvokeAsync(StateHasChanged);

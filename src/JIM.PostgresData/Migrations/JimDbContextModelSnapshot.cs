@@ -5314,6 +5314,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ActivityId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ActivityId");
+
                     b.HasIndex("ConnectedSystemObjectId");
 
                     b.HasIndex("MetaverseObjectId")

@@ -531,6 +531,20 @@ public partial class ActivityServer
     }
 
     /// <summary>
+    /// Where the follow-ups of each of the given runs stand now (#2021, Phase 6), counted by kind and state, keyed by
+    /// run: a run's Follow-up summary and the Activity list's follow-up chips. A run with no follow-ups is left out. One
+    /// read however many runs are asked about and however many follow-ups they have.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<FollowUpStateCount>>> GetFollowUpSummariesAsync(IReadOnlyCollection<Guid> runActivityIds)
+    {
+        if (runActivityIds.Count == 0)
+            return [];
+
+        var counts = await Application.Repository.Activity.GetFollowUpStateCountsAsync(runActivityIds);
+        return counts.GroupBy(c => c.RunActivityId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>

@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261103143604_AddExchangeChangeAndChildActivityIndexes")]
-    partial class AddExchangeChangeAndChildActivityIndexes
+    [Migration("20261103145400_AddFollowUpReadIndexes")]
+    partial class AddFollowUpReadIndexes
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -5316,6 +5316,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActivityId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ActivityId");
 
                     b.HasIndex("ConnectedSystemObjectId");
 

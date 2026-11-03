@@ -1045,6 +1045,13 @@ public class JimDbContext : DbContext
             .IsUnique()
             .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
 
+        // Where a password change stands, read by the Activity that recorded it: the Set Password dialog's wait, an
+        // export item's Initial Password follow-up, and a run's follow-up summary (#2021, Phase 6). Not unique: a
+        // propagated change has a row per Connected System.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.ActivityId)
+            .HasDatabaseName("IX_PendingPasswordChanges_ActivityId");
+
         // What the delivery pass asks for: the changes owed to this system, in this state, that have come due.
         modelBuilder.Entity<PendingPasswordChange>()
             .HasIndex(ppc => new { ppc.ConnectedSystemId, ppc.Status, ppc.NextRetryAt })

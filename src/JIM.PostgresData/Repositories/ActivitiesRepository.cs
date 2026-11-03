@@ -789,6 +789,106 @@ public partial class ActivityRepository : IActivityRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Raw SQL, because a run can have as many follow-ups as it exported accounts, and both list pages and run pages ask:
+    /// the states are decided in the database and only the counts come back. <b>The CASE expressions mirror two
+    /// in-memory readings and must be kept with them</b>: <c>ExchangeChangeOutcome.Describe</c> for an Exchange change,
+    /// and <c>PasswordSynchronisationServer.GetChangeOutcomesAsync</c> (its row and history readings) for an Initial
+    /// Password, which is never Held. <c>FollowUpStateCountDatabaseTests</c> holds the two readings to the same answer
+    /// for every state. Served by IX_Activities_ParentRunProfileExecutionItemId, IX_Activities_ParentActivityId and the
+    /// two queues' Activity indexes.
+    /// </remarks>
+    public async Task<List<FollowUpStateCount>> GetFollowUpStateCountsAsync(IReadOnlyCollection<Guid> runActivityIds)
+    {
+        if (runActivityIds.Count == 0)
+            return [];
+
+        var exchange = (int)ActivityTargetType.ExchangeRecipient;
+        var password = (int)ActivityTargetType.PasswordSynchronisation;
+        var sql = $"""
+            WITH f AS (
+                SELECT i."ActivityId" AS "RunActivityId", a."Id", a."TargetType", a."Status"
+                FROM "ActivityRunProfileExecutionItems" i
+                JOIN "Activities" a ON a."ParentRunProfileExecutionItemId" = i."Id"
+                WHERE i."ActivityId" = ANY(@runActivityIds)
+                  AND a."TargetType" IN ({exchange}, {password})
+            )
+            SELECT f."RunActivityId" AS "RunActivityId", f."TargetType" AS "Kind",
+                CASE WHEN f."TargetType" = {exchange} THEN
+                    CASE
+                        WHEN q."Id" IS NOT NULL THEN
+                            CASE q."Status"
+                                WHEN {(int)PendingExchangeChangeStatus.Delivering} THEN 'Delivering'
+                                WHEN {(int)PendingExchangeChangeStatus.Parked} THEN 'Parked'
+                                WHEN {(int)PendingExchangeChangeStatus.Cancelled} THEN 'Cancelled'
+                                WHEN {(int)PendingExchangeChangeStatus.Refused} THEN
+                                    CASE WHEN f."Status" = {(int)ActivityStatus.CompleteWithWarning} THEN 'NotMade' ELSE 'Refused' END
+                                ELSE CASE WHEN q."LastAttemptedAt" IS NOT NULL THEN 'Retrying' ELSE 'Queued' END
+                            END
+                        WHEN c."Id" IS NOT NULL THEN
+                            CASE c."TargetOperationType"
+                                WHEN {(int)ActivityTargetOperationType.WithdrawExchangeRecipient} THEN 'Withdrawn'
+                                WHEN {(int)ActivityTargetOperationType.ReplaceExchangeRecipient} THEN 'Replaced'
+                                WHEN {(int)ActivityTargetOperationType.CancelExchangeRecipient} THEN 'Cancelled'
+                                ELSE CASE WHEN c."Status" IN ({(int)ActivityStatus.CompleteWithError}, {(int)ActivityStatus.FailedWithError})
+                                          THEN 'Parked' ELSE 'Delivered' END
+                            END
+                        ELSE
+                            CASE
+                                WHEN f."Status" IN ({(int)ActivityStatus.CompleteWithError}, {(int)ActivityStatus.FailedWithError}) THEN 'Refused'
+                                WHEN f."Status" = {(int)ActivityStatus.CompleteWithWarning} THEN 'NotMade'
+                                ELSE 'Withdrawn'
+                            END
+                    END
+                ELSE
+                    CASE
+                        WHEN p."Id" IS NOT NULL THEN
+                            CASE p."Status"
+                                WHEN {(int)PendingPasswordChangeStatus.Delivering} THEN 'Delivering'
+                                WHEN {(int)PendingPasswordChangeStatus.Parked} THEN 'Parked'
+                                WHEN {(int)PendingPasswordChangeStatus.Expired} THEN 'Expired'
+                                WHEN {(int)PendingPasswordChangeStatus.Cancelled} THEN 'Cancelled'
+                                ELSE CASE WHEN p."LastAttemptedAt" IS NOT NULL THEN 'Retrying' ELSE 'Queued' END
+                            END
+                        WHEN pc."Id" IS NOT NULL THEN
+                            CASE WHEN pc."Status" IN ({(int)ActivityStatus.Complete}, {(int)ActivityStatus.CompleteWithWarning}) THEN 'Set' ELSE 'Parked' END
+                        ELSE 'Carried'
+                    END
+                END AS "State",
+                count(*)::int AS "Count"
+            FROM f
+            LEFT JOIN "PendingExchangeChanges" q
+                ON f."TargetType" = {exchange} AND q."ActivityId" = f."Id"
+            LEFT JOIN LATERAL (
+                SELECT x."Id", x."TargetOperationType", x."Status"
+                FROM "Activities" x
+                WHERE f."TargetType" = {exchange} AND x."ParentActivityId" = f."Id"
+                  AND x."TargetOperationType" <> {(int)ActivityTargetOperationType.RetryExchangeRecipient}
+                ORDER BY x."Created" DESC, x."Id" DESC
+                LIMIT 1) c ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT r."Id", r."Status", r."LastAttemptedAt"
+                FROM "PendingPasswordChanges" r
+                WHERE f."TargetType" = {password} AND r."ActivityId" = f."Id"
+                ORDER BY r."ConnectedSystemId"
+                LIMIT 1) p ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT y."Id", y."Status"
+                FROM "Activities" y
+                WHERE f."TargetType" = {password} AND y."ParentActivityId" = f."Id" AND y."ConnectedSystemId" IS NOT NULL
+                ORDER BY y."Created" DESC, y."Id" DESC
+                LIMIT 1) pc ON TRUE
+            GROUP BY 1, 2, 3
+            ORDER BY 1, 2, 3
+            """;
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<FollowUpStateCount>(sql,
+                new Npgsql.NpgsqlParameter("runActivityIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = runActivityIds.ToArray() })
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
     public async Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds)
     {
         if (executionItemIds.Count == 0)
