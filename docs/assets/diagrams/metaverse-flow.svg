@@ -1,0 +1,118 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- How values flow into and out of the Metaverse (Configuration > Metaverse page hero): -->
+<!-- source systems contribute values to one Metaverse Object, which then flows them out to targets. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 410" role="img" aria-labelledby="jimdg-mf-title jimdg-mf-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-mf-title">How values flow into and out of the Metaverse</title>
+  <desc id="jimdg-mf-desc">On the left, two Connected Systems import values into the Metaverse. The HR System supplies Employee ID, Display Name, Job Title and Department; Active Directory supplies Email and Account Name. In the Metaverse they come together on one Metaverse Object, a User named Ada Lovelace, and each of its values is tagged with the Connected System it came from. On the right, the Metaverse exports values out to two Connected Systems: Display Name, Job Title and Department to Active Directory, and Email, Display Name and Job Title to a Service Desk application. Active Directory is both a source and a target. Data never moves directly between the systems.</desc>
+  <defs>
+    <mask id="jimdg-mf-labelcut" maskUnits="userSpaceOnUse" x="0" y="0" width="1160" height="410">
+      <rect x="0" y="0" width="1160" height="410" fill="#ffffff"/>
+      <rect x="322.6" y="126" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="322.6" y="286" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="792.6" y="126" width="45.3" height="18" rx="3" fill="#000000"/>
+      <rect x="792.6" y="286" width="45.3" height="18" rx="3" fill="#000000"/>
+    </mask>
+  </defs>
+  <g id="jimdg-mf-boundary">
+    <rect class="jimdg-hub" x="390" y="16" width="380" height="378" rx="8"/>
+  </g>
+  <g id="jimdg-mf-object">
+    <rect class="jimdg-stage" x="414" y="68" width="332" height="304" rx="8"/>
+    <text class="jimdg-card-title" x="434" y="97">Ada Lovelace</text>
+    <text class="jimdg-card-tag" x="726" y="97">Metaverse Object · User</text>
+    <line class="jimdg-card-divider" x1="434" y1="110" x2="726" y2="110"/>
+    <text class="jimdg-list-item" x="434" y="142"><tspan class="jimdg-attr-name">Employee ID</tspan> · E1042</text>
+    <circle class="jimdg-flow-arrow" cx="640" cy="138" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="142">HR System</text>
+    <text class="jimdg-list-item" x="434" y="180"><tspan class="jimdg-attr-name">Display Name</tspan> · Ada Lovelace</text>
+    <circle class="jimdg-flow-arrow" cx="640" cy="176" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="180">HR System</text>
+    <text class="jimdg-list-item" x="434" y="218"><tspan class="jimdg-attr-name">Job Title</tspan> · Engineer</text>
+    <circle class="jimdg-flow-arrow" cx="640" cy="214" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="218">HR System</text>
+    <text class="jimdg-list-item" x="434" y="256"><tspan class="jimdg-attr-name">Department</tspan> · Engineering</text>
+    <circle class="jimdg-flow-arrow" cx="640" cy="252" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="256">HR System</text>
+    <text class="jimdg-list-item" x="434" y="294"><tspan class="jimdg-attr-name">Email</tspan> · ada@example.org</text>
+    <circle class="jimdg-arrow" cx="616" cy="290" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="294">Active Directory</text>
+    <text class="jimdg-list-item" x="434" y="332"><tspan class="jimdg-attr-name">Account Name</tspan> · alovelace</text>
+    <circle class="jimdg-arrow" cx="616" cy="328" r="4"/>
+    <text class="jimdg-card-tag" x="726" y="332">Active Directory</text>
+  </g>
+  <g id="jimdg-mf-sources">
+    <rect class="jimdg-system" x="20" y="70" width="280" height="130" rx="8"/>
+    <circle class="jimdg-flow-arrow" cx="88" cy="96" r="5"/>
+    <text class="jimdg-system-name" x="160" y="102">HR System</text>
+    <text class="jimdg-system-sub" x="160" y="123">Connected System · source</text>
+    <line class="jimdg-card-divider" x1="40" y1="138" x2="280" y2="138"/>
+    <text class="jimdg-list-item" x="40" y="162">Employee ID · Display Name</text>
+    <text class="jimdg-list-item" x="40" y="184">Job Title · Department</text>
+    <rect class="jimdg-system" x="20" y="240" width="280" height="110" rx="8"/>
+    <circle class="jimdg-arrow" cx="68" cy="266" r="5"/>
+    <text class="jimdg-system-name" x="160" y="272">Active Directory</text>
+    <text class="jimdg-system-sub" x="160" y="293">Connected System · source</text>
+    <line class="jimdg-card-divider" x1="40" y1="306" x2="280" y2="306"/>
+    <text class="jimdg-list-item" x="40" y="330">Email · Account Name</text>
+  </g>
+  <g id="jimdg-mf-targets">
+    <rect class="jimdg-system" x="860" y="70" width="280" height="130" rx="8"/>
+    <text class="jimdg-system-name" x="1000" y="102">Active Directory</text>
+    <text class="jimdg-system-sub" x="1000" y="123">Connected System · target</text>
+    <line class="jimdg-card-divider" x1="880" y1="138" x2="1120" y2="138"/>
+    <text class="jimdg-list-item" x="880" y="162">Display Name · Job Title</text>
+    <text class="jimdg-list-item" x="880" y="184">Department</text>
+    <rect class="jimdg-system" x="860" y="240" width="280" height="110" rx="8"/>
+    <text class="jimdg-system-name" x="1000" y="272">Service Desk</text>
+    <text class="jimdg-system-sub" x="1000" y="293">Connected System · target</text>
+    <line class="jimdg-card-divider" x1="880" y1="306" x2="1120" y2="306"/>
+    <text class="jimdg-list-item" x="880" y="330">Email · Display Name · Job Title</text>
+  </g>
+  <g mask="url(#jimdg-mf-labelcut)">
+  <g id="jimdg-mf-edges">
+    <line class="jimdg-spoke" x1="300" y1="135" x2="380" y2="135"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(390,135) rotate(0)"/>
+    <line class="jimdg-spoke" x1="300" y1="295" x2="380" y2="295"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(390,295) rotate(0)"/>
+    <line class="jimdg-spoke" x1="770" y1="135" x2="850" y2="135"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(860,135) rotate(0)"/>
+    <line class="jimdg-spoke" x1="770" y1="295" x2="850" y2="295"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(860,295) rotate(0)"/>
+  </g>
+  <g id="jimdg-mf-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="0s" repeatCount="indefinite" path="M300,135 L378,135"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-0.9s" repeatCount="indefinite" path="M300,295 L378,295"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-0.9s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-1.6s" repeatCount="indefinite" path="M770,135 L848,135"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-1.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-0.4s" repeatCount="indefinite" path="M770,295 L848,295"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-0.4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  </g>
+  <g id="jimdg-mf-labels">
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="345" y="139">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="345" y="299">import</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="815" y="139">export</text>
+    <text class="jimdg-spoke-label jimdg-anchor-middle" x="815" y="299">export</text>
+  </g>
+  <g id="jimdg-mf-boundary-title">
+    <text class="jimdg-hub-title" x="580" y="50">Metaverse</text>
+  </g>
+</svg>
