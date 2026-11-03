@@ -21,6 +21,7 @@ namespace JIM.Web.Models;
 /// <param name="Detail">The sentence beneath: why, or what happens next.</param>
 /// <param name="IsRunning">Whether JIM is still working on it, so the story it belongs to has not ended.</param>
 /// <param name="Created">When it was recorded (UTC).</param>
+/// <param name="Kind">What kind of work it is, which chooses its icon: an Initial Password, an Exchange recipient change.</param>
 public sealed record ExecutionItemFollowUpDisplay(
     Guid ActivityId,
     string Title,
@@ -29,7 +30,8 @@ public sealed record ExecutionItemFollowUpDisplay(
     string PillModifier,
     string? Detail,
     bool IsRunning,
-    DateTime Created)
+    DateTime Created,
+    ActivityTargetType Kind)
 {
     /// <summary>The follow-up's own Activity page.</summary>
     public string ActivityHref => $"/activity/{ActivityId}";
@@ -44,7 +46,7 @@ public sealed record ExecutionItemFollowUpDisplay(
             // change already waiting for the account, whose own Activity reports the delivery.
             var target = followUp.PasswordOutcomes?.Targets.FirstOrDefault();
             if (target == null)
-                return new(followUp.ActivityId, "Initial password", followUp.TargetName, "Carried", "neutral", followUp.Message, false, followUp.Created);
+                return new(followUp.ActivityId, "Initial password", followUp.TargetName, "Carried", "neutral", followUp.Message, false, followUp.Created, followUp.TargetType);
 
             var (label, modifier, running) = target.State switch
             {
@@ -59,7 +61,14 @@ public sealed record ExecutionItemFollowUpDisplay(
                 _ => (target.State.ToString(), "neutral", false)
             };
             return new(followUp.ActivityId, "Initial password", followUp.TargetName, label, modifier,
-                PasswordChangeTargetDisplay.Words(target), running, followUp.Created);
+                PasswordChangeTargetDisplay.Words(target), running, followUp.Created, followUp.TargetType);
+        }
+
+        if (followUp is { TargetType: ActivityTargetType.ExchangeRecipient, ExchangeOutcome: { } exchange })
+        {
+            var (label, modifier, running) = ExchangeChangeOutcomeDisplay.Pill(exchange.State);
+            return new(followUp.ActivityId, ExchangeChangeOutcomeDisplay.Title(exchange.RecipientType), followUp.TargetName, label, modifier,
+                ExchangeChangeOutcomeDisplay.Words(exchange), running, followUp.Created, followUp.TargetType);
         }
 
         var statusModifier = followUp.Status switch
@@ -69,8 +78,11 @@ public sealed record ExecutionItemFollowUpDisplay(
             ActivityStatus.CompleteWithError or ActivityStatus.FailedWithError => "err",
             _ => "neutral"
         };
-        return new(followUp.ActivityId, Helpers.GetActivityTargetTypeName(followUp.TargetType), followUp.TargetName,
+        var title = followUp.TargetType == ActivityTargetType.ExchangeRecipient
+            ? ExchangeChangeOutcomeDisplay.Title(null)
+            : Helpers.GetActivityTargetTypeName(followUp.TargetType);
+        return new(followUp.ActivityId, title, followUp.TargetName,
             followUp.Status.ToString().SplitOnCapitalLetters(), statusModifier, followUp.Message,
-            followUp.Status is ActivityStatus.InProgress or ActivityStatus.NotSet, followUp.Created);
+            followUp.Status is ActivityStatus.InProgress or ActivityStatus.NotSet, followUp.Created, followUp.TargetType);
     }
 }

@@ -495,11 +495,13 @@ public partial class ActivityServer
     /// <summary>
     /// The follow-ups of several Run Profile Execution Items in one read, keyed by item; an item with none is left out.
     /// An Initial Password's standing comes from the password queue and its delivery Activities, as the person's own
-    /// password history reads it.
+    /// password history reads it. An Exchange change's comes from the Exchange queue and the Activities recorded under
+    /// it, read for every item's changes together.
     /// </summary>
     public async Task<Dictionary<Guid, List<ExecutionItemFollowUp>>> GetExecutionItemFollowUpsAsync(IReadOnlyCollection<Guid> executionItemIds)
     {
         var activities = await Application.Repository.Activity.GetFollowUpActivitiesAsync(executionItemIds);
+        var exchangeOutcomes = await Application.ExchangeDelivery.GetChangeOutcomesAsync(activities);
         var byItem = new Dictionary<Guid, List<ExecutionItemFollowUp>>();
         foreach (var activity in activities)
         {
@@ -516,7 +518,8 @@ public partial class ActivityServer
                 Message = activity.Message,
                 PasswordOutcomes = activity.TargetType == ActivityTargetType.PasswordSynchronisation
                     ? await Application.PasswordSynchronisation.GetChangeOutcomesAsync(activity.Id)
-                    : null
+                    : null,
+                ExchangeOutcome = exchangeOutcomes.GetValueOrDefault(activity.Id)
             };
 
             if (!byItem.TryGetValue(itemId, out var followUps))
