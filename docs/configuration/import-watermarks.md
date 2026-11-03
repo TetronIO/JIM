@@ -7,7 +7,7 @@ audience: operator
 
 # Import Watermarks
 
-How an import's Activity describes the Connected System's watermark: the point a Delta Import reads changes after.
+How an import's Activity describes the watermark it read from and recorded: the point a Delta Import reads changes after, kept for the Connected System, or by the LDAP Connector for each partition.
 
 ```jim-diagram
 archetype: flow
@@ -29,17 +29,17 @@ steps:
 | Delta Import | **Read Changes** | After 8 (change sequence), with a note | The run recorded no new watermark (it failed, was cancelled, withheld detected deletions, or read everything without finishing its check for deleted objects), so the next Delta Import reads from the same point. |
 | Full Import | **Next Delta Import Reads Changes After** | 24 Oct 2026 21:21:13 (access log) | A Full Import reads everything; this is the point it set up for the next Delta Import. |
 
-A Connector that keeps a watermark for each Object Type or source shows one line for each, such as "User: after 10, up to 25 (change log sequence)". A time is shown in local time.
+A Connector that keeps more than one watermark shows one line for each: the LDAP Connector one for each partition the run read, such as "DC=corp,DC=local: after 81,520, up to 81,733 (Update Sequence Number)", and the SQL Connector one for each Object Type or related table, such as "User: after 10, up to 25 (change log sequence)". A Delta Import that finds any of its partitions without a watermark reads every object in all of them, so that partition's line reads "from the start", and the run's warning names it. A time is shown in local time.
 
-**Show Connector state** reveals what was recorded before and after the run, exactly as the Connector keeps it. That is often more than the watermark: the LDAP Connector's also holds what it detected about the directory.
+**Show Connector state** reveals what was recorded before and after the run, exactly as the Connector keeps it, which is often more than the watermark: the LDAP Connector's holds what it detected about the directory. For the LDAP Connector, a table beneath it gives each partition's watermark **Before this run** and **After this run**, in full. **After this run** reads **Unchanged** where the run left that partition's watermark as it was, and the table says so when the run recorded no watermark at all.
 
 ## :material-power-plug-outline: By Connector
 
 | Connector | Watermark | Shown as |
 |-----------|-----------|----------|
-| LDAP Connector, Active Directory and Samba AD | The directory's highest Update Sequence Number | Update Sequence Number |
-| LDAP Connector, OpenLDAP | The time of the latest access log entry | access log |
-| LDAP Connector, 389 Directory Server and other directories | The latest change log entry number | change log entry |
+| LDAP Connector, Active Directory and Samba AD | The directory's highest Update Sequence Number, for each partition | Update Sequence Number |
+| LDAP Connector, OpenLDAP | The time of the latest access log entry, for each partition | access log |
+| LDAP Connector, 389 Directory Server and other directories | The latest change log entry number, for each partition | change log entry |
 | SQL Connector, change log table | The highest sequence read, per Object Type | change log sequence |
 | SQL Connector, watermark column | The highest value read, per Object Type and per related table | watermark column |
 | SCIM 2.0 Client Connector | The last modified time Delta Imports ask the service provider for changes after | last modified time |
@@ -49,4 +49,4 @@ The File Connector keeps no watermark.
 
 ## :material-api: REST API and PowerShell
 
-`GET /api/v1/activities/{id}` and `Get-JIMActivity -Id` return the recorded values as `importWatermarkFrom` and `importWatermarkTo`, and the Connector's reading of them as `importReadRange`: a `from` and a `to`, each with a `kind` and its `points`, each point a `number`, a UTC `time` or a `text`, with a `scope` where the Connector keeps several.
+`GET /api/v1/activities/{id}` and `Get-JIMActivity -Id` return the recorded values as `importWatermarkFrom` and `importWatermarkTo`, and the LDAP Connector's partition watermarks as `importPartitionWatermarksFrom` and `importPartitionWatermarksTo`: for each partition, its `partitionId`, its `partitionName` as it was when the import ran, and its `value`. `importPartitionWatermarksTo` is empty when the run recorded none. `importReadRange` is the Connector's reading of them: a `from` and a `to`, each with a `kind` and its `points`, each point a `number`, a UTC `time` or a `text`, with a `scope` where the Connector keeps several; for the LDAP Connector, the `scope` names the partition.
