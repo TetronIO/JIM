@@ -32,18 +32,18 @@ A Full Import Run Profile can limit how many objects one run may newly mark as d
 
 ### Delta Import
 
-A **Delta Import** reads only the objects that have changed since the last import. It is much faster than a Full Import for a large directory, and needs the Connected System to track its changes: the [LDAP Connector](../connectors/jim-ldap-connector.md) reads Active Directory's update sequence numbers, OpenLDAP's accesslog overlay, or a changelog such as 389 Directory Server's. A Delta Import Run Profile can take [deletion limits](../configuration/run-profiles.md#delta-import) too.
+A **Delta Import** reads only the objects changed since the last import. It is much faster than a Full Import for a large directory, and needs the Connected System to track its changes: the [LDAP Connector](../connectors/jim-ldap-connector.md) reads Active Directory's update sequence numbers, OpenLDAP's accesslog overlay, or a changelog such as 389 Directory Server's. A Delta Import Run Profile can take [deletion limits](../configuration/run-profiles.md#delta-import) too.
 
 ### What Happens During Import
 
 1. JIM connects to the external system through its Connector.
-2. Objects are read: all of them for a Full Import, the changed ones for a Delta Import. A Delta Import that cannot read changes, because there is no watermark or the Connected System cannot continue from it, reads all of them instead and says so on its Activity.
+2. Objects are read: the changed ones for a Delta Import that can read changes, otherwise all of them.
 3. For each object read, JIM either:
    - **Creates**<br /> A new Connected System Object, if the object is not already in the Connector Space.
    - **Updates**<br /> The existing Connected System Object, if at least one of its attribute values has changed, or if JIM provisioned the object and the import confirms it exists in the Connected System.
    - **Leaves it unchanged**<br /> The existing Connected System Object, if the object matches what JIM holds. JIM finds this from the object's [content hash](#how-full-import-detects-unchanged-objects), or by comparing it attribute by attribute.
    - **Obsoletes**<br /> The existing Connected System Object, if the Connector reports the object deleted. The Activity message counts an obsoleted object as **deleted**.
-4. A run that read all of them, a Full Import or a Delta Import that read everything, also obsoletes each Connected System Object it no longer found in the source.
+4. A run that read all of them also obsoletes each Connected System Object it no longer found.
 5. The run's Activity message counts what happened, for example:
 
     > Import complete: 1,000 objects (3 created, 12 updated, 983 unchanged, 2 errors) in 42 sec (avg 24 obj/s); 5 no longer found and marked as deleted
