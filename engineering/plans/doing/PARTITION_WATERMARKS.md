@@ -366,6 +366,9 @@ Red first in every phase: each test below is written, run, and seen to fail for 
 - Tests: `ActivitiesControllerTests.GetActivityAsync_ImportWithPartitionWatermarks_ReturnsEachPartitionsRecordedValuesAsync`; `test/JIM.Web.Tests/ImportReadRangeFieldTests.cs`: `ImportReadRangeField_PartitionWatermarks_ShowsOneLinePerPartitionAsync` and `ImportReadRangeField_PartitionWithNoStartingWatermark_ReadsFromTheStartAsync` (behaviour, not wording).
 - Run `scripts/Generate-OpenApiDoc.ps1 -NoBuild` (new DTO members) and boot the stack once to confirm the Activity page.
 - Decision 3: the Partitions tab, partition DTO and `Get-JIMConnectedSystemPartition` gain the current watermark, with an artefact for the UI and Pester tests for the cmdlet's output shape.
+- UI shape, approved on the mockups ([artefact](https://claude.ai/artifact/MLS2kV3NzkoPm9x9mtATu6)) on 3 November 2026:
+  - **Activity, Show Connector state:** a table, not a pair of value boxes (boxes clipped long values with no way to read the rest). Columns: Partition (its recorded name), Before this run, After this run. Values wrap in full. After this run reads "Unchanged" when the run recorded the same value or left the Partition out, and says nothing was recorded when the run kept every watermark (`ImportPartitionWatermarksTo` null). The table scrolls sideways on a narrow screen rather than clipping.
+  - **Partitions tab:** one line under each managed Partition's name: "Next Delta Import reads changes after <described position> · Recorded <relative time>", or, with no row, "No watermark recorded. The next Delta Import reads every object in this partition, as a Full Import does, and records one." A deselected Partition shows nothing.
 
 ### Phase 7: Integration scenarios
 
