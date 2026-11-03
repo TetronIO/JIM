@@ -236,7 +236,8 @@ public class ExchangeDeliveryServer
                 {
                     removed.Add(change.Id);
                     result.WithdrawnCount++;
-                    await RecordOutcomeAsync(connectedSystem, change, $"Withdrawn: {withdrawal} Exchange was not asked to make it.", error: null);
+                    await RecordOutcomeAsync(connectedSystem, change, $"Withdrawn: {withdrawal} Exchange was not asked to make it.", error: null,
+                        ActivityTargetOperationType.WithdrawExchangeRecipient);
                     continue;
                 }
 
@@ -352,14 +353,17 @@ public class ExchangeDeliveryServer
 
     /// <summary>
     /// A child of the change's own Activity: System-attributed, completed as what it was, with the account and the
-    /// Connected System set so the follow-up shows against both.
+    /// Connected System set so the follow-up shows against both. A delivery or a failed attempt is
+    /// <see cref="ActivityTargetOperationType.SetExchangeRecipient"/>, told apart by its status; a withdrawal has an
+    /// operation of its own, so what became of the change can be read without parsing its words.
     /// </summary>
-    private async Task RecordOutcomeAsync(ConnectedSystem connectedSystem, PendingExchangeChange change, string message, string? error)
+    private async Task RecordOutcomeAsync(ConnectedSystem connectedSystem, PendingExchangeChange change, string message, string? error,
+        ActivityTargetOperationType operation = ActivityTargetOperationType.SetExchangeRecipient)
     {
         var activity = new Activity
         {
             TargetType = ActivityTargetType.ExchangeRecipient,
-            TargetOperationType = ActivityTargetOperationType.SetExchangeRecipient,
+            TargetOperationType = operation,
             TargetName = connectedSystem.Name,
             TargetContext = change.RecipientType,
             ParentActivityId = change.ActivityId,

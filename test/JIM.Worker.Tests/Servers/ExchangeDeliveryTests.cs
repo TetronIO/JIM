@@ -391,6 +391,8 @@ public class ExchangeDeliveryTests
             var outcome = _activities.Single();
             Assert.That(outcome.ParentActivityId, Is.EqualTo(change.ActivityId));
             Assert.That(outcome.Status, Is.EqualTo(ActivityStatus.Complete), "a withdrawal is not a failure");
+            Assert.That(outcome.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.WithdrawExchangeRecipient),
+                "a withdrawal is told apart from a delivery by what it is, not by its words");
             Assert.That(outcome.Message, Does.Contain(reason));
         }
     }
