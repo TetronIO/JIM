@@ -3,6 +3,7 @@
 
 using JIM.Connectors.LDAP;
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Staging;
 using NUnit.Framework;
 
@@ -82,14 +83,18 @@ public class LdapExchangeAttributesTests
         Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { expected }));
     }
 
-    [Test]
-    public void Derive_RecipientTypeJimDoesNotManage_HasNoValueRatherThanAWrongOne()
+    [TestCase("2147483648")]
+    [TestCase("2")]
+    [TestCase("not a number")]
+    public void Derive_RecipientTypeJimDoesNotManage_IsUnmanagedRatherThanAWrongOne(string recipientTypeDetails)
     {
-        // A remote mailbox (2147483648) is an Exchange Online recipient, which this release does not manage. Reporting
-        // it as None would invite JIM to enable it again; reporting it as Mailbox would be untrue.
-        var derived = LdapExchangeAttributes.Derive(Read(("msExchRecipientTypeDetails", "2147483648")), [LdapExchangeAttributes.RecipientType]);
+        // A remote mailbox (2147483648) is an Exchange Online recipient and a linked mailbox (2) belongs to another
+        // forest; this release manages neither. Leaving the type absent would read as None and invite JIM to enable the
+        // recipient again; reporting it as Mailbox would be untrue. Any value present but outside the managed map,
+        // unreadable ones included, is a recipient JIM leaves alone.
+        var derived = LdapExchangeAttributes.Derive(Read(("msExchRecipientTypeDetails", recipientTypeDetails)), [LdapExchangeAttributes.RecipientType]);
 
-        Assert.That(derived, Is.Empty);
+        Assert.That(Values(derived, LdapExchangeAttributes.RecipientType), Is.EqualTo(new[] { ExchangeRecipientTypes.Unmanaged }));
     }
 
     [Test]

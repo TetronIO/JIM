@@ -7,6 +7,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Exceptions;
+using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -36,6 +37,7 @@ public class SyncRepository : ISyncRepository
     private readonly Dictionary<Guid, MetaverseObject> _mvos = new();
     private readonly Dictionary<Guid, PendingExport> _pendingExports = new();
     private readonly Dictionary<Guid, PendingPasswordChange> _pendingPasswordChanges = new();
+    private readonly Dictionary<Guid, PendingExchangeChange> _pendingExchangeChanges = new();
 
     /// <summary>
     /// The queue rows a claim has handed out and not yet had back. Lets the attempt write honour the real
@@ -70,6 +72,12 @@ public class SyncRepository : ISyncRepository
     /// successful, which is the whole reason the password is staged rather than delivered inline.
     /// </summary>
     public Exception? FailProvisionedPasswordStagingWith { get; set; }
+
+    /// <summary>
+    /// When set, <see cref="StageExchangeChangesAsync"/> throws it, so a test can prove that failing to queue an
+    /// account's Exchange change leaves the export that wrote the account successful, and is counted rather than silent.
+    /// </summary>
+    public Exception? FailExchangeChangeStagingWith { get; set; }
 
     /// <summary>
     /// When set, <see cref="UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"/> throws it, so a test can prove
@@ -156,6 +164,9 @@ public class SyncRepository : ISyncRepository
     /// <summary>All Pending Exports, keyed by Pending Export ID.</summary>
     public IReadOnlyDictionary<Guid, PendingExport> PendingExports => _pendingExports;
     public IReadOnlyDictionary<Guid, PendingPasswordChange> PendingPasswordChanges => _pendingPasswordChanges;
+
+    /// <summary>The Exchange queue (#2021), keyed by row ID.</summary>
+    public IReadOnlyDictionary<Guid, PendingExchangeChange> PendingExchangeChanges => _pendingExchangeChanges;
 
     /// <summary>All activities, keyed by activity ID.</summary>
     public IReadOnlyDictionary<Guid, Activity> Activities => _activities;
@@ -885,7 +896,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Number of times <see cref="GetExportedCreatePendingExportsForPendingProvisioningCsosAsync"/> has
-    /// been called. Lets tests prove the two-phase Full Import unseen exported-Create retry step
+    /// been called. Lets tests prove the two-phase unseen exported-Create retry step
     /// (<c>SyncImportTaskProcessor.RetryUnconfirmedExportedCreatesAsync</c>) only promotes candidates to
     /// this full graph load when the lean Summary-tier projection decided at least one is genuinely
     /// unseen, and never for a run type or empty run the early guard already excludes.
@@ -912,7 +923,7 @@ public class SyncRepository : ISyncRepository
 
     /// <summary>
     /// Number of times <see cref="GetExportedCreatePendingExportRetryCandidateSummariesAsync"/> has been
-    /// called. Lets tests prove the retry step's early exit (not a Full Import, or nothing imported) skips
+    /// called. Lets tests prove the retry step's early exit (the run did not read every object, or read nothing) skips
     /// every repository query for this Connected System, including the lean projection.
     /// </summary>
     public int GetExportedCreatePendingExportRetryCandidateSummariesCallCount { get; private set; }
@@ -1370,8 +1381,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(toDelete.Count);
     }
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
+        // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // resolution below is a single pass either way.
         var resolved = 0;
         foreach (var cso in GetCsosForSystem(connectedSystemId))
         {
@@ -1420,27 +1433,23 @@ public class SyncRepository : ISyncRepository
 
         var resolved = 0;
 
-        // Iterate all RPEIs and resolve change record attribute values
-        foreach (var rpei in _rpeis.Values)
+        // Mirrors the Postgres fixup (#2690): only values the writer marked as references still to resolve are read, so
+        // a value whose referenced object was stored when it was written is never re-pointed by its identifier; a
+        // resolved value loses its mark, and one that matches nothing keeps it for a later run.
+        var markedValues = GetStoredCsoChanges()
+            .Where(change => change.ConnectedSystemId == connectedSystemId)
+            .SelectMany(change => change.AttributeChanges)
+            .SelectMany(attrChange => attrChange.ValueChanges)
+            .Where(valueChange => valueChange.IsUnresolvedReference && valueChange.StringValue != null);
+
+        foreach (var valueChange in markedValues)
         {
-            var change = rpei.ConnectedSystemObjectChange;
-            if (change == null || change.ConnectedSystemId != connectedSystemId)
-                continue;
-
-            foreach (var attrChange in change.AttributeChanges)
+            if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue!, out var targetCso) ||
+                secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue!, caseExact: false), out targetCso))
             {
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.ReferenceValue != null || valueChange.StringValue == null)
-                        continue;
-
-                    if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue, out var targetCso) ||
-                        secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue, caseExact: false), out targetCso))
-                    {
-                        valueChange.ReferenceValue = targetCso;
-                        resolved++;
-                    }
-                }
+                valueChange.ReferenceValue = targetCso;
+                valueChange.IsUnresolvedReference = false;
+                resolved++;
             }
         }
 
@@ -2357,6 +2366,10 @@ public class SyncRepository : ISyncRepository
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
             AssignSyncOutcomeIds(rpei.SyncOutcomes, rpei.Id, null);
 
+            // The change records the outcomes carry (the sync snapshots) are written by this flush in production, so
+            // their values are marked here as the production writer marks them (#2690).
+            MarkUnresolvedChangeReferences(GetOutcomeCsoChanges(rpei));
+
             // Drain the ambiguous match candidate buffer (#2052), as the production flush does.
             foreach (var candidate in rpei.MatchCandidates)
             {
@@ -2536,15 +2549,63 @@ public class SyncRepository : ISyncRepository
 
     public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        // No-op — CSO changes are already in memory on the RPEI objects
+        // The CSO changes are already in memory on the RPEI objects; only their values' unresolved reference marks are
+        // set, as the production writer sets them.
+        MarkUnresolvedChangeReferences(rpeis.Where(r => r.ConnectedSystemObjectChange != null).Select(r => r.ConnectedSystemObjectChange!));
         return Task.CompletedTask;
     }
 
     public Task PersistCsoChangesAsync(List<ConnectedSystemObjectChange> changes)
     {
+        MarkUnresolvedChangeReferences(changes);
         _standaloneCsoChanges.AddRange(changes);
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Sets each change value's unresolved reference mark as the PostgreSQL change record writer does on writing it
+    /// (#2690): a reference's id counts as written only when the object it refers to is stored, mirroring the writer's
+    /// check that the referenced row exists.
+    /// </summary>
+    private void MarkUnresolvedChangeReferences(IEnumerable<ConnectedSystemObjectChange> changes)
+    {
+        foreach (var attributeChange in changes.SelectMany(c => c.AttributeChanges))
+        {
+            foreach (var valueChange in attributeChange.ValueChanges)
+            {
+                var referenceIdWritten = valueChange.ReferenceValue is { } referenced
+                                         && referenced.Id != Guid.Empty
+                                         && _csos.ContainsKey(referenced.Id);
+                valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every change record the store holds: those on the execution items, those on their outcomes (the sync snapshots),
+    /// and those written without an execution item.
+    /// </summary>
+    private IEnumerable<ConnectedSystemObjectChange> GetStoredCsoChanges() =>
+        _rpeis.Values
+            .SelectMany(rpei => GetOutcomeCsoChanges(rpei).Prepend(rpei.ConnectedSystemObjectChange))
+            .Concat(_standaloneCsoChanges)
+            .Where(change => change != null)
+            .Select(change => change!)
+            .Distinct();
+
+    /// <summary>
+    /// The change records an execution item's outcomes carry, whether its outcome list holds every outcome or only the
+    /// roots of the tree.
+    /// </summary>
+    private static IEnumerable<ConnectedSystemObjectChange> GetOutcomeCsoChanges(ActivityRunProfileExecutionItem rpei) =>
+        FlattenOutcomes(rpei.SyncOutcomes)
+            .Select(outcome => outcome.ConnectedSystemObjectChange)
+            .Where(change => change != null)
+            .Select(change => change!)
+            .Distinct();
+
+    private static IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> FlattenOutcomes(IEnumerable<ActivityRunProfileExecutionItemSyncOutcome> outcomes) =>
+        outcomes.SelectMany(outcome => FlattenOutcomes(outcome.Children).Prepend(outcome));
 
     #endregion
 
@@ -2650,6 +2711,51 @@ public class SyncRepository : ISyncRepository
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .ToHashSet();
         return Task.FromResult(held);
+    }
+
+    /// <summary>
+    /// How many times <see cref="GetConnectedSystemObjectIdsWithExchangeChangeAsync"/> has been called, so a test can
+    /// prove the confirming import asks only when a page holds a change awaiting Exchange (#2021).
+    /// </summary>
+    public int GetConnectedSystemObjectIdsWithExchangeChangeCallCount { get; private set; }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        GetConnectedSystemObjectIdsWithExchangeChangeCallCount++;
+        // Every status counts, as in the PostgreSQL query: the row is the hold.
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && c.ConnectedSystemObjectId is { } id && asked.Contains(id))
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(queued);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var asked = connectedSystemObjectIds.ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && asked.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
+    {
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemObjectId.HasValue)
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        var released = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && !queued.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(released);
     }
 
     public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
@@ -3116,13 +3222,12 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Every (Metaverse Object, Connected System) <see cref="GetConnectedSystemObjectsByMetaverseObjectIdsAsync"/> or
-    /// <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/> has been asked for, in call order, so a test
-    /// can prove a lookup is not repeated (#2492).
+    /// Every (Metaverse Object, Connected System) <see cref="GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync"/>
+    /// has been asked for, in call order, so a test can prove a lookup is not repeated (#2492).
     /// </summary>
     public List<(Guid MetaverseObjectId, int ConnectedSystemId)> ConnectedSystemObjectLookupsByMetaverseObjectId { get; } = [];
 
-    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
+    private Dictionary<Guid, ConnectedSystemObject> FindConnectedSystemObjectsByMetaverseObjectIds(
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
     {
         var result = new Dictionary<Guid, ConnectedSystemObject>();
@@ -3143,15 +3248,15 @@ public class SyncRepository : ISyncRepository
             }
         }
 
-        return Task.FromResult(result);
+        return result;
     }
 
-    public async Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
+    public Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(
         IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
     {
         // The store's objects carry every value, so the identifier is the model's own rule over the whole object.
-        var objects = await GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
-        return objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString());
+        var objects = FindConnectedSystemObjectsByMetaverseObjectIds(metaverseObjectIds, connectedSystemId);
+        return Task.FromResult(objects.ToDictionary(pair => pair.Key, pair => pair.Value.NameOrId ?? pair.Value.Id.ToString()));
     }
 
     public Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
@@ -3733,6 +3838,274 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(outcomes);
     }
 
+    public Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes)
+    {
+        if (FailExchangeChangeStagingWith != null)
+            throw FailExchangeChangeStagingWith;
+
+        var outcomes = new List<ExchangeChangeStagingOutcome>(changes.Count);
+
+        foreach (var change in changes)
+        {
+            if (change.ConnectedSystemObjectId == null)
+                throw new ArgumentException($"Exchange change {change.Id} names no Connected System Object; staging is per account.", nameof(changes));
+
+            if (change.Id == Guid.Empty)
+                change.Id = Guid.NewGuid();
+
+            var requestedId = change.Id;
+
+            // Coalescing on the Connected System Object, matching the unique index in the real schema and the staging
+            // statement's decision (#2021), which this mirrors.
+            var existing = _pendingExchangeChanges.Values.SingleOrDefault(c => c.ConnectedSystemObjectId == change.ConnectedSystemObjectId);
+
+            if (existing == null)
+            {
+                _pendingExchangeChanges[change.Id] = change;
+                outcomes.Add(new ExchangeChangeStagingOutcome
+                {
+                    RequestedId = requestedId,
+                    RowId = change.Id,
+                    Disposition = ExchangeChangeStagingDisposition.Inserted
+                });
+                continue;
+            }
+
+            // The row keeps its own id, matching the real repository, so the caller adopts it.
+            change.Id = existing.Id;
+
+            // The same change leaves the row as it is, whatever its status (a Parked row stays parked, a retrying row
+            // keeps its backoff, a cancellation or a refusal holds), matching the real staging statement.
+            if (existing.IsSameChangeAs(change))
+            {
+                outcomes.Add(new ExchangeChangeStagingOutcome
+                {
+                    RequestedId = requestedId,
+                    RowId = existing.Id,
+                    Disposition = ExchangeChangeStagingDisposition.Unchanged,
+                    ExistingStatus = existing.Status
+                });
+                continue;
+            }
+
+            var previousActivityId = existing.ActivityId;
+            SupersedeExchangeChange(existing, change);
+            outcomes.Add(new ExchangeChangeStagingOutcome
+            {
+                RequestedId = requestedId,
+                RowId = existing.Id,
+                Disposition = ExchangeChangeStagingDisposition.Superseded,
+                PreviousActivityId = previousActivityId
+            });
+        }
+
+        return Task.FromResult(outcomes);
+    }
+
+    /// <summary>
+    /// What a newer declared state does to the row already held for the account: the in-memory twin of the staging
+    /// statement's supersede (<c>PendingExchangeChangeBulkColumns.PendingExchangeChangesSupersedeUpdate</c>). The
+    /// declared state and where and why it was declared are replaced, the status and failure fields take the offered
+    /// change's own (Pending for a deliverable change, Refused and its reason for a refusal), and every trace of earlier
+    /// attempts, the claim and the cancellation is cleared, so a deliverable row is due at once and an in-flight
+    /// attempt's result lands nowhere.
+    /// </summary>
+    private static void SupersedeExchangeChange(PendingExchangeChange row, PendingExchangeChange newer)
+    {
+        row.MetaverseObjectId = newer.MetaverseObjectId;
+        row.SyncRuleId = newer.SyncRuleId;
+        row.RecipientType = newer.RecipientType;
+        row.Alias = newer.Alias;
+        row.Database = newer.Database;
+        row.PrimarySmtpAddress = newer.PrimarySmtpAddress;
+        row.ExternalAddress = newer.ExternalAddress;
+        row.DomainController = newer.DomainController;
+        row.ActivityId = newer.ActivityId;
+        row.CreatedAt = newer.CreatedAt;
+        row.Status = newer.Status;
+        row.FailureKind = newer.FailureKind;
+        row.FailureMessage = newer.FailureMessage;
+        row.AttemptCount = 0;
+        row.LastAttemptedAt = null;
+        row.FirstFailedAt = null;
+        row.NextRetryAt = null;
+        row.ClaimedAt = null;
+        row.ClaimedBy = null;
+        row.CancelledAt = null;
+        row.CancelledById = null;
+        row.CancelledByName = null;
+    }
+
+    // ---- Exchange queue delivery (#2021, Phase 5) ----------------------------------------------------------------
+    // Twins of the PostgreSQL delivery statements. Every write is guarded as there: on the row still being Delivering
+    // under the writer's claim. A claim hands back copies, so a lane must go back through these methods for the store
+    // to see what it did, exactly as it must against PostgreSQL.
+
+    public Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease) =>
+        Task.FromResult(_pendingExchangeChanges.Values
+            .Where(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease))
+            .Select(c => c.ConnectedSystemId)
+            .Distinct()
+            .ToList());
+
+    public Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    {
+        var retrying = _pendingExchangeChanges.Values
+            .Where(c => c.Status == PendingExchangeChangeStatus.Pending && c.NextRetryAt > asOf)
+            .ToList();
+        return Task.FromResult(new DeliveryQueueOutlook
+        {
+            DueCount = _pendingExchangeChanges.Values.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
+            RetryingCount = retrying.Count,
+            NextAttemptAt = retrying.Min(c => c.NextRetryAt)
+        });
+    }
+
+    public Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
+
+        var claimed = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
+            .OrderBy(c => c.CreatedAt)
+            .ThenBy(c => c.Id)
+            .Take(Math.Max(maximum, 0))
+            .ToList();
+
+        foreach (var change in claimed)
+            change.Claim(claimedBy, asOf);
+
+        return Task.FromResult(claimed.Select(CopyExchangeChange).ToList());
+    }
+
+    public Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var released = 0;
+        foreach (var stored in StoredExchangeChangesClaimedBy(ids, claimedBy))
+        {
+            stored.ReleaseClaim();
+            released++;
+        }
+
+        return Task.FromResult(released);
+    }
+
+    public Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
+    {
+        var byId = changes.ToDictionary(c => c.Id);
+        foreach (var stored in StoredExchangeChangesClaimedBy(byId.Keys, claimedBy))
+        {
+            // The columns of PendingExchangeChangesAttemptUpdate, and only those.
+            var attempt = byId[stored.Id];
+            stored.Status = attempt.Status;
+            stored.FailureKind = attempt.FailureKind;
+            stored.FailureMessage = attempt.FailureMessage;
+            stored.AttemptCount = attempt.AttemptCount;
+            stored.LastAttemptedAt = attempt.LastAttemptedAt;
+            stored.FirstFailedAt = attempt.FirstFailedAt;
+            stored.NextRetryAt = attempt.NextRetryAt;
+            stored.ClaimedAt = attempt.ClaimedAt;
+            stored.ClaimedBy = attempt.ClaimedBy;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy)
+    {
+        var deleting = StoredExchangeChangesClaimedBy(ids, claimedBy).ToList();
+        foreach (var stored in deleting)
+            _pendingExchangeChanges.Remove(stored.Id);
+
+        return Task.FromResult(deleting.Count);
+    }
+
+    public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
+    {
+        var deleting = _pendingExchangeChanges.Values
+            .Where(c => c.Status is PendingExchangeChangeStatus.Parked or PendingExchangeChangeStatus.Cancelled
+                        && (c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt)
+            .Take(maxRecords)
+            .Select(c => c.Id)
+            .ToList();
+        foreach (var id in deleting)
+            _pendingExchangeChanges.Remove(id);
+
+        return Task.FromResult(deleting.Count);
+    }
+
+    public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        var objects = new List<ExchangeDeliveryObject>();
+        foreach (var id in connectedSystemObjectIds)
+        {
+            if (!_csos.TryGetValue(id, out var cso))
+                continue;
+
+            var anchor = cso.AttributeValues.FirstOrDefault(v => v.AttributeId == cso.ExternalIdAttributeId);
+            var secondary = cso.SecondaryExternalIdAttributeId is { } secondaryId
+                ? cso.AttributeValues.FirstOrDefault(v => v.AttributeId == secondaryId)
+                : null;
+            var held = _pendingExports.Values
+                .Where(pe => pe.ConnectedSystemObjectId == id)
+                .SelectMany(pe => pe.AttributeValueChanges)
+                .Where(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+                .Select(c => new ExchangeHeldChange(c.Attribute.Name, c.ChangeType, c.StringValue))
+                .ToList();
+
+            objects.Add(new ExchangeDeliveryObject
+            {
+                ConnectedSystemObjectId = cso.Id,
+                ObjectType = cso.Type?.Name ?? string.Empty,
+                ObjectGuid = anchor?.GuidValue,
+                DistinguishedName = secondary?.StringValue ?? anchor?.StringValue,
+                ImportedValues = cso.AttributeValues
+                    .Where(v => v.Attribute is { IsConnectorDefined: true } a && ExchangeRecipientAttributes.All.Contains(a.Name))
+                    .GroupBy(v => v.Attribute.Name, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().StringValue, StringComparer.Ordinal),
+                HeldChanges = held
+            });
+        }
+
+        return Task.FromResult(objects);
+    }
+
+    private IEnumerable<PendingExchangeChange> StoredExchangeChangesClaimedBy(IEnumerable<Guid> ids, string claimedBy) =>
+        ids.Select(id => _pendingExchangeChanges.GetValueOrDefault(id))
+            .Where(c => c is { Status: PendingExchangeChangeStatus.Delivering } && c.ClaimedBy == claimedBy)
+            .Select(c => c!)
+            .ToList();
+
+    private static PendingExchangeChange CopyExchangeChange(PendingExchangeChange source) => new()
+    {
+        Id = source.Id,
+        ConnectedSystemId = source.ConnectedSystemId,
+        ConnectedSystemObjectId = source.ConnectedSystemObjectId,
+        MetaverseObjectId = source.MetaverseObjectId,
+        SyncRuleId = source.SyncRuleId,
+        RecipientType = source.RecipientType,
+        Alias = source.Alias,
+        Database = source.Database,
+        PrimarySmtpAddress = source.PrimarySmtpAddress,
+        ExternalAddress = source.ExternalAddress,
+        DomainController = source.DomainController,
+        Status = source.Status,
+        FailureKind = source.FailureKind,
+        FailureMessage = source.FailureMessage,
+        AttemptCount = source.AttemptCount,
+        CreatedAt = source.CreatedAt,
+        LastAttemptedAt = source.LastAttemptedAt,
+        FirstFailedAt = source.FirstFailedAt,
+        NextRetryAt = source.NextRetryAt,
+        ClaimedAt = source.ClaimedAt,
+        ClaimedBy = source.ClaimedBy,
+        ActivityId = source.ActivityId,
+        CancelledAt = source.CancelledAt,
+        CancelledById = source.CancelledById,
+        CancelledByName = source.CancelledByName
+    };
+
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (FailInitialPasswordMarkingWith != null)
@@ -3855,14 +4228,14 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(released);
     }
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // As with the due-systems read above, this fake has no Connected System configuration to restrict to
         // enabled systems by; every queued change counts.
         var changes = _pendingPasswordChanges.Values.ToList();
         var retrying = changes.Where(c => c.Status == PendingPasswordChangeStatus.Pending && c.NextRetryAt > asOf).ToList();
 
-        return Task.FromResult(new PasswordQueueDeliveryOutlook
+        return Task.FromResult(new DeliveryQueueOutlook
         {
             DueCount = changes.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
             RetryingCount = retrying.Count,
@@ -4103,14 +4476,7 @@ public class SyncRepository : ISyncRepository
             })
             .ToList();
 
-        if (!string.IsNullOrWhiteSpace(filter.SearchText))
-        {
-            var search = filter.SearchText.Trim();
-            headers = headers
-                .Where(h => (h.MetaverseObjectDisplayName ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
-                            || h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
+        // The search is applied by FilterPasswordChanges, which retry and cancel share, so all three narrow alike.
 
         IOrderedEnumerable<PendingPasswordChangeHeader> ordered = sortBy?.ToLowerInvariant() switch
         {
@@ -4235,6 +4601,17 @@ public class SyncRepository : ISyncRepository
         {
             var ids = filter.Ids.ToList();
             query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        // The same search the list applies, so retry and cancel act on the changes shown and no others (#2725).
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            query = query.Where(c =>
+                (_mvos.TryGetValue(c.MetaverseObjectId, out var mvo) ? mvo.CachedDisplayName ?? string.Empty : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (_connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
         return query.ToList();

@@ -5,6 +5,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Models.Transactional.DTOs;
 using JIM.Utilities;
+using JIM.Worker.Delivery;
 using Serilog;
 
 namespace JIM.Worker.PasswordDelivery;
@@ -13,7 +14,7 @@ namespace JIM.Worker.PasswordDelivery;
 /// The Password Delivery Service's work against JIM proper (#1635): each call runs on a fresh <c>JimApplication</c>,
 /// as Worker tasks do, so no DbContext is shared between the loop, the heartbeat and the lanes running alongside.
 /// </summary>
-internal sealed class JimPasswordDeliveryWork : IPasswordDeliveryWork
+internal sealed class JimPasswordDeliveryWork : IDeliveryWork
 {
     private readonly IJimApplicationFactory _jimFactory;
     private readonly ServiceHeartbeatWriter _heartbeat;
@@ -29,7 +30,7 @@ internal sealed class JimPasswordDeliveryWork : IPasswordDeliveryWork
     /// </summary>
     public string InstanceId => _heartbeat.InstanceId;
 
-    public async Task<PasswordQueueDeliveryOutlook> GetOutlookAsync(DateTime asOf, CancellationToken cancellationToken)
+    public async Task<DeliveryQueueOutlook> GetOutlookAsync(DateTime asOf, CancellationToken cancellationToken)
     {
         using var jim = _jimFactory.Create();
         return await jim.PasswordSynchronisation.GetDeliveryOutlookAsync(asOf);
@@ -41,7 +42,7 @@ internal sealed class JimPasswordDeliveryWork : IPasswordDeliveryWork
         return await jim.PasswordSynchronisation.GetConnectedSystemIdsWithWorkDueAsync(asOf);
     }
 
-    public async Task<PasswordDeliveryLaneOutcome> RunLaneAsync(PasswordDeliveryLane lane, CancellationToken cancellationToken)
+    public async Task<DeliveryLaneOutcome> RunLaneAsync(DeliveryLane lane, CancellationToken cancellationToken)
     {
         using var jim = _jimFactory.Create();
 
@@ -65,7 +66,7 @@ internal sealed class JimPasswordDeliveryWork : IPasswordDeliveryWork
 
         // A problem is a lane that could not deliver at all (its claims went back unattempted); the pass reports
         // nothing for a lane that attempted and failed, because those rows are retrying on their own clock.
-        return result.Problems.Count > 0 ? PasswordDeliveryLaneOutcome.CouldNotDeliver : PasswordDeliveryLaneOutcome.Completed;
+        return result.Problems.Count > 0 ? DeliveryLaneOutcome.CouldNotDeliver : DeliveryLaneOutcome.Completed;
     }
 
     public async Task WriteHeartbeatAsync(string? currentWork, DateTime? currentWorkStartedAt, string? detail, CancellationToken cancellationToken)

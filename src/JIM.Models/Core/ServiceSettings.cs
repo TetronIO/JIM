@@ -26,11 +26,6 @@ public class ServiceSettings
     public string? SSOClientId { get; set; }
 
     /// <summary>
-    /// For display purposes only. Do not update. The value is pulled from the configuration file.
-    /// </summary>
-    public string? SSOSecret { get; set; }
-
-    /// <summary>
     /// The Claim Type to use from the ID token when uniquely identifying users. This will map to a Metaverse attribute and is used to map an IDP user to a JIM user for the purposes of authenticating a user with JIM.
     /// </summary>
     public string? SSOUniqueIdentifierClaimType { get; set; }

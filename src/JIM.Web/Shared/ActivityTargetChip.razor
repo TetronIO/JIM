@@ -14,7 +14,8 @@
                     Href="@Helpers.GetConnectedSystemActivityHref(Activity.ConnectedSystemId, Activity.TargetOperationType)" />
         break;
     case ActivityTargetType.PasswordSynchronisation when Activity.ConnectedSystemId.HasValue:
-        @* A password delivered to one Connected System: the system it went to. *@
+    case ActivityTargetType.ExchangeRecipient when Activity.ConnectedSystemId.HasValue:
+        @* A password delivered to one Connected System, or an Exchange change made through one: that system. *@
         <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@Activity.TargetName" Class="ma-0"
                     Href="@($"/admin/connected-systems/{Activity.ConnectedSystemId}/")" />
         break;

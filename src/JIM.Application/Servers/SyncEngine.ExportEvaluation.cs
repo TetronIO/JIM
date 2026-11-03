@@ -161,8 +161,8 @@ public partial class SyncEngine
         };
 
     /// <summary>
-    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
-    /// Full Import's payload, must be marked for retry. Reconciliation
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from an
+    /// import that read every object in its scope, must be marked for retry. Reconciliation
     /// (<see cref="ReconcileCsoAgainstPendingExport"/>) only ever runs for a CSO an import actually
     /// returned and matched, so a CSO genuinely absent from every subsequent import never reaches it:
     /// without this decision, its exported Create sits Status Exported forever
@@ -170,18 +170,19 @@ public partial class SyncEngine
     /// Exported, since re-sending it would normally mean asking the connector to create a duplicate of
     /// an object that already exists there), and the CSO never leaves Pending Provisioning.
     /// </summary>
-    /// <param name="runType">The import run's type. Only a Full Import can prove absence; a Delta Import
-    /// reports only changes, so an object missing from its payload says nothing about whether it still
-    /// exists.</param>
+    /// <param name="readEveryObjectInScope">Whether the run read every object in its scope: a Full Import, or a Delta
+    /// Import whose Connector read everything instead of its changes (#2720). Only such a run can prove absence; a Delta
+    /// Import that read changes reports only those, so an object missing from its payload says nothing about whether it
+    /// still exists.</param>
     /// <param name="totalObjectsImported">How many objects the run read from the Connected System in
     /// total, across every object type. Mirrors the "no objects imported means do nothing" guard
-    /// deletion detection applies (<c>SyncImportTaskProcessor.PerformImportAsync</c>): a Full Import
+    /// deletion detection applies (<c>SyncImportTaskProcessor.PerformImportAsync</c>): a complete read
     /// that read literally nothing may itself be the symptom of a connector or configuration problem,
     /// so it must not be read as proof that every outstanding Create is now absent.</param>
-    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full
-    /// Import's payload (or the object was otherwise processed this run).</param>
-    public bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen) =>
-        runType == ConnectedSystemRunType.FullImport &&
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the run's
+    /// payload (or the object was otherwise processed this run).</param>
+    public bool IsExportedCreateUnseenByCompleteRead(bool readEveryObjectInScope, int totalObjectsImported, bool wasSeen) =>
+        readEveryObjectInScope &&
         totalObjectsImported > 0 &&
         !wasSeen;
 

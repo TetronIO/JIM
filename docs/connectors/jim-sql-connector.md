@@ -257,7 +257,7 @@ Each mode has a step-by-step guide with the table and trigger definitions for bo
 - [Delta Import with a watermark column](jim-sql-connector-delta-import-watermark.md)
 
 !!! note "The first Delta Import runs as a Full Import"
-    JIM has nothing to compare against until one import has completed, so the first Delta Import you run (and the first after changing the Delta Import Mode) performs a Full Import instead, with a warning on the Activity saying so. From then on Delta Imports read only changes. A Delta Import run with no mode chosen is refused, so you cannot accidentally schedule one that does a Full Import every time.
+    JIM has nothing to compare against until one import has completed, so the first Delta Import you run (and the first after changing the Delta Import Mode) reads every object instead, with a warning on the Activity saying so. Like a Full Import, it marks as deleted each object JIM holds that the database no longer has, within the Run Profile's [deletion limits](../configuration/run-profiles.md#delta-import). From then on Delta Imports read only changes. A Delta Import run with no mode chosen is refused, so you cannot accidentally schedule one that does a Full Import every time.
 
 ### Export
 

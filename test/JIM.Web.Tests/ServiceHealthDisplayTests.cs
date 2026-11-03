@@ -283,6 +283,66 @@ public class ServiceHealthDisplayTests
     }
 
     [Test]
+    public void Banner_ExchangeDeliveryThatStoppedReporting_NamesItAlone()
+    {
+        // #2021: the Exchange delivery service shares the Worker process but reports for itself, so it going quiet while
+        // the rest of the Worker is alive is named precisely.
+        var report = Report(
+            Derive(JimService.WorkerSync, 2),
+            Derive(JimService.WorkerDelivery, 2),
+            Derive(JimService.WorkerExchange, 4 * 60),
+            Derive(JimService.Scheduler, 2));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Does.StartWith("The Worker's Exchange delivery service has not reported").And.Contain("Nothing is being delivered"));
+    }
+
+    [Test]
+    public void Banner_EveryWorkerServiceWithNoHeartbeat_NamesTheWorkerOnce()
+    {
+        var report = Report(
+            Derive(JimService.WorkerSync, 4 * 60),
+            Derive(JimService.WorkerDelivery, 4 * 60),
+            Derive(JimService.WorkerExchange, 4 * 60),
+            Derive(JimService.Scheduler, 2));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Does.StartWith("The Worker has not reported for 4 minutes."));
+    }
+
+    [Test]
+    public void Banner_WorkerDownButExchangeDeliveryAlive_NamesTheTwoServicesThatAreDown()
+    {
+        // Not "the Worker": part of the process is still reporting.
+        var report = Report(
+            Derive(JimService.WorkerSync, 4 * 60),
+            Derive(JimService.WorkerDelivery, 4 * 60),
+            Derive(JimService.WorkerExchange, 2),
+            Derive(JimService.Scheduler, 2));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Does.StartWith("The Worker's synchronisation service and the Worker's password delivery service have not reported"));
+    }
+
+    [Test]
+    public void Banner_ExchangeDeliveryStalled_NamesIt()
+    {
+        var stalled = Derive(JimService.WorkerExchange, 2, currentWork: "Delivering to Panoply AD", progressAgeSeconds: 15 * 60);
+        var report = Report(Derive(JimService.WorkerSync, 2), Derive(JimService.WorkerDelivery, 2), stalled, Derive(JimService.Scheduler, 2));
+
+        var banner = ServiceHealthDisplay.Banner(report);
+
+        Assert.That(banner, Is.Not.Null);
+        Assert.That(banner!.Sentence, Does.StartWith("The Worker's Exchange delivery service has made no progress"));
+    }
+
+    [Test]
     public void Banner_SchedulerWithNoHeartbeat_NamesTheScheduler()
     {
         var report = Report(

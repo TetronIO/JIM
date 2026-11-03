@@ -8,18 +8,18 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using JIM.Models.Transactional.DTOs;
-using JIM.Worker.PasswordDelivery;
+using JIM.Worker.Delivery;
 using NUnit.Framework;
 
-namespace JIM.Worker.Tests.PasswordDelivery;
+namespace JIM.Worker.Tests.Delivery;
 
 /// <summary>
 /// The Password Delivery Service's loop (#1635): when it wakes, which lanes it starts, and what it reports while
-/// they run. Exercised through <see cref="PasswordDeliveryScheduler"/> with a fake queue and a pinned clock, so
+/// they run. Exercised through <see cref="DeliveryScheduler"/> with a fake queue and a pinned clock, so
 /// every rule is asserted without a database or a directory.
 /// </summary>
 [TestFixture]
-public class PasswordDeliverySchedulerTests
+public class DeliverySchedulerTests
 {
     private static readonly DateTime Now = new(2026, 9, 5, 9, 15, 0, DateTimeKind.Utc);
     private static readonly TimeSpan SafetyPoll = TimeSpan.FromSeconds(30);
@@ -33,8 +33,8 @@ public class PasswordDeliverySchedulerTests
         _work = new FakeWork();
     }
 
-    private PasswordDeliveryScheduler NewScheduler(int maximumParallelLanes = 4, TimeSpan? heartbeatSlice = null) =>
-        new(_work, () => Now, SafetyPoll, maximumParallelLanes, heartbeatSlice ?? TimeSpan.FromMilliseconds(20));
+    private DeliveryScheduler NewScheduler(int maximumParallelLanes = 4, TimeSpan? heartbeatSlice = null) =>
+        new("Password delivery", _work, () => Now, SafetyPoll, maximumParallelLanes, heartbeatSlice ?? TimeSpan.FromMilliseconds(20));
 
     #region wake rules
 
@@ -293,7 +293,7 @@ public class PasswordDeliverySchedulerTests
     public async Task RunAsync_IterationThatFails_CarriesOnUntilCancelledAsync()
     {
         _work.FailOutlookWith = new InvalidOperationException("database gone");
-        var scheduler = new PasswordDeliveryScheduler(_work, () => DateTime.UtcNow, TimeSpan.FromMilliseconds(30), 4, TimeSpan.FromMilliseconds(10));
+        var scheduler = new DeliveryScheduler("Password delivery", _work, () => DateTime.UtcNow, TimeSpan.FromMilliseconds(30), 4, TimeSpan.FromMilliseconds(10));
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
 
         await scheduler.RunAsync(cancellation.Token);
@@ -310,7 +310,7 @@ public class PasswordDeliverySchedulerTests
         _work.DueSystems = [3];
         _work.CouldNotDeliverFor.Add(3);
         var clock = Now;
-        var scheduler = new PasswordDeliveryScheduler(_work, () => clock, SafetyPoll, 4, TimeSpan.FromMilliseconds(20));
+        var scheduler = new DeliveryScheduler("Password delivery", _work, () => clock, SafetyPoll, 4, TimeSpan.FromMilliseconds(20));
         await scheduler.DispatchAsync(CancellationToken.None);
         await _work.WaitForLaneToStartAsync(3);
         var waiting = scheduler.WaitAsync(TimeSpan.FromSeconds(30), CancellationToken.None);
@@ -433,7 +433,7 @@ public class PasswordDeliverySchedulerTests
     [Test]
     public async Task Heartbeat_CarriesTheOutlookAsDetailAsync()
     {
-        _work.Outlook = new PasswordQueueDeliveryOutlook { DueCount = 3, RetryingCount = 1, NextAttemptAt = new DateTime(2026, 9, 5, 9, 19, 0, DateTimeKind.Utc) };
+        _work.Outlook = new DeliveryQueueOutlook { DueCount = 3, RetryingCount = 1, NextAttemptAt = new DateTime(2026, 9, 5, 9, 19, 0, DateTimeKind.Utc) };
         var scheduler = NewScheduler();
 
         await scheduler.DispatchAsync(CancellationToken.None);
@@ -444,27 +444,27 @@ public class PasswordDeliverySchedulerTests
     [Test]
     public void DescribeOutlook_NothingAhead_IsNull()
     {
-        Assert.That(PasswordDeliveryScheduler.DescribeOutlook(new PasswordQueueDeliveryOutlook()), Is.Null);
+        Assert.That(DeliveryScheduler.DescribeOutlook(new DeliveryQueueOutlook()), Is.Null);
     }
 
     [Test]
     public void DescribeOutlook_DueOnly_OmitsTheNextAttempt()
     {
-        Assert.That(PasswordDeliveryScheduler.DescribeOutlook(new PasswordQueueDeliveryOutlook { DueCount = 2 }), Is.EqualTo("2 due, 0 retrying"));
+        Assert.That(DeliveryScheduler.DescribeOutlook(new DeliveryQueueOutlook { DueCount = 2 }), Is.EqualTo("2 due, 0 retrying"));
     }
 
     [Test]
     public void DescribeCurrentWork_NoLanes_IsIdle()
     {
-        Assert.That(PasswordDeliveryScheduler.DescribeCurrentWork([]), Is.EqualTo(((string?)null, (DateTime?)null)));
+        Assert.That(DeliveryScheduler.DescribeCurrentWork([]), Is.EqualTo(((string?)null, (DateTime?)null)));
     }
 
     [Test]
     public void DescribeCurrentWork_UnnamedLane_FallsBackToTheSystemId()
     {
-        var lane = new PasswordDeliveryLane(7, Now);
+        var lane = new DeliveryLane(7, Now);
 
-        Assert.That(PasswordDeliveryScheduler.DescribeCurrentWork([lane]).CurrentWork, Is.EqualTo("Delivering to Connected System 7"));
+        Assert.That(DeliveryScheduler.DescribeCurrentWork([lane]).CurrentWork, Is.EqualTo("Delivering to Connected System 7"));
     }
 
     #endregion
@@ -484,13 +484,13 @@ public class PasswordDeliverySchedulerTests
     /// A queue and a set of lanes the tests control: lanes block until released, so the tests can observe the
     /// loop with lanes in flight, and can be told to throw.
     /// </summary>
-    private sealed class FakeWork : IPasswordDeliveryWork
+    private sealed class FakeWork : IDeliveryWork
     {
         private readonly ConcurrentDictionary<int, TaskCompletionSource> _gates = new();
         private readonly ConcurrentDictionary<(int, int), TaskCompletionSource> _started = new();
         private readonly ConcurrentDictionary<int, int> _startCounts = new();
 
-        public PasswordQueueDeliveryOutlook Outlook { get; set; } = new();
+        public DeliveryQueueOutlook Outlook { get; set; } = new();
         public List<int> DueSystems { get; set; } = [];
         public HashSet<int> ThrowFor { get; } = [];
         public HashSet<int> CouldNotDeliverFor { get; } = [];
@@ -500,7 +500,7 @@ public class PasswordDeliverySchedulerTests
         public List<int> LanesStarted => LanesStartedQueue.ToList();
         public List<(string? CurrentWork, DateTime? CurrentWorkStartedAt, string? Detail)> Heartbeats { get; } = [];
 
-        public Task<PasswordQueueDeliveryOutlook> GetOutlookAsync(DateTime asOf, CancellationToken cancellationToken)
+        public Task<DeliveryQueueOutlook> GetOutlookAsync(DateTime asOf, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref OutlookReads);
             if (FailOutlookWith != null)
@@ -511,7 +511,7 @@ public class PasswordDeliverySchedulerTests
         public Task<IReadOnlyList<int>> GetConnectedSystemIdsWithWorkDueAsync(DateTime asOf, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<int>>(DueSystems.ToList());
 
-        public async Task<PasswordDeliveryLaneOutcome> RunLaneAsync(PasswordDeliveryLane lane, CancellationToken cancellationToken)
+        public async Task<DeliveryLaneOutcome> RunLaneAsync(DeliveryLane lane, CancellationToken cancellationToken)
         {
             lane.ConnectedSystemName = $"System {lane.ConnectedSystemId}";
             LanesStartedQueue.Enqueue(lane.ConnectedSystemId);
@@ -524,8 +524,8 @@ public class PasswordDeliverySchedulerTests
             await _gates.GetOrAdd(lane.ConnectedSystemId, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
 
             return CouldNotDeliverFor.Contains(lane.ConnectedSystemId)
-                ? PasswordDeliveryLaneOutcome.CouldNotDeliver
-                : PasswordDeliveryLaneOutcome.Completed;
+                ? DeliveryLaneOutcome.CouldNotDeliver
+                : DeliveryLaneOutcome.Completed;
         }
 
         public Task WriteHeartbeatAsync(string? currentWork, DateTime? currentWorkStartedAt, string? detail, CancellationToken cancellationToken)

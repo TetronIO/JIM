@@ -96,7 +96,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// a Full Import, when no readable changelog was found: recording zero there would read as "every change since
     /// the beginning" against a changelog that may not exist.
     /// </summary>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
+    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout)
     {
         var changelogDn = ChangelogDnFor(rootDse);
         rootDse.LastChangeNumber = TakeWatermark(rootDse, changelogDn, searchTimeout);

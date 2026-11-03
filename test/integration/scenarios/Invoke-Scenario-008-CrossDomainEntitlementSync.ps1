@@ -528,7 +528,8 @@ try {
         # be available if the accesslog exceeded the server's size limit during the preceding full import.
         # Kept on the RFC-directory family rather than OpenLDAP alone so 389 Directory Server gets the
         # same tolerance for a change-log watermark that is not yet established.
-        # The connector automatically falls back to a full import and establishes the watermark.
+        # The connector automatically falls back to reading every object, which also detects deletions by absence
+        # within the Run Profile's deletion limits, exactly as a Full Import does, and establishes the watermark.
         Write-Host "    Delta importing from Source AD..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaImportProfile.id -Wait -PassThru
         if ($isRfcDirectory) {

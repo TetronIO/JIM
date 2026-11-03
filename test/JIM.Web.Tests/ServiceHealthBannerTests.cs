@@ -37,6 +37,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _systemRepository = new Mock<ISystemRepository>();
         repository.Setup(r => r.System).Returns(_systemRepository.Object);
+        repository.Setup(r => r.ServiceSettings).Returns(new JIM.TestSupport.InMemoryServiceSettingsRepository());
         Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(new JimApplication(repository.Object)));
     }
 

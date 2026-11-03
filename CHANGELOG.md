@@ -18,9 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
+- 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
 
 ### Fixed
 
+- 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
 - 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)
 - 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)
 - 🐛 People JIM creates or changes outside synchronisation, such as the initial administrator at first sign-in, now reach their accounts at the next synchronisation, changed and removed values included; the run's review step is now called **Export Review**. (#2615)
@@ -28,9 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 An Activity's **CSOs Disconnected** figure now includes objects that left an import Synchronisation Rule's scope, so it agrees with the outcome counts beneath it. (#2629)
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
 - 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
+- 🐛 A Delta Import that reads every object instead of its changes, as one with no watermark to continue from does, now marks the objects no longer there as deleted, within the Run Profile's deletion limits, rather than leaving them in JIM until a Full Import. (#2720)
 
 ### Security
 
+- 🔒 JIM no longer keeps a plain-text copy of its OpenID Connect client secret in the database; the copy it wrote at every start is removed on upgrade, and the encrypted copy JIM uses is unchanged. (#2684)
 - 🔒 Connector credentials entered in the portal, such as an LDAP Connector password or a SCIM Client Secret, are now encrypted at rest; they were stored unencrypted, as only the REST API encrypted them. Credentials already stored unencrypted are encrypted automatically when JIM next starts, so nothing needs re-entering, and JIM now refuses any stored credential it finds unencrypted rather than using it. (#2680)
 
 ### Performance
@@ -44,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Deleting many departed accounts in one synchronisation is faster: each page removes them in a few statements rather than one per value, and a database check that ran for every value is gone, saving about a fifth of the time at 500,000 people. (#2669, #2670)
 - ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
 - ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
+- ⚡ Exports and imports into large Connected Systems no longer re-read all their change history to resolve references (about 20 seconds a run at 500,000 objects), and history naming a deleted object is no longer re-pointed at a later object reusing its DN. (#2690)
+- ⚡ An export now records each reference in its change history with the object it names as it writes it, instead of leaving them to be linked afterwards, which took 164 seconds after the first export of a 500,000-object Connected System. (#2700)
+- ⚡ OpenLDAP imports take their next watermark from what the accesslog gained since the last one: reading the whole log took 7 to 10 seconds per import at 500,000 objects, grew with the log, and on a size-limited directory could stop short of the latest change. (#2704)
+- ⚡ An import that creates objects no longer spends seconds linking up the few references it could not resolve as it wrote them: a Delta Import creating one group in a 500,000-object Connected System spent 8.8 seconds on 3 of them. (#2706)
+- ⚡ An OpenLDAP Delta Import is no longer slowed by heavy writes to other suffixes on the same server, which cost it 12 seconds at 500,000 objects after an initial export to another suffix: it now looks for where to start among the selected partitions' changes first. (#2712)
 
 
 ## [0.17.0] - 2026-10-29

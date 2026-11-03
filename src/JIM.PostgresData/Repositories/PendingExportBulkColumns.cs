@@ -72,18 +72,19 @@ internal static class PendingExportBulkColumns
         "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
         "UnresolvedReferenceValue", "ChangeType", "Status", "ExportAttemptCount",
         "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId", "SyncRuleId", "SyncRuleName",
-        "AwaitsInitialPassword"
+        "AwaitsInitialPassword", "AwaitsExchange"
     ];
 
     /// <summary>
     /// Update columns for the confirming-import bulk update (SyncRepository.CsOperations.cs):
     /// the export confirmation tracking fields. AwaitsInitialPassword is among them because the
     /// confirming import clears it when it releases a change held until an Initial Password is
-    /// delivered (#2039).
+    /// delivered (#2039). AwaitsExchange likewise: the confirming import clears it when it releases a
+    /// connector-defined change whose object no longer has a change on the Exchange queue (#2021).
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesConfirmationUpdate =
     [
-        "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt", "AwaitsInitialPassword"
+        "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt", "AwaitsInitialPassword", "AwaitsExchange"
     ];
 
     /// <summary>
@@ -92,12 +93,13 @@ internal static class PendingExportBulkColumns
     /// UnresolvedReferenceValue into StringValue before export, and the resolved target CSO is
     /// stamped onto ResolvedReferenceCsoId, #1079). AwaitsInitialPassword is set here when the
     /// Connector reports it wrote the attribute with an interim value until an Initial Password is
-    /// delivered (#2039).
+    /// delivered (#2039), and AwaitsExchange when export staging hands a connector-defined change to the
+    /// Exchange queue (#2021).
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesExportResultUpdate =
     [
         "Status", "ExportAttemptCount", "LastExportedAt", "StringValue",
-        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId", "AwaitsInitialPassword"
+        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId", "AwaitsInitialPassword", "AwaitsExchange"
     ];
 
     /// <summary>

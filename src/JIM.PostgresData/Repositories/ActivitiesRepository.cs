@@ -55,6 +55,17 @@ public partial class ActivityRepository : IActivityRepository
             .Distinct()
             .ToList();
 
+        // A snapshot built from a Pending Export carries the object each resolved reference was resolved to by its id
+        // alone (ResolvedReferenceCsoId, #2700), and that id is a soft pointer: the object may have been deleted since.
+        // As the bulk change record writer does, the id is written only where the object's row exists, so a reference to
+        // a deleted object is recorded by its DN and marked, rather than failing the whole save (and with it the
+        // housekeeping or withdrawal recording the snapshot) on the foreign key.
+        var existingReferencedObjectIds = await GetExistingConnectedSystemObjectIdsAsync(changeSnapshots
+            .SelectMany(c => c.AttributeChanges)
+            .SelectMany(ac => ac.ValueChanges)
+            .Where(vc => vc.ReferenceValue != null)
+            .Select(vc => vc.ReferenceValue!.Id));
+
         foreach (var change in changeSnapshots)
         {
             if (change.ConnectedSystemObject != null)
@@ -71,9 +82,19 @@ public partial class ActivityRepository : IActivityRepository
                     attributeChange.Attribute = null;
                 }
 
+                // Marked as the bulk change record writer marks them (#2690), so the change record reference fix-up
+                // resolves what this path writes too: a snapshot of staged or withdrawn reference values names its
+                // objects by DN where an earlier export resolved them, and otherwise by display text, which is never
+                // marked (#2700). A reference written with its object's id is never marked; one whose object has no row
+                // is written without the id, and marked.
+                foreach (var valueChange in attributeChange.ValueChanges)
+                    valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType,
+                        referenceIdWritten: valueChange.ReferenceValue is { } referenced && existingReferencedObjectIds.Contains(referenced.Id));
+
                 foreach (var valueChange in attributeChange.ValueChanges.Where(vc => vc.ReferenceValue != null))
                 {
-                    severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue!.Id));
+                    if (existingReferencedObjectIds.Contains(valueChange.ReferenceValue!.Id))
+                        severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue.Id));
                     valueChange.ReferenceValue = null;
                 }
             }
@@ -120,6 +141,23 @@ public partial class ActivityRepository : IActivityRepository
         // Emptied once written, matching the bulk path: an item re-persisted later must not duplicate them.
         foreach (var item in items.Where(i => i.CausalEdges.Count > 0))
             item.CausalEdges.Clear();
+    }
+
+    /// <summary>
+    /// Which of the given Connected System Object ids have a row, read inside the context's current transaction so rows
+    /// it wrote count.
+    /// </summary>
+    private async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IEnumerable<Guid> candidateIds)
+    {
+        var candidates = candidateIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (candidates.Count == 0)
+            return [];
+
+        var existing = await Repository.Database.ConnectedSystemObjects
+            .Where(cso => candidates.Contains(cso.Id))
+            .Select(cso => cso.Id)
+            .ToListAsync();
+        return [.. existing];
     }
 
     public async Task UpdateActivityAsync(Activity activity)

@@ -79,6 +79,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<DeferredReference> DeferredReferences { get; set; } = null!;
     public virtual DbSet<PendingExport> PendingExports { get; set; } = null!;
     public virtual DbSet<PendingPasswordChange> PendingPasswordChanges { get; set; } = null!;
+    public virtual DbSet<PendingExchangeChange> PendingExchangeChanges { get; set; } = null!;
     public virtual DbSet<PendingExportAttributeValueChange> PendingExportAttributeValueChanges { get; set; } = null!;
     public virtual DbSet<PredefinedSearch> PredefinedSearches { get; set; } = null!;
     public virtual DbSet<PredefinedSearchAttribute> PredefinedSearchAttributes {  get; set; } = null!;
@@ -414,6 +415,21 @@ public class JimDbContext : DbContext
             .HasOne(cav => cav.ReferenceValue)
             .WithMany()
             .OnDelete(DeleteBehavior.SetNull);
+
+        // The references the change record reference fix-up still has to resolve (#2690), which it reads after every
+        // export and import. Partial, because a reference is marked only while its object's id is unwritten, so the
+        // index holds a sliver of a table that grows by tens of millions of rows at customer scale, and the fix-up reads
+        // that sliver instead of every string value of change history. Keyed on the parent attribute change, which the
+        // fix-up joins on to reach the change record's Connected System. Named, so it is a second index beside the
+        // foreign key's own rather than a filter applied to that one; the foreign key's index is declared explicitly
+        // beside it because EF's convention treats any index leading with the foreign key column as covering it,
+        // partial or not, and would otherwise drop the full index the cascade from a deleted attribute change relies on.
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex("ConnectedSystemObjectChangeAttributeId");
+        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
+            .HasIndex(["ConnectedSystemObjectChangeAttributeId"], "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
+            .HasFilter("\"IsUnresolvedReference\"");
 
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
@@ -952,6 +968,14 @@ public class JimDbContext : DbContext
             .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsInitialPassword")
             .HasFilter("\"AwaitsInitialPassword\"");
 
+        // The connector-defined changes Exchange may still owe (#2021), found by the confirming import's per-page lookup
+        // and by its sweep of the holds it did not reconcile. Partial for the same reason as the index above: a change
+        // carries the flag only between its export and its confirmation, on a Connected System that manages Exchange,
+        // so every other change adds nothing to it.
+        modelBuilder.Entity<PendingExportAttributeValueChange>()
+            .HasIndex(avc => avc.PendingExportId, "IX_PendingExportAttributeValueChanges_PendingExportId_AwaitsExchange")
+            .HasFilter("\"AwaitsExchange\"");
+
         // The Password Synchronisation queue (#1119). Foreign keys with no navigations on either end, following
         // ConnectedSystemPasswordSynchronisation: nothing needs to walk from a queue row back to the identity or
         // the system, and a navigation would close a schema cycle the OpenAPI document build cannot collapse.
@@ -1030,6 +1054,49 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingPasswordChange>()
             .HasIndex(ppc => ppc.MetaverseObjectId)
             .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId");
+
+        // The Exchange queue (#2021), kept apart from the password queue so the latter's secrecy invariants stay its
+        // own. Foreign keys with no navigations, as above. Only the Connected System cascades: every other reference is
+        // set null, so a change whose account, identity or rule has gone stays on the queue for the delivery lane to
+        // withdraw under its own Activity, rather than vanishing with nothing to say it stopped being owed.
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasOne<ConnectedSystem>()
+            .WithMany()
+            .HasForeignKey(pec => pec.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasOne<ConnectedSystemObject>()
+            .WithMany()
+            .HasForeignKey(pec => pec.ConnectedSystemObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasOne<MetaverseObject>()
+            .WithMany()
+            .HasForeignKey(pec => pec.MetaverseObjectId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasOne<SyncRule>()
+            .WithMany()
+            .HasForeignKey(pec => pec.SyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // One change per account, enforced by the database: staging UPSERTs on this key, so a newer declared state
+        // supersedes the row in place and two exports of one account cannot both insert. Filtered because a row whose
+        // account has been deleted keeps its place on the queue with the reference cleared, and any number of those
+        // may wait to be withdrawn.
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasIndex(pec => pec.ConnectedSystemObjectId)
+            .IsUnique()
+            .HasFilter("\"ConnectedSystemObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_PendingExchangeChanges_ConnectedSystemObjectId_Unique");
+
+        // What the delivery pass asks for: the changes owed on this system, in this state, that have come due.
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasIndex(pec => new { pec.ConnectedSystemId, pec.Status, pec.NextRetryAt })
+            .HasDatabaseName("IX_PendingExchangeChanges_ConnectedSystemId_Status_NextRetryAt");
 
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).

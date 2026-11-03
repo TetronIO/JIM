@@ -59,7 +59,7 @@ Create a Connected System with the JIM SCIM 2.0 Client Connector and these setti
 | Authentication Method | OAuth 2.0 Client Credentials | |
 | Token Endpoint URL | `https://<host>/realms/<realm>/protocol/openid-connect/token` | |
 | Client ID, Client Secret | From step 2 | |
-| Change Detection | Full Scan | Keycloak moves a resource's last-modified date only when it is created, replaced, or (for a user) changed through SCIM PATCH. A filter on it would miss group membership changes, group renames, and anything changed in the Admin Console, the Admin REST API, LDAP federation or by the user. JIM recognises Keycloak and reads everything anyway, warning on each Delta Import; choosing Full Scan stops the warning. |
+| Change Detection | Full Scan | Keycloak moves a resource's last-modified date only when it is created, replaced, or (for a user) changed through SCIM PATCH. A filter on it would miss group membership changes, group renames, and anything changed in the Admin Console, the Admin REST API, LDAP federation or by the user. JIM recognises Keycloak and reads everything anyway, warning on each Delta Import; choosing Full Scan stops the warning. A Delta Import that reads everything also marks as deleted the objects Keycloak no longer holds, as a Full Import does. |
 | Use Bulk Operations | Off | Keycloak does not offer `/Bulk`. |
 
 Test the connection, then import the schema and select the `User` and `Group` Object Types. The schema import warns that Keycloak's schema does not say what is inside a Group's `members`, or a User's `groups` and `emails`, and that JIM used the SCIM specification's definition instead. That is expected, and is what makes those attributes available.

@@ -11,7 +11,9 @@ using NUnit.Framework;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
+using System.Collections;
 using System.DirectoryServices.Protocols;
+using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
@@ -29,7 +31,10 @@ public class LdapAccesslogDeltaSourceTests
 {
     private const string PartitionDn = "dc=corp,dc=local";
     private const string PeopleDn = "ou=people,dc=corp,dc=local";
+    private const string WithinThePartition = "uid=alice," + PeopleDn;
+    private const string UnderAnotherSuffix = "uid=bob,ou=people,dc=other,dc=local";
     private const string Watermark = "20260921080000.000000Z";
+    private const string EarlierWrite = "20260921070000.000001Z";
     private const string AccesslogFilter = "(&(objectClass=auditWriteObject)(reqResult=0))";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
@@ -43,7 +48,7 @@ public class LdapAccesslogDeltaSourceTests
             .Returns(LdapTestResponses.SearchResponseWith("reqStart=20260921090000.000001Z,cn=accesslog", ("reqStart", "20260921090000.000001Z")));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
-        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -68,7 +73,7 @@ public class LdapAccesslogDeltaSourceTests
                 AccesslogEntry("20260921090200.000003Z")));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
-        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090500.000002Z"), "the latest reqStart, whatever order the directory returned them in");
     }
@@ -89,7 +94,7 @@ public class LdapAccesslogDeltaSourceTests
                 AccesslogEntry("20260921090200.000003Z")));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
-        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -110,7 +115,7 @@ public class LdapAccesslogDeltaSourceTests
         var log = new CapturingSink();
         var before = DateTime.UtcNow.AddSeconds(-1);
 
-        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -133,7 +138,7 @@ public class LdapAccesslogDeltaSourceTests
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = Watermark, LastAccesslogTimestampIsLogged = true };
         var log = new CapturingSink();
 
-        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -152,7 +157,7 @@ public class LdapAccesslogDeltaSourceTests
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
         var log = new CapturingSink();
 
-        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
@@ -168,7 +173,7 @@ public class LdapAccesslogDeltaSourceTests
         executor.Setup(x => x.SendRequest(It.IsAny<DirectoryRequest>(), Timeout)).Throws(new LdapException(32, "no such object"));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
 
-        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         Assert.That(rootDse.LastAccesslogTimestamp, Is.Null);
     }
@@ -181,12 +186,395 @@ public class LdapAccesslogDeltaSourceTests
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
         var log = new CapturingSink();
 
-        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, Timeout);
+        await Source(executor, log).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.LastAccesslogTimestamp, Is.Null, "an unknown is never turned into a baseline");
             Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains("cn=accesslog")), Is.True);
+        }
+    }
+
+    #endregion
+
+    #region Watermark capture: from the previous watermark
+
+    [Test]
+    public async Task CaptureWatermarkAsync_PreviousWatermarkAndNoSort_WalksFromThePreviousWatermarkAlone()
+    {
+        // Without the sort, the walk used to read the whole log from its first entry, in a log every suffix on the
+        // server shares: 543,561 entries and 7 to 10 seconds on every import at 500,000 objects, where the same search
+        // from the previous watermark read 4,235 entries in 62 ms (#2704). The latest write is at or after the previous
+        // watermark whenever anything is, so starting there leaves out nothing the whole log would have answered.
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark, "20260921090500.000002Z", "20260921090200.000003Z" } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark) }), "one search, from the previous watermark, rather than the whole log");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090500.000002Z"), "the latest reqStart, whatever order the directory logged them in");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_NothingWrittenSinceThePreviousWatermark_TakesItAgainFromOneSearch()
+    {
+        // A quiet directory still logs the entry the last import ended at, so the walk from it finds that entry and
+        // stops: the watermark is unchanged, and it costs one search.
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark) }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(Watermark));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_FirstImport_WalksTheWholeLog()
+    {
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { AccesslogFilter }), "with nothing to start from, the whole log is read");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(Watermark));
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_PreviousRecordWithoutAnAccesslogWatermark_WalksTheWholeLog()
+    {
+        // The record the last import left when cn=accesslog could not be read, or one from a directory that keeps its
+        // changes elsewhere, names no point in this log to start from.
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        var previous = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, LastAccesslogTimestamp = null };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous, namingContexts: [], Timeout);
+
+        Assert.That(accesslog.Walk, Is.EqualTo(new[] { AccesslogFilter }));
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_PreviousWatermarkPurgedWithNothingLoggedSince_FallsBackToTheWholeLogAsBefore()
+    {
+        // The purge (olcAccessLogPurge) removes the oldest entries first, so a watermark purged with nothing written
+        // since leaves the log empty. The walk from the watermark finds nothing, and the whole log is read instead, so
+        // the outcome is what it always was: a readable, empty accesslog gets a generated timestamp naming no entry.
+        var accesslog = new ScriptedAccesslog();
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark), AccesslogFilter }), "nothing at or after the watermark, so the whole log is read as before");
+            Assert.That(rootDse.LastAccesslogTimestamp, Does.Match(@"^\d{14}\.\d{6}Z$"));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_DirectoryRestoredToBeforeThePreviousWatermark_FallsBackToTheWholeLogAsBefore()
+    {
+        // A restore from a backup or snapshot leaves only writes older than the watermark. The walk from it finds
+        // nothing, so the whole log is read and its latest write taken, as before; the continuity check that follows
+        // reads the watermark's own entry, finds it gone, and refuses the Delta Import exactly as it did.
+        const string latestBeforeTheRestore = "20260921073000.000002Z";
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, latestBeforeTheRestore } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark), AccesslogFilter }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(latestBeforeTheRestore), "the latest write the restored log holds, older than the previous watermark");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_PreviousWatermarkAndSortSupported_TakesTheSortedSearchAlone()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r)), Timeout))
+            .Returns(LdapTestResponses.SearchResponseWith("reqStart=20260921090000.000001Z,cn=accesslog", ("reqStart", "20260921090000.000001Z")));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090000.000001Z"));
+            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r) && ((SearchRequest)r).SizeLimit == 1), Timeout), Times.Once,
+                "a directory that sorts still answers with the single latest entry");
+            executor.VerifyNoOtherCalls();
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SizeLimitExceededFromThePreviousWatermark_WalksForwardFromTheLatestTimestampSeen()
+    {
+        // A directory whose size limit applies to the account JIM connects as cuts each search short. The walk carries
+        // on from the latest reqStart it has seen until a search comes back whole, starting from the previous watermark
+        // rather than from the first entry in the log.
+        const string first = "20260921090000.000001Z", second = "20260921090100.000002Z", third = "20260921090200.000003Z";
+        var accesslog = new ScriptedAccesslog { SizeLimit = 2, Logged = { EarlierWrite, "20260921073000.000002Z", Watermark, first, second, third } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark), WalkFrom(first), WalkFrom(second) }),
+                "each search starts from the latest reqStart the one before it reached");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(third));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SizeLimitStillCuttingTheWalkShortAfterAHundredSearches_WarnsThatTheWatermarkMayNotBeTheLatest()
+    {
+        // The walk stops after 100 searches, so that a directory answering the same entries forever cannot hold the
+        // import. What it has reached by then may fall short of the end of the log, and that is said, not left silent.
+        var logged = Timestamps(new DateTime(2026, 9, 21, 9, 0, 0, DateTimeKind.Utc), 150);
+        var accesslog = new ScriptedAccesslog { SizeLimit = 2 };
+        accesslog.Logged.AddRange(logged);
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        var log = new CapturingSink();
+
+        await Source(accesslog.Executor(), log).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Has.Count.EqualTo(100));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(logged[100]), "the latest the walk reached, short of the end of the log");
+            Assert.That(log.Events.Any(e => e.Level == LogEventLevel.Warning && e.RenderMessage().Contains(logged[100]) && e.RenderMessage().Contains("may not be the latest")), Is.True,
+                "a watermark short of the end of the log is said so");
+        }
+    }
+
+    #endregion
+
+    #region Watermark capture: within the selected partitions
+
+    [Test]
+    public async Task CaptureWatermarkAsync_PreviousWatermarkAndSelectedPartition_WalksThePartitionsWritesFromThePreviousWatermarkAlone()
+    {
+        // cn=accesslog is shared by every suffix on the server, so the walk from the previous watermark still read every
+        // suffix's writes since: at 500,000 objects, after the initial export to another suffix, it matched 543,561
+        // entries and the next Delta Import spent 12 s on it, where the same search within the partition matched 5,007
+        // (#2712). The change read is confined to the partitions, so the latest write within them is where it can start.
+        const string partitionsLatest = "20260921090000.000001Z", otherSuffixesLatest = "20260921090500.000002Z";
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark, partitionsLatest, { otherSuffixesLatest, UnderAnotherSuffix } } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})))" }),
+                "one search, from the previous watermark and within the partition: the confinement the change read has");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(partitionsLatest), "the partition's latest write, not the other suffix's");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True, "a logged write, so the next Delta Import can read it back");
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_WriteBurstUnderAnotherSuffix_IsLeftOutOfTheSearchesAnswer()
+    {
+        // The directory leaves the other suffix's writes on the server, so a burst there costs the walk nothing: one
+        // search, never cut short by a size limit the burst alone would exceed many times over.
+        const string partitionsWrite = "20260921083000.000001Z";
+        var accesslog = new ScriptedAccesslog { SizeLimit = 10, Logged = { Watermark } };
+        accesslog.Logged.AddRange(Timestamps(new DateTime(2026, 9, 21, 8, 10, 0, DateTimeKind.Utc), 50), UnderAnotherSuffix);
+        accesslog.Logged.Add(partitionsWrite);
+        accesslog.Logged.AddRange(Timestamps(new DateTime(2026, 9, 21, 8, 40, 0, DateTimeKind.Utc), 50), UnderAnotherSuffix);
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Returned, Is.EqualTo(new[] { new[] { Watermark, partitionsWrite } }),
+                "one search, answered with the partition's writes alone and none of the hundred under the other suffix");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(partitionsWrite));
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SizeLimitExceededWithinThePartition_WalksForwardWithinIt()
+    {
+        // A size limit can still cut the partition's own writes short; each search carries on from the latest reqStart
+        // the one before it reached, still within the partition.
+        const string first = "20260921090000.000001Z", second = "20260921090100.000002Z", third = "20260921090200.000003Z";
+        var accesslog = new ScriptedAccesslog
+        {
+            SizeLimit = 2,
+            Logged = { Watermark, first, { "20260921090030.000004Z", UnderAnotherSuffix }, second, third, { "20260921090300.000005Z", UnderAnotherSuffix } }
+        };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkWithinThePartitionFrom(Watermark), WalkWithinThePartitionFrom(first), WalkWithinThePartitionFrom(second) }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(third));
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SeveralSelectedPartitions_WalksTheWritesWithinAnyOfThem()
+    {
+        const string secondPartitionDn = "dc=partners,dc=local";
+        const string secondPartitionsLatest = "20260921090100.000002Z";
+        var accesslog = new ScriptedAccesslog
+        {
+            Logged =
+            {
+                Watermark,
+                "20260921090000.000001Z",
+                { secondPartitionsLatest, "uid=carol,ou=people," + secondPartitionDn },
+                { "20260921090500.000003Z", UnderAnotherSuffix }
+            }
+        };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn, secondPartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[]
+            {
+                $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={Watermark})(|(reqDN:dnSubtreeMatch:={PartitionDn})(reqDN:dnSubtreeMatch:={secondPartitionDn})))"
+            }), "one clause per partition, any of them matching");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(secondPartitionsLatest), "the latest write within either partition");
+        }
+    }
+
+    [TestCase(WithinThePartition, Description = "the last watermark was the partition's own write, which the search finds again and nothing newer")]
+    [TestCase(UnderAnotherSuffix, Description = "the last watermark was another suffix's write, so the search finds nothing")]
+    public async Task CaptureWatermarkAsync_NothingNewInThePartitionButWritesElsewhere_TakesTheLatestWriteFromThePreviousWatermarkSoTheWatermarkStillAdvances(string watermarkWrittenTo)
+    {
+        // A watermark that stood still while its partition was quiet would be purged once the partition had been quiet
+        // for longer than the accesslog keeps entries (olcAccessLogPurge), and every Delta Import after that would be
+        // refused for a Full Import. Taking the latest write anywhere instead keeps it advancing with the log, as before.
+        const string otherSuffixesLatest = "20260921090500.000002Z";
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, { Watermark, watermarkWrittenTo }, { otherSuffixesLatest, UnderAnotherSuffix } } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkWithinThePartitionFrom(Watermark), WalkFrom(Watermark) }),
+                "nothing newer within the partition, so every write from the previous watermark is read, as before");
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(otherSuffixesLatest), "the latest write in the log, as before");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [TestCase(null, Description = "no partition known")]
+    [TestCase("", Description = "a partition with no distinguished name to confine the search to")]
+    public async Task CaptureWatermarkAsync_NoPartitionToConfineTo_WalksEveryWriteFromThePreviousWatermarkAsBefore(string? partitionDn)
+    {
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark, "20260921090000.000001Z", { "20260921090500.000002Z", UnderAnotherSuffix } } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+        string[] namingContexts = partitionDn == null ? [] : [partitionDn];
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), namingContexts, Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkFrom(Watermark) }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090500.000002Z"));
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_FirstImportWithSelectedPartition_WalksTheWholeLogAsBefore()
+    {
+        // With no previous watermark there is nowhere for a search within the partition to start, and the first
+        // capture is what it always was.
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, Watermark, { "20260921090500.000002Z", UnderAnotherSuffix } } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { AccesslogFilter }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090500.000002Z"));
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SelectedPartitionAndDirectoryRestoredToBeforeThePreviousWatermark_FallsBackToTheWholeLogAsBefore()
+    {
+        // Nothing at or after the watermark within the partition or anywhere else, so the whole log is read and its
+        // latest write taken, as before; the continuity check then refuses the Delta Import, as before.
+        const string latestBeforeTheRestore = "20260921073000.000002Z";
+        var accesslog = new ScriptedAccesslog { Logged = { EarlierWrite, latestBeforeTheRestore } };
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkWithinThePartitionFrom(Watermark), WalkFrom(Watermark), AccesslogFilter }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo(latestBeforeTheRestore));
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.True);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SelectedPartitionAndPreviousWatermarkPurgedWithNothingLoggedSince_FallsBackToTheWholeLogAsBefore()
+    {
+        var accesslog = new ScriptedAccesslog();
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(accesslog.Executor()).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(accesslog.Walk, Is.EqualTo(new[] { WalkWithinThePartitionFrom(Watermark), WalkFrom(Watermark), AccesslogFilter }));
+            Assert.That(rootDse.LastAccesslogTimestamp, Does.Match(@"^\d{14}\.\d{6}Z$"), "a readable, empty accesslog still gets a generated timestamp");
+            Assert.That(rootDse.LastAccesslogTimestampIsLogged, Is.False);
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarkAsync_SelectedPartitionAndSortSupported_TakesTheSortedSearchAloneAsBefore()
+    {
+        // A directory that sorts answers with the log's single latest entry in one search, and that search is left as
+        // it was: confined to a partition, it would return a quiet partition's last write however old, which is the
+        // watermark the purge would then remove.
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r)), Timeout))
+            .Returns(LdapTestResponses.SearchResponseWith("reqStart=20260921090000.000001Z,cn=accesslog", ("reqStart", "20260921090000.000001Z")));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        await Source(executor).CaptureWatermarkAsync(RootDseEntry(), rootDse, LoggedWatermark(), [PartitionDn], Timeout);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260921090000.000001Z"));
+            executor.Verify(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r) && ((SearchRequest)r).Filter.ToString() == AccesslogFilter), Timeout), Times.Once);
+            executor.VerifyNoOtherCalls();
         }
     }
 
@@ -955,6 +1343,87 @@ public class LdapAccesslogDeltaSourceTests
     }
 
     private static SearchResultEntry RootDseEntry() => LdapTestResponses.Entry(string.Empty, ("vendorName", "OpenLDAP"));
+
+    /// <summary>The walk's search for the write operations at or after a timestamp.</summary>
+    private static string WalkFrom(string reqStart) => $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart}))";
+
+    /// <summary>The walk's search for the write operations at or after a timestamp to entries within the partition.</summary>
+    private static string WalkWithinThePartitionFrom(string reqStart) =>
+        $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart})(|(reqDN:dnSubtreeMatch:={PartitionDn})))";
+
+    /// <summary>Timestamps a second apart from <paramref name="first"/>, in generalised time, as the accesslog writes reqStart.</summary>
+    private static List<string> Timestamps(DateTime first, int count) =>
+        Enumerable.Range(0, count)
+            .Select(i => first.AddSeconds(i).ToString("yyyyMMddHHmmss.ffffffZ", CultureInfo.InvariantCulture))
+            .ToList();
+
+    /// <summary>
+    /// cn=accesslog on a directory without the sssvlv overlay, as the watermark walk sees it: the sorted search is
+    /// refused, and each of the walk's searches is answered with the logged writes it matches (see
+    /// <see cref="ScriptedAccesslogFilter"/>), in the order they were logged, cut short at the size limit as OpenLDAP
+    /// does. Every search's filter is recorded, in order, and so is what the directory returned to it.
+    /// </summary>
+    private sealed class ScriptedAccesslog
+    {
+        /// <summary>Each logged write, in the order the directory logged them.</summary>
+        internal LoggedWrites Logged { get; } = new();
+
+        internal int? SizeLimit { get; init; }
+
+        /// <summary>The filters of the walk's searches, in the order they were sent.</summary>
+        internal List<string> Walk { get; } = [];
+
+        /// <summary>The reqStart of every write the directory returned to each of the walk's searches, one list per search.</summary>
+        internal List<List<string>> Returned { get; } = [];
+
+        internal Mock<ILdapOperationExecutor> Executor()
+        {
+            var executor = new Mock<ILdapOperationExecutor>();
+            executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSortedSearch(r)), Timeout))
+                .Throws(new DirectoryOperationException(LdapTestResponses.Create<SearchResponse>(ResultCode.UnavailableCriticalExtension), "critical extension is unavailable"));
+            executor.Setup(x => x.SendRequest(It.Is<DirectoryRequest>(r => IsSearch(r) && !IsSortedSearch(r)), Timeout))
+                .Returns((DirectoryRequest request, TimeSpan _) => Answer((SearchRequest)request));
+            return executor;
+        }
+
+        private SearchResponse Answer(SearchRequest request)
+        {
+            var filter = request.Filter.ToString()!;
+            Walk.Add(filter);
+
+            var matching = Logged
+                .Where(write => ScriptedAccesslogFilter.Matches(filter, write.ReqStart, write.ReqDn))
+                .Select(write => write.ReqStart)
+                .ToList();
+            var returned = SizeLimit is { } sizeLimit && matching.Count > sizeLimit ? matching.Take(sizeLimit).ToList() : matching;
+            Returned.Add(returned);
+
+            var entries = returned.Select(reqStart => AccesslogEntry(reqStart)).ToArray();
+            return returned.Count < matching.Count
+                ? throw new DirectoryOperationException(PartialResponse(entries), "size limit exceeded")
+                : LdapTestResponses.SearchResponseWithEntries(entries);
+        }
+    }
+
+    /// <summary>
+    /// The writes a scripted accesslog holds, in the order the directory logged them: each one's reqStart, and the
+    /// entry it was made to, which is one within the partition unless another is named (<c>{ reqStart, dn }</c>).
+    /// </summary>
+    private sealed class LoggedWrites : IEnumerable<(string ReqStart, string ReqDn)>
+    {
+        private readonly List<(string ReqStart, string ReqDn)> _writes = [];
+
+        internal void Add(string reqStart) => Add(reqStart, WithinThePartition);
+
+        internal void Add(string reqStart, string reqDn) => _writes.Add((reqStart, reqDn));
+
+        internal void AddRange(IEnumerable<string> reqStarts, string reqDn = WithinThePartition) =>
+            _writes.AddRange(reqStarts.Select(reqStart => (reqStart, reqDn)));
+
+        public IEnumerator<(string ReqStart, string ReqDn)> GetEnumerator() => _writes.GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 
     private static SearchResultEntry AccesslogEntry(string reqStart, params (string Name, string Value)[] attributes) =>
         LdapTestResponses.Entry($"reqStart={reqStart},cn=accesslog", [("reqStart", reqStart), .. attributes]);

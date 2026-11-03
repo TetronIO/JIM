@@ -1,13 +1,18 @@
 ---
-title: Deploying with Ansible
+title: Deploying on RHEL with Ansible
 description: Deploy JIM across RHEL servers with Red Hat's podman system role, from the same files and settings the installer uses.
 type: how-to
 audience: implementer
 ---
 
-# Deploying with Ansible
+# Deploying on RHEL with Ansible
 
 To deploy JIM across RHEL servers with Ansible, use Red Hat's podman system role: `redhat.rhel_system_roles.podman`, from the RHEL System Roles, or its upstream `fedora.linux_system_roles.podman`. The role installs Podman's Quadlet units, stores Podman secrets, opens firewalld ports and, for a rootless account, enables lingering, which is everything [the installer](deployment.md#what-the-installer-does) does on Podman. JIM ships no role or collection of its own: the playbook below deploys the same files as the installer, rootful, as the installer does by default. [Rootless](#rootless) shows what changes to run JIM rootless, as an account named `jim`.
+
+!!! warning "Not yet verified on RHEL"
+    This playbook follows the podman system role's documented usage, but has not yet been run end to end on a RHEL host. Try it on a test server before you use it across an estate. If it fails there, nothing on the server is lost: [the installer](deployment.md) deploys the same files, rootful or rootless, and is tested on every change to JIM.
+
+This page covers Podman on RHEL only. For Docker, deploy with [the installer](deployment.md) on each server.
 
 ```jim-diagram
 archetype: flow

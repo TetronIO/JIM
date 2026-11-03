@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Services;
+using JIM.Models.Core;
 using JIM.Models.Operations;
 using JIM.Utilities;
 
@@ -62,6 +63,28 @@ public class SystemHealthServer
         JimService.Scheduler
     ];
 
+    /// <summary>
+    /// Services a deployment runs only while a feature flag is on, keyed to that flag (#1781). Expected, like
+    /// <see cref="ExpectedServices"/>, while the flag is on; left out of the report entirely while it is off, heartbeat
+    /// or no heartbeat, so a switched-off feature never surfaces on the Operations page.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<JimService, string> FeatureFlaggedServices = new Dictionary<JimService, string>
+    {
+        [JimService.WorkerExchange] = FeatureFlagCatalogue.ExchangeRecipients.Key
+    };
+
+    /// <summary>
+    /// The order services appear in a report: the Worker's services together, then the Scheduler. A service not
+    /// named here (one this build predates) follows, in enum order.
+    /// </summary>
+    private static readonly JimService[] ReportOrder =
+    [
+        JimService.WorkerSync,
+        JimService.WorkerDelivery,
+        JimService.WorkerExchange,
+        JimService.Scheduler
+    ];
+
     private JimApplication Application { get; }
 
     internal SystemHealthServer(JimApplication application)
@@ -96,11 +119,24 @@ public class SystemHealthServer
 
         // Every expected service, plus any other service that has actually reported: a heartbeat from a service
         // this build did not expect (an upgraded Worker reporting a loop this portal predates, say) is still
-        // information an administrator wants, and the order is the enum's so the display can rely on it.
+        // information an administrator wants. The order is fixed (ReportOrder) so the display can rely on it.
+        var switchedOff = new HashSet<JimService>();
+        var switchedOn = new List<JimService>();
+        foreach (var (service, flagKey) in FeatureFlaggedServices)
+        {
+            if (await Application.FeatureFlags.IsEnabledAsync(flagKey))
+                switchedOn.Add(service);
+            else
+                switchedOff.Add(service);
+        }
+
         var services = ExpectedServices
+            .Concat(switchedOn)
             .Concat(newestByService.Keys)
             .Distinct()
-            .OrderBy(service => (int)service)
+            .Where(service => !switchedOff.Contains(service))
+            .OrderBy(service => Array.IndexOf(ReportOrder, service) is var position and >= 0 ? position : ReportOrder.Length)
+            .ThenBy(service => (int)service)
             .Select(service => Derive(service, newestByService.GetValueOrDefault(service), asOf))
             .ToList();
 

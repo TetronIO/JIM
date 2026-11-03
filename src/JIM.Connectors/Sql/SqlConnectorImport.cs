@@ -124,7 +124,9 @@ internal sealed class SqlConnectorImport
     /// <exception cref="InvalidDataException">A row could not be paged past: a NULL or unreadable anchor, or a pagination token JIM replayed that this configuration cannot parse.</exception>
     internal async Task<ConnectedSystemImportResult> GetFullImportObjectsAsync()
     {
-        var result = new ConnectedSystemImportResult();
+        // Every page of a full read reads every object in scope, whether a Full Import asked for it or a Delta Import fell
+        // back to it, and says so: that is what has JIM detect deletions by absence on the fallback (#2720).
+        var result = new ConnectedSystemImportResult { CompleteRead = true };
         var plans = BuildPlans();
 
         if (plans.Count == 0)
@@ -290,8 +292,9 @@ internal sealed class SqlConnectorImport
     /// <remarks>
     /// A missing or unusable watermark is a state problem with exactly one remedy, and it is one JIM can
     /// apply itself: a Full Import delivers the right data and leaves the baseline the next Delta Import
-    /// needs. Refusing would fail the run and leave an administrator to do by hand what JIM has just
-    /// worked out is needed. A missing Delta Import Mode is refused instead, because that is a question
+    /// needs. Its pages report themselves complete, so JIM detects deletions by absence on the run,
+    /// exactly as on a Full Import (#2720). Refusing would fail the run and leave an administrator to do
+    /// by hand what JIM has just worked out is needed. A missing Delta Import Mode is refused instead, because that is a question
     /// nobody has answered rather than a state to recover from, and a scheduled Delta Import quietly
     /// costing a Full Import every cycle would hide it for ever.
     /// <para>
@@ -307,7 +310,9 @@ internal sealed class SqlConnectorImport
         var result = await GetFullImportObjectsAsync();
 
         result.WarningMessage =
-            $"A Delta Import was requested, but {reason}. A Full Import was performed instead, which has established the watermark, so the next Delta Import should run normally.";
+            $"A Delta Import was requested, but {reason}. Every object was read instead, as a Full Import does, and an object JIM holds that the " +
+            "Connected System no longer has is marked as deleted, within this Run Profile's deletion limits. Once a run like this has finished " +
+            "that check, it records a watermark and the next Delta Import reads only the changes after it.";
         result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
 
         return result;

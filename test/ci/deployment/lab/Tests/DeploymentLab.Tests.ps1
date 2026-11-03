@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak, ReverseProxy"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -167,6 +167,139 @@ Describe 'Test-LabMatrix for the installer''s cases and an external database' {
     }
 }
 
+Describe 'Test-LabMatrix for reverse proxy cells' {
+    BeforeAll {
+        function New-ProxyMatrix {
+            param([string]$Proxy = 'Remote')
+            $matrix = New-TestMatrix
+            $matrix.Cells[0].Scenario = 'ReverseProxy'
+            $matrix.Cells[0].Proxy = $Proxy
+            $matrix.Cells[0].ProxyMemoryGiB = 1
+            $matrix
+        }
+    }
+
+    It 'accepts a proxy on another machine, and one on the JIM host for Docker' {
+        Test-LabMatrix -Matrix (New-ProxyMatrix 'Remote') | Should -BeNullOrEmpty
+        Test-LabMatrix -Matrix (New-ProxyMatrix 'Local') | Should -BeNullOrEmpty
+    }
+
+    It 'accepts a proxy on another machine in front of a rootful Podman JIM' {
+        $matrix = New-ProxyMatrix 'Remote'
+        $matrix.Cells[0].Image = 'alma9-podman'
+        $matrix.Cells[0].Runtime = 'podman'
+        $matrix.Cells[0].Rootless = $false
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'names a proxy cell that does not say where its proxy runs' {
+        $matrix = New-ProxyMatrix
+        $matrix.Cells[0].Remove('Proxy')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote or Local')
+        $matrix.Cells[0].Proxy = 'Elsewhere'
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote or Local')
+    }
+
+    It 'names a proxy cell with no memory for the VM that brings nginx' {
+        $matrix = New-ProxyMatrix
+        $matrix.Cells[0].Remove('ProxyMemoryGiB')
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs ProxyMemoryGiB, at least 1, for the VM that brings nginx')
+    }
+
+    It 'names a proxy on the JIM host in front of Podman, which the guide gives for Docker only' {
+        $matrix = New-ProxyMatrix 'Local'
+        $matrix.Cells[0].Image = 'alma9-podman'
+        $matrix.Cells[0].Runtime = 'podman'
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a proxy on the JIM host is for Docker only, as TLS and Reverse Proxy gives it')
+    }
+
+    It 'names a rootless JIM behind a proxy, which the guide says not to run' {
+        $matrix = New-ProxyMatrix
+        $matrix.Cells[0].Image = 'alma9-podman'
+        $matrix.Cells[0].Runtime = 'podman'
+        $matrix.Cells[0].Rootless = $true
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a rootless JIM is not run behind a proxy, as TLS and Reverse Proxy says')
+    }
+
+    It 'names a proxy setting in a cell that is not a ReverseProxy cell' {
+        $matrix = New-TestMatrix
+        $matrix.Cells[0].Proxy = 'Remote'
+        $matrix.Cells[0].ProxyMemoryGiB = 1
+
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: Proxy and ProxyMemoryGiB are for ReverseProxy cells only')
+    }
+}
+
+Describe 'ConvertTo-LabProxyConfig' {
+    BeforeAll {
+        $guide = (Get-Content -Raw (Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'tls-and-reverse-proxy.md'))
+        $example = & (Join-Path $PSScriptRoot '..' '..' 'Get-DocumentedCommand.ps1') `
+            -Path (Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'tls-and-reverse-proxy.md') -Heading 'nginx Example'
+    }
+
+    It 'gives the guide''s example the lab''s names, re-encrypting to JIM' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -JimName 'jim-app.jimlab.test'
+
+        $config | Should -Match '(?m)^\s*server_name jim\.jimlab\.test;'
+        $config | Should -Match '(?m)^\s*proxy_pass https://jim-app\.jimlab\.test;'
+        $config | Should -Match '(?m)^\s*proxy_ssl_verify on;'
+        $config | Should -Not -Match 'example\.com'
+    }
+
+    It 'keeps everything else the guide sets: forwarded headers, buffers and WebSockets' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -JimName 'jim-app.jimlab.test'
+
+        foreach ($line in @('proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;', 'proxy_set_header X-Forwarded-Proto $scheme;',
+                'proxy_buffer_size 16k;', 'proxy_set_header Upgrade $http_upgrade;', 'proxy_set_header Connection "upgrade";')) {
+            $config | Should -Match ('(?m)^\s*' + [regex]::Escape($line))
+        }
+    }
+
+    It 'forwards plain HTTP to the loopback interface instead, with no certificate check to make' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -PlainHttp 'http://localhost:8080'
+
+        $config | Should -Match '(?m)^\s*proxy_pass http://localhost:8080;'
+        $config | Should -Not -Match 'proxy_ssl_'
+        $config | Should -Match '(?m)^\s*proxy_set_header Upgrade \$http_upgrade;'
+    }
+
+    It 'stops when the example no longer re-encrypts to a name, so a changed guide is noticed' {
+        { ConvertTo-LabProxyConfig -Config ($example -replace 'proxy_pass https://', 'proxy_pass http://') -UserName 'a' -JimName 'b' } |
+            Should -Throw '*proxy_pass https://jim-app.example.com*'
+        { ConvertTo-LabProxyConfig -Config ($example -replace 'server_name jim\.example\.com', 'server_name jim.example.org') -UserName 'a' -JimName 'b' } |
+            Should -Throw '*server_name jim.example.com*'
+    }
+
+    It 'returns the paths of the proxy''s own certificate and key, and of the CA it trusts' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -JimName 'jim-app.jimlab.test'
+
+        $files = Get-LabProxyFile -Config $config
+        $files.Certificate | Should -Be '/etc/nginx/ssl/jim.jimlab.test.crt'
+        $files.Key | Should -Be '/etc/nginx/ssl/jim.jimlab.test.key'
+        $files.TrustedCa | Should -Be '/etc/nginx/jim-ca.crt'
+    }
+
+    It 'returns no trusted CA for plain HTTP' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -PlainHttp 'http://localhost:8080'
+
+        (Get-LabProxyFile -Config $config).TrustedCa | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'ConvertTo-LabLxcNameFilter' {
+    It 'matches only the VM named, not another whose name it begins (lxc list takes a name as a prefix)' {
+        $filter = ConvertTo-LabLxcNameFilter -Name 'jl-u24-docker-ctrd-proxy'
+
+        'jl-u24-docker-ctrd-proxy' | Should -Match $filter
+        'jl-u24-docker-ctrd-proxy-local' | Should -Not -Match $filter
+        'jl-u24-docker-ctrd-proxy-proxy' | Should -Not -Match $filter
+    }
+}
+
 Describe 'Get-LabCellMemory' {
     It 'is the cell''s VM memory' {
         Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6 } | Should -Be 6
@@ -174,6 +307,10 @@ Describe 'Get-LabCellMemory' {
 
     It 'adds its database server''s memory' {
         Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6; DatabaseMemoryGiB = 2 } | Should -Be 8
+    }
+
+    It 'adds its proxy''s memory' {
+        Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6; ProxyMemoryGiB = 1 } | Should -Be 7
     }
 
     It 'reads a cell read back from JSON' {
@@ -278,6 +415,18 @@ Describe 'Get-LabLoginForm' {
     }
 }
 
+Describe 'Test-LabRedirectRefused' {
+    It 'recognises the identity provider refusing JIM''s callback address' {
+        Test-LabRedirectRefused -Html '<html><body><p id="kc-error-message">Invalid parameter: redirect_uri</p></body></html>' | Should -BeTrue
+        Test-LabRedirectRefused -Html '{"error":"invalid_redirect_uri"}' | Should -BeTrue
+    }
+
+    It 'does not mistake a login page for a refusal' {
+        Test-LabRedirectRefused -Html '<form id="kc-form-login" action="https://idp/login"></form>' | Should -BeFalse
+        Test-LabRedirectRefused -Html '' | Should -BeFalse
+    }
+}
+
 Describe 'Get-LabFormPost' {
     It 'reads the form Keycloak posts back to JIM, whatever the case of its tags' {
         # Keycloak's form_post page writes its tags in upper case.
@@ -373,6 +522,14 @@ Describe 'The matrix in Cells.psd1' {
         $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
 
         Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'puts JIM behind a proxy each way TLS and Reverse Proxy supports, on each runtime it gives' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $proxied = @($matrix.Cells | Where-Object { $_.Scenario -eq 'ReverseProxy' } |
+            ForEach-Object { "$($_.Proxy) $($_.Runtime)" } | Sort-Object -Unique)
+
+        $proxied | Should -Be @('Local docker', 'Remote docker', 'Remote podman')
     }
 
     It 'upgrades from its oldest release on Docker and both kinds of Podman' {

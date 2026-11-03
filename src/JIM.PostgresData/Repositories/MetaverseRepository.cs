@@ -3568,8 +3568,17 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// Deletes a Metaverse Object from the database.
     /// </summary>
     /// <param name="metaverseObject">The Metaverse Object to delete.</param>
+    /// <remarks>
+    /// Each statement runs under its own <c>Mvo.Delete.*</c> span, matching the bulk deleter in
+    /// <c>SyncRepository.DeleteMetaverseObjectsAsync</c> (#2669, Phase 0). Here <c>Mvo.Delete.UpdateTracker</c> is the
+    /// joined objects' fix-up alone: EF Core brings the rest of the tracker into line itself, inside
+    /// <c>Mvo.Delete.Delete</c>, whose <c>entriesWritten</c> counts every entry the save wrote, not only the object.
+    /// </remarks>
     public async Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
+        using var deleteSpan = ActivitySource.StartActivity("Mvo.Delete");
+        deleteSpan?.SetTag("mvoCount", 1);
+
         // One transaction for the whole deletion (Unique Value Generation, #242, Phase 6): the retirement below must
         // land with the deletion or not at all. A caller already inside a transaction keeps it; this joins it.
         await using var ownTransaction = Repository.Database.Database.CurrentTransaction == null
@@ -3579,21 +3588,33 @@ public partial class MetaverseRepository : IMetaverseRepository
         // Retire the object's generated values BEFORE it goes: its assignments are removed by the deletion's
         // foreign-key cascade, so once the object is deleted there is nothing left to read them from. The portal
         // and housekeeping callers record no synchronisation outcome, so what was retired is not returned here.
-        await RetiredGeneratedValueSql.RetireForMetaverseObjectsAsync(Repository.Database, [metaverseObject.Id]);
+        using (var retireSpan = ActivitySource.StartActivity("Mvo.Delete.RetireGeneratedValues"))
+        {
+            var retirements = await RetiredGeneratedValueSql.RetireForMetaverseObjectsAsync(Repository.Database, [metaverseObject.Id]);
+            retireSpan?.SetTag("retiredCount", retirements.Count);
+        }
 
         // Null out the FK references in related tables to preserve audit history before deletion.
 
         // Null out FK reference in Activities to preserve audit history
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-            metaverseObject.Id);
+        using (var clearSpan = ActivitySource.StartActivity("Mvo.Delete.ClearActivities"))
+        {
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                metaverseObject.Id);
+            clearSpan?.SetTag("rowsAffected", rowsAffected);
+        }
 
         // Stamp DeletedMetaverseObjectId on all prior change records for this MVO so that
         // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
         // Then null the FK to allow the MVO to be deleted without constraint violations.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-            metaverseObject.Id);
+        using (var rekeySpan = ActivitySource.StartActivity("Mvo.Delete.RekeyChangeRecords"))
+        {
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                metaverseObject.Id);
+            rekeySpan?.SetTag("rowsAffected", rowsAffected);
+        }
 
         // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
         // to this MVO. Without this, SaveChangesAsync may try to flush tracked CSO modifications
@@ -3602,19 +3623,29 @@ public partial class MetaverseRepository : IMetaverseRepository
         // Also update tracked entities in EF Core's change tracker to match the DB state,
         // otherwise SaveChangesAsync will try to write the stale FK value.
         // The join record (#348) goes with the join; JoinType and DateJoined are left as they always have been here.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL, ""JoinObjectMatchingRuleId"" = NULL, ""JoinMatchValue"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-            metaverseObject.Id);
-        foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
-            .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
+        using (var detachSpan = ActivitySource.StartActivity("Mvo.Delete.DetachJoins"))
         {
-            trackedCso.Entity.MetaverseObjectId = null;
-            trackedCso.Entity.MetaverseObject = null;
-            trackedCso.Entity.JoinMethod = null;
-            trackedCso.Entity.JoinSyncRuleId = null;
-            trackedCso.Entity.JoinSyncRuleName = null;
-            trackedCso.Entity.JoinObjectMatchingRuleId = null;
-            trackedCso.Entity.JoinMatchValue = null;
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL, ""JoinMethod"" = NULL, ""JoinSyncRuleId"" = NULL, ""JoinSyncRuleName"" = NULL, ""JoinObjectMatchingRuleId"" = NULL, ""JoinMatchValue"" = NULL WHERE ""MetaverseObjectId"" = {0}",
+                metaverseObject.Id);
+            detachSpan?.SetTag("rowsAffected", rowsAffected);
+        }
+        using (var trackerSpan = ActivitySource.StartActivity("Mvo.Delete.UpdateTracker"))
+        {
+            var clearedJoins = 0;
+            foreach (var trackedCso in Repository.Database.ChangeTracker.Entries<ConnectedSystemObject>()
+                .Where(e => e.Entity.MetaverseObjectId == metaverseObject.Id))
+            {
+                trackedCso.Entity.MetaverseObjectId = null;
+                trackedCso.Entity.MetaverseObject = null;
+                trackedCso.Entity.JoinMethod = null;
+                trackedCso.Entity.JoinSyncRuleId = null;
+                trackedCso.Entity.JoinSyncRuleName = null;
+                trackedCso.Entity.JoinObjectMatchingRuleId = null;
+                trackedCso.Entity.JoinMatchValue = null;
+                clearedJoins++;
+            }
+            trackerSpan?.SetTag("clearedJoinCount", clearedJoins);
         }
 
         // Reference attribute values on other MVOs that point to this MVO: valueless rows are
@@ -3622,20 +3653,36 @@ public partial class MetaverseRepository : IMetaverseRepository
         // surgically detached (#1019). Without the null-out half, deleting an MVO that is referenced
         // (e.g. as a Manager) would violate the FK constraint on
         // MetaverseObjectAttributeValues.ReferenceValueId.
-        await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(Repository.Database, [metaverseObject.Id]);
+        using (var cleanSpan = ActivitySource.StartActivity("Mvo.Delete.CleanReferenceRows"))
+        {
+            var (rowsDeleted, rowsCleared) = await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(Repository.Database, [metaverseObject.Id]);
+            cleanSpan?.SetTag("rowsDeleted", rowsDeleted);
+            cleanSpan?.SetTag("rowsCleared", rowsCleared);
+        }
 
         // Null out reference values in change tracking attribute records that point to this MVO.
         // Change history records may reference this MVO (e.g., "Manager was set to Alice")
         // and must be preserved with a null reference rather than blocking deletion.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
-            metaverseObject.Id);
+        using (var clearSpan = ActivitySource.StartActivity("Mvo.Delete.ClearChangeValueReferences"))
+        {
+            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
+                metaverseObject.Id);
+            clearSpan?.SetTag("rowsAffected", rowsAffected);
+        }
 
-        Repository.Database.MetaverseObjects.Remove(metaverseObject);
-        await Repository.Database.SaveChangesAsync();
+        using (var deleteStatementSpan = ActivitySource.StartActivity("Mvo.Delete.Delete"))
+        {
+            Repository.Database.MetaverseObjects.Remove(metaverseObject);
+            var entriesWritten = await Repository.Database.SaveChangesAsync();
+            deleteStatementSpan?.SetTag("entriesWritten", entriesWritten);
+        }
 
         if (ownTransaction != null)
-            await ownTransaction.CommitAsync();
+        {
+            using (ActivitySource.StartActivity("Mvo.Delete.Commit"))
+                await ownTransaction.CommitAsync();
+        }
     }
 
     /// <summary>

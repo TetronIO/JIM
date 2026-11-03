@@ -27,5 +27,13 @@ public enum JimService
     /// <summary>
     /// The Scheduler: the process that starts Schedules when they fall due and advances their steps.
     /// </summary>
-    Scheduler = 3
+    Scheduler = 3,
+
+    /// <summary>
+    /// The Worker's Exchange delivery service (#2021): the loop that has Exchange apply the recipient state exports
+    /// queued for their accounts. Hosted in the Worker process beside <see cref="WorkerDelivery"/> but reported
+    /// separately, because Exchange is a system of its own and can be down while the directory is not. Expected only
+    /// while the feature that uses it is switched on.
+    /// </summary>
+    WorkerExchange = 4
 }

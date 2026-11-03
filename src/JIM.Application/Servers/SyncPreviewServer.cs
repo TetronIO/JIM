@@ -1376,8 +1376,10 @@ public class SyncPreviewServer
         // For an object holding a change until its Initial Password is delivered, the run stages no correction restating
         // the held change, and corrects everything else (#2501). Asked only once drift is found, so an object with nothing
         // to correct costs no lookup; the run's own per-page lookup reads the same partial index.
+        // A connector-defined change awaiting Exchange is held the same way (#2021).
         if (cso.Id != Guid.Empty &&
-            (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0 &&
+            ((await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(context.ConnectedSystemId, [cso.Id])).Count > 0 ||
+             (await context.GuardedRepository.GetConnectedSystemObjectIdsAwaitingExchangeAsync(context.ConnectedSystemId, [cso.Id])).Count > 0) &&
             await context.GuardedRepository.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id) is { } heldPendingExport)
         {
             DriftDetectionService.DropCorrectionsRestatingHeldChanges(drift, heldPendingExport);

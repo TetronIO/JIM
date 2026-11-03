@@ -27,6 +27,7 @@ Closes #
 - [ ] `dotnet build JIM.sln` succeeds with zero errors
 - [ ] `dotnet test JIM.sln` passes
 - [ ] New functionality has tests (unit, workflow, or integration as appropriate)
+- [ ] Every integration scenario that reads changed behaviour (an API or PowerShell response, an Activity's shape or message, timing) has been searched for and updated, including the AD-lab-only scenarios (`test/CLAUDE.md`, "Keeping scenarios in step with the code")
 - [ ] Manually tested in a local development environment
 
 <!-- If integration testing was relevant, briefly describe the scenario(s) you exercised. -->

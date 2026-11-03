@@ -25,7 +25,7 @@ using JimActivity = JIM.Models.Activities.Activity;
 namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
-/// Measures, on real PostgreSQL, the two costs #2669 found in a leaver cohort's confirming Delta Synchronisation, and
+/// Measures, on real PostgreSQL, the costs #2669 found in a leaver cohort's confirming Delta Synchronisation, and
 /// prints them; it asserts only that each path did its job, not how fast.
 /// <list type="bullet">
 /// <item>Deleting a page of obsolete Connected System Objects: 500 departed accounts of 25 values each, on a tracking
@@ -36,6 +36,19 @@ namespace JIM.Worker.Tests.Repositories;
 /// items, change records and the values in them) the database clears to null when an object goes. The statement
 /// count it prints is held constant by <see cref="ConnectedSystemObjectBatchDeletionDatabaseTests"/>; this measures
 /// the time.</item>
+/// <item>Deleting 500 departed people's Metaverse Objects of 25 values each, among 50,000, through both deleters: the
+/// synchronisation flush's bulk deletion on a page context, and the portal's and housekeeping's singular deletion,
+/// once per object, on a tracking context as housekeeping loads them. Each departed person is a member of two groups of
+/// 25,000, the Manager of another person, and joined to an account in a target system; with history, each also has
+/// change records and Activities of its own, and other objects' change records hold Manager and member values naming
+/// it.</item>
+/// <item>Beside every deletion's time, how many rows of each audit table it updated and deleted, the rewrites the plan
+/// for #2669 (<c>engineering/plans/doing/AUDIT_REFERENCES_WITHOUT_FOREIGN_KEYS.md</c>) removes. Every path commits its
+/// own transaction (the quiet deletion's change record persistence refuses an ambient one), so the counts are the
+/// difference in <c>pg_stat_user_tables</c> before and after, not <c>pg_stat_xact_user_tables</c>. That view lags:
+/// a backend flushes its counts to it only when idle, at most once a second. So the deletion runs on one connection,
+/// held open, which flushes with <c>pg_stat_force_next_flush()</c> before each read; and the counts must agree across
+/// the measured runs, which a late flush would break.</item>
 /// <item>Loading a modified group's page, at several membership sizes, in each of the ways the plan for #2669 weighs:
 /// today's tracked load through <see cref="TypeOrderedCsoPager.NextPageAsync"/>, split by its spans; the same EF query
 /// untracked (option (a')); EF rows with raw values attached to the context (option (b)); a raw read that builds what
@@ -57,18 +70,31 @@ public class LeaverCohortCostDatabaseTests
     private const int ValuesPerLeaver = 25;
     private const int Users = 50_000;
     private const int MembersPerGroup = 25_000;
-    private const int MeasuredRuns = 3;
+    private const int MeasuredRuns = 5;
 
-    // A page load's runs vary more than a deletion's, on a shared host above all (the first measured run after the
-    // warm-up was over twice the median at 25,000 members), so its median is taken over more of them.
+    // A page load's runs vary widely on a shared host (the first measured run after the warm-up was over twice the
+    // median at 25,000 members), so its median is taken over five of them, as a deletion's is.
     private const int PageLoadRuns = 5;
 
     // History each departed account carries at the moment it is deleted, all of it pointing at the account and so all
     // of it cleared to null by the database as the account goes: execution items from the runs that touched it, its own
-    // change records, and member values in groups' change records.
+    // change records, and member values in groups' change records. A departed person's Metaverse Object carries the
+    // same change records and change values (one of them a Manager value on its report's change record), plus
+    // Activities naming it, all cleared by the deleters' own statements.
     private const int ExecutionItemsPerLeaver = 5;
     private const int ChangeRecordsPerLeaver = 3;
     private const int ChangeValuesPerLeaver = 15;
+    private const int ActivitiesPerLeaver = 2;
+
+    /// <summary>
+    /// The audit tables whose rows name a Connected System Object or a Metaverse Object, as the plan's inventory lists
+    /// them.
+    /// </summary>
+    private static readonly string[] AuditTables =
+    [
+        "ConnectedSystemObjectChanges", "ConnectedSystemObjectChangeAttributeValues", "ActivityRunProfileExecutionItems",
+        "MetaverseObjectChanges", "MetaverseObjectChangeAttributeValues", "Activities"
+    ];
 
     private string _connectionString = null!;
     private SpanRecorder _spans = null!;
@@ -129,6 +155,18 @@ public class LeaverCohortCostDatabaseTests
         SyncRepositoryByIds
     }
 
+    public enum MetaverseDeletionPath
+    {
+        /// <summary><c>SyncRepository.DeleteMetaverseObjectsAsync</c>: the synchronisation flush's, every object in one
+        /// pass, on a page context, the objects passed detached as the flush passes them.</summary>
+        Bulk,
+
+        /// <summary><c>MetaverseRepository.DeleteMetaverseObjectAsync</c>, once per object: the portal's and
+        /// housekeeping's, on a tracking context with change detection on, each object loaded tracked with its Type and
+        /// Connected System Objects, as housekeeping loads it.</summary>
+        Singular
+    }
+
     [TestCase(DeletionPath.ConnectedSystemRepository)]
     [TestCase(DeletionPath.QuietDeletion)]
     [TestCase(DeletionPath.ExecutionItems)]
@@ -144,7 +182,26 @@ public class LeaverCohortCostDatabaseTests
             for (var i = 0; i < MeasuredRuns; i++)
                 runs.Add(await MeasureDeletionAsync(path, withHistory));
 
-            report.Add(DescribeDeletionRuns(path, withHistory, runs));
+            report.Add(DescribeDeletionRuns($"{path}{(withHistory ? ", with history" : "")}", runs));
+            TestContext.Progress.WriteLine(report[^1]);
+        }
+
+        TestContext.Out.WriteLine(string.Join(Environment.NewLine + Environment.NewLine, report));
+    }
+
+    [TestCase(MetaverseDeletionPath.Bulk)]
+    [TestCase(MetaverseDeletionPath.Singular)]
+    public async Task DeleteMetaverseObjectsAsync_LeaverPageReferencedByGroupsAndHistory_ReportsThePathsCostAsync(MetaverseDeletionPath path)
+    {
+        var report = new List<string>();
+        foreach (var withHistory in new[] { false, true })
+        {
+            await MeasureMetaverseDeletionAsync(path, withHistory);
+            var runs = new List<DeletionRun>();
+            for (var i = 0; i < MeasuredRuns; i++)
+                runs.Add(await MeasureMetaverseDeletionAsync(path, withHistory));
+
+            report.Add(DescribeDeletionRuns($"Metaverse Object {path}{(withHistory ? ", with history" : "")}", runs));
             TestContext.Progress.WriteLine(report[^1]);
         }
 
@@ -175,7 +232,7 @@ public class LeaverCohortCostDatabaseTests
 
     private sealed record DeletionRun(
         double TotalMs, Dictionary<string, double> SpanMs, Dictionary<string, string> SpanTags,
-        int Commands, Dictionary<string, int> Statements);
+        int Commands, Dictionary<string, int> Statements, Dictionary<string, AuditRowCounts> AuditRows);
 
     private async Task<DeletionRun> MeasureDeletionAsync(DeletionPath path, bool withHistory)
     {
@@ -183,6 +240,8 @@ public class LeaverCohortCostDatabaseTests
         var counter = new SqlStatementCounter();
 
         await using var ctx = NewPageContext(counter);
+        // One connection for the whole run, so the audit counts read below are this connection's to flush.
+        await ctx.Database.OpenConnectionAsync();
         var repository = new PostgresDataRepository(ctx);
         // The two server paths run through the application layer; disposing it disposes the shared context, so it lives
         // as long as the context does.
@@ -224,6 +283,7 @@ public class LeaverCohortCostDatabaseTests
             return item;
         }).ToList();
 
+        var auditBefore = await ReadAuditRowCountsAsync(ctx);
         _spans.Start();
         counter.Counting = true;
         var stopwatch = Stopwatch.StartNew();
@@ -245,6 +305,7 @@ public class LeaverCohortCostDatabaseTests
         stopwatch.Stop();
         counter.Counting = false;
         var recorded = _spans.Stop();
+        var auditRows = AuditRowCounts.Difference(auditBefore, await ReadAuditRowCountsAsync(ctx));
 
         // The page carries on after its deletions (the Metaverse Object deletions and the execution items are written
         // on the same context), so whatever a path left tracked must save cleanly.
@@ -260,13 +321,30 @@ public class LeaverCohortCostDatabaseTests
             }
         }
 
-        return new DeletionRun(
+        return NewDeletionRun(stopwatch, recorded, counter, auditRows);
+    }
+
+    private static DeletionRun NewDeletionRun(Stopwatch stopwatch, List<RecordedSpan> recorded, SqlStatementCounter counter,
+        Dictionary<string, AuditRowCounts> auditRows)
+        => new(
             stopwatch.Elapsed.TotalMilliseconds,
             recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => g.Sum(s => s.Ms), StringComparer.Ordinal),
-            recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => string.Join(", ", g.First().Tags.Select(t => $"{t.Key}={t.Value}")), StringComparer.Ordinal),
+            recorded.GroupBy(s => s.Name).ToDictionary(g => g.Key, g => DescribeTags(g), StringComparer.Ordinal),
             counter.Commands,
-            new Dictionary<string, int>(counter.Statements, StringComparer.Ordinal));
-    }
+            new Dictionary<string, int>(counter.Statements, StringComparer.Ordinal),
+            auditRows);
+
+    /// <summary>
+    /// The tags of every span of one name: a numeric tag summed over them (a deleter run once per object, or a span
+    /// reported twice per deletion, adds up), any other tag as the first span gave it.
+    /// </summary>
+    private static string DescribeTags(IEnumerable<RecordedSpan> spans)
+        => string.Join(", ", spans
+            .SelectMany(s => s.Tags)
+            .GroupBy(t => t.Key, StringComparer.Ordinal)
+            .Select(g => g.All(t => t.Value is int or long)
+                ? $"{g.Key}={g.Sum(t => Convert.ToInt64(t.Value, CultureInfo.InvariantCulture))}"
+                : $"{g.Key}={g.First().Value}"));
 
     private async Task AssertDeletedAsync(DeletionPath path, SeededLeaverPage seeded, List<Guid> leaverIds)
     {
@@ -287,12 +365,12 @@ public class LeaverCohortCostDatabaseTests
         }
     }
 
-    private static string DescribeDeletionRuns(DeletionPath path, bool withHistory, List<DeletionRun> runs)
+    private static string DescribeDeletionRuns(string label, List<DeletionRun> runs)
     {
         var lines = new List<string>
         {
             string.Create(CultureInfo.InvariantCulture,
-                $"== {path}{(withHistory ? ", with history" : "")}: median {Median(runs.Select(r => r.TotalMs)):F1} ms " +
+                $"== {label}: median {Median(runs.Select(r => r.TotalMs)):F1} ms " +
                 $"(runs {string.Join(" / ", runs.Select(r => r.TotalMs.ToString("F1", CultureInfo.InvariantCulture)))}), " +
                 $"{Leavers} objects, {Median(runs.Select(r => r.TotalMs)) / Leavers:F2} ms each")
         };
@@ -307,8 +385,19 @@ public class LeaverCohortCostDatabaseTests
         var statements = string.Join(", ", last.Statements.OrderByDescending(s => s.Value).Select(s => $"{s.Key} x{s.Value}"));
         lines.Add(string.Create(CultureInfo.InvariantCulture,
             $"   EF commands (round trips) {last.Commands}; statements {last.Statements.Values.Sum()}: {statements}"));
+
+        // Every run deletes the same seeded rows, so a count that differs between runs was read before the deleting
+        // connection's statistics reached the view: the measurement, not the deletion, would be wrong.
+        Assert.That(runs.Select(r => DescribeAuditRows(r.AuditRows)).Distinct().Count(), Is.EqualTo(1),
+            $"{label}: every run touches the same audit rows");
+        lines.Add($"   audit rows touched (updated, of which HOT; deleted): {DescribeAuditRows(last.AuditRows)}");
         return string.Join(Environment.NewLine, lines);
     }
+
+    private static string DescribeAuditRows(Dictionary<string, AuditRowCounts> auditRows)
+        => string.Join("; ", AuditTables.Select(table => auditRows.TryGetValue(table, out var counts)
+            ? string.Create(CultureInfo.InvariantCulture, $"{table} {counts.Updated} ({counts.HotUpdated} HOT), {counts.Deleted} deleted")
+            : $"{table} not in pg_stat_user_tables"));
 
     private sealed record SeededLeaverPage(int SystemId, int UserTypeId, int GroupTypeId, DateTime Watermark, List<Guid> GroupIds);
 
@@ -470,6 +559,349 @@ public class LeaverCohortCostDatabaseTests
             }
             await writer.CompleteAsync();
         }
+    }
+
+    #endregion
+
+    #region Metaverse Object deletion
+
+    private sealed record SeededMetaverseLeaverPage(
+        List<Guid> LeaverIds, List<Guid> GroupIds, int ManagerAttributeId, int AccountSystemId, bool WithHistory);
+
+    private async Task<DeletionRun> MeasureMetaverseDeletionAsync(MetaverseDeletionPath path, bool withHistory)
+    {
+        var seeded = await SeedMetaverseLeaverPageAsync(withHistory);
+        var counter = new SqlStatementCounter();
+        var ids = seeded.LeaverIds.ToArray();
+
+        // The flush deletes on the page's context; housekeeping on a tracking context whose changes are detected.
+        await using var ctx = path == MetaverseDeletionPath.Bulk ? NewPageContext(counter) : NewContext(counter);
+        ctx.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+        await ctx.Database.OpenConnectionAsync();
+        var repository = new PostgresDataRepository(ctx);
+
+        // Each departed person's account in the target system, tracked, as export evaluation leaves it on either path:
+        // the detach has to clear the tracked join as well as the row's.
+        List<MetaverseObject> leavers;
+        if (path == MetaverseDeletionPath.Bulk)
+        {
+            await ctx.ConnectedSystemObjects.Where(c => c.ConnectedSystemId == seeded.AccountSystemId).LoadAsync();
+            leavers = await ctx.MetaverseObjects.AsNoTracking().Where(m => ids.Contains(m.Id)).ToListAsync();
+        }
+        else
+        {
+            leavers = await ctx.MetaverseObjects
+                .AsSplitQuery()
+                .Include(m => m.Type)
+                .Include(m => m.ConnectedSystemObjects)
+                .Where(m => ids.Contains(m.Id))
+                .ToListAsync();
+        }
+        var accounts = ctx.ChangeTracker.Entries<ConnectedSystemObject>().Select(e => e.Entity).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(leavers, Has.Count.EqualTo(Leavers));
+            Assert.That(accounts, Has.Count.EqualTo(Leavers), "every departed person's account is tracked");
+            Assert.That(accounts.Select(a => a.MetaverseObjectId), Is.All.Not.Null, "every account is joined");
+        }
+
+        var auditBefore = await ReadAuditRowCountsAsync(ctx);
+        _spans.Start();
+        counter.Counting = true;
+        var stopwatch = Stopwatch.StartNew();
+        if (path == MetaverseDeletionPath.Bulk)
+        {
+            await repository.Sync.DeleteMetaverseObjectsAsync(leavers);
+        }
+        else
+        {
+            foreach (var leaver in leavers)
+                await repository.Metaverse.DeleteMetaverseObjectAsync(leaver);
+        }
+        stopwatch.Stop();
+        counter.Counting = false;
+        var recorded = _spans.Stop();
+        var auditRows = AuditRowCounts.Difference(auditBefore, await ReadAuditRowCountsAsync(ctx));
+
+        // Either context carries on after its deletions, so whatever a path left tracked must save cleanly.
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing, $"{path}: the context saves after the deletion");
+        Assert.That(accounts.Select(a => a.MetaverseObjectId), Is.All.Null, $"{path}: no tracked account is still joined");
+        await AssertMetaverseObjectsDeletedAsync(path, seeded);
+
+        return NewDeletionRun(stopwatch, recorded, counter, auditRows);
+    }
+
+    /// <summary>
+    /// The departed people are gone and no live value names them; everyone else, and every row of history, is kept.
+    /// </summary>
+    private async Task AssertMetaverseObjectsDeletedAsync(MetaverseDeletionPath path, SeededMetaverseLeaverPage seeded)
+    {
+        await using var verify = NewContext(null);
+        var ids = seeded.LeaverIds.ToArray();
+        var (firstGroup, secondGroup) = (seeded.GroupIds[0], seeded.GroupIds[1]);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.MetaverseObjects.CountAsync(m => ids.Contains(m.Id)), Is.Zero, $"{path}: the departed people are gone");
+            Assert.That(await verify.MetaverseObjects.CountAsync(), Is.EqualTo(Users - Leavers + 2), $"{path}: everyone else is kept");
+            Assert.That(await verify.MetaverseObjectAttributeValues.CountAsync(v => v.ReferenceValueId.HasValue && ids.Contains(v.ReferenceValueId.Value)),
+                Is.Zero, $"{path}: no value still names a departed person");
+            Assert.That(await verify.MetaverseObjectAttributeValues.CountAsync(v => EF.Property<Guid>(v, "MetaverseObjectId") == firstGroup),
+                Is.EqualTo(MembersPerGroup - Leavers), $"{path}: the first group keeps its other members");
+            Assert.That(await verify.MetaverseObjectAttributeValues.CountAsync(v => EF.Property<Guid>(v, "MetaverseObjectId") == secondGroup),
+                Is.EqualTo(MembersPerGroup - Leavers), $"{path}: the second group keeps its other members");
+            Assert.That(await verify.MetaverseObjectAttributeValues.CountAsync(v => v.AttributeId == seeded.ManagerAttributeId), Is.Zero,
+                $"{path}: the departed people's reports have no Manager left");
+            Assert.That(await verify.ConnectedSystemObjects.CountAsync(c => c.ConnectedSystemId == seeded.AccountSystemId && c.MetaverseObjectId == null),
+                Is.EqualTo(Leavers), $"{path}: every account is kept, disconnected");
+
+            var history = seeded.WithHistory ? 1 : 0;
+            Assert.That(await verify.Activities.CountAsync(), Is.EqualTo(history * Leavers * ActivitiesPerLeaver), $"{path}: every Activity is kept");
+            Assert.That(await verify.MetaverseObjectChanges.CountAsync(), Is.EqualTo(history * (Leavers * ChangeRecordsPerLeaver + Leavers + 4)),
+                $"{path}: every change record is kept");
+            Assert.That(await verify.MetaverseObjectChangeAttributeValues.CountAsync(), Is.EqualTo(history * Leavers * ChangeValuesPerLeaver),
+                $"{path}: every change value is kept");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Users"/> people's Metaverse Objects, the first <see cref="Leavers"/> departed, with
+    /// <see cref="ValuesPerLeaver"/> values each and each joined to an account in a target system; two groups of
+    /// <see cref="MembersPerGroup"/> members, both holding every departed person, as the Connected System Object page
+    /// does; and the next <see cref="Leavers"/> people each managed by one of them. With history, each departed person
+    /// also has <see cref="ChangeRecordsPerLeaver"/> change records and <see cref="ActivitiesPerLeaver"/> Activities of
+    /// its own, and <see cref="ChangeValuesPerLeaver"/> reference values naming it in other objects' change records:
+    /// one in its report's Manager change, the rest in the groups' member changes.
+    /// </summary>
+    private async Task<SeededMetaverseLeaverPage> SeedMetaverseLeaverPageAsync(bool withHistory)
+    {
+        await PostgresTestDatabase.ResetAsync(_connectionString);
+
+        int systemId, accountTypeId, accountIdAttributeId, personTypeId, groupTypeId, memberId, managerId;
+        var textAttributeIds = new List<int>();
+        await using (var seed = NewContext(null))
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Panoply Directory", ConnectorDefinition = connectorDefinition };
+            var accountType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+            var accountId = Attribute(accountType, "objectGUID", AttributeDataType.Guid, AttributePlurality.SingleValued);
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People" };
+            var groupType = new MetaverseObjectType { Name = "Group", PluralName = "Groups" };
+            var member = new MetaverseAttribute { Name = "Static Members", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued };
+            var manager = new MetaverseAttribute { Name = "Manager", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued };
+            var textAttributes = Enumerable.Range(1, ValuesPerLeaver)
+                .Select(i => new MetaverseAttribute { Name = $"Attribute {i:D2}", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued })
+                .ToList();
+            seed.AddRange(connectorDefinition, system, accountType, personType, groupType, member, manager);
+            seed.AddRange(textAttributes);
+            await seed.SaveChangesAsync();
+            (systemId, accountTypeId, accountIdAttributeId) = (system.Id, accountType.Id, accountId.Id);
+            (personTypeId, groupTypeId, memberId, managerId) = (personType.Id, groupType.Id, member.Id, manager.Id);
+            textAttributeIds.AddRange(textAttributes.Select(a => a.Id));
+        }
+
+        var personIds = Enumerable.Range(0, Users).Select(_ => Guid.NewGuid()).ToList();
+        var leaverIds = personIds.Take(Leavers).ToList();
+        var groupIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var created = DateTime.UtcNow.AddDays(-30);
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""MetaverseObjects"" (""Id"", ""Created"", ""TypeId"", ""Status"", ""DeletionInitiatedByType"", ""Origin"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var (mvoId, typeId) in personIds.Select(id => (id, personTypeId)).Concat(groupIds.Select(id => (id, groupTypeId))))
+            {
+                await writer.StartRowAsync();
+                await writer.WriteAsync(mvoId, NpgsqlDbType.Uuid);
+                await writer.WriteAsync(created, NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync(typeId, NpgsqlDbType.Integer);
+                await writer.WriteAsync((int)MetaverseObjectStatus.Normal, NpgsqlDbType.Integer);
+                await writer.WriteAsync(0, NpgsqlDbType.Integer);
+                await writer.WriteAsync((int)MetaverseObjectOrigin.Projected, NpgsqlDbType.Integer);
+            }
+            await writer.CompleteAsync();
+        }
+
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""MetaverseObjectAttributeValues"" (""Id"", ""MetaverseObjectId"", ""AttributeId"", ""StringValue"", ""ReferenceValueId"") FROM STDIN (FORMAT BINARY)"))
+        {
+            for (var i = 0; i < Leavers; i++)
+            {
+                foreach (var attributeId in textAttributeIds)
+                    await WriteValueRowAsync(writer, leaverIds[i], attributeId, $"value {attributeId} of person {i:D6}", null);
+
+                // The next block of people report to the departed ones.
+                await WriteValueRowAsync(writer, personIds[Leavers + i], managerId, null, leaverIds[i]);
+            }
+
+            // Both groups hold every departed person; the first holds the first block of people, the second the last.
+            var firstGroupMembers = personIds.Take(MembersPerGroup);
+            var secondGroupMembers = leaverIds.Concat(personIds.Skip(Users - (MembersPerGroup - Leavers)));
+            foreach (var (groupId, members) in new[] { (groupIds[0], firstGroupMembers), (groupIds[1], secondGroupMembers) })
+            {
+                foreach (var memberMvoId in members)
+                    await WriteValueRowAsync(writer, groupId, memberId, null, memberMvoId);
+            }
+            await writer.CompleteAsync();
+        }
+
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""ConnectedSystemObjects"" (""Id"", ""Created"", ""TypeId"", ""ConnectedSystemId"", ""ExternalIdAttributeId"", ""Status"", ""JoinType"", ""SynchronisationPending"", ""MetaverseObjectId"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var leaverId in leaverIds)
+            {
+                await WriteObjectRowAsync(writer, Guid.NewGuid(), created, accountTypeId, systemId, accountIdAttributeId,
+                    ConnectedSystemObjectStatus.Normal, false, ConnectedSystemObjectJoinType.Provisioned);
+                await writer.WriteAsync(leaverId, NpgsqlDbType.Uuid);
+            }
+            await writer.CompleteAsync();
+        }
+
+        if (withHistory)
+            await SeedMetaverseHistoryAsync(connection, leaverIds, personIds.Skip(Leavers).Take(Leavers).ToList(), groupIds, memberId, managerId);
+
+        await using (var analyse = new NpgsqlCommand(
+            @"ANALYZE ""MetaverseObjects""; ANALYZE ""MetaverseObjectAttributeValues""; ANALYZE ""ConnectedSystemObjects""; ANALYZE ""Activities""; " +
+            @"ANALYZE ""MetaverseObjectChanges""; ANALYZE ""MetaverseObjectChangeAttributes""; ANALYZE ""MetaverseObjectChangeAttributeValues"";", connection))
+        {
+            await analyse.ExecuteNonQueryAsync();
+        }
+
+        return new SeededMetaverseLeaverPage(leaverIds, groupIds, managerId, systemId, withHistory);
+    }
+
+    private async Task SeedMetaverseHistoryAsync(NpgsqlConnection connection, List<Guid> leaverIds, List<Guid> reportIds,
+        List<Guid> groupIds, int memberId, int managerId)
+    {
+        await using (var seed = NewContext(null))
+        {
+            seed.Activities.AddRange(leaverIds.SelectMany(id => Enumerable.Range(0, ActivitiesPerLeaver).Select(_ => new JimActivity
+            {
+                TargetName = "Earlier change to a person",
+                TargetType = ActivityTargetType.MetaverseObject,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                InitiatedByType = ActivityInitiatorType.System,
+                Created = DateTime.UtcNow.AddDays(-2),
+                MetaverseObjectId = id
+            })));
+            await seed.SaveChangesAsync();
+        }
+
+        // Each departed person's own change records; then a Manager change record for each report and two membership
+        // change records per group, whose reference values name the departed people.
+        var managerChanges = reportIds.Select(id => (Id: Guid.NewGuid(), ObjectId: id)).ToList();
+        var groupChanges = groupIds.SelectMany(id => new[] { (Id: Guid.NewGuid(), ObjectId: id), (Id: Guid.NewGuid(), ObjectId: id) }).ToList();
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""MetaverseObjectChanges"" (""Id"", ""MetaverseObjectId"", ""ChangeTime"", ""InitiatedByType"", ""ChangeInitiatorType"", ""ChangeType"") FROM STDIN (FORMAT BINARY)"))
+        {
+            var ownChanges = leaverIds.SelectMany(id => Enumerable.Repeat(id, ChangeRecordsPerLeaver)).Select(id => (Id: Guid.NewGuid(), ObjectId: id));
+            foreach (var (changeId, objectId) in ownChanges.Concat(managerChanges).Concat(groupChanges))
+            {
+                await writer.StartRowAsync();
+                await writer.WriteAsync(changeId, NpgsqlDbType.Uuid);
+                await writer.WriteAsync(objectId, NpgsqlDbType.Uuid);
+                await writer.WriteAsync(DateTime.UtcNow.AddDays(-1), NpgsqlDbType.TimestampTz);
+                await writer.WriteAsync((int)ActivityInitiatorType.System, NpgsqlDbType.Integer);
+                await writer.WriteAsync((int)MetaverseObjectChangeInitiatorType.NotSet, NpgsqlDbType.Integer);
+                await writer.WriteAsync((int)ObjectChangeType.Updated, NpgsqlDbType.Integer);
+            }
+            await writer.CompleteAsync();
+        }
+
+        var managerAttributeChangeIds = new List<Guid>();
+        var groupAttributeChangeIds = new List<Guid>();
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"", ""AttributeName"", ""AttributeType"") FROM STDIN (FORMAT BINARY)"))
+        {
+            foreach (var (changeIds, changes, attributeId, name) in new[]
+                     {
+                         (managerAttributeChangeIds, managerChanges, managerId, "Manager"),
+                         (groupAttributeChangeIds, groupChanges, memberId, "Static Members")
+                     })
+            {
+                foreach (var (changeId, _) in changes)
+                {
+                    var attributeChangeId = Guid.NewGuid();
+                    changeIds.Add(attributeChangeId);
+                    await writer.StartRowAsync();
+                    await writer.WriteAsync(attributeChangeId, NpgsqlDbType.Uuid);
+                    await writer.WriteAsync(changeId, NpgsqlDbType.Uuid);
+                    await writer.WriteAsync(attributeId, NpgsqlDbType.Integer);
+                    await writer.WriteAsync(name, NpgsqlDbType.Text);
+                    await writer.WriteAsync((int)AttributeDataType.Reference, NpgsqlDbType.Integer);
+                }
+            }
+            await writer.CompleteAsync();
+        }
+
+        await using (var writer = await connection.BeginBinaryImportAsync(
+            @"COPY ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""ReferenceValueId"") FROM STDIN (FORMAT BINARY)"))
+        {
+            // One value in the departed person's report's Manager change; the rest across the groups' member changes.
+            var row = 0;
+            for (var i = 0; i < leaverIds.Count; i++)
+            {
+                await WriteChangeValueRowAsync(writer, managerAttributeChangeIds[i], leaverIds[i]);
+                for (var j = 1; j < ChangeValuesPerLeaver; j++)
+                    await WriteChangeValueRowAsync(writer, groupAttributeChangeIds[row++ % groupAttributeChangeIds.Count], leaverIds[i]);
+            }
+            await writer.CompleteAsync();
+        }
+    }
+
+    private static async Task WriteChangeValueRowAsync(NpgsqlBinaryImporter writer, Guid attributeChangeId, Guid referenceValueId)
+    {
+        await writer.StartRowAsync();
+        await writer.WriteAsync(Guid.NewGuid(), NpgsqlDbType.Uuid);
+        await writer.WriteAsync(attributeChangeId, NpgsqlDbType.Uuid);
+        await writer.WriteAsync((int)ValueChangeType.Add, NpgsqlDbType.Integer);
+        await writer.WriteAsync(referenceValueId, NpgsqlDbType.Uuid);
+    }
+
+    #endregion
+
+    #region Audit rows
+
+    /// <summary>
+    /// What a table's cumulative statistics say was done to its rows: updated (of which heap-only, so no index entry
+    /// was written) and deleted, whether by a statement or by a foreign key's action.
+    /// </summary>
+    private sealed record AuditRowCounts(long Updated, long HotUpdated, long Deleted)
+    {
+        public static Dictionary<string, AuditRowCounts> Difference(
+            Dictionary<string, AuditRowCounts> before, Dictionary<string, AuditRowCounts> after)
+            => after.ToDictionary(
+                a => a.Key,
+                a => before.TryGetValue(a.Key, out var b)
+                    ? new AuditRowCounts(a.Value.Updated - b.Updated, a.Value.HotUpdated - b.HotUpdated, a.Value.Deleted - b.Deleted)
+                    : a.Value,
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The audit tables' cumulative row counts, read on the context's open connection after flushing that connection's
+    /// own pending statistics: a backend publishes them only when idle and at most once a second, so without the flush
+    /// the read would miss what the deletion just did. The flush lands before the server reports the statement done,
+    /// so the next statement sees it.
+    /// </summary>
+    private static async Task<Dictionary<string, AuditRowCounts>> ReadAuditRowCountsAsync(JimDbContext context)
+    {
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        Assert.That(connection.State, Is.EqualTo(System.Data.ConnectionState.Open), "the measured connection is held open");
+
+        await using (var flush = new NpgsqlCommand("SELECT pg_stat_force_next_flush()", connection))
+            await flush.ExecuteNonQueryAsync();
+
+        await using var command = new NpgsqlCommand(
+            @"SELECT ""relname"", ""n_tup_upd"", ""n_tup_hot_upd"", ""n_tup_del"" FROM ""pg_stat_user_tables"" " +
+            @"WHERE ""schemaname"" = 'public' AND ""relname"" = ANY(@tables)", connection);
+        command.Parameters.Add(new NpgsqlParameter("tables", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = AuditTables });
+
+        var counts = new Dictionary<string, AuditRowCounts>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            counts[reader.GetString(0)] = new AuditRowCounts(reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
+        return counts;
     }
 
     #endregion

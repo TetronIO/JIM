@@ -130,6 +130,7 @@ nav:
       - Password Synchronisation: concepts/password-synchronisation.md
       - Expressions: concepts/expressions.md
       - Nulls and Missing Inputs: concepts/expression-nulls.md
+      - Expression Recipes: concepts/expression-recipes.md
       - Case Sensitivity: concepts/case-sensitivity.md
       - Object Naming: concepts/object-naming.md
   - Configuration:
@@ -181,7 +182,7 @@ nav:
       - TLS and Reverse Proxy: administration/tls-and-reverse-proxy.md
       - Running on Podman: administration/podman.md
       - Installing on Podman by Hand: administration/podman-by-hand.md
-      - Deploying with Ansible: administration/deploying-with-ansible.md
+      - Deploying on RHEL with Ansible: administration/deploying-with-ansible.md
       - SSO Setup:
           - administration/sso-setup.md
           - Microsoft Entra ID: administration/sso-setup/microsoft-entra-id.md
@@ -263,6 +264,7 @@ nav:
       - Schedules: powershell/schedules.md
       - Schedule Executions: powershell/schedule-executions.md
       - Activities: powershell/activities.md
+      - Activity Statistics: powershell/activity-statistics.md
       - Execution Items: powershell/execution-items.md
       - API Keys: powershell/api-keys.md
       - Certificates: powershell/certificates.md

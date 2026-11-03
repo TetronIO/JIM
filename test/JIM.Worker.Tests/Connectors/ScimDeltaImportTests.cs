@@ -67,6 +67,7 @@ public class ScimDeltaImportTests
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.LastModifiedFilter));
             Assert.That(plan.Filter, Is.EqualTo("meta.lastModified gt \"2026-07-30T10:00:00Z\""));
             Assert.That(plan.WarningMessage, Is.Null);
+            Assert.That(plan.ReadsEveryResource, Is.False);
         }
     }
 
@@ -81,8 +82,9 @@ public class ScimDeltaImportTests
         {
             Assert.That(plan.Strategy, Is.EqualTo(ScimDeltaStrategy.FullScan));
             Assert.That(plan.Filter, Is.Null);
-            Assert.That(plan.WarningMessage, Is.Not.Null);
+            Assert.That(plan.WarningMessage, Does.Contain("marked as deleted"));
             Assert.That(plan.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
+            Assert.That(plan.ReadsEveryResource, Is.True);
         }
     }
 
@@ -315,6 +317,16 @@ public class ScimDeltaImportTests
         return response;
     }
 
+    private static HttpResponseMessage ScimError(HttpStatusCode status, string scimType)
+    {
+        return new HttpResponseMessage(status)
+        {
+            Content = new StringContent(
+                $$"""{ "schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"], "status": "{{(int)status}}", "scimType": "{{scimType}}" }""",
+                Encoding.UTF8, "application/scim+json")
+        };
+    }
+
     private static HttpResponseMessage NotFound()
     {
         return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent(string.Empty) };
@@ -380,10 +392,15 @@ public class ScimDeltaImportTests
         using var handler = UserProvider(_ => Json(UserPage(1, "alice")));
         var persisted = new ScimImportState { Watermark = Watermark }.Serialise();
 
-        await RunImportAsync(handler, ConnectedSystem(), RunProfile(), persisted);
+        var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(), persisted);
 
         var userQuery = handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query;
-        Assert.That(Uri.UnescapeDataString(userQuery), Does.Contain("filter=meta.lastModified gt \"2026-07-30T10:00:00Z\""));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Uri.UnescapeDataString(userQuery), Does.Contain("filter=meta.lastModified gt \"2026-07-30T10:00:00Z\""));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.False,
+                "a filtered read has not read every resource, so a resource it did not return says nothing about whether it is gone");
+        }
     }
 
     [Test]
@@ -399,7 +416,8 @@ public class ScimDeltaImportTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(userQuery, Does.Not.Contain("filter="));
-            Assert.That(results[0].WarningMessage, Does.Contain("Keycloak"));
+            Assert.That(results[0].WarningMessage, Does.Contain("Keycloak").And.Contain("marked as deleted"));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True, "every resource was read, so JIM detects deletions by absence (#2720)");
         }
     }
 
@@ -444,7 +462,49 @@ public class ScimDeltaImportTests
         {
             Assert.That(results[0].WarningMessage, Is.Not.Null);
             Assert.That(results[0].WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
+            Assert.That(results[0].WarningMessage, Does.Contain("Every resource was read instead").And.Contain("marked as deleted"));
             Assert.That(results[0].ImportObjects, Has.Count.EqualTo(1));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_DeltaRunWithoutAWatermarkAcrossSeveralPages_SaysOnEveryPageThatItReadEveryResourceAsync()
+    {
+        // #2720: every page of the run must give JIM the same answer, so the plan's answer travels on each page.
+        using var handler = UserProvider(query => query.Contains("startIndex=1")
+            ? Json(UserPage(3, "alice", "bob"))
+            : Json(UserPage(3, "carol")));
+
+        var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(pageSize: 2), persistedConnectorData: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(2));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
+        }
+    }
+
+    [Test]
+    public async Task ImportAsync_ProviderRejectsTheFilterItAdvertises_ReadsEveryResourceAndSaysSoOnEveryPageAsync()
+    {
+        // The plan changes on the first page, after the provider refuses the filter; every page the run returns, the
+        // first included, says that it read everything.
+        using var handler = UserProvider(query =>
+        {
+            if (query.Contains("filter=", StringComparison.Ordinal))
+                return ScimError(HttpStatusCode.BadRequest, "invalidFilter");
+            return query.Contains("startIndex=1") ? Json(UserPage(3, "alice", "bob")) : Json(UserPage(3, "carol"));
+        });
+        var persisted = new ScimImportState { Watermark = Watermark }.Serialise();
+
+        var results = await RunImportAsync(handler, ConnectedSystem(), RunProfile(pageSize: 2), persisted);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(results, Has.Count.EqualTo(2));
+            Assert.That(results[0].WarningMessage, Does.Contain("rejected the filter").And.Contain("marked as deleted"));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
         }
     }
 
@@ -499,9 +559,10 @@ public class ScimDeltaImportTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(results[0].WarningMessage, Is.Not.Null);
+            Assert.That(results[0].WarningMessage, Does.Contain("marked as deleted"));
             Assert.That(handler.Requests.Single(r => r.RequestUri!.AbsolutePath.EndsWith("/Users", StringComparison.Ordinal)).RequestUri!.Query,
                 Does.Not.Contain("filter"));
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
         }
     }
 
@@ -519,6 +580,8 @@ public class ScimDeltaImportTests
                 Does.Not.Contain("filter"));
             // Deliberate configuration, so it is not reported as a shortfall on every run.
             Assert.That(results[0].WarningMessage, Is.Null);
+            // But it still reads every resource, so JIM detects deletions by absence on it (#2720).
+            Assert.That(results.Select(r => r.CompleteRead), Is.All.True);
         }
     }
     #endregion

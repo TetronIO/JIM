@@ -60,7 +60,9 @@ public static class RunProfileSafeguardsValidator
 
     /// <summary>
     /// Allow Object Type Changes (#2049) is a Full Import setting: its effect, retiring an object of the old Object
-    /// Type, comes from the Full Import's deletion detection, which no other run performs.
+    /// Type, comes from deletion detection, which only a Full Import is sure to perform. A Delta Import performs it only
+    /// when its Connector reads every object instead of its changes (#2720), which nobody knows when the Run Profile is
+    /// saved.
     /// </summary>
     private static string? ValidateAllowObjectTypeChanges(bool allowObjectTypeChanges, ConnectedSystemRunType runType) =>
         allowObjectTypeChanges && runType != ConnectedSystemRunType.FullImport

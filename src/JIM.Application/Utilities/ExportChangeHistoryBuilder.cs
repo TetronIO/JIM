@@ -247,6 +247,10 @@ public static class ExportChangeHistoryBuilder
                 // identifier is stored as a StringValue with the IsPendingExportStub flag, so the UI renders it
                 // meaningfully instead of showing a broken-link icon. ReferenceValue (the navigation) is deliberately
                 // never set: the object may not be persisted yet, and the change record only ever needs its name.
+                // Either way the value names its object by display text (its display identifier, or the Metaverse
+                // Object id the reference was staged with), never by its identifier in the Connected System, so no
+                // identifier lookup can resolve it and the writers must not leave it for the change record reference
+                // fix-up to read on every run (#2700).
                 if (referenceDisplayIdentifiers != null
                     && Guid.TryParse(peChange.UnresolvedReferenceValue, out var mvoGuid)
                     && referenceDisplayIdentifiers.TryGetValue(mvoGuid, out var displayName))
@@ -254,6 +258,7 @@ public static class ExportChangeHistoryBuilder
                     var valueChange = new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, displayName)
                     {
                         IsPendingExportStub = true,
+                        NamesReferencedObjectByDisplayText = true,
                         SyncRuleId = syncRuleId,
                         SyncRuleName = syncRuleName
                     };
@@ -265,19 +270,26 @@ public static class ExportChangeHistoryBuilder
                     attributeChange.ValueChanges.Add(
                         new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.UnresolvedReferenceValue)
                         {
+                            NamesReferencedObjectByDisplayText = true,
                             SyncRuleId = syncRuleId,
                             SyncRuleName = syncRuleName
                         });
                 }
                 break;
             case AttributeDataType.Reference when peChange.StringValue != null:
-                // Resolved reference — deferred exports have their UnresolvedReferenceValue cleared
-                // and the resolved identifier (e.g. DN) stored in StringValue during reference resolution.
-                // Mark as Pending Export stub so the UI renders a clock icon (awaiting confirmation)
-                // rather than the broken-link "unresolved" icon.
+                // Resolved reference: deferred exports have their UnresolvedReferenceValue cleared and the resolved
+                // identifier (e.g. DN) stored in StringValue during reference resolution. Mark as Pending Export stub so
+                // the UI renders a clock icon (awaiting confirmation) rather than the broken-link "unresolved" icon.
+                // Resolution also stamped the object it resolved to (ResolvedReferenceCsoId), so the value carries that
+                // object by its id alone, as change capture carries a reference whose navigation is not loaded: the writer
+                // records the id where the object's row exists, and only otherwise leaves the DN for the change record
+                // reference fix-up to resolve (#2700). The stamp is a soft pointer, which is why the writers check the row.
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)
                     {
+                        ReferenceValue = peChange.ResolvedReferenceCsoId is { } resolvedCsoId
+                            ? new ConnectedSystemObject { Id = resolvedCsoId }
+                            : null,
                         IsPendingExportStub = true,
                         SyncRuleId = syncRuleId,
                         SyncRuleName = syncRuleName

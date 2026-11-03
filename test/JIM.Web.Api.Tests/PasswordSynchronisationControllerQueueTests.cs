@@ -483,6 +483,41 @@ public class PasswordSynchronisationControllerQueueTests
     }
 
     [Test]
+    public async Task Retry_WithSearchText_RetriesOnlyTheChangesItMatchesAsync()
+    {
+        // The portal's "Retry shown" sends the search box's text, so the action must narrow exactly as the list it
+        // was shown did (#2725). Grace's change does not match "ada" and must stay parked.
+        var ada = await SeedChangeAsync(_adaId, CorporateAdId, PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.Transient);
+        var grace = await SeedChangeAsync(_graceId, CorporateAdId, PendingPasswordChangeStatus.Parked, PasswordSetFailureReason.Transient);
+
+        var body = await RetryAsync(new PasswordQueueActionRequest { SearchText = "ada" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(body.AffectedCount, Is.EqualTo(1));
+            Assert.That(_syncRepo.PendingPasswordChanges[ada].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+            Assert.That(_syncRepo.PendingPasswordChanges[grace].Status, Is.EqualTo(PendingPasswordChangeStatus.Parked));
+        }
+    }
+
+    [Test]
+    public async Task Cancel_WithSearchText_MatchingASystemName_CancelsOnlyThatSystemsChangesAsync()
+    {
+        // The search matches the Connected System's name as well as the identity's, as the list's does.
+        var corporate = await SeedChangeAsync(_adaId, CorporateAdId);
+        var hr = await SeedChangeAsync(_adaId, HrPortalId);
+
+        var body = await CancelAsync(new PasswordQueueActionRequest { SearchText = "HR Portal" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(body.AffectedCount, Is.EqualTo(1));
+            Assert.That(_syncRepo.PendingPasswordChanges[hr].Status, Is.EqualTo(PendingPasswordChangeStatus.Cancelled));
+            Assert.That(_syncRepo.PendingPasswordChanges[corporate].Status, Is.EqualTo(PendingPasswordChangeStatus.Pending));
+        }
+    }
+
+    [Test]
     public async Task Retry_UnknownConnectedSystem_IsNotFoundAsync()
     {
         // Otherwise a typo in the identifier is indistinguishable from "nothing was owed".

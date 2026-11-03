@@ -73,7 +73,7 @@ edges:
 
     What the installer does on Podman, step by step, for a policy that requires every step by hand.
 
--   **[Deploying with Ansible](deploying-with-ansible.md)**
+-   **[Deploying on RHEL with Ansible](deploying-with-ansible.md)**
 
     ---
 

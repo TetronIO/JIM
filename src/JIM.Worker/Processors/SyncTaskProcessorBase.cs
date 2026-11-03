@@ -7910,7 +7910,7 @@ public abstract class SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
-            var heldPendingExports = await GetPendingExportsHeldForInitialPasswordAsync();
+            var heldPendingExports = await GetPendingExportsHoldingChangesAsync();
 
             foreach (var (cso, mvo) in _pendingDriftEvaluations)
                 EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
@@ -7921,14 +7921,15 @@ public abstract class SyncTaskProcessorBase
 
     /// <summary>
     /// The Pending Exports of the page's queued Connected System Objects that hold a change written with an interim
-    /// value until an Initial Password is delivered (#2039), keyed by object. Drift Detection still corrects such an
+    /// value until an Initial Password is delivered (#2039), or a connector-defined change awaiting Exchange (#2021),
+    /// keyed by object. Drift Detection still corrects such an
     /// object's other attributes at once (#2501), but its correction must neither restate the held change nor drop it:
     /// the page flush replaces the object's Pending Export with the correction (<see cref="FlushPendingExportOperationsAsync"/>),
     /// so the held change has to travel with it. The first query reads the partial index on the flag, so a page with
     /// nothing held costs one cheap query, and none at all when this run detects no drift; the Pending Exports are read
     /// only for the objects it names.
     /// </summary>
-    private async Task<IReadOnlyDictionary<Guid, PendingExport>> GetPendingExportsHeldForInitialPasswordAsync()
+    private async Task<IReadOnlyDictionary<Guid, PendingExport>> GetPendingExportsHoldingChangesAsync()
     {
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
             return new Dictionary<Guid, PendingExport>();
@@ -7941,7 +7942,10 @@ public abstract class SyncTaskProcessorBase
         if (connectedSystemObjectIds.Count == 0)
             return new Dictionary<Guid, PendingExport>();
 
+        // A change awaiting Exchange is held the same way (#2021): until Exchange acts the object does not hold the
+        // declared value, so a correction would restate it on every synchronisation.
         var heldConnectedSystemObjectIds = await _syncRepo.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(_connectedSystem.Id, connectedSystemObjectIds);
+        heldConnectedSystemObjectIds.UnionWith(await _syncRepo.GetConnectedSystemObjectIdsAwaitingExchangeAsync(_connectedSystem.Id, connectedSystemObjectIds));
         if (heldConnectedSystemObjectIds.Count == 0)
             return new Dictionary<Guid, PendingExport>();
 

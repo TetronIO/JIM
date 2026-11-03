@@ -491,12 +491,12 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
-    public async Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public async Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
         // One grouped round trip, read on every iteration of the delivery loop: three numbers from one scan of a
         // table that is small whenever the service is keeping up. Restricted to what a lane would claim, so a
         // paused system's held propagated changes neither inflate the counts nor wake the service for retries it
-        // will not make (see PasswordQueueDeliveryOutlook); anything but a propagated change counts wherever it
+        // will not make (see DeliveryQueueOutlook); anything but a propagated change counts wherever it
         // is (#1635; widened by #1697).
         var claimExpiredBefore = asOf - claimLease;
         var outlook = await _context.PendingPasswordChanges.AsNoTracking()
@@ -505,7 +505,7 @@ public partial class SyncRepository
                         || _context.ConnectedSystemPasswordSynchronisations
                             .Any(ps => ps.ConnectedSystemId == c.ConnectedSystemId && ps.Enabled))
             .GroupBy(_ => 1)
-            .Select(g => new PasswordQueueDeliveryOutlook
+            .Select(g => new DeliveryQueueOutlook
             {
                 DueCount = g.Count(c => c.Status == PendingPasswordChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
                                         || c.Status == PendingPasswordChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore),
@@ -516,7 +516,7 @@ public partial class SyncRepository
             .SingleOrDefaultAsync();
 
         // An empty queue groups to nothing rather than to a row of zeroes, which is the answer the caller wants.
-        return outlook ?? new PasswordQueueDeliveryOutlook();
+        return outlook ?? new DeliveryQueueOutlook();
     }
 
     /// <inheritdoc />
@@ -920,7 +920,7 @@ public partial class SyncRepository
     /// Narrows a queue query to what a filter names. Kept separate from the header projection so the retry and
     /// cancel actions apply exactly the same rules the list did, rather than a re-typed approximation of them.
     /// </summary>
-    private static IQueryable<PendingPasswordChange> ApplyChangeFilter(
+    private IQueryable<PendingPasswordChange> ApplyChangeFilter(
         IQueryable<PendingPasswordChange> query,
         PendingPasswordChangeFilter filter)
     {
@@ -957,6 +957,17 @@ public partial class SyncRepository
         {
             var ids = filter.Ids.ToList();
             query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        // The same search the list applies (ApplyHeaderFilter), so an action taken on "the changes shown" acts on the
+        // changes shown and no others (#2725). Reached through correlated lookups rather than a join, because retry and
+        // cancel run as set-based updates over this query.
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var searchPattern = LikePattern.Contains(filter.SearchText.Trim());
+            query = query.Where(c =>
+                _context.MetaverseObjects.Any(m => m.Id == c.MetaverseObjectId && m.CachedDisplayName != null && EF.Functions.ILike(m.CachedDisplayName, searchPattern))
+                || _context.ConnectedSystems.Any(cs => cs.Id == c.ConnectedSystemId && EF.Functions.ILike(cs.Name, searchPattern)));
         }
 
         return query;

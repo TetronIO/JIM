@@ -13,8 +13,7 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Tests for export performance optimisation repository methods (Phase 1).
-/// Validates GetExecutableExportsAsync, GetConnectedSystemObjectsByMetaverseObjectIdsAsync,
-/// and GetAttributesByIdsAsync.
+/// Validates GetExecutableExportsAsync and GetAttributesByIdsAsync.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemRepositoryExportOptimisationTests
@@ -255,103 +254,6 @@ public class ConnectedSystemRepositoryExportOptimisationTests
 
     #endregion
 
-    #region GetConnectedSystemObjectsByMetaverseObjectIdsAsync
-
-    [Test]
-    public async Task GetConnectedSystemObjectsByMetaverseObjectIdsAsync_WithEmptyInput_ReturnsEmptyDictionaryAsync()
-    {
-        // Act
-        var result = await _repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-            Array.Empty<Guid>(), _connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Is.Not.Null);
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
-    public async Task GetConnectedSystemObjectsByMetaverseObjectIdsAsync_WithMatchingCsos_ReturnsDictionaryAsync()
-    {
-        // Arrange
-        var mvoId1 = Guid.NewGuid();
-        var mvoId2 = Guid.NewGuid();
-
-        var cso1 = CreateCso(mvoId1);
-        var cso2 = CreateCso(mvoId2);
-        _connectedSystemObjectsData.AddRange([cso1, cso2]);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-            new[] { mvoId1, mvoId2 }, _connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(2));
-        Assert.That(result.ContainsKey(mvoId1), Is.True);
-        Assert.That(result.ContainsKey(mvoId2), Is.True);
-        Assert.That(result[mvoId1].Id, Is.EqualTo(cso1.Id));
-        Assert.That(result[mvoId2].Id, Is.EqualTo(cso2.Id));
-    }
-
-    [Test]
-    public async Task GetConnectedSystemObjectsByMetaverseObjectIdsAsync_FiltersToCorrectSystemAsync()
-    {
-        // Arrange
-        var mvoId = Guid.NewGuid();
-
-        var csoCorrectSystem = CreateCso(mvoId);
-        var csoOtherSystem = CreateCso(mvoId);
-        csoOtherSystem.ConnectedSystemId = 999; // Different system
-
-        _connectedSystemObjectsData.AddRange([csoCorrectSystem, csoOtherSystem]);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-            new[] { mvoId }, _connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result[mvoId].Id, Is.EqualTo(csoCorrectSystem.Id));
-    }
-
-    [Test]
-    public async Task GetConnectedSystemObjectsByMetaverseObjectIdsAsync_WithNoMatches_ReturnsEmptyDictionaryAsync()
-    {
-        // Arrange
-        var nonExistentMvoId = Guid.NewGuid();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-            new[] { nonExistentMvoId }, _connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
-    public async Task GetConnectedSystemObjectsByMetaverseObjectIdsAsync_WithPartialMatches_ReturnsOnlyMatchedAsync()
-    {
-        // Arrange
-        var mvoId1 = Guid.NewGuid();
-        var mvoId2 = Guid.NewGuid(); // This one won't have a CSO
-
-        var cso1 = CreateCso(mvoId1);
-        _connectedSystemObjectsData.Add(cso1);
-        SetUpMockContext();
-
-        // Act
-        var result = await _repository.ConnectedSystems.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-            new[] { mvoId1, mvoId2 }, _connectedSystem.Id);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result.ContainsKey(mvoId1), Is.True);
-        Assert.That(result.ContainsKey(mvoId2), Is.False);
-    }
-
-    #endregion
-
     #region GetAttributesByIdsAsync
 
     [Test]
@@ -449,20 +351,6 @@ public class ConnectedSystemRepositoryExportOptimisationTests
             Status = status,
             CreatedAt = DateTime.UtcNow,
             AttributeValueChanges = new()
-        };
-    }
-
-    private ConnectedSystemObject CreateCso(Guid metaverseObjectId)
-    {
-        return new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystem = _connectedSystem,
-            ConnectedSystemId = _connectedSystem.Id,
-            Type = _objectType,
-            TypeId = _objectType.Id,
-            MetaverseObjectId = metaverseObjectId,
-            AttributeValues = new()
         };
     }
 

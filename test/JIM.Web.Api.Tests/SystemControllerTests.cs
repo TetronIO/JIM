@@ -128,6 +128,7 @@ public class SystemControllerTests
 
         mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         mockRepository.Setup(r => r.System).Returns(mockSystemRepo.Object);
+        mockRepository.Setup(r => r.ServiceSettings).Returns(new JIM.TestSupport.InMemoryServiceSettingsRepository());
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
         mockRepository.Setup(r => r.ExampleData).Returns(mockExampleDataRepo.Object);
         mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
@@ -364,6 +365,7 @@ public class SystemControllerTests
         var mockSystemRepo = new Mock<ISystemRepository>();
         mockSystemRepo.Setup(s => s.GetLatestServiceHeartbeatsAsync()).ReturnsAsync(new List<ServiceHeartbeat>(heartbeats));
         mockRepository.Setup(r => r.System).Returns(mockSystemRepo.Object);
+        mockRepository.Setup(r => r.ServiceSettings).Returns(new JIM.TestSupport.InMemoryServiceSettingsRepository());
 
         var application = new JimApplication(mockRepository.Object);
         return new SystemController(NullLogger<SystemController>.Instance, application)

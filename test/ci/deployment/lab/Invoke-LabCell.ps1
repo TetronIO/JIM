@@ -20,7 +20,7 @@
     AppArmor denial since the last boot (Select-KernelFault.ps1).
 
     Results go to results.json in -OutputPath, with the cell's log (cell.log) and everything else the scenario saves.
-    The VM, and an ExternalDatabase cell's database server, are deleted afterwards, unless -KeepVm says otherwise.
+    The VM, and an ExternalDatabase cell's database server or a ReverseProxy cell's proxy, are deleted afterwards, unless -KeepVm says otherwise.
 
 .PARAMETER CellName
     The cell, as Cells.psd1 names it.
@@ -102,6 +102,8 @@ $address = $null
 $caPath = Join-Path $OutputPath 'ca.crt'
 # An ExternalDatabase cell's PostgreSQL server, a VM of its own, which the scenario sets up.
 $databaseVm = $null
+# A ReverseProxy cell's nginx server, a VM of its own, which the scenario sets up.
+$proxyVm = $null
 
 #region What every scenario uses
 
@@ -391,7 +393,7 @@ finally {
         Vm = $vm
     } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $OutputPath 'results.json')
 
-    $vms = @($vm) + @($databaseVm | Where-Object { $_ })
+    $vms = @($vm) + @($databaseVm, $proxyVm | Where-Object { $_ })
     if ($KeepVm -eq 'Always' -or ($KeepVm -eq 'OnFailure' -and $failed)) {
         Write-CellLog "kept VM $($vms -join ' and ')"
     }

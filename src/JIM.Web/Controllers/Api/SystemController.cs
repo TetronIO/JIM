@@ -94,9 +94,11 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
     /// writes to the database every 5 seconds. This is the same report the Operations page shows, so a monitoring
     /// script and an administrator looking at the portal always see the same verdict.
     ///
-    /// One entry is returned per service, always in the order **WorkerSync** (the Worker's synchronisation loop,
+    /// One entry is returned per service, in the order **WorkerSync** (the Worker's synchronisation loop,
     /// which runs Run Profiles and other queued work), **WorkerDelivery** (the Worker's password delivery
-    /// loop) and **Scheduler** (which starts Schedules when they fall due). Each entry's <c>status</c> is one of:
+    /// loop), **WorkerExchange** (the Worker's Exchange delivery loop, present only while the in-development Exchange
+    /// recipients feature is switched on, so never in a production deployment) and **Scheduler** (which starts
+    /// Schedules when they fall due). Each entry's <c>status</c> is one of:
     ///
     /// - **Healthy**: heartbeating within the last 15 seconds. Nothing to do.
     /// - **Degraded**: alive, but something is not right. Its <c>condition</c> says what: **HeartbeatOverdue**

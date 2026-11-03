@@ -47,6 +47,22 @@ public class ActivityTargetChipTests : JimComponentTestContext
     }
 
     [Test]
+    public void Render_ExchangeRecipientOnASystem_IsTheSystemChip()
+    {
+        // An Exchange change is made through one Connected System's Exchange settings: the system it goes through.
+        var activity = NewActivity(ActivityTargetType.ExchangeRecipient);
+        activity.ConnectedSystemId = 2;
+
+        var chip = RenderTarget(activity).FindComponent<ObjectChip>().Instance;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(chip.Kind, Is.EqualTo(ObjectChipKind.ConnectedSystem));
+            Assert.That(chip.Href, Is.EqualTo("/admin/connected-systems/2/"));
+        }
+    }
+
+    [Test]
     public void Render_PasswordSynchronisationToASystem_IsTheSystemChip()
     {
         var activity = NewActivity(ActivityTargetType.PasswordSynchronisation);

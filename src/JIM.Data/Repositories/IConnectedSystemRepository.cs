@@ -732,15 +732,6 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
 
     /// <summary>
-    /// Batch loads Connected System Objects by multiple Metaverse Object IDs within a single Connected System.
-    /// Used to resolve export references in bulk instead of individual N+1 queries.
-    /// </summary>
-    /// <param name="metaverseObjectIds">The MVO IDs to look up.</param>
-    /// <param name="connectedSystemId">The Connected System ID to search within.</param>
-    /// <returns>A dictionary keyed by MVO ID for O(1) lookup.</returns>
-    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
-
-    /// <summary>
     /// What references to the given Metaverse Objects are written as in a Connected System: per
     /// Metaverse Object joined to an object there, that object's id and anchor. Summary-tier, so export
     /// execution can resolve hundreds of thousands of group members without materialising the objects.
@@ -1468,6 +1459,14 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <returns>The Connected System, or null where it no longer exists.</returns>
     public Task<ConnectedSystem?> GetConnectedSystemForPasswordDeliveryAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Loads a Connected System for an Exchange delivery pass (#2021): its Connector Definition, which the Connector is
+    /// built from, and its setting values, which the Exchange session signs in with. Untracked, because the pass writes
+    /// only to the queue, through raw SQL of its own.
+    /// </summary>
+    /// <returns>The Connected System, or null where it no longer exists.</returns>
+    public Task<ConnectedSystem?> GetConnectedSystemForExchangeDeliveryAsync(int connectedSystemId);
 
     /// <summary>
     /// Returns the count of all Connected System Objects across all Connected Systems.

@@ -168,7 +168,9 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         if (_connectedSystem.ObjectTypes == null)
             throw new ArgumentException("_connectedSystem.ObjectTypes is null. Cannot continue.");
 
-        var result = new ConnectedSystemImportResult();
+        // Every page of a full read reads every object in the Run Profile's scope, whether a Full Import asked for it or a
+        // Delta Import fell back to it, and says so: that is what has JIM detect deletions by absence on the fallback (#2720).
+        var result = new ConnectedSystemImportResult { CompleteRead = true };
 
         if (_cancellationToken.IsCancellationRequested)
         {
@@ -180,9 +182,11 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         {
             // initial-page call. we have no paging tokens to use (yet) to resume a query
 
-            // get information about the directory we're connected to
+            // get information about the directory we're connected to. A Delta Import that fell back to this has
+            // already read the last import's record; a Full Import reads it only to narrow the watermark search.
             await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
-            _currentRootDse = await GetRootDseInformationAsync();
+            var targetPartitions = GetTargetPartitions().ToList();
+            _currentRootDse = await GetRootDseInformationAsync(_previousRootDse ?? ReadPreviousRootDse(), NamingContextsOf(targetPartitions));
 
             // Serialise the rootDSE info to JSON for persistence
             // This captures the current USN/changelog position for use in future delta imports
@@ -190,7 +194,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
             // Guard against silently importing zero objects from a Partition the connected domain
             // controller does not host (see #230). AD-family only; a no-op for other directory types.
-            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, GetTargetPartitions(), _logger);
+            LdapConnectorUtilities.VerifyPartitionsAreHostedByConnectedServer(_currentRootDse, targetPartitions, _logger);
         }
 
         // OpenLDAP's RFC 2696 paging cookies are connection-scoped: any new search on the same
@@ -316,12 +320,13 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         // The record the last import left says how this directory reports change, and so which source reads it.
         var source = DeltaSourceFor(_previousRootDse);
         var targetPartitions = GetTargetPartitions().ToList();
+        var namingContexts = NamingContextsOf(targetPartitions);
 
         if (_paginationTokens.Count == 0)
         {
             // Initial page - get the current RootDSE info
             await _progress.EnterPhaseAsync(LdapConnectorPhases.RootDse, "Querying root DSE...");
-            _currentRootDse = await GetRootDseInformationAsync();
+            _currentRootDse = await GetRootDseInformationAsync(_previousRootDse, namingContexts);
             result.PersistedConnectorData = JsonSerializer.Serialize(_currentRootDse);
 
             // Guard against a delta import silently reading its watermark against a directory it no longer
@@ -338,7 +343,6 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             // cannot read is not always refused, its search can succeed with no rows, so continuing would import
             // what it could see and provably miss the rest. Runs before any change is queried. An unavailability
             // JIM could prove stops the run; one it could not confirm becomes a warning.
-            var namingContexts = targetPartitions.Select(p => p.ExternalId).ToList();
             var findings = await source.VerifyReadinessAsync(_currentRootDse, namingContexts, _cancellationToken);
             _deltaSourceNotes = LdapDeltaSourceFindings.ThrowOnUnavailableOrNote(findings, _logger);
         }
@@ -347,17 +351,19 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         {
             // The last import recorded no watermark: its change source could not be read at the time (a changelog
             // not yet enabled, an accesslog the account could not see), or the record predates this version. The
-            // source is readable now, or the readiness check above would have refused the run, so a Full Import
+            // source is readable now, or the readiness check above would have refused the run, so a full read
             // both imports everything and records the watermark the next Delta Import reads from. Falling back
             // rather than failing is what the SQL and SCIM connectors already do; the run says so in its warning.
+            // The full read reports itself complete, so JIM detects deletions by absence as on a Full Import (#2720).
             _logger.Warning("GetDeltaImportObjects: The last import recorded no change watermark. " +
                 "Falling back to a full import to establish the baseline; future delta imports read from it.");
 
             result = await GetFullImportObjectsAsync();
             result.WarningMessage = "A Delta Import was requested, but the last import recorded no change watermark for this directory " +
                 "(its change source could not be read at the time, or the record predates this version of JIM). " +
-                "A Full Import was performed instead, which also detects deletions by absence; it recorded the watermark, " +
-                "and the next Delta Import will read from it.";
+                "Every object was read instead, as a Full Import does, and an object JIM holds that the directory no longer has " +
+                "is marked as deleted, within this Run Profile's deletion limits. Once a run like this has finished that check, " +
+                "it records a watermark and the next Delta Import reads only the changes after it.";
             result.WarningErrorType = ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport;
             return result;
         }
@@ -406,6 +412,13 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
 
         return targets;
     }
+
+    /// <summary>
+    /// The distinguished names of the partitions this run imports from, which is how a change source is told which
+    /// partitions to check, and to confine its searches to.
+    /// </summary>
+    private static List<string> NamingContextsOf(IEnumerable<ConnectedSystemPartition> targetPartitions) =>
+        targetPartitions.Select(p => p.ExternalId).ToList();
 
     /// <summary>
     /// Returns every Container stating something about scope across the partitions this run targets: the
@@ -689,7 +702,36 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         await ReportObjectsReadAsync(result.ImportObjects.Count - readBefore);
     }
 
-    private async Task<LdapConnectorRootDse> GetRootDseInformationAsync()
+    /// <summary>
+    /// The record the last import left, for a Full Import, which takes nothing from it but where the watermark search
+    /// can start (#2704). Null when there is none or it cannot be read, which costs only that narrowing; the Full
+    /// Import replaces it with a record of its own either way. A Delta Import reads the record for itself.
+    /// </summary>
+    private LdapConnectorRootDse? ReadPreviousRootDse()
+    {
+        if (string.IsNullOrEmpty(_persistedConnectorData))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<LdapConnectorRootDse>(_persistedConnectorData);
+        }
+        catch (JsonException ex)
+        {
+            _logger.Debug(ex, "GetFullImportObjects: The record the last import left could not be read, so the watermark is searched for from the start of the change log");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the rootDSE of the directory reached: its type and capabilities, and the watermark the next Delta Import
+    /// will read from.
+    /// </summary>
+    /// <param name="previousRootDse">The record the last import left, which the change source may use to narrow its
+    /// search for the new watermark; null on a first import, or when the record could not be read.</param>
+    /// <param name="namingContexts">The partitions this run imports from, which a change source whose log every
+    /// partition on the server shares may confine that search to, as its change read is (#2712).</param>
+    private async Task<LdapConnectorRootDse> GetRootDseInformationAsync(LdapConnectorRootDse? previousRootDse, IReadOnlyCollection<string> namingContexts)
     {
         var request = new SearchRequest()
         {
@@ -739,8 +781,10 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
         // committed USN and the domain controller's invocationId for Active Directory, the latest accesslog
         // timestamp for OpenLDAP, the last change number for a changelog. This must run during BOTH full and
         // delta imports: a full import establishes the baseline for the first delta import, and a delta import
-        // captures the position the next one starts from.
-        await DeltaSourceFor(rootDse).CaptureWatermarkAsync(rootDseEntry, rootDse, _searchTimeout);
+        // captures the position the next one starts from. The last import's record, on every import that has one,
+        // lets the source search from the last watermark rather than from the start of its change log (#2704), and
+        // the run's partitions let it leave out the writes to the others where every partition shares one log (#2712).
+        await DeltaSourceFor(rootDse).CaptureWatermarkAsync(rootDseEntry, rootDse, previousRootDse, namingContexts, _searchTimeout);
 
         // Pin creation and self-healing (issue #230 Phase 2): the connection that answered this rootDSE
         // query was itself opened via the resolved pin (or Host, on a first connection or after a pin was

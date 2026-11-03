@@ -125,13 +125,13 @@ Get-JIMServiceHealth -Summary
 
 ### Output
 
-One object per service, always three and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to empty. With `-Summary`, one object whose Services holds those three.
+One object per service the deployment runs, in the order WorkerSync, WorkerDelivery, WorkerExchange, Scheduler. WorkerExchange is present only while the in-development Exchange recipients feature is switched on, so a production deployment never returns it. A service that has never reported is present as Unhealthy (NeverStarted), with the fields it cannot supply set to empty. With `-Summary`, one object whose Services holds them.
 
 **By default**:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Service` | `string` | Which service this is: WorkerSync (the Worker's synchronisation loop), WorkerDelivery (the Worker's password delivery loop) or Scheduler. One of `WorkerSync`, `WorkerDelivery` or `Scheduler`. |
+| `Service` | `string` | Which service this is. WorkerSync is the Worker's synchronisation loop, WorkerDelivery its password delivery loop, Scheduler the Scheduler, and WorkerExchange the Worker's Exchange delivery loop, which only the in-development Exchange recipients feature runs. One of `WorkerSync`, `WorkerDelivery`, `Scheduler` or `WorkerExchange`. |
 | `Status` | `string` | The verdict: Healthy (heartbeating within its interval), Degraded (alive, but its heartbeat is overdue, its current work has stalled, or its memory is low) or Unhealthy (no heartbeat long enough to presume it down, or never started). One of `Healthy`, `Degraded` or `Unhealthy`. |
 | `Condition` | `string` | Why the service has that status: Heartbeating, HeartbeatOverdue, Stalled, MemoryLow (85% or more of the memory it can draw on is in use), NoHeartbeat or NeverStarted. Each condition belongs to exactly one status. One of `Heartbeating`, `HeartbeatOverdue`, `Stalled`, `NoHeartbeat`, `NeverStarted` or `MemoryLow`. |
 | `Reason` | `string` | The condition in plain words with the figures that matter, for example "No heartbeat for 4 minutes". |
@@ -155,7 +155,7 @@ One object per service, always three and always in the order WorkerSync, WorkerD
 | `Overall` | `string` | The worst status among Services: Healthy, Degraded or Unhealthy. A monitoring script that alerts on anything other than Healthy needs to read nothing else. One of `Healthy`, `Degraded` or `Unhealthy`. |
 | `WebVersion` | `string` | The version of the web tier that answered, for comparison with each service's own version; a mismatch means a partial upgrade. |
 | `GeneratedAt` | `datetime` | When (UTC) the verdicts were derived. Every "last seen n seconds ago" reason is relative to this moment. |
-| `Services` | `object[]` | One entry per service, always present and always in the order WorkerSync, WorkerDelivery, Scheduler. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt`, `Detail`, `ProcessMemoryBytes`, `MemoryTotalBytes` and `MemoryAvailableBytes`. |
+| `Services` | `object[]` | One entry per service the deployment runs, in the order WorkerSync, WorkerDelivery, WorkerExchange, Scheduler. WorkerExchange is present only while the in-development Exchange recipients feature is switched on, so a production deployment never reports it. A service that has never reported is present as Unhealthy (NeverStarted) rather than missing. Each has `Service`, `Status`, `Condition`, `Reason`, `InstanceId`, `HostName`, `Version`, `StartedAt`, `LastSeenAt`, `CurrentWork`, `CurrentWorkStartedAt`, `LastProgressAt`, `Detail`, `ProcessMemoryBytes`, `MemoryTotalBytes` and `MemoryAvailableBytes`. |
 <!-- END GENERATED: Get-JIMServiceHealth -->
 
 ### Examples

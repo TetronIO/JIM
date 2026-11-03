@@ -171,6 +171,24 @@ public static class TestUtilities
         mockDbContext.Setup(m => m.ConnectedSystemContainers).Returns(emptyContainers.Object);
     }
 
+    /// <summary>
+    /// Gives <paramref name="mockDbContext"/> Service Settings holding every feature flag, enabled, so a test runs as
+    /// though the features had shipped (test/CLAUDE.md). An export run reads the Exchange recipients flag
+    /// (<see cref="FeatureFlagCatalogue.ExchangeRecipients"/>) once as it starts, by key, through <c>FindAsync</c>, which
+    /// a plain mocked DbSet does not answer, so it is set up here too.
+    /// </summary>
+    /// <returns>The settings, so a test can turn a flag off by setting its <see cref="ServiceSetting.Value"/>.</returns>
+    public static List<ServiceSetting> SetUpFeatureFlagsEnabled(Mock<JimDbContext> mockDbContext)
+    {
+        // A completed task: the in-memory settings store answers synchronously.
+        var settings = InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled().GetAllSettingsAsync().GetAwaiter().GetResult();
+        var mockSettings = settings.BuildMockDbSet();
+        mockSettings.Setup(m => m.FindAsync(It.IsAny<object[]>()))
+            .Returns((object[] keys) => ValueTask.FromResult(settings.SingleOrDefault(s => s.Key == (string)keys[0])));
+        mockDbContext.Setup(m => m.ServiceSettingItems).Returns(mockSettings.Object);
+        return settings;
+    }
+
     public static MetaverseObject GetInitiatedBy()
     {
         var user = new MetaverseObject

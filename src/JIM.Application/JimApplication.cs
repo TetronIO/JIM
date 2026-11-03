@@ -78,6 +78,12 @@ public class JimApplication : IDisposable
     public PasswordSynchronisationServer PasswordSynchronisation { get; }
 
     /// <summary>
+    /// Delivers the Exchange queue (#2021): the background lane that has Exchange apply the recipient state an export left
+    /// for an account.
+    /// </summary>
+    public ExchangeDeliveryServer ExchangeDelivery { get; }
+
+    /// <summary>
     /// Generates initial passwords, and tells an administrator in advance what a configuration would produce.
     /// Exposed on the facade because the Synchronisation Rule editor assesses a configuration as it is typed,
     /// and the administrator's set-password dialog generates on demand.
@@ -207,6 +213,15 @@ public class JimApplication : IDisposable
             // same credential protection fallback InitialPasswordServer above is built with.
             PasswordGenerator,
             () => CredentialProtection ?? new CredentialProtectionService(DataProtectionHelper.CreateProvider()));
+        ExchangeDelivery = new ExchangeDeliveryServer(
+            SyncRepo,
+            // Resolved when a lane runs, for the reason PasswordSynchronisation's is: Repository is not yet assigned here.
+            () => Repository!.ConnectedSystems,
+            connectedSystem => ConnectedSystems.CreateConnector(connectedSystem),
+            // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
+            activity => Activities.CreateSystemActivityAsync(activity),
+            activity => Activities.CompleteActivityAsync(activity),
+            (activity, errorMessage) => Activities.CompleteActivityWithErrorAsync(activity, errorMessage));
         ScopingEvaluation = new ScopingEvaluationServer();
         ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);
@@ -282,7 +297,6 @@ public class JimApplication : IDisposable
     public async Task InitialiseSsoAsync(
         string ssoAuthority,
         string ssoClientId,
-        string ssoSecret,
         string uniqueIdentifierClaimType,
         string uniqueIdentifierMetaverseAttributeName)
     {
@@ -319,14 +333,8 @@ public class JimApplication : IDisposable
             Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOClientId to: {ssoClientId}");
         }
 
-        if (string.IsNullOrEmpty(serviceSettings.SSOSecret) || serviceSettings.SSOSecret != ssoSecret)
-        {
-            serviceSettings.SSOSecret = ssoSecret;
-            await ServiceSettings.UpdateServiceSettingsAsync(serviceSettings);
-
-            // don't print the secret to logs!
-            Log.Information($"InitialiseSSOAsync: Updated ServiceSettings.SSOSecret");
-        }
+        // The client secret is deliberately not mirrored here: it is held encrypted as the SSO.Secret service setting
+        // (seeded by SeedingServer), and a copy on this row was stored in clear (#2684).
 
         // INBOUND CLAIM MAPPING:
         // We want to make it easy for IDP and JIM admin teams to enable SSO. We don't want them to have to add JIM-specific claims to the OIDC ID token if possible.

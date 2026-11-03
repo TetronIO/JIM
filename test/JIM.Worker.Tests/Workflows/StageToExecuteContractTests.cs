@@ -1004,7 +1004,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
     /// (contract clause 3's invariants, including the one added specifically for an unconfirmable Exported
     /// Pending Export against a NotJoined CSO, are asserted at the end).
     ///
-    /// Fixed via <c>SyncEngine.IsExportedCreateUnseenByFullImport</c> +
+    /// Fixed via <c>SyncEngine.IsExportedCreateUnseenByCompleteRead</c> +
     /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase: when a Full Import completes
     /// without seeing a Pending Provisioning CSO whose Create Pending Export is Status Exported, that
     /// Create is marked for retry (Pending Export Status -&gt; ExportNotConfirmed, its
@@ -1100,7 +1100,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
     /// different code path: <c>ReconcileCsoAgainstPendingExport</c> is only ever invoked per imported
     /// object, so an object genuinely absent from every subsequent import is never reconciled by it.
     /// <c>SyncImportTaskProcessor</c>'s Full Import deletion-detection phase now runs a second, narrow
-    /// step (<c>SyncEngine.IsExportedCreateUnseenByFullImport</c>) that finds exactly this shape - a
+    /// step (<c>SyncEngine.IsExportedCreateUnseenByCompleteRead</c>) that finds exactly this shape - a
     /// Pending Provisioning CSO whose Create Pending Export is Status Exported but whose External Id
     /// never appeared in the run's own imported set - and marks it for retry, so the next export re-sends
     /// the Create.

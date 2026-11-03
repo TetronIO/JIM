@@ -28,14 +28,16 @@ internal static class MetaverseReferenceRowCleanup
     /// MVOs are passed to Remove/RemoveRange: EF's client-side cascade fix-up fires at Remove time
     /// and would otherwise mark the raw-deleted rows Modified (an UPDATE against a missing row
     /// throws DbUpdateConcurrencyException and poisons the worker's long-lived context).
+    /// Returns how many rows each of its two statements deleted and cleared, which the deleters
+    /// report on their spans.
     /// </summary>
-    internal static async Task CleanUpReferencesToDeletedMvosAsync(JimDbContext context, Guid[] deletedMvoIds)
+    internal static async Task<(int RowsDeleted, int RowsCleared)> CleanUpReferencesToDeletedMvosAsync(JimDbContext context, Guid[] deletedMvoIds)
     {
         // Rows owned by the deleted MVOs themselves are excluded from the DELETE: they die with
         // their owner via the database cascade, and raw-deleting them here would make EF's cascade
         // delete at SaveChanges target already-missing rows (zero rows affected -> concurrency
         // exception). Only rows on SURVIVING owners are ghost candidates.
-        await context.Database.ExecuteSqlRawAsync(
+        var rowsDeleted = await context.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""MetaverseObjectAttributeValues""
               WHERE ""ReferenceValueId"" = ANY({0})
                 AND NOT (""MetaverseObjectId"" = ANY({0}))
@@ -54,11 +56,12 @@ internal static class MetaverseReferenceRowCleanup
         // Payload-carrying rows on surviving owners, and all rows owned by the co-deleted MVOs,
         // keep the legacy behaviour: reference nulled, row preserved (the co-deleted MVOs' own rows
         // are removed moments later by the database cascade when their owner row is deleted).
-        await context.Database.ExecuteSqlRawAsync(
+        var rowsCleared = await context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
             deletedMvoIds);
 
         RemoveTrackedValuelessReferenceRows(context, deletedMvoIds.ToHashSet());
+        return (rowsDeleted, rowsCleared);
     }
 
     /// <summary>

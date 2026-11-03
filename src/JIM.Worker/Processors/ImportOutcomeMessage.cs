@@ -29,7 +29,10 @@ internal static class ImportOutcomeMessage
     /// deletes the Connector reported for objects JIM no longer held or already held as deleted.
     /// </param>
     /// <param name="connectorReportedDeletions">Deletes the Connector reported for objects JIM held, now marked as deleted.</param>
-    /// <param name="detectedDeletions">Objects a Full Import no longer found and newly marked as deleted; not among <paramref name="objects"/>.</param>
+    /// <param name="detectedDeletions">
+    /// Objects a run that read every object in its scope no longer found and newly marked as deleted (a Full Import, or a
+    /// Delta Import whose Connector read everything instead of its changes, #2720); not among <paramref name="objects"/>.
+    /// </param>
     /// <param name="errors">Execution items the run recorded an error on.</param>
     /// <param name="throughput">
     /// How long the run took and what it averaged, already formatted by
@@ -61,24 +64,30 @@ internal static class ImportOutcomeMessage
     }
 
     /// <summary>
-    /// Run Profile Safeguards (#1618, Layer 2): the sentence appended to a Full Import's Activity
-    /// warning when deletion detection refused because it would have newly marked more Connected
-    /// System Objects as deleted than the Run Profile's <c>MaxDetectedDeletions</c> and/or
-    /// <c>MaxDetectedDeletionsPercent</c> limit allows. A refused detection marks nothing; the objects
-    /// the import did see are still created and updated as normal.
+    /// Run Profile Safeguards (#1618, Layer 2): the sentence appended to the Activity warning of a run
+    /// that read every object in its scope when deletion detection refused because it would have newly
+    /// marked more Connected System Objects as deleted than the Run Profile's <c>MaxDetectedDeletions</c>
+    /// and/or <c>MaxDetectedDeletionsPercent</c> limit allows. A refused detection marks nothing; the objects
+    /// the import did see are still created and updated as normal. A Full Import is run again once the
+    /// cause is dealt with; a Delta Import that read every object (#2720) kept its watermark, so each Delta
+    /// Import reads everything and checks again by itself.
     /// </summary>
     /// <param name="count">How many Connected System Objects deletion detection would have newly marked as deleted.</param>
     /// <param name="baseCount">How many Connected System Objects were in the run's scope at the start of the run.</param>
     /// <param name="maxCount">The Run Profile's <c>MaxDetectedDeletions</c> limit, or null when unset.</param>
     /// <param name="maxPercent">The Run Profile's <c>MaxDetectedDeletionsPercent</c> limit, or null when unset.</param>
-    internal static string ForRefusedDeletionDetection(int count, int baseCount, int? maxCount, int? maxPercent)
+    /// <param name="runType">The Run Profile's type: a Full Import, or a Delta Import that read every object.</param>
+    internal static string ForRefusedDeletionDetection(int count, int baseCount, int? maxCount, int? maxPercent, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
         var (percent, limitDescription) = DescribeDeletionLimits(count, baseCount, maxCount, maxPercent);
         var objectWord = count == 1 ? "object" : "objects";
+        var whatNext = runType == ConnectedSystemRunType.DeltaImport
+            ? "or raise the limit. Each Delta Import will read every object and check again until this is resolved."
+            : "or raise the limit, then run the Full Import again.";
 
         return $"Deletion detection found {count:N0} {objectWord} ({percent}% of {baseCount:N0}) no longer in the Connected System, " +
                $"above this Run Profile's {limitDescription}; none were marked as deleted. Check the Connected System's scope and " +
-               "the connector's filters, or raise the limit, then run the Full Import again.";
+               $"the connector's filters, {whatNext}";
     }
 
     /// <summary>
@@ -249,19 +258,24 @@ internal static class ImportOutcomeMessage
     }
 
     /// <summary>
-    /// Why a Full Import did not check an Object Type's objects for deletion (#2066): the External ID of at least one of
-    /// its objects could not be read, so JIM could not tell which object it was, and would otherwise have found the
-    /// object it holds for it missing and marked it deleted although the Connected System still holds it.
+    /// Why a run that read every object did not check an Object Type's objects for deletion (#2066): the External ID of at
+    /// least one of its objects could not be read, so JIM could not tell which object it was, and would otherwise have
+    /// found the object it holds for it missing and marked it deleted although the Connected System still holds it. A Delta
+    /// Import that read every object (#2720) kept its watermark, so each Delta Import reads everything and checks again.
     /// </summary>
     /// <param name="heldBack">Each held-back Object Type's name and how many of its objects had an unreadable External ID.</param>
-    internal static string ForUnreadableExternalIds(IReadOnlyList<(string ObjectTypeName, int Count)> heldBack)
+    /// <param name="runType">The Run Profile's type: a Full Import, or a Delta Import that read every object.</param>
+    internal static string ForUnreadableExternalIds(IReadOnlyList<(string ObjectTypeName, int Count)> heldBack, ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport)
     {
+        var whatNext = runType == ConnectedSystemRunType.DeltaImport
+            ? "Correct the External IDs in the Connected System. Each Delta Import will read every object and check again until they can be read."
+            : "Correct the External IDs in the Connected System, then run the Full Import again.";
+
         return string.Join(" ", heldBack.Select(item =>
         {
             var objects = item.Count == 1 ? "1 object" : $"{item.Count:N0} objects";
             return $"Object Type '{item.ObjectTypeName}' was not checked for deleted objects, because the External ID of {objects} " +
-                   "could not be read and JIM could not tell which objects they were. None of its objects were marked as deleted. " +
-                   "Correct the External IDs in the Connected System, then run the Full Import again.";
+                   $"could not be read and JIM could not tell which objects they were. None of its objects were marked as deleted. {whatNext}";
         }));
     }
 

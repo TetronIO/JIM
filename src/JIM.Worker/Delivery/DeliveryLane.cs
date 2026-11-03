@@ -1,16 +1,17 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-namespace JIM.Worker.PasswordDelivery;
+namespace JIM.Worker.Delivery;
 
 /// <summary>
-/// One delivery lane in flight: the Password Delivery Service delivering to one Connected System (#1635). The
+/// One delivery lane in flight: a delivery service (passwords #1635, Exchange recipients #2021) delivering to one
+/// Connected System. The
 /// scheduler creates one per system it dispatches, the work fills in the system's name once it has loaded it, and
 /// the heartbeat describes the lanes in flight as the service's current work.
 /// </summary>
-internal sealed class PasswordDeliveryLane
+internal sealed class DeliveryLane
 {
-    public PasswordDeliveryLane(int connectedSystemId, DateTime startedAt)
+    public DeliveryLane(int connectedSystemId, DateTime startedAt)
     {
         ConnectedSystemId = connectedSystemId;
         StartedAt = startedAt;

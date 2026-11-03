@@ -4,6 +4,7 @@
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
+using JIM.Models.Exchange;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -214,7 +215,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<int>> GetConnectedSystemIdsWithDuePasswordChangesAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetConnectedSystemIdsWithDuePasswordChangesAsync(asOf, claimLease);
 
-    public Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+    public Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
         => _inner.GetPasswordQueueDeliveryOutlookAsync(asOf, claimLease);
 
     public Task<List<PendingPasswordChange>> GetPasswordChangesByActivityAsync(Guid activityId)
@@ -290,6 +291,24 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsAwaitingInitialPasswordAsync(connectedSystemId, connectedSystemObjectIds);
 
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsWithExchangeChangeAsync(connectedSystemId, connectedSystemObjectIds);
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
+        => _inner.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(connectedSystemId);
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetConnectedSystemObjectIdsAwaitingExchangeAsync(connectedSystemId, connectedSystemObjectIds);
+
+    public Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetConnectedSystemIdsWithDueExchangeChangesAsync(asOf, claimLease);
+
+    public Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
+        => _inner.GetExchangeQueueDeliveryOutlookAsync(asOf, claimLease);
+
+    public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+        => _inner.GetExchangeDeliveryObjectsAsync(connectedSystemObjectIds);
+
     public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
         => _inner.GetAccountEnablementFactsAsync(connectedSystemId, pendingPasswordChangeId, connectedSystemObjectId, exportsInFlightSince);
@@ -335,9 +354,6 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
         => _inner.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
-
-    public Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(IEnumerable<Guid> metaverseObjectIds, int connectedSystemId)
-        => _inner.GetConnectedSystemObjectsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
 
     public Task<Dictionary<Guid, string>> GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
         => _inner.GetReferenceDisplayIdentifiersByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
@@ -522,7 +538,7 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => throw new PreviewWriteAttemptedException(nameof(DeleteConnectedSystemObjectsAsync));
 
-    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
         => throw new PreviewWriteAttemptedException(nameof(FixupCrossBatchReferenceIdsAsync));
 
     public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
@@ -573,6 +589,24 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => throw new PreviewWriteAttemptedException(nameof(MarkOwedInitialPasswordsAsSetByAttributeFlowAsync));
+
+    public Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes)
+        => throw new PreviewWriteAttemptedException(nameof(StageExchangeChangesAsync));
+
+    public Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum)
+        => throw new PreviewWriteAttemptedException(nameof(ClaimDueExchangeChangesAsync));
+
+    public Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(ReleaseExchangeChangeClaimsAsync));
+
+    public Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(RecordExchangeChangeAttemptsAsync));
+
+    public Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteExchangeChangesAsync));
+
+    public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
+        => throw new PreviewWriteAttemptedException(nameof(DeleteTerminalExchangeChangesAsync));
 
     public Task CreateActivitiesAsync(IReadOnlyCollection<Activity> activities)
         => throw new PreviewWriteAttemptedException(nameof(CreateActivitiesAsync));

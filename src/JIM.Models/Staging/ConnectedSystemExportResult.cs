@@ -85,6 +85,18 @@ public class ConnectedSystemExportResult
     public string? SecondaryExternalId { get; set; }
 
     /// <summary>
+    /// The server that took the write: for Active Directory, the domain controller the export connection was bound to,
+    /// as its RootDSE names it (<c>dnsHostName</c>). Null where the Connector does not say, and on every result that
+    /// did not succeed.
+    /// </summary>
+    /// <remarks>
+    /// Recorded because the Connected System's host may be a domain name that any domain controller answers, while the
+    /// Exchange step must name the one that has the object it was just given (#2021, PRD requirement 8): any other may
+    /// not have it until replication reaches it. A host name, never a credential.
+    /// </remarks>
+    public string? DirectoryServer { get; set; }
+
+    /// <summary>
     /// Whether the Connector never started this export because the run was cancelled before it reached it (#2083).
     /// JIM records the results of the exports the Connector did write, and puts this one back exactly as it was before
     /// the batch was sent: no attempt is counted and no execution item is recorded, because nothing was sent and

@@ -480,6 +480,54 @@ public class SyncEngineExportMergeTests
         Assert.That(withdrawn, Is.Empty);
     }
 
+    // ---- A connector-defined change awaiting Exchange (#2021) ----
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_ChangeAwaitingExchangeWhenTheDeclaredStateReverted_IsWithdrawn()
+    {
+        // The declaration reverts before Exchange acts: the rule asks for "None" again, which is what the object was
+        // imported as. The change awaiting Exchange still asserts "Mailbox"; kept, its queued Exchange change would be
+        // delivered and create a mailbox nobody declares any more. Withdrawn, the delivery lane sees the declared state
+        // has moved and withdraws the queued change too.
+        var awaiting = AwaitingExchange(attributeId: 1, "Mailbox");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [awaiting], [SingleValuedChange(attributeId: 1, "None")]);
+
+        Assert.That(withdrawn, Is.EqualTo(new[] { awaiting }));
+    }
+
+    [Test]
+    public void SelectSurvivingDriftChanges_ChangeAwaitingExchangeWhenTheDeclaredStateReverted_DoesNotSurvive()
+    {
+        var awaiting = AwaitingExchange(attributeId: 1, "Mailbox");
+        var keep = SingleValuedChange(attributeId: 2, "Leaver");
+
+        var survivors = SyncEngine.SelectSurvivingDriftChanges([], [awaiting, keep], alreadyCurrentChanges: [SingleValuedChange(attributeId: 1, "None")]);
+
+        Assert.That(survivors, Is.EqualTo(new[] { keep }));
+    }
+
+    [Test]
+    public void SelectChangesWithdrawnAsAlreadyCurrent_ChangeAwaitingExchangeTheEvaluationRestates_IsNotWithdrawn()
+    {
+        // Exchange has acted and the import has read its result back, so the target holds what the change asserts:
+        // the change is the confirmation of that, not a stale instruction.
+        var awaiting = AwaitingExchange(attributeId: 1, "Mailbox");
+
+        var withdrawn = SyncEngine.SelectChangesWithdrawnAsAlreadyCurrent([], [awaiting], [SingleValuedChange(attributeId: 1, "Mailbox")]);
+
+        Assert.That(withdrawn, Is.Empty);
+    }
+
+    private static PendingExportAttributeValueChange AwaitingExchange(int attributeId, string value)
+    {
+        var change = SingleValuedChange(attributeId, value);
+        change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        change.ExportAttemptCount = 1;
+        change.AwaitsExchange = true;
+        return change;
+    }
+
     private static PendingExportAttributeValueChange HeldChange(int attributeId, string value)
     {
         var change = SingleValuedChange(attributeId, value);

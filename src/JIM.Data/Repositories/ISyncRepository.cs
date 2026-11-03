@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using JIM.Models.Exchange;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
@@ -275,8 +276,8 @@ public interface ISyncRepository
     /// PendingProvisioning: an exported Create whose confirming import has not yet reported the object
     /// back. Ordinary deletion detection excludes PendingProvisioning Connected System Objects outright
     /// (they have no External ID yet to compare), so this is a separate, deliberately narrow query used
-    /// only by a Full Import's "unseen exported Create" retry step
-    /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByFullImport"/>): the
+    /// only by the "unseen exported Create" retry step of an import that read every object
+    /// (<see cref="JIM.Application.Interfaces.ISyncEngine.IsExportedCreateUnseenByCompleteRead"/>): the
     /// caller compares each returned Pending Export's Connected System Object External Id against the
     /// run's own imported set to decide whether the Create was genuinely unseen.
     /// <para>
@@ -450,19 +451,31 @@ public interface ISyncRepository
     Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
-    /// Resolves cross-batch reference attribute values that could not be resolved during initial import
-    /// because the target CSO was in a later batch. Uses raw SQL JOIN with partial indexes.
-    /// Returns the count of resolved references.
+    /// Resolves the given Connected System's outstanding CSO reference values: those holding a reference by identifier
+    /// (<see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>) but no referenced object's id,
+    /// because the import could not resolve them when it wrote them (the object arrives in a later run, or a later
+    /// batch). Each is matched against the Secondary External ID values of CSOs in the same Connected System, ignoring
+    /// case unless the target's attribute is case-exact; a value that matches nothing stays outstanding for a later run,
+    /// and a value already holding an id is never re-pointed. When nothing is outstanding, which is the usual case, the
+    /// objects references could name are not read at all. Resolutions are applied in bounded batches so each statement
+    /// stays inside the bulk command timeout regardless of backlog size. Returns the count of resolved references.
     /// </summary>
-    Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose reference values to resolve.</param>
+    /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
+    Task<int> FixupCrossBatchReferenceIdsAsync(int connectedSystemId, int? batchSize = null);
 
     /// <summary>
-    /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
-    /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
-    /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same Connected System using case-insensitive comparison. Resolutions are applied in bounded
-    /// batches so each statement stays inside the bulk command timeout regardless of backlog size
-    /// (a Scale500k25kGroups run accumulates millions of unresolved rows).
+    /// Resolves the reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues) that were
+    /// written without their referenced object's id, which the writer marks
+    /// <see cref="ConnectedSystemObjectChangeAttributeValue.IsUnresolvedReference"/>: the referenced object's row did
+    /// not exist yet (a later batch writes it), or the reference named no object when it was recorded. A value naming its
+    /// object by display text holds no identifier to match, so it is never marked and never read here. The DN in
+    /// StringValue is matched against the secondary external ID attribute values of CSOs in the same Connected System,
+    /// ignoring case unless the target's attribute is case-exact; writing the id clears the mark, and a value that
+    /// matches nothing stays marked for a later run. A value written with its id is never read, so one whose object
+    /// is deleted later keeps the DN it was recorded with rather than being re-pointed at a later object reusing it.
+    /// Resolutions are applied in bounded batches so each statement stays inside the bulk command timeout regardless
+    /// of backlog size (a Scale500k25kGroups run accumulates millions of unresolved rows).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose change records to resolve.</param>
     /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
@@ -921,7 +934,7 @@ public interface ISyncRepository
     /// loop iteration to decide how long to sleep, and written into the service's heartbeat. Counts what a lane
     /// would claim: every change on an enabled system, and everything but propagated changes elsewhere.
     /// </summary>
-    Task<PasswordQueueDeliveryOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
+    Task<DeliveryQueueOutlook> GetPasswordQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
 
     /// <summary>
     /// Every queue row a password change produced, by the Activity that recorded the change. Rows a newer change
@@ -1072,6 +1085,123 @@ public interface ISyncRepository
     /// are delivered off this queue.
     /// </summary>
     Task<List<InitialPasswordRejection>> GetParkedProvisionedPasswordReasonsAsync(int syncRuleId);
+
+    #endregion
+
+    #region Exchange queue (#2021)
+
+    /// <summary>
+    /// Offers Exchange changes to the queue, one per exported account, coalescing on the Connected System Object: the
+    /// queue holds at most one change per account, the latest declared state.
+    /// <para>
+    /// Decided per change in one statement against the row already there, if any
+    /// (<see cref="ExchangeChangeStagingDisposition"/>): with no row, the change is inserted; a row that is the same
+    /// change (the five declared values, null and empty alike, and refused or not alike:
+    /// <see cref="PendingExchangeChange.IsSameChangeAs"/>) is left untouched whatever its status, so re-staging does not
+    /// unpark a Parked change, undo a cancellation, report a refusal again, wipe a retrying change's backoff or disturb
+    /// a delivery in flight, and its status is reported on the outcome; any other row, including one being delivered,
+    /// is superseded in place, keeping its id, taking the change's declared state, domain controller, Metaverse Object,
+    /// Synchronisation Rule, Activity, creation time, status and failure fields, and clearing every trace of earlier
+    /// attempts, the claim and the cancellation, so a deliverable change is due at once.
+    /// </para>
+    /// <para>
+    /// Each change must name its account (<see cref="PendingExchangeChange.ConnectedSystemObjectId"/>). A change whose
+    /// row already existed is given that row's id, so the caller holds the id actually in the table.
+    /// </para>
+    /// </summary>
+    /// <returns>One outcome per change, in the order offered.</returns>
+    Task<List<ExchangeChangeStagingOutcome>> StageExchangeChangesAsync(IReadOnlyCollection<PendingExchangeChange> changes);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those with a change on the Exchange queue of
+    /// <paramref name="connectedSystemId"/> (#2021), in any status: Pending, Delivering, Parked, Cancelled or Refused.
+    /// The confirming import holds a connector-defined change Exchange may still owe
+    /// (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>) while its object is among them, and judges it as
+    /// any other change once it is not. Asked once per reconciliation page, and only for a page holding such a change.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// The Connected System Objects on <paramref name="connectedSystemId"/> whose Pending Export holds a connector-defined
+    /// change awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021) but which no longer have a
+    /// change on the Exchange queue: the hold has nothing left to wait for.
+    /// <para>
+    /// Asked once per import, after reconciliation, so such a change is judged even when the import did not return its
+    /// object (a queued change withdrawn or deleted without Exchange touching the object changes nothing a Delta Import
+    /// would report). Answered from the partial index on the flag, so it costs nothing where no change awaits Exchange.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Narrows a set of Connected System Object ids to those whose Pending Export holds a connector-defined change
+    /// awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021). Drift Detection reads those
+    /// objects' Pending Exports, so its correction neither restates the held change nor drops it when it replaces the
+    /// Pending Export holding it, as for a change awaiting an Initial Password. Answered from a partial index, so it
+    /// costs nothing where no change carries the flag.
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// The Connected Systems with Exchange changes a delivery lane would attempt now: pending and due, or claimed under
+    /// a lease that has run out. Parked, Cancelled and Refused changes are never due.
+    /// </summary>
+    Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// What the Exchange Delivery Service has ahead of it, in one query: changes due now, changes waiting out a backoff,
+    /// and the earliest scheduled attempt still ahead.
+    /// </summary>
+    Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease);
+
+    /// <summary>
+    /// Claims up to <paramref name="maximum"/> due Exchange changes on <paramref name="connectedSystemId"/> for
+    /// <paramref name="claimedBy"/>, oldest first, in one statement: each becomes
+    /// <see cref="PendingExchangeChangeStatus.Delivering"/> under a lease from <paramref name="asOf"/>. Rows another
+    /// claimant holds are stepped over rather than waited for, so two deliverers never claim the same change. A claim
+    /// whose lease has run out is claimable again.
+    /// </summary>
+    /// <returns>The changes claimed, in the order they were claimed.</returns>
+    Task<List<PendingExchangeChange>> ClaimDueExchangeChangesAsync(int connectedSystemId, string claimedBy, DateTime asOf, TimeSpan lease, int maximum);
+
+    /// <summary>
+    /// Gives claimed changes back unattempted: each still Delivering under <paramref name="claimedBy"/>'s claim goes
+    /// back to Pending with its claim cleared. A change superseded, cancelled or reclaimed by another deliverer since is
+    /// left alone.
+    /// </summary>
+    /// <returns>How many were released.</returns>
+    Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy);
+
+    /// <summary>
+    /// Records failed attempts: each change's status, failure, attempt count, failure clock, next attempt and cleared
+    /// claim. Written only where the row is still Delivering under <paramref name="claimedBy"/>'s claim, so an outcome
+    /// a supersession, a cancellation or another deliverer gave the row meanwhile survives.
+    /// </summary>
+    Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy);
+
+    /// <summary>
+    /// Removes changes that were delivered or withdrawn, where each is still Delivering under
+    /// <paramref name="claimedBy"/>'s claim: a row superseded meanwhile carries newer work and is kept.
+    /// </summary>
+    /// <returns>How many were removed.</returns>
+    Task<int> DeleteExchangeChangesAsync(IEnumerable<Guid> ids, string claimedBy);
+
+    /// <summary>
+    /// Removes Parked and Cancelled Exchange changes last touched before <paramref name="olderThan"/>, oldest first, at
+    /// most <paramref name="maxRecords"/>, for history retention. A Delivering change is in a deliverer's hands and a
+    /// Refused one is what stops a misfit being reported again, so neither is ever removed here.
+    /// </summary>
+    /// <returns>How many were removed.</returns>
+    Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
+    /// What the delivery lane needs about each of <paramref name="connectedSystemObjectIds"/> before converging its
+    /// queued change: its identifiers, and its declared state now (the imported Exchange values and the changes its
+    /// Pending Export still holds for Exchange). An id with no object is absent from the result.
+    /// </summary>
+    Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     #endregion
 
@@ -1698,14 +1828,6 @@ public interface ISyncRepository
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
-
-    /// <summary>
-    /// Gets CSOs joined to multiple MVOs within a Connected System.
-    /// Returns a dictionary keyed by MVO ID for O(1) lookup.
-    /// Used for reference resolution during export processing.
-    /// </summary>
-    Task<Dictionary<Guid, ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdsAsync(
-        IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
     /// Per Metaverse Object joined to an object in the Connected System, the identifier a change record shows for a

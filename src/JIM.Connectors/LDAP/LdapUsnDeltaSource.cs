@@ -37,7 +37,7 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
     /// <see cref="LdapConnectorUtilities.VerifyDomainControllerIdentity"/>). invocationId is not itself a rootDSE
     /// attribute, hence the second read.
     /// </summary>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
+    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout)
     {
         rootDse.HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN");
 

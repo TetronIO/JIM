@@ -224,11 +224,27 @@ public interface ISyncEngine
     /// an interim value until an Initial Password is delivered is held or released (#2039). Null when the caller did
     /// not look, in which case such a change is held: the safe answer, since releasing re-sends a value the target
     /// refuses. Read only for a flagged change, so callers whose objects carry none need not supply it.</param>
+    /// <param name="connectedSystemObjectIdsWithExchangeChange">The Connected System Objects with a change on the
+    /// Exchange queue in any status (<c>ISyncRepository.GetConnectedSystemObjectIdsWithExchangeChangeAsync</c>), deciding
+    /// whether a connector-defined change Exchange still owes (#2021) is held or judged as any other. Null when the
+    /// caller did not look, in which case such a change is held: the safe answer, since judging it would report and
+    /// re-send a change Exchange may simply not have made yet. Read only for a flagged change.</param>
     void ReconcileCsoAgainstPendingExport(
         ConnectedSystemObject connectedSystemObject,
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
-        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null);
+        IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null);
+
+    /// <summary>
+    /// Judges the connector-defined changes a Pending Export holds while Exchange may still owe them (#2021) when the
+    /// import that has just run did not return its Connected System Object, and the object has no change left on the
+    /// Exchange queue: each is confirmed if the object's last imported value shows it, and otherwise released to be sent
+    /// again. No other change is touched, since the import did not read the object; a Create no import has confirmed,
+    /// and a Parked or Executing export, are left as they are.
+    /// This method does NOT perform any database operations; the caller persists the result.
+    /// </summary>
+    void JudgeChangesAwaitingExchangeNotReconciled(ConnectedSystemObject connectedSystemObject, PendingExport pendingExport, PendingExportReconciliationResult result);
 
     /// <summary>
     /// Judges the changes a Pending Export holds until an Initial Password is delivered when the import that has just run
@@ -304,18 +320,19 @@ public interface ISyncEngine
     bool IsProvisioningNeverExported(ConnectedSystemObject cso, PendingExport? existingPendingExport);
 
     /// <summary>
-    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from a
-    /// Full Import's payload, must be marked for retry: a CSO genuinely absent from every subsequent
+    /// Decides whether an exported Create Pending Export, for a Pending Provisioning CSO absent from an
+    /// import that read every object in its scope, must be marked for retry: a CSO genuinely absent from every subsequent
     /// import never reaches <see cref="ReconcileCsoAgainstPendingExport"/> (which only ever runs for a
     /// CSO an import actually returned and matched), so without this decision its exported Create sits
-    /// Status Exported forever and the CSO never leaves Pending Provisioning. Only a Full Import can
-    /// prove absence, and only when the run genuinely read something (mirrors deletion detection's own
+    /// Status Exported forever and the CSO never leaves Pending Provisioning. Only a run that read every object
+    /// can prove absence (a Full Import, or a Delta Import whose Connector read everything instead of its changes,
+    /// #2720), and only when it genuinely read something (mirrors deletion detection's own
     /// "no objects imported means do nothing" guard).
     /// </summary>
-    /// <param name="runType">The import run's type.</param>
+    /// <param name="readEveryObjectInScope">Whether the run read every object in its scope.</param>
     /// <param name="totalObjectsImported">How many objects the run read from the Connected System in total.</param>
-    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the Full Import's payload.</param>
-    bool IsExportedCreateUnseenByFullImport(ConnectedSystemRunType runType, int totalObjectsImported, bool wasSeen);
+    /// <param name="wasSeen">Whether this Connected System Object's External Id appeared in the run's payload.</param>
+    bool IsExportedCreateUnseenByCompleteRead(bool readEveryObjectInScope, int totalObjectsImported, bool wasSeen);
 
     /// <summary>
     /// Decides whether a disconnect that removed a Metaverse Object's last connector should stamp
