@@ -102,7 +102,7 @@ Before provisioning, the rule's Object Matching Rules look for an unjoined accou
 
 If a Metaverse Object attribute changes again while its Create export is still awaiting confirmation by a subsequent import, JIM never sends a second Create; most Connected Systems reject a Create for an object they already hold. The change is queued and sent as a single Update once the Create is confirmed, carrying whatever the latest value is by then; the Create counts as confirmed as soon as an import reports the object back at all, even if one of the values it reports still differs from what was exported, and the outstanding value then retries as part of that same Update.
 
-If a Full Import completes without reporting the object back at all, the Create itself is sent again at every export until an import reports it; a Delta Import never triggers this, since it only reports changes and an object missing from its payload is not evidence that it no longer exists.
+If an import that read every object completes without reporting the object back at all, the Create itself is sent again at every export until an import reports it. That is a Full Import, or a Delta Import that read everything because it could not read changes; a Delta Import that read changes never triggers this, since an object missing from its payload is not evidence that it no longer exists.
 
 ## :material-account-arrow-down-outline: Deprovisioning Action
 

@@ -73,7 +73,7 @@ When an Export activity withholds anything, it completes as **Complete with warn
 
 ### Run Profile Safeguards (import deletion limits)
 
-Every Full Import activity that ran deletion detection, and every Delta Import activity that completed, carries a `detectedDeletionsWithheld` counter. It is `0` when the Run Profile has no deletion limit, or the run's deletions did not exceed either limit. Otherwise it is how many Connected System Objects the run left exactly as they were instead of marking them as deleted: for a Full Import, the objects deletion detection no longer found; for a Delta Import, the objects the Connected System reported as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+Every Full Import activity that ran deletion detection, and every Delta Import activity that completed, carries a `detectedDeletionsWithheld` counter. It is `0` when the Run Profile has no deletion limit, or the run's deletions did not exceed either limit. Otherwise it is how many Connected System Objects the run left exactly as they were instead of marking them as deleted: for a Full Import, the objects deletion detection no longer found; for a Delta Import, the objects the Connected System reported as deleted, and, where it read every object instead of its changes, those deletion detection no longer found as well. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
 
 When a run withholds its deletions, it completes as **Complete with warning**, and its warning message names the limit, how many objects were involved and what share of the Connected System that is. A Delta Import's warning reads, for example:
 
@@ -82,6 +82,8 @@ When a run withholds its deletions, it completes as **Complete with warning**, a
 When a Full Import activity's deletion detection is refused, it completes as **Complete with warning**, and its warning message names the limit that tripped, for example:
 
 > Deletion detection found 4,120 objects (41% of 10,000) no longer in the Connected System, above this Run Profile's limit of 10%; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again.
+
+A Delta Import that read every object instead of its changes gives the same warning, ending instead "Each Delta Import will read every object and check again until this is resolved": it keeps the watermark it started with, so the next Delta Import repeats the check.
 
 A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
 

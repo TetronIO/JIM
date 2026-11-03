@@ -143,7 +143,7 @@ Then select **Save Settings**. Any selected Object Type, or related table of one
 
 ## :material-import: 5. Baseline with a Full Import
 
-Create a **Full Import** Run Profile and a **Delta Import** Run Profile, then run the Full Import once. A Full Import records every watermark column's current high value **before it reads a single row**, so a change made during the Full Import is read by the first Delta Import rather than lost between the two. Run the Delta Import first instead and JIM performs a Full Import in its place, with a warning on the Activity saying so.
+Create a **Full Import** Run Profile and a **Delta Import** Run Profile, then run the Full Import once. A Full Import records every watermark column's current high value **before it reads a single row**, so a change made during the Full Import is read by the first Delta Import rather than lost between the two. Run the Delta Import first instead and JIM reads every object in its place, as a Full Import does, with a warning on the Activity saying so.
 
 ## :material-calendar-clock-outline: 6. Schedule both
 
