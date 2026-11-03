@@ -1,6 +1,6 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 1b has proven Kerberos, encryption, framing and the shell Create against Exchange, and found that Exchange assigns its own ShellId, now handled and awaiting re-test; Phase 3 waits for the next Exchange window)
+- **Status:** Doing (Phases 0, 1a and 2 complete; Phase 3 has run against Exchange, and its results meet the go criteria; Phase 4, the go / no-go call, is recommended as go and awaits confirmation)
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -208,6 +208,63 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 7. **Lab access for Phase 1b (2026-10-30):** Claude Code Remote Control on the lab's runner VM, run as a separate account from the CI runner's, so the spike's lab tests run from the session that owns #2021.
 
 ## Spike Results
+
+### Phase 3: fourth run against Exchange (2026-11-03)
+
+**Every Q4 cmdlet the go criteria name works against Exchange, with svc-jim's least-privilege roles. The one failure was the test's own set-up, and it is fixed.** Both suites ran at `f0ad013b6`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` as svc-jim:
+- **Read-only suite:** 6 of 6 passed, in 7.5 s.
+- **Write suite:** 10 of 11 passed, in 16.1 s. The write suite runs only once the read-only suite passes.
+
+| Test | Result |
+|---|---|
+| `New-Mailbox -Shared` | Passed, 2 s |
+| `Disable-Mailbox`, then `Enable-Mailbox` without `-Database` (Exchange chose MDB01) | Passed, 809 ms |
+| `Set-Mailbox -Type Shared` on a user mailbox | Passed, 1 s |
+| `Enable-Mailbox -Database` | Passed, 568 ms |
+| `Enable-Mailbox -Shared` on a plain account | Passed, 435 ms |
+| `Enable-MailUser` | Passed, 674 ms |
+| `Enable-MailContact` | Passed, 632 ms |
+| `Enable-DistributionGroup` on a universal group | **Failed in set-up**, 153 ms |
+| Failure classification from Exchange's own records | Passed, 453 ms |
+| `Get-Recipient` 50 times on one session | Passed, 4 s |
+| Eight concurrent sessions | Passed, 1 s |
+
+**The failure:**
+- **What happened:** the test builds its group with `New-DistributionGroup -Type Distribution`. Exchange refused the call: "A parameter cannot be found that matches parameter name 'Type'."
+- **Why:** svc-jim holds Recipient Management, whose Distribution Groups role offers `New-DistributionGroup` without `-Type`. `-Type` belongs to the Security Group Creation and Membership role, which only Organization Management holds. Exchange refused the call while binding parameters, before the cmdlet ran, so ex1's cmdlet log has no line for it.
+- **The fix:** leave `-Type` out, since Distribution is the default. It is a fixture fix only: in JIM the group comes from the directory export, and the lane only ever runs `Enable-DistributionGroup` on it.
+
+**Timings (Q6):**
+- `Get-Recipient`, 50 calls on one session: median 93 ms, p95 115 ms, maximum 128 ms.
+- Eight concurrent sessions opened in 650 ms, and each ran `Get-Recipient` within 367 ms.
+- No throttling was seen. Exchange's cmdlet log recorded no throttling delay, and none of the eight sessions was held back.
+
+**Exchange's failure catalogue (Q5):**
+
+| Failure | What Exchange returns | Proposed RPEI error type and retry |
+|---|---|---|
+| Already enabled | An error record: `Cmdlet-RecipientTaskException`, error ID `9679C438,Microsoft.Exchange.Management.RecipientTasks.EnableMailbox`, "This task does not support recipients of this type ... is of type UserMailbox" | Not an error to retry. The lane reads the recipient's state again and treats it as converged or conflicting |
+| Object not found (replication lag) | An error record: `Cmdlet-ManagementObjectNotFoundException`, error ID `4D962A57,...EnableMailbox`, "couldn't be found on 'dc1.PANOPLY.LOCAL'" | Transient; retry with backoff |
+| A cmdlet outside svc-jim's roles | A thrown `RemoteException` with no error record: "The term 'Get-ExchangeCertificate' is not recognized as the name of a cmdlet" | Insufficient permissions; park, no retry |
+| A parameter outside svc-jim's roles | A thrown `RemoteException`: "A parameter cannot be found that matches parameter name '...'" | Insufficient permissions; park, no retry |
+
+**RBAC never says "access denied". It hides what an account may not use.** So the delivery lane must class the last two as insufficient permissions, never as bad input. That rule goes into #2021's Phase 2 connector.
+
+**Ping errors at session close:** ex1's front-end logs showed HTTP 500s on `Ping` for svc-jim, between 12:03:57.9 and 12:03:59.3 UTC.
+- **What they were:** the keep-alives of the eight concurrent sessions, aborted as each session closed ("The I/O operation has been aborted because of either a thread exit or an application request").
+- **Effect:** the test passed, and the client raised nothing for them, so they are harmless.
+
+**Cleanup:** none needed. Exchange shows no `jimspike*` recipient, and PANOPLY has no live `jimspike*` object. The four tombstones found came from this run's own cleanup. ex1 is shut down, and the svc-jim password file is shredded.
+
+**Lab lesson:** the first attempt that morning overlapped the nightly lab run. That run restores dc-primary from checkpoints mid-run, and one restore crashed ex1's services. The lab agent now checks that no lab run is in progress or due before starting ex1.
+
+**Still open, none of them a go criterion:**
+- **`Enable-DistributionGroup`:** re-run on a universal distribution group with the fixed fixture.
+- **A non-universal group refused by `Enable-DistributionGroup`:** test it, since the group test failed before it got there.
+- **A universal security group:** check whether svc-jim can mail-enable one, or whether that also needs Security Group Creation and Membership. JIM manages membership through the directory, not through Exchange, so it may not.
+- **Serialisation payload signing:** a read-only check that it is on in ex1. It has been on by default since the November 2023 SU, and nothing in the runs suggests otherwise, but no run has read the setting.
+- **Q3 against Exchange:** HTTPS. HTTP with Kerberos message encryption is the decided default, so this concerns the optional path only.
+- **A run from the Worker image against Exchange:** the lab runs used the .NET SDK container. The Worker image passed against the harness with its own hardening, and both images carry MIT `libgssapi-krb5-2`. #2021's Phase 2 lab tests close this, since the connector runs in the Worker.
 
 ### Phase 1b: third run against Exchange (2026-11-01)
 

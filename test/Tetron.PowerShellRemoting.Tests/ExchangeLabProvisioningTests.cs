@@ -174,8 +174,11 @@ public class ExchangeLabProvisioningTests
     [Test, Order(8)]
     public async Task EnableDistributionGroup_MailEnablesAUniversalGroupAsync()
     {
+        // No -Type: Distribution is the default, and least-privilege RBAC hides -Type from svc-jim (it belongs to the
+        // Security Group Creation and Membership role, which Recipient Management does not hold; 2026-11-03 lab window).
+        // In JIM the group comes from the directory export, never from New-DistributionGroup; this only builds the fixture.
         await RunCleanAsync("New-DistributionGroup", ps => ps.AddCommand("New-DistributionGroup").AddParameter("Name", GroupE).AddParameter("Alias", GroupE)
-            .AddParameter("Type", "Distribution").AddParameter("DomainController", DomainController));
+            .AddParameter("DomainController", DomainController));
         _cleanup.Add(("Remove-DistributionGroup", GroupE));
         await RunCleanAsync("Disable-DistributionGroup", ps => ps.AddCommand("Disable-DistributionGroup").AddParameter("Identity", GroupE)
             .AddParameter("Confirm", false).AddParameter("DomainController", DomainController));
