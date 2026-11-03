@@ -322,7 +322,7 @@
             <MudPaper Outlined="true" Class="pa-4 mb-5">
                 @foreach (var followUp in _followUps)
                 {
-                    <ExecutionItemFollowUpRow @key="followUp.ActivityId" FollowUp="followUp" />
+                    <ExecutionItemFollowUpRow @key="followUp.ActivityId" FollowUp="followUp" OnRetried="ReloadFollowUpsAsync" />
                 }
             </MudPaper>
         }
@@ -591,6 +591,21 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     // The item's follow-ups (#2668), oldest first, as they read on screen.
     private List<ExecutionItemFollowUpDisplay> _followUps = [];
+
+    /// <summary>
+    /// Re-reads the follow-ups alone after an Exchange change on one of them is retried (#2021, Phase 6b), so it reads
+    /// as it now stands without reloading the rest of the page.
+    /// </summary>
+    private async Task ReloadFollowUpsAsync()
+    {
+        if (_activityRunProfileExecutionItem == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        _followUps = (await jim.Activities.GetExecutionItemFollowUpsAsync(_activityRunProfileExecutionItem.Id))
+            .Select(ExecutionItemFollowUpDisplay.From)
+            .ToList();
+    }
 
     protected override async Task OnParametersSetAsync()
     {

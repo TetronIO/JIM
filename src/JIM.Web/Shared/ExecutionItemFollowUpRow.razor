@@ -18,12 +18,22 @@
             <div class="jim-follow-up-detail">@FollowUp.Detail</div>
         }
     </div>
-    <MudLink Href="@FollowUp.ActivityHref" Class="jim-follow-up-link">View Activity</MudLink>
+    <div class="jim-follow-up-link d-flex align-center" style="gap: 0.5rem;">
+        @if (FollowUp.RetryableChangeId is { } changeId)
+        {
+            <ExchangeChangeRetryButton ChangeId="changeId" Retrying="FollowUp.RetryableChangeIsRetrying" OnRetried="OnRetried" />
+        }
+        <MudLink Href="@FollowUp.ActivityHref">View Activity</MudLink>
+    </div>
 </div>
 
 @code {
     [Parameter, EditorRequired]
     public ExecutionItemFollowUpDisplay FollowUp { get; set; } = null!;
+
+    /// <summary>Raised after a retry offered on this follow-up has run, so the host can re-read where it stands.</summary>
+    [Parameter]
+    public EventCallback OnRetried { get; set; }
 
     private string Icon => FollowUp.Kind switch
     {

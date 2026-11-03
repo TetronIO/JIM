@@ -1,0 +1,64 @@
+@using JIM.Models.Core
+@using JIM.Models.Transactional.DTOs
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Retry for one queued Exchange change (#2021, Phase 6b), wherever the change already shows: an export item's follow-up,
+   an account's Exchange Recipient panel, the change's own page. It retries the change it was given by its queue id, as
+   the signed-in administrator, and tells its host so the host can re-read where the change now stands. Offered only
+   while Exchange recipients are switched on, as every other way of retrying is. *@
+@if (_enabled)
+{
+    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Replay" Disabled="@_busy"
+               OnClick="RetryAsync" data-testid="jim-exchange-retry" aria-label="Retry this Exchange change">
+        @(Retrying ? "Retry now" : "Retry")
+    </MudButton>
+}
+
+@code {
+    /// <summary>The queued change to retry: its id on the Exchange queue.</summary>
+    [Parameter, EditorRequired]
+    public Guid ChangeId { get; set; }
+
+    /// <summary>Whether the change is waiting out a backoff, which a retry brings forward, rather than parked.</summary>
+    [Parameter]
+    public bool Retrying { get; set; }
+
+    /// <summary>Raised once the retry has run, so the host can re-read where the change stands.</summary>
+    [Parameter]
+    public EventCallback OnRetried { get; set; }
+
+    private bool _enabled;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
+    }
+
+    private async Task RetryAsync()
+    {
+        _busy = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateProvider.GetAuthenticationStateAsync());
+            var retried = await jim.ExchangeDelivery.RetryAsync(new PendingExchangeChangeFilter { Ids = [ChangeId] }, user, null);
+
+            // Zero is said out loud: the change moved on (delivered, claimed or already retried) since the page was read.
+            Snackbar.Add(
+                retried == 0 ? "Nothing was retried: the change is no longer parked or retrying." : "The change will be attempted again within seconds.",
+                retried == 0 ? Severity.Info : Severity.Success);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await OnRetried.InvokeAsync();
+    }
+}

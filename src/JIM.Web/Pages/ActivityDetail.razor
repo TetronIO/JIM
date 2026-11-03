@@ -257,6 +257,14 @@
                     </div>
                     <div class="jim-follow-up-detail">@ExchangeChangeOutcomeDisplay.Words(exchangeOutcome)</div>
                 </div>
+                @* Offered while the change is parked or retrying, as on the Operations Exchange tab (#2021, Phase 6b). *@
+                @if (exchangeOutcome.CanRetry && exchangeOutcome.QueuedChangeId is { } queuedChangeId)
+                {
+                    <div class="jim-follow-up-link">
+                        <ExchangeChangeRetryButton ChangeId="queuedChangeId" OnRetried="ReloadExchangeOutcomeAsync"
+                                                   Retrying="@(exchangeOutcome.State == JIM.Models.Transactional.DTOs.ExchangeChangeState.Retrying)" />
+                    </div>
+                }
             </div>
             <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
                 Each attempt that said something new, and the outcome, are recorded as Child Activities below.
@@ -1394,6 +1402,18 @@
         var summaries = await jim.ConnectedSystems.GetConnectedSystemContainerSummariesAsync(
             _activityRunProfileExecutionStats!.EntriesDiscardedByExcludedContainer.Keys.ToList());
         _excludedContainers = summaries.ToDictionary(summary => summary.Id);
+    }
+
+    /// <summary>
+    /// Re-reads where this Exchange change stands after it is retried from its own panel (#2021, Phase 6b).
+    /// </summary>
+    private async Task ReloadExchangeOutcomeAsync()
+    {
+        if (_activity == null)
+            return;
+
+        using var jim = JimFactory.Create();
+        _exchangeOutcome = await jim.ExchangeDelivery.GetChangeOutcomeAsync(_activity.Id);
     }
 
     protected override void OnInitialized()

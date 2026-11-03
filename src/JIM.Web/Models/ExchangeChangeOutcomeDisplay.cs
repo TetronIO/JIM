@@ -88,6 +88,43 @@ public static class ExchangeChangeOutcomeDisplay
         }
     }
 
+    /// <summary>
+    /// What a change on the Exchange queue is waiting for, beneath its pill on the Operations Exchange tab (#2021, Phase
+    /// 6b): when the next attempt is, since when it has been parked, or why it holds.
+    /// </summary>
+    public static string QueueDetail(PendingExchangeChangeHeader change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        return change.State switch
+        {
+            ExchangeChangeState.Queued => "Due now",
+            ExchangeChangeState.Delivering => "Exchange is applying it now",
+            ExchangeChangeState.Retrying => change.NextRetryAt is { } next
+                ? $"Attempt {change.AttemptCount}; next {next.ToLocalTime().ToFriendlyDate()}"
+                : $"Attempt {change.AttemptCount}; due now",
+            ExchangeChangeState.Parked => change.LastAttemptedAt is { } last
+                ? $"Since {last.ToLocalTime().ToFriendlyDate()}"
+                : "Waiting for somebody to retry it",
+            _ => "Holds until the account's declared state changes"
+        };
+    }
+
+    /// <summary>
+    /// Why a change on the Exchange queue is not delivered: how its last attempt failed and Exchange's own words, or JIM's
+    /// reason for refusing it. Null for a change that has not failed.
+    /// </summary>
+    public static string? QueueReason(PendingExchangeChangeHeader change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        var message = string.IsNullOrWhiteSpace(change.FailureMessage) ? null : change.FailureMessage.Trim();
+        if (change.FailureKind is { } kind)
+            return message == null ? Reason(kind) : $"{Reason(kind)}: {message}";
+
+        return message;
+    }
+
     /// <summary>How an attempt failed, in an administrator's words.</summary>
     public static string Reason(ExchangeChangeFailureKind kind) => kind switch
     {

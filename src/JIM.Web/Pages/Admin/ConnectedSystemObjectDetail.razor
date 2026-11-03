@@ -152,7 +152,8 @@
     @* In development (#2021): read only while Exchange recipient management is available. *@
     @if (_exchangeRecipient != null)
     {
-        <ConnectedSystemObjectExchangeRecipientPanel State="@_exchangeRecipient" ConnectedSystemName="@ConnectedSystemHeader?.Name" Class="mt-6" />
+        <ConnectedSystemObjectExchangeRecipientPanel State="@_exchangeRecipient" ConnectedSystemName="@ConnectedSystemHeader?.Name" Class="mt-6"
+                                                     OnRetried="ReloadExchangeRecipientAsync" />
     }
 
     @if (PendingExport != null && _pendingExportTotalCount > 0)
@@ -723,6 +724,17 @@
     // object with none has no use for. Shared by the Unresolved References panel and the attribute table's cause chips.
     private ConnectedSystemObjectUnresolvedReferenceContext? _unresolvedReferenceContext;
     private JIM.Models.Exchange.ExchangeRecipientState? _exchangeRecipient;
+
+    /// <summary>
+    /// Re-reads the account's Exchange recipient state alone after its queued change is retried (#2021, Phase 6b). The
+    /// panel only shows while Exchange recipients are switched on, so the flag needs no second look.
+    /// </summary>
+    private async Task ReloadExchangeRecipientAsync()
+    {
+        using var jim = JimFactory.Create();
+        _exchangeRecipient = await jim.ExchangeDelivery.GetRecipientStateAsync(_connectedSystemObjectId);
+    }
+
     private UnresolvedReferenceCauses? _unresolvedReferenceCauses;
 
     /// <summary>

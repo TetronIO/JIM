@@ -68,6 +68,17 @@ public class ExchangeChangeOutcome
     public DateTime OccurredAt { get; set; }
 
     /// <summary>
+    /// The queued change's ID while it is on the Exchange queue, which identifies it when retrying it; null once it has
+    /// left the queue.
+    /// </summary>
+    public Guid? QueuedChangeId { get; set; }
+
+    /// <summary>
+    /// Whether the change can be retried: it is still on the queue, and parked or retrying after an attempt.
+    /// </summary>
+    public bool CanRetry => QueuedChangeId.HasValue && State is ExchangeChangeState.Parked or ExchangeChangeState.Retrying;
+
+    /// <summary>
     /// Describes one change from its own Activity, its queue row if it is still on the queue, and the Activities
     /// recorded under it (any order; those of other changes are ignored).
     /// </summary>
@@ -134,7 +145,8 @@ public class ExchangeChangeOutcome
             NextAttemptAt = state == ExchangeChangeState.Retrying ? row.NextRetryAt : null,
             FailureKind = row.FailureKind,
             Message = row.FailureMessage ?? changeActivity.ErrorMessage ?? changeActivity.Message,
-            OccurredAt = row.LastAttemptedAt ?? row.CreatedAt
+            OccurredAt = row.LastAttemptedAt ?? row.CreatedAt,
+            QueuedChangeId = row.Id
         };
     }
 

@@ -1,4 +1,5 @@
 @page "/admin/operations"
+@using JIM.Models.Core
 @using JIM.Models.Operations
 @using JIM.Web.Pages.Admin.Components
 @attribute [Authorize(Roles = "Administrator")]
@@ -44,6 +45,15 @@
                  BadgeData="@(_passwordAttentionCount > 0 ? _passwordAttentionCount.ToString("N0") : null)">
         <OperationsPasswordsTab />
     </MudTabPanel>
+    @* The Exchange queue (#2021, Phase 6b), while Exchange recipients are switched on. Badged with the changes waiting on
+       a person (parked, refused and not made), as Passwords is: queued and retrying changes need nobody. *@
+    @if (_exchangeEnabled)
+    {
+        <MudTabPanel Text="Exchange" Icon="@Icons.Material.Filled.Email" BadgeColor="Color.Warning"
+                     BadgeData="@(_exchangeAttentionCount > 0 ? _exchangeAttentionCount.ToString("N0") : null)">
+            <OperationsExchangeTab OnChanged="RefreshAndRenderAsync" />
+        </MudTabPanel>
+    }
     @* Badged with the generated values waiting on an administrator (Unique Value Generation, #242, release 4): an export
        held for a decision is work JIM has stopped doing, which must be visible without opening the tab. An allowed
        rename is not counted: it waits on the next export, not on anyone. *@
@@ -90,6 +100,18 @@
     private int _generatedValueAttentionCount;
 
     /// <summary>
+    /// Whether Exchange recipients are switched on, and so whether the Exchange tab shows. Read once when the page opens,
+    /// as the flag is read everywhere else: a flag switched while the page is open takes effect on the next visit.
+    /// </summary>
+    private bool _exchangeEnabled;
+
+    /// <summary>
+    /// Queued Exchange changes that wait on a person, for the Exchange tab's badge: loaded by the page for the same reason
+    /// as the Passwords badge, and refreshed on the same poll and after the tab's retries.
+    /// </summary>
+    private int _exchangeAttentionCount;
+
+    /// <summary>
     /// Whether the Service Health strip is collapsed. Read here rather than by the strip: the strip only renders once
     /// OnInitializedAsync has finished, so its first render already has the answer, whereas a strip reading it itself
     /// could only do so after rendering and would paint open, then animate shut. Collapsed until this browser says
@@ -108,6 +130,8 @@
     {
         // Started before the health read so the browser round trip runs alongside it rather than after it.
         var healthCollapsed = PreferenceService.GetServiceHealthCollapsedAsync();
+        using (var jim = JimFactory.Create())
+            _exchangeEnabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
         await RefreshAsync();
         _healthCollapsed = await healthCollapsed ?? true;
 
@@ -126,6 +150,8 @@
         var summary = await jim.PasswordSynchronisation.GetQueueSummaryAsync();
         _passwordAttentionCount = summary.ParkedCount + summary.ExpiredCount;
         _generatedValueAttentionCount = (await jim.GeneratedValueDecisions.GetSummaryAsync()).NeedsDecisionCount;
+        if (_exchangeEnabled)
+            _exchangeAttentionCount = (await jim.ExchangeDelivery.GetQueueSummaryAsync()).WaitingOnAPersonCount;
     }
 
     private async Task RefreshAndRenderAsync()

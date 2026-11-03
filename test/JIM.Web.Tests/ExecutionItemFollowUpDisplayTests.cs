@@ -185,6 +185,28 @@ public class ExecutionItemFollowUpDisplayTests
         Assert.That(display.Kind, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
     }
 
+    [TestCase(ExchangeChangeState.Parked, true, true)]
+    [TestCase(ExchangeChangeState.Retrying, true, true)]
+    [TestCase(ExchangeChangeState.Queued, true, false)]
+    [TestCase(ExchangeChangeState.Refused, true, false)]
+    [TestCase(ExchangeChangeState.Parked, false, false)]
+    public void From_ExchangeChange_OffersRetryOnlyForAChangeThatCanBeRetried(ExchangeChangeState state, bool onTheQueue, bool offered)
+    {
+        var queuedId = Guid.NewGuid();
+        var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome
+        {
+            State = state, RecipientType = "Mailbox", QueuedChangeId = onTheQueue ? queuedId : null
+        }));
+
+        Assert.That(display.RetryableChangeId, Is.EqualTo(offered ? queuedId : (Guid?)null));
+    }
+
+    [Test]
+    public void From_InitialPassword_OffersNoExchangeRetry()
+    {
+        Assert.That(ExecutionItemFollowUpDisplay.From(InitialPassword()).RetryableChangeId, Is.Null);
+    }
+
     private static ExecutionItemFollowUp ExchangeChange(ExchangeChangeOutcome? outcome) => new()
     {
         ActivityId = Guid.NewGuid(),

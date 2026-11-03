@@ -37,6 +37,16 @@ public sealed record ExecutionItemFollowUpDisplay(
     public string ActivityHref => $"/activity/{ActivityId}";
 
     /// <summary>
+    /// The queued Exchange change a Retry beside this follow-up would retry (#2021, Phase 6b), or null where there is
+    /// nothing to retry: the change is not parked or retrying, has left the queue, or the follow-up is not an Exchange
+    /// change at all.
+    /// </summary>
+    public Guid? RetryableChangeId { get; init; }
+
+    /// <summary>Whether the change to retry is waiting out a backoff, rather than parked.</summary>
+    public bool RetryableChangeIsRetrying { get; init; }
+
+    /// <summary>
     /// A queued Exchange change, read as its follow-up reads: for a surface that has the change but not the export item
     /// it followed, such as an account's Exchange recipient panel.
     /// </summary>
@@ -46,7 +56,11 @@ public sealed record ExecutionItemFollowUpDisplay(
 
         var (label, modifier, running) = ExchangeChangeOutcomeDisplay.Pill(outcome.State);
         return new(outcome.ActivityId, ExchangeChangeOutcomeDisplay.Title(outcome.RecipientType), targetName, label, modifier,
-            ExchangeChangeOutcomeDisplay.Words(outcome), running, created, ActivityTargetType.ExchangeRecipient);
+            ExchangeChangeOutcomeDisplay.Words(outcome), running, created, ActivityTargetType.ExchangeRecipient)
+        {
+            RetryableChangeId = outcome.CanRetry ? outcome.QueuedChangeId : null,
+            RetryableChangeIsRetrying = outcome.State == ExchangeChangeState.Retrying
+        };
     }
 
     public static ExecutionItemFollowUpDisplay From(ExecutionItemFollowUp followUp)

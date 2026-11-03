@@ -1,0 +1,508 @@
+@using JIM.Models.Transactional
+@using JIM.Models.Transactional.DTOs
+@using JIM.Utilities
+@using JIM.Web.Models
+@inject IJimApplicationFactory JimFactory
+@inject NavigationManager NavManager
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Exchange queue (#2021, Phase 6b), as the Exchange tab of Operations, shown while Exchange recipients are switched
+   on. The Passwords tab's sibling: what JIM owes Exchange, and what has stopped. Retry is the only action, because an
+   Exchange change is stopped or corrected by changing what is declared for the account, not by cancelling it (PRD
+   decision 16). *@
+
+@* mt-5 rather than a tab-panel padding, as on the Passwords tab: the Operations page hands its tabs no top padding. *@
+<MudText Typo="Typo.h6" Class="mt-5 mb-1">Exchange queue</MudText>
+<MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">
+    Recipient changes JIM has queued for Exchange. A change leaves this queue once Exchange has made it, or once it is
+    no longer wanted; anything listed here is still owed, or waits on a person.
+</MudText>
+
+@* Four cards. A change being applied is counted with the queued ones, because neither needs anyone; Not made shares the
+   Refused card, because both hold until what is declared for the account changes. *@
+<MudGrid>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%;">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Queued</MudText>
+            <MudTooltip Arrow="true" Placement="Placement.Top">
+                <TooltipContent>
+                    <TooltipText Text="Changes waiting for their first attempt, or being applied by Exchange now. Nothing is needed from anyone." />
+                </TooltipContent>
+                <ChildContent>
+                    <MudText Typo="Typo.h4">@((_summary.QueuedCount + _summary.DeliveringCount).ToString("N0"))</MudText>
+                </ChildContent>
+            </MudTooltip>
+            @if (_summary.DeliveringCount > 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_summary.DeliveringCount.ToString("N0") being applied now</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%;">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Retrying</MudText>
+            <MudTooltip Arrow="true" Placement="Placement.Top">
+                <TooltipContent>
+                    <TooltipText Text="An attempt failed in a way that may clear by itself, such as replication or a server that did not answer. JIM tries again with a growing interval, and parks the change if it is still failing after 24 hours." />
+                </TooltipContent>
+                <ChildContent>
+                    <MudText Typo="Typo.h4">@_summary.RetryingCount.ToString("N0")</MudText>
+                </ChildContent>
+            </MudTooltip>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%; border-left: 3px solid var(--mud-palette-warning);">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Parked</MudText>
+            <MudTooltip Arrow="true" Placement="Placement.Top">
+                <TooltipContent>
+                    <TooltipText Text="Exchange refused these, JIM lacks the permission to make them, or they kept failing for 24 hours. JIM has stopped trying, so they wait on a person. Deal with the reason Exchange gave, then retry them." />
+                </TooltipContent>
+                <ChildContent>
+                    <MudText Typo="Typo.h4" Color="@(_summary.ParkedCount > 0 ? Color.Warning : Color.Default)">@_summary.ParkedCount.ToString("N0")</MudText>
+                </ChildContent>
+            </MudTooltip>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Class="pa-4" Outlined="true" Style="height:100%; border-left: 3px solid var(--mud-palette-error);">
+            <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Refused</MudText>
+            <MudTooltip Arrow="true" Placement="Placement.Top">
+                <TooltipContent>
+                    <TooltipText Text="JIM did not ask Exchange to make these, because what is declared cannot be made, such as a mailbox on a contact, or is a change of recipient type JIM does not make. Retrying cannot help. Correct what is declared for the account, and the next synchronisation replaces the change." />
+                </TooltipContent>
+                <ChildContent>
+                    <MudText Typo="Typo.h4" Color="@(RefusedTotal > 0 ? Color.Error : Color.Default)">@RefusedTotal.ToString("N0")</MudText>
+                </ChildContent>
+            </MudTooltip>
+            @if (_summary.NotMadeCount > 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_summary.NotMadeCount.ToString("N0") recipient type changes not made</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Said out loud, because the cards above count the whole queue while the list below is narrowed to one person. *@
+@if (MetaverseObjectIdFilter.HasValue)
+{
+    <MudAlert Severity="Severity.Info" Class="mt-6">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <span>Showing one Metaverse Object's queued Exchange changes. The counts above are for the whole queue.</span>
+            <AlertButton Severity="Severity.Info" Size="Size.Small" OnClick="ClearIdentityFilterAsync">Show the whole queue</AlertButton>
+        </MudStack>
+    </MudAlert>
+}
+
+@* mt-0: MudGrid pulls itself up by its items' 24px top padding, so a positive margin would stack on top of it. *@
+<MudGrid Class="mt-0">
+    <MudItem xs="12" sm="4">
+        <MudSelect T="int?" Label="Connected System" Value="_connectedSystemId" ValueChanged="OnConnectedSystemFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true">
+            @foreach (var (id, name) in _connectedSystemNames.OrderBy(n => n.Value))
+            {
+                <MudSelectItem T="int?" Value="@id">@name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="ExchangeChangeState?" Label="Status" Value="_state" ValueChanged="OnStateFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true">
+            @foreach (var state in FilterableStates)
+            {
+                <MudSelectItem T="ExchangeChangeState?" Value="@state">@ExchangeChangeOutcomeDisplay.Pill(state).Label</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <MudSelect T="ExchangeChangeFailureKind?" Label="Failure reason" Value="_failureKind" ValueChanged="OnFailureKindFilterChangedAsync"
+                   Variant="Variant.Outlined" Clearable="true" Dense="true">
+            @foreach (var kind in Enum.GetValues<ExchangeChangeFailureKind>())
+            {
+                <MudSelectItem T="ExchangeChangeFailureKind?" Value="@kind">@ExchangeChangeOutcomeDisplay.Reason(kind)</MudSelectItem>
+            }
+        </MudSelect>
+    </MudItem>
+</MudGrid>
+
+<VirtualisedDataGrid @ref="_grid" T="PendingExchangeChangeHeader"
+                     ContainerId="exchange-queue"
+                     DefaultSortBy="queued"
+                     LoadWindow="LoadWindowAsync"
+                     RowClicked="HandleRowClicked"
+                     SingularName="queued Exchange change"
+                     PluralName="queued Exchange changes"
+                     SearchPlaceholder="Search Metaverse Objects and Connected Systems...">
+    <ToolBarExtras>
+        @* Acts on the filter and the search the reader is looking at, so it covers the whole match set rather than the
+           window on screen (#2725). Only the parked and retrying changes among them are retried. *@
+        <MudButton StartIcon="@Icons.Material.Filled.Replay" Size="Size.Small" Disabled="@(_busy || _grid?.TotalItems is null or 0)"
+                   OnClick="RetryShownAsync">
+            Retry shown
+        </MudButton>
+    </ToolBarExtras>
+    <Columns>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 200px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Metaverse Object" Name="identity" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @* The row opens the change's Activity; this link opens the person, and stopping the click keeps it to
+                   one history entry while the link keeps middle-click and open-in-new-tab. *@
+                @if (IdentityHref(context.Item) is { } identityHref)
+                {
+                    <span @onclick:stopPropagation="true" class="jim-one-line">
+                        <MudLink Href="@identityHref">@(context.Item.MetaverseObjectDisplayName ?? context.Item.MetaverseObjectId.ToString())</MudLink>
+                    </span>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 170px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Change</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                <OneLineText Text="@ExchangeChangeOutcomeDisplay.Title(context.Item.RecipientType)" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 170px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Connected System" Name="system" />
+            </HeaderTemplate>
+            <CellTemplate>
+                <OneLineText Text="@context.Item.ConnectedSystemName" />
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 300px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent>
+                        <TooltipText Text="Where the change stands, and what it is waiting for. Sorted by the next attempt, so the changes about to be tried come first." />
+                    </TooltipContent>
+                    <ChildContent><VirtualisedSortHeader Title="Status" Name="nextattempt" /></ChildContent>
+                </MudTooltip>
+            </HeaderTemplate>
+            <CellTemplate>
+                @{
+                    var (label, modifier, _) = ExchangeChangeOutcomeDisplay.Pill(context.Item.State);
+                    var detail = ExchangeChangeOutcomeDisplay.QueueDetail(context.Item);
+                }
+                <span class="jim-one-line-list" title="@detail">
+                    <span class="@($"jim-status-pill jim-status-pill--{modifier}")"><span class="jim-status-dot"></span>@label</span>
+                    <span class="jim-one-line-list-value mud-text-secondary">@detail</span>
+                </span>
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
+            <HeaderTemplate>
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent>
+                        <TooltipText Text="Why the change has not been made, in Exchange's own words where Exchange gave any. The remedy is usually outside JIM: a permission, a policy, or a value already in use." />
+                    </TooltipContent>
+                    <ChildContent><MudText Typo="Typo.button">Reason</MudText></ChildContent>
+                </MudTooltip>
+            </HeaderTemplate>
+            <CellTemplate>
+                @if (ExchangeChangeOutcomeDisplay.QueueReason(context.Item) is { } reason)
+                {
+                    <OneLineText Text="@reason" />
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 190px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <VirtualisedSortHeader Title="Queued" Name="queued" />
+            </HeaderTemplate>
+            <CellTemplate>
+                @context.Item.CreatedAt.ToLocalTime().ToFriendlyDate()
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false" HeaderStyle="width: 90px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+            <HeaderTemplate>
+                <MudText Typo="Typo.button">Actions</MudText>
+            </HeaderTemplate>
+            <CellTemplate>
+                @* Offered only where a retry would act: a parked change, or one waiting out a backoff. A queued change is
+                   already due, one being applied is left to finish, and a refused one waits on a new declared state. *@
+                @if (context.Item.CanRetry)
+                {
+                    <span @onclick:stopPropagation="true" class="jim-one-line-list">
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <TooltipContent>
+                                <TooltipText Text="@RetryTooltip(context.Item)" />
+                            </TooltipContent>
+                            <ChildContent>
+                                <MudIconButton Icon="@Icons.Material.Filled.Replay" Size="Size.Small" Disabled="@_busy"
+                                               aria-label="Retry this Exchange change"
+                                               OnClick="@(() => RetryOneAsync(context.Item))" />
+                            </ChildContent>
+                        </MudTooltip>
+                    </span>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <EmptyContent Context="grid">
+        @if (!string.IsNullOrWhiteSpace(grid.SearchText))
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.SearchOff"
+                             PrimaryText="@($"No queued Exchange changes match \"{grid.SearchText}\"")"
+                             SecondaryText="Try a different search term, or clear the search."
+                             ActionText="Clear Search"
+                             OnAction="@(() => grid.ClearSearchAsync())" />
+        }
+        else if (HasFilter)
+        {
+            <TableEmptyState Icon="@Icons.Material.Filled.FilterAlt"
+                             PrimaryText="No queued Exchange changes match these filters"
+                             SecondaryText="Clear the filters to see the whole queue."
+                             ActionText="Clear Filters"
+                             OnAction="ClearFiltersAsync" />
+        }
+        else
+        {
+            @* Empty is the healthy state here, and the message says so rather than reading as a fault. *@
+            <TableEmptyState Icon="@Icons.Material.Filled.CheckCircleOutline"
+                             PrimaryText="Nothing is waiting for Exchange"
+                             SecondaryText="Recipient changes appear here while they are on their way to Exchange, and leave once Exchange has made them." />
+        }
+    </EmptyContent>
+</VirtualisedDataGrid>
+
+@code {
+    /// <summary>
+    /// Raised after a retry, so the Operations page can re-read the tab's badge without waiting for its poll.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    /// <summary>
+    /// Narrows the queue to one identity, for a link from that person's page. Read from the query string, as the
+    /// Passwords tab's is: the Operations route carries it (<c>/admin/operations?t=exchange&amp;metaverseObjectId=...</c>).
+    /// </summary>
+    [Parameter, SupplyParameterFromQuery(Name = "metaverseObjectId")]
+    public Guid? MetaverseObjectIdFilter { get; set; }
+
+    /// <summary>
+    /// Pre-selects the Connected System filter for a link from a system's own page; the control owns it from then on.
+    /// </summary>
+    [Parameter, SupplyParameterFromQuery(Name = "connectedSystemId")]
+    public int? ConnectedSystemIdFilter { get; set; }
+
+    /// <summary>
+    /// The states a change on the queue can be in. Delivered, Withdrawn and Replaced are left out: a change in any of
+    /// them has left the queue.
+    /// </summary>
+    private static readonly ExchangeChangeState[] FilterableStates =
+    [
+        ExchangeChangeState.Queued,
+        ExchangeChangeState.Delivering,
+        ExchangeChangeState.Retrying,
+        ExchangeChangeState.Parked,
+        ExchangeChangeState.Refused,
+        ExchangeChangeState.NotMade
+    ];
+
+    private VirtualisedDataGrid<PendingExchangeChangeHeader>? _grid;
+    private Dictionary<int, string> _connectedSystemNames = new();
+    private ExchangeQueueSummary _summary = new();
+    private int? _connectedSystemId;
+    private ExchangeChangeState? _state;
+    private ExchangeChangeFailureKind? _failureKind;
+
+    /// <summary>Guards the actions while one is in flight, so two retries over the same filter cannot race.</summary>
+    private bool _busy;
+
+    private int RefusedTotal => _summary.RefusedCount + _summary.NotMadeCount;
+
+    private bool HasFilter =>
+        _connectedSystemId.HasValue || _state.HasValue || _failureKind.HasValue || MetaverseObjectIdFilter.HasValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connectedSystemId = ConnectedSystemIdFilter;
+
+        using var jim = JimFactory.Create();
+        _connectedSystemNames = await jim.ConnectedSystems.GetConnectedSystemNamesAsync();
+        await LoadSummaryAsync();
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        using var jim = JimFactory.Create();
+        _summary = await jim.ExchangeDelivery.GetQueueSummaryAsync();
+    }
+
+    /// <summary>
+    /// The filter the grid is showing, which is also what "Retry shown" acts on. Built in one place so the action cannot
+    /// drift from the list (#2725).
+    /// </summary>
+    private PendingExchangeChangeFilter CurrentFilter(string? searchText) => new()
+    {
+        ConnectedSystemId = _connectedSystemId,
+        State = _state,
+        FailureKind = _failureKind,
+        MetaverseObjectId = MetaverseObjectIdFilter,
+        SearchText = searchText
+    };
+
+    private async Task<VirtualisedWindow<PendingExchangeChangeHeader>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken token)
+    {
+        using var jim = JimFactory.Create();
+        var result = await jim.ExchangeDelivery.GetPendingChangesAsync(
+            CurrentFilter(request.SearchText),
+            request.StartIndex,
+            request.Count,
+            request.SortBy,
+            request.SortDescending,
+            request.IncludeTotalCount);
+
+        return new VirtualisedWindow<PendingExchangeChangeHeader>(result.Results, result.TotalResults);
+    }
+
+    private async Task OnConnectedSystemFilterChangedAsync(int? value)
+    {
+        _connectedSystemId = value;
+        await RefreshAsync();
+    }
+
+    private async Task OnStateFilterChangedAsync(ExchangeChangeState? value)
+    {
+        _state = value;
+        await RefreshAsync();
+    }
+
+    private async Task OnFailureKindFilterChangedAsync(ExchangeChangeFailureKind? value)
+    {
+        _failureKind = value;
+        await RefreshAsync();
+    }
+
+    private async Task ClearIdentityFilterAsync()
+    {
+        MetaverseObjectIdFilter = null;
+        ForgetDeepLink("metaverseObjectId");
+        await RefreshAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _connectedSystemId = null;
+        _state = null;
+        _failureKind = null;
+        MetaverseObjectIdFilter = null;
+        ForgetDeepLink("metaverseObjectId", "connectedSystemId");
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Drops deep-link parameters from the URL as well as from this component, because the tab strip re-creates the
+    /// component when the reader comes back to the tab and it would read them afresh. Replaces the history entry.
+    /// </summary>
+    private void ForgetDeepLink(params string[] parameterNames)
+    {
+        var query = System.Web.HttpUtility.ParseQueryString(new Uri(NavManager.Uri).Query);
+        if (!parameterNames.Any(name => query[name] != null))
+            return;
+
+        var cleared = parameterNames.ToDictionary(name => name, _ => (object?)null);
+        NavManager.NavigateTo(NavManager.GetUriWithQueryParameters(cleared), replace: true);
+    }
+
+    /// <summary>
+    /// Re-reads the summary and the list. A filter change alters what matches, so the totals are counted again and the
+    /// scroll position, which described the old match set, is reset.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        await LoadSummaryAsync();
+
+        if (_grid != null)
+        {
+            await _grid.ResetScrollAsync();
+            await _grid.RefreshAsync(invalidateTotals: true);
+        }
+    }
+
+    private async Task RetryOneAsync(PendingExchangeChangeHeader change)
+    {
+        // Named by its id and nothing else: the row the administrator clicked, even if the filters moved on since.
+        await RetryAsync(new PendingExchangeChangeFilter { Ids = [change.Id] }, confirmation: null);
+    }
+
+    private async Task RetryShownAsync()
+    {
+        var count = _grid?.TotalItems ?? 0;
+        await RetryAsync(
+            CurrentFilter(_grid?.SearchText),
+            confirmation: $"Attempt the {Describe(count)} shown again? Only the parked and retrying changes among them are retried; " +
+                          "the rest are already due, being applied, or wait on a change to what is declared.");
+    }
+
+    /// <summary>
+    /// Runs a retry and reports what it covered. Shared so a row's retry and "Retry shown" cannot report differently.
+    /// </summary>
+    private async Task RetryAsync(PendingExchangeChangeFilter filter, string? confirmation)
+    {
+        if (confirmation != null)
+        {
+            var confirmed = await DialogService.ShowMessageBoxAsync("Retry Exchange changes", confirmation, yesText: "Retry", cancelText: "Close");
+            if (confirmed != true)
+                return;
+        }
+
+        _busy = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateProvider.GetAuthenticationStateAsync());
+            var retried = await jim.ExchangeDelivery.RetryAsync(filter, user, null);
+
+            // Zero is said out loud: an administrator who acted and changed nothing needs to know.
+            Snackbar.Add(
+                retried == 0
+                    ? "Nothing was retried: no matching change is parked or retrying."
+                    : $"{Describe(retried)} will be attempted again within seconds.",
+                retried == 0 ? Severity.Info : Severity.Success);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await RefreshAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Opens the change's own Activity, where each attempt that said something new, and the outcome, are recorded.
+    /// </summary>
+    private void HandleRowClicked(PendingExchangeChangeHeader change) => NavManager.NavigateTo($"/activity/{change.ActivityId}");
+
+    private static string? IdentityHref(PendingExchangeChangeHeader change) =>
+        change.MetaverseObjectId is not { } id
+            ? null
+            : string.IsNullOrWhiteSpace(change.MetaverseObjectTypePluralName)
+                ? "/search"
+                : Utilities.GetMetaverseObjectHref(id, change.MetaverseObjectTypePluralName);
+
+    private static string Describe(int count) =>
+        count == 1 ? "1 Exchange change" : $"{count:N0} Exchange changes";
+
+    private static string RetryTooltip(PendingExchangeChangeHeader change) => change.State == ExchangeChangeState.Retrying
+        ? "Attempt it now rather than waiting for the next scheduled attempt."
+        : "Attempt it again, with its attempts and 24-hour clock reset. Deal with the reason Exchange gave first, or it will park again.";
+}

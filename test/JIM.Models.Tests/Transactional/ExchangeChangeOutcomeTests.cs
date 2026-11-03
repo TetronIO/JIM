@@ -278,6 +278,44 @@ public class ExchangeChangeOutcomeTests
         OccurredAt = at
     };
 
+    // ---- Retrying a change (Phase 6b) -----------------------------------------------------------------------------
+
+    [TestCase(PendingExchangeChangeStatus.Parked, true, true)]
+    [TestCase(PendingExchangeChangeStatus.Pending, true, true)]
+    [TestCase(PendingExchangeChangeStatus.Pending, false, false)]
+    [TestCase(PendingExchangeChangeStatus.Delivering, false, false)]
+    [TestCase(PendingExchangeChangeStatus.Refused, false, false)]
+    public void Describe_ChangeOnTheQueue_NamesItsRowAndWhetherItCanBeRetried(PendingExchangeChangeStatus status, bool attempted, bool canRetry)
+    {
+        var row = Row(status);
+        row.LastAttemptedAt = attempted ? Queued.AddMinutes(1) : null;
+
+        var outcome = ExchangeChangeOutcome.Describe(ChangeActivity(), row, []);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.QueuedChangeId, Is.EqualTo(row.Id), "what a retry of this change names");
+            Assert.That(outcome.CanRetry, Is.EqualTo(canRetry));
+            Assert.That(outcome.CanRetry, Is.EqualTo(row.CanRetry), "the outcome and the row agree");
+        }
+    }
+
+    [Test]
+    public void Describe_ParkedChangeNoLongerOnTheQueue_CannotBeRetried()
+    {
+        // Retention removed the row; the last thing known is the park, but there is nothing left to retry.
+        var events = new List<ExchangeChangeEvent> { Event(ActivityTargetOperationType.SetExchangeRecipient, ActivityStatus.CompleteWithError, Queued.AddMinutes(1), error: "Refused.") };
+
+        var outcome = ExchangeChangeOutcome.Describe(ChangeActivity(), null, events);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.State, Is.EqualTo(ExchangeChangeState.Parked));
+            Assert.That(outcome.QueuedChangeId, Is.Null);
+            Assert.That(outcome.CanRetry, Is.False);
+        }
+    }
+
     // ---- Which Activities are a change's own (Phase 6b) ----------------------------------------------------------
 
     [TestCase(ActivityTargetType.ExchangeRecipient, ActivityTargetOperationType.SetExchangeRecipient, false, true)]
