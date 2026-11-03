@@ -4043,6 +4043,157 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(deleting.Count);
     }
 
+    public Task<RangeResultSet<PendingExchangeChangeHeader>> GetPendingExchangeChangeHeadersAsync(
+        PendingExchangeChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var headers = FilterExchangeChangeHeaders(filter);
+        IOrderedEnumerable<PendingExchangeChangeHeader> ordered = sortBy?.ToLowerInvariant() switch
+        {
+            "identity" => sortDescending ? headers.OrderByDescending(h => h.MetaverseObjectDisplayName) : headers.OrderBy(h => h.MetaverseObjectDisplayName),
+            "system" => sortDescending ? headers.OrderByDescending(h => h.ConnectedSystemName) : headers.OrderBy(h => h.ConnectedSystemName),
+            "attempts" => sortDescending ? headers.OrderByDescending(h => h.AttemptCount) : headers.OrderBy(h => h.AttemptCount),
+            "nextattempt" => sortDescending ? headers.OrderByDescending(h => h.NextRetryAt) : headers.OrderBy(h => h.NextRetryAt),
+            "lastattempt" => sortDescending ? headers.OrderByDescending(h => h.LastAttemptedAt) : headers.OrderBy(h => h.LastAttemptedAt),
+            _ => sortDescending ? headers.OrderByDescending(h => h.CreatedAt) : headers.OrderBy(h => h.CreatedAt)
+        };
+
+        var sorted = ordered.ThenBy(h => h.Id).ToList();
+        return Task.FromResult(new RangeResultSet<PendingExchangeChangeHeader>
+        {
+            Results = sorted.Skip(startIndex).Take(count).ToList(),
+            TotalResults = includeTotalCount ? sorted.Count : null
+        });
+    }
+
+    public Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf)
+    {
+        var headers = FilterExchangeChangeHeaders(new PendingExchangeChangeFilter());
+        var due = _pendingExchangeChanges.Values.Count(c => c.IsDue(asOf));
+
+        return Task.FromResult(new ExchangeQueueSummary
+        {
+            QueuedCount = headers.Count(h => h.State == ExchangeChangeState.Queued),
+            DeliveringCount = headers.Count(h => h.State == ExchangeChangeState.Delivering),
+            RetryingCount = headers.Count(h => h.State == ExchangeChangeState.Retrying),
+            ParkedCount = headers.Count(h => h.State == ExchangeChangeState.Parked),
+            RefusedCount = headers.Count(h => h.State == ExchangeChangeState.Refused),
+            NotMadeCount = headers.Count(h => h.State == ExchangeChangeState.NotMade),
+            DueCount = due
+        });
+    }
+
+    public Task<List<RetriedExchangeChange>> RetryExchangeChangesAsync(PendingExchangeChangeFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        // Chosen through the list's own filter, as the PostgreSQL twin does, then retried through the row's own transition.
+        var retried = FilterExchangeChangeHeaders(filter)
+            .Select(h => _pendingExchangeChanges[h.Id])
+            .Where(c => c.Retry())
+            .Select(c => new RetriedExchangeChange
+            {
+                Id = c.Id,
+                ActivityId = c.ActivityId,
+                ConnectedSystemId = c.ConnectedSystemId,
+                ConnectedSystemObjectId = c.ConnectedSystemObjectId,
+                MetaverseObjectId = c.MetaverseObjectId,
+                RecipientType = c.RecipientType
+            })
+            .ToList();
+
+        return Task.FromResult(retried);
+    }
+
+    /// <summary>
+    /// The queue as list rows, narrowed by <paramref name="filter"/>: the in-memory twin of the PostgreSQL list and of the
+    /// narrowing its retry shares.
+    /// </summary>
+    private List<PendingExchangeChangeHeader> FilterExchangeChangeHeaders(PendingExchangeChangeFilter filter)
+    {
+        IEnumerable<PendingExchangeChangeHeader> query = _pendingExchangeChanges.Values.Select(c =>
+        {
+            MetaverseObject? mvo = null;
+            if (c.MetaverseObjectId is { } metaverseObjectId)
+                _mvos.TryGetValue(metaverseObjectId, out mvo);
+            _activities.TryGetValue(c.ActivityId, out var activity);
+
+            return new PendingExchangeChangeHeader
+            {
+                Id = c.Id,
+                ActivityId = c.ActivityId,
+                ConnectedSystemId = c.ConnectedSystemId,
+                ConnectedSystemName = _connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty,
+                ConnectedSystemObjectId = c.ConnectedSystemObjectId,
+                MetaverseObjectId = c.MetaverseObjectId,
+                MetaverseObjectDisplayName = mvo?.CachedDisplayName,
+                MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
+                RecipientType = c.RecipientType,
+                Status = c.Status,
+                FailureKind = c.FailureKind,
+                FailureMessage = c.FailureMessage,
+                AttemptCount = c.AttemptCount,
+                CreatedAt = c.CreatedAt,
+                LastAttemptedAt = c.LastAttemptedAt,
+                FirstFailedAt = c.FirstFailedAt,
+                NextRetryAt = c.NextRetryAt,
+                ChangeActivityStatus = activity?.Status ?? ActivityStatus.CompleteWithError
+            };
+        });
+
+        if (filter.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(h => h.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (filter.State.HasValue)
+        {
+            var state = filter.State.Value;
+            query = query.Where(h => h.State == state);
+        }
+
+        if (filter.FailureKind.HasValue)
+        {
+            var failureKind = filter.FailureKind.Value;
+            query = query.Where(h => h.FailureKind == failureKind);
+        }
+
+        if (filter.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(h => h.MetaverseObjectId == metaverseObjectId);
+        }
+
+        if (filter.ConnectedSystemObjectId.HasValue)
+        {
+            var connectedSystemObjectId = filter.ConnectedSystemObjectId.Value;
+            query = query.Where(h => h.ConnectedSystemObjectId == connectedSystemObjectId);
+        }
+
+        if (filter.Ids is { Count: > 0 })
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(h => ids.Contains(h.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            query = query.Where(h =>
+                (h.MetaverseObjectDisplayName?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                || h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return query.ToList();
+    }
+
     public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         var objects = new List<ExchangeDeliveryObject>();

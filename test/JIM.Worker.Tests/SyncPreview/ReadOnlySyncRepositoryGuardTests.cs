@@ -59,6 +59,13 @@ public class ReadOnlySyncRepositoryGuardTests
     }
 
     [Test]
+    public void RetryExchangeChangesAsync_IsAWrite_Throws()
+    {
+        Assert.That(() => _guard.RetryExchangeChangesAsync(new JIM.Models.Transactional.DTOs.PendingExchangeChangeFilter()),
+            Throws.InstanceOf<PreviewWriteAttemptedException>().With.Message.Contain(nameof(ISyncRepository.RetryExchangeChangesAsync)));
+    }
+
+    [Test]
     public void DeletePendingExportAsync_IsAWrite_Throws()
     {
         Assert.That(() => _guard.DeletePendingExportAsync(new PendingExport()),

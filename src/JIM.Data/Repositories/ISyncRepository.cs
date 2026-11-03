@@ -1210,6 +1210,40 @@ public interface ISyncRepository
     Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
+    /// One window of the Exchange queue for a list (#2021, Phase 6b): the Operations Exchange tab, its REST and
+    /// PowerShell counterparts. Each row names its Connected System and identity and reads as its follow-up does.
+    /// </summary>
+    /// <param name="filter">Which changes; the retry applies exactly the same narrowing, search text included.</param>
+    /// <param name="startIndex">The first row of the window, from zero.</param>
+    /// <param name="count">How many rows at most.</param>
+    /// <param name="sortBy">identity, system, attempts, nextattempt, lastattempt or queued (the default and fallback).</param>
+    /// <param name="sortDescending">Whether to reverse the order.</param>
+    /// <param name="includeTotalCount">Whether to count every match; null is returned in its place when false.</param>
+    Task<RangeResultSet<PendingExchangeChangeHeader>> GetPendingExchangeChangeHeadersAsync(
+        PendingExchangeChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount);
+
+    /// <summary>
+    /// What the whole Exchange queue holds (#2021, Phase 6b): how many changes stand in each state, and how many a
+    /// delivery pass would attempt at <paramref name="asOf"/>.
+    /// </summary>
+    Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf);
+
+    /// <summary>
+    /// An administrator's retry (#2021, Phase 6b): makes every retryable change the filter matches (parked, or retrying
+    /// after an attempt) due at once, clearing its attempts, failure, park clock and claim, in one statement that rechecks
+    /// each row is still retryable, so a change claimed since the list was read is left to its deliverer. The update fires
+    /// the queue's notification, which wakes the delivery lane. <see cref="PendingExchangeChange.Retry"/> is the same
+    /// transition in memory.
+    /// </summary>
+    /// <returns>The changes retried, for the Activities that record the retry under each one.</returns>
+    Task<List<RetriedExchangeChange>> RetryExchangeChangesAsync(PendingExchangeChangeFilter filter);
+
+    /// <summary>
     /// What the delivery lane needs about each of <paramref name="connectedSystemObjectIds"/> before converging its
     /// queued change: its identifiers, and its declared state now (the imported Exchange values and the changes its
     /// Pending Export still holds for Exchange). An id with no object is absent from the result.

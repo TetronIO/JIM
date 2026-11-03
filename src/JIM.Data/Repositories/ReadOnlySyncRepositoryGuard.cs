@@ -315,6 +315,18 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ExchangeDeliveryObject>> GetExchangeDeliveryObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetExchangeDeliveryObjectsAsync(connectedSystemObjectIds);
 
+    public Task<RangeResultSet<PendingExchangeChangeHeader>> GetPendingExchangeChangeHeadersAsync(
+        PendingExchangeChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+        => _inner.GetPendingExchangeChangeHeadersAsync(filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+
+    public Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf)
+        => _inner.GetExchangeQueueSummaryAsync(asOf);
+
     public Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,
         DateTime exportsInFlightSince)
         => _inner.GetAccountEnablementFactsAsync(connectedSystemId, pendingPasswordChangeId, connectedSystemObjectId, exportsInFlightSince);
@@ -604,6 +616,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<int> ReleaseExchangeChangeClaimsAsync(IEnumerable<Guid> ids, string claimedBy)
         => throw new PreviewWriteAttemptedException(nameof(ReleaseExchangeChangeClaimsAsync));
+
+    public Task<List<RetriedExchangeChange>> RetryExchangeChangesAsync(PendingExchangeChangeFilter filter)
+        => throw new PreviewWriteAttemptedException(nameof(RetryExchangeChangesAsync));
 
     public Task RecordExchangeChangeAttemptsAsync(IEnumerable<PendingExchangeChange> changes, string claimedBy)
         => throw new PreviewWriteAttemptedException(nameof(RecordExchangeChangeAttemptsAsync));

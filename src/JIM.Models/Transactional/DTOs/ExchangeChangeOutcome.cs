@@ -80,24 +80,31 @@ public class ExchangeChangeOutcome
     }
 
     /// <summary>
+    /// Where a change still on the queue stands, from its row's status and last attempt and its own Activity's status:
+    /// the reading every surface shares, the queue list's included, so a row never reads one way in a list and another
+    /// on its follow-up.
+    /// </summary>
+    public static ExchangeChangeState StateOf(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt, ActivityStatus changeActivityStatus) => status switch
+    {
+        PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
+        PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
+        // Staging records both kinds of refusal as a refused row; a type change this release does not make is the one
+        // recorded under a warning rather than an error.
+        PendingExchangeChangeStatus.Refused => changeActivityStatus == ActivityStatus.CompleteWithWarning
+            ? ExchangeChangeState.NotMade
+            : ExchangeChangeState.Refused,
+        // Pending: not yet attempted, or waiting out a backoff after a failure that may clear.
+        _ when lastAttemptedAt != null => ExchangeChangeState.Retrying,
+        _ => ExchangeChangeState.Queued
+    };
+
+    /// <summary>
     /// A change still on the queue, described from its row: the row is the authority on what JIM intends to do next,
     /// and the latest attempt's words are on it.
     /// </summary>
     private static ExchangeChangeOutcome DescribeRow(Activity changeActivity, PendingExchangeChange row)
     {
-        var state = row.Status switch
-        {
-            PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
-            PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
-            // Staging records both kinds of refusal as a refused row; a type change this release does not make is
-            // the one recorded under a warning rather than an error.
-            PendingExchangeChangeStatus.Refused => changeActivity.Status == ActivityStatus.CompleteWithWarning
-                ? ExchangeChangeState.NotMade
-                : ExchangeChangeState.Refused,
-            // Pending: not yet attempted, or waiting out a backoff after a failure that may clear.
-            _ when row.LastAttemptedAt != null => ExchangeChangeState.Retrying,
-            _ => ExchangeChangeState.Queued
-        };
+        var state = StateOf(row.Status, row.LastAttemptedAt, changeActivity.Status);
 
         return new ExchangeChangeOutcome
         {
