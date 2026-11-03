@@ -912,6 +912,28 @@ function Invoke-LabVm {
     Invoke-LabLxc -Arguments ($arguments + '--' + $Command) -AllowFailure:$AllowFailure -LogPath $LogPath
 }
 
+function Test-LabBootFinished {
+    <#
+    .SYNOPSIS
+        Whether a VM has finished booting, from what `systemctl is-system-running --wait` and `cloud-init status --wait`
+        said and how they ended: systemd running or degraded (either is booted), and cloud-init done.
+
+    .DESCRIPTION
+        Both answers count only if the agent gave them (exit code 255 is lxc saying the agent did not). AlmaLinux VMs
+        reboot once on their first boot, and a VM's agent can answer in that boot: a wait for cloud-init cut off by
+        the reboot is not a finished boot, though systemd said running a moment before.
+    #>
+    param(
+        [AllowEmptyString()][string]$SystemState,
+        [int]$SystemExitCode,
+        [AllowEmptyString()][string]$CloudInit,
+        [int]$CloudInitExitCode
+    )
+    $SystemExitCode -ne 255 -and $SystemState -match '^\s*(running|degraded)\s*$' -and
+        # cloud-init exits 2 for done with recoverable errors, which is still done.
+        $CloudInitExitCode -in 0, 2 -and $CloudInit -match '(?m)^status: done\s*$'
+}
+
 function Wait-LabVm {
     <#
     .SYNOPSIS
@@ -927,10 +949,10 @@ function Wait-LabVm {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        # is-system-running --wait returns once boot is over, as running or degraded; either is booted.
         $state = Invoke-LabVm -Name $Name -Command @('systemctl', 'is-system-running', '--wait') -AllowFailure
-        if ($LASTEXITCODE -ne 255 -and "$state" -match 'running|degraded') {
-            Invoke-LabVm -Name $Name -Command @('cloud-init', 'status', '--wait') -AllowFailure | Out-Null
+        $stateExit = $LASTEXITCODE
+        $cloudInit = Invoke-LabVm -Name $Name -Command @('cloud-init', 'status', '--wait') -AllowFailure
+        if (Test-LabBootFinished -SystemState "$state" -SystemExitCode $stateExit -CloudInit "$cloudInit" -CloudInitExitCode $LASTEXITCODE) {
             return
         }
         Start-Sleep -Seconds 3
@@ -1385,7 +1407,7 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, Test-LabRhelFamily, ConvertTo-LabAnsiblePlaybook, ConvertTo-LabAnsibleCommand, ConvertTo-LabPodmanConfig, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, Test-LabRhelFamily, Test-LabBootFinished, ConvertTo-LabAnsiblePlaybook, ConvertTo-LabAnsibleCommand, ConvertTo-LabPodmanConfig, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, New-LabCertificate, Get-LabVmAddress,

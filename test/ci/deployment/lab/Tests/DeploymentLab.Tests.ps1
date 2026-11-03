@@ -808,6 +808,36 @@ Describe 'ConvertTo-LabPinnedInstaller' {
     }
 }
 
+Describe 'Test-LabBootFinished' {
+    It 'is finished once systemd is <System> and cloud-init is done' -ForEach @(@{ System = 'running' }, @{ System = 'degraded' }) {
+        Test-LabBootFinished -SystemState $System -SystemExitCode 0 -CloudInit 'status: done' -CloudInitExitCode 0 | Should -BeTrue
+    }
+
+    It 'is not finished while systemd says <System>' -ForEach @(@{ System = 'starting' }, @{ System = 'initializing' }, @{ System = 'stopping' }) {
+        Test-LabBootFinished -SystemState $System -SystemExitCode 1 -CloudInit 'status: done' -CloudInitExitCode 0 | Should -BeFalse
+    }
+
+    It 'is finished when cloud-init is done with recoverable errors (exit code 2)' {
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit 'status: done' -CloudInitExitCode 2 | Should -BeTrue
+    }
+
+    It 'is not finished when the wait for cloud-init was cut off, as by the VM rebooting' {
+        # AlmaLinux VMs reboot once on their first boot; a helper VM's agent answered in the first boot, the wait for
+        # cloud-init ended with the reboot, and the lab started work on a VM that was about to go down.
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit 'Error: LXD VM agent is not currently running' -CloudInitExitCode 255 |
+            Should -BeFalse
+    }
+
+    It 'is not finished while cloud-init says <Status>' -ForEach @(@{ Status = 'status: running' }, @{ Status = 'status: not started' }, @{ Status = '' }) {
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit $Status -CloudInitExitCode 0 | Should -BeFalse
+    }
+
+    It 'is not finished when the agent did not answer the systemd question' {
+        Test-LabBootFinished -SystemState 'Error: LXD VM agent is not currently running (running)' -SystemExitCode 255 -CloudInit 'status: done' -CloudInitExitCode 0 |
+            Should -BeFalse
+    }
+}
+
 Describe 'Test-LabRhelFamily' {
     It 'is true for <Os>' -ForEach @(
         @{ Os = 'AlmaLinux 9' }, @{ Os = 'CentOS Stream 10' }, @{ Os = 'Rocky Linux 9' }, @{ Os = 'Red Hat Enterprise Linux 10' }
