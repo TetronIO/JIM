@@ -31,7 +31,8 @@ public class ExecutionItemFollowUp
     public DateTime Created { get; set; }
 
     /// <summary>
-    /// What kind of work it is. PasswordSynchronisation is an account's Initial Password.
+    /// What kind of work it is. PasswordSynchronisation is an account's Initial Password; ExchangeRecipient is the
+    /// Exchange recipient its Synchronisation Rule declares.
     /// </summary>
     public ActivityTargetType TargetType { get; set; }
 
@@ -62,4 +63,10 @@ public class ExecutionItemFollowUp
     /// the account has no targets of its own; that change's own Activity reports its delivery.
     /// </summary>
     public PasswordChangeOutcomes? PasswordOutcomes { get; set; }
+
+    /// <summary>
+    /// For an Exchange recipient change, where it stands now: queued, retrying, delivered, parked and so on. Null for
+    /// any other kind of follow-up.
+    /// </summary>
+    public ExchangeChangeOutcome? ExchangeOutcome { get; set; }
 }

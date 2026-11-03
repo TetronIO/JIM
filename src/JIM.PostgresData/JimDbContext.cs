@@ -1045,6 +1045,13 @@ public class JimDbContext : DbContext
             .IsUnique()
             .HasDatabaseName("IX_PendingPasswordChanges_MetaverseObjectId_ConnectedSystemId_Unique");
 
+        // Where a password change stands, read by the Activity that recorded it: the Set Password dialog's wait, an
+        // export item's Initial Password follow-up, and a run's follow-up summary (#2021, Phase 6). Not unique: a
+        // propagated change has a row per Connected System.
+        modelBuilder.Entity<PendingPasswordChange>()
+            .HasIndex(ppc => ppc.ActivityId)
+            .HasDatabaseName("IX_PendingPasswordChanges_ActivityId");
+
         // What the delivery pass asks for: the changes owed to this system, in this state, that have come due.
         modelBuilder.Entity<PendingPasswordChange>()
             .HasIndex(ppc => new { ppc.ConnectedSystemId, ppc.Status, ppc.NextRetryAt })
@@ -1097,6 +1104,15 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingExchangeChange>()
             .HasIndex(pec => new { pec.ConnectedSystemId, pec.Status, pec.NextRetryAt })
             .HasDatabaseName("IX_PendingExchangeChanges_ConnectedSystemId_Status_NextRetryAt");
+
+        // What a follow-up asks for: where the change its Activity recorded stands now (#2021, Phase 6). Unique, because
+        // every staged change gets an Activity of its own and supersession re-points the row at the newer one: two rows
+        // naming one Activity would be a fault in staging, which should fail its batch loudly rather than leave a
+        // follow-up describing whichever row it happened to read.
+        modelBuilder.Entity<PendingExchangeChange>()
+            .HasIndex(pec => pec.ActivityId)
+            .IsUnique()
+            .HasDatabaseName("IX_PendingExchangeChanges_ActivityId_Unique");
 
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
@@ -1331,6 +1347,14 @@ public class JimDbContext : DbContext
             .HasIndex(a => a.ParentRunProfileExecutionItemId)
             .HasFilter("\"ParentRunProfileExecutionItemId\" IS NOT NULL")
             .HasDatabaseName("IX_Activities_ParentRunProfileExecutionItemId");
+
+        // Children of an Activity: an Activity page's child list and counts, a password change's delivery outcomes, and
+        // what became of a queued Exchange change (#2021, Phase 6) all read by this column. Partial, because most
+        // Activities are top level.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.ParentActivityId)
+            .HasFilter("\"ParentActivityId\" IS NOT NULL")
+            .HasDatabaseName("IX_Activities_ParentActivityId");
 
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()

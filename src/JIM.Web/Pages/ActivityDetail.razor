@@ -241,6 +241,29 @@
                              ScheduleStepIndex="_activity.ScheduleStepIndex"
                              Class="mt-6" />
 
+    @* A queued Exchange change's own Activity (#2021, Phase 6): it completed the moment the change was queued, so its
+       status says nothing about the recipient. This says where the change stands now. *@
+    @if (_exchangeOutcome is { } exchangeOutcome)
+    {
+        var (exchangeLabel, exchangeModifier, _) = ExchangeChangeOutcomeDisplay.Pill(exchangeOutcome.State);
+        <MudPaper Class="pa-4 mt-6" Outlined="true" data-testid="jim-exchange-change">
+            <MudText Typo="Typo.h5" Class="mb-3">Exchange Change</MudText>
+            <div class="jim-follow-up-row">
+                <MudIcon Icon="@Icons.Material.Filled.Email" Class="jim-follow-up-icon" aria-hidden="true" />
+                <div class="jim-follow-up-what">
+                    <div class="jim-follow-up-title">
+                        <span>@ExchangeChangeOutcomeDisplay.Title(exchangeOutcome.RecipientType)</span>
+                        <span class="@($"jim-status-pill jim-status-pill--{exchangeModifier}")"><span class="jim-status-dot"></span>@exchangeLabel</span>
+                    </div>
+                    <div class="jim-follow-up-detail">@ExchangeChangeOutcomeDisplay.Words(exchangeOutcome)</div>
+                </div>
+            </div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                Each attempt that said something new, and the outcome, are recorded as Child Activities below.
+            </MudText>
+        </MudPaper>
+    }
+
     @* Where the run has got to: the steps (#454), and how far through the running step it is. One
        panel, because they answer the same question at two resolutions. The steps outlive the run;
        the counters below them only exist while it is in flight. *@
@@ -668,6 +691,9 @@
                                              ConnectedSystemId="_activity.ConnectedSystemId" ConnectedSystemName="@_connectedSystemHeader?.Name"
                                              Class="mt-6" />
             }
+
+            @* What the export set in motion, and where it stands now (#2021, Phase 6). *@
+            <RunFollowUpSummaryPanel Lines="_followUpLines" Class="mt-6" />
 
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
@@ -1262,6 +1288,8 @@
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private ActivityRunProfileExecutionStats? _activityRunProfileExecutionStats;
+    private IReadOnlyList<FollowUpSummaryLine> _followUpLines = [];
+    private JIM.Models.Transactional.DTOs.ExchangeChangeOutcome? _exchangeOutcome;
 
     /// <summary>
     /// The excluded Containers this run discarded entries through, named. Loaded only when there are any, which
@@ -1407,6 +1435,9 @@
         }
 
         _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
+        _exchangeOutcome = _activity is { TargetType: ActivityTargetType.ExchangeRecipient, ParentActivityId: null }
+            ? await jim.ExchangeDelivery.GetChangeOutcomeAsync(_activity.Id)
+            : null;
 
         // Asked only where the answer can show: inside a warning, on a run against a Connected System.
         _hasUnresolvedReferences = !string.IsNullOrEmpty(_activity.WarningMessage)
@@ -1480,6 +1511,7 @@
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
             _phases = await jim.Activities.GetActivityPhasesAsync(_activity.Id);
             await LoadExcludedContainerNamesAsync(jim);
+            await LoadFollowUpSummaryAsync(jim, _activity.Id);
             _executionItemsRefreshGate.Seed(_activityRunProfileExecutionStats.TotalObjectChangeCount, DateTime.UtcNow);
         }
 
@@ -1844,6 +1876,22 @@
     /// <summary>
     /// Checks if this is an Export run.
     /// </summary>
+    /// <summary>
+    /// What an export run set in motion and where it stands now (#2021, Phase 6): its Initial Passwords and Exchange
+    /// recipient changes. Nothing is read for any other kind of run, which sets nothing in motion.
+    /// </summary>
+    private async Task LoadFollowUpSummaryAsync(JimApplication jim, Guid runActivityId)
+    {
+        if (!IsExportRun())
+        {
+            _followUpLines = [];
+            return;
+        }
+
+        var summaries = await jim.Activities.GetFollowUpSummariesAsync([runActivityId]);
+        _followUpLines = summaries.TryGetValue(runActivityId, out var counts) ? FollowUpSummaryDisplay.From(counts) : [];
+    }
+
     private bool IsExportRun()
     {
         if (IsHousekeepingActivity)
@@ -1993,6 +2041,7 @@
                 _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
                 _phases = await jim.Activities.GetActivityPhasesAsync(updated.Id);
                 await LoadExcludedContainerNamesAsync(jim);
+                await LoadFollowUpSummaryAsync(jim, updated.Id);
             }
 
             await InvokeAsync(StateHasChanged);

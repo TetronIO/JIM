@@ -1,0 +1,48 @@
+@using JIM.Models.Activities
+@using JIM.Web.Models
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A run's follow-up on its Activity list row (#2021, Phase 6): per kind of work, how many are done, still running and
+   waiting for a person. The run's own status stays as it ended; these change as the work is delivered. *@
+@if (Lines.Count > 0)
+{
+    <span class="jim-follow-up-chips" data-testid="jim-follow-up-chips">
+        <span class="jim-follow-up-chips-label">Follow-up</span>
+        @foreach (var line in Lines)
+        {
+            var settled = line.Total - line.RunningCount - line.StuckCount;
+            var icon = Icon(line.Kind);
+            @if (settled > 0)
+            {
+                <MudTooltip Text="@Describe(line, s => !s.IsRunning && !s.IsStuck)" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@settled.ToString("N0")</MudChip>
+                </MudTooltip>
+            }
+            @if (line.RunningCount > 0)
+            {
+                <MudTooltip Text="@Describe(line, s => s.IsRunning)" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@line.RunningCount.ToString("N0")</MudChip>
+                </MudTooltip>
+            }
+            @if (line.StuckCount > 0)
+            {
+                <MudTooltip Text="@Describe(line, s => s.IsStuck)" Arrow="true" Placement="Placement.Top">
+                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@line.StuckCount.ToString("N0")</MudChip>
+                </MudTooltip>
+            }
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FollowUpSummaryLine> Lines { get; set; } = [];
+
+    private static string Icon(ActivityTargetType kind) => kind == ActivityTargetType.PasswordSynchronisation
+        ? Icons.Material.Filled.Key
+        : Icons.Material.Filled.Email;
+
+    private static string Describe(FollowUpSummaryLine line, Func<FollowUpSummaryState, bool> which) =>
+        $"{line.Title}: " + string.Join(", ", line.States.Where(which).Select(s => $"{s.Count:N0} {s.Label}"));
+}

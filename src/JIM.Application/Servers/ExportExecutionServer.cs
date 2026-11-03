@@ -3452,6 +3452,7 @@ public class ExportExecutionServer
                         var replaced = ExchangeFollowUp(Guid.NewGuid(), cso, declared, connectedSystemName, executionItemId: null, now,
                             ActivityStatus.Complete, ExchangeChangeStagingMessages.Replaced(connectedSystemName));
                         replaced.ParentActivityId = previousActivityId;
+                        replaced.TargetOperationType = ActivityTargetOperationType.ReplaceExchangeRecipient;
                         activities.Add(replaced);
                     }
                 }

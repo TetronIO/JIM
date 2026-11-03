@@ -1,0 +1,83 @@
+@using JIM.Models.Exchange
+@using JIM.Web.Models
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* An account's Exchange recipient (#2021, Phase 6): what its Synchronisation Rules declare beside what the last import
+   read back, and the change still owed to Exchange, if any. JIM believes Exchange only once an import shows it, so an
+   account whose mailbox is still being made reads as not a recipient yet. Takes its data from the page, which reads it
+   only while Exchange recipient management is available. *@
+<MudPaper Class="@($"pa-4 {Class}")" Outlined="true" data-testid="jim-exchange-recipient">
+    <div class="d-flex align-center flex-wrap mb-3" style="gap: 0.5rem 0.75rem;">
+        <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Info" aria-hidden="true" />
+        <MudText Typo="Typo.h6">Exchange Recipient</MudText>
+        <span class="@($"jim-status-pill jim-status-pill--{_headline.Modifier}")">
+            <span class="jim-status-dot"></span>@_headline.Label
+        </span>
+    </div>
+    <MudSimpleTable Outlined="true">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Declared</th>
+                <th>In Exchange <span class="mud-text-secondary" style="text-transform: none; letter-spacing: 0;">as of the last import</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in Rows)
+            {
+                <tr @key="row.Name">
+                    <td>@row.Name</td>
+                    <td><TextValueDisplay Value="@row.Declared" /></td>
+                    <td><TextValueDisplay Value="@row.Imported" /></td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+    @if (State.QueuedChange is { } queued)
+    {
+        <div class="mt-3">
+            <ExecutionItemFollowUpRow FollowUp="@ExecutionItemFollowUpDisplay.ForExchangeChange(queued, ConnectedSystemName, queued.OccurredAt)" />
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public ExchangeRecipientState State { get; set; } = null!;
+
+    [Parameter]
+    public string? ConnectedSystemName { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private (string Label, string Modifier) _headline;
+
+    protected override void OnParametersSet() => _headline = ExchangeRecipientStateDisplay.Headline(State);
+
+    private IEnumerable<(string Name, string? Declared, string? Imported)> Rows
+    {
+        get
+        {
+            // The recipient type always; each other value where either side has one, so a mailbox's panel does not
+            // list a mail contact's external address.
+            yield return ("Recipient type", Declared(State.Declared.RecipientType, "Not a recipient"), Imported(State.Imported.RecipientType));
+            foreach (var (name, declared, imported, unset) in new[]
+                     {
+                         ("Alias", State.Declared.Alias, State.Imported.Alias, "Exchange chooses"),
+                         ("Database", State.Declared.Database, State.Imported.Database, "Exchange chooses"),
+                         ("Primary SMTP address", State.Declared.PrimarySmtpAddress, State.Imported.PrimarySmtpAddress, "Email Address Policies apply"),
+                         ("External address", State.Declared.ExternalAddress, State.Imported.ExternalAddress, (string?)null)
+                     }.Where(r => !string.IsNullOrEmpty(r.Item2) || !string.IsNullOrEmpty(r.Item3)))
+            {
+                yield return (name, Declared(declared, unset), imported);
+            }
+        }
+    }
+
+    private static string? Declared(string? value, string? unset) => string.IsNullOrEmpty(value) ? unset : value;
+
+    private static string Imported(string? recipientType) =>
+        string.IsNullOrEmpty(recipientType) || recipientType == ExchangeRecipientTypes.None ? "Not a recipient" : recipientType;
+}

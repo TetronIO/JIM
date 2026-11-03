@@ -510,6 +510,13 @@ public class ActivityDetailDto
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
     /// <summary>
+    /// For the Activity of a queued Exchange recipient change, where the change stands now: queued, retrying,
+    /// delivered, parked and so on. The Activity itself completes the moment the change is queued, so its status says
+    /// nothing about whether Exchange has made the recipient. Null for every other Activity.
+    /// </summary>
+    public JIM.Models.Transactional.DTOs.ExchangeChangeOutcome? ExchangeOutcome { get; set; }
+
+    /// <summary>
     /// The steps the Run Profile execution moved through, in run order, each with how it
     /// turned out and how long it took. Empty for other Activity types, and for runs that predate
     /// phase recording.
@@ -982,6 +989,15 @@ public class ActivityRunProfileExecutionStatsDto
     /// Entries discarded across every exclusion, which is the figure that answers "why was this import slow?".
     /// </summary>
     public int TotalEntriesDiscardedByExclusion { get; set; }
+    #endregion
+
+    #region Follow-up Stats
+    /// <summary>
+    /// Where the work the run set in motion stands now, counted by kind and state: the Initial Passwords and Exchange
+    /// recipient changes its exports queued. Unlike the counts above, which are final once the run has finished, these
+    /// change as the work is delivered. Empty for a run that set nothing in motion.
+    /// </summary>
+    public List<FollowUpStateCountDto> FollowUps { get; set; } = [];
     #endregion
 
     /// <summary>

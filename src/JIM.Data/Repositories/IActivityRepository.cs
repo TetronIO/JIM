@@ -100,10 +100,25 @@ public interface IActivityRepository
     public Task<List<PasswordSynchronisationEventOutcome>> GetPasswordSynchronisationOutcomesAsync(Guid changeActivityId);
 
     /// <summary>
+    /// What became of each of the given Exchange changes (#2021, Phase 6): the Activities recorded under each change's
+    /// own Activity, oldest first, as projections. Empty for a change nothing has been recorded under yet.
+    /// </summary>
+    /// <param name="changeActivityIds">The Activities recording the Exchange changes.</param>
+    public Task<List<ExchangeChangeEvent>> GetExchangeChangeEventsAsync(IReadOnlyCollection<Guid> changeActivityIds);
+
+    /// <summary>
     /// The follow-up Activities of the given Run Profile Execution Items (#2668): those whose parent is one of the
     /// items, oldest first. Untracked; empty when none of the items has any.
     /// </summary>
     public Task<List<Activity>> GetFollowUpActivitiesAsync(IReadOnlyCollection<Guid> executionItemIds);
+
+    /// <summary>
+    /// Where the follow-ups of each of the given runs stand, counted by kind and state (#2021, Phase 6): Initial
+    /// Passwords and Exchange recipient changes, each judged exactly as its own follow-up reads. One grouped read
+    /// whatever the size of the runs; a run with no follow-ups contributes nothing.
+    /// </summary>
+    /// <param name="runActivityIds">The runs' Activities.</param>
+    public Task<List<FollowUpStateCount>> GetFollowUpStateCountsAsync(IReadOnlyCollection<Guid> runActivityIds);
 
     /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.

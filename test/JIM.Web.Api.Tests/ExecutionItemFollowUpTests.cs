@@ -44,6 +44,7 @@ public class ExecutionItemFollowUpTests
         _activityRepository.Setup(r => r.GetActivityAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _followUps.SingleOrDefault(a => a.Id == id));
         _activityRepository.Setup(r => r.GetPasswordSynchronisationOutcomesAsync(It.IsAny<Guid>())).ReturnsAsync([]);
+        _activityRepository.Setup(r => r.GetExchangeChangeEventsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
 
         _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
         _connectedSystemRepository.Setup(r => r.GetPasswordSynchronisationTargetsAsync())
@@ -118,6 +119,76 @@ public class ExecutionItemFollowUpTests
             Assert.That(byItem[first].Single().ActivityId, Is.EqualTo(firstActivity.Id));
             Assert.That(byItem[second].Single().ActivityId, Is.EqualTo(secondActivity.Id));
         }
+    }
+
+    /// <summary>
+    /// An Exchange change's follow-up carries where the change stands (#2021, Phase 6), read from the queue: a change
+    /// waiting out a backoff is Retrying, not the Complete its Activity was recorded as when it was queued.
+    /// </summary>
+    [Test]
+    public async Task GetExecutionItemFollowUpsAsync_ItemWithAnExchangeChangeRetrying_ReturnsItWithWhereItStandsAsync()
+    {
+        var itemId = Guid.NewGuid();
+        var activity = ExchangeChangeActivity(itemId);
+        await _syncRepository.StageExchangeChangesAsync([new PendingExchangeChange
+        {
+            ConnectedSystemId = DirectoryId, ConnectedSystemObjectId = Guid.NewGuid(), RecipientType = "Mailbox",
+            CreatedAt = Created, ActivityId = activity.Id
+        }]);
+        var row = _syncRepository.PendingExchangeChanges.Values.Single();
+        row.RecordFailure(ExchangeChangeFailureKind.Unreachable, "Exchange did not answer within 60 seconds.", Created.AddMinutes(1));
+
+        var followUp = (await _application.Activities.GetExecutionItemFollowUpsAsync(itemId)).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(followUp.Status, Is.EqualTo(ActivityStatus.Complete), "the Activity itself was complete the moment it was queued");
+            Assert.That(followUp.ExchangeOutcome, Is.Not.Null);
+            Assert.That(followUp.ExchangeOutcome!.State, Is.EqualTo(ExchangeChangeState.Retrying));
+            Assert.That(followUp.ExchangeOutcome!.RecipientType, Is.EqualTo("Mailbox"));
+            Assert.That(followUp.PasswordOutcomes, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Many items' Exchange follow-ups are read together, as the causality timeline asks for them: one read of the
+    /// Activities under the changes, not one per change.
+    /// </summary>
+    [Test]
+    public async Task GetExecutionItemFollowUpsAsync_SeveralItemsWithExchangeChanges_ReadsTheirOutcomesTogetherAsync()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        ExchangeChangeActivity(first);
+        ExchangeChangeActivity(second);
+
+        var byItem = await _application.Activities.GetExecutionItemFollowUpsAsync([first, second]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(byItem[first].Single().ExchangeOutcome, Is.Not.Null);
+            Assert.That(byItem[second].Single().ExchangeOutcome, Is.Not.Null);
+        }
+        _activityRepository.Verify(r => r.GetExchangeChangeEventsAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Once);
+    }
+
+    private Activity ExchangeChangeActivity(Guid itemId)
+    {
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            ParentRunProfileExecutionItemId = itemId,
+            TargetType = ActivityTargetType.ExchangeRecipient,
+            TargetOperationType = ActivityTargetOperationType.SetExchangeRecipient,
+            TargetContext = "Mailbox",
+            TargetName = "PANOPLY",
+            ConnectedSystemId = DirectoryId,
+            Status = ActivityStatus.Complete,
+            Message = "Mailbox queued for Exchange.",
+            Created = Created
+        };
+        _followUps.Add(activity);
+        return activity;
     }
 
     private Activity InitialPasswordActivity(Guid itemId)

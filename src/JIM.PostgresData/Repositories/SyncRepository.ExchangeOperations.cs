@@ -132,6 +132,28 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public async Task<List<PendingExchangeChange>> GetExchangeChangesByActivityAsync(IReadOnlyCollection<Guid> activityIds)
+    {
+        if (activityIds.Count == 0)
+            return [];
+
+        // A portal and API read, a page of follow-ups at a time; served by IX_PendingExchangeChanges_ActivityId.
+        return await _context.PendingExchangeChanges
+            .AsNoTracking()
+            .Where(c => activityIds.Contains(c.ActivityId))
+            .ToListAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<PendingExchangeChange?> GetExchangeChangeForConnectedSystemObjectAsync(Guid connectedSystemObjectId)
+    {
+        // Served by the unique index on the account, which is what makes "at most one" a guarantee rather than a hope.
+        return await _context.PendingExchangeChanges
+            .AsNoTracking()
+            .SingleOrDefaultAsync(c => c.ConnectedSystemObjectId == connectedSystemObjectId);
+    }
+
+    /// <inheritdoc />
     public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (connectedSystemObjectIds.Count == 0)

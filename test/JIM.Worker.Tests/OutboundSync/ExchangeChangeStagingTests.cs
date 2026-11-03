@@ -501,6 +501,9 @@ public class ExchangeChangeStagingTests
             Assert.That(row.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
             Assert.That(SyncRepo.Activities[row.ActivityId].Message, Does.StartWith("Update to the mailbox queued for Exchange"));
             Assert.That(replaced.Status, Is.EqualTo(ActivityStatus.Complete));
+            Assert.That(replaced.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.ReplaceExchangeRecipient));
+            Assert.That(SyncRepo.Activities[row.ActivityId].TargetOperationType, Is.EqualTo(ActivityTargetOperationType.SetExchangeRecipient),
+                "the change that replaced it is an ordinary Exchange change");
             Assert.That(replaced.Message, Does.Contain("replaced by a newer declared state"));
             Assert.That(replaced.ParentRunProfileExecutionItemId, Is.Null, "an Activity has one parent");
             Assert.That(result.ExchangeChangesSupersededCount, Is.EqualTo(1));

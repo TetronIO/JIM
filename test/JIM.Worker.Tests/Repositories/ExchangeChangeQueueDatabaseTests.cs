@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
@@ -591,6 +592,130 @@ public class ExchangeChangeQueueDatabaseTests
             Assert.That(received[0].Payload, Is.EqualTo(seeded.SystemId.ToString()));
         }
     }
+
+    #region Reading where a change stands (Phase 6)
+
+    /// <summary>
+    /// A follow-up reads its change's row by the change's Activity; rows carrying other changes are not returned.
+    /// </summary>
+    [Test]
+    public async Task GetExchangeChangesByActivityAsync_ReturnsOnlyTheRowsCarryingThoseActivitiesAsync()
+    {
+        var seeded = await SeedAsync();
+        var asked = NewChange(seeded, alias: "ada");
+        var other = NewChange(seeded with { CsoId = await SeedConnectedSystemObjectAsync(seeded.SystemId) }, alias: "grace");
+        await StageAsync(asked);
+        await StageAsync(other);
+
+        await using var read = NewContext();
+        var rows = await new PostgresDataRepository(read).Sync.GetExchangeChangesByActivityAsync([asked.ActivityId, Guid.NewGuid()]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows.Single().Id, Is.EqualTo(asked.Id));
+            Assert.That(rows.Single().Alias, Is.EqualTo("ada"));
+            Assert.That(rows.Single().ConnectedSystemObjectId, Is.EqualTo(seeded.CsoId));
+            Assert.That(await new PostgresDataRepository(read).Sync.GetExchangeChangesByActivityAsync([]), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task GetExchangeChangeForConnectedSystemObjectAsync_ReturnsTheAccountsRowOrNullAsync()
+    {
+        var seeded = await SeedAsync();
+        var change = NewChange(seeded);
+        await StageAsync(change);
+        var unqueued = await SeedConnectedSystemObjectAsync(seeded.SystemId);
+
+        await using var read = NewContext();
+        var repository = new PostgresDataRepository(read).Sync;
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That((await repository.GetExchangeChangeForConnectedSystemObjectAsync(seeded.CsoId))?.Id, Is.EqualTo(change.Id));
+            Assert.That(await repository.GetExchangeChangeForConnectedSystemObjectAsync(unqueued), Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// Each staged change has an Activity of its own, and the database holds staging to it: two rows naming one Activity
+    /// would leave a follow-up describing whichever it happened to read.
+    /// </summary>
+    [Test]
+    public async Task StageExchangeChangesAsync_TwoChangesNamingOneActivity_IsRefusedByTheDatabaseAsync()
+    {
+        var seeded = await SeedAsync();
+        var first = NewChange(seeded);
+        await StageAsync(first);
+        var second = NewChange(seeded with { CsoId = await SeedConnectedSystemObjectAsync(seeded.SystemId) });
+        second.ActivityId = first.ActivityId;
+
+        var thrown = Assert.CatchAsync(async () => await StageAsync(second));
+
+        Assert.That(thrown is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }
+                    || thrown?.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation },
+            Is.True, $"expected a unique violation, got {thrown?.GetType().Name}: {thrown?.Message}");
+    }
+
+    /// <summary>
+    /// What became of each change: the Activities recorded under it, oldest first, projected with what the outcome read
+    /// needs; those under other Activities are left out.
+    /// </summary>
+    [Test]
+    public async Task GetExchangeChangeEventsAsync_ReturnsTheActivitiesUnderEachChangeOldestFirstAsync()
+    {
+        var changeActivityId = Guid.NewGuid();
+        var otherActivityId = Guid.NewGuid();
+        var at = new DateTime(2026, 11, 3, 10, 0, 0, DateTimeKind.Utc);
+        await using (var seed = NewContext())
+        {
+            seed.Activities.AddRange(
+                ChangeActivity(changeActivityId, null, at, ActivityTargetOperationType.SetExchangeRecipient, ActivityStatus.Complete),
+                ChangeActivity(Guid.NewGuid(), changeActivityId, at.AddMinutes(6), ActivityTargetOperationType.WithdrawExchangeRecipient,
+                    ActivityStatus.Complete, message: "Withdrawn: the account was removed."),
+                ChangeActivity(Guid.NewGuid(), changeActivityId, at.AddMinutes(2), ActivityTargetOperationType.SetExchangeRecipient,
+                    ActivityStatus.CompleteWithError, error: "Exchange did not answer."),
+                ChangeActivity(Guid.NewGuid(), otherActivityId, at.AddMinutes(1), ActivityTargetOperationType.SetExchangeRecipient,
+                    ActivityStatus.Complete));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var read = NewContext();
+        var events = await new PostgresDataRepository(read).Activity.GetExchangeChangeEventsAsync([changeActivityId]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(events.Select(e => e.Operation), Is.EqualTo(new[]
+            {
+                ActivityTargetOperationType.SetExchangeRecipient, ActivityTargetOperationType.WithdrawExchangeRecipient
+            }), "oldest first, and only those under the change asked about");
+            Assert.That(events.All(e => e.ChangeActivityId == changeActivityId), Is.True);
+            Assert.That(events[0].Status, Is.EqualTo(ActivityStatus.CompleteWithError));
+            Assert.That(events[0].ErrorMessage, Is.EqualTo("Exchange did not answer."));
+            Assert.That(events[0].OccurredAt, Is.EqualTo(at.AddMinutes(2)));
+            Assert.That(events[1].Message, Is.EqualTo("Withdrawn: the account was removed."));
+        }
+    }
+
+    private static Activity ChangeActivity(Guid id, Guid? parentId, DateTime created, ActivityTargetOperationType operation, ActivityStatus status,
+        string? message = null, string? error = null) => new()
+    {
+        Id = id,
+        ParentActivityId = parentId,
+        TargetType = ActivityTargetType.ExchangeRecipient,
+        TargetOperationType = operation,
+        TargetName = "Corporate AD",
+        Status = status,
+        Message = message,
+        ErrorMessage = error,
+        InitiatedByType = ActivityInitiatorType.System,
+        InitiatedByName = "System",
+        Created = created,
+        Executed = created
+    };
+
+    #endregion
 
     #region helpers
 

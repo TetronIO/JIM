@@ -97,6 +97,8 @@ A follow-up never changes its run's status. A password parked hours after a run 
 
 The REST API returns an item's follow-ups with `include=followups` (`GET /api/v1/activities/items/{id}?include=followups`), and PowerShell with `Get-JIMActivityExecutionItem -IncludeFollowUps`.
 
+An export run's Activity counts its items' follow-ups in a **Follow-up** panel, by state, and its row on the Activity list shows how many are done, still running and waiting for a person. The counts change as the work is delivered. The REST API returns them as `followUps` in a run's statistics (`GET /api/v1/activities/{id}/stats`), as does `Get-JIMActivityStats`.
+
 ## :material-arrow-decision-outline: Causes and consequences
 
 The Lineage reads beyond the run in both directions: up the chain to what caused the item, and down it to what the item went on to cause in later runs, each on the object it happened to. [Causality](causality.md) explains both, including how each branch says where it ends.

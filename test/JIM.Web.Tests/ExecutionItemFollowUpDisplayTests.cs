@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Web.Models;
 using NUnit.Framework;
@@ -90,6 +91,111 @@ public class ExecutionItemFollowUpDisplayTests
             Assert.That(display.Detail, Is.EqualTo("Something followed."));
         }
     }
+
+    // ---- Exchange recipient changes (#2021, Phase 6) -------------------------------------------------------------
+
+    [TestCase(ExchangeChangeState.Queued, "Queued", "neutral", true)]
+    [TestCase(ExchangeChangeState.Delivering, "Delivering", "neutral", true)]
+    [TestCase(ExchangeChangeState.Retrying, "Retrying", "warn", true)]
+    [TestCase(ExchangeChangeState.Delivered, "Delivered", "ok", false)]
+    [TestCase(ExchangeChangeState.Withdrawn, "Withdrawn", "ok", false)]
+    [TestCase(ExchangeChangeState.Replaced, "Replaced", "neutral", false)]
+    [TestCase(ExchangeChangeState.Parked, "Parked", "err", false)]
+    [TestCase(ExchangeChangeState.Refused, "Refused", "err", false)]
+    [TestCase(ExchangeChangeState.NotMade, "Not made", "warn", false)]
+    [TestCase(ExchangeChangeState.Cancelled, "Cancelled", "err", false)]
+    public void From_ExchangeChange_ReadsItsStateFromItsOutcome(ExchangeChangeState state, string label, string modifier, bool running)
+    {
+        var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome { State = state, RecipientType = "Mailbox" }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display.Kind, Is.EqualTo(ActivityTargetType.ExchangeRecipient));
+            Assert.That(display.StateLabel, Is.EqualTo(label));
+            Assert.That(display.PillModifier, Is.EqualTo(modifier));
+            Assert.That(display.IsRunning, Is.EqualTo(running));
+        }
+    }
+
+    [TestCase("Mailbox", "Mailbox")]
+    [TestCase("SharedMailbox", "Shared mailbox")]
+    [TestCase("EquipmentMailbox", "Equipment mailbox")]
+    [TestCase("MailEnabledGroup", "Mail-enabled group")]
+    [TestCase("None", "Exchange recipient")]
+    [TestCase("Spaceship", "Exchange recipient")]
+    public void From_ExchangeChange_IsTitledByTheRecipientItDeclares(string recipientType, string title)
+    {
+        var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome
+        {
+            State = ExchangeChangeState.Queued, RecipientType = recipientType
+        }));
+
+        Assert.That(display.Title, Is.EqualTo(title));
+    }
+
+    [Test]
+    public void From_ExchangeChangeRetrying_SaysWhatWentWrongInExchangesWordsAndWhenItIsTriedNext()
+    {
+        var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome
+        {
+            State = ExchangeChangeState.Retrying, RecipientType = "Mailbox", AttemptCount = 2,
+            FailureKind = ExchangeChangeFailureKind.Unreachable, Message = "Exchange did not answer within 60 seconds.",
+            NextAttemptAt = DateTime.UtcNow.AddMinutes(4)
+        }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display.Detail, Does.Contain("Exchange did not answer within 60 seconds."));
+            Assert.That(display.Detail, Does.Contain("Attempt 2"));
+            Assert.That(display.Detail, Does.Contain("Next attempt"));
+        }
+    }
+
+    [Test]
+    public void From_ExchangeChangeRefused_GivesJimsReason()
+    {
+        var display = ExecutionItemFollowUpDisplay.From(ExchangeChange(new ExchangeChangeOutcome
+        {
+            State = ExchangeChangeState.Refused, RecipientType = "Mailbox", Message = "A group cannot be a mailbox."
+        }));
+
+        Assert.That(display.Detail, Does.Contain("A group cannot be a mailbox."));
+    }
+
+    [Test]
+    public void From_ExchangeChangeWithNoOutcome_ReadsFromItsActivityUnderItsOwnName()
+    {
+        // No outcome is read where the change's own Activity could not be matched, so the Activity speaks for it.
+        var followUp = ExchangeChange(outcome: null);
+
+        var display = ExecutionItemFollowUpDisplay.From(followUp);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(display.Title, Is.EqualTo("Exchange recipient"));
+            Assert.That(display.StateLabel, Is.EqualTo("Complete"));
+            Assert.That(display.Detail, Is.EqualTo(followUp.Message));
+        }
+    }
+
+    [Test]
+    public void From_InitialPassword_IsAPasswordFollowUp()
+    {
+        var display = ExecutionItemFollowUpDisplay.From(InitialPassword(new PasswordChangeTargetOutcome { State = PasswordChangeTargetState.Set }));
+
+        Assert.That(display.Kind, Is.EqualTo(ActivityTargetType.PasswordSynchronisation));
+    }
+
+    private static ExecutionItemFollowUp ExchangeChange(ExchangeChangeOutcome? outcome) => new()
+    {
+        ActivityId = Guid.NewGuid(),
+        RunProfileExecutionItemId = Guid.NewGuid(),
+        TargetType = ActivityTargetType.ExchangeRecipient,
+        TargetName = "PANOPLY",
+        Status = ActivityStatus.Complete,
+        Message = "Mailbox queued for Exchange on PANOPLY.",
+        ExchangeOutcome = outcome
+    };
 
     private static ExecutionItemFollowUp InitialPassword(PasswordChangeTargetOutcome? target = null) => new()
     {
