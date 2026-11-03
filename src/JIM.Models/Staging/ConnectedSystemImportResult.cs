@@ -46,11 +46,30 @@ public class ConnectedSystemImportResult
     /// contradicts the first fails the run before anything is saved. A Connector cannot change how it reads part-way
     /// through a run. A page returned once the run is being cancelled is not held to it.
     ///
-    /// This covers every Partition the Run Profile reads. #2715 generalises it to the set of Partitions read completely,
-    /// so that a run reading some Partitions in full and others by their changes detects deletions only in the former;
-    /// a Connector setting this today is saying that set is every Partition the run targets.
+    /// It covers every Partition the Run Profile targets, and that is the whole answer: a run cannot say it read some
+    /// Partitions in full and others by their changes. A Connector that keeps a watermark per Partition
+    /// (<see cref="JIM.Models.Interfaces.IConnectorPartitionWatermarks"/>) and lacks one for any target Partition reads
+    /// every target Partition in full and says so here.
     /// </remarks>
     public bool CompleteRead { get; set; }
+
+    /// <summary>
+    /// For a Connector that keeps a Delta Import watermark per Partition
+    /// (<see cref="JIM.Models.Interfaces.IConnectorPartitionWatermarks"/>), the watermark this run reached for each
+    /// Partition it read, by Partition id: a value to record, or null to clear that Partition's watermark, so its next
+    /// Delta Import reads every object in it. A Partition left out keeps the watermark it has.
+    /// </summary>
+    /// <remarks>
+    /// #2715. JIM takes the map from the first page that carries one and ignores the maps of later pages, as it does
+    /// <see cref="PersistedConnectorData"/>, and records it only once the run has staged everything it read; a run that
+    /// fails, is cancelled, withholds the deletes its Connector reported, or cannot finish deletion detection after
+    /// reading every object records none of it. Every page's map is checked before that page's objects are processed:
+    /// each key must be one of the Partitions JIM handed the Connector for this run, and a Connector that does not
+    /// implement the interface must leave this null. Anything else fails the run before anything is staged. A value
+    /// equal to the one JIM handed over is still recorded, so each Partition's watermark says when an import last read
+    /// it.
+    /// </remarks>
+    public Dictionary<int, string?>? PartitionWatermarks { get; set; }
 
     /// <summary>
     /// Optional warning message from the connector. When set, the import completes and the message is

@@ -22,6 +22,7 @@ public class FaultingSyncServerProxy : DispatchProxy
     /// <summary>
     /// Creates a proxy over <paramref name="inner"/> whose <paramref name="failingMethodName"/> returns a faulted
     /// task carrying <paramref name="exception"/>, as a failing asynchronous call does, instead of calling through.
+    /// The method may return <see cref="Task"/> or <see cref="Task{TResult}"/>.
     /// </summary>
     public static ISyncServer Create(ISyncServer inner, string failingMethodName, Exception exception)
     {
@@ -42,9 +43,21 @@ public class FaultingSyncServerProxy : DispatchProxy
         if (targetMethod.Name != _failingMethodName)
             return targetMethod.Invoke(_inner, args);
 
-        if (targetMethod.ReturnType != typeof(Task))
-            throw new NotSupportedException($"FaultingSyncServerProxy only fails methods returning Task; {targetMethod.Name} returns {targetMethod.ReturnType.Name}.");
+        if (targetMethod.ReturnType == typeof(Task))
+            return Task.FromException(_exception);
 
-        return Task.FromException(_exception);
+        if (targetMethod.ReturnType.IsGenericType && targetMethod.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+            return FaultedTaskOf(targetMethod.ReturnType.GetGenericArguments()[0]);
+
+        throw new NotSupportedException($"FaultingSyncServerProxy only fails methods returning Task or Task<T>; {targetMethod.Name} returns {targetMethod.ReturnType.Name}.");
     }
+
+    /// <summary>
+    /// A <see cref="Task{TResult}"/> of <paramref name="resultType"/> faulted with the proxy's exception.
+    /// </summary>
+    private object FaultedTaskOf(Type resultType) =>
+        typeof(Task).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Single(m => m.Name == nameof(Task.FromException) && m.IsGenericMethodDefinition)
+            .MakeGenericMethod(resultType)
+            .Invoke(null, [_exception])!;
 }

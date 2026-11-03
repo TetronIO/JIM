@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.ObjectModel;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
@@ -150,6 +151,20 @@ public class SyncImportTaskProcessor
     /// </summary>
     private bool IsDeltaImportThatReadEveryObject =>
         _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport && _connectorReadEveryObject == true;
+
+    /// <summary>
+    /// #2715: for a Connector that keeps a Delta Import watermark per Partition (<see cref="IConnectorPartitionWatermarks"/>),
+    /// the watermark JIM handed it for each Partition the run targets, by Partition id, null where none was recorded. Fixed
+    /// for the run once handed over. Null for any other Connector: JIM hands it none, so it may return none.
+    /// </summary>
+    private IReadOnlyDictionary<int, string?>? _partitionWatermarksHanded;
+
+    /// <summary>
+    /// #2715: the Partitions the run targets, by id, as they stood when it started: the Partitions whose watermarks it
+    /// was handed and may record, named as the Activity records them. Empty unless the Connector keeps a watermark per
+    /// Partition.
+    /// </summary>
+    private Dictionary<int, ConnectedSystemPartition> _partitionWatermarkTargets = new();
 
     /// <summary>
     /// Deletes the Connector reported that a Delta Import withheld because, together, they exceeded the Run Profile's
@@ -407,6 +422,17 @@ public class SyncImportTaskProcessor
         // when it equals the one the run started from: the run still reached it.
         string? watermarkReached = null;
 
+        // #2715: what a Connector that keeps a watermark per Partition returned with the first page that carried any,
+        // held back like watermarkToRecord until the run has staged everything it read. A value is recorded, a null clears
+        // that Partition's watermark, and a Partition left out keeps the one it has. Unlike watermarkToRecord, a value equal
+        // to the one handed over is still recorded, so each Partition's watermark says when an import last read it.
+        Dictionary<int, string?>? partitionWatermarksReached = null;
+
+        // Why the run must leave every watermark as it started, its Connected System's and each Partition's alike, or null
+        // while it may record what it reached. Each way out below that drops watermarkToRecord says why here; the first
+        // reason found is the one kept.
+        string? reasonToRecordNoWatermark = null;
+
         // The fetching step is entered by each branch below, once the work it names is about to
         // start: a call-based import connects first, and entering the later step here would close
         // connecting out before it began.
@@ -443,6 +469,13 @@ public class SyncImportTaskProcessor
                 // Hand the SCIM 2.0 Service Provider Connector its Connected System's store
                 if (callBasedImportConnector is IConnectorScimResourceStoreAware storeAwareConnector)
                     storeAwareConnector.SetScimResourceStore(new ScimResourceStoreService(_jim, _connectedSystem.Id));
+
+                // Hand a Connector that keeps a watermark per Partition the one JIM holds for each Partition the run reads
+                // (#2715), before the connection opens, as the services above are handed over. Once per run: every page is
+                // read from the same values, as every page is handed the same persisted connector data below, so anything
+                // the Connector builds from them on the first page (an LDAP paging cookie) still holds on the next.
+                if (callBasedImportConnector is IConnectorPartitionWatermarks partitionWatermarksConnector)
+                    await HandTheConnectorItsPartitionWatermarksAsync(partitionWatermarksConnector);
 
                 // Tracks whether the import phase below completed without throwing. Read from the
                 // finally block to decide whether a failure while persisting CloseImportConnection's
@@ -527,6 +560,10 @@ public class SyncImportTaskProcessor
                         // an object missing from this run is gone depends on it (#2720).
                         RecordWhetherTheConnectorReadEveryObject(result, pageNumber);
 
+                        // Likewise before any of the page's objects is processed: a Partition watermark JIM did not hand the
+                        // Connector fails the run before anything is staged (#2715).
+                        CheckThePartitionWatermarksTheConnectorReturned(result, pageNumber);
+
                         totalObjectsImported += result.ImportObjects.Count;
 
                         Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
@@ -558,6 +595,16 @@ public class SyncImportTaskProcessor
                         {
                             Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
                             newPersistedData = result.PersistedConnectorData;
+                        }
+
+                        // The Partition watermarks are taken the same way (#2715): from the first page that carries any,
+                        // copied so that nothing the Connector does afterwards can change them, and recorded only once the
+                        // run has staged everything it read.
+                        if (result.PartitionWatermarks != null && partitionWatermarksReached == null)
+                        {
+                            partitionWatermarksReached = new Dictionary<int, string?>(result.PartitionWatermarks);
+                            Log.Debug("PerformImportAsync: Captured the Connector's watermarks for {Count} Partition(s) from page {Page}; they are recorded once the run has staged everything it read.",
+                                partitionWatermarksReached.Count, pageNumber);
                         }
 
                         // Capture connector warning from the first page that reports one
@@ -626,6 +673,10 @@ public class SyncImportTaskProcessor
                     {
                         watermarkToRecord = null;
                         watermarkReached = null;
+                        // The pages' Partition watermarks were taken under the state the Connector has just overridden,
+                        // so none is recorded either (#2715); each Partition's next import starts where this one did.
+                        partitionWatermarksReached = null;
+                        reasonToRecordNoWatermark ??= "the Connector returned data when it closed the import connection, which overrides what its pages reported";
 
                         try
                         {
@@ -670,6 +721,8 @@ public class SyncImportTaskProcessor
 
                 await _phases.ExitConnectorPhasesAsync();
                 RecordWhetherTheConnectorReadEveryObject(result, pageNumber: 1);
+                // JIM hands a file-based Connector no Partition watermarks, so it may return none (#2715).
+                CheckThePartitionWatermarksTheConnectorReturned(result, pageNumber: 1);
                 objectsReadInCurrentCall = 0;
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);
@@ -717,6 +770,7 @@ public class SyncImportTaskProcessor
         {
             watermarkToRecord = null;
             watermarkReached = null;
+            reasonToRecordNoWatermark ??= "it withheld the deletes its Connector reported, which the next Delta Import must read again";
         }
 
         // Deletion detection: an object JIM holds that the run did not return is gone, but only where the run read every
@@ -770,6 +824,7 @@ public class SyncImportTaskProcessor
                 totalObjectsImported);
             watermarkToRecord = null;
             watermarkReached = null;
+            reasonToRecordNoWatermark ??= "it read every object instead of its changes, and its deletion detection did not run to completion";
         }
 
         // An Object Type change is only carried out where deletion detection retired what it replaces (#2049). It
@@ -1107,7 +1162,13 @@ public class SyncImportTaskProcessor
         // can finally be recorded (#1868). Every earlier way out of the run (an exception, or cancellation) leaves the
         // watermark the run started with, so the next Delta Import re-reads what this one did not stage; re-reading
         // an already staged change is harmless, skipping an unstaged one is not.
-        if (watermarkToRecord != null)
+        if (_partitionWatermarksHanded != null)
+        {
+            // A Connector that keeps a watermark per Partition (#2715): its persisted connector data and each Partition's
+            // watermark are recorded by one write, so neither lands without the other.
+            await RecordPartitionWatermarksAsync(watermarkToRecord, partitionWatermarksReached, reasonToRecordNoWatermark);
+        }
+        else if (watermarkToRecord != null)
         {
             Log.Debug("PerformImportAsync: Recording the Connector's new watermark for Connected System {ConnectedSystemId} now that the run has staged everything it read. Old value: '{OldWatermark}', new value: '{NewWatermark}'",
                 _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(watermarkToRecord));
@@ -4945,6 +5006,151 @@ public class SyncImportTaskProcessor
             "depends on that answer, so the import stopped before saving anything, and the next import starts from the same point. " +
             "This is a fault in the Connector.");
     }
+
+    /// <summary>
+    /// #2715: hands a Connector that keeps a Delta Import watermark per Partition the watermark JIM holds for each
+    /// Partition the run targets, null where it holds none, and records those values on the Activity as where each
+    /// Partition's read started. The values are fixed for the run from here: the Connector is handed a read-only map,
+    /// and what the run may record and what the Activity shows are judged against the same one.
+    /// </summary>
+    private async Task HandTheConnectorItsPartitionWatermarksAsync(IConnectorPartitionWatermarks connector)
+    {
+        _partitionWatermarkTargets = _connectedSystem.GetTargetPartitions(_connectedSystemRunProfile).ToDictionary(partition => partition.Id);
+        var recorded = (await _syncServer.GetConnectedSystemPartitionWatermarksAsync(_connectedSystem.Id))
+            .ToDictionary(watermark => watermark.PartitionId, watermark => watermark.Value);
+        var handed = _partitionWatermarkTargets.Keys.ToDictionary<int, int, string?>(
+            partitionId => partitionId,
+            partitionId => recorded.TryGetValue(partitionId, out var value) ? value : null);
+
+        _partitionWatermarksHanded = new ReadOnlyDictionary<int, string?>(handed);
+        connector.SetPartitionWatermarks(_partitionWatermarksHanded);
+        _activity.ImportPartitionWatermarksFrom = DescribePartitionWatermarksForTheActivity(_partitionWatermarksHanded);
+
+        Log.Information("PerformImportAsync: Handed the Connector the Delta Import watermarks of the {Count} Partition(s) this run reads, {WithoutCount} of them with none recorded. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+            handed.Count, handed.Count(watermark => watermark.Value == null), _connectedSystem.Id, _connectedSystemRunProfile.Id);
+    }
+
+    /// <summary>
+    /// #2715: holds what a page returned in <see cref="ConnectedSystemImportResult.PartitionWatermarks"/> to the
+    /// watermarks JIM handed the Connector. Called for every page, before any of its objects is processed. A Connector
+    /// that was handed none (one that does not keep a watermark per Partition) may return none, and one that was handed
+    /// some may return a watermark only for a Partition among them: recording any other would move the starting point
+    /// of a Partition this run did not read past changes no import of it has read, which is #2715 itself. Either fault
+    /// fails the run before anything is staged, and every watermark stays where the run found it.
+    /// </summary>
+    /// <param name="result">The page the Connector has just returned.</param>
+    /// <param name="pageNumber">The page's number in the run, counting from 1.</param>
+    /// <exception cref="InvalidDataException">The page carries a Partition watermark JIM did not hand the Connector.</exception>
+    private void CheckThePartitionWatermarksTheConnectorReturned(ConnectedSystemImportResult result, int pageNumber)
+    {
+        if (result.PartitionWatermarks == null)
+            return;
+
+        if (_partitionWatermarksHanded == null)
+        {
+            Log.Error("PerformImportAsync: The Connector returned watermarks for {Count} Partition(s) on page {PageNumber}, but it does not keep a watermark per Partition, so JIM handed it none. " +
+                "Stopping the import before anything is staged. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+                result.PartitionWatermarks.Count, pageNumber, _connectedSystem.Id, _connectedSystemRunProfile.Id);
+
+            throw new InvalidDataException(
+                $"The Connector returned Delta Import watermarks for Partitions on page {pageNumber:N0} of this import, but it does not keep a watermark " +
+                "for each Partition, so JIM handed it none to continue from. The import stopped before saving anything, and the next import starts " +
+                "from the same point. This is a fault in the Connector.");
+        }
+
+        var handed = _partitionWatermarksHanded;
+        var unexpected = result.PartitionWatermarks.Keys.Where(partitionId => !handed.ContainsKey(partitionId)).Order().ToList();
+        if (unexpected.Count == 0)
+            return;
+
+        var named = string.Join(", ", unexpected.Select(DescribePartitionForAMessage));
+        Log.Error("PerformImportAsync: The Connector returned a watermark on page {PageNumber} for {Partitions}, which this run does not read. " +
+            "Stopping the import before anything is staged. Connected System {ConnectedSystemId}, Run Profile {RunProfileId}.",
+            pageNumber, LogSanitiser.Sanitise(named), _connectedSystem.Id, _connectedSystemRunProfile.Id);
+
+        throw new InvalidDataException(
+            $"The Connector returned a Delta Import watermark on page {pageNumber:N0} of this import for {named}, which this import does not read. " +
+            "Recording it would move a Partition's starting point past changes no import of that Partition has read, so the import stopped before " +
+            "saving anything, and the next import starts from the same point. This is a fault in the Connector.");
+    }
+
+    /// <summary>
+    /// Names a Partition, by id, in a message an administrator reads.
+    /// </summary>
+    private string DescribePartitionForAMessage(int partitionId)
+    {
+        var name = _connectedSystem.Partitions?.Where(partition => partition.Id == partitionId).Select(partition => partition.Name).FirstOrDefault();
+        return name != null
+            ? $"the Partition '{name}'"
+            : $"a Partition (id {partitionId:D}) this Connected System does not have";
+    }
+
+    /// <summary>
+    /// #2715: the end-of-run write for a Connector that keeps a watermark per Partition, once the run has staged
+    /// everything it read. One write records the Connected System's persisted connector data (when the run reached new
+    /// data), each Partition watermark the Connector returned (a null clearing that Partition's), and removes the
+    /// watermarks of Partitions no longer selected; a Partition the Connector left out keeps its watermark. Nothing at
+    /// all is written when the run must keep every watermark it started with. Ends with the run's summary of what
+    /// became of each target Partition's watermark.
+    /// </summary>
+    /// <param name="persistedConnectorData">The persisted connector data to record, or null to leave it as it is.</param>
+    /// <param name="reached">What the Connector returned for each Partition, or null when it returned nothing.</param>
+    /// <param name="reasonToRecordNone">Why the run must keep every watermark it started with, or null when it may record.</param>
+    private async Task RecordPartitionWatermarksAsync(string? persistedConnectorData, IReadOnlyDictionary<int, string?>? reached, string? reasonToRecordNone)
+    {
+        if (reasonToRecordNone != null)
+        {
+            Log.Information("PerformImportAsync: Partition watermark summary for Connected System {ConnectedSystemId}: none recorded, because {Reason}. " +
+                "Each Partition the run read keeps the watermark it started from: {Partitions}.",
+                _connectedSystem.Id, reasonToRecordNone, SummarisePartitionWatermarks(_ => "kept"));
+            return;
+        }
+
+        if (persistedConnectorData != null)
+        {
+            Log.Debug("PerformImportAsync: Recording the Connector's new persisted connector data for Connected System {ConnectedSystemId}, with its Partition watermarks, now that the run has staged everything it read. Old value: '{OldValue}', new value: '{NewValue}'",
+                _connectedSystem.Id, LogSanitiser.Sanitise(_connectedSystem.PersistedConnectorData), LogSanitiser.Sanitise(persistedConnectorData));
+        }
+
+        var toRecord = reached ?? new Dictionary<int, string?>();
+        var recording = await _syncServer.RecordImportWatermarksAsync(_connectedSystem, persistedConnectorData, toRecord);
+        if (toRecord.Count > 0)
+            _activity.ImportPartitionWatermarksTo = DescribePartitionWatermarksForTheActivity(toRecord);
+
+        Log.Information("PerformImportAsync: Partition watermark summary for Connected System {ConnectedSystemId}: {Partitions}. Watermarks written: {Recorded}, cleared: {Cleared}, removed for Partitions no longer selected: {Removed}.",
+            _connectedSystem.Id,
+            SummarisePartitionWatermarks(partitionId => !toRecord.TryGetValue(partitionId, out var value)
+                ? "kept"
+                : value == null ? "cleared" : $"recorded '{LogSanitiser.Sanitise(value)}'"),
+            recording.PartitionWatermarksRecorded, recording.PartitionWatermarksCleared, recording.DeselectedPartitionWatermarksRemoved);
+    }
+
+    /// <summary>
+    /// One line naming each Partition the run targets and what became of its watermark, for the run's summary.
+    /// </summary>
+    private string SummarisePartitionWatermarks(Func<int, string> outcome) =>
+        _partitionWatermarkTargets.Count == 0
+            ? "the run read no Partition"
+            : string.Join("; ", _partitionWatermarkTargets.Values
+                .OrderBy(partition => partition.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(partition => partition.Id)
+                .Select(partition => $"'{LogSanitiser.Sanitise(partition.Name)}' ({partition.Id}) {outcome(partition.Id)}"));
+
+    /// <summary>
+    /// #2715: the Partition watermarks as the Activity records them, one entry per Partition, each named as the Partition
+    /// was named when the run started, so the record still reads correctly once the Partition is renamed or removed.
+    /// </summary>
+    private List<ImportPartitionWatermark> DescribePartitionWatermarksForTheActivity(IReadOnlyDictionary<int, string?> watermarks) =>
+        watermarks
+            .Select(watermark => new ImportPartitionWatermark
+            {
+                PartitionId = watermark.Key,
+                PartitionName = _partitionWatermarkTargets[watermark.Key].Name,
+                Value = watermark.Value
+            })
+            .OrderBy(watermark => watermark.PartitionName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(watermark => watermark.PartitionId)
+            .ToList();
 
     /// <summary>
     /// Adds what one import call discarded through exclusions to the run's running totals.
