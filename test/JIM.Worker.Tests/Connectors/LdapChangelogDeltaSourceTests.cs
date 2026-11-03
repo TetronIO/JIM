@@ -394,11 +394,11 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 4321 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeNumber, Is.EqualTo(4321));
+            Assert.That(captured?.ChangeNumber, Is.EqualTo(4321));
             Assert.That(_sent.Select(s => s.Request.Scope), Is.All.EqualTo(SearchScope.Base), "the rootDSE already said; there is nothing to enumerate");
         }
     }
@@ -411,12 +411,12 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = request => WatermarkEntryAnswer(request, "changeNumber=4321,cn=changelog", "20261007190130Z");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 4321 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         var read = _sent.Single(s => s.Request.DistinguishedName == "changeNumber=4321,cn=changelog");
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeTime, Is.EqualTo("20261007190130Z"));
+            Assert.That(captured?.ChangeTime, Is.EqualTo("20261007190130Z"));
             Assert.That(read.Request.Scope, Is.EqualTo(SearchScope.Base));
             Assert.That(read.Request.Attributes.Cast<string>(), Is.EqualTo(new[] { "changeTime" }));
             Assert.That(read.Timeout, Is.EqualTo(Timeout), "the read honours the import's search timeout");
@@ -429,9 +429,9 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = request => WatermarkEntryAnswer(request, $"changeNumber=7,{AdvertisedChangelogDn}", "20261007190130Z");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 7, ChangelogDn = AdvertisedChangelogDn };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeTime, Is.EqualTo("20261007190130Z"));
+        Assert.That(captured?.ChangeTime, Is.EqualTo("20261007190130Z"));
     }
 
     [Test]
@@ -441,12 +441,12 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw NoSuchObject();
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeNumber, Is.EqualTo(5), "the watermark itself stands");
-            Assert.That(rootDse.LastChangeTime, Is.Null, "with no entry there is nothing for the next Delta Import to compare");
+            Assert.That(captured?.ChangeNumber, Is.EqualTo(5), "the watermark itself stands");
+            Assert.That(captured?.ChangeTime, Is.Null, "with no entry there is nothing for the next Delta Import to compare");
         }
     }
 
@@ -456,12 +456,12 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw new LdapException(81, "The LDAP server is unavailable.");
         var rootDse = new LdapConnectorRootDse { AdvertisedLastChangeNumber = 5 };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeNumber, Is.EqualTo(5));
-            Assert.That(rootDse.LastChangeTime, Is.Null, "a check the next Delta Import cannot make is skipped, never failed on");
+            Assert.That(captured?.ChangeNumber, Is.EqualTo(5));
+            Assert.That(captured?.ChangeTime, Is.Null, "a check the next Delta Import cannot make is skipped, never failed on");
         }
     }
 
@@ -470,11 +470,11 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeTime, Is.Null);
+            Assert.That(captured?.ChangeTime, Is.Null);
             Assert.That(_sent.Select(s => s.Request.DistinguishedName), Has.None.StartsWith("changeNumber="), "change number zero names no change");
         }
     }
@@ -485,12 +485,12 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangelogEntry(7), ChangelogEntry(12), ChangelogEntry(9));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         var enumeration = _sent.Single(s => s.Request.Scope != SearchScope.Base);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeNumber, Is.EqualTo(12), "LDAP guarantees no order, so the last entry by position is not the newest");
+            Assert.That(captured?.ChangeNumber, Is.EqualTo(12), "LDAP guarantees no order, so the last entry by position is not the newest");
             Assert.That(enumeration.Request.DistinguishedName, Is.EqualTo(DefaultChangelogDn));
             Assert.That(enumeration.Request.Scope, Is.EqualTo(SearchScope.OneLevel));
             Assert.That(enumeration.Request.Filter, Is.EqualTo("(changeNumber=*)"));
@@ -505,9 +505,9 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => throw SizeLimitExceeded(ChangelogEntry(30), ChangelogEntry(45), ChangelogEntry(31));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeNumber, Is.EqualTo(45), "below the truth is the safe direction: the next Delta Import re-reads a few changes rather than skipping any");
+        Assert.That(captured?.ChangeNumber, Is.EqualTo(45), "below the truth is the safe direction: the next Delta Import re-reads a few changes rather than skipping any");
     }
 
     [Test]
@@ -515,22 +515,22 @@ public class LdapChangelogDeltaSourceTests
     {
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeNumber, Is.Zero, "a readable, empty changelog is a baseline: every change from here on is numbered above zero");
+        Assert.That(captured?.ChangeNumber, Is.Zero, "a readable, empty changelog is a baseline: every change from here on is numbered above zero");
     }
 
     [Test]
     public async Task CaptureWatermarkAsync_ChangelogNotFound_LeavesTheWatermarkNullAsync()
     {
         _baseReadAnswer = _ => throw NoSuchObject();
-        var rootDse = new LdapConnectorRootDse { LastChangeNumber = 5 };
+        var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rootDse.LastChangeNumber, Is.Null, "null makes the next Delta Import run as a Full Import; zero would read as a real baseline");
+            Assert.That(captured, Is.Null, "null makes the next Delta Import run as a Full Import; zero would read as a real baseline");
             Assert.That(_sent.Select(s => s.Request.Scope), Is.EqualTo(new[] { SearchScope.Base }), "with no changelog there is nothing to enumerate");
         }
     }
@@ -539,11 +539,11 @@ public class LdapChangelogDeltaSourceTests
     public async Task CaptureWatermarkAsync_ChangelogRefused_LeavesTheWatermarkNullAsync()
     {
         _baseReadAnswer = _ => throw Refused("insufficient access rights");
-        var rootDse = new LdapConnectorRootDse { LastChangeNumber = 5 };
+        var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeNumber, Is.Null);
+        Assert.That(captured, Is.Null);
     }
 
     [Test]
@@ -552,9 +552,9 @@ public class LdapChangelogDeltaSourceTests
         _baseReadAnswer = _ => throw new LdapException(81, "The LDAP server is unavailable.");
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeNumber, Is.Null);
+        Assert.That(captured, Is.Null);
     }
 
     [Test]
@@ -563,12 +563,12 @@ public class LdapChangelogDeltaSourceTests
         _searchAnswer = _ => LdapTestResponses.SearchResponseWithEntries(ChangelogEntry(3));
         var rootDse = new LdapConnectorRootDse { ChangelogDn = AdvertisedChangelogDn };
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_sent.Select(s => s.Request.DistinguishedName), Is.All.EndsWith(AdvertisedChangelogDn), "the changelog and its entries, never the default cn=changelog");
-            Assert.That(rootDse.LastChangeNumber, Is.EqualTo(3));
+            Assert.That(captured?.ChangeNumber, Is.EqualTo(3));
         }
     }
 
@@ -580,9 +580,9 @@ public class LdapChangelogDeltaSourceTests
             LdapTestResponses.Entry("changeNumber=abc,cn=changelog", ("changeNumber", "abc")));
         var rootDse = new LdapConnectorRootDse();
 
-        await Source().CaptureWatermarkAsync(RootDseEntry(), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await Source().CaptureWatermarkAsync(rootDse, Timeout);
 
-        Assert.That(rootDse.LastChangeNumber, Is.EqualTo(8));
+        Assert.That(captured?.ChangeNumber, Is.EqualTo(8));
     }
 
     #endregion
@@ -592,10 +592,10 @@ public class LdapChangelogDeltaSourceTests
     [Test]
     public void VerifyContinuity_PreviousWatermarkBelowTheAdvertisedFirstChangeNumber_ThrowsNamingTheTrim()
     {
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 100 };
+        var previous = ChangelogWatermark(100);
         var current = new LdapConnectorRootDse { FirstChangeNumber = 150 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current),
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current),
             Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.EqualTo(
                 "The directory's changelog no longer holds the changes since the last import: it starts at change number 150, and the last import ended at 100, " +
                 "so changes between them were trimmed (389 Directory Server: the Retro Changelog plug-in's maximum age) and cannot be imported. " +
@@ -607,36 +607,36 @@ public class LdapChangelogDeltaSourceTests
     [TestCase(200, 150, Description = "the watermark is well within the changelog")]
     public void VerifyContinuity_PreviousWatermarkAtOrAboveTheFirstChangeNumber_DoesNotThrow(long previousWatermark, long firstChangeNumber)
     {
-        var previous = new LdapConnectorRootDse { LastChangeNumber = previousWatermark };
+        var previous = ChangelogWatermark(previousWatermark);
         var current = new LdapConnectorRootDse { FirstChangeNumber = firstChangeNumber };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
     public void VerifyContinuity_FirstChangeNumberNotAdvertised_DoesNotThrow()
     {
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 1 };
+        var previous = ChangelogWatermark(1);
         var current = new LdapConnectorRootDse { FirstChangeNumber = null, AdvertisedLastChangeNumber = 5000 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
         Assert.That(_sent, Is.Empty, "continuity is judged from the rootDSE alone");
     }
 
     [Test]
     public void VerifyContinuity_NoPreviousWatermark_DoesNotThrow()
     {
-        Assert.That(() => Source().VerifyContinuity(new LdapConnectorRootDse(), new LdapConnectorRootDse { FirstChangeNumber = 150 }), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Changelog }, new LdapConnectorRootDse { FirstChangeNumber = 150 }), Throws.Nothing);
     }
 
     [Test]
     public void VerifyContinuity_AdvertisedLastChangeNumberBelowTheWatermark_ThrowsNamingBothNumbersTheRestoreAndTheRemedy()
     {
         // 389 Directory Server restored from a copy of its files taken at change 3, after an import recorded 8 (#2004).
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 8 };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 3, LastChangeNumber = 3 };
+        var previous = ChangelogWatermark(8);
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 3 };
 
-        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
 
         using (Assert.EnterMultipleScope())
         {
@@ -653,20 +653,20 @@ public class LdapChangelogDeltaSourceTests
     {
         // Without an advertised lastChangeNumber the watermark comes from enumerating the changelog, which can stop at
         // the directory's size limit short of the newest change, so a lower number there proves nothing.
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 8 };
-        var current = new LdapConnectorRootDse { AdvertisedLastChangeNumber = null, LastChangeNumber = 3 };
+        var previous = ChangelogWatermark(8);
+        var current = new LdapConnectorRootDse { AdvertisedLastChangeNumber = null };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [TestCase(8L, 8L, Description = "nothing has changed since the watermark")]
     [TestCase(8L, 9L, Description = "the changelog has moved on")]
     public void VerifyContinuity_AdvertisedLastChangeNumberAtOrAboveTheWatermark_DoesNotThrow(long previousWatermark, long advertisedLast)
     {
-        var previous = new LdapConnectorRootDse { LastChangeNumber = previousWatermark };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = advertisedLast, LastChangeNumber = advertisedLast };
+        var previous = ChangelogWatermark(previousWatermark);
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = advertisedLast };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
@@ -675,10 +675,10 @@ public class LdapChangelogDeltaSourceTests
         // Restored from a backup, then written to until the numbering passed the watermark again: change 5 exists, but
         // it is not the change the last import ended at (#2008).
         _baseReadAnswer = request => WatermarkEntryAnswer(request, "changeNumber=5,cn=changelog", "20261007190500Z");
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
 
         using (Assert.EnterMultipleScope())
         {
@@ -697,10 +697,10 @@ public class LdapChangelogDeltaSourceTests
         // 389 Directory Server's online restore removes the changes made after the backup from its changelog and
         // carries on numbering after them, so the newest number never goes back and only the hole shows (#2008).
         _baseReadAnswer = _ => throw NoSuchObject();
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
 
         using (Assert.EnterMultipleScope())
         {
@@ -714,10 +714,10 @@ public class LdapChangelogDeltaSourceTests
     public void VerifyContinuity_WatermarkEntryGoneAsLdapException32WhileOlderChangesRemain_Throws()
     {
         _baseReadAnswer = _ => throw new LdapException(32, "no such object");
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.TypeOf<CannotPerformDeltaImportException>());
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.TypeOf<CannotPerformDeltaImportException>());
     }
 
     [Test]
@@ -725,10 +725,10 @@ public class LdapChangelogDeltaSourceTests
     {
         // Trimming removed the watermark's entry and nothing after it: every change since is still there to read.
         _baseReadAnswer = _ => throw NoSuchObject();
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 6, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 6, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
@@ -736,29 +736,29 @@ public class LdapChangelogDeltaSourceTests
     {
         // Trimmed or restored cannot be told apart without knowing where the changelog now starts.
         _baseReadAnswer = _ => throw NoSuchObject();
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse();
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
     public void VerifyContinuity_WatermarkEntryUnchanged_DoesNotThrow()
     {
         _baseReadAnswer = request => WatermarkEntryAnswer(request, "changeNumber=5,cn=changelog", "20261007190130Z");
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
     public void VerifyContinuity_NoRecordedChangeTime_ReadsNothing()
     {
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5 };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5);
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
         Assert.That(_sent, Is.Empty, "a record from before JIM kept the changeTime, or one whose entry had none, has nothing to compare");
     }
 
@@ -766,20 +766,20 @@ public class LdapChangelogDeltaSourceTests
     public void VerifyContinuity_WatermarkEntryReadRefused_DoesNotThrow()
     {
         _baseReadAnswer = _ => throw Refused("insufficient access rights");
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing, "a refusal says nothing about the entry; the readiness check names it");
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing, "a refusal says nothing about the entry; the readiness check names it");
     }
 
     [Test]
     public void VerifyContinuity_ConnectionFailure_Propagates()
     {
         _baseReadAnswer = _ => throw new LdapException(81, "The LDAP server is unavailable.");
-        var previous = new LdapConnectorRootDse { LastChangeNumber = 5, LastChangeTime = "20261007190130Z" };
-        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9, LastChangeNumber = 9 };
+        var previous = ChangelogWatermark(5, "20261007190130Z");
+        var current = new LdapConnectorRootDse { FirstChangeNumber = 1, AdvertisedLastChangeNumber = 9 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.TypeOf<LdapException>());
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.TypeOf<LdapException>());
     }
 
     #endregion
@@ -787,12 +787,18 @@ public class LdapChangelogDeltaSourceTests
     #region HasBaseline
 
     [Test]
-    public void HasBaseline_NoChangeNumber_IsFalse() =>
-        Assert.That(Source().HasBaseline(new LdapConnectorRootDse()), Is.False);
+    public void HasBaseline_NoChangeNumber_IsFalse()
+    {
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Source().HasBaseline(null), Is.False);
+            Assert.That(Source().HasBaseline(new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Changelog }), Is.False);
+        }
+    }
 
     [Test]
     public void HasBaseline_ChangeNumberPresent_IsTrue() =>
-        Assert.That(Source().HasBaseline(new LdapConnectorRootDse { LastChangeNumber = 0 }), Is.True);
+        Assert.That(Source().HasBaseline(ChangelogWatermark(0)), Is.True);
 
     #endregion
 
@@ -1495,12 +1501,19 @@ public class LdapChangelogDeltaSourceTests
         : logDeleted == null ? LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top")))
         : LdapTestResponses.SearchResponseWithEntries(LdapTestResponses.Entry(PluginDn, ("objectClass", "top"), (LogDeletedAttribute, logDeleted)));
 
+    private static LdapPartitionWatermark ChangelogWatermark(long changeNumber, string? changeTime = null) =>
+        new() { Kind = LdapDeltaSourceKind.Changelog, ChangeNumber = changeNumber, ChangeTime = changeTime };
+
+    /// <summary>The partition a change read targets, and a continuity check is told holds the watermark it checks.</summary>
+    private static ConnectedSystemPartition Partition() => new() { Id = 1, ExternalId = "dc=example,dc=com", Name = "example.com", Selected = true };
+
     private static LdapDeltaReadContext Context(Mock<ILdapDeltaImportHost> host, long previousChangeNumber = PreviousChangeNumber, LdapConnectorRootDse? currentRootDse = null, LdapDeltaSourceNotes? notes = null,
         IReadOnlyList<ConnectedSystemPaginationToken>? paginationTokens = null) => new()
     {
-        PreviousRootDse = new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber },
-        CurrentRootDse = currentRootDse ?? new LdapConnectorRootDse { LastChangeNumber = previousChangeNumber + 10 },
-        TargetPartitions = [],
+        PreviousRootDse = new LdapConnectorRootDse(),
+        Watermarks = new Dictionary<int, LdapPartitionWatermark> { [Partition().Id] = ChangelogWatermark(previousChangeNumber) },
+        CurrentRootDse = currentRootDse ?? new LdapConnectorRootDse(),
+        TargetPartitions = [Partition()],
         ScopeDecidingContainers = [new ConnectedSystemContainer { ExternalId = ContainerDn, Name = "People", Selected = true }],
         ObjectTypes = [InetOrgPerson()],
         PaginationTokens = paginationTokens ?? [],

@@ -16,10 +16,10 @@ namespace JIM.Worker.Tests.Connectors;
 /// <summary>
 /// An OpenLDAP import takes its next watermark from cn=accesslog on its first page, and on a directory without the
 /// sssvlv overlay that means walking the log. These tests drive the whole import against a scripted directory to show
-/// that the walk starts from the watermark the last import left, on a Delta Import and on a Full Import after the
-/// first (#2704); that it is confined to the partitions the run imports from, as the change read is (#2712); that
-/// the checks which read that watermark back behave as they always did; and that a Delta Import with no watermark to
-/// read changes after reads every object instead, and says that it did (#2720).
+/// that the walk starts from the partition's watermark, on a Delta Import and on a Full Import after the first
+/// (#2704); that it is confined to the partitions the run imports from, as the change read is (#2712), and given only
+/// to them (#2715); that the checks which read that watermark back behave as they always did; and that a Delta Import
+/// with no watermark to read changes after reads every object instead, and says that it did (#2720).
 /// </summary>
 [TestFixture]
 public class LdapConnectorImportAccesslogWatermarkTests
@@ -66,27 +66,27 @@ public class LdapConnectorImportAccesslogWatermarkTests
     {
         Log(EarlierWrite, Watermark, LaterWrite);
 
-        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark)).GetDeltaImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetDeltaImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_walk, Is.EqualTo(new[] { WalkFrom(Watermark) }), "the last import's watermark reaches the capture, so the log before it is not read");
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(LaterWrite));
+            Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }), "the partition's watermark reaches the capture, so the log before it is not read");
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite));
         }
     }
 
     [Test]
     public async Task GetFullImportObjectsAsync_PreviousWatermark_TakesTheNextWatermarkFromItAsync()
     {
-        // A Full Import is handed the record the last import left as well, and takes its baseline the same way.
+        // A Full Import is handed each partition's watermark as well, and takes its baseline the same way.
         Log(EarlierWrite, Watermark, LaterWrite);
 
-        var result = await NewImport(ConnectedSystemRunType.FullImport, PersistedState(Watermark)).GetFullImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.FullImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetFullImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(_walk, Is.EqualTo(new[] { WalkFrom(Watermark) }));
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(LaterWrite));
+            Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }));
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite));
         }
     }
 
@@ -95,45 +95,47 @@ public class LdapConnectorImportAccesslogWatermarkTests
     {
         Log(EarlierWrite, Watermark);
 
-        var result = await NewImport(ConnectedSystemRunType.FullImport, persistedState: null).GetFullImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.FullImport, [Partition(1, PartitionDn)], WatermarksOf((1, null))).GetFullImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WholeLog }));
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(Watermark));
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(Watermark));
         }
     }
 
     [Test]
-    public async Task GetFullImportObjectsAsync_PreviousRecordUnreadable_WalksTheWholeLogRatherThanFailingAsync()
+    public async Task GetFullImportObjectsAsync_PreviousWatermarkUnreadable_WalksTheWholeLogRatherThanFailingAsync()
     {
-        // A Full Import needs nothing from the last import's record; an unreadable one costs only the narrower search,
-        // and the Full Import replaces it with a record of its own.
+        // A Full Import needs nothing from the partition's watermark; an unreadable one costs only the narrower search,
+        // and the Full Import replaces it with one of its own.
         Log(EarlierWrite, Watermark);
 
-        var result = await NewImport(ConnectedSystemRunType.FullImport, persistedState: "{ not a record").GetFullImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.FullImport, [Partition(1, PartitionDn)], new Dictionary<int, string?> { [1] = "{ not a watermark" })
+            .GetFullImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WholeLog }));
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(Watermark));
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(Watermark));
         }
     }
 
     [Test]
     public void GetDeltaImportObjectsAsync_DirectoryRestoredToBeforeThePreviousWatermark_StillRefusesAsync()
     {
-        // The restored log holds only writes older than the watermark, so the walk from it finds nothing and the whole
-        // log is read, as before; the continuity check then finds the watermark's entry gone and refuses, as before.
+        // The restored log holds only writes older than the watermark, so the walk from it finds nothing within the
+        // partition or anywhere else and the whole log is read, as before; the continuity check then reads the
+        // watermark's own entry, as it always did, finds it gone and refuses.
         Log(EarlierWrite);
 
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(
-            () => NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark)).GetDeltaImportObjectsAsync());
+            () => NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetDeltaImportObjectsAsync());
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(failure!.Message, Does.Contain(Watermark).And.Contain("restored from a backup or snapshot"));
-            Assert.That(_walk, Is.EqualTo(new[] { WalkFrom(Watermark), WholeLog }), "nothing from the watermark, so the whole log was read");
+            Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn), WalkFrom(Watermark), WholeLog }), "nothing from the watermark, so the whole log was read");
         }
     }
 
@@ -145,12 +147,12 @@ public class LdapConnectorImportAccesslogWatermarkTests
         Log(EarlierWrite, Watermark, LaterWrite);
         LogUnder(UnderAnotherSuffix, OtherSuffixesLaterWrite);
 
-        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark), [Partition(1, PartitionDn)]).GetDeltaImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetDeltaImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }));
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(LaterWrite), "the partition's latest write, not the other suffix's");
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite), "the partition's latest write, not the other suffix's");
         }
     }
 
@@ -160,12 +162,12 @@ public class LdapConnectorImportAccesslogWatermarkTests
         Log(EarlierWrite, Watermark, LaterWrite);
         LogUnder(UnderAnotherSuffix, OtherSuffixesLaterWrite);
 
-        var result = await NewImport(ConnectedSystemRunType.FullImport, PersistedState(Watermark), [Partition(1, PartitionDn)]).GetFullImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.FullImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetFullImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }));
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(LaterWrite));
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite));
         }
     }
 
@@ -173,19 +175,20 @@ public class LdapConnectorImportAccesslogWatermarkTests
     public async Task GetDeltaImportObjectsAsync_RunProfileTargetsOnePartition_ConfinesTheWatermarkToItAsTheChangeReadIsAsync()
     {
         // The capture is confined to the partitions the change read is: the one the Run Profile targets, not every
-        // partition selected on the Connected System.
+        // partition selected on the Connected System; and only that partition is given the watermark (#2715).
         Log(EarlierWrite, Watermark, LaterWrite);
         LogUnder("uid=carol,ou=people," + SecondPartitionDn, OtherSuffixesLaterWrite);
         var targeted = Partition(1, PartitionDn);
 
-        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark), [targeted, Partition(2, SecondPartitionDn)], targeted)
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, [targeted, Partition(2, SecondPartitionDn)], WatermarksOf((1, Watermark)), targeted)
             .GetDeltaImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn) }));
             Assert.That(_changeRead, Does.EndWith($"(|(reqDN:dnSubtreeMatch:={PartitionDn})))"), "the change read is confined the same way");
-            Assert.That(Read(result.PersistedConnectorData).LastAccesslogTimestamp, Is.EqualTo(LaterWrite));
+            Assert.That(Reached(result, 1).AccesslogTimestamp, Is.EqualTo(LaterWrite));
+            Assert.That(result.PartitionWatermarks!.Keys, Is.EquivalentTo(new[] { 1 }), "the partition the run did not read keeps the watermark it has");
         }
     }
 
@@ -197,12 +200,13 @@ public class LdapConnectorImportAccesslogWatermarkTests
         Log(EarlierWrite);
 
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(
-            () => NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark), [Partition(1, PartitionDn)]).GetDeltaImportObjectsAsync());
+            () => NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn), Partition(2, SecondPartitionDn)], WatermarksOf((1, Watermark), (2, Watermark)))
+                .GetDeltaImportObjectsAsync());
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(failure!.Message, Does.Contain(Watermark).And.Contain("restored from a backup or snapshot"));
-            Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn), WalkFrom(Watermark), WholeLog }));
+            Assert.That(_walk, Is.EqualTo(new[] { WalkWithinFrom(Watermark, PartitionDn, SecondPartitionDn), WalkFrom(Watermark), WholeLog }));
         }
     }
 
@@ -211,7 +215,7 @@ public class LdapConnectorImportAccesslogWatermarkTests
     {
         Log(EarlierWrite, Watermark, LaterWrite);
 
-        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(Watermark)).GetDeltaImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetDeltaImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
@@ -223,17 +227,17 @@ public class LdapConnectorImportAccesslogWatermarkTests
     [Test]
     public async Task GetDeltaImportObjectsAsync_PreviousRecordHoldsNoWatermark_ReadsEveryObjectInsteadAndSaysSoAsync()
     {
-        // The last import's record has no accesslog position, so there is nothing to read changes after: the Delta
+        // JIM holds no accesslog position for the partition, so there is nothing to read changes after: the Delta
         // Import reads everything, and tells JIM so, which is what has JIM detect deletions by absence.
         Log(EarlierWrite, Watermark);
 
-        var result = await NewImport(ConnectedSystemRunType.DeltaImport, PersistedState(lastAccesslogTimestamp: null)).GetDeltaImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.DeltaImport, [Partition(1, PartitionDn)], WatermarksOf((1, null))).GetDeltaImportObjectsAsync();
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.CompleteRead, Is.True);
             Assert.That(result.WarningErrorType, Is.EqualTo(ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport));
-            Assert.That(result.WarningMessage, Does.Contain("Every object was read instead").And.Contain("marked as deleted"));
+            Assert.That(result.WarningMessage, Does.Contain("was read instead").And.Contain("marked as deleted"));
             Assert.That(_changeRead, Is.Null, "no changes were read: the run read every object instead");
         }
     }
@@ -243,7 +247,7 @@ public class LdapConnectorImportAccesslogWatermarkTests
     {
         Log(EarlierWrite, Watermark);
 
-        var result = await NewImport(ConnectedSystemRunType.FullImport, PersistedState(Watermark)).GetFullImportObjectsAsync();
+        var result = await NewImport(ConnectedSystemRunType.FullImport, [Partition(1, PartitionDn)], WatermarksOf((1, Watermark))).GetFullImportObjectsAsync();
 
         Assert.That(result.CompleteRead, Is.True);
     }
@@ -299,39 +303,44 @@ public class LdapConnectorImportAccesslogWatermarkTests
 
     private static string WalkFrom(string reqStart) => $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart}))";
 
-    private static string WalkWithinFrom(string reqStart, string partitionDn) =>
-        $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart})(|(reqDN:dnSubtreeMatch:={partitionDn})))";
+    private static string WalkWithinFrom(string reqStart, params string[] partitionDns) =>
+        $"(&(objectClass=auditWriteObject)(reqResult=0)(reqStart>={reqStart})(|{string.Concat(partitionDns.Select(dn => $"(reqDN:dnSubtreeMatch:={dn})"))}))";
 
     private static ConnectedSystemPartition Partition(int id, string dn) =>
         new() { Id = id, ExternalId = dn, Name = dn, Selected = true, Containers = [] };
 
-    private LdapConnectorImport NewImport(ConnectedSystemRunType runType, string? persistedState,
-        List<ConnectedSystemPartition>? partitions = null, ConnectedSystemPartition? targetedPartition = null)
+    private LdapConnectorImport NewImport(ConnectedSystemRunType runType, List<ConnectedSystemPartition> partitions,
+        IReadOnlyDictionary<int, string?> partitionWatermarks, ConnectedSystemPartition? targetedPartition = null)
     {
         // No Object Type and no Container selected: a Full Import stops once it has recorded the watermark, and a
         // Delta Import reads its changes without fetching any object.
-        var connectedSystem = new ConnectedSystem { Name = "OpenLDAP", ObjectTypes = [], Partitions = partitions ?? [] };
+        var connectedSystem = new ConnectedSystem { Name = "OpenLDAP", ObjectTypes = [], Partitions = partitions };
         var import = new LdapConnectorImport(connectedSystem,
             new ConnectedSystemRunProfile { Name = runType.ToString(), RunType = runType, PageSize = 500, Partition = targetedPartition },
-            new LdapConnection("localhost"), null, 1, [], persistedState, null, "openldap.corp.local", _ => true, Logger,
+            new LdapConnection("localhost"), null, 1, [], PersistedState(), partitionWatermarks, null, "openldap.corp.local", _ => true, Logger,
             CancellationToken.None, new RecordingConnectorProgress());
         import.Executor = _executor.Object;
         return import;
     }
 
-    private static string PersistedState(string? lastAccesslogTimestamp) =>
-        JsonSerializer.Serialize(new LdapConnectorRootDse
-        {
-            DirectoryType = LdapDirectoryType.OpenLDAP,
-            VendorName = "OpenLDAP",
-            LastAccesslogTimestamp = lastAccesslogTimestamp,
-            LastAccesslogTimestampIsLogged = lastAccesslogTimestamp != null
-        });
+    /// <summary>The Connected System's record of the directory: OpenLDAP, which reads its changes from the accesslog.</summary>
+    private static string PersistedState() =>
+        JsonSerializer.Serialize(new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP, VendorName = "OpenLDAP" });
 
-    private static LdapConnectorRootDse Read(string? json)
+    /// <summary>The watermark JIM holds for each partition: the reqStart of a logged write, or none.</summary>
+    private static Dictionary<int, string?> WatermarksOf(params (int PartitionId, string? AccesslogTimestamp)[] watermarks) =>
+        watermarks.ToDictionary(w => w.PartitionId, w => w.AccesslogTimestamp == null
+            ? null
+            : new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Accesslog, AccesslogTimestamp = w.AccesslogTimestamp, AccesslogTimestampIsLogged = true }.Serialise());
+
+    /// <summary>The watermark the run reached for a partition.</summary>
+    private static LdapPartitionWatermark Reached(ConnectedSystemImportResult result, int partitionId)
     {
-        Assert.That(json, Is.Not.Null, "the import returned no persisted connector data");
-        return JsonSerializer.Deserialize<LdapConnectorRootDse>(json!)!;
+        Assert.That(result.PartitionWatermarks, Is.Not.Null, "the import returned no partition watermarks");
+        Assert.That(result.PartitionWatermarks!.ContainsKey(partitionId), Is.True, $"the import returned no watermark for partition {partitionId}");
+        var watermark = LdapPartitionWatermark.Parse(result.PartitionWatermarks![partitionId], Logger);
+        Assert.That(watermark, Is.Not.Null, $"partition {partitionId}'s watermark is none");
+        return watermark!;
     }
 
     #endregion

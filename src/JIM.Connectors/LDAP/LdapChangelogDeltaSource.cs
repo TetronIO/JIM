@@ -90,21 +90,40 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     #region Watermark
 
     /// <summary>
-    /// Records the highest change number the changelog holds now, so the next Delta Import reads from there. The
-    /// rootDSE's <c>lastChangeNumber</c> is taken when advertised; otherwise the changelog is enumerated and the
-    /// maximum taken, since LDAP guarantees no order to the entries. Null, which makes the next Delta Import run as
-    /// a Full Import, when no readable changelog was found: recording zero there would read as "every change since
-    /// the beginning" against a changelog that may not exist.
+    /// Takes the highest change number the changelog holds now, and its changeTime, as every target Partition's
+    /// watermark, so each one's next Delta Import reads from there. The changelog is directory-wide and this source does
+    /// not narrow the search by any previous watermark, so one capture serves every Partition, taken before anything is
+    /// read; see <see cref="CaptureWatermarkAsync"/>.
     /// </summary>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout)
+    public async Task<IReadOnlyDictionary<int, LdapPartitionWatermark?>> CaptureWatermarksAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse,
+        IReadOnlyDictionary<int, LdapPartitionWatermark?> previous, IReadOnlyList<ConnectedSystemPartition> targetPartitions, TimeSpan searchTimeout)
+    {
+        if (targetPartitions.Count == 0)
+            return new Dictionary<int, LdapPartitionWatermark?>();
+
+        var watermark = await CaptureWatermarkAsync(rootDse, searchTimeout);
+        return targetPartitions.ToDictionary(partition => partition.Id, _ => watermark);
+    }
+
+    /// <summary>
+    /// Takes one changelog watermark: the highest change number the changelog holds now, so the next Delta Import
+    /// reads from there. The rootDSE's <c>lastChangeNumber</c> is taken when advertised; otherwise the changelog is
+    /// enumerated and the maximum taken, since LDAP guarantees no order to the entries. None, which makes the next
+    /// Delta Import read every object, when no readable changelog was found: recording zero there would read as
+    /// "every change since the beginning" against a changelog that may not exist.
+    /// </summary>
+    internal Task<LdapPartitionWatermark?> CaptureWatermarkAsync(LdapConnectorRootDse rootDse, TimeSpan searchTimeout)
     {
         var changelogDn = ChangelogDnFor(rootDse);
-        rootDse.LastChangeNumber = TakeWatermark(rootDse, changelogDn, searchTimeout);
-        rootDse.LastChangeTime = rootDse.LastChangeNumber is > 0 and var changeNumber
-            ? CaptureChangeTime(changelogDn, changeNumber, searchTimeout)
-            : null;
+        if (TakeWatermark(rootDse, changelogDn, searchTimeout) is not { } changeNumber)
+            return Task.FromResult<LdapPartitionWatermark?>(null);
 
-        return Task.CompletedTask;
+        return Task.FromResult<LdapPartitionWatermark?>(new LdapPartitionWatermark
+        {
+            Kind = LdapDeltaSourceKind.Changelog,
+            ChangeNumber = changeNumber,
+            ChangeTime = changeNumber > 0 ? CaptureChangeTime(changelogDn, changeNumber, searchTimeout) : null
+        });
     }
 
     /// <summary>The watermark itself: the advertised lastChangeNumber, else the changelog's highest; see <see cref="CaptureWatermarkAsync"/>.</summary>
@@ -267,7 +286,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// has gone back behind (#2004), or one whose own change it no longer holds (#2008). Either way a Delta Import
     /// reading from the watermark would skip changes without noticing.
     /// </summary>
-    public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    public void VerifyContinuity(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
         VerifyNotTrimmedPast(previous, current);
         VerifyNotGoneBackwards(previous, current);
@@ -279,9 +298,9 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// the changes between were discarded (389 Directory Server: the Retro Changelog plug-in's maximum age). A
     /// directory that does not advertise its first change number cannot be checked here.
     /// </summary>
-    private void VerifyNotTrimmedPast(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    private void VerifyNotTrimmedPast(LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        if (current.FirstChangeNumber is not { } first || previous.LastChangeNumber is not { } last || last + 1 >= first)
+        if (current.FirstChangeNumber is not { } first || previous.ChangeNumber is not { } last || last + 1 >= first)
             return;
 
         _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog now starts at change number {First} and the last import ended at {Last}",
@@ -304,9 +323,9 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// and on, so neither is mistaken for one. Once numbering overtakes the watermark again the rollback can no
     /// longer be seen here.
     /// </summary>
-    private void VerifyNotGoneBackwards(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    private void VerifyNotGoneBackwards(LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        if (current.AdvertisedLastChangeNumber is not { } newest || previous.LastChangeNumber is not { } last || newest >= last)
+        if (current.AdvertisedLastChangeNumber is not { } newest || previous.ChangeNumber is not { } last || newest >= last)
             return;
 
         _logger.Warning("LdapChangelogDeltaSource: Refusing the Delta Import; the changelog's newest change number is {Newest} and the last import ended at {Last}",
@@ -330,12 +349,12 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// advertise where its changelog starts the two cannot be told apart, so neither is refused. Nothing is read
     /// without a recorded changeTime, and a refused read concludes nothing; the readiness check names a refusal.
     /// </summary>
-    private void VerifyWatermarkChangeStillHeld(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    private void VerifyWatermarkChangeStillHeld(LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        if (previous.LastChangeNumber is not { } last || string.IsNullOrEmpty(previous.LastChangeTime))
+        if (previous.ChangeNumber is not { } last || string.IsNullOrEmpty(previous.ChangeTime))
             return;
 
-        var recorded = previous.LastChangeTime;
+        var recorded = previous.ChangeTime;
         var read = ReadChangeTime(ChangelogDnFor(current), last, searchTimeout: null);
 
         if (read.Outcome == WatermarkChangeOutcome.Present && read.ChangeTime != null && !string.Equals(read.ChangeTime, recorded, StringComparison.OrdinalIgnoreCase))
@@ -649,7 +668,7 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     #region Reading changes
 
     /// <inheritdoc />
-    public bool HasBaseline(LdapConnectorRootDse previous) => previous.LastChangeNumber.HasValue;
+    public bool HasBaseline(LdapPartitionWatermark? watermark) => watermark is { Kind: LdapDeltaSourceKind.Changelog, ChangeNumber: not null };
 
     /// <summary>
     /// Reads one page of the changelog entries numbered after the watermark and turns each into an import object: a
@@ -665,8 +684,10 @@ internal sealed class LdapChangelogDeltaSource : ILdapDeltaSource
     /// <exception cref="CannotPerformDeltaImportException">The changelog was not found, or the directory refused to read it, or it answered nothing within its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
-        // The shell has already established HasBaseline before calling.
-        var previousChangeNumber = context.PreviousRootDse.LastChangeNumber!.Value;
+        // The shell has already established HasBaseline for every target Partition before calling. Until each Partition's
+        // changes are judged against its own watermark (#2715, phase 5), the read starts after the oldest, which re-reads
+        // what a Partition with a later watermark already read and misses nothing.
+        var previousChangeNumber = context.OldestWatermark(watermark => watermark.ChangeNumber!.Value, Comparer<long>.Default);
         var changelogDn = ChangelogDnFor(context.CurrentRootDse ?? context.PreviousRootDse);
 
         await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changelog since change number {previousChangeNumber:N0}...");

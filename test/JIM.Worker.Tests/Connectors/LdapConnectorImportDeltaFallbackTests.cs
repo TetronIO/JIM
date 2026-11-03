@@ -6,7 +6,6 @@ using JIM.Models.Activities;
 using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
-using System.Text.Json;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -68,54 +67,49 @@ public class LdapConnectorImportDeltaFallbackTests
 
     #endregion
 
-    #region RootDSE accesslog watermark tests
+    #region Partition accesslog watermark tests
 
     [Test]
-    public void OpenLdapRootDse_WithNullAccesslogTimestamp_IndicatesWatermarkUnavailableAsync()
+    public void OpenLdapPartitionWatermark_WithNullAccesslogTimestamp_IsNoBaselineAsync()
     {
-        // When an OpenLDAP RootDSE reads its changes from the accesslog but has no timestamp,
-        // the connector should detect that the watermark is unavailable
-        var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: null);
+        // A Partition whose accesslog watermark has no timestamp has nothing to read changes after, which is what
+        // makes its next Delta Import read every object instead.
+        var watermark = CreateOpenLdapPartitionWatermark(accesslogTimestamp: null);
 
-        Assert.That(rootDse.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
-        Assert.That(rootDse.LastAccesslogTimestamp, Is.Null);
+        Assert.That(AccesslogSource().HasBaseline(watermark), Is.False);
     }
 
     [Test]
-    public void OpenLdapRootDse_WithAccesslogTimestamp_IndicatesWatermarkAvailableAsync()
+    public void OpenLdapPartitionWatermark_WithAccesslogTimestamp_IsABaselineAsync()
     {
-        var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: "20260329094128.000033Z");
+        var watermark = CreateOpenLdapPartitionWatermark(accesslogTimestamp: "20260329094128.000033Z");
 
-        Assert.That(rootDse.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
-        Assert.That(rootDse.LastAccesslogTimestamp, Is.Not.Null);
-        Assert.That(rootDse.LastAccesslogTimestamp, Is.EqualTo("20260329094128.000033Z"));
+        Assert.That(AccesslogSource().HasBaseline(watermark), Is.True);
     }
 
     [Test]
-    public void OpenLdapRootDse_SerialisesAndDeserialisesCorrectly_WithNullTimestampAsync()
+    public void OpenLdapPartitionWatermark_SerialisesAndDeserialisesCorrectly_WithNullTimestampAsync()
     {
-        // Verify that the persisted connector data correctly round-trips with null timestamp,
-        // which is the condition that triggers the fallback
-        var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: null);
-        var json = JsonSerializer.Serialize(rootDse);
-        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>(json);
+        // The value JIM holds round-trips with a null timestamp, the condition that triggers the fallback
+        var watermark = CreateOpenLdapPartitionWatermark(accesslogTimestamp: null);
+
+        var deserialised = LdapPartitionWatermark.Parse(watermark.Serialise(), Serilog.Core.Logger.None);
 
         Assert.That(deserialised, Is.Not.Null);
-        Assert.That(deserialised!.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
-        Assert.That(deserialised.LastAccesslogTimestamp, Is.Null);
-        Assert.That(deserialised.DirectoryType, Is.EqualTo(LdapDirectoryType.OpenLDAP));
+        Assert.That(deserialised!.Kind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
+        Assert.That(deserialised.AccesslogTimestamp, Is.Null);
     }
 
     [Test]
-    public void OpenLdapRootDse_SerialisesAndDeserialisesCorrectly_WithTimestampAsync()
+    public void OpenLdapPartitionWatermark_SerialisesAndDeserialisesCorrectly_WithTimestampAsync()
     {
-        var rootDse = CreateOpenLdapRootDse(lastAccesslogTimestamp: "20260329094128.000033Z");
-        var json = JsonSerializer.Serialize(rootDse);
-        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>(json);
+        var watermark = CreateOpenLdapPartitionWatermark(accesslogTimestamp: "20260329094128.000033Z");
+
+        var deserialised = LdapPartitionWatermark.Parse(watermark.Serialise(), Serilog.Core.Logger.None);
 
         Assert.That(deserialised, Is.Not.Null);
-        Assert.That(deserialised!.DeltaSourceKind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
-        Assert.That(deserialised.LastAccesslogTimestamp, Is.EqualTo("20260329094128.000033Z"));
+        Assert.That(deserialised!.Kind, Is.EqualTo(LdapDeltaSourceKind.Accesslog));
+        Assert.That(deserialised.AccesslogTimestamp, Is.EqualTo("20260329094128.000033Z"));
     }
 
     #endregion
@@ -213,14 +207,11 @@ public class LdapConnectorImportDeltaFallbackTests
 
     #region Helpers
 
-    private static LdapConnectorRootDse CreateOpenLdapRootDse(string? lastAccesslogTimestamp)
-    {
-        return new LdapConnectorRootDse
-        {
-            DirectoryType = LdapDirectoryType.OpenLDAP,
-            LastAccesslogTimestamp = lastAccesslogTimestamp
-        };
-    }
+    private static LdapPartitionWatermark CreateOpenLdapPartitionWatermark(string? accesslogTimestamp) =>
+        new() { Kind = LdapDeltaSourceKind.Accesslog, AccesslogTimestamp = accesslogTimestamp, AccesslogTimestampIsLogged = accesslogTimestamp != null };
+
+    private static ILdapDeltaSource AccesslogSource() =>
+        LdapDeltaSources.Create(LdapDeltaSourceKind.Accesslog, new Moq.Mock<ILdapOperationExecutor>().Object, Serilog.Core.Logger.None);
 
     #endregion
 }

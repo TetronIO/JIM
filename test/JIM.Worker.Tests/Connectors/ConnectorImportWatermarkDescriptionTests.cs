@@ -1,8 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Text.Json;
-using JIM.Connectors.LDAP;
 using JIM.Connectors.SCIM;
 using JIM.Connectors.SCIM.ServiceProvider;
 using JIM.Connectors.Sql;
@@ -15,8 +13,9 @@ using Serilog;
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
-/// Covers each built-in Connector's reading of its own import watermark, which the Activity page shows in place of
-/// the raw persisted data (an LDAP Connector's, for example, is mostly its detected view of the directory).
+/// Covers each built-in Connector's reading of its own Connected System-level import watermark, which the Activity page
+/// shows in place of the raw persisted data. The LDAP Connector keeps a watermark per Partition instead (#2715), so it
+/// describes those (<c>LdapPartitionWatermarkTests</c>).
 /// </summary>
 [TestFixture]
 public class ConnectorImportWatermarkDescriptionTests
@@ -25,7 +24,6 @@ public class ConnectorImportWatermarkDescriptionTests
 
     private static IEnumerable<TestCaseData> WatermarkKeepingConnectors()
     {
-        yield return new TestCaseData(new LdapConnector()).SetArgDisplayNames("LDAP");
         yield return new TestCaseData(new ScimServiceProviderConnector()).SetArgDisplayNames("SCIM 2.0 Service Provider");
         yield return new TestCaseData(new ScimConnector()).SetArgDisplayNames("SCIM 2.0 Client");
         yield return new TestCaseData(new SqlConnector()).SetArgDisplayNames("SQL");
@@ -43,70 +41,6 @@ public class ConnectorImportWatermarkDescriptionTests
             Assert.That(describer!.DescribeImportWatermark("", Logger), Is.Null);
             Assert.That(describer!.DescribeImportWatermark("not json", Logger), Is.Null);
         }
-    }
-
-    [Test]
-    public void DescribeImportWatermark_LdapOpenLdap_ReturnsTheAccessLogTimeAndNothingElse()
-    {
-        // The persisted data is mostly the directory's detected capabilities; only the access log time is a watermark.
-        var rootDse = new LdapConnectorRootDse
-        {
-            DirectoryType = LdapDirectoryType.OpenLDAP,
-            LastAccesslogTimestamp = "20261024202113.992856Z",
-            NamingContexts = ["dc=yellowstone,dc=local", "cn=accesslog"],
-            SupportedControls = ["2.16.840.1.113730.3.4.5"]
-        };
-
-        var description = new LdapConnector().DescribeImportWatermark(JsonSerializer.Serialize(rootDse), Logger);
-
-        Assert.That(description, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(description!.Kind, Is.EqualTo("access log"));
-            Assert.That(description!.Points, Has.Count.EqualTo(1));
-            Assert.That(description!.Points[0].Scope, Is.Null);
-            Assert.That(description!.Points[0].Time, Is.EqualTo(new DateTime(2026, 10, 24, 20, 21, 13, 992, DateTimeKind.Utc).AddTicks(8560)));
-            Assert.That(description!.Points[0].Time!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
-        }
-    }
-
-    [Test]
-    public void DescribeImportWatermark_LdapActiveDirectory_ReturnsTheUpdateSequenceNumber()
-    {
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory, HighestCommittedUsn = 482913 };
-
-        var description = new LdapConnector().DescribeImportWatermark(JsonSerializer.Serialize(rootDse), Logger);
-
-        Assert.That(description, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(description!.Kind, Is.EqualTo("Update Sequence Number"));
-            Assert.That(description!.Points.Single().Number, Is.EqualTo(482913));
-        }
-    }
-
-    [Test]
-    public void DescribeImportWatermark_LdapChangelogDirectory_ReturnsTheChangeNumber()
-    {
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389, LastChangeNumber = 1207 };
-
-        var description = new LdapConnector().DescribeImportWatermark(JsonSerializer.Serialize(rootDse), Logger);
-
-        Assert.That(description, Is.Not.Null);
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(description!.Kind, Is.EqualTo("change log entry"));
-            Assert.That(description!.Points.Single().Number, Is.EqualTo(1207));
-        }
-    }
-
-    [Test]
-    public void DescribeImportWatermark_LdapActiveDirectoryWithoutAUsn_ReturnsNull()
-    {
-        // The data is there, but this directory's watermark is not: nothing to describe.
-        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory, LastAccesslogTimestamp = "20261024202113.992856Z" };
-
-        Assert.That(new LdapConnector().DescribeImportWatermark(JsonSerializer.Serialize(rootDse), Logger), Is.Null);
     }
 
     [Test]

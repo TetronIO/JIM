@@ -428,7 +428,7 @@ public class LdapConnectorImportUnreadableValueTests
             Partitions = [new ConnectedSystemPartition { ExternalId = "DC=corp,DC=local", Name = "corp", Selected = true, Containers = [] }]
         };
         var import = new LdapConnectorImport(connectedSystem, new ConnectedSystemRunProfile { Name = "Full Import", RunType = ConnectedSystemRunType.FullImport },
-            new LdapConnection("localhost"), null, 1, [], null, null, "dc1.corp.local", _ => true, logger, CancellationToken.None, new RecordingConnectorProgress());
+            new LdapConnection("localhost"), null, 1, [], null, null, null, "dc1.corp.local", _ => true, logger, CancellationToken.None, new RecordingConnectorProgress());
 
         var response = LdapTestResponses.SearchResponseWithEntries(entries);
         return ((ILdapDeltaImportHost)import).ConvertEntries(response.Entries, ObjectChangeType.NotSet, userType).ToList();

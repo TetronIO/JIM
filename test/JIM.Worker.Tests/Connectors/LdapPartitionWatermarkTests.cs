@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.LDAP;
+using JIM.Models.Interfaces;
+using JIM.Models.Staging;
 using NUnit.Framework;
 using Serilog;
 
@@ -75,4 +77,87 @@ public class LdapPartitionWatermarkTests
         Assert.That(() => parsed = LdapPartitionWatermark.Parse(value, Logger), Throws.Nothing);
         Assert.That(parsed, Is.Null);
     }
+
+    #region DescribePartitionWatermark
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("not json")]
+    public void DescribePartitionWatermark_NoOrUnreadableValue_ReturnsNull(string? value)
+    {
+        Assert.That(Describe(value), Is.Null);
+    }
+
+    [Test]
+    public void DescribePartitionWatermark_Accesslog_ReturnsTheAccessLogTimeInUtc()
+    {
+        var value = OneOf(nameof(LdapDeltaSourceKind.Accesslog)).Serialise();
+
+        var description = Describe(value);
+
+        Assert.That(description, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(description!.Kind, Is.EqualTo("access log"));
+            Assert.That(description!.Points, Has.Count.EqualTo(1));
+            Assert.That(description!.Points[0].Scope, Is.Null, "JIM scopes each point by the partition's name");
+            Assert.That(description!.Points[0].Time, Is.EqualTo(new DateTime(2026, 10, 24, 20, 21, 13, 992, DateTimeKind.Utc).AddTicks(8560)));
+            Assert.That(description!.Points[0].Time!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+        }
+    }
+
+    [Test]
+    public void DescribePartitionWatermark_Usn_ReturnsTheUpdateSequenceNumberAndNotTheDomainController()
+    {
+        var value = OneOf(nameof(LdapDeltaSourceKind.Usn)).Serialise();
+
+        var description = Describe(value);
+
+        Assert.That(description, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(description!.Kind, Is.EqualTo("Update Sequence Number"));
+            Assert.That(description!.Points.Single().Number, Is.EqualTo(9_876_543_210));
+            Assert.That(description!.Points.Single().Scope, Is.Null);
+        }
+    }
+
+    [Test]
+    public void DescribePartitionWatermark_Changelog_ReturnsTheChangeNumber()
+    {
+        var value = OneOf(nameof(LdapDeltaSourceKind.Changelog)).Serialise();
+
+        var description = Describe(value);
+
+        Assert.That(description, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(description!.Kind, Is.EqualTo("change log entry"));
+            Assert.That(description!.Points.Single().Number, Is.EqualTo(4_200_000_000));
+        }
+    }
+
+    [TestCase("{\"Kind\":\"Usn\",\"InvocationId\":\"11111111-2222-3333-4444-555555555555\"}", Description = "a USN watermark with no USN")]
+    [TestCase("{\"Kind\":\"Usn\",\"AccesslogTimestamp\":\"20261024202113.992856Z\"}", Description = "another kind's position, which a USN watermark does not hold")]
+    [TestCase("{\"Kind\":\"Accesslog\",\"AccesslogTimestamp\":\"yesterday\"}", Description = "an access log time that does not read as one")]
+    public void DescribePartitionWatermark_KindWithoutItsPosition_ReturnsNull(string value)
+    {
+        Assert.That(Describe(value), Is.Null);
+    }
+
+    [Test]
+    public void LdapConnector_DescribesItsWatermarksPerPartitionOnly()
+    {
+        // The Connected System-level record holds no position (#2715); describing it as well would show an import's
+        // read range twice.
+        Assert.That(typeof(IConnectorImportWatermarkDescription).IsAssignableFrom(typeof(LdapConnector)), Is.False);
+    }
+
+    private static ImportWatermarkDescription? Describe(string? value)
+    {
+        using var connector = new LdapConnector();
+        return connector.DescribePartitionWatermark(value, Logger);
+    }
+
+    #endregion
 }
