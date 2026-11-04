@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Importing a Connected System's hierarchy through the REST API or PowerShell no longer fails when a partition removed from the directory still holds objects; the partition is removed and its objects are kept. (#2723)
 - 🐛 A partition-targeted import now detects the deletion of objects first imported by an unscoped Run Profile or provisioned by JIM, and retries a provisioned object no import has confirmed: JIM records each object in the partition it is in. (#2723)
 - 🐛 A hierarchy refresh that fails while saving now finishes its Activity as failed with the reason, instead of leaving it in progress for ever, and reports the save's own error rather than one raised while recording it. (#2742)
-- 🐛 Refreshing a Connected System's hierarchy on its **Scope** tab now removes the partitions and Containers no longer in the Connected System, with the Containers beneath them; it reported them removed but kept them. (#2743)
+- 🐛 Refreshing a Connected System's hierarchy now removes the partitions and Containers it no longer holds, with the Containers beneath them, where it reported them removed but kept them; the **Scope** tab's Refresh now asks before discarding unsaved selections. (#2743)
 
 ### Security
 
