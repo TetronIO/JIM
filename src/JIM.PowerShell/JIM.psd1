@@ -178,6 +178,10 @@
         'Resume-JIMPendingPasswordChange',
         'Stop-JIMPendingPasswordChange',
 
+        # Exchange
+        'Get-JIMPendingExchangeChange',
+        'Resume-JIMPendingExchangeChange',
+
         # Metaverse
         'Get-JIMMetaverseObject',
         'Set-JIMMetaverseObjectPassword',

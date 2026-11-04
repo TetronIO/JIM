@@ -36,6 +36,7 @@ public class ExchangeChangeOutcomeReadTests
             () => new Mock<IConnectedSystemRepository>().Object,
             () => _activityRepository.Object,
             _ => throw new InvalidOperationException("reading outcomes builds no Connector"),
+            (_, _, _) => Task.CompletedTask,
             _ => Task.CompletedTask,
             _ => Task.CompletedTask,
             (_, _) => Task.CompletedTask);
@@ -74,8 +75,10 @@ public class ExchangeChangeOutcomeReadTests
         var password = ChangeActivity(ActivityTargetType.PasswordSynchronisation);
         var replacedNotice = ChangeActivity();
         replacedNotice.ParentActivityId = Guid.NewGuid();
+        var administratorsRetry = ChangeActivity();
+        administratorsRetry.TargetOperationType = ActivityTargetOperationType.RetryExchangeRecipient;
 
-        var outcomes = await _server.GetChangeOutcomesAsync([password, replacedNotice]);
+        var outcomes = await _server.GetChangeOutcomesAsync([password, replacedNotice, administratorsRetry]);
 
         Assert.That(outcomes, Is.Empty);
         _activityRepository.Verify(r => r.GetExchangeChangeEventsAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Never,

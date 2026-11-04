@@ -341,6 +341,44 @@ public class PendingExchangeChange
         NextRetryAt = scheduled > parkAt ? parkAt : scheduled;
     }
 
+    /// <summary>
+    /// Whether an administrator's retry would act on this change (#2021, Phase 6b): it is parked, or retrying after an
+    /// attempt. A change never attempted is already due, one being delivered is getting the attempt a retry asks for,
+    /// and a refused one earns the same refusal until its declared state changes.
+    /// </summary>
+    public bool CanRetry => IsRetryable(Status, LastAttemptedAt);
+
+    /// <summary>
+    /// The rule behind <see cref="CanRetry"/>, for a change known only by its status and last attempt (a list row). The
+    /// repository's retry statement applies the same rule in SQL.
+    /// </summary>
+    public static bool IsRetryable(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt) =>
+        status == PendingExchangeChangeStatus.Parked
+        || (status == PendingExchangeChangeStatus.Pending && lastAttemptedAt != null);
+
+    /// <summary>
+    /// Makes the change due at once, as though it had just been queued (PRD requirement 11): every trace of the earlier
+    /// attempts goes, the 24-hour park clock included, so it is retried in full before it can park again. The
+    /// repository's retry statement makes the same transition in SQL; this is its in-memory twin.
+    /// </summary>
+    /// <returns>Whether the change was retried; false where <see cref="CanRetry"/> is false, and nothing changes.</returns>
+    public bool Retry()
+    {
+        if (!CanRetry)
+            return false;
+
+        Status = PendingExchangeChangeStatus.Pending;
+        AttemptCount = 0;
+        LastAttemptedAt = null;
+        FirstFailedAt = null;
+        NextRetryAt = null;
+        FailureKind = null;
+        FailureMessage = null;
+        ClaimedAt = null;
+        ClaimedBy = null;
+        return true;
+    }
+
     public override string ToString() =>
         $"Exchange change {Id} ({RecipientType}) for Connected System Object {ConnectedSystemObjectId}: {Status}";
 }

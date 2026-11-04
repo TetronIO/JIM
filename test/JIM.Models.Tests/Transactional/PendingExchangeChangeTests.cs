@@ -295,4 +295,111 @@ public class PendingExchangeChangeTests
             Assert.That(change.RepeatsLastFailure(ExchangeChangeFailureKind.AuthenticationFailed, "down"), Is.False);
         }
     }
+
+    // ---- An administrator's retry (Phase 6b) --------------------------------------------------------------------
+
+    private static PendingExchangeChange Parked()
+    {
+        var change = Declared();
+        change.Claim("worker-1:abcd1234", AsOf);
+        change.RecordFailure(ExchangeChangeFailureKind.InsufficientPermissions, "Access denied.", AsOf);
+        return change;
+    }
+
+    [Test]
+    public void Retry_ParkedChange_IsDueAtOnceWithEveryTraceOfTheFailuresCleared()
+    {
+        var change = Parked();
+
+        var retried = change.Retry();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retried, Is.True);
+            Assert.That(change.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(change.IsDue(AsOf), Is.True);
+            Assert.That(change.AttemptCount, Is.Zero);
+            Assert.That(change.LastAttemptedAt, Is.Null);
+            Assert.That(change.FirstFailedAt, Is.Null, "the 24-hour park clock starts again");
+            Assert.That(change.NextRetryAt, Is.Null);
+            Assert.That(change.FailureKind, Is.Null);
+            Assert.That(change.FailureMessage, Is.Null);
+            Assert.That(change.ClaimedAt, Is.Null);
+            Assert.That(change.ClaimedBy, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Retry_RetryingChange_IsDueAtOnceRatherThanWaitingOutItsBackoff()
+    {
+        var change = Claimed();
+        change.RecordFailure(ExchangeChangeFailureKind.Unreachable, "No answer.", AsOf);
+        Assert.That(change.IsDue(AsOf), Is.False, "precondition: waiting out a backoff");
+
+        var retried = change.Retry();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retried, Is.True);
+            Assert.That(change.IsDue(AsOf), Is.True);
+            Assert.That(change.FirstFailedAt, Is.Null);
+        }
+    }
+
+    [Test]
+    public void Retry_ChangeNeverAttempted_ChangesNothing()
+    {
+        // Already due, so there is nothing to retry; saying it was would overstate what the administrator did.
+        var change = Declared();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.CanRetry, Is.False);
+            Assert.That(change.Retry(), Is.False);
+            Assert.That(change.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+        }
+    }
+
+    [Test]
+    public void Retry_ChangeBeingDelivered_LeavesTheDeliveryAlone()
+    {
+        var change = Claimed();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.CanRetry, Is.False);
+            Assert.That(change.Retry(), Is.False);
+            Assert.That(change.Status, Is.EqualTo(PendingExchangeChangeStatus.Delivering));
+            Assert.That(change.ClaimedBy, Is.EqualTo("worker-1:abcd1234"));
+        }
+    }
+
+    [Test]
+    public void Retry_RefusedChange_StaysRefused()
+    {
+        // JIM refused it before asking Exchange; asking again earns the same refusal until the declaration changes.
+        var change = Declared();
+        change.Status = PendingExchangeChangeStatus.Refused;
+        change.FailureMessage = "A mailbox cannot be created on a contact.";
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.CanRetry, Is.False);
+            Assert.That(change.Retry(), Is.False);
+            Assert.That(change.Status, Is.EqualTo(PendingExchangeChangeStatus.Refused));
+            Assert.That(change.FailureMessage, Is.EqualTo("A mailbox cannot be created on a contact."));
+        }
+    }
+
+    [Test]
+    public void Retry_Twice_RetriesOnlyOnce()
+    {
+        var change = Parked();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Retry(), Is.True);
+            Assert.That(change.Retry(), Is.False, "a retried change has not been attempted since, so a second click is a no-op");
+        }
+    }
 }

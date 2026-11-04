@@ -219,6 +219,10 @@ public class JimApplication : IDisposable
             () => Repository!.ConnectedSystems,
             () => Repository!.Activity,
             connectedSystem => ConnectedSystems.CreateConnector(connectedSystem),
+            // An administrator's retry is attributed to them, as PasswordSynchronisation's queue actions are.
+            (activity, initiatedBy, initiatedByApiKey) => initiatedByApiKey != null
+                ? Activities.CreateActivityAsync(activity, initiatedByApiKey)
+                : Activities.CreateActivityAsync(activity, initiatedBy),
             // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
             activity => Activities.CreateSystemActivityAsync(activity),
             activity => Activities.CompleteActivityAsync(activity),

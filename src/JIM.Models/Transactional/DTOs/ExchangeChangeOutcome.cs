@@ -68,6 +68,17 @@ public class ExchangeChangeOutcome
     public DateTime OccurredAt { get; set; }
 
     /// <summary>
+    /// The queued change's ID while it is on the Exchange queue, which identifies it when retrying it; null once it has
+    /// left the queue.
+    /// </summary>
+    public Guid? QueuedChangeId { get; set; }
+
+    /// <summary>
+    /// Whether the change can be retried: it is still on the queue, and parked or retrying after an attempt.
+    /// </summary>
+    public bool CanRetry => QueuedChangeId.HasValue && State is ExchangeChangeState.Parked or ExchangeChangeState.Retrying;
+
+    /// <summary>
     /// Describes one change from its own Activity, its queue row if it is still on the queue, and the Activities
     /// recorded under it (any order; those of other changes are ignored).
     /// </summary>
@@ -80,24 +91,49 @@ public class ExchangeChangeOutcome
     }
 
     /// <summary>
+    /// Whether <paramref name="activity"/> is a queued Exchange change's own Activity: the top-level
+    /// <see cref="ActivityTargetOperationType.SetExchangeRecipient"/> export staging writes for it. Not an Activity recorded
+    /// under a change (an attempt, a withdrawal, a retry), nor an administrator's retry, which is a top-level Exchange
+    /// Activity too but an action over changes rather than a change.
+    /// </summary>
+    public static bool IsChangeActivity(Activity activity)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+
+        return activity is
+        {
+            TargetType: ActivityTargetType.ExchangeRecipient,
+            TargetOperationType: ActivityTargetOperationType.SetExchangeRecipient,
+            ParentActivityId: null
+        };
+    }
+
+    /// <summary>
+    /// Where a change still on the queue stands, from its row's status and last attempt and its own Activity's status:
+    /// the reading every surface shares, the queue list's included, so a row never reads one way in a list and another
+    /// on its follow-up.
+    /// </summary>
+    public static ExchangeChangeState StateOf(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt, ActivityStatus changeActivityStatus) => status switch
+    {
+        PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
+        PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
+        // Staging records both kinds of refusal as a refused row; a type change this release does not make is the one
+        // recorded under a warning rather than an error.
+        PendingExchangeChangeStatus.Refused => changeActivityStatus == ActivityStatus.CompleteWithWarning
+            ? ExchangeChangeState.NotMade
+            : ExchangeChangeState.Refused,
+        // Pending: not yet attempted, or waiting out a backoff after a failure that may clear.
+        _ when lastAttemptedAt != null => ExchangeChangeState.Retrying,
+        _ => ExchangeChangeState.Queued
+    };
+
+    /// <summary>
     /// A change still on the queue, described from its row: the row is the authority on what JIM intends to do next,
     /// and the latest attempt's words are on it.
     /// </summary>
     private static ExchangeChangeOutcome DescribeRow(Activity changeActivity, PendingExchangeChange row)
     {
-        var state = row.Status switch
-        {
-            PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
-            PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
-            // Staging records both kinds of refusal as a refused row; a type change this release does not make is
-            // the one recorded under a warning rather than an error.
-            PendingExchangeChangeStatus.Refused => changeActivity.Status == ActivityStatus.CompleteWithWarning
-                ? ExchangeChangeState.NotMade
-                : ExchangeChangeState.Refused,
-            // Pending: not yet attempted, or waiting out a backoff after a failure that may clear.
-            _ when row.LastAttemptedAt != null => ExchangeChangeState.Retrying,
-            _ => ExchangeChangeState.Queued
-        };
+        var state = StateOf(row.Status, row.LastAttemptedAt, changeActivity.Status);
 
         return new ExchangeChangeOutcome
         {
@@ -109,7 +145,8 @@ public class ExchangeChangeOutcome
             NextAttemptAt = state == ExchangeChangeState.Retrying ? row.NextRetryAt : null,
             FailureKind = row.FailureKind,
             Message = row.FailureMessage ?? changeActivity.ErrorMessage ?? changeActivity.Message,
-            OccurredAt = row.LastAttemptedAt ?? row.CreatedAt
+            OccurredAt = row.LastAttemptedAt ?? row.CreatedAt,
+            QueuedChangeId = row.Id
         };
     }
 

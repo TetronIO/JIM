@@ -59,6 +59,7 @@ public class ExchangeDeliveryTests
         () => _connectedSystemRepository.Object,
         () => new Mock<IActivityRepository>().Object,
         _ => _resolvedConnector,
+        (_, _, _) => throw new InvalidOperationException("delivery records nothing as a person"),
         activity =>
         {
             activity.InitiatedByType = ActivityInitiatorType.System;

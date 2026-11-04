@@ -3,11 +3,14 @@
 
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Serilog;
 
@@ -58,6 +61,7 @@ public class ExchangeDeliveryServer
     private readonly Func<IConnectedSystemRepository> _connectedSystemRepo;
     private readonly Func<IActivityRepository> _activityRepo;
     private readonly Func<ConnectedSystem, IConnector> _createConnector;
+    private readonly Func<Activity, MetaverseObject?, ApiKey?, Task> _createActivity;
     private readonly Func<Activity, Task> _createSystemActivity;
     private readonly Func<Activity, Task> _completeActivity;
     private readonly Func<Activity, string, Task> _completeActivityWithError;
@@ -68,6 +72,8 @@ public class ExchangeDeliveryServer
     /// <param name="connectedSystemRepository">Loads the Connected System a lane delivers to; resolved per pass.</param>
     /// <param name="activityRepository">Reads what was recorded under each change, for where a change stands.</param>
     /// <param name="createConnector">Builds the Connector, configured as every other path builds it.</param>
+    /// <param name="createActivity">Creates an administrator's Activity, attributed to the person or the API key that took
+    /// the action; exactly one of the two is given.</param>
     /// <param name="createSystemActivity">Creates an outcome Activity attributed to JIM itself: delivery runs unattended,
     /// long after whoever exported the account has gone.</param>
     /// <param name="completeActivity">Completes an outcome Activity.</param>
@@ -79,6 +85,7 @@ public class ExchangeDeliveryServer
         Func<IConnectedSystemRepository> connectedSystemRepository,
         Func<IActivityRepository> activityRepository,
         Func<ConnectedSystem, IConnector> createConnector,
+        Func<Activity, MetaverseObject?, ApiKey?, Task> createActivity,
         Func<Activity, Task> createSystemActivity,
         Func<Activity, Task> completeActivity,
         Func<Activity, string, Task> completeActivityWithError,
@@ -89,6 +96,7 @@ public class ExchangeDeliveryServer
         _connectedSystemRepo = connectedSystemRepository;
         _activityRepo = activityRepository;
         _createConnector = createConnector;
+        _createActivity = createActivity;
         _createSystemActivity = createSystemActivity;
         _completeActivity = completeActivity;
         _completeActivityWithError = completeActivityWithError;
@@ -123,7 +131,7 @@ public class ExchangeDeliveryServer
     public async Task<Dictionary<Guid, ExchangeChangeOutcome>> GetChangeOutcomesAsync(IReadOnlyCollection<Activity> changeActivities)
     {
         var changes = changeActivities
-            .Where(a => a is { TargetType: ActivityTargetType.ExchangeRecipient, ParentActivityId: null })
+            .Where(ExchangeChangeOutcome.IsChangeActivity)
             .DistinctBy(a => a.Id)
             .ToList();
         if (changes.Count == 0)
@@ -149,6 +157,138 @@ public class ExchangeDeliveryServer
 
         var outcomes = await GetChangeOutcomesAsync([activity]);
         return outcomes.GetValueOrDefault(changeActivityId);
+    }
+
+    /// <summary>
+    /// One window of the Exchange queue for a list (#2021, Phase 6b): the Operations Exchange tab, and its REST and
+    /// PowerShell counterparts.
+    /// </summary>
+    public Task<RangeResultSet<PendingExchangeChangeHeader>> GetPendingChangesAsync(
+        PendingExchangeChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        return _syncRepo.GetPendingExchangeChangeHeadersAsync(filter, startIndex, count, sortBy, sortDescending, includeTotalCount);
+    }
+
+    /// <summary>What the whole Exchange queue holds now, for the summary above a queue list.</summary>
+    public Task<ExchangeQueueSummary> GetQueueSummaryAsync() => _syncRepo.GetExchangeQueueSummaryAsync(DateTime.UtcNow);
+
+    /// <summary>
+    /// An administrator's retry (#2021, Phase 6b, PRD requirement 11): makes every parked or retrying change the filter
+    /// matches due at once, with its attempts and 24-hour park clock reset, and wakes the delivery lane for it.
+    /// <para>
+    /// Recorded as one top-level Activity for the action, attributed to whoever took it, and as one child under each
+    /// retried change's own Activity, so a change's history says who retried it and when. The action's Activity is
+    /// written first and completed after, so a retry that fails is recorded as failed rather than not at all, and one
+    /// that matched nothing still says so.
+    /// </para>
+    /// </summary>
+    /// <returns>How many changes were made due again.</returns>
+    public async Task<int> RetryAsync(PendingExchangeChangeFilter filter, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var action = new Activity
+        {
+            TargetType = ActivityTargetType.ExchangeRecipient,
+            TargetOperationType = ActivityTargetOperationType.RetryExchangeRecipient,
+            TargetName = DescribeFilter(filter),
+            ConnectedSystemId = filter.ConnectedSystemId,
+            MetaverseObjectId = filter.MetaverseObjectId,
+            ConnectedSystemObjectId = filter.ConnectedSystemObjectId
+        };
+        await _createActivity(action, initiatedBy, initiatedByApiKey);
+
+        List<RetriedExchangeChange> retried;
+        try
+        {
+            retried = await _syncRepo.RetryExchangeChangesAsync(filter);
+            if (retried.Count > 0)
+                await _syncRepo.CreateActivitiesAsync(retried.Select(r => RetryRecord(r, action)).ToList());
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "RetryAsync: Could not retry the queued Exchange changes '{Target}'", action.TargetName);
+            await _completeActivityWithError(action, $"The retry did not complete: {ex.Message}");
+            throw;
+        }
+
+        action.Message = retried.Count switch
+        {
+            0 when filter.TargetsSpecificChanges => filter.Ids!.Count == 1
+                ? "Nothing was retried: the change is no longer parked or retrying."
+                : "Nothing was retried: none of the changes is parked or retrying any more.",
+            0 => "Nothing was retried: no queued Exchange change matched that was parked or retrying.",
+            1 => "1 queued Exchange change will be attempted again.",
+            _ => $"{retried.Count} queued Exchange changes will be attempted again."
+        };
+        await _completeActivity(action);
+
+        // The reset fires the queue's notification, which wakes the Exchange delivery lane: nothing else is needed for the
+        // changes to be attempted within seconds.
+        Log.Information("RetryAsync: {Retried} queued Exchange change(s) are due again ({Target})", retried.Count, action.TargetName);
+        return retried.Count;
+    }
+
+    /// <summary>
+    /// The record of a retry under the change's own Activity, attributed to whoever took the action: the change's history
+    /// then says who asked for it to be attempted again, and the outcome reading skips it, because a retry changes how a
+    /// change stands, not what became of it.
+    /// </summary>
+    private static Activity RetryRecord(RetriedExchangeChange change, Activity action)
+    {
+        var now = DateTime.UtcNow;
+        return new Activity
+        {
+            Id = Guid.NewGuid(),
+            ParentActivityId = change.ActivityId,
+            TargetType = ActivityTargetType.ExchangeRecipient,
+            TargetOperationType = ActivityTargetOperationType.RetryExchangeRecipient,
+            TargetContext = change.RecipientType,
+            TargetName = change.ConnectedSystemName,
+            ConnectedSystemId = change.ConnectedSystemId,
+            ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+            MetaverseObjectId = change.MetaverseObjectId,
+            InitiatedByType = action.InitiatedByType,
+            InitiatedById = action.InitiatedById,
+            InitiatedByName = action.InitiatedByName,
+            Status = ActivityStatus.Complete,
+            Message = "Retried; JIM will attempt it again shortly.",
+            Created = now,
+            Executed = now,
+            ExecutionTime = TimeSpan.Zero,
+            TotalActivityTime = TimeSpan.Zero
+        };
+    }
+
+    /// <summary>
+    /// Names what a retry ran over, for its Activity: what the administrator chose rather than what it resolved to,
+    /// because that is what they will look for later.
+    /// </summary>
+    private static string DescribeFilter(PendingExchangeChangeFilter filter)
+    {
+        if (filter.TargetsSpecificChanges)
+            return filter.Ids!.Count == 1 ? "One Exchange change" : $"{filter.Ids!.Count} Exchange changes";
+
+        var parts = new List<string>();
+        if (filter.State.HasValue)
+            parts.Add(filter.State.Value.ToString());
+        if (filter.FailureKind.HasValue)
+            parts.Add(filter.FailureKind.Value.ToString());
+
+        var described = parts.Count == 0 && filter.MetaverseObjectId == null && filter.ConnectedSystemObjectId == null
+                        && string.IsNullOrWhiteSpace(filter.SearchText)
+            ? "The Exchange queue"
+            : parts.Count == 0 ? "Exchange changes" : $"{string.Join(", ", parts)} Exchange changes";
+
+        return string.IsNullOrWhiteSpace(filter.SearchText)
+            ? described
+            : $"{described} matching \"{filter.SearchText.Trim()}\"";
     }
 
     /// <summary>

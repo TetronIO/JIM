@@ -37,7 +37,8 @@
     @if (State.QueuedChange is { } queued)
     {
         <div class="mt-3">
-            <ExecutionItemFollowUpRow FollowUp="@ExecutionItemFollowUpDisplay.ForExchangeChange(queued, ConnectedSystemName, queued.OccurredAt)" />
+            <ExecutionItemFollowUpRow FollowUp="@ExecutionItemFollowUpDisplay.ForExchangeChange(queued, ConnectedSystemName, queued.OccurredAt)"
+                                      OnRetried="OnRetried" />
         </div>
     }
 </MudPaper>
@@ -51,6 +52,10 @@
 
     [Parameter]
     public string? Class { get; set; }
+
+    /// <summary>Raised after the account's queued change is retried, so the host can re-read the recipient state.</summary>
+    [Parameter]
+    public EventCallback OnRetried { get; set; }
 
     private (string Label, string Modifier) _headline;
 

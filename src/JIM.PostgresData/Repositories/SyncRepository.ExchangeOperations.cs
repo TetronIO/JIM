@@ -1,9 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Exchange;
 using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
+using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -513,6 +515,249 @@ public partial class SyncRepository
         command.Parameters.Add(new NpgsqlParameter("p19", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = (object?)change.ClaimedAt ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("p20", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)change.ClaimedBy ?? DBNull.Value });
         command.Parameters.Add(new NpgsqlParameter("p21", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = change.ActivityId });
+    }
+
+    #endregion
+
+    #region The queue as administrators see and act on it (#2021, Phase 6b)
+
+    /// <inheritdoc />
+    public async Task<RangeResultSet<PendingExchangeChangeHeader>> GetPendingExchangeChangeHeadersAsync(
+        PendingExchangeChangeFilter filter,
+        int startIndex,
+        int count,
+        string sortBy,
+        bool sortDescending,
+        bool includeTotalCount)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        var query = ApplyExchangeChangeFilter(ExchangeChangeHeaders(), filter);
+
+        // Counted before windowing, and only when asked: a scroll re-reads windows far more often than the filters change.
+        int? total = includeTotalCount ? await query.CountAsync() : null;
+
+        query = sortBy?.ToLowerInvariant() switch
+        {
+            "identity" => sortDescending ? query.OrderByDescending(h => h.MetaverseObjectDisplayName) : query.OrderBy(h => h.MetaverseObjectDisplayName),
+            "system" => sortDescending ? query.OrderByDescending(h => h.ConnectedSystemName) : query.OrderBy(h => h.ConnectedSystemName),
+            "attempts" => sortDescending ? query.OrderByDescending(h => h.AttemptCount) : query.OrderBy(h => h.AttemptCount),
+            "nextattempt" => sortDescending ? query.OrderByDescending(h => h.NextRetryAt) : query.OrderBy(h => h.NextRetryAt),
+            "lastattempt" => sortDescending ? query.OrderByDescending(h => h.LastAttemptedAt) : query.OrderBy(h => h.LastAttemptedAt),
+            // Queued time is the default and the fallback: the one column every row has a value for.
+            _ => sortDescending ? query.OrderByDescending(h => h.CreatedAt) : query.OrderBy(h => h.CreatedAt)
+        };
+
+        // Id breaks ties, so paging over changes queued in the same instant cannot repeat or skip one.
+        var ordered = ((IOrderedQueryable<PendingExchangeChangeHeader>)query).ThenBy(h => h.Id);
+
+        return new RangeResultSet<PendingExchangeChangeHeader>
+        {
+            Results = await ordered.Skip(startIndex).Take(count).ToListAsync(),
+            TotalResults = total
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf)
+    {
+        // One aggregate over the queue, with the change Activity joined only to tell a refusal from a type change this
+        // release does not make (the same reading ExchangeChangeOutcome.StateOf makes). An Activity removed by retention
+        // reads as a refusal, the state a row with no Activity left can only be.
+        var sql = $"""
+            SELECT
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND c."LastAttemptedAt" IS NULL)::int AS "QueuedCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Delivering})::int AS "DeliveringCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND c."LastAttemptedAt" IS NOT NULL)::int AS "RetryingCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Parked})::int AS "ParkedCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Refused}
+                                   AND a."Status" IS DISTINCT FROM {(int)ActivityStatus.CompleteWithWarning})::int AS "RefusedCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Refused}
+                                   AND a."Status" = {(int)ActivityStatus.CompleteWithWarning})::int AS "NotMadeCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending}
+                                   AND (c."NextRetryAt" IS NULL OR c."NextRetryAt" <= @asOf))::int AS "DueCount"
+            FROM "PendingExchangeChanges" c
+            LEFT JOIN "Activities" a ON a."Id" = c."ActivityId"
+            """;
+
+        var counts = await _context.Database
+            .SqlQueryRaw<ExchangeQueueCounts>(sql, new NpgsqlParameter("asOf", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = asOf })
+            .SingleAsync();
+
+        return new ExchangeQueueSummary
+        {
+            QueuedCount = counts.QueuedCount,
+            DeliveringCount = counts.DeliveringCount,
+            RetryingCount = counts.RetryingCount,
+            ParkedCount = counts.ParkedCount,
+            RefusedCount = counts.RefusedCount,
+            NotMadeCount = counts.NotMadeCount,
+            DueCount = counts.DueCount
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<List<RetriedExchangeChange>> RetryExchangeChangesAsync(PendingExchangeChangeFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        // Chosen by the list's own query and filter, so an action on "the changes shown" acts on exactly those (#2725).
+        var candidates = await ApplyExchangeChangeFilter(ExchangeChangeHeaders(), filter)
+            .Where(h => h.Status == PendingExchangeChangeStatus.Parked
+                        || (h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null))
+            .Select(h => new { h.Id, h.ConnectedSystemName })
+            .ToListAsync();
+        if (candidates.Count == 0)
+            return [];
+        var systemNames = candidates.ToDictionary(c => c.Id, c => c.ConnectedSystemName);
+
+        // The reset rechecks each row is still retryable as it writes it, so a change a deliverer claimed after the list
+        // was read is left to that deliverer. The columns cleared here MUST stay in step with PendingExchangeChange.Retry(),
+        // which is the same transition in memory. Deliberately hand-written rather than driven from the bulk-columns
+        // constant: it resets a fixed set of attempt and claim columns, and a future column must not be swept into it.
+        // The update fires jim_exchange_change, which wakes the delivery lane.
+        var sql = $$"""
+            UPDATE "PendingExchangeChanges"
+            SET "Status" = {{(int)PendingExchangeChangeStatus.Pending}}, "AttemptCount" = 0, "LastAttemptedAt" = NULL, "FirstFailedAt" = NULL,
+                "NextRetryAt" = NULL, "FailureKind" = NULL, "FailureMessage" = NULL, "ClaimedAt" = NULL, "ClaimedBy" = NULL
+            WHERE "Id" = ANY({0})
+              AND ("Status" = {{(int)PendingExchangeChangeStatus.Parked}}
+                   OR ("Status" = {{(int)PendingExchangeChangeStatus.Pending}} AND "LastAttemptedAt" IS NOT NULL))
+            RETURNING *
+            """;
+
+        var retried = await _context.PendingExchangeChanges
+            .FromSqlRaw(sql, new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid, Value = systemNames.Keys.ToArray() })
+            .AsNoTracking()
+            .ToListAsync();
+
+        return retried
+            .Select(c => new RetriedExchangeChange
+            {
+                Id = c.Id,
+                ActivityId = c.ActivityId,
+                ConnectedSystemId = c.ConnectedSystemId,
+                ConnectedSystemName = systemNames[c.Id],
+                ConnectedSystemObjectId = c.ConnectedSystemObjectId,
+                MetaverseObjectId = c.MetaverseObjectId,
+                RecipientType = c.RecipientType
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Every queued Exchange change as a list row: its Connected System and identity by name, and its own Activity's
+    /// status, which is what tells a refusal from a type change this release does not make. Projected in the database:
+    /// the list needs a handful of names and columns per row, not the entities behind them.
+    /// </summary>
+    private IQueryable<PendingExchangeChangeHeader> ExchangeChangeHeaders() =>
+        from change in _context.PendingExchangeChanges.AsNoTracking()
+        join system in _context.ConnectedSystems.AsNoTracking() on change.ConnectedSystemId equals system.Id
+        join activity in _context.Activities.AsNoTracking() on change.ActivityId equals activity.Id into activities
+        from activity in activities.DefaultIfEmpty()
+        join mvo in _context.MetaverseObjects.AsNoTracking() on change.MetaverseObjectId equals (Guid?)mvo.Id into identities
+        from mvo in identities.DefaultIfEmpty()
+        select new PendingExchangeChangeHeader
+        {
+            Id = change.Id,
+            ActivityId = change.ActivityId,
+            ConnectedSystemId = change.ConnectedSystemId,
+            ConnectedSystemName = system.Name,
+            ConnectedSystemObjectId = change.ConnectedSystemObjectId,
+            MetaverseObjectId = change.MetaverseObjectId,
+            MetaverseObjectDisplayName = mvo == null ? null : mvo.CachedDisplayName,
+            // Through the navigation rather than a join of its own: the Object Type foreign key is a shadow property.
+            MetaverseObjectTypePluralName = mvo == null ? null : mvo.Type.PluralName,
+            RecipientType = change.RecipientType,
+            Status = change.Status,
+            FailureKind = change.FailureKind,
+            FailureMessage = change.FailureMessage,
+            AttemptCount = change.AttemptCount,
+            CreatedAt = change.CreatedAt,
+            LastAttemptedAt = change.LastAttemptedAt,
+            FirstFailedAt = change.FirstFailedAt,
+            NextRetryAt = change.NextRetryAt,
+            // An Activity removed by retention leaves a refused row reading as a refusal, which is all it can be known as.
+            ChangeActivityStatus = activity == null ? ActivityStatus.CompleteWithError : activity.Status
+        };
+
+    /// <summary>
+    /// Narrows the list to what a filter names. The retry chooses its changes through this same function over the same
+    /// rows, so the list and the action cannot narrow differently.
+    /// </summary>
+    private static IQueryable<PendingExchangeChangeHeader> ApplyExchangeChangeFilter(
+        IQueryable<PendingExchangeChangeHeader> query,
+        PendingExchangeChangeFilter filter)
+    {
+        if (filter.ConnectedSystemId.HasValue)
+        {
+            var connectedSystemId = filter.ConnectedSystemId.Value;
+            query = query.Where(h => h.ConnectedSystemId == connectedSystemId);
+        }
+
+        if (filter.State.HasValue)
+        {
+            // The states as ExchangeChangeOutcome.StateOf reads them, in terms the database can filter on.
+            query = filter.State.Value switch
+            {
+                ExchangeChangeState.Queued => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt == null),
+                ExchangeChangeState.Retrying => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null),
+                ExchangeChangeState.Delivering => query.Where(h => h.Status == PendingExchangeChangeStatus.Delivering),
+                ExchangeChangeState.Parked => query.Where(h => h.Status == PendingExchangeChangeStatus.Parked),
+                ExchangeChangeState.Refused => query.Where(h => h.Status == PendingExchangeChangeStatus.Refused
+                                                                && h.ChangeActivityStatus != ActivityStatus.CompleteWithWarning),
+                ExchangeChangeState.NotMade => query.Where(h => h.Status == PendingExchangeChangeStatus.Refused
+                                                                && h.ChangeActivityStatus == ActivityStatus.CompleteWithWarning),
+                // Delivered, Withdrawn and Replaced are reached only by leaving the queue.
+                _ => query.Where(_ => false)
+            };
+        }
+
+        if (filter.FailureKind.HasValue)
+        {
+            var failureKind = filter.FailureKind.Value;
+            query = query.Where(h => h.FailureKind == failureKind);
+        }
+
+        if (filter.MetaverseObjectId.HasValue)
+        {
+            var metaverseObjectId = filter.MetaverseObjectId.Value;
+            query = query.Where(h => h.MetaverseObjectId == metaverseObjectId);
+        }
+
+        if (filter.ConnectedSystemObjectId.HasValue)
+        {
+            var connectedSystemObjectId = filter.ConnectedSystemObjectId.Value;
+            query = query.Where(h => h.ConnectedSystemObjectId == connectedSystemObjectId);
+        }
+
+        if (filter.Ids is { Count: > 0 })
+        {
+            var ids = filter.Ids.ToList();
+            query = query.Where(h => ids.Contains(h.Id));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var searchPattern = LikePattern.Contains(filter.SearchText.Trim());
+            query = query.Where(h =>
+                (h.MetaverseObjectDisplayName != null && EF.Functions.ILike(h.MetaverseObjectDisplayName, searchPattern))
+                || EF.Functions.ILike(h.ConnectedSystemName, searchPattern));
+        }
+
+        return query;
+    }
+
+    /// <summary>The summary's counts as the database returns them, before the summary adds what it derives.</summary>
+    private sealed class ExchangeQueueCounts
+    {
+        public int QueuedCount { get; set; }
+        public int DeliveringCount { get; set; }
+        public int RetryingCount { get; set; }
+        public int ParkedCount { get; set; }
+        public int RefusedCount { get; set; }
+        public int NotMadeCount { get; set; }
+        public int DueCount { get; set; }
     }
 
     #endregion
