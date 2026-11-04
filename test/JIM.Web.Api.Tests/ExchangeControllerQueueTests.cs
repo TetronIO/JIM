@@ -138,7 +138,7 @@ public class ExchangeControllerQueueTests
             var row = page.Items.Last();
             Assert.That(row.ConnectedSystemName, Is.EqualTo("Resurgam AD"));
             Assert.That(row.MetaverseObjectDisplayName, Is.EqualTo("Alan Turing"));
-            Assert.That(row.State, Is.EqualTo(ExchangeChangeState.Parked));
+            Assert.That(row.State, Is.EqualTo(ExchangeQueueState.Parked));
             Assert.That(row.RecipientType, Is.EqualTo(ExchangeRecipientTypes.Mailbox));
             Assert.That(row.FailureKind, Is.EqualTo(ExchangeChangeFailureKind.InsufficientPermissions));
             Assert.That(row.CanRetry, Is.True);
@@ -155,7 +155,7 @@ public class ExchangeControllerQueueTests
         Seed(ResurgamId, "Grace Hopper", _ => { });
         Seed(PanoplyId, "Ada Lovelace", Parked);
 
-        var result = await _controller.GetPendingExchangeChangesAsync(new PaginationRequest(), state: ExchangeChangeState.Parked, search: "resurgam") as OkObjectResult;
+        var result = await _controller.GetPendingExchangeChangesAsync(new PaginationRequest(), state: ExchangeQueueState.Parked, search: "resurgam") as OkObjectResult;
 
         Assert.That(((PaginatedResponse<PendingExchangeChangeResponse>)result!.Value!).Items.Select(i => i.Id), Is.EqualTo(new[] { parked.Id }));
     }
@@ -239,7 +239,7 @@ public class ExchangeControllerQueueTests
                 Is.EqualTo(new[] { nameof(ExchangeQueueActionRequest.ApplyToAllChanges) }));
             Assert.That(Validate(new ExchangeQueueActionRequest { ApplyToAllChanges = true }), Is.Empty);
             Assert.That(Validate(new ExchangeQueueActionRequest { SearchText = "panoply" }), Is.Empty, "search text is a criterion");
-            Assert.That(Validate(new ExchangeQueueActionRequest { State = ExchangeChangeState.Parked }), Is.Empty);
+            Assert.That(Validate(new ExchangeQueueActionRequest { State = ExchangeQueueState.Parked }), Is.Empty);
         }
     }
 
@@ -259,7 +259,7 @@ public class ExchangeControllerQueueTests
         var id = Guid.NewGuid();
         var filter = new ExchangeQueueActionRequest
         {
-            ConnectedSystemId = PanoplyId, State = ExchangeChangeState.Retrying, FailureKind = ExchangeChangeFailureKind.Unreachable,
+            ConnectedSystemId = PanoplyId, State = ExchangeQueueState.Retrying, FailureKind = ExchangeChangeFailureKind.Unreachable,
             MetaverseObjectId = mvoId, ConnectedSystemObjectId = csoId, Ids = [id], SearchText = "ada"
         }.ToFilter();
 

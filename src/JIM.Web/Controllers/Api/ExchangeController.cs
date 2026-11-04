@@ -67,7 +67,7 @@ public class ExchangeController(
     public async Task<IActionResult> GetPendingExchangeChangesAsync(
         [FromQuery] PaginationRequest pagination,
         [FromQuery] int? connectedSystemId = null,
-        [FromQuery] ExchangeChangeState? state = null,
+        [FromQuery] ExchangeQueueState? state = null,
         [FromQuery] ExchangeChangeFailureKind? failureKind = null,
         [FromQuery] Guid? metaverseObjectId = null,
         [FromQuery] Guid? connectedSystemObjectId = null,
@@ -89,7 +89,7 @@ public class ExchangeController(
         var filter = new PendingExchangeChangeFilter
         {
             ConnectedSystemId = connectedSystemId,
-            State = state,
+            State = state?.ToChangeState(),
             FailureKind = failureKind,
             MetaverseObjectId = metaverseObjectId,
             ConnectedSystemObjectId = connectedSystemObjectId,

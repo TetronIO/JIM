@@ -67,7 +67,7 @@ public class PendingExchangeChangeResponse
     /// existing recipient's type, which JIM does not do). A refused or not-made change holds until its
     /// declared state changes.
     /// </summary>
-    public ExchangeChangeState State { get; set; }
+    public ExchangeQueueState State { get; set; }
 
     /// <summary>
     /// How the last attempt failed, or null for a change not attempted since it was queued or retried.
@@ -131,7 +131,7 @@ public class PendingExchangeChangeResponse
             MetaverseObjectDisplayName = header.MetaverseObjectDisplayName,
             MetaverseObjectTypePluralName = header.MetaverseObjectTypePluralName,
             RecipientType = header.RecipientType,
-            State = header.State,
+            State = header.State.ToQueueState(),
             FailureKind = header.FailureKind,
             FailureMessage = header.FailureMessage,
             AttemptCount = header.AttemptCount,
@@ -163,9 +163,9 @@ public class ExchangeQueueActionRequest : IValidatableObject
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Restrict to changes in one state (Queued, Delivering, Retrying, Parked, Refused or NotMade), or omit for every state.
+    /// Restrict to changes in one state, or omit for every state.
     /// </summary>
-    public ExchangeChangeState? State { get; set; }
+    public ExchangeQueueState? State { get; set; }
 
     /// <summary>
     /// Restrict to changes whose last attempt failed this way, or omit for every kind.
@@ -213,7 +213,7 @@ public class ExchangeQueueActionRequest : IValidatableObject
     public PendingExchangeChangeFilter ToFilter() => new()
     {
         ConnectedSystemId = ConnectedSystemId,
-        State = State,
+        State = State?.ToChangeState(),
         FailureKind = FailureKind,
         MetaverseObjectId = MetaverseObjectId,
         ConnectedSystemObjectId = ConnectedSystemObjectId,
