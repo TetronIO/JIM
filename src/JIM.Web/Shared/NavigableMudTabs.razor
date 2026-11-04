@@ -38,6 +38,14 @@
     private bool _barHiddenForSinglePanel;
 
     /// <summary>
+    /// The tab the URL names, until a panel by that name has registered. A panel that appears only once its page has
+    /// read something (a tab behind a feature flag, one that shows only where there is something to put in it)
+    /// registers after the bar's first render, so a link to it is matched on a later render rather than given up on.
+    /// Dropped as soon as the reader picks a tab themselves, so a late panel never takes them away from it.
+    /// </summary>
+    private string? _pendingSlug;
+
+    /// <summary>
     /// The caller's class plus the marker that hides a one-tab bar. The hiding is CSS rather than markup
     /// because MudTabs owns the toolbar element; the class also zeroes the panels' top padding, so the
     /// content lands exactly where it would have without tabs.
@@ -112,23 +120,22 @@
     {
         NavManager.LocationChanged += OnLocationChanged;
 
-        // Read ?t= from the current URL on first load
+        // Read ?t= from the current URL on first load. Matched in OnAfterRender, because panels register during
+        // their own render, and on every render until one matches.
         var slug = GetTabSlugFromUrl();
         if (!string.IsNullOrEmpty(slug))
-        {
-            // Defer panel lookup to OnAfterRender since panels aren't registered yet
-        }
+            _pendingSlug = slug;
     }
 
     protected override void OnAfterRender(bool firstRender)
     {
-        if (firstRender)
+        if (_pendingSlug != null)
         {
-            var slug = GetTabSlugFromUrl();
-            if (!string.IsNullOrEmpty(slug))
+            var index = FindRegisteredPanelIndex(_pendingSlug);
+            if (index >= 0)
             {
-                var index = FindPanelIndexBySlug(slug);
-                if (index >= 0 && index != _activePanelIndex)
+                _pendingSlug = null;
+                if (index != _activePanelIndex)
                 {
                     _activePanelIndex = index;
                     ActivePanelIndex = index;
@@ -159,6 +166,8 @@
         if (_isNavigating || _disposed)
             return;
 
+        // The reader has chosen a tab, so a panel the URL named that has still to arrive must not take over.
+        _pendingSlug = null;
         _activePanelIndex = newIndex;
         ActivePanelIndex = newIndex;
         await ActivePanelIndexChanged.InvokeAsync(newIndex);
@@ -238,6 +247,21 @@
         if (_mudTabs?.Panels == null)
             return -1;
 
+        // If the tab is disabled or not found, stay on first tab
+        var index = FindRegisteredPanelIndex(slug);
+        return index < 0 ? 0 : index;
+    }
+
+    /// <summary>
+    /// The index of the enabled panel this slug names, or -1 while no such panel has registered. Unlike
+    /// <see cref="FindPanelIndexBySlug"/>, which falls back to the first tab, it tells a panel that has not arrived
+    /// yet apart from one that has.
+    /// </summary>
+    private int FindRegisteredPanelIndex(string slug)
+    {
+        if (_mudTabs?.Panels == null)
+            return -1;
+
         var panels = _mudTabs.Panels.ToList();
         for (var i = 0; i < panels.Count; i++)
         {
@@ -245,8 +269,7 @@
                 return i;
         }
 
-        // If the tab is disabled or not found, stay on first tab
-        return 0;
+        return -1;
     }
 
     private string? GetSlugForPanelIndex(int index)
