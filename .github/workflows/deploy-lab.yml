@@ -6,14 +6,14 @@
 # on a fresh LXD VM on the deployment lab host: installs on Docker with both image stores and on rootful and rootless
 # Podman, on Ubuntu 24.04, and on AlmaLinux 9 and CentOS Stream 10 with SELinux enforcing; upgrades from the latest
 # release with a rollback by the guide, and from the oldest supported release; the installer's refusals, re-runs and
-# certificate options; an external PostgreSQL server; JIM behind nginx, as TLS and Reverse Proxy configures it;
-# Deploying on RHEL with Ansible's playbook, on AlmaLinux 9 and CentOS Stream 10; and a soak of restarts and reboots.
-# The lab's README says what each cell checks. The job writes the report to its summary, uploads the report and every
-# cell's logs, and posts a commit status named `jim-deploy-lab` on the SHA it tested: `success` only when every cell
-# passed, with the count in its description. release.yml and /release require `success` for the SHA being tagged
-# (scripts/Test-DeployLabReleaseGate.ps1) once the repository variable JIM_DEPLOY_LAB_GATE_ENFORCED is `true` (set after
-# the lab's first green run here); from then on there is no override, so the remedy for a red run is a fix and a
-# dispatched run.
+# certificate options; an external PostgreSQL server; JIM behind nginx and Apache httpd, as TLS and Reverse Proxy
+# configures them; a File Connector host folder under SELinux; Deploying on RHEL with Ansible's playbook, on AlmaLinux 9
+# and CentOS Stream 10; and a soak of restarts and reboots. The lab's README says what each cell checks. The job writes
+# the report to its summary, uploads the report and every cell's logs, and posts a commit status named `jim-deploy-lab`
+# on the SHA it tested: `success` only when every cell passed, with the count in its description. release.yml and
+# /release require `success` for the SHA being tagged (scripts/Test-DeployLabReleaseGate.ps1) once the repository
+# variable JIM_DEPLOY_LAB_GATE_ENFORCED is `true` (set after the lab's first green run here); from then on there is no
+# override, so the remedy for a red run is a fix and a dispatched run.
 #
 # The online cells (tag `online`) are the exception: they install the latest published release from GitHub and ghcr.io,
 # and upgrade to it from the release before it, so they test what is published rather than the commit. A run takes them
@@ -48,7 +48,7 @@
 # the first step refuses to start while any jl- VM exists, which is a run by hand in progress or a run that died, and
 # the last step deletes every jl- VM, which after that check can only be this run's.
 #
-# Timing: 01:00 UTC. A full run is about 60 minutes on the lab host (a bundle build, then 31 cells, several at once).
+# Timing: 01:00 UTC. A full run is about 65 minutes on the lab host (a bundle build, then 35 cells, several at once).
 
 name: jim-deploy-lab
 
@@ -136,7 +136,7 @@ jobs:
           ./test/ci/deployment/lab/Invoke-DeploymentLab.ps1 @arguments
           exit $LASTEXITCODE
 
-      # The report into the job summary, and its headline ("31 of 31 cells passed.") into the status description,
+      # The report into the job summary, and its headline ("35 of 35 cells passed.") into the status description,
       # capped at GitHub's 140 characters.
       - name: Summarise the run
         id: summary
