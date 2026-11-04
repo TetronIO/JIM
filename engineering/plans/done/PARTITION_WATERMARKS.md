@@ -1,6 +1,6 @@
 # Per-Partition Delta Import Watermarks
 
-- **Status:** Doing (Phases 1 to 7 complete, with Phase 8's documentation and changelog; moving this plan to `done/` in the pull request that closes #2715, and Scenario 025 in the AD lab after merge, outstanding)
+- **Status:** Done (all eight phases complete; Scenario 025 runs in the AD lab after merge)
 - **Issue:** [#2715](https://github.com/TetronIO/JIM/issues/2715)
 - **Depends on:** [#2720](https://github.com/TetronIO/JIM/issues/2720) (merged in PR #2721, `ConnectedSystemImportResult.CompleteRead`)
 - **Related:** [#2723](https://github.com/TetronIO/JIM/issues/2723) (truthful `ConnectedSystemObject.PartitionId`), [#2724](https://github.com/TetronIO/JIM/issues/2724) (clearing leaves the SQL and SCIM watermarks)
@@ -380,7 +380,7 @@ See [Integration testing](#integration-testing).
 - **As built.** `Setup-Scenario-009.ps1` adds Delta Import (Scoped), Delta Import (Unscoped) and, on OpenLDAP and 389 Directory Server, Delta Import (Scoped - Second), each reading three objects per page. `Invoke-Scenario-009-PartitionScopedImports.ps1` adds the six steps below, with the step set per directory type declared at the top of the script. Every run a step makes is held to one contract (`Assert-RunKeptToItsPartitions`): it started each partition it read from the watermark JIM held for it (`importPartitionWatermarksFrom` against `Get-JIMConnectedSystemPartition`'s `deltaImportWatermark` just before), recorded one for each (`importPartitionWatermarksTo`, which is what JIM then holds), and left every other partition's exactly as it was. Every step also names the objects it expects updated or deleted, by display name, and requires nothing read unchanged, so a Delta Import that read too much or too little fails. Shared reads went into `utils/Test-Helpers.ps1` (`Get-PartitionDeltaImportWatermark`, `Get-ActivityPartitionWatermark`, `Get-ImportReadRangeScope`, `Get-ImportObjectCount`, `Get-ActivityItemDisplayName`), with Pester tests.
 - **Red evidence.** A pre-#2715 build cannot run the new steps meaningfully: it has no partition watermarks to read, so `DeltaBaseline` fails on that before any change is made. The bug's shape was put back temporarily instead, in the processor: each run's watermark recorded for every selected Partition, as the single Connected System-level watermark behaved. `-Step CrossPartitionDelta` then failed on OpenLDAP at Micro with "Delta Import (Scoped - Second) updated 0 object(s); expected 4" (the first run had moved the second partition past its four changes), and passed with the change reverted.
 
-### Phase 8: Documentation, changelog, plan lifecycle
+### Phase 8: Documentation, changelog, plan lifecycle ✅
 
 See [Documentation and changelog](#documentation-and-changelog). Move this plan to `engineering/plans/done/` in the pull request that closes #2715.
 
