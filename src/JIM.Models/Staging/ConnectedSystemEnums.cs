@@ -229,6 +229,22 @@ public enum ConnectorSettingRequiredGroupCardinality
     ExactlyOne
 }
 
+/// <summary>
+/// How much a finding from validating a Connected System's settings matters.
+/// </summary>
+public enum ConnectorSettingValidationSeverity
+{
+    /// <summary>
+    /// The settings cannot be saved as they are.
+    /// </summary>
+    Error,
+
+    /// <summary>
+    /// The settings can be saved, and the administrator is told what will not work as they stand.
+    /// </summary>
+    Warning
+}
+
 public enum ConnectedSystemSettingType
 {
     String,

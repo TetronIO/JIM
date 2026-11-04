@@ -2106,7 +2106,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <remarks>
     /// This is what <see cref="ConnectedSystem.SettingValuesValid"/> carries, and it is deliberately narrower than
-    /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
+    /// <see cref="ValidateConnectedSystemSettingsAsync"/>. That method also asks the Connector, whose own validation is a
     /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
     /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
     /// invalid, and the portal gates the Schema, Scope and Matching tabs on this flag, so saving
@@ -2114,7 +2114,7 @@ public partial class ConnectedSystemServer
     /// the Settings tab. It also put a network round trip on the path of every unrelated save.
     ///
     /// Whether the target answers is still reported, where it is actionable: the Settings tab and the settings-writing
-    /// REST endpoint both call <see cref="ValidateConnectedSystemSettings"/> and surface what it finds.
+    /// REST endpoint both call <see cref="ValidateConnectedSystemSettingsAsync"/> and surface what it finds.
     /// </remarks>
     public static bool AreSettingValuesComplete(ConnectedSystem connectedSystem)
     {
@@ -2123,7 +2123,19 @@ public partial class ConnectedSystemServer
         return ConnectorSettingValidator.Validate(connectedSystem.SettingValues).All(r => r.IsValid);
     }
 
-    public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
+    /// <summary>
+    /// Validates a Connected System's settings as they are about to be saved: the generic constraints the setting
+    /// metadata declares, the Connector's own validation, and, once nothing has refused them, the Connector's settings
+    /// check (<see cref="IConnectorSettingsCheck"/>), which may reach other systems the settings name.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System carrying the setting values.</param>
+    /// <param name="cancellationToken">Cancels the Connector's settings check.</param>
+    /// <returns>
+    /// Every finding. One that is not valid refuses the save; a valid one with a message is a warning, which saves
+    /// and tells the administrator.
+    /// </returns>
+    public async Task<IList<ConnectorSettingValueValidationResult>> ValidateConnectedSystemSettingsAsync(ConnectedSystem connectedSystem,
+        CancellationToken cancellationToken = default)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -2147,6 +2159,14 @@ public partial class ConnectedSystemServer
             // yet is nothing selected, which is a valid answer, not a reason to skip the question.
             if (connector is IConnectorObjectTypeSelectionValidation selectionValidation)
                 results.AddRange(selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, connectedSystem.ObjectTypes ?? [], Log.Logger));
+
+            // the slow check runs only once nothing above has refused the settings: a missing value or an unreachable
+            // directory would fail it for the same reason, after a wait. a warning is not a refusal, so it does not stop it.
+            if (connector is IConnectorSettingsCheck settingsCheck && results.All(result => result.IsValid))
+            {
+                var check = await settingsCheck.CheckSettingsAsync(connectedSystem.SettingValues, Log.Logger, cancellationToken);
+                results.AddRange(check.Results);
+            }
         }
         finally
         {

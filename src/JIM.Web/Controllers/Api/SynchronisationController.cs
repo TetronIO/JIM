@@ -2709,13 +2709,18 @@ public class SynchronisationController(
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to update.</param>
     /// <param name="request">The update request with new values.</param>
-    /// <returns>The updated Connected System details.</returns>
+    /// <returns>The updated Connected System details, with any warnings its settings raised.</returns>
+    /// <remarks>
+    /// A request that writes settings has them checked before anything is saved: a setting the Connector refuses fails
+    /// the request with per-setting errors, and one it only warns about saves, the warning coming back in
+    /// <c>settingWarnings</c>.
+    /// </remarks>
     /// <response code="200">Connected System updated successfully.</response>
     /// <response code="400">Invalid request.</response>
     /// <response code="404">Connected System not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}", Name = "UpdateConnectedSystem")]
-    [ProducesResponseType(typeof(ConnectedSystemDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ConnectedSystemSaveResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -2755,6 +2760,9 @@ public class SynchronisationController(
         if (request.UnresolvedReferenceHandling.HasValue)
             connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
 
+        // what checking the settings found; only a request that writes settings has them checked
+        IList<ConnectorSettingValueValidationResult> settingFindings = [];
+
         // Update setting values if provided
         if (request.SettingValues != null)
         {
@@ -2793,8 +2801,8 @@ public class SynchronisationController(
             // the caller is writing settings, so validate before persisting and reject with structured per-setting
             // errors if invalid, mirroring the web form (which also blocks saving an invalid configuration). updates
             // that do not touch settings are not gated on pre-existing setting validity.
-            var validationResults = _application.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
-            var invalidResults = validationResults.Where(r => !r.IsValid).ToList();
+            settingFindings = await _application.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem, HttpContext?.RequestAborted ?? default);
+            var invalidResults = settingFindings.Where(r => !r.IsValid).ToList();
             if (invalidResults.Count > 0)
             {
                 _logger.LogInformation("Rejected settings update for Connected System {Id}: {Count} validation error(s)", connectedSystem.Id, invalidResults.Count);
@@ -2817,7 +2825,7 @@ public class SynchronisationController(
 
             // Retrieve the updated system
             var updated = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
-            return Ok(ConnectedSystemDetailDto.FromEntity(updated!));
+            return Ok(ConnectedSystemSaveResponse.FromSave(updated!, settingFindings));
         }
         catch (ArgumentException ex)
         {

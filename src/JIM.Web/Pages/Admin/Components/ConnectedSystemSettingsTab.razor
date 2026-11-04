@@ -272,6 +272,21 @@
         }
     }
 
+    @* What the last save raised that did not stop it: the settings are saved, and these say what will not work as
+       they stand. Kept until the next save, so it is still there once the administrator has read the snackbar. *@
+    @if (_settingWarnings.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-5" data-testid="jim-settings-warnings">
+            <MudText>Your settings were saved, but some of this will not work as it stands:</MudText>
+            <ul class="mt-3">
+                @foreach (var warning in _settingWarnings)
+                {
+                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? $"{settingName}: {warning.ErrorMessage}" : warning.ErrorMessage)</li>
+                }
+            </ul>
+        </MudAlert>
+    }
+
 </MudForm>
 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _catalogueDocumentHasProblems || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync" data-testid="jim-settings-save">
     @if (_settingsBeingSaved)
@@ -397,6 +412,11 @@
     private string? _certificateFetchMessage;
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
+
+    /// <summary>
+    /// The warnings the last successful save raised: the settings saved, and these say what will not work as they stand.
+    /// </summary>
+    private List<ConnectorSettingValueValidationResult> _settingWarnings = [];
 
     /// <summary>
     /// What this Connected System's Connector says about directory server discovery (issue #1167), or null when
@@ -533,12 +553,13 @@
         using var jim = JimFactory.Create();
         _settingsBeingSaved = true;
         SettingsFormCustomErrors.Clear();
+        _settingWarnings = [];
         _serverCertificate = null;
 
         StateHasChanged();
         await Task.Delay(1);
 
-        var results = jim.ConnectedSystems.ValidateConnectedSystemSettings(ConnectedSystem);
+        var results = await jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(ConnectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
             var result = results[i];
@@ -588,7 +609,9 @@
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
-        Snackbar.Add("Your setting changes have been saved.", Severity.Success);
+        _settingWarnings = results.Where(result => result.IsWarning).ToList();
+        Snackbar.Add(_settingWarnings.Count == 0 ? "Your setting changes have been saved." : "Your setting changes have been saved, with warnings.",
+            _settingWarnings.Count == 0 ? Severity.Success : Severity.Warning);
         _settingsBeingSaved = false;
 
         await OnConnectedSystemChanged.InvokeAsync();
