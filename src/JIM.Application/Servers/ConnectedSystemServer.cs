@@ -2166,6 +2166,10 @@ public partial class ConnectedSystemServer
             {
                 var check = await settingsCheck.CheckSettingsAsync(connectedSystem.SettingValues, Log.Logger, cancellationToken);
                 results.AddRange(check.Results);
+
+                // what the check learnt about the settings now on screen replaces what an earlier check learnt; the save
+                // that follows persists it, and a refused save persists nothing
+                connectedSystem.SettingsCheckFacts = check.Facts.Count == 0 ? null : check.Facts;
             }
         }
         finally
@@ -4090,8 +4094,12 @@ public partial class ConnectedSystemServer
     /// "Directory Capabilities" card on the Connected System details page; JIM never interprets the persisted
     /// data itself, it is only ever replayed to the owning Connector to interpret.
     /// <para>
+    /// What the Connector's settings check learnt on the last save (<see cref="ConnectedSystem.SettingsCheckFacts"/>,
+    /// such as the Exchange version, #2021) follows the Connector's own facts.
+    /// </para>
+    /// <para>
     /// Null when the Connected System does not exist or its Connector does not implement
-    /// <see cref="IConnectorDetectedCapabilities"/> (the UI renders nothing); an empty list when the
+    /// <see cref="IConnectorDetectedCapabilities"/> and no settings check has learnt anything (the UI renders nothing); an empty list when the
     /// Connector supports detection but nothing has been detected yet (for example, before the first
     /// successful connection), which the UI renders as a single line saying so.
     /// </para>
@@ -4103,9 +4111,15 @@ public partial class ConnectedSystemServer
         if (connectedSystem == null)
             return null;
 
-        return CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
+        var detected = CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
             ? capabilitiesConnector.GetDetectedCapabilities(connectedSystem.PersistedConnectorData, Log.Logger)
             : null;
+
+        // what the settings check learnt on the last save follows what the Connector detected on the last connection
+        if (connectedSystem.SettingsCheckFacts is not { Count: > 0 } checkFacts)
+            return detected;
+
+        return [.. detected ?? [], .. checkFacts];
     }
 
     /// <summary>

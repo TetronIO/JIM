@@ -120,6 +120,42 @@ public class ConnectedSystemSettingsCheckTests
         Assert.That(_connector.DisposedAfterCheck, Is.True, "the check holds a session; it must finish before the Connector is disposed");
     }
 
+    [Test]
+    public async Task ValidateConnectedSystemSettingsAsync_CheckLearnsFacts_RecordsThemOnTheConnectedSystemForTheSaveAsync()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        _connector.CheckFacts.Add(new ConnectorCapability { Name = "Exchange", Value = "Version 15.2 (Build 1544.4)" });
+
+        await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
+
+        Assert.That(connectedSystem.SettingsCheckFacts!.Select(f => (f.Name, f.Value)),
+            Is.EqualTo(new[] { ("Exchange", "Version 15.2 (Build 1544.4)") }));
+    }
+
+    [Test]
+    public async Task ValidateConnectedSystemSettingsAsync_CheckLearnsNothing_ClearsWhatAnEarlierCheckLearntAsync()
+    {
+        // Turning Exchange off: the check has nothing to sign in to, so the version it found last time no longer holds.
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.SettingsCheckFacts = [new ConnectorCapability { Name = "Exchange", Value = "Version 15.2 (Build 1544.4)" }];
+
+        await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
+
+        Assert.That(connectedSystem.SettingsCheckFacts, Is.Null);
+    }
+
+    [Test]
+    public async Task ValidateConnectedSystemSettingsAsync_QuickCheckRefuses_LeavesTheFactsAsTheyWereAsync()
+    {
+        var connectedSystem = CreateConnectedSystem();
+        connectedSystem.SettingsCheckFacts = [new ConnectorCapability { Name = "Exchange", Value = "Version 15.2 (Build 1544.4)" }];
+        _connector.QuickResults.Add(new ConnectorSettingValueValidationResult { IsValid = false, ErrorMessage = "The directory refused the bind." });
+
+        await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
+
+        Assert.That(connectedSystem.SettingsCheckFacts, Has.Count.EqualTo(1), "nothing is saved, so nothing it says about the stored settings changes");
+    }
+
     private static ConnectedSystem CreateConnectedSystem()
     {
         var connectorDefinition = new ConnectorDefinition { Name = StubCheckingConnector.ConnectorName };
@@ -146,6 +182,7 @@ public class ConnectedSystemSettingsCheckTests
 
         public List<ConnectorSettingValueValidationResult> QuickResults { get; } = [];
         public List<ConnectorSettingValueValidationResult> CheckResults { get; } = [];
+        public List<ConnectorCapability> CheckFacts { get; } = [];
         public int ChecksRun { get; private set; }
         public bool DisposedAfterCheck { get; private set; }
 
@@ -157,7 +194,7 @@ public class ConnectedSystemSettingsCheckTests
         {
             await Task.Yield();
             ChecksRun++;
-            return new ConnectorSettingsCheckResult { Results = CheckResults };
+            return new ConnectorSettingsCheckResult { Results = CheckResults, Facts = CheckFacts };
         }
 
         public void Dispose() => DisposedAfterCheck = ChecksRun > 0;
