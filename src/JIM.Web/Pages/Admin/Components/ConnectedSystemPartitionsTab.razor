@@ -596,7 +596,9 @@ else
 
         try
         {
-            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem, user);
+            // By id: the refresh loads and saves its own change-tracked copy (#2743). The page reloads this tab's
+            // Connected System afterwards (OnConnectedSystemChanged below), so the tab shows what was saved.
+            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem.Id, user);
 
             if (_hierarchyRefreshResult.Success)
             {

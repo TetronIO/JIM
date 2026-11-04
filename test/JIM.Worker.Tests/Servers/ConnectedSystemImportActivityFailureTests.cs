@@ -33,6 +33,7 @@ public class ConnectedSystemImportActivityFailureTests
 {
     private Mock<IRepository> _repository = null!;
     private Mock<IActivityRepository> _activityRepository = null!;
+    private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
     private JimApplication _jim = null!;
     private Activity? _createdActivity;
     private Activity? _updatedActivity;
@@ -48,6 +49,8 @@ public class ConnectedSystemImportActivityFailureTests
         _repository = new Mock<IRepository>();
         _activityRepository = new Mock<IActivityRepository>();
         _repository.Setup(r => r.Activity).Returns(_activityRepository.Object);
+        _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
+        _repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
 
         _activityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
             .Callback<Activity>(a => _createdActivity = a)
@@ -87,12 +90,12 @@ public class ConnectedSystemImportActivityFailureTests
     [Test]
     public void ImportConnectedSystemHierarchyAsync_WhenTheHierarchyCannotBeRetrieved_FailsTheActivity()
     {
-        var connectedSystem = CreateUnreachableLdapConnectorConnectedSystem();
+        var connectedSystem = Stored(CreateUnreachableLdapConnectorConnectedSystem());
 
         // Caught rather than typed: which exception a refused connection surfaces as is the connector's business.
         // What matters here is that the Activity is finished when one escapes.
         Assert.CatchAsync(async () =>
-            await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, NewInitiator()));
+            await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem.Id, NewInitiator()));
 
         AssertActivityFailed();
     }
@@ -100,12 +103,29 @@ public class ConnectedSystemImportActivityFailureTests
     [Test]
     public void ImportConnectedSystemHierarchyAsync_ApiKeyInitiated_WhenTheHierarchyCannotBeRetrieved_FailsTheActivity()
     {
-        var connectedSystem = CreateUnreachableLdapConnectorConnectedSystem();
+        var connectedSystem = Stored(CreateUnreachableLdapConnectorConnectedSystem());
 
         Assert.CatchAsync(async () =>
-            await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, NewApiKey()));
+            await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem.Id, NewApiKey()));
 
         AssertActivityFailed();
+    }
+
+    /// <summary>
+    /// A hierarchy refresh of a Connected System that does not exist says so, and records no Activity: there is
+    /// nothing to attribute one to.
+    /// </summary>
+    [Test]
+    public void ImportConnectedSystemHierarchyAsync_UnknownConnectedSystem_ThrowsAndRecordsNoActivity()
+    {
+        var exception = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(404, NewInitiator()));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(exception!.ParamName, Is.EqualTo("connectedSystemId"));
+            Assert.That(_createdActivity, Is.Null, "a refresh that cannot start must not leave an Activity behind");
+        }
     }
 
     /// <summary>
@@ -123,6 +143,15 @@ public class ConnectedSystemImportActivityFailureTests
             Assert.That(_updatedActivity!.Status, Is.EqualTo(ActivityStatus.FailedWithError));
             Assert.That(_updatedActivity!.ErrorMessage, Is.Not.Null.And.Not.Empty, "The failure reason must be recorded on the Activity.");
         }
+    }
+
+    /// <summary>
+    /// Makes the Connected System loadable by its id, change-tracked, as the hierarchy import loads it.
+    /// </summary>
+    private ConnectedSystem Stored(ConnectedSystem connectedSystem)
+    {
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(connectedSystem.Id, true)).ReturnsAsync(connectedSystem);
+        return connectedSystem;
     }
 
     private static MetaverseObject NewInitiator() => new()

@@ -4422,14 +4422,50 @@ public partial class ConnectedSystemServer
 
     #region Connected System Hierarchy
     /// <summary>
-    /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the Connected System.
-    /// You will need update the ConnectedSystem after if happy with the changes, to persist them.
+    /// Retrieves the hierarchy (Partitions and Containers) from a Connected System, merges it into the one JIM holds,
+    /// preserving selections, and saves the result: Partitions and Containers the Connected System no longer holds are
+    /// removed. Recorded as an Import Hierarchy Activity attributed to <paramref name="initiatedBy"/>.
     /// </summary>
+    /// <param name="connectedSystemId">The Connected System to refresh.</param>
+    /// <param name="initiatedBy">The user who asked for the refresh.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
+    /// <exception cref="NotSupportedException">The Connected System's Connector cannot retrieve a hierarchy.</exception>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, MetaverseObject? initiatedBy) =>
+        ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy, initiatedByApiKey: null);
+
+    /// <summary>
+    /// As <see cref="ImportConnectedSystemHierarchyAsync(int, MetaverseObject?)"/>, attributed to an API key.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to refresh.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
+    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
+    /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
+    /// <exception cref="NotSupportedException">The Connected System's Connector cannot retrieve a hierarchy.</exception>
+    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, ApiKey initiatedByApiKey)
     {
-        ValidateConnectedSystemParameter(connectedSystem);
+        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+        return ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy: null, initiatedByApiKey);
+    }
+
+    /// <summary>
+    /// The hierarchy refresh behind both public overloads; the initiator decides who the Activity is attributed to,
+    /// not what a hierarchy means. Exactly one of <paramref name="initiatedBy"/> and <paramref name="initiatedByApiKey"/>
+    /// is used: the API key where there is one.
+    /// </summary>
+    /// <remarks>
+    /// The Connected System is loaded here, change-tracked, on the context that saves it, rather than accepted from
+    /// the caller (#2743). The refresh removes what the directory no longer holds from the Connected System's
+    /// collections, and a removal only becomes a deletion on a graph this context tracks. The portal's Scope tab
+    /// used to hand over the instance its page had loaded on an earlier, since disposed, context; the save attached
+    /// what was still reachable from it, so every removed Partition and Container survived while the refresh reported
+    /// it removed. Taking an id leaves no way to hand over such a graph.
+    /// </remarks>
+    private async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyCoreAsync(int connectedSystemId, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        var connectedSystem = await GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true)
+            ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
 
         // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
@@ -4445,17 +4481,26 @@ public partial class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.ImportHierarchy,
             ConnectedSystemId = connectedSystem.Id
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        if (initiatedByApiKey != null)
+            await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        else
+            await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
         // Everything from here on is covered, so that a Connected System that cannot be read finishes its Activity
         // as a failure carrying the reason, rather than leaving one in flight for ever with nothing recorded
         // against it. The exception still reaches the caller; the Activity is the audit record, not the response.
         try
         {
+            // What the refresh removes is whatever it takes out of the hierarchy: everything there before, less
+            // everything still there after, so that a Container which merely moved is kept.
+            var (removedPartitions, removedContainers) = CollectHierarchy(connectedSystem);
             var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
+            var (keptPartitions, keptContainers) = CollectHierarchy(connectedSystem);
+            removedPartitions.ExceptWith(keptPartitions);
+            removedContainers.ExceptWith(keptContainers);
 
-            // Persist the changes
-            await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
+            await PersistConnectedSystemHierarchyUpdateAsync(connectedSystem, removedPartitions, removedContainers, initiatedBy, initiatedByApiKey);
 
             // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
             // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
@@ -4481,55 +4526,48 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Import the hierarchy (partitions and containers) from the Connected System (initiated by API key).
+    /// Every Partition and Container in a Connected System's hierarchy, as it stands. Compared by reference: a
+    /// refresh can rewrite a Container's name and external id, but not which instance it is.
     /// </summary>
-    /// <param name="connectedSystem">The Connected System to import hierarchy for.</param>
-    /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
-    /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
-    public async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    private static (HashSet<ConnectedSystemPartition> Partitions, HashSet<ConnectedSystemContainer> Containers) CollectHierarchy(ConnectedSystem connectedSystem)
     {
-        ValidateConnectedSystemParameter(connectedSystem);
-        ArgumentNullException.ThrowIfNull(initiatedByApiKey);
+        var partitions = new HashSet<ConnectedSystemPartition>(connectedSystem.Partitions ?? [], ReferenceEqualityComparer.Instance);
+        var containers = new HashSet<ConnectedSystemContainer>(ReferenceEqualityComparer.Instance);
+        foreach (var partition in partitions.Where(p => p.Containers != null))
+            CollectContainers(partition.Containers!, containers);
 
-        // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
-        // unsupported connector must never leave an in-flight activity behind.
-        var connector = CreateConnector(connectedSystem);
-        if (connector is not IConnectorPartitions partitionsConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support hierarchy import.");
+        return (partitions, containers);
+    }
 
-        // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
-        var activity = new Activity
+    private static void CollectContainers(IEnumerable<ConnectedSystemContainer> containers, HashSet<ConnectedSystemContainer> collected)
+    {
+        foreach (var container in containers)
         {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.ImportHierarchy,
-            ConnectedSystemId = connectedSystem.Id
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-
-        // Covered from here on: see the user-initiated overload above.
-        try
-        {
-            var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
-
-            // Persist the changes
-            await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
-
-            // Capture the configuration change onto the ImportHierarchy activity: see the user-initiated overload above.
-            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-
-            // finish the activity
-            await Application.Activities.CompleteActivityAsync(activity);
-
-            return result;
+            collected.Add(container);
+            CollectContainers(container.ChildContainers, collected);
         }
-        catch (Exception ex)
-        {
-            // Discard staged hierarchy changes before recording the failure: see the user-initiated overload above.
-            Application.Repository.ClearChangeTracker();
-            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
-            throw;
-        }
+    }
+
+    /// <summary>
+    /// As <see cref="PersistConnectedSystemUpdateAsync(ConnectedSystem, MetaverseObject?)"/>, for a hierarchy refresh:
+    /// also deletes the Partitions and Containers the refresh removed. The Connected System must be change-tracked.
+    /// Attributed to <paramref name="initiatedByApiKey"/> where there is one, otherwise to <paramref name="initiatedBy"/>.
+    /// </summary>
+    private async Task PersistConnectedSystemHierarchyUpdateAsync(ConnectedSystem connectedSystem,
+        IReadOnlyCollection<ConnectedSystemPartition> removedPartitions, IReadOnlyCollection<ConnectedSystemContainer> removedContainers,
+        MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    {
+        connectedSystem.SettingValuesValid = AreSettingValuesComplete(connectedSystem);
+
+        if (initiatedByApiKey != null)
+            AuditHelper.SetUpdated(connectedSystem, initiatedByApiKey);
+        else
+            AuditHelper.SetUpdated(connectedSystem, initiatedBy);
+
+        SanitiseConnectedSystemUserInput(connectedSystem);
+        ProtectEncryptedSettingValues(connectedSystem);
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemHierarchyAsync(connectedSystem, removedPartitions, removedContainers);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystem.Id);
     }
 
     /// <summary>
@@ -5352,9 +5390,7 @@ public partial class ConnectedSystemServer
     /// system's existing hierarchy, preserving selections, and records what changed on the supplied Activity.
     /// </summary>
     /// <remarks>
-    /// Shared by both <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, MetaverseObject?)"/> and
-    /// <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, ApiKey)"/>. They were separate copies of
-    /// this logic; the initiator decides who the Activity is attributed to, not what a hierarchy means.
+    /// Called by <see cref="ImportConnectedSystemHierarchyCoreAsync"/>, behind both initiator overloads.
     /// </remarks>
     private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
     {

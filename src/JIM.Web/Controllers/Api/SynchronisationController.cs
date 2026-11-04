@@ -3054,8 +3054,8 @@ public class SynchronisationController(
             return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
         }
 
-        // Get the Connected System with change tracking since hierarchy import modifies and saves it
-        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true);
+        // An existence check only: the refresh loads and saves its own change-tracked copy.
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
@@ -3065,9 +3065,9 @@ public class SynchronisationController(
             JIM.Models.Staging.DTOs.HierarchyRefreshResult result;
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, apiKey);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, apiKey);
             else
-                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, initiatedBy);
 
             _logger.LogInformation("Hierarchy imported for Connected System: {Id} ({Name}). Summary: {Summary}",
                 connectedSystemId, connectedSystem.Name, result.GetSummary());

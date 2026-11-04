@@ -501,6 +501,32 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task UpdateConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem,
+        IReadOnlyCollection<ConnectedSystemPartition> removedPartitions,
+        IReadOnlyCollection<ConnectedSystemContainer> removedContainers)
+    {
+        Repository.Database.RequireTracked(connectedSystem, nameof(UpdateConnectedSystemHierarchyAsync),
+            "Load it with GetConnectedSystemAsync(id, withChangeTracking: true) on the context that saves it, as " +
+            "ConnectedSystemServer.ImportConnectedSystemHierarchyAsync does from the Connected System's id.");
+
+        // Each removal is stated outright. Left to itself, EF Core deletes a removed Partition, which cannot exist
+        // without its Connected System, but only clears a removed Container's link to its Partition or parent, since
+        // either link is optional: the row stays behind, belonging to nothing (#2743).
+        //
+        // Containers before Partitions, so a removed Partition's own Containers are already deleted, rather than
+        // having their Partition cleared, when the Partition's deletion cascades through the tracker. A Run Profile
+        // targeting a removed Partition has its Partition cleared by that cascade, as a change-tracked refresh always
+        // did; whether that is right for the Run Profile is #2740's question.
+        foreach (var container in removedContainers)
+            Repository.Database.Entry(container).State = EntityState.Deleted;
+
+        foreach (var partition in removedPartitions)
+            Repository.Database.Entry(partition).State = EntityState.Deleted;
+
+        MarkConnectedSystemGraphForUpdate(connectedSystem);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task<List<ConnectedSystemSettingValue>> GetEncryptedSettingValuesAsync()
     {
         return await Repository.Database.ConnectedSystemSettingValues
