@@ -50,6 +50,13 @@ if (Test-ReadyCheck 'installed') {
 }
 }
 
+# Rootful Podman on RHEL: what Running on Podman says the installer sets up for firewalld and NetworkManager.
+$rhelRootful = $cell.Runtime -eq 'podman' -and -not $rootless -and (Test-LabRhelFamily -Os $cell.Os)
+if ($rhelRootful) {
+    Test-NetworkManagerCheck 'installed'
+    Test-FirewalldReloadCheck -By 'the installer'
+}
+
 # A host reboot.
 Invoke-Guest -Action Sql -Sql "CREATE SCHEMA IF NOT EXISTS jimlab; CREATE TABLE IF NOT EXISTS jimlab.marker (cell text); INSERT INTO jimlab.marker VALUES ('$CellName');" | Out-Null
 Write-CellLog 'rebooting the VM'
@@ -58,4 +65,7 @@ if (Test-ReadyCheck 'after a reboot') {
     $marker = Invoke-Guest -Action Sql -Sql 'SELECT cell FROM jimlab.marker;'
     Add-Check 'after a reboot: JIM started by itself, with its data' ("$marker" -eq $CellName) "found '$marker'"
     Test-SignInCheck 'after a reboot'
+}
+if ($rhelRootful) {
+    Test-NetworkManagerCheck 'after a reboot'
 }

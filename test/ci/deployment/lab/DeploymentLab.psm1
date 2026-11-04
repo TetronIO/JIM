@@ -15,8 +15,8 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak', 'ReverseProxy', 'Ansible')
-$script:Proxies = @('Remote', 'Local')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak', 'ReverseProxy', 'Ansible', 'FileConnector')
+$script:Proxies = @('Remote', 'Local', 'Apache')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
@@ -79,10 +79,15 @@ function Test-LabMatrix {
         }
         if ($cell.Scenario -eq 'ReverseProxy') {
             if (-not $cell.ContainsKey('Proxy') -or $cell.Proxy -notin $script:Proxies) {
-                "${name}: a ReverseProxy cell needs Proxy, Remote or Local"
+                "${name}: a ReverseProxy cell needs Proxy, Remote, Local or Apache"
             }
             elseif ($cell.Proxy -eq 'Local' -and $cell.Runtime -ne 'docker') {
                 "${name}: a proxy on the JIM host is for Docker only, as TLS and Reverse Proxy gives it"
+            }
+            elseif ($cell.Proxy -eq 'Apache' -and -not (Test-LabRhelFamily -Os "$(if ($Matrix.Images.ContainsKey($cell.Image)) { $Matrix.Images[$cell.Image].Os })")) {
+                # The proxy's VM runs the cell's own image, so this is httpd on RHEL, where the guide says it is the
+                # default web server and needs its SELinux boolean.
+                "${name}: an Apache httpd proxy runs on RHEL, as TLS and Reverse Proxy gives it"
             }
             if ($cell.ContainsKey('Rootless') -and $cell.Rootless) {
                 "${name}: a rootless JIM is not run behind a proxy, as TLS and Reverse Proxy says"
@@ -98,6 +103,12 @@ function Test-LabMatrix {
             $os = if ($Matrix.Images.ContainsKey($cell.Image)) { "$($Matrix.Images[$cell.Image].Os)" } else { '' }
             if ($cell.Runtime -ne 'podman' -or -not (Test-LabRhelFamily -Os $os)) {
                 "${name}: an Ansible cell is Podman on RHEL, as Deploying on RHEL with Ansible covers"
+            }
+        }
+        if ($cell.Scenario -eq 'FileConnector') {
+            $os = if ($Matrix.Images.ContainsKey($cell.Image)) { "$($Matrix.Images[$cell.Image].Os)" } else { '' }
+            if ($cell.Runtime -ne 'podman' -or -not (Test-LabRhelFamily -Os $os)) {
+                "${name}: a FileConnector cell is Podman on RHEL, as the File Connector guide's On Podman covers, with SELinux"
             }
         }
         # Online cells test what is published, not the commit, so a run takes them only when asked for by their tag
@@ -347,6 +358,59 @@ function ConvertTo-LabPodmanConfig {
         throw "jim-config.yaml still leaves $($empty -join ', ') empty"
     }
     $Config
+}
+
+function ConvertTo-LabApacheConfig {
+    <#
+    .SYNOPSIS
+        Returns TLS and Reverse Proxy's Apache httpd example with the lab's names in place of its example ones.
+
+    .DESCRIPTION
+        As ConvertTo-LabProxyConfig does for nginx: users reach jim.example.com, and httpd connects to JIM at
+        jim-app.example.com, re-encrypting; -UserName and -JimName replace the two names everywhere, the certificate
+        paths with them. Everything else is the guide's own. It stops if the example no longer has the two names.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Config,
+
+        [Parameter(Mandatory)]
+        [string]$UserName,
+
+        [Parameter(Mandatory)]
+        [string]$JimName
+    )
+
+    if ($Config -notmatch '(?m)^\s*ServerName jim\.example\.com\s*$') {
+        throw "TLS and Reverse Proxy's Apache httpd example no longer has ServerName jim.example.com"
+    }
+    if ($Config -notmatch '(?m)^\s*ProxyPass\s+/ https://jim-app\.example\.com/\s*$') {
+        throw "TLS and Reverse Proxy's Apache httpd example no longer has ProxyPass / https://jim-app.example.com/"
+    }
+    $Config.Replace('jim-app.example.com', $JimName).Replace('jim.example.com', $UserName)
+}
+
+function Get-LabApacheFile {
+    <#
+    .SYNOPSIS
+        Returns where an Apache httpd configuration expects its own certificate and key, and the CA it checks JIM's
+        certificate by.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Config
+    )
+
+    $read = { param([string]$Directive) if ($Config -match "(?m)^\s*$Directive\s+(\S+)\s*$") { $Matches[1] } }
+    @{
+        Certificate = & $read 'SSLCertificateFile'
+        Key = & $read 'SSLCertificateKeyFile'
+        TrustedCa = & $read 'SSLProxyCACertificateFile'
+    }
 }
 
 function Get-LabProxyFile {
@@ -912,6 +976,71 @@ function Invoke-LabVm {
     Invoke-LabLxc -Arguments ($arguments + '--' + $Command) -AllowFailure:$AllowFailure -LogPath $LogPath
 }
 
+function ConvertTo-LabPodWithHostFolder {
+    <#
+    .SYNOPSIS
+        Returns the Podman pod file with the File Connector guide's host folder added, as On Podman says: mounted in
+        the worker and web containers, and a hostPath volume in the pod.
+
+    .DESCRIPTION
+        -Snippet is the guide's YAML: one volumeMounts entry, and one volume with a hostPath. Each container's mount
+        goes beside its connector files mount, and the volume after the connector files volume, at the same
+        indentation, as a reader editing jim.yaml would put them. It stops if the guide no longer gives a mount and a
+        hostPath, or the pod file no longer has the connector files volume in two containers, so a change to either
+        is noticed rather than tested around.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Pod,
+
+        [Parameter(Mandatory)]
+        [string]$Snippet
+    )
+
+    if ($Snippet -notmatch '(?m)^\s*(- \{ name: (?<name>[\w-]+), mountPath: (?<mount>\S+) \})\s*$') {
+        throw "The File Connector guide's On Podman snippet no longer gives a volumeMounts entry"
+    }
+    $mountLine = $Matches[1]
+    $name = $Matches.name
+    $mountPath = $Matches.mount
+    if ($Snippet -notmatch "(?m)^\s*- name: $([regex]::Escape($name))\s*\r?\n\s*(hostPath: \{ path: (?<path>\S+), type: \w+ \})\s*$") {
+        throw "The File Connector guide's On Podman snippet no longer gives a hostPath volume named $name"
+    }
+    $hostPathLine = $Matches[1]
+    $hostPath = $Matches.path
+
+    $mounts = [regex]::Matches($Pod, '(?m)^(?<indent>\s+)- \{ name: jim-connector-files, mountPath: /connector-files \}\r?$')
+    if ($mounts.Count -ne 2) {
+        throw "The pod file no longer mounts jim-connector-files at /connector-files in two containers (found $($mounts.Count))"
+    }
+    $Pod = [regex]::Replace($Pod, '(?m)^(?<indent>\s+)- \{ name: jim-connector-files, mountPath: /connector-files \}(?<cr>\r?)$',
+        { param($m) "$($m.Value)`n$($m.Groups['indent'].Value)$mountLine$($m.Groups['cr'].Value)" })
+    $volume = [regex]::Match($Pod, '(?m)^(?<indent>\s+)- name: jim-connector-files\r?\n(?<inner>\s+)persistentVolumeClaim: \{ claimName: jim-connector-files-volume \}\r?$')
+    if (-not $volume.Success) {
+        throw 'The pod file no longer has the jim-connector-files volume'
+    }
+    $added = "`n$($volume.Groups['indent'].Value)- name: $name`n$($volume.Groups['inner'].Value)$hostPathLine"
+    $Pod = $Pod.Insert($volume.Index + $volume.Length, $added)
+
+    [pscustomobject]@{ Pod = $Pod; Name = $name; HostPath = $hostPath; MountPath = $mountPath }
+}
+
+function Get-LabManagedVeth {
+    <#
+    .SYNOPSIS
+        From `nmcli -t -f DEVICE,TYPE,STATE device`, how many veth interfaces there are, and the lines of any that
+        NetworkManager manages. Running on Podman says it must manage none of a rootful JIM's: one it takes is unplugged
+        from JIM's network (#2009).
+    #>
+    param([AllowEmptyString()][string[]]$Line)
+    $veths = @($Line | Where-Object { $_ -match '^veth[^:]*:' })
+    [pscustomobject]@{
+        Veths   = $veths.Count
+        Managed = @($veths | Where-Object { $_ -notmatch ':unmanaged$' })
+    }
+}
+
 function Test-LabBootFinished {
     <#
     .SYNOPSIS
@@ -1407,7 +1536,7 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, Test-LabRhelFamily, Test-LabBootFinished, ConvertTo-LabAnsiblePlaybook, ConvertTo-LabAnsibleCommand, ConvertTo-LabPodmanConfig, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, Test-LabRhelFamily, Test-LabBootFinished, Get-LabManagedVeth, ConvertTo-LabPodWithHostFolder, ConvertTo-LabAnsiblePlaybook, ConvertTo-LabAnsibleCommand, ConvertTo-LabPodmanConfig, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, ConvertTo-LabApacheConfig, Get-LabApacheFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
     Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, New-LabCertificate, Get-LabVmAddress,

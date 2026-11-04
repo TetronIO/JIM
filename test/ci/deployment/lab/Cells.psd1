@@ -55,6 +55,7 @@
         @{ Name = 'u24-docker-ctrd-cases'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'docker', 'ubuntu') }
         @{ Name = 'u24-podrf-cases'; Image = 'u24-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'ubuntu') }
         @{ Name = 'alma9-podrf-cases'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'cs10-podrf-cases'; Image = 'cs10-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrl-cases'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'InstallerCases'; MemoryGiB = 6; Tags = @('cases', 'airgap', 'podman', 'rhel') }
 
         # A PostgreSQL server of the customer's own, on a VM of its own beside JIM's.
@@ -62,12 +63,19 @@
         @{ Name = 'alma9-podrf-extdb'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ExternalDatabase'; MemoryGiB = 6; DatabaseMemoryGiB = 2; Tags = @('extdb', 'airgap', 'podman', 'rhel') }
         @{ Name = 'alma9-podrf-soak'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'Soak'; MemoryGiB = 6; Tags = @('soak', 'airgap', 'podman', 'rhel') }
 
-        # Behind nginx, configured from TLS and Reverse Proxy's own example: re-encrypting to JIM from a proxy on a VM
-        # of its own (the recommended way), and forwarding plain HTTP to JIM on the JIM host's loopback interface
-        # (Docker only, as the guide gives it). Not rootless, which the guide says not to run behind a proxy.
+        # Behind a proxy configured from TLS and Reverse Proxy's own examples: nginx re-encrypting to JIM from a VM of
+        # its own (the recommended way), nginx forwarding plain HTTP to JIM on the JIM host's loopback interface
+        # (Docker only, as the guide gives it), and Apache httpd re-encrypting from a VM of its own on RHEL, with
+        # SELinux enforcing. Not rootless, which the guide says not to run behind a proxy.
         @{ Name = 'u24-docker-ctrd-proxy'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
         @{ Name = 'alma9-podrf-proxy'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Remote'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrf-proxy-httpd'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Apache'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'podman', 'rhel') }
         @{ Name = 'u24-docker-ctrd-proxy-local'; Image = 'u24-docker-ctrd'; Runtime = 'docker'; Network = 'airgap'; Scenario = 'ReverseProxy'; Proxy = 'Local'; MemoryGiB = 6; ProxyMemoryGiB = 1; Tags = @('proxy', 'airgap', 'docker', 'ubuntu') }
+
+        # A File Connector host folder, mounted and labelled as the File Connector guide's On Podman says, with SELinux
+        # enforcing, and imported from (#2738).
+        @{ Name = 'alma9-podrf-files'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $false; Network = 'airgap'; Scenario = 'FileConnector'; MemoryGiB = 6; Tags = @('files', 'airgap', 'podman', 'rhel') }
+        @{ Name = 'alma9-podrl-files'; Image = 'alma9-podman'; Runtime = 'podman'; Rootless = $true; Network = 'airgap'; Scenario = 'FileConnector'; MemoryGiB = 6; Tags = @('files', 'airgap', 'podman', 'rhel') }
 
         # Deployed by Deploying on RHEL with Ansible's own playbook, rootful and (with the page's Rootless changes)
         # rootless, on each RHEL stand-in, air-gapped: Ansible and the RHEL System Roles from the distribution's packages,

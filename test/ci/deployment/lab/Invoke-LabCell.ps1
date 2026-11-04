@@ -228,6 +228,31 @@ function Test-SignInCheck {
     }
 }
 
+# Rootful Podman on RHEL only, as Running on Podman says (Firewall, SELinux, AppArmor and NetworkManager): a rootless
+# JIM's network is out of firewalld's and NetworkManager's sight. -By names what set them up: the installer or the play.
+function Test-FirewalldReloadCheck {
+    param([string]$By, [string]$Trusting = "the installer's CA")
+    $enabled = Invoke-LabVm -Name $vm -Command @('systemctl', 'is-enabled', 'netavark-firewalld-reload.service') -AllowFailure
+    Add-Check "deployed: $By enabled netavark-firewalld-reload.service" ("$enabled" -eq 'enabled') "$enabled"
+    # A reload drops the rules Podman added for JIM's network; the service puts them back, or JIM cannot reach its
+    # database until it restarts.
+    Invoke-LabVm -Name $vm -Command @('firewall-cmd', '--reload') | Out-Null
+    if (Test-ReadyCheck 'after a firewalld reload' -Trusting $Trusting) {
+        Test-SignInCheck 'after a firewalld reload'
+    }
+}
+
+function Test-NetworkManagerCheck {
+    # NetworkManager must leave every veth Podman plugs JIM's pods in with alone, or it can unplug one (#2009).
+    param([string]$When)
+    $setting = Invoke-LabVm -Name $vm -Command @('cat', '/etc/NetworkManager/conf.d/90-jim-podman.conf') -AllowFailure
+    $set = "$setting" -match 'unmanaged-devices\+?=.*interface-name:veth\*'
+    $devices = Get-LabManagedVeth -Line @(Invoke-LabVm -Name $vm -Command @('nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'device') -AllowFailure)
+    Add-Check "${When}: NetworkManager leaves JIM's veth interfaces alone (90-jim-podman.conf, nmcli device)" `
+        ($set -and $devices.Veths -gt 0 -and $devices.Managed.Count -eq 0) `
+        $(if (-not $set) { '90-jim-podman.conf missing or without the veth rule' } elseif ($devices.Veths -eq 0) { 'no veth interfaces found' } else { "managed: $($devices.Managed -join '; ')" })
+}
+
 function Test-SelinuxCheck {
     # From the journal, which has every denial the kernel reports: the lab's images, like LXD's, have no auditd, so no
     # ausearch, and without it the kernel logs them itself. Denials the policy marks dontaudit are hidden either way.

@@ -2,14 +2,18 @@
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 # The ReverseProxy scenario, dot-sourced by Invoke-LabCell.ps1 once the VM is up and the bundle checked: JIM behind
-# nginx, set up from TLS and Reverse Proxy's own example, either re-encrypting to JIM from a VM of its own (Proxy =
-# 'Remote', the recommended way) or forwarding plain HTTP to JIM on the JIM host's loopback interface (Proxy = 'Local',
-# Docker only). Every check is made through the proxy, from the lab host, as a user's browser would. See README.md,
+# a proxy set up from TLS and Reverse Proxy's own example: nginx re-encrypting to JIM from a VM of its own (Proxy =
+# 'Remote', the recommended way), nginx forwarding plain HTTP to JIM on the JIM host's loopback interface (Proxy =
+# 'Local', Docker only), or Apache httpd re-encrypting from a VM of its own on RHEL, SELinux enforcing (Proxy =
+# 'Apache'). Every check is made through the proxy, from the lab host, as a user's browser would. See README.md,
 # "What a ReverseProxy cell checks".
 
 $installPath = '/opt/jim'
 $guide = 'tls-and-reverse-proxy.md'
 $local = $cell.Proxy -eq 'Local'
+$apache = $cell.Proxy -eq 'Apache'
+$proxyName = if ($apache) { 'Apache httpd' } else { 'nginx' }
+$proxyLog = if ($apache) { 'httpd' } else { 'nginx' }
 # The name the proxy connects to JIM at, beside the one users type, as the guide's example has it.
 $jimName = 'jim-app.' + ($hostName -replace '^[^.]+\.', '')
 $apiKey = 'jim_ak_' + [System.Security.Cryptography.RandomNumberGenerator]::GetHexString(64, $true)
@@ -19,26 +23,32 @@ $clientAddress = $network.Gateway
 $jimCaPath = $caPath
 $proxyCaPath = Join-Path $OutputPath 'proxy-ca.crt'
 
-#region nginx, its certificate and its configuration
+#region The proxy, its certificate and its configuration
 
-# nginx from Ubuntu's own packages, as a customer installs it. On the air-gapped network it has no route to them, so a
-# VM on the online network fetches it: for a proxy of its own, that VM becomes the proxy and then moves onto the
-# cell's network, as an ExternalDatabase cell's server does; for a proxy on the JIM host, it fetches the packages for
-# the JIM VM to install, and goes.
+# nginx from Ubuntu's own packages, as a customer installs it, or Apache httpd from the cell's own RHEL-family
+# image's. On the air-gapped network it has no route to them, so a VM on the online network fetches it: for a proxy
+# of its own, that VM becomes the proxy and then moves onto the cell's network, as an ExternalDatabase cell's server
+# does; for a proxy on the JIM host, it fetches the packages for the JIM VM to install, and goes.
 $proxyVm = "$vm-proxy"
-Write-CellLog "creating $proxyVm, to bring nginx"
-New-LabVm -Name $proxyVm -Image $lab.DatabaseServer.Image -Profile @($lab.BaseProfile, $lab.Networks['online'].Profile) `
+$proxyImage = if ($apache) { $matrix.Images[$cell.Image].Image } else { $lab.DatabaseServer.Image }
+$proxyOs = if ($apache) { "$($cell.Os)'s" } else { "Ubuntu's" }
+Write-CellLog "creating $proxyVm, to bring $proxyName"
+New-LabVm -Name $proxyVm -Image $proxyImage -Profile @($lab.BaseProfile, $lab.Networks['online'].Profile) `
     -MemoryGiB $cell.ProxyMemoryGiB
 $fetch = if ($local) {
-    'apt-get update -q && apt-get install -y -q --download-only nginx && mkdir -p /root/nginx && cp /var/cache/apt/archives/*.deb /root/nginx/ && tar -C /root -czf /root/nginx.tar.gz nginx'
+    'export DEBIAN_FRONTEND=noninteractive; apt-get update -q && apt-get install -y -q --download-only nginx && mkdir -p /root/nginx && cp /var/cache/apt/archives/*.deb /root/nginx/ && tar -C /root -czf /root/nginx.tar.gz nginx'
+}
+elseif ($apache) {
+    # The image runs firewalld, as RHEL does, so the proxy's own port is opened as on any web server.
+    'dnf -y -q install httpd mod_ssl && firewall-cmd -q --add-service=https && firewall-cmd -q --permanent --add-service=https'
 }
 else {
-    'apt-get update -q && apt-get install -y -q nginx'
+    'export DEBIAN_FRONTEND=noninteractive; apt-get update -q && apt-get install -y -q nginx'
 }
-Invoke-LabVm -Name $proxyVm -Command @('bash', '-ec', "export DEBIAN_FRONTEND=noninteractive; $fetch") -AllowFailure `
-    -LogPath (Join-Path $OutputPath 'nginx-install.log') | Out-Null
+Invoke-LabVm -Name $proxyVm -Command @('bash', '-ec', $fetch) -AllowFailure `
+    -LogPath (Join-Path $OutputPath "$proxyLog-install.log") | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    throw 'nginx could not be fetched from Ubuntu''s packages; see nginx-install.log'
+    throw "$proxyName could not be fetched from $proxyOs packages; see $proxyLog-install.log"
 }
 if ($local) {
     $packages = Join-Path $OutputPath 'nginx.tar.gz'
@@ -50,44 +60,54 @@ if ($local) {
     Invoke-LabVm -Name $vm -Command @('bash', '-ec', 'tar -C /root -xzf /root/nginx.tar.gz && DEBIAN_FRONTEND=noninteractive dpkg -i /root/nginx/*.deb') `
         -AllowFailure -LogPath (Join-Path $OutputPath 'nginx-install.log') | Out-Null
     $installedNginx = $LASTEXITCODE -eq 0
-    $nginxVm = $vm
+    $proxyHost = $vm
     $proxyAddress = $address
 }
 else {
     Set-LabVmProfile -Name $proxyVm -Profile @($lab.BaseProfile, $network.Profile)
     $installedNginx = $true
-    $nginxVm = $proxyVm
+    $proxyHost = $proxyVm
     $proxyAddress = Get-LabVmAddress -Name $proxyVm -Gateway $network.Gateway
     Write-CellLog "the proxy is at $proxyAddress"
 }
-Add-Check "nginx installed from Ubuntu's packages $(if ($local) { 'on the JIM host' } else { 'on a server of its own' })" $installedNginx
+Add-Check "$proxyName installed from $proxyOs packages $(if ($local) { 'on the JIM host' } else { 'on a server of its own' })" $installedNginx
 if (-not $installedNginx) {
-    throw 'stopped: nginx did not install'
+    throw "stopped: $proxyName did not install"
 }
 
 function Install-ProxyConfig {
     # The guide's example, with the lab's names, on the proxy: its certificate and key, the CA it checks JIM's
     # certificate by (re-encrypting only), and the configuration, which nginx must accept.
     param([string]$Config)
-    $files = Get-LabProxyFile -Config $Config
+    $files = if ($apache) { Get-LabApacheFile -Config $Config } else { Get-LabProxyFile -Config $Config }
     # The proxy's own certificate for the name users type, as an organisation's own CA would issue it.
     $tls = Join-Path $OutputPath 'proxy-tls'
     $issued = New-LabCertificate -Folder $tls -CaPath $proxyCaPath -Name $hostName -CaName 'JIM deployment lab proxy CA'
-    Copy-LabFile -Source $issued.Certificate -Destination "${nginxVm}:$($files.Certificate)"
-    Copy-LabFile -Source $issued.Key -Destination "${nginxVm}:$($files.Key)"
+    Copy-LabFile -Source $issued.Certificate -Destination "${proxyHost}:$($files.Certificate)"
+    Copy-LabFile -Source $issued.Key -Destination "${proxyHost}:$($files.Key)"
     Remove-Item -Recurse $tls
     if ($files.TrustedCa) {
-        Copy-LabFile -Source $jimCaPath -Destination "${nginxVm}:$($files.TrustedCa)"
+        Copy-LabFile -Source $jimCaPath -Destination "${proxyHost}:$($files.TrustedCa)"
     }
-    $configPath = Join-Path $OutputPath 'nginx-jim.conf'
+    $configPath = Join-Path $OutputPath "$proxyLog-jim.conf"
     $Config | Set-Content $configPath
-    Copy-LabFile -Source $configPath -Destination "${nginxVm}:/etc/nginx/conf.d/jim.conf"
-    Invoke-LabVm -Name $nginxVm -Command @('bash', '-ec', "chmod 600 '$($files.Key)' && nginx -t && systemctl reload-or-restart nginx") `
-        -AllowFailure -LogPath (Join-Path $OutputPath 'nginx-config.log') | Out-Null
+    if ($apache) {
+        Copy-LabFile -Source $configPath -Destination "${proxyHost}:/etc/httpd/conf.d/jim.conf"
+        # restorecon: files copied in keep no label of their own, and httpd may read only what SELinux labels for it.
+        # httpd starts first, as on any new web server: mod_ssl's own ssl.conf names a localhost certificate that
+        # httpd-init.service makes on the first start, and until then no configuration passes configtest.
+        $apply = "chmod 600 '$($files.Key)' && restorecon -R /etc/pki/tls /etc/httpd/conf.d && systemctl start httpd-init.service && apachectl configtest && systemctl enable -q httpd && systemctl reload-or-restart httpd"
+    }
+    else {
+        Copy-LabFile -Source $configPath -Destination "${proxyHost}:/etc/nginx/conf.d/jim.conf"
+        $apply = "chmod 600 '$($files.Key)' && nginx -t && systemctl reload-or-restart nginx"
+    }
+    Invoke-LabVm -Name $proxyHost -Command @('bash', '-ec', $apply) `
+        -AllowFailure -LogPath (Join-Path $OutputPath "$proxyLog-config.log") | Out-Null
     $accepted = $LASTEXITCODE -eq 0
-    Add-Check "nginx runs the guide's example configuration (nginx-jim.conf)" $accepted
+    Add-Check "$proxyName runs the guide's example configuration ($proxyLog-jim.conf)" $accepted
     if (-not $accepted) {
-        throw 'stopped: nginx refused the configuration; see nginx-config.log'
+        throw "stopped: $proxyName refused the configuration; see $proxyLog-config.log"
     }
 }
 
@@ -179,10 +199,28 @@ if (-not $local) {
         throw 'stopped: JIM is not ready'
     }
 
-    # 2. nginx re-encrypting to JIM at the second name, which the proxy resolves to the JIM server.
+    # 2. The proxy re-encrypting to JIM at the second name, which the proxy resolves to the JIM server.
     Invoke-LabVm -Name $proxyVm -Command @('sh', '-c', "echo '$address $jimName' >> /etc/hosts") | Out-Null
-    $example = Get-DocumentedCommand -Page $guide -Heading 'nginx Example'
-    Install-ProxyConfig (ConvertTo-LabProxyConfig -Config $example -UserName $hostName -JimName $jimName)
+    if ($apache) {
+        $example = Get-DocumentedCommand -Page $guide -Heading 'Apache httpd Example'
+        Install-ProxyConfig (ConvertTo-LabApacheConfig -Config $example -UserName $hostName -JimName $jimName)
+
+        # What the guide says SELinux does until httpd may open network connections: every request fails with 503
+        # Service Unavailable, and the proxy's audit log has a name_connect denial. Then its setsebool, as written.
+        $blocked = Invoke-ProxyRequest -Path '/api/v1/health/ready'
+        $denial = @(Invoke-LabVm -Name $proxyVm -Command @('bash', '-c', 'journalctl -b --no-pager | grep -E "avc:\s+denied .*name_connect.*httpd" || true') |
+            Where-Object { $_ })
+        Add-Check 'before httpd_can_network_connect: 503 Service Unavailable, and a name_connect denial, as the guide says' `
+            ($blocked.Status -eq '503' -and $denial.Count -gt 0) "HTTP $($blocked.Status); $($denial.Count) name_connect denials"
+        $boolean = Get-DocumentedCommand -Page $guide -Heading 'Apache httpd Example' -Block 2
+        Invoke-LabVm -Name $proxyVm -Command @('bash', '-ec', $boolean) -AllowFailure -LogPath (Join-Path $OutputPath 'httpd-config.log') | Out-Null
+        $set = $LASTEXITCODE
+        Add-Check "httpd_can_network_connect set as the guide says ($($boolean.Trim()))" ($set -eq 0) "exit $set"
+    }
+    else {
+        $example = Get-DocumentedCommand -Page $guide -Heading 'nginx Example'
+        Install-ProxyConfig (ConvertTo-LabProxyConfig -Config $example -UserName $hostName -JimName $jimName)
+    }
 
     # 3. Through the proxy.
     Test-ThroughProxyCheck

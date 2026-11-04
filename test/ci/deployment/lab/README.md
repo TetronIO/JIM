@@ -16,7 +16,7 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 |------|---------|--------------|
 | `Invoke-DeploymentLab.ps1` | Lab host | Runs the matrix, or part of it, against one bundle, as many cells at once as the host's memory holds, and writes `report.md` |
 | `Invoke-LabCell.ps1` | Lab host | Runs one cell on its own VM; the runner starts one per cell |
-| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase`, `Soak`, `ReverseProxy`, `Ansible` |
+| `scenarios/<Scenario>.ps1` | Lab host | What each kind of cell does once its VM is up: `Install`, `Upgrade`, `InstallerCases`, `ExternalDatabase`, `Soak`, `ReverseProxy`, `Ansible`, `FileConnector` |
 | `Invoke-LabUpgradeData.ps1` | Lab host | Gives an upgrade cell's JIM real data, and checks it is all there afterwards |
 | `Build-LabBundle.ps1` | Lab host | Builds a bundle from a commit, as the release workflow does, on a throwaway online VM |
 | `Cells.psd1` | | The matrix: each cell's image, runtime, network, scenario and memory |
@@ -30,8 +30,8 @@ runbook in `docs/deploy-lab.md`; this folder holds the tests that run on it.
 Every cell a run takes by default is air-gapped: its VM sits on a bridge with no route out, and proves it cannot reach
 `github.com` before installing anything. Each combination below is an Install cell (`-ag`) and an Upgrade cell (`-up`);
 some are also an InstallerCases cell (`-cases`), an ExternalDatabase cell (`-extdb`), a ReverseProxy cell (`-proxy`,
-`-proxy-local`), an Ansible cell (`-ansible`), or an Upgrade cell from the oldest release a customer can upgrade from
-(`-up-oldest`), and one is the Soak cell (`alma9-podrf-soak`).
+`-proxy-local`, `-proxy-httpd`), an Ansible cell (`-ansible`), a FileConnector cell (`-files`), or an Upgrade cell from
+the oldest release a customer can upgrade from (`-up-oldest`), and one is the Soak cell (`alma9-podrf-soak`).
 
 | Cells | Operating system | Runtime |
 |-------|------------------|---------|
@@ -39,9 +39,9 @@ some are also an InstallerCases cell (`-cases`), an ExternalDatabase cell (`-ext
 | `u24-docker-classic-ag`, `-up` | Ubuntu 24.04 | Docker, classic overlay2 image store |
 | `u24-podrf-ag`, `-up`, `-cases` | Ubuntu 24.04 | Podman, rootful |
 | `u24-podrl-ag`, `-up`, `-up-oldest` | Ubuntu 24.04 | Podman, rootless |
-| `alma9-podrf-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb`, `-proxy`, `-soak`, `-ansible` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
-| `alma9-podrl-ag`, `-up`, `-cases`, `-ansible` | AlmaLinux 9 | Podman, rootless |
-| `cs10-podrf-ag`, `-ansible` | CentOS Stream 10 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrf-ag`, `-up`, `-up-oldest`, `-cases`, `-extdb`, `-proxy`, `-proxy-httpd`, `-soak`, `-ansible`, `-files` | AlmaLinux 9 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
+| `alma9-podrl-ag`, `-up`, `-cases`, `-ansible`, `-files` | AlmaLinux 9 | Podman, rootless |
+| `cs10-podrf-ag`, `-cases`, `-ansible` | CentOS Stream 10 (SELinux enforcing, firewalld, NetworkManager) | Podman, rootful |
 | `cs10-podrl-ag`, `-ansible` | CentOS Stream 10 | Podman, rootless |
 
 The online cells install and upgrade as a customer with internet access does, downloading from GitHub and ghcr.io, so
@@ -76,9 +76,14 @@ container runtime added, so they are as bare as a customer's new host.
    authority, which also proves the firewall was opened; the initial administrator signs in through the identity
    provider, followed through every redirect and form post as a browser does; and JIM holds exactly one
    Administrator.
-5. **A host reboot**: JIM starts by itself, with the data written before the reboot, and the administrator signs in
+5. **Rootful Podman on AlmaLinux and CentOS Stream**: what Running on Podman says the installer sets up for firewalld
+   and NetworkManager. `netavark-firewalld-reload.service` is enabled, and after a `firewall-cmd --reload` JIM is
+   still ready and the administrator signs in; `90-jim-podman.conf` tells NetworkManager to leave Podman's veth
+   interfaces alone, and `nmcli device` shows every one of JIM's unmanaged, after the install and again after the
+   reboot (#2009).
+6. **A host reboot**: JIM starts by itself, with the data written before the reboot, and the administrator signs in
    again.
-6. **Nothing crashed quietly**: no container has restarted, and the kernel has logged no fault or AppArmor denial of a
+7. **Nothing crashed quietly**: no container has restarted, and the kernel has logged no fault or AppArmor denial of a
    container since the reboot. A crashing service is restarted and soon looks healthy again, so readiness alone
    cannot show it (#1953). On AlmaLinux and CentOS Stream, SELinux is still enforcing and the journal holds no denial
    since the reboot (the images have no auditd, so the kernel logs denials itself), as every RHEL-family cell checks
@@ -185,11 +190,12 @@ The database server is a second VM, `jl-<cell>-db`, given the cell's `DatabaseMe
 
 ## What a ReverseProxy cell checks
 
-JIM behind nginx, configured from TLS and Reverse Proxy's own nginx example (read from the page, with the lab's names
-in place of `jim.example.com` and `jim-app.example.com`), in the two ways the guide supports. nginx comes from Ubuntu's
-packages, fetched by a VM on the online network (`DatabaseServer`'s image in `Lab.psd1`, given the cell's
-`ProxyMemoryGiB`). Its own certificate, for `jim.jimlab.test`, comes from a CA made for the cell, and the checks trust
-only that CA, so every one of them goes through the proxy.
+JIM behind a proxy configured from TLS and Reverse Proxy's own examples (read from the page, with the lab's names in
+place of `jim.example.com` and `jim-app.example.com`): nginx in the two ways the guide supports, and Apache httpd.
+nginx comes from Ubuntu's packages, fetched by a VM on the online network (`DatabaseServer`'s image in `Lab.psd1`),
+and Apache httpd from the cell's own AlmaLinux image's packages; either VM is given the cell's `ProxyMemoryGiB`. The
+proxy's own certificate, for `jim.jimlab.test`, comes from a CA made for the cell, and the checks trust only that CA,
+so every one of them goes through the proxy.
 
 **Re-encrypting, from a proxy of its own** (`-proxy`, `Proxy = 'Remote'`; Docker and rootful Podman):
 
@@ -203,6 +209,17 @@ only that CA, so every one of them goes through the proxy.
    callback, so this also proves JIM sent the address users type); the security audit log records the lab host's
    address for that sign-in, not the proxy's; the portal's live connection is upgraded to a WebSocket (101 Switching
    Protocols on `/_blazor`); and `jim.web` logs `Trusting forwarded headers from 1 known proxy address(es)`.
+
+**Apache httpd, re-encrypting from a proxy of its own** (`-proxy-httpd`, `Proxy = 'Apache'`; rootful Podman on
+AlmaLinux, where the guide gives it):
+
+1. **Apache httpd on a server of its own**, from AlmaLinux's packages, with SELinux enforcing and firewalld running, as
+   on any RHEL web server; then on the cell's air-gapped network, as the nginx proxy is.
+2. **JIM installed** as for nginx.
+3. **httpd runs the guide's Apache example** (`apachectl configtest`), re-encrypting to `jim-app.jimlab.test`.
+4. **Before `httpd_can_network_connect`**, what the guide says SELinux does: every request fails with 503 Service
+   Unavailable, and the proxy's journal has a `name_connect` denial. Then the guide's `setsebool`, as written.
+5. **Through the proxy**, everything the nginx re-encrypting cell checks.
 
 **Plain HTTP on the JIM host** (`-proxy-local`, `Proxy = 'Local'`; Docker only, as the guide gives it):
 
@@ -218,8 +235,8 @@ only that CA, so every one of them goes through the proxy.
 5. **Through the proxy**, everything the re-encrypting cell checks, and the password request accepted (404, as the
    Metaverse Object it names does not exist).
 
-A rootless JIM behind a proxy is not tested, as the guide says not to run one; nor is Apache httpd, or more than one
-JIM server behind a load balancer, which is not supported. Both kinds end by checking that nothing crashed quietly.
+A rootless JIM behind a proxy is not tested, as the guide says not to run one; nor is more than one JIM server behind a
+load balancer, which is not supported. Every kind ends by checking that nothing crashed quietly.
 
 ## What an Ansible cell checks
 
@@ -238,7 +255,9 @@ checks this) runs that page's own playbook, taken from the page at run time, on 
    the VM. Rootless cells add the page's Rootless `vars` and `pre_tasks`.
 4. **The page's `ansible-playbook` command** runs with no failed task; JIM is ready (trusting only the cell's CA, as
    the organisation's), its health check passes, the administrator signs in, and the journal holds no SELinux denial.
-5. **Rootful only: a firewalld reload** leaves JIM ready and signing in (the play's `post_tasks`).
+5. **Rootful only: NetworkManager and a firewalld reload**: the play's `90-jim-podman.conf` leaves JIM's veth
+   interfaces unmanaged (and again after the reboot), and a firewalld reload leaves JIM ready and signing in (the
+   play's `post_tasks`).
 6. **The play run again**, as after a change, with no failed task, and JIM still ready.
 7. **Restarted** as Operating JIM says, and **the host rebooted**: JIM comes back each time with its data (rootless
    through lingering), signs in, and the journal still holds no SELinux denial (the check every RHEL-family cell
@@ -246,6 +265,24 @@ checks this) runs that page's own playbook, taken from the page at run time, on 
 
 A helper VM's packages come from the distribution's mirrors, so an Ansible cell needs the online network for its
 first minute, though JIM's own VM never leaves the air-gapped one.
+
+## What a FileConnector cell checks
+
+A folder on the JIM host, mounted into JIM for the File Connector as the File Connector guide's On Podman says, on
+AlmaLinux with SELinux enforcing, rootful and rootless (`-files`):
+
+1. **JIM installed** with `setup.sh`, with an infrastructure API key, and ready.
+2. **The folder in the guide's pod file snippet** (`/mnt/hr-extracts`), holding a CSV of three people written by
+   root, as an HR system's job usually leaves one; handed to JIM's container user as the guide says (rootful,
+   `chown 1654:1654`; rootless, the guide's `jim-podman unshare chown`), and labelled `container_file_t` with its
+   `semanage fcontext` and `restorecon`.
+3. **Mounted in `/opt/jim/jim.yaml`** as the guide's snippet does: in the worker and web containers, beside the
+   connector files volume, with a `hostPath` volume in the pod (`ConvertTo-LabPodWithHostFolder`). Then JIM restarted
+   as Operating JIM says, and ready.
+4. **A File Connector Connected System** reading `/connector-files/hr-input/people.csv`, its schema imported, and a
+   Full Import, through JIM's PowerShell module from the bundle, from the lab host (`Invoke-LabFileImport.ps1`): the
+   import completes, and all three people are in the Connector Space.
+5. **No SELinux denial**, as every RHEL-family cell checks as it ends.
 
 ## What a Soak cell checks
 

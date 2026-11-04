@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak, ReverseProxy, Ansible"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak, ReverseProxy, Ansible, FileConnector"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -196,9 +196,23 @@ Describe 'Test-LabMatrix for reverse proxy cells' {
     It 'names a proxy cell that does not say where its proxy runs' {
         $matrix = New-ProxyMatrix
         $matrix.Cells[0].Remove('Proxy')
-        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote or Local')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote, Local or Apache')
         $matrix.Cells[0].Proxy = 'Elsewhere'
-        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote or Local')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('u24-docker-ag: a ReverseProxy cell needs Proxy, Remote, Local or Apache')
+    }
+
+    It 'accepts Apache httpd on a server of its own in front of a rootful Podman JIM on RHEL' {
+        $matrix = New-ProxyMatrix 'Apache'
+        $matrix.Cells[0].Image = 'alma9-podman'
+        $matrix.Cells[0].Runtime = 'podman'
+        $matrix.Cells[0].Rootless = $false
+
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'names an Apache httpd proxy off RHEL, where the guide gives it' {
+        Test-LabMatrix -Matrix (New-ProxyMatrix 'Apache') |
+            Should -Be @('u24-docker-ag: an Apache httpd proxy runs on RHEL, as TLS and Reverse Proxy gives it')
     }
 
     It 'names a proxy cell with no memory for the VM that brings nginx' {
@@ -284,6 +298,52 @@ Describe 'ConvertTo-LabProxyConfig' {
     }
 
     It 'returns no trusted CA for plain HTTP' {
+        $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -PlainHttp 'http://localhost:8080'
+
+        (Get-LabProxyFile -Config $config).TrustedCa | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'ConvertTo-LabApacheConfig' {
+    BeforeAll {
+        $example = & (Join-Path $PSScriptRoot '..' '..' 'Get-DocumentedCommand.ps1') `
+            -Path (Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'tls-and-reverse-proxy.md') -Heading 'Apache httpd Example'
+    }
+
+    It 'gives the guide''s example the lab''s names, re-encrypting to JIM and checking its certificate' {
+        $config = ConvertTo-LabApacheConfig -Config $example -UserName 'jim.jimlab.test' -JimName 'jim-app.jimlab.test'
+
+        $config | Should -Match '(?m)^\s*ServerName jim\.jimlab\.test$'
+        $config | Should -Match '(?m)^\s*ProxyPass\s+/ https://jim-app\.jimlab\.test/$'
+        $config | Should -Match '(?m)^\s*RewriteRule \^/\(\.\*\) wss://jim-app\.jimlab\.test/\$1 \[P,L\]$'
+        $config | Should -Match '(?m)^\s*SSLProxyVerify require$'
+        $config | Should -Match '(?m)^\s*ProxyPreserveHost On$'
+        $config | Should -Not -Match 'example\.com'
+    }
+
+    It 'stops when the example no longer re-encrypts to a name, so a changed guide is noticed' {
+        { ConvertTo-LabApacheConfig -Config ($example -replace 'ProxyPass(\s+)/ https://', 'ProxyPass$1/ http://') -UserName 'a' -JimName 'b' } |
+            Should -Throw '*ProxyPass / https://jim-app.example.com/*'
+        { ConvertTo-LabApacheConfig -Config ($example -replace 'ServerName jim\.example\.com', 'ServerName jim.example.org') -UserName 'a' -JimName 'b' } |
+            Should -Throw '*ServerName jim.example.com*'
+    }
+
+    It 'returns the paths of the proxy''s own certificate and key, and of the CA it trusts' {
+        $files = Get-LabApacheFile -Config (ConvertTo-LabApacheConfig -Config $example -UserName 'jim.jimlab.test' -JimName 'jim-app.jimlab.test')
+
+        $files.Certificate | Should -Be '/etc/pki/tls/certs/jim.jimlab.test.crt'
+        $files.Key | Should -Be '/etc/pki/tls/private/jim.jimlab.test.key'
+        $files.TrustedCa | Should -Be '/etc/pki/tls/certs/jim-ca.crt'
+    }
+}
+
+Describe 'Get-LabProxyFile for plain HTTP' {
+    BeforeAll {
+        $example = & (Join-Path $PSScriptRoot '..' '..' 'Get-DocumentedCommand.ps1') `
+            -Path (Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'tls-and-reverse-proxy.md') -Heading 'nginx Example'
+    }
+
+    It 'still returns no trusted CA for plain HTTP' {
         $config = ConvertTo-LabProxyConfig -Config $example -UserName 'jim.jimlab.test' -PlainHttp 'http://localhost:8080'
 
         (Get-LabProxyFile -Config $config).TrustedCa | Should -BeNullOrEmpty
@@ -533,7 +593,7 @@ Describe 'The matrix in Cells.psd1' {
         $proxied = @($matrix.Cells | Where-Object { $_.Scenario -eq 'ReverseProxy' } |
             ForEach-Object { "$($_.Proxy) $($_.Runtime)" } | Sort-Object -Unique)
 
-        $proxied | Should -Be @('Local docker', 'Remote docker', 'Remote podman')
+        $proxied | Should -Be @('Apache podman', 'Local docker', 'Remote docker', 'Remote podman')
     }
 
     It 'deploys with Deploying on RHEL with Ansible rootful and rootless, on RHEL 9 and RHEL 10 stand-ins' {
@@ -542,6 +602,23 @@ Describe 'The matrix in Cells.psd1' {
             ForEach-Object { "$($matrix.Images[$_.Image].Os) $(if ($_.Rootless) { 'rootless' } else { 'rootful' })" } | Sort-Object)
 
         $deployed | Should -Be @('AlmaLinux 9 rootful', 'AlmaLinux 9 rootless', 'CentOS Stream 10 rootful', 'CentOS Stream 10 rootless')
+    }
+
+    It 'imports from a File Connector host folder under SELinux, rootful and rootless' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $files = @($matrix.Cells | Where-Object { $_.Scenario -eq 'FileConnector' } |
+            ForEach-Object { "$($matrix.Images[$_.Image].Os) $(if ($_.Rootless) { 'rootless' } else { 'rootful' })" } | Sort-Object)
+
+        $files | Should -Be @('AlmaLinux 9 rootful', 'AlmaLinux 9 rootless')
+    }
+
+    It 'runs the installer cases, certificate renewal among them, rootful on the RHEL 9 and RHEL 10 stand-ins' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $cases = @($matrix.Cells |
+            Where-Object { $_.Scenario -eq 'InstallerCases' -and $_.Runtime -eq 'podman' -and -not $_.Rootless -and $matrix.Images[$_.Image].Os -match '^(AlmaLinux|CentOS Stream) ' } |
+            ForEach-Object { $matrix.Images[$_.Image].Os } | Sort-Object)
+
+        $cases | Should -Be @('AlmaLinux 9', 'CentOS Stream 10')
     }
 
     It 'installs air-gapped with setup.sh rootful and rootless on the RHEL 9 and RHEL 10 stand-ins, as the Podman PRD requires' {
@@ -808,6 +885,68 @@ Describe 'ConvertTo-LabPinnedInstaller' {
     }
 }
 
+Describe 'ConvertTo-LabPodWithHostFolder' {
+    BeforeAll {
+        $repo = Join-Path $PSScriptRoot '..' '..' '..' '..' '..'
+        $pod = Get-Content -Raw (Join-Path $repo 'deploy' 'podman' 'jim.yaml')
+        $snippet = & (Join-Path $PSScriptRoot '..' '..' 'Get-DocumentedCommand.ps1') `
+            -Path (Join-Path $repo 'docs' 'connectors' 'jim-file-connector.md') -Heading 'On Podman' -Block 1
+    }
+
+    It 'reads the folder the File Connector guide mounts, and where' {
+        $result = ConvertTo-LabPodWithHostFolder -Pod $pod -Snippet $snippet
+
+        $result.HostPath | Should -Be '/mnt/hr-extracts'
+        $result.MountPath | Should -Be '/connector-files/hr-input'
+    }
+
+    It 'mounts it in the worker and web containers, beside the connector files volume, and nowhere else' {
+        $result = ConvertTo-LabPodWithHostFolder -Pod $pod -Snippet $snippet
+
+        ([regex]::Matches($result.Pod, '(?m)^\s+- \{ name: hr-extracts, mountPath: /connector-files/hr-input \}$')).Count | Should -Be 2
+        $result.Pod | Should -Match '(?ms)- name: web\b.*?mountPath: /connector-files \}\r?\n\s+- \{ name: hr-extracts, mountPath: /connector-files/hr-input \}'
+        $result.Pod | Should -Match '(?ms)- name: worker\b.*?mountPath: /connector-files \}\r?\n\s+- \{ name: hr-extracts, mountPath: /connector-files/hr-input \}'
+        $result.Pod | Should -Not -Match '(?ms)- name: scheduler\b.*hr-extracts, mountPath'
+    }
+
+    It 'adds the host folder to the pod''s volumes, as a hostPath' {
+        $result = ConvertTo-LabPodWithHostFolder -Pod $pod -Snippet $snippet
+
+        $result.Pod | Should -Match '(?m)^    - name: hr-extracts\r?\n      hostPath: \{ path: /mnt/hr-extracts, type: Directory \}$'
+        ($result.Pod -split "`n").Count | Should -Be ((($pod -split "`n").Count) + 4)
+    }
+
+    It 'stops when the pod file no longer has the connector files volume to mount beside' {
+        { ConvertTo-LabPodWithHostFolder -Pod ($pod -replace 'mountPath: /connector-files \}', 'mountPath: /files }') -Snippet $snippet } |
+            Should -Throw '*jim-connector-files*'
+    }
+
+    It 'stops when the guide no longer gives a hostPath volume' {
+        { ConvertTo-LabPodWithHostFolder -Pod $pod -Snippet ($snippet -replace 'hostPath:', 'emptyDir:') } | Should -Throw '*hostPath*'
+    }
+}
+
+Describe 'Get-LabManagedVeth' {
+    # nmcli -t -f DEVICE,TYPE,STATE device, as a rootful Podman host on RHEL prints it.
+    It 'returns nothing when every veth is unmanaged' {
+        $lines = @('eth0:ethernet:connected', 'podman1:bridge:unmanaged', 'veth0a1b2c3:ethernet:unmanaged', 'veth9f8e7d6:ethernet:unmanaged', 'lo:loopback:unmanaged')
+        $result = Get-LabManagedVeth -Line $lines
+        $result.Veths | Should -Be 2
+        @($result.Managed).Count | Should -Be 0
+    }
+
+    It 'returns each veth NetworkManager manages, as #2009 did' {
+        $lines = @('eth0:ethernet:connected', 'veth0a1b2c3:ethernet:connecting (getting IP configuration)', 'veth9f8e7d6:ethernet:unmanaged')
+        $result = Get-LabManagedVeth -Line $lines
+        $result.Veths | Should -Be 2
+        $result.Managed | Should -Be @('veth0a1b2c3:ethernet:connecting (getting IP configuration)')
+    }
+
+    It 'counts no veth when the pods have none' {
+        (Get-LabManagedVeth -Line @('eth0:ethernet:connected', 'lo:loopback:unmanaged')).Veths | Should -Be 0
+    }
+}
+
 Describe 'Test-LabBootFinished' {
     It 'is finished once systemd is <System> and cloud-init is done' -ForEach @(@{ System = 'running' }, @{ System = 'degraded' }) {
         Test-LabBootFinished -SystemState $System -SystemExitCode 0 -CloudInit 'status: done' -CloudInitExitCode 0 | Should -BeTrue
@@ -878,6 +1017,30 @@ Describe 'Test-LabMatrix for Ansible cells' {
         $matrix.Images['u24-podman'] = @{ Image = 'jimlab/u24-podman'; Os = 'Ubuntu 24.04' }
         $matrix.Cells[1].Image = 'u24-podman'
         Test-LabMatrix -Matrix $matrix | Should -Be @('alma-podrl-ag: an Ansible cell is Podman on RHEL, as Deploying on RHEL with Ansible covers')
+    }
+}
+
+Describe 'Test-LabMatrix for FileConnector cells' {
+    BeforeAll {
+        function New-FileConnectorMatrix {
+            $matrix = New-TestMatrix
+            $matrix.Cells[1].Scenario = 'FileConnector'
+            $matrix
+        }
+    }
+
+    It 'accepts Podman on a RHEL-family host, rootful or rootless' {
+        Test-LabMatrix -Matrix (New-FileConnectorMatrix) | Should -BeNullOrEmpty
+        $matrix = New-FileConnectorMatrix
+        $matrix.Cells[1].Rootless = $false
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'names a FileConnector cell on Docker or Ubuntu, which it does not cover' {
+        $matrix = New-FileConnectorMatrix
+        $matrix.Cells[1].Runtime = 'docker'
+        $matrix.Cells[1].Remove('Rootless')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('alma-podrl-ag: a FileConnector cell is Podman on RHEL, as the File Connector guide''s On Podman covers, with SELinux')
     }
 }
 

@@ -166,12 +166,8 @@ else {
 Test-SelinuxCheck 'deployed'
 
 if (-not $rootless) {
-    $enabled = Invoke-LabVm -Name $vm -Command @('systemctl', 'is-enabled', 'netavark-firewalld-reload.service') -AllowFailure
-    Add-Check 'deployed: the play enabled netavark-firewalld-reload.service' ("$enabled" -eq 'enabled') "$enabled"
-    Invoke-LabVm -Name $vm -Command @('firewall-cmd', '--reload') | Out-Null
-    if (Test-ReadyCheck 'after a firewalld reload' -Trusting "the organisation's CA") {
-        Test-SignInCheck 'after a firewalld reload'
-    }
+    Test-NetworkManagerCheck 'deployed'
+    Test-FirewalldReloadCheck -By 'the play' -Trusting "the organisation's CA"
 }
 
 # Run again, as the page says to after a change: with nothing changed, the play must still succeed and leave JIM up.
@@ -201,6 +197,9 @@ if (Test-ReadyCheck 'after a reboot' -Trusting "the organisation's CA") {
     $marker = Invoke-Guest -Action Sql -Sql 'SELECT cell FROM jimlab.marker;'
     Add-Check "after a reboot: JIM started by itself$(if ($rootless) { ', through the jim account''s lingering' }), with its data" ("$marker" -eq $CellName) "found '$marker'"
     Test-SignInCheck 'after a reboot'
+}
+if (-not $rootless) {
+    Test-NetworkManagerCheck 'after a reboot'
 }
 
 #endregion
