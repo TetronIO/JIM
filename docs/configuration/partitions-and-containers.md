@@ -66,6 +66,40 @@ Selection is how you tell JIM which parts of a system it manages, and it binds e
 - Objects in a deselected partition or container fall out of import scope. A Full Import treats anything it does not find as deleted from the system, so narrowing scope makes the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls the attribute values they contributed. Widen scope again before running a Full Import if that is not what you intended.
 - Deselecting a partition also clears its Delta Import watermark. Once you select it again, its next Delta Import reads every object in it, as a Full Import does, so its objects come back whether or not they changed while it was out of scope, and records a new watermark. A Delta Import that also reads other partitions reads every object in all of them on that run.
 
+## :material-map-marker-outline: Which partition an object is in
+
+JIM records each Connected System Object in the partition it is in, however JIM first came to hold it: imported by a Run Profile that targets no partition, or one that targets another partition, or provisioned by JIM. The Connector says where the object is. The LDAP Connector goes by the object's distinguished name, which ends with the naming context of the partition it is in; where naming contexts are nested (one directory tree hosted beneath another), JIM records the deepest selected partition that holds the object.
+
+```jim-diagram
+archetype: decision
+title: Which partition JIM records for a Connected System Object
+desc: "Whenever an import reads an object, or an export creates or renames one, JIM asks the Connector which partition the object is in. Where a selected partition holds it, JIM records the deepest selected partition that does. Where only a deselected partition holds it, JIM records that partition. Where no partition holds it, JIM keeps the partition it already holds for the object, and a new object takes the partition its Run Profile targets, or none."
+start: { label: Connected System Object }
+questions:
+  - { id: selected, label: "In a selected partition?", sub: by its distinguished name }
+  - { id: other, label: "In a deselected partition?" }
+outcomes:
+  - { id: deepest, label: Recorded in the deepest one, good: true }
+  - { id: deselected, label: Recorded in that partition }
+  - { id: kept, label: Kept as it was, sub: "a new object takes its Run Profile's" }
+answers:
+  - { from: selected, to: deepest, label: "yes" }
+  - { from: selected, to: other, label: "no" }
+  - { from: other, to: deselected, label: "yes" }
+  - { from: other, to: kept, label: "no" }
+```
+
+A Run Profile that targets a partition therefore covers every object in it:
+
+- An import of the partition that reads every object (a Full Import, or a Delta Import with no watermark to read from) marks as deleted any object in it that the Connected System no longer returns.
+- The Run Profile's [deletion limits](run-profiles.md#full-import) apply to every object in the partition, so **Max detected deletions percent** is a share of all of them.
+- A create JIM exported that such an import does not find is [sent again](connected-systems.md#pending-exports) at the next export run.
+- `Get-JIMConnectedSystemObject -Count -PartitionId` counts every object in the partition.
+
+Every import that reads an object records its partition again, so an object moved to another partition is recorded there once an import reads it. An export that creates or renames an object records the partition it wrote to, before any import confirms it.
+
+An object in none of the Connected System's partitions keeps the partition JIM already holds for it; a new one takes the partition its Run Profile targets, or none for a Run Profile that targets no partition. After an import that read any such object, the Worker logs a warning counting them. It usually means a partition is missing from the Connected System: run **Retrieve Hierarchy**, and the next import records each object in the partition it is in.
+
 ## :material-history: Where each partition's next Delta Import starts
 
 Each partition keeps its own Delta Import watermark: the point its next Delta Import reads changes after, recorded by the last import that read it. The Scope tab shows it under each selected partition, so you can tell before a run whether that partition's next Delta Import reads its changes or every object in it:
@@ -131,7 +165,7 @@ The counts honour each container's [Container Scope](../connectors/jim-ldap-conn
 Two limits are worth knowing, and the preview states both where they apply:
 
 - **Objects JIM has never imported cannot be counted.** Selecting new scope makes the next Full Import discover objects that are not in the Connector Space yet, and there is nothing to count until it runs.
-- **Some objects cannot be placed.** An object imported before JIM recorded partitions, or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
+- **Some objects cannot be placed.** An object JIM holds in no partition (one no import has read since before JIM recorded partitions, or one [outside them all](#which-partition-an-object-is-in) first imported by a Run Profile that targets no partition), or one whose Connector cannot say what container an object is in, is left out of the counts entirely rather than guessed at in either direction.
 
 Save after previewing and the confirmation opens with the preview's own sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the selection after previewing and the preview is marked stale and contributes nothing, because it now describes a different change.
 

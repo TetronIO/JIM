@@ -1324,6 +1324,26 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// #2723: records each object's Partition, as the PostgreSQL statement does: the Partition alone, only where it
+    /// differs, with nothing else marked. Virtual so a test can see the write was made, which it cannot otherwise tell
+    /// here: this store holds the instances its callers hold, so a caller that set the Partition on its own copy and
+    /// never persisted it would look the same.
+    /// </summary>
+    public virtual Task<int> UpdateConnectedSystemObjectPartitionsAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int PartitionId)> placements)
+    {
+        var changed = 0;
+        foreach (var (stored, partitionId) in placements
+                     .Select(placement => (Stored: _csos.GetValueOrDefault(placement.ConnectedSystemObjectId), placement.PartitionId))
+                     .Where(placement => placement.Stored != null && placement.Stored.PartitionId != placement.PartitionId))
+        {
+            stored!.PartitionId = partitionId;
+            BumpRowVersion(stored);
+            changed++;
+        }
+        return Task.FromResult(changed);
+    }
+
+    /// <summary>
     /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here.
     /// Unlike the Postgres implementation, there is no separate persisted store to reconcile -
     /// <see cref="_csos"/> IS the live graph, so <c>ExportExecutionServer</c> mutating

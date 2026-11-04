@@ -7,6 +7,7 @@ using JIM.Connectors.Mock;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -490,6 +491,100 @@ public class ImportContentHashSkipTests
 
         Assert.That(activity.Message, Does.Contain("1 object (0 created, 0 updated, 1 unchanged)"),
             "A Delta Import never skips by content hash, so it compares every object it reads; finding one unchanged is not an update.");
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Partition placement (#2723): an object is skipped by its content hash only where the Partition JIM holds for it is
+    // the one it would record, so a Full Import that would correct an object's Partition always reaches the object.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task SecondIdenticalFullImport_StoredPartitionDiffersFromThePlacement_IsNotSkippedAndIsRestampedAsync()
+    {
+        var (corp, partners) = AddPartitions();
+        var hrId = Guid.NewGuid();
+        await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        cso.PartitionId = partners.Id; // as a Run Profile's stamp from before placement would have left it
+
+        var (activity, skipped) = await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(skipped, Is.Zero, "an unchanged object whose Partition would change is not skipped");
+            Assert.That(cso.PartitionId, Is.EqualTo(corp.Id));
+            Assert.That(activity.RunProfileExecutionItems.Any(r => r.ConnectedSystemObjectId == cso.Id), Is.False,
+                "a Partition-only change is reported in the run's summary, not as a change to the object");
+        }
+    }
+
+    [Test]
+    public async Task SecondIdenticalFullImport_StoredPartitionMatchesThePlacement_IsSkippedAsync()
+    {
+        var (corp, _) = AddPartitions();
+        var hrId = Guid.NewGuid();
+        await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        Assert.That(cso.PartitionId, Is.EqualTo(corp.Id), "precondition: the first import recorded where the object is");
+
+        var (_, skipped) = await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+
+        Assert.That(skipped, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task SecondIdenticalFullImport_UnscopedWithNoStoredPartition_IsNotSkippedAndIsPlacedAsync()
+    {
+        // An unscoped Run Profile used to skip an object with no Partition, so it never gained one.
+        var (corp, _) = AddPartitions();
+        var hrId = Guid.NewGuid();
+        await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+        var cso = SyncRepo.ConnectedSystemObjects.Values.Single();
+        cso.PartitionId = null; // as an unscoped import left every object before placement
+
+        var (_, skipped) = await RunFullImportAsync(PlacingConnector(hrId, "Jane Smith", corp));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(skipped, Is.Zero);
+            Assert.That(cso.PartitionId, Is.EqualTo(corp.Id));
+        }
+    }
+
+    /// <summary>Gives Connected System 1 two selected Partitions.</summary>
+    private (ConnectedSystemPartition Corp, ConnectedSystemPartition Partners) AddPartitions()
+    {
+        var connectedSystem = ConnectedSystemsData.Single(cs => cs.Id == 1);
+        var corp = new ConnectedSystemPartition { Id = 1, ConnectedSystem = connectedSystem, ExternalId = "dc=corp,dc=local", Name = "corp.local", Selected = true };
+        var partners = new ConnectedSystemPartition { Id = 2, ConnectedSystem = connectedSystem, ExternalId = "dc=partners,dc=local", Name = "partners.local", Selected = true };
+        ConnectedSystemPartitionsData.AddRange([corp, partners]);
+        return (corp, partners);
+    }
+
+    private static PlacingMockFileConnector PlacingConnector(Guid hrId, string displayName, ConnectedSystemPartition placedIn)
+    {
+        var connector = new PlacingMockFileConnector(new Dictionary<string, int> { [hrId.ToString()] = placedIn.Id });
+        connector.TestImportObjects.Add(CreateImportObject(hrId, displayName));
+        return connector;
+    }
+
+    /// <summary>
+    /// A Mock File Connector that says which Partition each object is in (#2723), by its External ID: this Object Type has
+    /// no Secondary External ID, so JIM asks with the External ID, as it would a Connector whose objects have only one.
+    /// </summary>
+    private sealed class PlacingMockFileConnector(IReadOnlyDictionary<string, int> partitionIdByExternalId) : MockFileConnector, IConnectorPartitionPlacement
+    {
+        public IConnectorPartitionPlacer PreparePartitionPlacement(IReadOnlyCollection<ConnectedSystemPartition> partitions) =>
+            new MapPlacer(partitionIdByExternalId, partitions);
+    }
+
+    private sealed class MapPlacer(IReadOnlyDictionary<string, int> partitionIdByExternalId, IReadOnlyCollection<ConnectedSystemPartition> partitions)
+        : IConnectorPartitionPlacer
+    {
+        public ConnectedSystemPartition? GetPartition(string? objectIdentifier) =>
+            objectIdentifier != null && partitionIdByExternalId.TryGetValue(objectIdentifier, out var partitionId)
+                ? partitions.FirstOrDefault(partition => partition.Id == partitionId)
+                : null;
     }
 
     private async Task<Activity> RunDeltaImportAsync(MockFileConnector connector)

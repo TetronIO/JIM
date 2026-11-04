@@ -96,6 +96,36 @@ public class SyncImportTaskProcessor
     /// </summary>
     private int _hashSkippedCount;
 
+    /// <summary>
+    /// #2723: where each object this run reads is, from its Connector (<see cref="IConnectorPartitionPlacement"/>), for the
+    /// Partition recorded against it. Prepared once, as the run starts, so the Connector parses its Partitions once. Null
+    /// for a Connector that cannot place objects, or a Connected System with no Partitions: every object then follows the
+    /// rule from before placement, the Run Profile's Partition.
+    /// </summary>
+    private ConnectedSystemPartitionPlacement? _partitionPlacement;
+
+    /// <summary>
+    /// #2723: per Object Type name, case-insensitive, the attributes whose value identifies an object to its Connector for
+    /// placement, in the order they are tried: the Secondary External ID (for a directory, the distinguished name), then
+    /// the External ID. Built on first use per run; the schema does not change mid-import.
+    /// </summary>
+    private readonly Dictionary<string, IReadOnlyList<ConnectedSystemObjectTypeAttribute>> _placementIdentifierAttributes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>#2723: objects this run's Connector placed in a Partition, for the end-of-import placement summary.</summary>
+    private int _placedInAPartitionCount;
+
+    /// <summary>
+    /// #2723: objects this run's Connector could place in no Partition (outside every one, or with no identifier it could
+    /// read), each of which kept the Partition JIM held for it, for the end-of-import placement summary.
+    /// </summary>
+    private int _placedInNoPartitionCount;
+
+    /// <summary>
+    /// #2723: existing objects whose recorded Partition this run changed, for the end-of-import placement summary. A
+    /// Partition-only change gets no execution item: it is not a change an administrator acts on.
+    /// </summary>
+    private int _partitionRestampedCount;
+
     // The outcome of each object the run read, for the Activity's message (#2129). Each object read lands in one of
     // created (the create list), updated, unchanged (these plus _hashSkippedCount), a reported deletion, or none of them
     // because it was rejected with an error. Each is counted where its outcome is decided, at the end of that branch, so
@@ -310,6 +340,10 @@ public class SyncImportTaskProcessor
 
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("PerformImportAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+        // #2723: prepared once for the whole run, so the Connector parses the Connected System's Partitions once rather
+        // than once per object.
+        _partitionPlacement = ConnectedSystemPartitionPlacement.Prepare(_connector, _connectedSystem.Partitions);
 
         // Check if the Connected System has any existing CSOs. If it's empty (first-ever import),
         // we can skip all FindMatchingCso lookups since every object is guaranteed to be new.
@@ -1228,6 +1262,24 @@ public class SyncImportTaskProcessor
             Log.Information("PerformImportAsync: Object Type change summary: Refused: 0, Allowed: {Allowed}.", _objectTypeChangesAllowedCount);
         }
 
+        // #2723: where the run placed what it read. An object in no Partition kept the Partition JIM held for it, which a
+        // Partition-scoped run's deletion detection reads, so that is worth a warning: usually the Connected System's
+        // Partitions are out of date.
+        if (_partitionPlacement != null)
+        {
+            if (_placedInNoPartitionCount > 0)
+            {
+                Log.Warning("PerformImportAsync: Partition placement summary: Placed in a Partition: {Placed}, In no Partition: {InNoPartition}, Existing objects whose Partition changed: {Restamped}. " +
+                    "An object in no Partition keeps the Partition JIM held for it, and a new one takes the Run Profile's; if one of the Connected System's Partitions is missing, retrieve its hierarchy.",
+                    _placedInAPartitionCount, _placedInNoPartitionCount, _partitionRestampedCount);
+            }
+            else
+            {
+                Log.Information("PerformImportAsync: Partition placement summary: Placed in a Partition: {Placed}, In no Partition: {InNoPartition}, Existing objects whose Partition changed: {Restamped}.",
+                    _placedInAPartitionCount, _placedInNoPartitionCount, _partitionRestampedCount);
+            }
+        }
+
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("readEveryObjectInScope", ReadEveryObjectInScope);
         importSpan.SetTag("objectsCreated", createdCount);
@@ -1240,6 +1292,12 @@ public class SyncImportTaskProcessor
         importSpan.SetTag("objectsDeletionWithheld", _withheldDeletionCount);
         importSpan.SetTag("objectTypeChangesRefused", _objectTypeChangesRefusedCount);
         importSpan.SetTag("objectTypeChangesAllowed", _objectTypeChangesAllowedCount);
+        if (_partitionPlacement != null)
+        {
+            importSpan.SetTag("objectsPlacedInAPartition", _placedInAPartitionCount);
+            importSpan.SetTag("objectsPlacedInNoPartition", _placedInNoPartitionCount);
+            importSpan.SetTag("objectsPartitionChanged", _partitionRestampedCount);
+        }
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
             importSpan.SetTag("verificationDangerousDisagreements", _verificationDangerousDisagreementCount);
@@ -2215,6 +2273,13 @@ public class SyncImportTaskProcessor
         /// is included in <see cref="HydratedCsos"/> above, since the delete is applied to it.
         /// </summary>
         public Dictionary<ConnectedSystemImportObject, HeldUnderAnotherObjectType> CrossTypeMatches { get; } = new();
+
+        /// <summary>
+        /// #2723: where the Connector placed each of the page's objects that could be created or updated (see
+        /// <see cref="PlaceImportObjects"/>): a Partition, or null where it placed the object in none. A missing key means
+        /// the object was not placed: a delete, an object the Connector could not read, or a run with no placement.
+        /// </summary>
+        public Dictionary<ConnectedSystemImportObject, ConnectedSystemPartition?> Placements { get; } = new();
     }
 
     /// <summary>
@@ -2291,11 +2356,19 @@ public class SyncImportTaskProcessor
     /// hydrate. Skip-eligible objects are excluded from the batch hydration query entirely - the
     /// hydration this method exists to batch is exactly the cost a skip avoids.
     /// </para>
+    /// <para>
+    /// #2723: first places every object of the page that could be created or updated (<see cref="PlaceImportObjects"/>),
+    /// even on a first-ever import, since the skip predicate, the create and the update all record where it is.
+    /// </para>
     /// </summary>
-    /// <returns>The page's hydrated CSOs plus the SPEC-1082 skip-predicate results, for use by the per-object processing loop.</returns>
+    /// <returns>The page's hydrated CSOs, placements and SPEC-1082 skip-predicate results, for use by the per-object processing loop.</returns>
     private async Task<CsoHydrationPageResult> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
     {
         var result = new CsoHydrationPageResult();
+
+        // #2723: placed first, before the skip predicate below needs it, and whether or not JIM holds anything yet: a
+        // first-ever import records a Partition for every object it creates.
+        PlaceImportObjects(connectedSystemImportResult, result.Placements);
 
         // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by
         // definition, and HydrateCsoAsync's own _csIsEmpty short-circuit means the secondary lookup
@@ -2393,7 +2466,9 @@ public class SyncImportTaskProcessor
                 && matchedEntry.ImportStateFingerprint.HasValue && matchedEntry.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType!)
                 && matchedEntry.Status == ConnectedSystemObjectStatus.Normal
                 && importObject.ChangeType != ObjectChangeType.Deleted
-                && (matchedEntry.PartitionId != null || _connectedSystemRunProfile.Partition == null)
+                // The Partition JIM holds is the one the run would record (#2723): an object whose Partition would change
+                // must reach the update below, which records it.
+                && matchedEntry.PartitionId == PartitionIdToRecord(result.Placements.GetValueOrDefault(importObject), matchedEntry.PartitionId)
                 // An object the Connector flagged is never skipped (#2066): a skipped object gets no execution item, so
                 // the error would go unreported, and an unreadable value can leave the readable content unchanged.
                 && importObject.ErrorType is null or ConnectedSystemImportObjectError.NotSet;
@@ -2429,6 +2504,102 @@ public class SyncImportTaskProcessor
         span.SetTag("skippedCount", result.SkipEligible.Count);
         return result;
     }
+
+    /// <summary>
+    /// #2723: asks the Connector where each object of the page that could be created or updated is, once per object, and
+    /// records the answer in <paramref name="placements"/>: a Partition, or null where the object is in none. A delete is
+    /// never placed (the object is gone, and keeps the Partition it was recorded against), nor is an object the Connector
+    /// could not read, from which nothing is created or updated. Places nothing on a run with no placement. Must never
+    /// throw on a malformed object: this runs before the per-object loop validates anything, and that loop reports it.
+    /// </summary>
+    private void PlaceImportObjects(ConnectedSystemImportResult connectedSystemImportResult, Dictionary<ConnectedSystemImportObject, ConnectedSystemPartition?> placements)
+    {
+        if (_partitionPlacement == null)
+            return;
+
+        foreach (var importObject in connectedSystemImportResult.ImportObjects.Where(IsPlaceable))
+        {
+            var partition = _partitionPlacement.Place(GetPlacementIdentifier(importObject));
+            placements[importObject] = partition;
+            if (partition == null)
+                _placedInNoPartitionCount++;
+            else
+                _placedInAPartitionCount++;
+        }
+    }
+
+    /// <summary>
+    /// #2723: whether an import object is placed: anything a run might create or update from, which excludes a delete and
+    /// an object the Connector could not read. One with an unreadable attribute value is still imported, so is placed.
+    /// </summary>
+    private static bool IsPlaceable(ConnectedSystemImportObject importObject) =>
+        importObject.ChangeType != ObjectChangeType.Deleted
+        && importObject.ErrorType is null or ConnectedSystemImportObjectError.NotSet or ConnectedSystemImportObjectError.AttributeValueError;
+
+    /// <summary>
+    /// #2723: what identifies an import object to its Connector for placement: its Secondary External ID where its Object
+    /// Type has one and the object carries it (for a directory, the distinguished name), else its External ID. Null where
+    /// it carries neither, or its Object Type is not one JIM knows.
+    /// </summary>
+    private string? GetPlacementIdentifier(ConnectedSystemImportObject importObject) =>
+        GetPlacementIdentifierAttributes(importObject.ObjectType)
+            .Select(attribute => GetPlacementIdentifierValue(importObject, attribute))
+            .FirstOrDefault(value => !string.IsNullOrEmpty(value));
+
+    /// <summary>
+    /// #2723: the attributes that identify an object of the named Object Type for placement, in the order tried (see
+    /// <see cref="_placementIdentifierAttributes"/>); empty for an Object Type JIM does not know.
+    /// </summary>
+    private IReadOnlyList<ConnectedSystemObjectTypeAttribute> GetPlacementIdentifierAttributes(string? objectTypeName)
+    {
+        if (string.IsNullOrEmpty(objectTypeName))
+            return [];
+
+        if (_placementIdentifierAttributes.TryGetValue(objectTypeName, out var attributes))
+            return attributes;
+
+        // FirstOrDefault rather than SingleOrDefault: the per-object loop resolves the Object Type itself and reports what
+        // it cannot, so this must not throw first.
+        var objectType = _connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Name.Equals(objectTypeName, StringComparison.OrdinalIgnoreCase));
+        attributes = objectType == null
+            ? []
+            : new[] { objectType.Attributes.FirstOrDefault(a => a.IsSecondaryExternalId), objectType.Attributes.FirstOrDefault(a => a.IsExternalId) }
+                .OfType<ConnectedSystemObjectTypeAttribute>()
+                .ToList();
+        _placementIdentifierAttributes[objectTypeName] = attributes;
+        return attributes;
+    }
+
+    /// <summary>
+    /// #2723: an import object's first value for an identifying attribute, as text, or null where it carries none.
+    /// FirstOrDefault rather than SingleOrDefault: an attribute the object repeats is the per-object loop's to reject.
+    /// </summary>
+    private static string? GetPlacementIdentifierValue(ConnectedSystemImportObject importObject, ConnectedSystemObjectTypeAttribute attribute)
+    {
+        var importAttribute = importObject.Attributes.FirstOrDefault(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase));
+        if (importAttribute == null)
+            return null;
+
+        return attribute.Type switch
+        {
+            AttributeDataType.Text => importAttribute.StringValues.FirstOrDefault(),
+            AttributeDataType.Guid when importAttribute.GuidValues.Count > 0 => importAttribute.GuidValues[0].ToString(),
+            AttributeDataType.Number when importAttribute.IntValues.Count > 0 => importAttribute.IntValues[0].ToString(CultureInfo.InvariantCulture),
+            AttributeDataType.LongNumber when importAttribute.LongValues.Count > 0 => importAttribute.LongValues[0].ToString(CultureInfo.InvariantCulture),
+            AttributeDataType.Decimal when importAttribute.DecimalValues.Count > 0 => ExternalIdValue.ToCanonicalString(importAttribute.DecimalValues[0]),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// #2723: the Partition to record for an object this run reads: where its Connector placed it; else, where it placed
+    /// it in none or cannot place objects, the Partition JIM already holds for it; else the Run Profile's, the rule from
+    /// before placement. So a Connector that cannot place objects keeps exactly that rule, and nothing is ever cleared.
+    /// </summary>
+    /// <param name="placement">Where the Connector placed the object, or null for no answer.</param>
+    /// <param name="storedPartitionId">The Partition JIM holds for the object; null for a new one.</param>
+    private int? PartitionIdToRecord(ConnectedSystemPartition? placement, int? storedPartitionId) =>
+        placement?.Id ?? storedPartitionId ?? _connectedSystemRunProfile.Partition?.Id;
 
     /// <summary>
     /// Records an import object with no primary external ID match as a candidate for the page's
@@ -2774,7 +2945,7 @@ public class SyncImportTaskProcessor
 
                 // SPEC-1082 D8: skip check, INSTEAD of TryAndFindMatchingConnectedSystemObjectAsync,
                 // for objects the pre-fetch already proved unchanged (hash+fingerprint match, Normal
-                // status, not a delete, no pending partition backfill). Mirrors the existing no-op
+                // status, not a delete, its Partition already the one it would record). Mirrors the existing no-op
                 // path immediately below (RPEI removal); skipped objects are NOT added to the update list. Their external ID was already
                 // collected for deletion detection at page level before processing (AddExternalIdsToCollection),
                 // so a genuinely missing object still obsoletes; see ImportContentHashSkipTests.
@@ -2904,7 +3075,8 @@ public class SyncImportTaskProcessor
                     // Note: ExternalIdSnapshot is already set earlier in the duplicate detection block (line ~564)
                     // for all data types (Text, Number, LongNumber, Guid). No need to set it again here.
 
-                    connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem);
+                    connectedSystemObject = CreateConnectedSystemObjectFromImportObject(importObject, csObjectType, activityRunProfileExecutionItem,
+                        PartitionIdToRecord(hydrationResult.Placements.GetValueOrDefault(importObject), storedPartitionId: null));
 
                     // An allowed Object Type change whose replacement could not be built must not retire the held
                     // object, or the directory object would vanish from JIM altogether (#2049).
@@ -2985,10 +3157,19 @@ public class SyncImportTaskProcessor
                         statusTransitioned = true;
                     }
 
-                    // Backfill PartitionId for CSOs created before partition tracking was added.
-                    // This ensures deletion detection can scope correctly on subsequent imports.
-                    if (connectedSystemObject.PartitionId == null && _connectedSystemRunProfile.Partition != null)
-                        connectedSystemObject.PartitionId = _connectedSystemRunProfile.Partition.Id;
+                    // #2723: record where the object is now, so every Partition-scoped reader (deletion detection, the
+                    // deletion limits' base, the retry of an unconfirmed exported Create) sees it in the Partition that
+                    // holds it. A Partition-only change is not one to report: it gets no execution item of its own and is
+                    // counted into the run's placement summary. Never cleared: an object its Connector cannot place keeps
+                    // the Partition JIM holds for it.
+                    var partitionIdToRecord = PartitionIdToRecord(hydrationResult.Placements.GetValueOrDefault(importObject), connectedSystemObject.PartitionId);
+                    if (connectedSystemObject.PartitionId != partitionIdToRecord)
+                    {
+                        Log.Debug("ProcessImportObjectsAsync: Recording CSO {CsoId} against Partition {PartitionId}, where it was recorded against {PreviousPartitionId}.",
+                            connectedSystemObject.Id, partitionIdToRecord, connectedSystemObject.PartitionId);
+                        connectedSystemObject.PartitionId = partitionIdToRecord;
+                        _partitionRestampedCount++;
+                    }
 
                     // Pre-load a dictionary of referenced CSO external IDs via direct SQL.
                     // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
@@ -3864,7 +4045,8 @@ public class SyncImportTaskProcessor
         return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType, hydratedCsoPage, hydrationResult);
     }
 
-    private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
+    // partitionId is the Partition to record for the new object (#2723): see PartitionIdToRecord.
+    private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem, int? partitionId)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -3887,7 +4069,7 @@ public class SyncImportTaskProcessor
             ExternalIdAttributeId = connectedSystemObjectType.Attributes.First(a => a.IsExternalId).Id,
             Type = connectedSystemObjectType,
             TypeId = connectedSystemObjectType.Id,
-            PartitionId = _connectedSystemRunProfile.Partition?.Id
+            PartitionId = partitionId
         };
 
         // not every system uses a secondary external id attribute, but some do, i.e. LDAP

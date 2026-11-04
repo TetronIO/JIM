@@ -550,6 +550,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectsWithNewAttributeValuesAsync));
 
+    public Task<int> UpdateConnectedSystemObjectPartitionsAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int PartitionId)> placements)
+        => throw new PreviewWriteAttemptedException(nameof(UpdateConnectedSystemObjectPartitionsAsync));
+
     public Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
         => throw new PreviewWriteAttemptedException(nameof(ApplyExportedAttributeValuesAsync));
 

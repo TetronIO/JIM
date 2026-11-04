@@ -611,6 +611,10 @@ public class SyncExportTaskProcessor
         if (result.InitialPasswordMarkingFailedCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForInitialPasswordMarkingFailed(result.InitialPasswordMarkingFailedCount));
 
+        // #2723: contained so the exports stay successful, but never left to the service log alone.
+        if (result.PartitionRecordingFailedCount > 0)
+            AppendActivityWarning(ExportOutcomeMessage.ForPartitionsNotRecorded(result.PartitionRecordingFailedCount));
+
         // #2021: contained so the exports stay successful, but never left to the service log alone.
         if (result.ExchangeChangeStagingFailedCount > 0)
             AppendActivityWarning(ExportOutcomeMessage.ForExchangeChangesNotStaged(result.ExchangeChangeStagingFailedCount));

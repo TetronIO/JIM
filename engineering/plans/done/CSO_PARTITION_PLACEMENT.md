@@ -1,6 +1,6 @@
 # Truthful Connected System Object Partition
 
-- **Status:** Doing (Phase 0 complete)
+- **Status:** Done (all phases complete)
 - **Issue:** [#2723](https://github.com/TetronIO/JIM/issues/2723)
 - **Related:** [#2715](https://github.com/TetronIO/JIM/issues/2715) (per-Partition watermarks; this is its Follow-up 1), [#2720](https://github.com/TetronIO/JIM/issues/2720)
 - **Design:** approved 4 November 2026 (decisions D1 to D5 below, all as recommended)
@@ -88,25 +88,25 @@ Each phase starts with failing tests.
 - `OnDelete(DeleteBehavior.SetNull)` in `JimDbContext`, a migration, `DeletePathForeignKeyCoverageTests`, `MigrationDesignerChainTests`, `dotnet ef migrations has-pending-model-changes`.
 - Confirmed by the red test, which drives `ImportConnectedSystemHierarchyAsync` with the Connected System loaded change-tracked, as the REST endpoint loads it: the save failed with `23503: update or delete on table "ConnectedSystemPartitions" violates foreign key constraint "FK_ConnectedSystemObjects_ConnectedSystemPartitions_PartitionId" on table "ConnectedSystemObjects"`. Recording that failure on the Activity saves on the same context, which still holds the Partition marked deleted, so it failed again with the same error and the Activity was left **In Progress** with no error message. The portal's **Retrieve Hierarchy** never reached it: it saves a graph loaded on another context, so a removed Partition is reported as removed but its row (with its Containers and objects) stays. On the REST path the removed Partition's Containers are kept with no Partition and no Connected System. None of these three is changed here.
 
-### Phase 1: Capability and the LDAP rule
+### Phase 1: Capability and the LDAP rule ✅
 
 - `IConnectorPartitionPlacement` in JIM.Models; LDAP implementation over `PartitionForDn`.
 - `test/JIM.Worker.Tests/Connectors/LdapConnectorPartitionPlacementTests.cs`: one Partition; nested suffixes return the longest match; outside every Partition returns null; an unreadable DN returns null; an escaped comma in the leaf RDN is not placed in a look-alike suffix.
 - `JIM.Models.Tests` policy tests: an inner deselected suffix prefers the selected outer; no selected match falls back to any Partition; a Connector without the capability returns null.
 - A conformance test: every Connector with `SupportsPartitions` implements the capability.
 
-### Phase 2: Import processor
+### Phase 2: Import processor ✅
 
 - Placement in the hydration pre-pass; restamp replaces `SyncImportTaskProcessor.cs:2988-2991`; the skip predicate becomes "stored equals placement"; one summary log line.
 - `Workflows/ImportPartitionPlacementTests.cs`: an unscoped Full Import stamps each object's Partition; unscoped-created then deleted is marked deleted by a scoped Full Import (the issue); a scoped Full Import does not mark another Partition's object deleted; a moved object is restamped with no execution item; placed nowhere keeps the stored value; no capability keeps the Run Profile stamp; a reported delete leaves the Partition; a confirming import stamps a provisioned object; the deletion-limit base counts unscoped-created objects; an Object Type change retires an unscoped-created held object.
 - `ImportContentHashSkipTests`: stored Partition differs, not skipped and restamped; matches, skipped; unscoped run with a null stored Partition, not skipped.
 
-### Phase 3: Provisioning (D2)
+### Phase 3: Provisioning (D2) ✅
 
-- `Workflows/ProvisionedObjectPartitionTests.cs`: a successful create stamps the Partition written to; a scoped Full Import retries a never-confirmed exported create (red today); does not retry one in another Partition; provisioned, confirmed by an unscoped import, then deleted, is marked deleted by a scoped Full Import; an export result without a DN uses the provisioned DN.
+- `Workflows/ProvisionedObjectPartitionTests.cs`: a successful create stamps the Partition written to; a scoped Full Import retries a never-confirmed exported create (red today); does not retry one in another Partition; provisioned, confirmed by an unscoped import, then deleted, is marked deleted by a scoped Full Import; an export result without a DN uses the provisioned DN; a rename into another Partition restamps, and one outside every Partition keeps the stored value; a Connector without the capability records nothing; the placement is prepared once per run; one summary log line; a Partition that cannot be recorded leaves the Create recorded.
 - `CsoPartitionIdPersistenceDatabaseTests`: the narrow update sets only the Partition column; tracked instances match and a later save succeeds. `BulkSqlColumnConventionTests` passes with the exemption comment.
 
-### Phase 4: Integration, documentation, changelog, plan lifecycle
+### Phase 4: Integration, documentation, changelog, plan lifecycle ✅
 
 See below. Move this plan to `engineering/plans/done/` in the pull request that closes #2723.
 
@@ -132,7 +132,7 @@ See below. Move this plan to `engineering/plans/done/` in the pull request that 
 
 | Risk | Mitigation |
 |------|------------|
-| The first Full Import after the upgrade loses the content-hash skip for restamped objects | One-off; measured at Large on OpenLDAP |
+| The first Full Import after the upgrade loses the content-hash skip for restamped objects; and because the raw bulk update (`ConnectedSystemRepository.BulkUpdateConnectedSystemObjectsRawAsync`) marks every row it writes `SynchronisationPending`, and an import puts every compared object in that write, the restamped objects are marked pending too, so the next Delta Synchronisation processes every one of them (once, finding nothing to change) | One-off for both; measured at Large on OpenLDAP. The Delta Synchronisation that follows costs about as much as a Full Synchronisation of the objects restamped. The export path does not add to it: its Partition write (`UpdateConnectedSystemObjectPartitionsAsync`) writes the Partition alone and marks nothing |
 | Objects deleted before the upgrade keep a null Partition and only an unscoped complete read marks them deleted | Pre-release: no deployments carry such rows; and no wave of deletions at upgrade |
 | A genuine move: a scoped read of the old Partition before the new one's read marks the object deleted | Inherent to deletion by absence, and true today |
 | Placement cost per object | Partition DNs parsed once per run; measured at Large |
@@ -147,3 +147,27 @@ See below. Move this plan to `engineering/plans/done/` in the pull request that 
 - OpenLDAP subordinate glue returning nested-suffix entries in a superior search; AD domain-NC searches not returning DomainDnsZones objects.
 - Partitions being loaded at export preparation.
 - Whether an Active Directory cross-domain move keeps the objectGUID and reports a delete in the source Partition.
+
+## Departures
+
+What was built differently from the plan above, and why.
+
+| Phase | Plan | Built | Why |
+|-------|------|-------|-----|
+| 1 | The LDAP Connector implements the capability with `LdapConnectorUtilities.PartitionForDn` | The rule moved into `LdapPartitionPlacer`; `PartitionForDn` (the watermark judge) now delegates to it | One rule either way, and the placer can parse each Partition's DN once per run rather than once per object; the watermark path keeps its per-call form |
+| 1 | `IConnectorPartitionPlacement` answers which Partition an identifier is in | `PreparePartitionPlacement(partitions)` returns an `IConnectorPartitionPlacer` whose `GetPartition(identifier)` answers | The prepared placer is what lets the Connector parse Partitions once; the policy prepares one over the selected Partitions and, only where some are deselected, one over them all |
+| 1 | No answer for a Connector without the capability | `ConnectedSystemPartitionPlacement.Prepare` also has no answer for a Connected System with no Partitions | Placing among no Partitions would only count every object as placed nowhere |
+| 2 | No answer keeps the stored value | No answer keeps the stored value; where nothing is stored either, the Run Profile's Partition, for an existing object as for a new one | The old backfill becomes the last fallback (`PartitionIdToRecord`: placement, else stored, else the Run Profile's), so create and update agree, nothing is ever cleared, and a Connector without the capability keeps exactly today's behaviour, skip predicate included |
+| 2 | The skip predicate becomes "the stored Partition equals the placement" | "The stored Partition equals the Partition the run would record" | The same where the object is placed; elsewhere it is today's predicate, so an object placed nowhere is not denied its skip on every run |
+| 2 | Every non-delete import object is placed | Every object the run might create or update: not a delete, and not one the Connector could not read (an object-level import error); one with an unreadable attribute value is placed | Nothing is created or updated from an object the Connector could not read, so counting it as placed nowhere would only raise a false warning |
+| 2 | One summary log line: restamped, placed nowhere | The line also counts objects placed in a Partition, and the import span carries all three | The placed count is the denominator that makes the other two readable |
+| 2 | `CsoPartitionIdPersistenceDatabaseTests` covers the restamp if not already covered | A characterisation test (`PartitionMovedWithNothingElseChanged`), green from the start | The raw bulk update writes `PartitionId` for every object in the update list, changed or not, and an import always puts every compared object in that list; the existing backfill test covered null to a value, the new one covers one Partition to another through the `ISyncRepository` call the import makes |
+| 3 | Place and write in `BatchUpdateCsosAfterSuccessfulExportAsync` | A separate `RecordPartitionPlacementsAsync`, run once the batch's results are committed (last in the calls path's follow-on steps; straight after the External ID write in the file path), best-effort: a failure (the write, or a placer breaking its no-throw contract) is logged at Error with the objects named, counted as not recorded in the run's summary, and never fails the export | That method runs inside the transaction that records a Create's External ID and status together; a Partition write failing there (a Partition removed by a concurrent hierarchy refresh fails the foreign key) would roll back the result of a Create that succeeded, and it would be sent again. The object keeps the Partition it had and its confirming import places it, as before this phase. The in-memory harness cannot show the rollback (it holds the callers' instances), so `Export_PartitionCannotBeRecorded_StillRecordsTheSuccessfulCreateAsync` pins the contract and the count |
+| 3 | Prepare the placement in `PrepareConnectorForExport` | Prepared once in `ExecuteExportsAsync`, from the run's primary Connector, held for the run beside its other run-wide state, and read by every batch, parallel ones included | `PrepareConnectorForExport` runs once per Connector instance (the primary and each parallel batch's), so preparing there would parse the Partitions once per batch; the Partitions are loaded on the export path already (`Worker.LoadConnectedSystemForSynchronisationAsync` loads the full graph), so nothing needed loading |
+| 3 | Place from `SecondaryExternalId`, else the stored DN | That, then the External ID the Connector reported, then the stored External ID | The identifier rule the capability documents and the import uses (Secondary External ID, else External ID), so the two cannot ask different questions of a Connector that places by External ID; for LDAP the DN always answers first |
+| 3 | `UpdateConnectedSystemObjectPartitionsAsync` with tracked instances fixed up | As planned, and it writes only rows whose Partition differs and returns how many changed; the fix-up generalises `ConnectedSystemObjectMarkFixUp` to a per-object value | The export batch's own write (`UpdateConnectedSystemObjectsWithNewAttributeValuesAsync`) inserts attribute values and never writes the object's row, so it could not carry the Partition. Writing only what differs keeps an unchanged row's version (`xmin`) where it was |
+| 3 | One summary log line per run | The export's line, with the import's counts (placed, in no Partition, changed) and the number not recorded, on the run's `ExportExecutionResult`, accumulated across parallel batches as its other counts are | Matches the import's summary, so the two read alike |
+| 3 | `ProvisionedObjectPartitionTests`: "provisioned, confirmed by an unscoped import, then deleted, is marked deleted by a scoped Full Import" | Kept, green from the start | Phase 2 already places a provisioned object at its confirming import, which is what this scenario turns on |
+| 3 | A Partition that cannot be recorded is counted in the run's summary | Also a warning on the export Activity (`ExportOutcomeMessage.ForPartitionsNotRecorded`) | Never left to the service log alone, as an Initial Password JIM could not stage is reported |
+| 4 | `docs/configuration/run-profiles.md` explains a Partition-scoped run's coverage | A new section, "Which partition an object is in", on `partitions-and-containers.md`, with a decision diagram; `run-profiles.md` points to it | The run profiles page was at its word budget, and partitions are that page's subject |
+| 4 | Scenario 009 step `UnscopedCreatedDeletion` | As planned, with each partition's count compared before and after Full Import (Unscoped), since the count includes the Obsolete object `PartitionDeletion` leaves; Samba AD runs it with one user and one scoped Full Import | The single-partition directories have no second Partition to scope to |

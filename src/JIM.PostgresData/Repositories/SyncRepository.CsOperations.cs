@@ -529,6 +529,40 @@ public partial class SyncRepository
 
     #endregion
 
+    #region Partition Placement (#2723)
+
+    /// <inheritdoc />
+    public async Task<int> UpdateConnectedSystemObjectPartitionsAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int PartitionId)> placements)
+    {
+        if (placements.Count == 0)
+            return 0;
+
+        // One row per object; were an object given twice, the last placement stands.
+        var partitionIdByCsoId = new Dictionary<Guid, int>(placements.Count);
+        foreach (var (connectedSystemObjectId, partitionId) in placements)
+            partitionIdByCsoId[connectedSystemObjectId] = partitionId;
+
+        // bulk-sql-column-exemption: a narrow, single-column write of a call-site-computed value (where the Connector
+        // placed the object), not the Connected System Object write path, so it deliberately writes no other column.
+        var changed = await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" AS cso
+              SET ""PartitionId"" = placed.partition_id
+              FROM unnest({0}, {1}) AS placed(id, partition_id)
+              WHERE cso.""Id"" = placed.id
+                AND cso.""PartitionId"" IS DISTINCT FROM placed.partition_id",
+            new NpgsqlParameter { Value = partitionIdByCsoId.Keys.ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid },
+            new NpgsqlParameter { Value = partitionIdByCsoId.Values.ToArray(), NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer });
+
+        // Every placed object's tracked instance, not only those the statement changed: one that already held the
+        // Partition matches it either way, and one that was stale now reads as the row does.
+        ConnectedSystemObjectMarkFixUp.Apply(_context, cso => partitionIdByCsoId.ContainsKey(cso.Id),
+            cso => cso.PartitionId, cso => (int?)partitionIdByCsoId[cso.Id]);
+
+        return changed;
+    }
+
+    #endregion
+
     #region Cross-Batch Reference Fixup
 
     /// <summary>
