@@ -3801,11 +3801,11 @@ function Get-PartitionObjectCount {
 
     $counts = @{}
     foreach ($partition in @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ConnectedSystemId)) {
-        $count = Get-JIMConnectedSystemObject -ConnectedSystemId $ConnectedSystemId -Count -PartitionId ([int]$partition.id)
-        if ($null -eq $count) {
+        $objectCount = Get-JIMConnectedSystemObject -ConnectedSystemId $ConnectedSystemId -Count -PartitionId ([int]$partition.id)
+        if ($null -eq $objectCount) {
             throw "Could not count the Connected System Objects in partition $($partition.id) ('$($partition.name)') of Connected System $ConnectedSystemId"
         }
-        $counts[[int]$partition.id] = [int]$count
+        $counts[[int]$partition.id] = [int]$objectCount
     }
     return $counts
 }

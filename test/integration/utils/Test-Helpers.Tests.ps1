@@ -1894,8 +1894,9 @@ Describe 'Get-PartitionObjectCount' {
     }
 
     It 'maps each partition to the number of objects JIM counts in it, zero included' {
-        Mock Get-JIMConnectedSystemObject -ParameterFilter { $PartitionId -eq 3 } { 12 }
-        Mock Get-JIMConnectedSystemObject -ParameterFilter { $PartitionId -eq 4 } { 0 }
+        # One mock answering per partition, not one filtered mock per partition: with two filtered behaviours, Pester
+        # evaluates the filters where the bound -Count switch shadows a variable of its own, and fails to compare.
+        Mock Get-JIMConnectedSystemObject { switch ($PartitionId) { 3 { 12 } 4 { 0 } } }
 
         $counts = Get-PartitionObjectCount -ConnectedSystemId 7
 
@@ -1909,8 +1910,7 @@ Describe 'Get-PartitionObjectCount' {
     }
 
     It 'throws, naming the partition, when its count cannot be read' {
-        Mock Get-JIMConnectedSystemObject -ParameterFilter { $PartitionId -eq 3 } { 12 }
-        Mock Get-JIMConnectedSystemObject -ParameterFilter { $PartitionId -eq 4 } { $null }
+        Mock Get-JIMConnectedSystemObject { if ($PartitionId -eq 3) { 12 } }
 
         { Get-PartitionObjectCount -ConnectedSystemId 7 } | Should -Throw '*partition 4*glitterband*'
     }
