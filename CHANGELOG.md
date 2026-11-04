@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
 - ✨ An Initial Password now sits under the export item that provisioned the account, which shows where it stands as a follow-up (also in the Causality Explorer, the REST API and PowerShell), so an export no longer adds one Activity per account to the Activity list. (#2668)
 - ✨ An export run's Activity now counts where its Initial Passwords stand (delivered, retrying, parked and so on), its row on the Activity list shows them at a glance, and the REST API and `Get-JIMActivityStats` return the same counts. (#2021)
+- ✨ Run Profiles can be disabled and enabled again, in the portal, the REST API and PowerShell; a disabled Run Profile cannot run, and the portal, `Get-JIMRunProfile` and a failed Schedule step say why. (#2740)
 
 ### Changed
 
@@ -39,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A partition-targeted import now detects the deletion of objects first imported by an unscoped Run Profile or provisioned by JIM, and retries a provisioned object no import has confirmed: JIM records each object in the partition it is in. (#2723)
 - 🐛 A hierarchy refresh that fails while saving now finishes its Activity as failed with the reason, instead of leaving it in progress for ever, and reports the save's own error rather than one raised while recording it. (#2742)
 - 🐛 Refreshing a Connected System's hierarchy now removes the partitions and Containers it no longer holds, with the Containers beneath them, where it reported them removed but kept them; the **Scope** tab's Refresh now asks before discarding unsaved selections. (#2743)
+- 🐛 A hierarchy refresh that removes a partition a Run Profile targets no longer silently widens that Run Profile to every selected partition: you choose to disable those Run Profiles, or cancel the refresh. (#2740)
 
 ### Security
 

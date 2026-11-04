@@ -152,7 +152,7 @@ public class RunProfileEnabledStatePersistenceDatabaseTests
         {
             Assert.That(stored, Is.Not.Null);
             Assert.That(stored!.Enabled, Is.True, "the stored state, not the tracked copy's edit");
-            Assert.That(stored.DisabledReason, Is.Null);
+            Assert.That(stored!.DisabledReason, Is.Null);
         }
     }
 

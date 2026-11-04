@@ -55,13 +55,13 @@ A Run Profile that targets no partition reads every partition selected on the Co
 
 ### When a targeted partition is deselected
 
-Selecting partitions on the Connected System's Scope tab decides what JIM manages, for every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
+Selecting partitions on the Connected System's Scope tab decides what JIM manages, for every Run Profile. A Run Profile that targets a deselected partition is **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than read scope you have withdrawn. The Run Profiles tab marks it **Not selected**, and the REST API and `Get-JIMRunProfile` return `targetsDeselectedPartition`, so you can find each one before a scheduled run reaches it:
 
 ```powershell
 Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object targetsDeselectedPartition
 ```
 
-To resolve it, select the partition again, retarget the Run Profile, or delete it if the partition is retired.
+Select the partition again, retarget the Run Profile, or delete it if the partition is retired.
 
 !!! warning "Deselecting a partition or container changes what a Full Import considers deleted"
 
@@ -129,23 +129,23 @@ Each Delta Import re-reads everything since that position until the deletions ar
 
 **Recommended values:** set a limit on a Delta Import Run Profile that runs on a frequent Schedule against a Connected System that can delete objects in bulk, such as a directory where a whole OU can be deleted by mistake. A count of what a normal interval's leavers look like, with headroom, is usually easier to reason about than a percentage.
 
-## :material-timer-sand: Asynchronous execution
+## :material-pause-circle-outline: Disable a Run Profile
 
-Starting a Run Profile returns an Activity ID straight away. The work runs on the Worker, and its [Activity](activities.md) shows the run's progress as it goes, in the portal or with `Get-JIMActivity -Follow`; afterwards, its execution items give each object's outcome.
+A disabled Run Profile cannot run: JIM refuses it everywhere a run can start, saying why, a run already queued included. A Schedule step that runs it fails with the reason, and the step's failure setting decides whether the Schedule carries on. The Run Profile keeps its settings.
+
+Turn **Enabled** off or on in its edit dialog, or use `Set-JIMRunProfile -Enabled`. The Run Profiles tab marks it **Disabled**, with the reason, and the REST API and `Get-JIMRunProfile` return why:
+
+```powershell
+Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { -not $_.Enabled } | Select-Object Name, DisabledReason, DisabledPartitionName
+```
+
+`disabledReason` is `Manual` when an administrator disabled it, or `PartitionRemoved` when [a hierarchy refresh removed its partition](partitions-and-containers.md#when-a-refresh-removes-a-partition-a-run-profile-targets). Enabling that one again needs a partition, or **All selected partitions**, in the same change.
 
 ## :material-playlist-check: Common workflows
 
-**Setting up Run Profiles for a new Connected System:**
+**Setting up Run Profiles for a new Connected System:** create a Full Import, a Full Synchronisation and an Export at minimum, and bring the Connected System in with them in the order [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) sets out. Then add delta Run Profiles and run them from a [Schedule](schedules.md), keeping the full ones for periodic ground-truth refreshes.
 
-1. Create the Connected System and import its schema
-2. Create the Run Profiles you need: a Full Import, a Full Synchronisation and an Export at minimum, since the first run has to look at everything rather than only what changes. Add delta variants for ongoing operation, and keep the full variants for periodic ground-truth refreshes.
-3. Use the full variants to bring the Connected System in, in the order [Initialising JIM](../concepts/synchronisation-pipeline.md#initialising-jim) sets out, before switching to delta; then either add the delta Run Profiles as steps to a [schedule](schedules.md) for automated execution, or run them on demand for one-off operations
-
-**Running a one-off import:**
-
-1. Find the right Run Profile for the Connected System
-2. Run it, and note the Activity ID it returns
-3. Watch the Activity to follow its progress and inspect the result
+**Running a one-off operation:** run the Run Profile. It returns at once, and its [Activity](activities.md) shows the run's progress and each object's outcome, in the portal or with `Get-JIMActivity -Follow`.
 
 ## :material-cog-outline: Manage Run Profiles
 

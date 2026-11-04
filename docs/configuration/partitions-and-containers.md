@@ -180,3 +180,12 @@ JIM identifies partitions and containers by the system's own immutable identifie
 Containers selected before this behaviour shipped record their identifier at their next hierarchy refresh, and continue to be matched on Distinguished Name until then. Refresh the hierarchy once after upgrading to pick it up.
 
 A container that genuinely disappears from the source system is still reported as removed, and the Scope tab warns when a removed container was one you had selected.
+
+## :material-play-circle-outline: When a refresh removes a partition a Run Profile targets
+
+**Retrieve Hierarchy** removes the partitions and containers the Connected System no longer has. A partition a [Run Profile](run-profiles.md) targets is the exception: removing it would leave the Run Profile reading every selected partition, so a Full Import scoped to one partition would look for every object in the Connected System and treat any it did not find as deleted. JIM saves nothing from such a refresh until you choose:
+
+- **Disable Run Profiles** applies the refresh and disables each Run Profile that targets a removed partition, recording the partition's name. Each keeps its other settings, and stays disabled until you [enable it again](run-profiles.md#disable-a-run-profile) and choose the partition it reads, or all selected partitions. The refresh's Activity completes with a warning naming each Run Profile it disabled.
+- **Cancel** applies nothing from the refresh: no partition or container is added, removed or renamed, and every Run Profile is left as it was. The refresh's Activity completes with a warning saying so, naming the Run Profiles. Point them at another partition, then retrieve the hierarchy again.
+
+The portal asks, listing each Run Profile and the partition it targets. `Import-JIMConnectedSystemHierarchy` disables them unless you pass `-RunProfileAction Cancel`, and warns about each one it disabled. Over the REST API, `POST /api/v1/synchronisation/connected-systems/{connectedSystemId}/import-hierarchy` takes `runProfileAction` (`Disable`, the default, or `Cancel`); a cancelled refresh answers `409 Conflict`, naming the Run Profiles.

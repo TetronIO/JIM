@@ -1,6 +1,6 @@
 # Run Profiles that Target a Removed Partition
 
-- **Status:** Doing (Phases 1-7 complete)
+- **Status:** Done
 - **Issue:** [#2740](https://github.com/TetronIO/JIM/issues/2740)
 - **Created:** 2026-11-04
 
@@ -96,15 +96,15 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 
 ### Phase 2: Refuse a disabled Run Profile everywhere it can start ✅
 
-- Tests: `TaskingServerDisabledRunProfileTests.CreateWorkerTaskAsync_DisabledRunProfile_RefusesWithTheReason` (and the enabled control); `SchedulerServerSafeStartTests.StartScheduleExecutionAsync_StepRunsADisabledRunProfile_RecordsAFailedActivityWithTheReasonAsync`; `WorkerDisabledRunProfileTests.RefuseIfDisabledAsync_*`.
+- Tests: `TaskingServerDisabledRunProfileTests.CreateWorkerTaskAsync_DisabledRunProfile_RefusesWithTheReasonAndQueuesNothingAsync` (and the enabled control); `SchedulerServerSafeStartTests.StartScheduleExecutionAsync_StepRunsADisabledRunProfile_RecordsAFailedActivityWithTheReasonAsync`; `WorkerDisabledRunProfileTests.RefuseIfRunProfileDisabledAsync_*`.
 
 ### Phase 3: Enabling and disabling by update ✅
 
-- Tests: `ConnectedSystemRunProfileEnablementTests` (JIM.Worker.Tests): disabling records `Manual`; enabling clears the reason; re-enabling a `PartitionRemoved` Run Profile without a scope is refused, with a Partition or `allSelectedPartitions` succeeds; `ConfigurationSnapshotService` records the disabled state.
+- Tests: `ConnectedSystemRunProfileEnablementTests` (JIM.Worker.Tests): disabling records `Manual`; enabling clears the reason; re-enabling a `PartitionRemoved` Run Profile without a scope is refused, with a Partition or `allSelectedPartitions` succeeds; `ConfigurationSnapshotServiceTests.CreateSnapshot_ConnectedSystem_DisabledRunProfile_RecordsTheStateAndWhy`; `RunProfileEnabledStatePersistenceDatabaseTests.UpdateConnectedSystemRunProfileAsync_FromTheServerOnANoTrackingContext_DisablesAndOnlyEnablesWithAScopeAsync` (RequiresPostgres).
 
 ### Phase 4: The refresh ✅
 
-- Tests (RequiresPostgres, driven through the server on a NoTracking context, as JIM.Web runs it): `RefreshHierarchy_PartitionARunProfileTargetsIsRemoved_DisablesTheRunProfileAndClearsItsPartitionAsync` (the issue's reproduction, red against today's silent widening); `..._Cancel_AppliesNothingAndCompletesTheActivityWithAWarningAsync`; `..._NoRunProfileAffected_Cancel_StillAppliesAsync`.
+- Tests (RequiresPostgres, driven through the server on a NoTracking context, as JIM.Web runs it): `RefreshHierarchy_PartitionARunProfileTargetsIsRemoved_DisablesTheRunProfileAndClearsItsPartitionAsync` (the issue's reproduction: red with the Run Profile still enabled and its Partition cleared); `RefreshHierarchy_Cancel_PartitionARunProfileTargetsIsRemoved_AppliesNothingAsync`; `RefreshHierarchy_Cancel_NoRunProfileTargetsARemovedPartition_AppliesTheRefreshAsync`. `RunProfileEnablementTests` covers the two Activity messages.
 
 ### Phase 5: REST ✅
 
@@ -116,11 +116,23 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 
 ### Phase 7: Portal ✅
 
-- Tests: `AwaitingSynchronisationRunProfileTests.Preferred_DisabledDeltaSynchronisation_FallsBackToAnEnabledRunProfile`; `RemovedPartitionRunProfilesDialogTests` (bUnit, Shared component): lists each Run Profile and its Partition, Disable closes with the choice. The rest is markup over `RunProfileEnablement`, verified by build and by eye.
+- Tests: `AwaitingSynchronisationRunProfileTests.Preferred_DisabledDeltaSynchronisation_FallsBackToAnEnabledRunProfile`; `RemovedPartitionRunProfilesDialogTests` (bUnit, Shared component): lists each Run Profile and its Partition, Disable goes ahead and Cancel does not; `ConnectedSystemRunProfilesTabTests` (bUnit): the Disabled chip, the Enabled switch saving disabled, the required scope choice when enabling a Run Profile a removed partition disabled, and saving with a partition or all selected partitions. The rest is markup over `RunProfileEnablement`, verified by build.
 
-### Phase 8: Documentation, changelog, close
+### Phase 8: Documentation, changelog, close ✅
 
-- `docs/configuration/run-profiles.md`, `docs/configuration/partitions-and-containers.md`, the PowerShell reference (regenerated), the changelog, and this plan to `done/`.
+- `docs/configuration/run-profiles.md`, `docs/configuration/partitions-and-containers.md`, `docs/configuration/schedules.md`, the PowerShell reference (regenerated in Phase 6, examples here), the changelog, and this plan to `done/`.
+
+## Integration scenarios
+
+Readers of what this changes, searched across `test/integration`:
+
+- `Import-JIMConnectedSystemHierarchy`: Setup-Scenario 001, 002, 008, 009, 010, 014, 017, 019, 022, 025 and 031. Each refreshes before creating Run Profiles, or re-imports a hierarchy that has lost no partition, so the default (Disable) changes nothing for them; the cmdlet now sends a body, which the endpoint accepts. Output is piped to `Out-Null` everywhere.
+- `Get-JIMRunProfile`: Scenarios 010, 012, 013 (read `name`) and 021 (reads `safeguards`). The new properties are additive.
+- `Set-JIMRunProfile`: Scenario 021 (Safeguards only). Unchanged parameters.
+- `Start-JIMRunProfile`: most scenarios. No scenario disables a Run Profile, so none is refused.
+- Schedule step failures ("Could not be queued") and the hierarchy result's fields: no reader.
+
+None needed changing.
 
 ## Success Criteria
 
@@ -145,4 +157,8 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 |----------------|------------------------|-----|
 | "Portal Run buttons ... and its Run action is disabled with a tooltip" on the Run Profiles tab | The tab has no Run action today, so none is added; the Disabled chip carries the reason. The places that do start runs (Operations queue dialog, Full Synchronisation preview, "Run now") refuse a disabled Run Profile visibly | Adding a Run action to the tab is new scope |
 | REST run endpoint "a 4xx in the existing error shape" | 400 with `ApiErrorResponse`, as every other queue refusal | One refusal shape for one endpoint |
+| A refused refresh "Complete with a warning" | Complete With Warning, and the same for a refresh that disabled Run Profiles | Disabling a Run Profile stops it running, so it is as worth noticing as a cancelled refresh; an ordinary refresh still completes as Complete |
+| The Schedule editor "shows the disabled state" | A disabled Run Profile can still be chosen for a step, marked "(disabled)" and with a Disabled chip on the step | A Schedule can be set up before its Run Profile is enabled; the step fails, saying why, until it is |
+| `DisabledReason` | An enum (`Manual`, `PartitionRemoved`) with the partition's name beside it, rather than free text as on a Synchronisation Rule | The re-enabling rule depends on the reason and must not parse a sentence |
+| Docs: add to `run-profiles.md` | `run-profiles.md` is a priority page at 2,999 of its 3,000-word budget, so "Common workflows" was tightened and "Asynchronous execution" folded into it to make room | STR-8 blocks a priority page over budget |
 | Re-enabling must carry a Partition or the all-partitions flag | Enforced as "the result has a Partition, or the change states all selected partitions". A Partition chosen in an earlier change while the Run Profile stayed disabled counts | Such a Partition was picked by an administrator after the removal, so nothing widens; refusing it would make the administrator restate a choice already saved |

@@ -94,6 +94,10 @@ Get-JIMRunProfile -ConnectedSystemName "HR System" -Name "Delta*"
 Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
 ```
 
+```powershell title="List disabled Run Profiles and why"
+Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { -not $_.Enabled } | Select-Object Name, DisabledReason, DisabledPartitionName
+```
+
 ---
 
 ## :material-plus-circle-outline: New-JIMRunProfile
@@ -257,6 +261,18 @@ Get-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" | Set-JIMRunProfile -
 
 ```powershell title="Change partition assignment"
 Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -PartitionId 5
+```
+
+```powershell title="Disable a Run Profile"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $false
+```
+
+```powershell title="Enable a Run Profile a hierarchy refresh disabled, choosing its partition"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $true -PartitionId 5
+```
+
+```powershell title="Enable it to read every selected partition instead"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $true -AllSelectedPartitions
 ```
 
 ```powershell title="Update a file-based connector's Run Profile"

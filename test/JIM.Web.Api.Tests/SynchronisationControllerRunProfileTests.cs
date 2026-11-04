@@ -1351,8 +1351,8 @@ public class SynchronisationControllerRunProfileTests
         {
             Assert.That(dto, Is.Not.Null);
             Assert.That(dto!.Enabled, Is.False);
-            Assert.That(dto.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.PartitionRemoved));
-            Assert.That(dto.DisabledPartitionName, Is.EqualTo("dc=glitterband,dc=local"));
+            Assert.That(dto!.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.PartitionRemoved));
+            Assert.That(dto!.DisabledPartitionName, Is.EqualTo("dc=glitterband,dc=local"));
         }
     }
 

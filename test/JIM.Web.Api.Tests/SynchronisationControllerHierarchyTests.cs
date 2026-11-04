@@ -111,7 +111,7 @@ public class SynchronisationControllerHierarchyTests
         {
             Assert.That(dto, Is.Not.Null, "no body applies the refresh");
             Assert.That(dto!.Applied, Is.True);
-            Assert.That(dto.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.RunProfileName, rp.PartitionName, rp.Disabled)),
+            Assert.That(dto!.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.RunProfileName, rp.PartitionName, rp.Disabled)),
                 Is.EqualTo(new[] { (7, "Full Import (Glitterband)", "dc=glitterband,dc=local", true) }),
                 "the response names each Run Profile it disabled");
             Assert.That(_glitterbandImport.Enabled, Is.False, "and the Run Profile is disabled rather than widened");
@@ -129,7 +129,7 @@ public class SynchronisationControllerHierarchyTests
         {
             Assert.That(body, Is.Not.Null, "a cancelled refresh is a 409");
             Assert.That(body!.Message, Does.StartWith("Nothing from this refresh was saved."));
-            Assert.That(body.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.PartitionName, rp.Disabled)),
+            Assert.That(body!.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.PartitionName, rp.Disabled)),
                 Is.EqualTo(new[] { (7, "dc=glitterband,dc=local", false) }));
             Assert.That(_glitterbandImport.Enabled, Is.True);
         }
