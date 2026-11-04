@@ -6,8 +6,9 @@ using System.Buffers.Binary;
 namespace Tetron.PowerShellRemoting.Transport;
 
 /// <summary>
-/// Gathers the PSRP fragments that open a shell or a pipeline until their opening message is complete. WinRM needs
-/// the whole of it in one Create or Command, while PowerShell writes it in packets of at most 32 KiB.
+/// Gathers the PSRP fragments that open a shell or a pipeline until their opening message is complete. A shell's opening
+/// goes whole in its Create, and a pipeline's starts its Command, while PowerShell writes either in packets of at most
+/// 32 KiB.
 /// </summary>
 /// <remarks>
 /// A PSRP fragment (MS-PSRP 2.2.4) is an object id and a fragment id (big-endian), a flags byte (0x1 start, 0x2 end),

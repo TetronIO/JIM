@@ -3,7 +3,7 @@
 - **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 complete apart from the Attribute Flow tab's Exchange recipients panel; Phase 1 under way)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
-- **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
+- **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
 - **Created:** 2026-11-01
 
 ## Overview
@@ -143,7 +143,7 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
 - Add `ExchangeKerberosConfiguration` (D8, per process). The library's own tests already pin the rendering (AES only, no reverse DNS, `0600`); the service's tests cover merging, rewriting only on change, concurrency and the private directory.
 - Carry the spike's open items:
   - **TGT renewal:** an end-to-end harness test of a session outliving its ticket-granting ticket, both for a new connection and for a command running across the expiry. The harness KDC refuses service tickets for a TGT with about two minutes or less to run, so the tests use 150-second tickets. Both passed first time: the library signs in again as it stands, so the tests pin that rather than drive a fix.
-  - **Large payloads:** harness tests from 1 KB to 5 MB either side of 16 KB, and a read-only lab test against ex1. Session statistics now report the largest message each way, so a test can prove it crossed 16 KB.
+  - **Large payloads:** harness tests from 1 KB to 5 MB either side of 16 KB, and a read-only lab test against ex1. Session statistics now report the largest message each way, so a test can prove it crossed 16 KB. The lab run (2026-11-04) showed Windows keeps sealed messages whole, and found that a command's parameters went in one request, which Windows refuses over 500 KB; the client now splits them (recorded in the spike plan), and Phase 2's lab run repeats the 1 MB case.
   - **No recorded fixtures (changed 2026-11-04):** a recorded Kerberos-sealed exchange can be replayed only with its session key, a secret, and a plaintext recording does not test the framing in question. The live lab test is the Windows proof, and can be re-run.
 - **Moved out:** the feature flag (D11) shipped in Phase 3; quiet session close moves to Phase 2, since only ex1's front-end logs show the Ping 500s it is about.
 - **Done when:** the Worker and web images, booted read-only as UID 1654, each open a harness session (`Test-ImageRemoting.ps1`, in `remoting-harness-tests`), and `remoting-harness-tests` is green in CI.

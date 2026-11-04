@@ -142,6 +142,8 @@ public class ExchangeLabTests
         {
             Assert.That(answer, Is.Not.Empty, "a missing recipient is an error from Exchange, not silence");
             Assert.That(statistics.LargestRequestBytes, Is.GreaterThan(16 * 1024));
+            Assert.That(statistics.LargestRequestBytes, Is.LessThanOrEqualTo(500 * 1024),
+                "ex1 refuses a request over its MaxEnvelopeSizekb (500) with HTTP 413, as it did the 1 MB parameter sent whole");
             Assert.That(_runspace!.RunspaceStateInfo.State, Is.EqualTo(RunspaceState.Opened));
         }
     }
