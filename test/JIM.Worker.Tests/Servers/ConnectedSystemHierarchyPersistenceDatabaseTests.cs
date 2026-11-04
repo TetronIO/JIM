@@ -4,6 +4,7 @@
 using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Connectors;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -620,16 +621,158 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
-    /// A Connector whose hierarchy is whatever the test says the directory holds.
+    /// A refresh whose save fails finishes its Activity as a failure carrying the reason, and the save's own
+    /// exception reaches the caller (#2742).
     /// </summary>
-    private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions) : IConnector, IConnectorPartitions
+    /// <remarks>
+    /// The save is made to fail for a real reason: two refreshes of one Connected System at once. While this one reads
+    /// the directory, another that started a moment later saves first, having found Groups gone and removed it. This
+    /// one still holds Groups, so its update of that row matches nothing and the save fails.
+    ///
+    /// The failure handler used to record the failure on the same context whose save had just failed, which still
+    /// held the changes that broke it, so its own save failed the same way: the Activity stayed In Progress with no
+    /// message, and the caller was handed the handler's exception rather than the refresh's.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_SaveFails_FailsTheActivityAndRethrowsTheSaveFailureAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // This refresh's directory read still has Groups, and adds Contractors beneath People. The other refresh
+        // removes Groups (and, by cascade, Admins) while this one is reading.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Single(c => c.Name == "People").ChildContainers
+            .Add(new ConnectorContainer("ou=Contractors,ou=People,dc=yellowstone,dc=local", "Contractors"));
+        var connector = new StubPartitionsConnector([yellowstone, GlitterbandAsDiscovered()], whileReadingAsync: async () =>
+        {
+            await using var otherRefresh = NewContext();
+            await otherRefresh.ConnectedSystemContainers.Where(c => c.Name == "Groups").ExecuteDeleteAsync();
+        });
+
+        DbUpdateException? thrown;
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx), connectorFactory: new StubConnectorFactory(connector));
+            var system = (await jim.ConnectedSystems.GetConnectedSystemAsync(systemId, withChangeTracking: true))!;
+            var initiator = await ctx.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+
+            thrown = Assert.ThrowsAsync<DbUpdateConcurrencyException>(async () =>
+                await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(system, initiator));
+        }
+
+        await using var verify = NewContext();
+        var activity = await verify.Activities.SingleAsync(a => a.TargetOperationType == ActivityTargetOperationType.ImportHierarchy);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown?.StackTrace, Does.Not.Contain(nameof(ActivityServer.FailActivityWithErrorAsync)),
+                "the caller must be handed the refresh's own failure, not one raised while recording it");
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError),
+                "a refresh that failed must not leave its Activity In Progress for ever");
+            Assert.That(activity.ErrorMessage, Is.Not.Null.And.Not.Empty, "the Activity must say why it failed");
+            Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EquivalentTo(new[] { "People", "Staff" }),
+                "nothing of the failed refresh is saved: Contractors is not added, and only the other refresh's removal stands");
+        }
+    }
+
+    /// <summary>
+    /// Seeds a directory holding two selected partitions: Yellowstone, with People, and Groups holding Admins; and
+    /// Glitterband, with Staff. Returns the Connected System's id and the id of a security principal to attribute a
+    /// refresh to.
+    /// </summary>
+    private async Task<(int SystemId, Guid InitiatorId)> SeedTwoPartitionDirectoryAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test LDAP Connector", SupportsPartitions = true, SupportsPartitionContainers = true };
+        var setting = new ConnectorDefinitionSetting { Name = "Host", Type = ConnectedSystemSettingType.String };
+        connectorDefinition.Settings.Add(setting);
+        var system = new ConnectedSystem
+        {
+            Name = "Test Directory",
+            ConnectorDefinition = connectorDefinition,
+            SettingValues = [new ConnectedSystemSettingValue { Setting = setting, StringValue = "directory.example.local" }]
+        };
+
+        var yellowstone = new ConnectedSystemPartition
+        {
+            ConnectedSystem = system, ExternalId = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Selected = true, Containers = []
+        };
+        yellowstone.Containers.Add(new ConnectedSystemContainer
+        {
+            Partition = yellowstone, ExternalId = "ou=People,dc=yellowstone,dc=local", Name = "People", Selected = true
+        });
+        var groups = new ConnectedSystemContainer
+        {
+            Partition = yellowstone, ExternalId = "ou=Groups,dc=yellowstone,dc=local", Name = "Groups", Selected = true
+        };
+        groups.AddChildContainer(new ConnectedSystemContainer
+        {
+            ExternalId = "ou=Admins,ou=Groups,dc=yellowstone,dc=local", Name = "Admins", Selected = true
+        });
+        yellowstone.Containers.Add(groups);
+
+        var glitterband = new ConnectedSystemPartition
+        {
+            ConnectedSystem = system, ExternalId = "dc=glitterband,dc=local", Name = "dc=glitterband,dc=local", Selected = true, Containers = []
+        };
+        glitterband.Containers.Add(new ConnectedSystemContainer
+        {
+            Partition = glitterband, ExternalId = "ou=Staff,dc=glitterband,dc=local", Name = "Staff", Selected = true
+        });
+
+        // A hierarchy refresh is a configuration change, recorded against a security principal or not at all.
+        var mvUserType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+        var initiator = new MetaverseObject { Type = mvUserType, CachedDisplayName = "Test Administrator" };
+
+        seed.AddRange(connectorDefinition, system, yellowstone, glitterband, mvUserType, initiator);
+        await seed.SaveChangesAsync();
+
+        return (system.Id, initiator.Id);
+    }
+
+    /// <summary>
+    /// Yellowstone as the directory reports it: People always, and Groups with Admins beneath it when asked for.
+    /// </summary>
+    private static ConnectorPartition YellowstoneAsDiscovered(bool includeGroups)
+    {
+        var containers = new List<ConnectorContainer> { new("ou=People,dc=yellowstone,dc=local", "People") };
+        if (includeGroups)
+        {
+            var groups = new ConnectorContainer("ou=Groups,dc=yellowstone,dc=local", "Groups");
+            groups.ChildContainers.Add(new ConnectorContainer("ou=Admins,ou=Groups,dc=yellowstone,dc=local", "Admins"));
+            containers.Add(groups);
+        }
+
+        return new ConnectorPartition { Id = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Containers = containers };
+    }
+
+    /// <summary>
+    /// Glitterband as the directory reports it: Staff.
+    /// </summary>
+    private static ConnectorPartition GlitterbandAsDiscovered() => new()
+    {
+        Id = "dc=glitterband,dc=local",
+        Name = "dc=glitterband,dc=local",
+        Containers = [new ConnectorContainer("ou=Staff,dc=glitterband,dc=local", "Staff")]
+    };
+
+    /// <summary>
+    /// A Connector whose hierarchy is whatever the test says the directory holds, and which can run something else
+    /// while it is being read, to stand in for whatever else happens meanwhile.
+    /// </summary>
+    private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions, Func<Task>? whileReadingAsync = null) : IConnector, IConnectorPartitions
     {
         public string Name => "Stub Partitions Connector";
         public string? Description => null;
         public string? Url => null;
 
-        public Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger) =>
-            Task.FromResult(partitions);
+        public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+        {
+            if (whileReadingAsync != null)
+                await whileReadingAsync();
+
+            return partitions;
+        }
     }
 
     private sealed class StubConnectorFactory(IConnector connector) : IConnectorFactory

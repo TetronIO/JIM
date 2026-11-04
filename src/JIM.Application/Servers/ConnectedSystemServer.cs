@@ -4468,6 +4468,13 @@ public partial class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard whatever the refresh left staged on the shared DbContext before recording the failure (#2742):
+            // FailActivityWithErrorAsync saves on that same context, and when the refresh's own save was what failed,
+            // the context still held the changes that broke it, so recording the failure failed the same way. The
+            // Activity stayed In Progress with no message, and the caller was handed that second exception instead of
+            // this one. The Activity write survives the cleared tracker by design: UpdateActivityAsync attaches
+            // detach-safe. The schema import does the same, for the same reason.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
@@ -4518,6 +4525,8 @@ public partial class ConnectedSystemServer
         }
         catch (Exception ex)
         {
+            // Discard staged hierarchy changes before recording the failure: see the user-initiated overload above.
+            Application.Repository.ClearChangeTracker();
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
