@@ -4,7 +4,7 @@
 - **Created:** 2026-10-31
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
-- **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md). It decided go on 2026-11-03, against the AD lab's Exchange server.
+- **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../../plans/done/EXCHANGE_REMOTING_SPIKE.md). It decided go on 2026-11-03, against the AD lab's Exchange server.
 - **Implementation plan:** [`engineering/plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md`](../../plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md)
 
 ## Problem Statement
@@ -227,7 +227,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 ## Dependencies
 
-- The spike's go/no-go, decided go on 2026-11-03 ([plan](../../plans/doing/EXCHANGE_REMOTING_SPIKE.md)).
+- The spike's go/no-go, decided go on 2026-11-03 ([plan](../../plans/done/EXCHANGE_REMOTING_SPIKE.md)).
 - Follow-up Activities parented by their execution item (#2668), done first for initial passwords and reused here.
 - The AD lab's Exchange servers (#2412): `exchange-primary` in PANOPLY exists; `exchange-source` in RESURGAM is needed for GAL sync in both directions.
 

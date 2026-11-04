@@ -9,8 +9,9 @@ namespace Tetron.PowerShellRemoting.Tests;
 /// <summary>
 /// Payloads of several sizes, there and back through one bound parameter: under and over 16 KB, where WinRM's
 /// encryption is known to split messages for some protocols, and up to several megabytes, which PowerShell remoting
-/// has to fragment across many WS-Management messages in each direction. An Exchange recipient at full serialisation
-/// is tens of kilobytes, so this is everyday traffic, not an edge case. Skipped without the harness.
+/// has to fragment across many WS-Management messages in each direction, each within the size Windows accepts. An
+/// Exchange recipient at full serialisation is tens of kilobytes, so this is everyday traffic, not an edge case.
+/// Skipped without the harness.
 /// </summary>
 /// <remarks>
 /// The harness proves our framing against pyspnego; whether Windows itself ever splits a Kerberos-sealed message is for
@@ -20,6 +21,9 @@ namespace Tetron.PowerShellRemoting.Tests;
 public class LargePayloadHarnessTests
 {
     private const int SixteenKilobytes = 16 * 1024;
+
+    // Windows' MaxEnvelopeSizekb, 500 by default: the largest request it accepts. The stand-in server enforces it too.
+    private const int WindowsRequestLimit = 500 * 1024;
 
     [SetUp]
     public void SetUp()
@@ -51,6 +55,8 @@ public class LargePayloadHarnessTests
         {
             Assert.That(ps.HadErrors, Is.False);
             Assert.That(output.Single().BaseObject as string, Is.EqualTo(payload), "byte for byte, in order");
+            Assert.That(statistics.LargestRequestBytes, Is.LessThanOrEqualTo(WindowsRequestLimit),
+                "no request is larger than Windows accepts, however large the parameter");
             if (characters > SixteenKilobytes)
             {
                 Assert.That(statistics.LargestRequestBytes, Is.GreaterThan(SixteenKilobytes), "the request really crossed 16 KB");

@@ -16,7 +16,7 @@ namespace Tetron.PowerShellRemoting.Transport;
 /// <list type="bullet">
 ///   <item>Session <c>Data</c> up to the end of INIT_RUNSPACEPOOL is the Create; later session data is a Send.</item>
 ///   <item><c>Command</c> is acknowledged at once; the pipeline's <c>Data</c> up to the end of its first message is the
-///   Command; later data is a Send to it.</item>
+///   Command, as much of it as one request holds, the rest following in Sends to it; later data is a Send to it.</item>
 ///   <item><c>Signal</c> stops a pipeline; <c>Close</c> terminates a pipeline, or deletes the shell for the session.</item>
 ///   <item>A Receive pump per shell and per pipeline turns their stdout into <c>Data</c> packets.</item>
 /// </list>
@@ -30,6 +30,13 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
 {
     private const uint InitRunspacePool = 0x00010004;
     private const int EnvelopeOverhead = 4096;
+
+    // The envelope size this client asks for, PowerShell's own default. It is also the size this client keeps each request
+    // within, comfortably below what Windows accepts (MaxEnvelopeSizekb, 500 KB by default), as Windows' own client does.
+    private const int MaxEnvelopeSize = 153600;
+
+    // The PSRP bytes one request carries: base64 grows them by a third, and the SOAP envelope around them needs room.
+    private const int MaxPsrpBytesPerRequest = (MaxEnvelopeSize - EnvelopeOverhead) / 4 * 3;
 
     private readonly RemoteSessionOptions _options;
     private readonly RemoteSessionStatistics _statistics;
@@ -63,7 +70,7 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
         _onPacket = onPacket;
         _onError = onError;
         _settings = new WSManSessionSettings(options.ConnectionUri, $"http://schemas.microsoft.com/powershell/{options.ConfigurationName}",
-            Guid.NewGuid(), 153600, options.OperationTimeout);
+            Guid.NewGuid(), MaxEnvelopeSize, options.OperationTimeout);
         _login = new KerberosLogin(options, statistics);
         _control = OpenConnection();
         Writer = new PacketWriter(_requests);
@@ -210,8 +217,14 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
             pipeline.Opening.Append(data);
             if (pipeline.Opening.IsComplete)
             {
-                Call(WSManMessages.Command(_settings, _shellId, commandId, Convert.ToBase64String(pipeline.Opening.TakeAll())));
+                // A command's first message carries its parameters, so it can be any size. The Command carries what one
+                // request holds and the rest follows on stdin, as Windows' own client sends it: Windows refuses a request
+                // over its envelope size, which a 1 MB parameter in one Command was (HTTP 413).
+                var pieces = PsrpFragmentChunks.Split(pipeline.Opening.TakeAll(), MaxPsrpBytesPerRequest).ToList();
+                Call(WSManMessages.Command(_settings, _shellId, commandId, Convert.ToBase64String(pieces[0].Span)));
                 pipeline.Created = true;
+                foreach (var piece in pieces.Skip(1))
+                    Call(WSManMessages.Send(_settings, _shellId, "stdin", piece.ToArray(), commandId));
                 StartReceive(pipeline);
             }
         }
@@ -252,16 +265,10 @@ internal sealed class OutOfProcWSManTranslator : IDisposable
         Emit($"<CloseAck PSGuid='{Guid.Empty}' />");
     }
 
-    private void SendChunked(string stream, ReadOnlySpan<byte> data, Guid? commandId)
+    private void SendChunked(string stream, byte[] data, Guid? commandId)
     {
-        var chunkSize = (_settings.MaxEnvelopeSize - EnvelopeOverhead) / 4 * 3;
-        do
-        {
-            var chunk = data[..Math.Min(chunkSize, data.Length)];
-            Call(WSManMessages.Send(_settings, _shellId, stream, chunk.ToArray(), commandId));
-            data = data[chunk.Length..];
-        }
-        while (data.Length > 0);
+        foreach (var piece in PsrpFragmentChunks.Split(data, MaxPsrpBytesPerRequest))
+            Call(WSManMessages.Send(_settings, _shellId, stream, piece.ToArray(), commandId));
     }
 
     // Input for the shell must wait until the server has answered its first Receive.

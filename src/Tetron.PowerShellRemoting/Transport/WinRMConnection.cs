@@ -60,6 +60,7 @@ internal sealed class WinRMConnection : IDisposable
                     await AuthenticateAsync(cancellationToken).ConfigureAwait(false);
 
                 using var request = BuildRequest(envelope);
+                _statistics.RecordRequest(envelope.Length);
                 using var response = await SendHttpAsync(request, cancellationToken).ConfigureAwait(false);
                 var body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 
@@ -82,7 +83,7 @@ internal sealed class WinRMConnection : IDisposable
 
                 if (!_options.UsesMessageEncryption)
                 {
-                    _statistics.RecordMessage(envelope.Length, body.Length);
+                    _statistics.RecordResponse(body.Length);
                     return body;
                 }
 
@@ -90,7 +91,7 @@ internal sealed class WinRMConnection : IDisposable
                 try
                 {
                     var plaintext = WinRMEncryptedMessage.Decode(body, contentType, _context!);
-                    _statistics.RecordMessage(envelope.Length, plaintext.Length);
+                    _statistics.RecordResponse(plaintext.Length);
                     return plaintext;
                 }
                 catch (WinRMEncryptionException error)
