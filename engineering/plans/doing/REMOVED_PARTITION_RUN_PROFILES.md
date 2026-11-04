@@ -1,6 +1,6 @@
 # Run Profiles that Target a Removed Partition
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-4 complete)
 - **Issue:** [#2740](https://github.com/TetronIO/JIM/issues/2740)
 - **Created:** 2026-11-04
 
@@ -102,7 +102,7 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 
 - Tests: `ConnectedSystemRunProfileEnablementTests` (JIM.Worker.Tests): disabling records `Manual`; enabling clears the reason; re-enabling a `PartitionRemoved` Run Profile without a scope is refused, with a Partition or `allSelectedPartitions` succeeds; `ConfigurationSnapshotService` records the disabled state.
 
-### Phase 4: The refresh
+### Phase 4: The refresh ✅
 
 - Tests (RequiresPostgres, driven through the server on a NoTracking context, as JIM.Web runs it): `RefreshHierarchy_PartitionARunProfileTargetsIsRemoved_DisablesTheRunProfileAndClearsItsPartitionAsync` (the issue's reproduction, red against today's silent widening); `..._Cancel_AppliesNothingAndCompletesTheActivityWithAWarningAsync`; `..._NoRunProfileAffected_Cancel_StillAppliesAsync`.
 

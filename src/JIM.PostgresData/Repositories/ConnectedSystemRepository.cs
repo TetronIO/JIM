@@ -514,9 +514,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // either link is optional: the row stays behind, belonging to nothing (#2743).
         //
         // Containers before Partitions, so a removed Partition's own Containers are already deleted, rather than
-        // having their Partition cleared, when the Partition's deletion cascades through the tracker. A Run Profile
-        // targeting a removed Partition has its Partition cleared by that cascade, as a change-tracked refresh always
-        // did; whether that is right for the Run Profile is #2740's question.
+        // having their Partition cleared, when the Partition's deletion cascades through the tracker. No Run Profile
+        // still targets a removed Partition by now: the refresh has disabled each one and cleared its Partition, or
+        // saved nothing at all (#2740), so the cascade never quietly widens one.
         foreach (var container in removedContainers)
             Repository.Database.Entry(container).State = EntityState.Deleted;
 

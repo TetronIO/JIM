@@ -59,6 +59,35 @@ public static class RunProfileEnablement
     }
 
     /// <summary>
+    /// What a hierarchy refresh that disabled Run Profiles says about them: how many, which, the partition each targeted,
+    /// and what to do next.
+    /// </summary>
+    public static string DescribeRunProfilesDisabledByRefresh(IReadOnlyCollection<HierarchyRefreshRunProfileItem> runProfiles)
+    {
+        ArgumentNullException.ThrowIfNull(runProfiles);
+        return $"Disabled {CountOf(runProfiles)} that targeted a partition this refresh removed: {ListOf(runProfiles)}. " +
+               "Enable each one again, choosing the partition it reads.";
+    }
+
+    /// <summary>
+    /// What a hierarchy refresh asked to cancel says when Run Profiles target a partition it would remove: that nothing was
+    /// saved, which Run Profiles stopped it, and the ways forward.
+    /// </summary>
+    public static string DescribeCancelledRefresh(IReadOnlyCollection<HierarchyRefreshRunProfileItem> runProfiles)
+    {
+        ArgumentNullException.ThrowIfNull(runProfiles);
+        var (target, those, them) = runProfiles.Count == 1 ? ("targets", "that Run Profile", "it") : ("target", "those Run Profiles", "them");
+        return $"Nothing from this refresh was saved. It would remove a partition that {CountOf(runProfiles)} {target}: {ListOf(runProfiles)}. " +
+               $"Refresh again choosing to disable {those}, or point {them} at another partition first.";
+    }
+
+    private static string CountOf(IReadOnlyCollection<HierarchyRefreshRunProfileItem> runProfiles) =>
+        runProfiles.Count == 1 ? "1 Run Profile" : $"{runProfiles.Count} Run Profiles";
+
+    private static string ListOf(IEnumerable<HierarchyRefreshRunProfileItem> runProfiles) =>
+        string.Join(", ", runProfiles.Select(rp => $"'{rp.RunProfileName}' (partition '{rp.PartitionName}')"));
+
+    /// <summary>
     /// Applies an update's enabled state to <paramref name="updated"/>, judged against the state that is stored, and
     /// returns why the update is refused, or null when it may be saved.
     /// </summary>

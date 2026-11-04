@@ -65,6 +65,20 @@ public class HierarchyRefreshResult
     public List<HierarchyMoveItem> MovedContainers { get; set; } = new();
 
     /// <summary>
+    /// Whether the refresh was saved. False only when it was asked to cancel rather than disable the Run Profiles that
+    /// target a Partition it would remove, and there were some: nothing was changed, and the lists above describe what
+    /// the refresh found rather than what it did.
+    /// </summary>
+    /// <remarks>#2740.</remarks>
+    public bool Applied { get; set; } = true;
+
+    /// <summary>
+    /// The Run Profiles that target a Partition the refresh removes, or would remove: each one disabled when the refresh
+    /// was applied, and left as it was when it was not. Empty when the refresh removes no Partition a Run Profile targets.
+    /// </summary>
+    public List<HierarchyRefreshRunProfileItem> AffectedRunProfiles { get; set; } = new();
+
+    /// <summary>
     /// Whether there were any changes to the hierarchy.
     /// </summary>
     public bool HasChanges => AddedPartitions.Count > 0 ||

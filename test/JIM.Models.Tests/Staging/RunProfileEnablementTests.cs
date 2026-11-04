@@ -207,6 +207,34 @@ public class RunProfileEnablementTests
         }
     }
 
+    private static HierarchyRefreshRunProfileItem Affected(string name, string partition) =>
+        new() { RunProfileId = 1, RunProfileName = name, PartitionName = partition };
+
+    [Test]
+    public void DescribeRunProfilesDisabledByRefresh_OneRunProfile_NamesItItsPartitionAndTheRemedy()
+    {
+        var message = RunProfileEnablement.DescribeRunProfilesDisabledByRefresh([Affected("Full Import (Glitterband)", "dc=glitterband,dc=local")]);
+
+        Assert.That(message, Is.EqualTo(
+            "Disabled 1 Run Profile that targeted a partition this refresh removed: 'Full Import (Glitterband)' (partition 'dc=glitterband,dc=local'). " +
+            "Enable each one again, choosing the partition it reads."));
+    }
+
+    [Test]
+    public void DescribeCancelledRefresh_SeveralRunProfiles_SaysNothingWasSavedAndNamesEach()
+    {
+        var message = RunProfileEnablement.DescribeCancelledRefresh(
+        [
+            Affected("Full Import (Glitterband)", "dc=glitterband,dc=local"),
+            Affected("Delta Import (Glitterband)", "dc=glitterband,dc=local")
+        ]);
+
+        Assert.That(message, Is.EqualTo(
+            "Nothing from this refresh was saved. It would remove a partition that 2 Run Profiles target: " +
+            "'Full Import (Glitterband)' (partition 'dc=glitterband,dc=local'), 'Delta Import (Glitterband)' (partition 'dc=glitterband,dc=local'). " +
+            "Refresh again choosing to disable those Run Profiles, or point them at another partition first."));
+    }
+
     [Test]
     public void ApplyEnabledStateChange_NoStoredState_KeepsTheCallersStateAndRecordsADisabledRunProfileAsDisabledByHand()
     {
