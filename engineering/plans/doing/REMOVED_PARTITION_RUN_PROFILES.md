@@ -1,6 +1,6 @@
 # Run Profiles that Target a Removed Partition
 
-- **Status:** Doing (Phases 1-6 complete)
+- **Status:** Doing (Phases 1-7 complete)
 - **Issue:** [#2740](https://github.com/TetronIO/JIM/issues/2740)
 - **Created:** 2026-11-04
 
@@ -114,7 +114,7 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 
 - Pester: `Set-JIMRunProfile -Enabled $false/$true`, `-AllSelectedPartitions`; `Import-JIMConnectedSystemHierarchy -RunProfileAction` (default Disable, Cancel sent, warning naming disabled Run Profiles); `Invoke-JIMApi` expanding a 409's affected Run Profiles.
 
-### Phase 7: Portal
+### Phase 7: Portal ✅
 
 - Tests: `AwaitingSynchronisationRunProfileTests.Preferred_DisabledDeltaSynchronisation_FallsBackToAnEnabledRunProfile`; `RemovedPartitionRunProfilesDialogTests` (bUnit, Shared component): lists each Run Profile and its Partition, Disable closes with the choice. The rest is markup over `RunProfileEnablement`, verified by build and by eye.
 

@@ -37,7 +37,17 @@
                     {
                         @foreach (var runProfile in _runProfiles)
                         {
-                            <MudSelectItem Value="@runProfile" />
+                            @* A disabled Run Profile is listed, so its absence is not a mystery, but cannot be chosen (#2740). *@
+                            @if (runProfile.Enabled)
+                            {
+                                <MudSelectItem Value="@runProfile" />
+                            }
+                            else
+                            {
+                                <MudSelectItem Value="@runProfile" Disabled="true">
+                                    <span title="@runProfile.DescribeWhyDisabled()">@runProfile.Name (disabled)</span>
+                                </MudSelectItem>
+                            }
                         }
                     }
                 </MudSelect>
@@ -84,7 +94,7 @@
         }
     }
 
-    private bool CanQueue() => !_queueing && _selectedConnectedSystemId != null && _selectedRunProfile != null;
+    private bool CanQueue() => !_queueing && _selectedConnectedSystemId != null && _selectedRunProfile is { Enabled: true };
 
     private async Task HandleConnectedSystemChangedAsync(int? connectedSystemId)
     {

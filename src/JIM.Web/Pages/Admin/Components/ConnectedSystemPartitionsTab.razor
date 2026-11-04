@@ -115,6 +115,12 @@ else
                             Selected items removed
                         </MudChip>
                     }
+                    @if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Filled">
+                            Run Profiles disabled
+                        </MudChip>
+                    }
                 </div>
             </TitleContent>
             <ChildContent>
@@ -129,6 +135,31 @@ else
                     </div>
 
                     @* Removed Items (show first if any were selected - important warning) *@
+                    @if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.PauseCircleOutline" Class="mr-1" Color="Color.Warning" />
+                            Run Profiles disabled
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Run Profile</th>
+                                    <th>Partition removed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var runProfile in _hierarchyRefreshResult.AffectedRunProfiles)
+                                {
+                                    <tr @key="runProfile.RunProfileId">
+                                        <td>@runProfile.RunProfileName</td>
+                                        <td><span class="jim-code-inline">@runProfile.PartitionName</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
                     @if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
                     {
                         <MudText Typo="Typo.subtitle2" Class="mb-2">
@@ -604,13 +635,35 @@ else
         {
             // By id: the refresh loads and saves its own change-tracked copy (#2743). The page reloads this tab's
             // Connected System afterwards (OnConnectedSystemChanged below), so the tab shows what was saved.
-            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem.Id, user);
+            //
+            // Asked to cancel first (#2740): a refresh that would remove a partition a Run Profile targets then saves
+            // nothing, and the administrator chooses. Disabling those Run Profiles refreshes again; cancelling leaves
+            // everything, the unsaved selection edits included, as it was.
+            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem.Id, user, RemovedPartitionRunProfileAction.Cancel);
+
+            if (!_hierarchyRefreshResult.Applied)
+            {
+                var affected = _hierarchyRefreshResult.AffectedRunProfiles;
+                _hierarchyRefreshResult = null;
+                if (!await RemovedPartitionRunProfilesDialog.ShowAsync(DialogService, affected))
+                {
+                    Snackbar.Add("Hierarchy refresh cancelled. Nothing was changed.", Severity.Info);
+                    return;
+                }
+
+                _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem.Id, user, RemovedPartitionRunProfileAction.Disable);
+            }
 
             if (_hierarchyRefreshResult.Success)
             {
                 _hierarchyRetrievedAt = DateTime.UtcNow;
 
-                if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
+                if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
+                {
+                    var count = _hierarchyRefreshResult.AffectedRunProfiles.Count;
+                    Snackbar.Add($"Hierarchy refreshed. Disabled {count} Run Profile{(count == 1 ? "" : "s")} that targeted a removed partition.", Severity.Warning);
+                }
+                else if (_hierarchyRefreshResult.HasSelectedItemsRemoved)
                 {
                     Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
                 }
@@ -673,6 +726,14 @@ else
         sb.AppendLine($"Total Partitions: {_hierarchyRefreshResult.TotalPartitions}");
         sb.AppendLine($"Total Containers: {_hierarchyRefreshResult.TotalContainers}");
         sb.AppendLine();
+
+        if (_hierarchyRefreshResult.AffectedRunProfiles.Count > 0)
+        {
+            sb.AppendLine("RUN PROFILES DISABLED:");
+            foreach (var runProfile in _hierarchyRefreshResult.AffectedRunProfiles)
+                sb.AppendLine($"  {runProfile.RunProfileName} (partition {runProfile.PartitionName})");
+            sb.AppendLine();
+        }
 
         if (_hierarchyRefreshResult.RemovedPartitions.Count > 0 || _hierarchyRefreshResult.RemovedContainers.Count > 0)
         {

@@ -35,6 +35,16 @@
                 </HeaderTemplate>
                 <CellTemplate>
                     @context.Item.Name
+                    @if (!context.Item.Enabled)
+                    {
+                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                            <TooltipContent><TooltipText Text="@DisabledChipExplanation(context.Item)" /></TooltipContent>
+                            <ChildContent>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2"
+                                         data-testid="jim-run-profile-disabled">Disabled</MudChip>
+                            </ChildContent>
+                        </MudTooltip>
+                    }
                 </CellTemplate>
             </TemplateColumn>
             <TemplateColumn Title="Run Type" Sortable="false">
@@ -108,6 +118,16 @@
                                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Not selected</MudChip>
                                 </MudTooltip>
                             }
+                        }
+                        else if (context.Item.NeedsScopeToEnable())
+                        {
+                            @* Its partition was removed and cleared (#2740): "All selected" would say what it reads once
+                               enabled with nothing chosen, which is exactly what enabling it refuses to do. *@
+                            <span class="jim-code-inline mud-text-secondary">@context.Item.DisabledPartitionName</span>
+                            <MudTooltip Text="The Connected System no longer has this partition. Choose the partition this Run Profile reads, or All selected partitions, when you enable it."
+                                        Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Removed</MudChip>
+                            </MudTooltip>
                         }
                         else
                         {
@@ -355,10 +375,19 @@
             </MudText>
         </TitleContent>
         <DialogContent>
-            <MudForm @bind-IsValid="@_isEditRunProfileFormValid">
+            <MudForm @ref="_editForm" @bind-IsValid="@_isEditRunProfileFormValid">
                 <PrefilledFormValidator />
+                @if (_editRunProfileOriginal is { Enabled: false } disabledRunProfile)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-3" data-testid="jim-run-profile-disabled-reason">
+                        This Run Profile is disabled, so it cannot run. @disabledRunProfile.DescribeWhyDisabled()
+                    </MudAlert>
+                }
                 <MudTextField T="string" @bind-Value="_editRunProfile.Name" Label="Name" Variant="Variant.Outlined"
                               Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" Immediate="true" />
+
+                <MudSwitch T="bool" @bind-Value="_editRunProfile.Enabled" @bind-Value:after="RevalidateEditFormAsync"
+                           Label="Enabled" Color="Color.Primary" Class="mt-3" data-testid="jim-run-profile-enabled" />
 
                 <MudTextField T="string" Value="@_editRunProfile.RunType.ToString().SplitOnCapitalLetters()" Label="Run Type"
                               Variant="Variant.Outlined" Class="mt-5" Disabled="true"
@@ -372,7 +401,24 @@
                                   HelperText="Leave empty to use the Connected System's File Path, or enter an in-container path such as /connector-files/Users.csv to read a different file" />
                 }
 
-                @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
+                @if (EditNeedsScopeChoice)
+                {
+                    @* Enabling a Run Profile that a hierarchy refresh disabled, by removing its partition (#2740). Its
+                       partition was cleared, so leaving the box empty would quietly have it read every selected
+                       partition. A required choice, gated by the form, makes "all selected partitions" a decision. *@
+                    <MudSelect T="string" @bind-Value="_editScopeChoice" Label="Partition" Variant="Variant.Outlined"
+                               Class="mt-5" AnchorOrigin="Origin.BottomLeft" Required="true"
+                               RequiredError="Choose the partition this Run Profile reads, or All selected partitions"
+                               HelperText="Required to enable it: the partition it read was removed."
+                               data-testid="jim-run-profile-scope-choice">
+                        <MudSelectItem Value="@AllSelectedPartitionsChoice">All selected partitions</MudSelectItem>
+                        @foreach (var partition in (ConnectedSystem.Partitions ?? []).Where(p => p.Selected))
+                        {
+                            <MudSelectItem Value="@partition.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)">@partition.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPartitions && ConnectedSystem.Partitions != null)
                 {
                     <MudSelect T="ConnectedSystemPartition" @bind-Value="_editRunProfile.Partition" Label="Partition"
                                Variant="Variant.Outlined" Class="mt-5" AnchorOrigin="Origin.BottomLeft" Clearable="true"
@@ -502,9 +548,43 @@
     private bool _newRunProfileDialogVisible;
 
     private bool _isEditRunProfileFormValid;
+    private MudForm? _editForm;
     private ConnectedSystemRunProfile _editRunProfile = new();
     private ConnectedSystemRunProfile? _editRunProfileOriginal;
     private bool _editRunProfileDialogVisible;
+
+    /// <summary>
+    /// The scope chosen when enabling a Run Profile that a removed partition disabled: a partition's id, or
+    /// <see cref="AllSelectedPartitionsChoice"/>. Null until one is chosen.
+    /// </summary>
+    private string? _editScopeChoice;
+
+    private const string AllSelectedPartitionsChoice = "all";
+
+    /// <summary>
+    /// Whether the edit enables a Run Profile that a hierarchy refresh disabled by removing its partition (#2740), and so
+    /// has to say what it reads.
+    /// </summary>
+    private bool EditNeedsScopeChoice => _editRunProfile.Enabled && _editRunProfileOriginal?.NeedsScopeToEnable() == true;
+
+    /// <summary>
+    /// The Disabled chip's tooltip: that the Run Profile cannot run, and why.
+    /// </summary>
+    private static string DisabledChipExplanation(ConnectedSystemRunProfile runProfile) =>
+        $"This Run Profile is disabled, so it cannot run. {runProfile.DescribeWhyDisabled()}";
+
+    /// <summary>
+    /// Re-checks the edit form when the Enabled switch moves, since that shows or hides the required scope choice and a
+    /// field that disappears does not re-evaluate the form by itself.
+    /// </summary>
+    private async Task RevalidateEditFormAsync()
+    {
+        if (_editForm == null)
+            return;
+
+        await Task.Yield();
+        await _editForm.ValidateAsync();
+    }
 
     /// <summary>
     /// Slices one window of Run Profiles from the collection held on the Connected System the page already loaded,
@@ -670,6 +750,7 @@
             PageSize = runProfile.PageSize,
             FilePath = runProfile.FilePath,
             Partition = runProfile.Partition,
+            Enabled = runProfile.Enabled,
             VerifyImportContentHashes = runProfile.VerifyImportContentHashes,
             AllowObjectTypeChanges = runProfile.AllowObjectTypeChanges,
             MaxCreates = runProfile.MaxCreates,
@@ -678,6 +759,7 @@
             MaxDetectedDeletions = runProfile.MaxDetectedDeletions,
             MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent
         };
+        _editScopeChoice = null;
         _editRunProfileDialogVisible = true;
         return Task.CompletedTask;
     }
@@ -687,9 +769,26 @@
         if (_editRunProfileOriginal == null)
             return;
 
+        // Enabling a Run Profile a removed partition disabled says what it reads (#2740): a partition, or all selected
+        // partitions, stated to the server so it does not refuse the enable as a silent widening.
+        var allSelectedPartitions = false;
         var selectedPartition = _editRunProfile.Partition;
+        if (EditNeedsScopeChoice)
+        {
+            if (_editScopeChoice == AllSelectedPartitionsChoice)
+            {
+                allSelectedPartitions = true;
+                selectedPartition = null;
+            }
+            else
+            {
+                selectedPartition = ConnectedSystem.Partitions?.SingleOrDefault(p =>
+                    p.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) == _editScopeChoice);
+            }
+        }
 
         _editRunProfileOriginal.Name = _editRunProfile.Name;
+        _editRunProfileOriginal.Enabled = _editRunProfile.Enabled;
         _editRunProfileOriginal.PageSize = _editRunProfile.PageSize;
         _editRunProfileOriginal.FilePath = IsImportRunType(_editRunProfileOriginal.RunType) ? _editRunProfile.FilePath : null;
         _editRunProfileOriginal.Partition = selectedPartition;
@@ -713,13 +812,18 @@
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(_editRunProfileOriginal, user);
+            await jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(_editRunProfileOriginal, user, allSelectedPartitions);
 
             _editRunProfileOriginal.Partition = selectedPartition;
 
             Snackbar.Add("Run Profile updated.", Severity.Success);
             _editRunProfileDialogVisible = false;
             await RefreshGridAsync();
+        }
+        catch (ArgumentException ex)
+        {
+            // A refusal the server explains, such as enabling a Run Profile without the scope it needs.
+            Snackbar.Add(ex.Message, Severity.Error);
         }
         catch
         {

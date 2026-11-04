@@ -102,19 +102,44 @@ else if (_previewActivityId is { } previewActivityId)
                            && _fullSynchronisationRunProfiles.Count > 0;
 
     /// <summary>
-    /// The Run Profiles the Run button offers: the one the preview was asked from where there was one, else every Full
-    /// Synchronisation Run Profile of the system.
+    /// The Run Profiles the Run button could offer: the one the preview was asked from where there was one, else every
+    /// Full Synchronisation Run Profile of the system, enabled or not.
     /// </summary>
-    private List<ConnectedSystemRunProfile> RunnableProfiles =>
+    private List<ConnectedSystemRunProfile> CandidateProfiles =>
         _fullSynchronisationRunProfiles.Where(p => p.Id == _preferredRunProfileId).ToList() is { Count: > 0 } preferred
             ? preferred
             : _fullSynchronisationRunProfiles;
+
+    /// <summary>
+    /// The Run Profiles the Run button offers: the enabled candidates. A disabled one cannot run (#2740).
+    /// </summary>
+    private List<ConnectedSystemRunProfile> RunnableProfiles => CandidateProfiles.Where(p => p.Enabled).ToList();
+
+    /// <summary>
+    /// Why the Run button is unavailable when every candidate is disabled: the one Run Profile's own reason, or a
+    /// sentence covering them all.
+    /// </summary>
+    private string AllDisabledExplanation => CandidateProfiles is [var only]
+        ? RunProfileEnablement.DescribeRunRefusal(only)
+        : "Every Full Synchronisation Run Profile of this Connected System is disabled. Enable one on the Run Profiles tab to run it.";
 
     private RenderFragment HeaderActions => @<text>
         @if (CanRun)
         {
             var runnable = RunnableProfiles;
-            @if (runnable.Count == 1)
+            @if (runnable.Count == 0)
+            {
+                <MudTooltip Arrow="true" Placement="Placement.Top">
+                    <TooltipContent><TooltipText Text="@AllDisabledExplanation" /></TooltipContent>
+                    <ChildContent>
+                        <MudButton Variant="Variant.Filled" DropShadow="false" StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   Disabled="true" data-testid="jim-full-sync-run-disabled">
+                            Run Full Synchronisation
+                        </MudButton>
+                    </ChildContent>
+                </MudTooltip>
+            }
+            else if (runnable.Count == 1)
             {
                 var only = runnable[0];
                 @* Outlined, not filled: the panel offers this action rather than being the page's one main focus, and
