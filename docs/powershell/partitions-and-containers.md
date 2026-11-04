@@ -47,10 +47,10 @@ Imports a Connected System's partitions and containers, or refreshes those impor
 
 ```powershell
 # ById (default)
-Import-JIMConnectedSystemHierarchy -Id <int> [-PassThru] [-WhatIf] [-Confirm]
+Import-JIMConnectedSystemHierarchy -Id <int> [-RunProfileAction <string>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Import-JIMConnectedSystemHierarchy -InputObject <PSCustomObject> [-PassThru] [-WhatIf] [-Confirm]
+Import-JIMConnectedSystemHierarchy -InputObject <PSCustomObject> [-RunProfileAction <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -59,11 +59,12 @@ Import-JIMConnectedSystemHierarchy -InputObject <PSCustomObject> [-PassThru] [-W
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) |  | The ID of the Connected System to import the hierarchy of. Accepts pipeline input by property name. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
+| `RunProfileAction` | `string` | No | `'Disable'` | What to do when the refresh would remove a partition that Run Profiles target: Disable applies the refresh and disables them, and Cancel applies nothing from the refresh. A refresh that removes no such partition is applied either way. One of `Disable` or `Cancel`. |
 | `PassThru` | `switch` | No |  | Returns what the refresh changed. |
 
 ### Output
 
-With `-PassThru`, what the refresh added, removed, renamed and moved; otherwise nothing.
+With `-PassThru`, what the refresh added, removed, renamed and moved, and the Run Profiles it disabled; otherwise nothing.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -81,6 +82,8 @@ With `-PassThru`, what the refresh added, removed, renamed and moved; otherwise 
 | `RemovedContainers` | `object[]` | Containers that were removed from the hierarchy. Each has `ExternalId`, `Name`, `WasSelected` and `ItemType`. |
 | `RenamedContainers` | `object[]` | Containers that were renamed (ExternalId matched, Name changed). Each has `ExternalId`, `OldName`, `NewName` and `ItemType`. |
 | `MovedContainers` | `object[]` | Containers that moved to a different parent (ExternalId matched, parent changed). Each has `ExternalId`, `Name`, `OldParentExternalId` and `NewParentExternalId`. |
+| `Applied` | `bool` | Whether the refresh was saved. Always true on a successful response: a refresh asked to cancel when Run Profiles target a partition it would remove answers 409 instead. |
+| `AffectedRunProfiles` | `object[]` | The Run Profiles the refresh disabled because they targeted a partition it removed, each with that partition's name. Empty when the refresh removed no partition a Run Profile targets. Each has `RunProfileId`, `RunProfileName`, `PartitionName` and `Disabled`. |
 <!-- END GENERATED: Import-JIMConnectedSystemHierarchy -->
 
 ### Examples

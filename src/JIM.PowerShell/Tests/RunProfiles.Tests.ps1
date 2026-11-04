@@ -979,3 +979,88 @@ Describe 'Start-JIMRunProfile -PreviewActivityId' {
         }
     }
 }
+
+Describe 'Set-JIMRunProfile -Enabled and -AllSelectedPartitions (#2740)' {
+
+    BeforeEach {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+        }
+    }
+
+    It 'Has an Enabled bool parameter, not a switch, so $false is expressible' {
+        (Get-Command Set-JIMRunProfile).Parameters['Enabled'].ParameterType.Name | Should -Be 'Boolean'
+    }
+
+    It 'Sends enabled=$false to disable the Run Profile' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+
+            Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $false -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.ContainsKey('enabled') -and $Body.enabled -eq $false
+            }
+        }
+    }
+
+    It 'Sends enabled=$true with the partition chosen in the same request' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+
+            Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $true -PartitionId 2 -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Body.enabled -eq $true -and $Body.partitionId -eq 2 -and -not $Body.ContainsKey('allSelectedPartitions')
+            }
+        }
+    }
+
+    It 'Sends allSelectedPartitions=$true for -AllSelectedPartitions' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+
+            Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $true -AllSelectedPartitions -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Body.enabled -eq $true -and $Body.allSelectedPartitions -eq $true -and -not $Body.ContainsKey('partitionId')
+            }
+        }
+    }
+
+    It 'Leaves the enabled state alone when -Enabled is not given' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+
+            Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Name 'Renamed' -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                -not $Body.ContainsKey('enabled') -and -not $Body.ContainsKey('allSelectedPartitions')
+            }
+        }
+    }
+
+    It 'Writes an error and sends nothing for -PartitionId with -AllSelectedPartitions' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+
+            { Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -PartitionId 2 -AllSelectedPartitions -Confirm:$false -ErrorAction Stop } |
+                Should -Throw '*-PartitionId or -AllSelectedPartitions, not both*'
+
+            Should -Invoke Invoke-JIMApi -Times 0
+        }
+    }
+
+    It 'Sends -Enabled from a piped Run Profile' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 4 } }
+            $runProfile = [PSCustomObject]@{ Id = 4; ConnectedSystemId = 1; Name = 'Full Import'; Enabled = $true }
+
+            $runProfile | Set-JIMRunProfile -Enabled $false -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Endpoint -eq '/api/v1/synchronisation/connected-systems/1/run-profiles/4' -and $Body.enabled -eq $false
+            }
+        }
+    }
+}

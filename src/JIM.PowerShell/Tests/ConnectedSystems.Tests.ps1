@@ -812,3 +812,89 @@ Describe 'Import-JIMConnectedSystemSchema' {
         }
     }
 }
+
+Describe 'Import-JIMConnectedSystemHierarchy -RunProfileAction (#2740)' {
+
+    BeforeAll {
+        # A 409 Conflict as Invoke-RestMethod throws it in PowerShell 7. Global, so InModuleScope blocks can see it.
+        function global:New-HierarchyRefusalException {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Conflict)
+            return [Microsoft.PowerShell.Commands.HttpResponseException]::new('Conflict', $resp)
+        }
+    }
+
+    AfterAll {
+        Remove-Item function:global:New-HierarchyRefusalException -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey'; ApiKey = 'jim_ak_test' }
+        }
+    }
+
+    It 'Offers Disable and Cancel, defaulting to Disable' {
+        $parameter = (Get-Command Import-JIMConnectedSystemHierarchy).Parameters['RunProfileAction']
+        $parameter.Attributes.Where({ $_ -is [System.Management.Automation.ValidateSetAttribute] }).ValidValues |
+            Should -Be @('Disable', 'Cancel')
+    }
+
+    It 'Asks the refresh to disable affected Run Profiles when no choice is given' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ success = $true; applied = $true; affectedRunProfiles = @() } }
+
+            Import-JIMConnectedSystemHierarchy -Id 5 -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Endpoint -eq '/api/v1/synchronisation/connected-systems/5/import-hierarchy' -and $Method -eq 'POST' -and
+                $Body.runProfileAction -eq 'Disable'
+            }
+        }
+    }
+
+    It 'Sends Cancel when asked' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi { [PSCustomObject]@{ success = $true; applied = $true; affectedRunProfiles = @() } }
+
+            Import-JIMConnectedSystemHierarchy -Id 5 -RunProfileAction Cancel -Confirm:$false
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Body.runProfileAction -eq 'Cancel' }
+        }
+    }
+
+    It 'Warns about each Run Profile the refresh disabled, even without -PassThru' {
+        InModuleScope JIM {
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    success             = $true
+                    applied             = $true
+                    affectedRunProfiles = @([PSCustomObject]@{
+                        runProfileId = 7; runProfileName = 'Full Import (Glitterband)'; partitionName = 'dc=glitterband,dc=local'; disabled = $true
+                    })
+                }
+            }
+
+            $output = Import-JIMConnectedSystemHierarchy -Id 5 -Confirm:$false -WarningVariable written -WarningAction SilentlyContinue
+
+            $output | Should -BeNullOrEmpty
+            "$written" | Should -BeLike "*Disabled Run Profile 'Full Import (Glitterband)'*'dc=glitterband,dc=local'*Set-JIMRunProfile*"
+        }
+    }
+
+    It 'Says, when cancelled, which Run Profiles stopped the refresh and how to go ahead' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod {
+                $body = @{
+                    message             = "Nothing from this refresh was saved. It would remove a partition that 1 Run Profile targets: 'Full Import (Glitterband)' (partition 'dc=glitterband,dc=local')."
+                    affectedRunProfiles = @(@{ runProfileId = 7; runProfileName = 'Full Import (Glitterband)'; partitionName = 'dc=glitterband,dc=local'; disabled = $false })
+                } | ConvertTo-Json -Depth 5
+                $record = [System.Management.Automation.ErrorRecord]::new((New-HierarchyRefusalException), 'Conflict', 'InvalidOperation', $null)
+                $record.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($body)
+                throw $record
+            }
+
+            { Invoke-JIMApiRequest -Endpoint '/api/v1/synchronisation/connected-systems/5/import-hierarchy' -Method 'POST' -Body @{ runProfileAction = 'Cancel' } } |
+                Should -Throw -ExpectedMessage "*(409)*Nothing from this refresh was saved*-RunProfileAction Disable*"
+        }
+    }
+}

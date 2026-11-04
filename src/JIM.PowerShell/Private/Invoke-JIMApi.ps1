@@ -237,6 +237,13 @@ function Invoke-JIMApiRequest {
                     }
                     $errorMessage = "$errorMessage`n$($details -join "`n")`nRun the command again with -AcceptNewResult to take the new results as expected, or -SaveAnyway to save regardless."
                 }
+
+                # A hierarchy refresh asked to cancel because it would remove a partition that Run Profiles target. The
+                # message names them; say how to go ahead.
+                $affectedRunProfiles = $errorObj.affectedRunProfiles ?? $errorObj.AffectedRunProfiles
+                if ($affectedRunProfiles) {
+                    $errorMessage = "$errorMessage`nRun the command again with -RunProfileAction Disable to apply the refresh and disable them, or point them at another partition first."
+                }
             }
             catch {
                 # Keep original error message if JSON parsing fails
