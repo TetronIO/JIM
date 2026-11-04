@@ -23,12 +23,8 @@
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
-<div class="d-flex align-center mt-3">
-    <SegmentedToggle TValue="string" Options="@SiblingPages.ConnectedSystems" Value="@("systems")"
-                     AriaLabel="Connected Systems or Connectors" />
-    <MudSpacer />
-    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
-</div>
+<SegmentedToggle TValue="string" Options="@SiblingPages.ConnectedSystems" Value="@("systems")"
+                 AriaLabel="Connected Systems or Connectors" Class="mt-3" />
 
 @* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
 @if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
@@ -48,6 +44,8 @@
                      SingularName="Connected System"
                      PluralName="Connected Systems">
     <ToolBarExtras>
+        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new"
+                   Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
         @* Beside the table rather than in a filter row of its own: it is the only page-owned filter here, and a
            full row of chrome above the grid for one control would cost more than it explains. Outlined at the dense
            margin, like every other filter in the portal and the search box it shares this toolbar with. *@
