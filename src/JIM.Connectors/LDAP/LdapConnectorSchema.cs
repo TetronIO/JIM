@@ -338,6 +338,9 @@ internal class LdapConnectorSchema
         else if (!string.IsNullOrEmpty(adminDescription))
             attribute.Description = adminDescription;
 
+        // Exchange's own attributes look writable in the schema, but writing them over LDAP creates no recipient (#2755).
+        LdapExchangeOwnedAttributes.Declare(attribute);
+
         return attribute;
     }
 
