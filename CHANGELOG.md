@@ -20,9 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
 - 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
+- 🔄 Each LDAP partition now keeps its own Delta Import watermark. After upgrading, the first Delta Import to read each partition reads every object in it once, which also picks up any change a partition-targeted import skipped. (#2715)
 
 ### Fixed
 
+- 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.
 - 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
 - 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)
 - 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)
@@ -32,9 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
 - 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 - 🐛 A Delta Import that reads every object instead of its changes, as one with no watermark to continue from does, now marks the objects no longer there as deleted, within the Run Profile's deletion limits, rather than leaving them in JIM until a Full Import. (#2720)
+- 🐛 An import that reads one LDAP partition, Full or Delta, no longer moves another partition's Delta Import starting point, so partition-targeted Delta Imports no longer skip changes. (#2715)
 
 ### Security
 
+- 🔒 JIM's images move to .NET and ASP.NET Core 10.0.14, fixing CVE-2026-111497, an out-of-bounds write in the runtime's Brotli decoder.
 - 🔒 JIM no longer keeps a plain-text copy of its OpenID Connect client secret in the database; the copy it wrote at every start is removed on upgrade, and the encrypted copy JIM uses is unchanged. (#2684)
 - 🔒 Connector credentials entered in the portal, such as an LDAP Connector password or a SCIM Client Secret, are now encrypted at rest; they were stored unencrypted, as only the REST API encrypted them. Credentials already stored unencrypted are encrypted automatically when JIM next starts, so nothing needs re-entering, and JIM now refuses any stored credential it finds unencrypted rather than using it. (#2680)
 

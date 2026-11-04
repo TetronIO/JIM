@@ -88,6 +88,13 @@ public class SyncServer : ISyncServer
     public Task UpdateConnectedSystemPersistedConnectorDataAsync(ConnectedSystem connectedSystem, string? persistedConnectorData)
         => _jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, persistedConnectorData);
 
+    public Task<List<ConnectedSystemPartitionWatermark>> GetConnectedSystemPartitionWatermarksAsync(int connectedSystemId)
+        => _jim.ConnectedSystems.GetConnectedSystemPartitionWatermarksAsync(connectedSystemId);
+
+    public Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(ConnectedSystem connectedSystem, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string?> partitionWatermarks)
+        => _jim.ConnectedSystems.RecordImportWatermarksAsync(connectedSystem, persistedConnectorData, partitionWatermarks);
+
     #endregion
 
     #region Activity Management

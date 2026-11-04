@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:939555726cae4c916d212323ac3c0792996dcac2614f00e82cc40fcf059e1af3 AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:a3f9f81954b9c810af2ed18849716c8dc74a4707bd0907fdbd69be81554c0f30 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Scheduler"
@@ -44,7 +44,7 @@ RUN mkdir -p /data/keys /var/log/jim \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:0d99ebf1ccad15037b5c98c9fe8979d6b8dbac23812feae2277a0b277b5c5ffa AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
 # Corporate networks routinely inspect outbound TLS by re-signing it with their own authority, which
 # breaks certificate validation for every package restore inside the build. Supplying that authority
 # here (base64 of a PEM bundle) lets the build trust it; empty (the default) is a no-op. Build-stage

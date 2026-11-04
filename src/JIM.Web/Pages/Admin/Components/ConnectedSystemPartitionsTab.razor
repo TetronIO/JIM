@@ -370,6 +370,9 @@ else
                            Color="Color.Primary" Label="Manage this partition" Class="ms-auto" />
             </div>
 
+            @* Where this partition's next Delta Import starts (#2715); nothing for a deselected one *@
+            <PartitionDeltaImportWatermark Partition="@partition" Watermarks="@PartitionWatermarks" />
+
             @if (partition.Selected && ConnectedSystem.ConnectorDefinition.SupportsPartitionContainers)
             {
                 @* px-4 pb-4, not pa-4 pt-0: MudBlazor declares pa-4 after pt-0, so the pair kept a 16px top. *@
@@ -446,6 +449,13 @@ else
 
     [Parameter]
     public EventCallback OnConnectedSystemChanged { get; set; }
+
+    /// <summary>
+    /// Each partition's Delta Import watermark, by partition id (#2715), as read with the Connected System; null where its
+    /// Connector keeps none per partition. The page reads them, so this tab reaches the application layer only to save.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<int, DescribedPartitionWatermark>? PartitionWatermarks { get; set; }
 
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }

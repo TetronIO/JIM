@@ -1785,3 +1785,140 @@ Describe 'Scenario 016 database logins' {
         ConvertTo-ContainerSqlScript -Config $config -ScriptText "SELECT 1;" | Should -Be "SELECT 1;"
     }
 }
+
+Describe 'Partition Delta Import watermark reads' {
+    # Scenario 009 reads where each partition's next Delta Import starts, from the Connected System and from an
+    # import's Activity, before and after nearly every run it makes; these helpers are the one place that reads them.
+    BeforeAll {
+        # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing the module.
+        function Get-JIMConnectedSystemPartition { param([int]$ConnectedSystemId) }
+    }
+
+    Context 'Get-PartitionDeltaImportWatermark' {
+        It 'maps each partition to the watermark JIM holds for it, and to $null where it holds none' {
+            Mock Get-JIMConnectedSystemPartition {
+                @(
+                    [PSCustomObject]@{ id = 3; name = 'dc=yellowstone,dc=local'; deltaImportWatermark = [PSCustomObject]@{ value = '{"Kind":"Accesslog"}'; recordedAt = '2026-11-03T20:54:20Z' } },
+                    [PSCustomObject]@{ id = 4; name = 'dc=glitterband,dc=local'; deltaImportWatermark = $null }
+                )
+            }
+
+            $watermarks = Get-PartitionDeltaImportWatermark -ConnectedSystemId 7
+
+            $watermarks.Keys.Count | Should -Be 2
+            $watermarks[3] | Should -Be '{"Kind":"Accesslog"}'
+            $watermarks.ContainsKey(4) | Should -BeTrue
+            $watermarks[4] | Should -BeNullOrEmpty
+            Should -Invoke Get-JIMConnectedSystemPartition -Times 1 -ParameterFilter { $ConnectedSystemId -eq 7 }
+        }
+
+        It 'reads a partition the API returned without the watermark property as having none' {
+            Mock Get-JIMConnectedSystemPartition { [PSCustomObject]@{ id = 5; name = 'dc=archive,dc=local' } }
+
+            $watermarks = Get-PartitionDeltaImportWatermark -ConnectedSystemId 7
+
+            $watermarks.ContainsKey(5) | Should -BeTrue
+            $watermarks[5] | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Get-ActivityPartitionWatermark' {
+        It 'maps each partition the Activity names to the value it recorded, keeping a cleared one as $null' {
+            $activity = [PSCustomObject]@{
+                importPartitionWatermarksFrom = @(
+                    [PSCustomObject]@{ partitionId = 3; partitionName = 'dc=yellowstone,dc=local'; value = 'Y1' },
+                    [PSCustomObject]@{ partitionId = 4; partitionName = 'dc=glitterband,dc=local'; value = $null }
+                )
+                importPartitionWatermarksTo = @([PSCustomObject]@{ partitionId = 3; partitionName = 'dc=yellowstone,dc=local'; value = 'Y2' })
+            }
+
+            $from = Get-ActivityPartitionWatermark -Activity $activity -Direction From
+            $to = Get-ActivityPartitionWatermark -Activity $activity -Direction To
+
+            $from.Keys.Count | Should -Be 2
+            $from[3] | Should -Be 'Y1'
+            $from.ContainsKey(4) | Should -BeTrue
+            $from[4] | Should -BeNullOrEmpty
+            $to.Keys.Count | Should -Be 1
+            $to[3] | Should -Be 'Y2'
+        }
+
+        It 'returns $null when the Activity recorded no partition watermark, and for one that carries no such field' {
+            $recordedNothing = [PSCustomObject]@{ importPartitionWatermarksFrom = @([PSCustomObject]@{ partitionId = 3; partitionName = 'Y'; value = 'Y1' }); importPartitionWatermarksTo = $null }
+            $notAnImport = [PSCustomObject]@{ id = 'a1' }
+
+            Get-ActivityPartitionWatermark -Activity $recordedNothing -Direction To | Should -BeNullOrEmpty
+            Get-ActivityPartitionWatermark -Activity $notAnImport -Direction From | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Get-ImportReadRangeScope' {
+        It 'names the scope of each point of the side asked for' {
+            $activity = [PSCustomObject]@{
+                importReadRange = [PSCustomObject]@{
+                    from = [PSCustomObject]@{ kind = 'access log'; points = @([PSCustomObject]@{ scope = 'dc=yellowstone,dc=local' }, [PSCustomObject]@{ scope = 'dc=glitterband,dc=local' }) }
+                    to   = [PSCustomObject]@{ kind = 'access log'; points = @([PSCustomObject]@{ scope = 'dc=glitterband,dc=local' }) }
+                }
+            }
+
+            @(Get-ImportReadRangeScope -Activity $activity -Direction From) | Should -Be @('dc=glitterband,dc=local', 'dc=yellowstone,dc=local')
+            @(Get-ImportReadRangeScope -Activity $activity -Direction To) | Should -Be @('dc=glitterband,dc=local')
+        }
+
+        It 'returns nothing when the Activity has no read range, or none on that side' {
+            $noRange = [PSCustomObject]@{ importReadRange = $null }
+            $noTo = [PSCustomObject]@{ importReadRange = [PSCustomObject]@{ from = [PSCustomObject]@{ points = @([PSCustomObject]@{ scope = 'Y' }) }; to = $null } }
+
+            @(Get-ImportReadRangeScope -Activity $noRange -Direction From).Count | Should -Be 0
+            @(Get-ImportReadRangeScope -Activity $noTo -Direction To).Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'Import Activity reads' {
+    BeforeAll {
+        function Get-JIMActivity { param([string]$Id, [switch]$ExecutionItems) }
+        function Get-JIMActivityStats { param([string]$ActivityId) }
+    }
+
+    Context 'Get-ImportObjectCount' {
+        It 'returns what the import reported for the objects it read' {
+            Mock Get-JIMActivityStats { [PSCustomObject]@{ totalCsoAdds = 1; totalCsoUpdates = 4; totalCsoDeletes = 2; totalUnchanged = 9; totalProjections = 7 } }
+
+            $counts = Get-ImportObjectCount -ActivityId 'a1'
+
+            $counts.Added | Should -Be 1
+            $counts.Updated | Should -Be 4
+            $counts.Deleted | Should -Be 2
+            $counts.Unchanged | Should -Be 9
+            Should -Invoke Get-JIMActivityStats -Times 1 -ParameterFilter { $ActivityId -eq 'a1' }
+        }
+
+        It 'throws, naming the Activity, when its statistics cannot be read' {
+            Mock Get-JIMActivityStats { $null }
+
+            { Get-ImportObjectCount -ActivityId 'a1' } | Should -Throw '*a1*'
+        }
+    }
+
+    Context 'Get-ActivityItemDisplayName' {
+        BeforeEach {
+            Mock Get-JIMActivity -ParameterFilter { $ExecutionItems } {
+                @(
+                    [PSCustomObject]@{ objectChangeType = 'Updated'; displayName = 'S009 b' },
+                    [PSCustomObject]@{ objectChangeType = 'Deleted'; displayName = 'S009 gone' },
+                    [PSCustomObject]@{ objectChangeType = 'Updated'; displayName = 'S009 a' }
+                )
+            }
+        }
+
+        It 'returns the display names of the items of that change type only, sorted' {
+            @(Get-ActivityItemDisplayName -ActivityId 'a1' -ObjectChangeType Updated) | Should -Be @('S009 a', 'S009 b')
+            @(Get-ActivityItemDisplayName -ActivityId 'a1' -ObjectChangeType Deleted) | Should -Be @('S009 gone')
+        }
+
+        It 'returns nothing when no item has that change type' {
+            @(Get-ActivityItemDisplayName -ActivityId 'a1' -ObjectChangeType Added).Count | Should -Be 0
+        }
+    }
+}

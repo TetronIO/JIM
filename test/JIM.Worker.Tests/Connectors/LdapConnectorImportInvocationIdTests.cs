@@ -22,7 +22,9 @@ namespace JIM.Worker.Tests.Connectors;
 /// made after the restore reuse USN values the watermark has already passed and a Delta Import would silently miss
 /// them. These tests drive the whole import (root DSE read, continuity check, change search, persisted state)
 /// against a scripted directory, because the guarantees that matter are about the order of those steps and about
-/// what the persisted state carries, which no test of one step can show.
+/// what the persisted state carries, which no test of one step can show. Each Partition's watermark carries the
+/// invocationId of the domain controller that issued it (#2715), and the Connected System's record carries the one
+/// the last import reached, which the Connected System page shows.
 /// </summary>
 [TestFixture]
 public class LdapConnectorImportInvocationIdTests
@@ -69,13 +71,15 @@ public class LdapConnectorImportInvocationIdTests
         _directory.VendorName = VendorNameOf(directoryType);
         _directory.InvocationId = AfterRestore;
         _directory.HighestCommittedUsn = 90;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, usn: 100, directoryType));
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, directoryType), WatermarkOf(Before, usn: 100));
 
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(failure!.Message, Does.Contain(Before.ToString()).And.Contain(AfterRestore.ToString()), "the error names both invocationIds");
+            Assert.That(failure!.Message, Does.Contain("invocationId has changed"), "Scenario 025 reads the refusal for this");
+            Assert.That(failure.Message, Does.Contain(Before.ToString()).And.Contain(AfterRestore.ToString()), "the error names both invocationIds");
+            Assert.That(failure.Message, Does.Contain("corp.local"), "the error names the partition whose watermark it is");
             Assert.That(failure.Message, Does.Contain("restored from a backup or snapshot"));
             Assert.That(failure.Message, Does.Contain("Full Import"));
             Assert.That(_sent.Select(r => r.DistinguishedName ?? string.Empty), Is.EqualTo(new[] { string.Empty, NtdsSettingsDn }),
@@ -90,7 +94,7 @@ public class LdapConnectorImportInvocationIdTests
         // different domain controller. The watermark came from dc1; this connection is to dc2.
         _directory.InvocationId = AfterRestore;
         _directory.DnsHostName = Dc2;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, usn: 100, pin: null), connectedServer: "corp.local");
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, pin: null), WatermarkOf(Before, usn: 100), connectedServer: "corp.local");
 
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
 
@@ -105,49 +109,52 @@ public class LdapConnectorImportInvocationIdTests
     public async Task GetDeltaImportObjectsAsync_InvocationIdMatches_ReadsChangesFromTheWatermarkAndAdvancesItAsync()
     {
         _directory.HighestCommittedUsn = 250;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, usn: 100));
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before), WatermarkOf(Before, usn: 100));
 
         var result = await import.GetDeltaImportObjectsAsync();
 
         var recorded = Read(result.PersistedConnectorData);
+        var reached = Reached(result);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_sent.Any(r => r.DistinguishedName == ContainerDn && r.Filter?.ToString() == "(&(objectClass=user)(uSNChanged>=101))"), Is.True,
                 "the change search reads from the stored watermark");
             Assert.That(recorded.InvocationId, Is.EqualTo(Before));
-            Assert.That(recorded.HighestCommittedUsn, Is.EqualTo(250));
+            Assert.That(reached.Usn, Is.EqualTo(250));
+            Assert.That(reached.InvocationId, Is.EqualTo(Before));
         }
     }
 
     [Test]
-    public async Task GetDeltaImportObjectsAsync_StateWithoutAnInvocationId_AcceptsItAndRecordsTheCurrentOneAsync()
+    public async Task GetDeltaImportObjectsAsync_WatermarkWithoutAnInvocationId_AcceptsItAndRecordsTheCurrentOneAsync()
     {
-        // State written before the invocationId was recorded has no such property at all.
-        var legacyState = WithoutProperty(PersistedState(Before, usn: 100), nameof(LdapConnectorRootDse.InvocationId));
-        Assert.That(Read(legacyState).InvocationId, Is.Null, "precondition: the legacy state genuinely carries no invocationId");
+        // A watermark taken when the domain controller's invocationId could not be read carries none.
+        var watermark = WithoutProperty(WatermarkOf(Before, usn: 100)[1]!, nameof(LdapPartitionWatermark.InvocationId));
+        Assert.That(LdapPartitionWatermark.Parse(watermark, Logger)!.InvocationId, Is.Null, "precondition: the watermark genuinely carries no invocationId");
         _directory.InvocationId = AfterRestore;
         _directory.HighestCommittedUsn = 180;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, legacyState);
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(invocationId: null), new Dictionary<int, string?> { [1] = watermark });
 
         var result = await import.GetDeltaImportObjectsAsync();
 
-        var recorded = Read(result.PersistedConnectorData);
+        var reached = Reached(result);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_sent.Any(r => r.DistinguishedName == ContainerDn), Is.True, "unknown identity is accepted, so the changes are read");
-            Assert.That(recorded.InvocationId, Is.EqualTo(AfterRestore), "and the current invocationId is recorded for the next run to compare against");
-            Assert.That(recorded.HighestCommittedUsn, Is.EqualTo(180));
+            Assert.That(reached.InvocationId, Is.EqualTo(AfterRestore), "and the current invocationId is recorded for the next run to compare against");
+            Assert.That(reached.Usn, Is.EqualTo(180));
+            Assert.That(Read(result.PersistedConnectorData).InvocationId, Is.EqualTo(AfterRestore));
         }
     }
 
     [Test]
-    public void GetDeltaImportObjectsAsync_StateWithoutAnInvocationIdFromAnotherHost_StillFailsOnTheServerName()
+    public void GetDeltaImportObjectsAsync_WatermarkWithoutAnInvocationIdFromAnotherHost_StillFailsOnTheServerName()
     {
         // Deliberate: an unknown invocationId is accepted only while nothing else says the server differs. A different
-        // dnsHostName is conclusive by itself, so the weaker check is kept for state that predates the invocationId.
-        var legacyState = WithoutProperty(PersistedState(Before, usn: 100), nameof(LdapConnectorRootDse.InvocationId));
+        // dnsHostName is conclusive by itself, so the weaker check is kept for a watermark without the invocationId.
+        var watermark = WithoutProperty(WatermarkOf(Before, usn: 100)[1]!, nameof(LdapPartitionWatermark.InvocationId));
         _directory.DnsHostName = Dc2;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, legacyState, connectedServer: Dc2);
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(invocationId: null), new Dictionary<int, string?> { [1] = watermark }, connectedServer: Dc2);
 
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(() => import.GetDeltaImportObjectsAsync());
 
@@ -158,7 +165,7 @@ public class LdapConnectorImportInvocationIdTests
     public async Task GetDeltaImportObjectsAsync_CurrentInvocationIdUnreadable_ProceedsBecauseIdentityUnknownIsNotAFailureAsync()
     {
         _directory.NtdsSettingsReadRefused = true;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, usn: 100));
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before), WatermarkOf(Before, usn: 100));
 
         var result = await import.GetDeltaImportObjectsAsync();
 
@@ -166,6 +173,7 @@ public class LdapConnectorImportInvocationIdTests
         {
             Assert.That(_sent.Any(r => r.DistinguishedName == ContainerDn), Is.True);
             Assert.That(Read(result.PersistedConnectorData).InvocationId, Is.Null);
+            Assert.That(Reached(result).InvocationId, Is.Null);
         }
     }
 
@@ -177,7 +185,7 @@ public class LdapConnectorImportInvocationIdTests
     public async Task GetDeltaImportObjectsAsync_ConnectedThroughThePinnedServer_ComparesAgainstTheServerTheWatermarkCameFromAsync()
     {
         _directory.HighestCommittedUsn = 140;
-        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, usn: 100, pin: Dc1), connectedServer: Dc1);
+        var import = NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, PersistedState(Before, pin: Dc1), WatermarkOf(Before, usn: 100), connectedServer: Dc1);
 
         var result = await import.GetDeltaImportObjectsAsync();
 
@@ -187,6 +195,7 @@ public class LdapConnectorImportInvocationIdTests
             Assert.That(recorded.PinnedDirectoryServer, Is.EqualTo(Dc1), "the pin travels with the watermark and the invocationId it belongs to");
             Assert.That(recorded.InvocationId, Is.EqualTo(Before));
             Assert.That(recorded.DnsHostName, Is.EqualTo(Dc1));
+            Assert.That(Reached(result).DnsHostName, Is.EqualTo(Dc1));
         }
     }
 
@@ -201,16 +210,19 @@ public class LdapConnectorImportInvocationIdTests
         var directoryType = Enum.Parse<LdapDirectoryType>(directoryTypeName);
         _directory.VendorName = VendorNameOf(directoryType);
         _directory.HighestCommittedUsn = 4200;
-        var import = NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, persistedState: null);
+        var import = NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, persistedState: null, NoWatermark());
 
         var result = await import.GetFullImportObjectsAsync();
 
         var recorded = Read(result.PersistedConnectorData);
+        var reached = Reached(result);
         using (Assert.EnterMultipleScope())
         {
             Assert.That(recorded.DirectoryType, Is.EqualTo(directoryType));
             Assert.That(recorded.InvocationId, Is.EqualTo(Before));
-            Assert.That(recorded.HighestCommittedUsn, Is.EqualTo(4200));
+            Assert.That(reached.Usn, Is.EqualTo(4200));
+            Assert.That(reached.InvocationId, Is.EqualTo(Before));
+            Assert.That(reached.DnsHostName, Is.EqualTo(Dc1));
             Assert.That(recorded.DnsHostName, Is.EqualTo(Dc1));
             Assert.That(recorded.PinnedDirectoryServer, Is.EqualTo(Dc1), "the invocationId is per domain controller, so the pin recorded is the one it was read from");
         }
@@ -220,34 +232,35 @@ public class LdapConnectorImportInvocationIdTests
     public async Task RestoreLifecycle_DeltaImportFailsAfterARestoreAndAFullImportReestablishesTheBaselineAsync()
     {
         // 1. A Full Import baselines the directory as it is.
-        var baseline = (await NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, persistedState: null).GetFullImportObjectsAsync()).PersistedConnectorData;
-        Assert.That(Read(baseline).InvocationId, Is.EqualTo(Before));
+        var baseline = await NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, persistedState: null, NoWatermark()).GetFullImportObjectsAsync();
+        Assert.That(Read(baseline.PersistedConnectorData).InvocationId, Is.EqualTo(Before));
 
         // 2. A Delta Import against the unchanged directory is clean and moves the watermark on.
         _directory.HighestCommittedUsn = 120;
-        var afterDelta = (await NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, baseline).GetDeltaImportObjectsAsync()).PersistedConnectorData;
-        Assert.That(Read(afterDelta).HighestCommittedUsn, Is.EqualTo(120));
+        var afterDelta = await NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, baseline.PersistedConnectorData, baseline.PartitionWatermarks).GetDeltaImportObjectsAsync();
+        Assert.That(Reached(afterDelta).Usn, Is.EqualTo(120));
 
         // 3. The domain controller is restored: a new invocationId, and USNs back where the backup left them.
         _directory.InvocationId = AfterRestore;
         _directory.HighestCommittedUsn = 90;
         _sent.Clear();
         var failure = Assert.ThrowsAsync<CannotPerformDeltaImportException>(
-            () => NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, afterDelta).GetDeltaImportObjectsAsync());
+            () => NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, afterDelta.PersistedConnectorData, afterDelta.PartitionWatermarks).GetDeltaImportObjectsAsync());
         Assert.That(failure!.Message, Does.Contain(Before.ToString()).And.Contain(AfterRestore.ToString()));
         Assert.That(_sent.Any(r => r.DistinguishedName == ContainerDn), Is.False, "nothing was read while the watermark was untrustworthy");
 
         // 4. A Full Import re-establishes the baseline against the restored directory.
-        var rebaselined = (await NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, afterDelta).GetFullImportObjectsAsync()).PersistedConnectorData;
+        var rebaselined = await NewImport(EmptyConnectedSystem(), ConnectedSystemRunType.FullImport, afterDelta.PersistedConnectorData, afterDelta.PartitionWatermarks).GetFullImportObjectsAsync();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(Read(rebaselined).InvocationId, Is.EqualTo(AfterRestore));
-            Assert.That(Read(rebaselined).HighestCommittedUsn, Is.EqualTo(90));
+            Assert.That(Read(rebaselined.PersistedConnectorData).InvocationId, Is.EqualTo(AfterRestore));
+            Assert.That(Reached(rebaselined).InvocationId, Is.EqualTo(AfterRestore));
+            Assert.That(Reached(rebaselined).Usn, Is.EqualTo(90));
         }
 
         // 5. The next Delta Import is clean, reading from the restored directory's own USN stream.
         _sent.Clear();
-        await NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, rebaselined).GetDeltaImportObjectsAsync();
+        await NewImport(ScopedConnectedSystem(), ConnectedSystemRunType.DeltaImport, rebaselined.PersistedConnectorData, rebaselined.PartitionWatermarks).GetDeltaImportObjectsAsync();
         Assert.That(_sent.Any(r => r.DistinguishedName == ContainerDn && r.Filter?.ToString() == "(&(objectClass=user)(uSNChanged>=91))"), Is.True);
     }
 
@@ -303,18 +316,27 @@ public class LdapConnectorImportInvocationIdTests
     /// <summary>Samba AD is told apart from Active Directory by its vendorName; both advertise the Active Directory capability.</summary>
     private static string? VendorNameOf(LdapDirectoryType directoryType) => directoryType == LdapDirectoryType.SambaAD ? SambaVendorName : null;
 
-    private LdapConnectorImport NewImport(ConnectedSystem connectedSystem, ConnectedSystemRunType runType, string? persistedState, string connectedServer = Dc1)
+    private LdapConnectorImport NewImport(ConnectedSystem connectedSystem, ConnectedSystemRunType runType, string? persistedState,
+        IReadOnlyDictionary<int, string?>? partitionWatermarks, string connectedServer = Dc1)
     {
         var import = new LdapConnectorImport(connectedSystem,
             new ConnectedSystemRunProfile { Name = runType.ToString(), RunType = runType, PageSize = 500 },
-            new LdapConnection("localhost"), null, 1, [], persistedState, null, connectedServer, _ => true, Logger,
+            new LdapConnection("localhost"), null, 1, [], persistedState, partitionWatermarks, null, connectedServer, _ => true, Logger,
             CancellationToken.None, new RecordingConnectorProgress());
         import.Executor = _executor.Object;
         return import;
     }
 
-    /// <summary>A Connected System with nothing selected, so a Full Import stops after recording the baseline.</summary>
-    private static ConnectedSystem EmptyConnectedSystem() => new() { Name = "Active Directory", ObjectTypes = [], Partitions = [] };
+    /// <summary>
+    /// A Connected System whose one partition has no Container and no Object Type selected, so a Full Import stops
+    /// after recording the baseline.
+    /// </summary>
+    private static ConnectedSystem EmptyConnectedSystem() => new()
+    {
+        Name = "Active Directory",
+        ObjectTypes = [],
+        Partitions = [new ConnectedSystemPartition { Id = 1, ExternalId = PartitionDn, Name = "corp.local", Selected = true, Containers = [] }]
+    };
 
     private static ConnectedSystem ScopedConnectedSystem() => new()
     {
@@ -346,15 +368,33 @@ public class LdapConnectorImportInvocationIdTests
         ]
     };
 
-    private static string PersistedState(Guid? invocationId, long usn, LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory, string? pin = Dc1) =>
+    /// <summary>The Connected System's record of the directory the last import reached, which holds no position.</summary>
+    private static string PersistedState(Guid? invocationId, LdapDirectoryType directoryType = LdapDirectoryType.ActiveDirectory, string? pin = Dc1) =>
         JsonSerializer.Serialize(new LdapConnectorRootDse
         {
             DirectoryType = directoryType,
             DnsHostName = Dc1,
-            HighestCommittedUsn = usn,
             InvocationId = invocationId,
             PinnedDirectoryServer = pin
         });
+
+    /// <summary>The watermark JIM holds for the one partition: a USN, and the domain controller (dc1) that issued it.</summary>
+    private static Dictionary<int, string?> WatermarkOf(Guid? invocationId, long usn) => new()
+    {
+        [1] = new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Usn, Usn = usn, InvocationId = invocationId, DnsHostName = Dc1 }.Serialise()
+    };
+
+    private static Dictionary<int, string?> NoWatermark() => new() { [1] = null };
+
+    /// <summary>The watermark the run reached for the one partition.</summary>
+    private static LdapPartitionWatermark Reached(ConnectedSystemImportResult result)
+    {
+        Assert.That(result.PartitionWatermarks, Is.Not.Null, "the import returned no partition watermarks");
+        Assert.That(result.PartitionWatermarks!.Keys, Is.EquivalentTo(new[] { 1 }), "a watermark for the run's one partition and no other");
+        var watermark = LdapPartitionWatermark.Parse(result.PartitionWatermarks![1], Logger);
+        Assert.That(watermark, Is.Not.Null, "the partition's watermark is none");
+        return watermark!;
+    }
 
     private static string WithoutProperty(string json, string propertyName)
     {

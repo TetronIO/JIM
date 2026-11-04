@@ -26,6 +26,8 @@ namespace JIM.Worker.Tests.Connectors;
 public class LdapUsnDeltaSourceTests
 {
     private const string PartitionDn = "DC=corp,DC=local";
+    private const string OtherPartitionDn = "DC=child,DC=corp,DC=local";
+    private const string OtherPartitionsDeletedObjectsDn = "CN=Deleted Objects," + OtherPartitionDn;
     private const string ContainerDn = "OU=Users,DC=corp,DC=local";
     private const string DeletedObjectsDn = "CN=Deleted Objects,DC=corp,DC=local";
     private const string NtdsSettingsDn = "CN=NTDS Settings,CN=DC1,CN=Servers,CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=local";
@@ -84,26 +86,73 @@ public class LdapUsnDeltaSourceTests
 
     private LdapUsnDeltaSource Source() => new(_executor.Object, Log.Logger);
 
-    #region CaptureWatermarkAsync
+    #region CaptureWatermarksAsync
 
     [Test]
-    public async Task CaptureWatermarkAsync_RootDseCarriesHighestCommittedUsn_RecordsItAsync()
+    public async Task CaptureWatermarksAsync_RootDseCarriesHighestCommittedUsn_RecordsItAsync()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
+        var partition = Partition();
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "123456")), rootDse, previous: null, namingContexts: [], Timeout);
+        var captured = await CaptureAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "123456")), rootDse, partition);
 
-        Assert.That(rootDse.HighestCommittedUsn, Is.EqualTo(123456));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured[partition.Id]?.Usn, Is.EqualTo(123456));
+            Assert.That(rootDse.CurrentHighestCommittedUsn, Is.EqualTo(123456), "the continuity check compares it with each watermark");
+        }
     }
 
     [Test]
-    public async Task CaptureWatermarkAsync_RootDseNamesDsServiceName_ReadsInvocationIdFromTheNtdsSettingsObjectAsync()
+    public async Task CaptureWatermarksAsync_RecordsTheIssuingControllersInvocationIdAndHostNameForEveryTargetPartitionAsync()
+    {
+        // A USN means something only against the domain controller that issued it (#230), so every Partition's watermark
+        // names that domain controller: each Partition's next Delta Import may be the one that meets a different one.
+        var invocationId = Guid.NewGuid();
+        _answers[NtdsSettingsDn] = _ => LdapTestResponses.SearchResponseWithBinary(NtdsSettingsDn, ("invocationId", [invocationId.ToByteArray()]));
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory, DnsHostName = "dc1.corp.local" };
+        var corp = Partition();
+        var child = Partition(OtherPartitionDn, "OU=Staff," + OtherPartitionDn);
+
+        var captured = await CaptureAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "4200"), ("dsServiceName", NtdsSettingsDn)), rootDse, corp, child);
+
+        var expected = new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Usn, Usn = 4200, InvocationId = invocationId, DnsHostName = "dc1.corp.local" };
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(captured.Keys, Is.EquivalentTo(new[] { corp.Id, child.Id }), "a watermark for every target partition and no other");
+            Assert.That(captured[corp.Id], Is.EqualTo(expected));
+            Assert.That(captured[child.Id], Is.EqualTo(expected), "the USN is read once, before any partition's search, so it is safe for each");
+            Assert.That(_sent.Count(r => r.DistinguishedName == NtdsSettingsDn), Is.EqualTo(1), "the invocationId is read once for the run");
+        }
+    }
+
+    [Test]
+    public async Task CaptureWatermarksAsync_RootDseLacksHighestCommittedUsn_TakesNoWatermarkSoTheNextDeltaImportReadsEverythingAsync()
+    {
+        var partition = Partition();
+
+        var captured = await CaptureAsync(LdapTestResponses.Entry(""), new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory }, partition);
+
+        Assert.That(captured, Is.EqualTo(new Dictionary<int, LdapPartitionWatermark?> { [partition.Id] = null }));
+    }
+
+    [Test]
+    public async Task CaptureWatermarksAsync_RunTargetsNoPartition_TakesNoneAsync()
+    {
+        var captured = await Source().CaptureWatermarksAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1")),
+            new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory }, new Dictionary<int, LdapPartitionWatermark?>(), [], Timeout);
+
+        Assert.That(captured, Is.Empty);
+    }
+
+    [Test]
+    public async Task CaptureWatermarksAsync_RootDseNamesDsServiceName_ReadsInvocationIdFromTheNtdsSettingsObjectAsync()
     {
         var invocationId = Guid.NewGuid();
         _answers[NtdsSettingsDn] = _ => LdapTestResponses.SearchResponseWithBinary(NtdsSettingsDn, ("invocationId", [invocationId.ToByteArray()]));
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, namingContexts: [], Timeout);
+        await CaptureAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, Partition());
 
         var ntdsRead = _sent.Single();
         using (Assert.EnterMultipleScope())
@@ -117,27 +166,28 @@ public class LdapUsnDeltaSourceTests
     }
 
     [Test]
-    public async Task CaptureWatermarkAsync_NtdsSettingsReadRefused_LeavesInvocationIdNullWithoutFailingAsync()
+    public async Task CaptureWatermarksAsync_NtdsSettingsReadRefused_LeavesInvocationIdNullWithoutFailingAsync()
     {
         _answers[NtdsSettingsDn] = _ => throw new DirectoryOperationException(
             LdapTestResponses.Create<SearchResponse>(ResultCode.InsufficientAccessRights), "insufficient access rights");
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, previous: null, namingContexts: [], Timeout);
+        var partition = Partition();
+        var captured = await CaptureAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1"), ("dsServiceName", NtdsSettingsDn)), rootDse, partition);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(rootDse.InvocationId, Is.Null, "identity unknown is not a failure; the import goes on without the guard");
-            Assert.That(rootDse.HighestCommittedUsn, Is.EqualTo(1));
+            Assert.That(captured[partition.Id]?.Usn, Is.EqualTo(1));
         }
     }
 
     [Test]
-    public async Task CaptureWatermarkAsync_RootDseLacksDsServiceName_LeavesInvocationIdNullAsync()
+    public async Task CaptureWatermarksAsync_RootDseLacksDsServiceName_LeavesInvocationIdNullAsync()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory };
 
-        await Source().CaptureWatermarkAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1")), rootDse, previous: null, namingContexts: [], Timeout);
+        await CaptureAsync(LdapTestResponses.Entry("", ("HighestCommittedUSN", "1")), rootDse, Partition());
 
         using (Assert.EnterMultipleScope())
         {
@@ -153,21 +203,69 @@ public class LdapUsnDeltaSourceTests
     [Test]
     public void VerifyContinuity_InvocationIdChanged_ThrowsCannotPerformDeltaImportException()
     {
-        var previous = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), DnsHostName = "dc1.corp.local" };
+        var previous = UsnWatermark(42, Guid.NewGuid(), "dc1.corp.local");
         var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), DnsHostName = "dc1.corp.local" };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current),
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current),
             Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("invocationId has changed"));
+    }
+
+    [Test]
+    public void VerifyContinuity_PartitionWatermarkFromAnotherDomainController_ThrowsNamingThePartitionAsync()
+    {
+        // The partition was last read through dc2; this run reached dc1. A single Connected System-level record could not
+        // tell, because another partition's run through dc1 would have overwritten it (#2715).
+        var previous = UsnWatermark(9000, Guid.NewGuid(), "dc2.corp.local");
+        var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), DnsHostName = "dc1.corp.local", CurrentHighestCommittedUsn = 9100 };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("invocationId has changed"), "Scenario 025 reads the refusal for this");
+            Assert.That(ex.Message, Does.Contain(previous.InvocationId!.Value.ToString()).And.Contain(current.InvocationId!.Value.ToString()));
+            Assert.That(ex.Message, Does.Contain("the partition corp.local"), "the refusal names the partition whose watermark it is");
+            Assert.That(ex.Message, Does.Contain("Full Import"));
+        }
+    }
+
+    [Test]
+    public void VerifyContinuity_WatermarkHeldBySeveralPartitions_NamesEveryOne()
+    {
+        var previous = UsnWatermark(9000, Guid.NewGuid(), "dc1.corp.local");
+        var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), DnsHostName = "dc1.corp.local" };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() =>
+            Source().VerifyContinuity([Partition(), Partition(OtherPartitionDn, "OU=Staff," + OtherPartitionDn)], previous, current));
+
+        Assert.That(ex!.Message, Does.Contain($"the partitions corp.local and {OtherPartitionDn}"));
+    }
+
+    [Test]
+    public void VerifyContinuity_UsnBelowThePartitionsWatermark_ThrowsAsync()
+    {
+        // The directory's highestCommittedUSN is behind this partition's watermark, though perhaps not behind another's.
+        var invocationId = Guid.NewGuid();
+        var previous = UsnWatermark(5000, invocationId, "dc1.corp.local");
+        var current = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", CurrentHighestCommittedUsn = 4200 };
+
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.Message, Does.Contain("has gone backwards").And.Contain("5000").And.Contain("4200"));
+            Assert.That(ex.Message, Does.Contain("the partition corp.local"), "the refusal names the partition whose watermark it is");
+        }
     }
 
     [Test]
     public void VerifyContinuity_InvocationIdUnchanged_DoesNotThrow()
     {
         var invocationId = Guid.NewGuid();
-        var previous = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local" };
+        var previous = UsnWatermark(42, invocationId, "dc1.corp.local");
         var current = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc2.corp.local" };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     [Test]
@@ -176,10 +274,10 @@ public class LdapUsnDeltaSourceTests
         // A restore that bypasses Active Directory's own (a file-level or volume snapshot restore) keeps the
         // invocationId, so only the USN going backwards gives it away (#1869).
         var invocationId = Guid.NewGuid();
-        var previous = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", HighestCommittedUsn = 5000 };
-        var current = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", HighestCommittedUsn = 4200 };
+        var previous = UsnWatermark(5000, invocationId, "dc1.corp.local");
+        var current = new LdapConnectorRootDse { InvocationId = invocationId, DnsHostName = "dc1.corp.local", CurrentHighestCommittedUsn = 4200 };
 
-        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity(previous, current));
+        var ex = Assert.Throws<CannotPerformDeltaImportException>(() => Source().VerifyContinuity([Partition()], previous, current));
 
         using (Assert.EnterMultipleScope())
         {
@@ -187,7 +285,7 @@ public class LdapUsnDeltaSourceTests
             Assert.That(ex.Message, Does.Contain("4200"), "the directory's current USN");
             Assert.That(ex.Message, Does.Contain("restored from a backup or snapshot"), "the usual cause");
             Assert.That(ex.Message, Does.Contain("silently miss changes"), "why the run must not carry on");
-            Assert.That(ex.Message, Does.Contain("Run a Full Import to re-establish the delta baseline"), "what to do");
+            Assert.That(ex.Message, Does.Contain("Run a Full Import that reads the partition corp.local to re-establish the delta baseline"), "what to do, for which partition");
         }
     }
 
@@ -196,10 +294,10 @@ public class LdapUsnDeltaSourceTests
     {
         // With no invocationId or hostname to compare, a watermark the directory has not reached is still proof that
         // reading from it would miss changes, whichever of a restore or a different domain controller explains it.
-        var previous = new LdapConnectorRootDse { HighestCommittedUsn = 5000 };
-        var current = new LdapConnectorRootDse { HighestCommittedUsn = 4200 };
+        var previous = UsnWatermark(5000, invocationId: null, dnsHostName: null);
+        var current = new LdapConnectorRootDse { CurrentHighestCommittedUsn = 4200 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current),
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current),
             Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("has gone backwards"));
     }
 
@@ -207,24 +305,23 @@ public class LdapUsnDeltaSourceTests
     public void VerifyContinuity_InvocationIdChangedAndUsnWentBackwards_ReportsTheInvocationIdChange()
     {
         // USNs from two invocationIds are not comparable, so the identity change is the diagnosis to report.
-        var previous = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), HighestCommittedUsn = 5000 };
-        var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), HighestCommittedUsn = 4200 };
+        var previous = UsnWatermark(5000, Guid.NewGuid(), dnsHostName: null);
+        var current = new LdapConnectorRootDse { InvocationId = Guid.NewGuid(), CurrentHighestCommittedUsn = 4200 };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current),
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current),
             Throws.TypeOf<CannotPerformDeltaImportException>().With.Message.Contains("invocationId has changed"));
     }
 
     [TestCase(5000L, 5000L, Description = "nothing has changed since the watermark")]
     [TestCase(5000L, 5001L, Description = "the directory has moved on")]
     [TestCase(5000L, null, Description = "the directory did not return its USN, so there is nothing to compare")]
-    [TestCase(null, 4200L, Description = "no watermark was recorded, so the import falls back to a Full Import")]
-    public void VerifyContinuity_UsnNotBehindTheWatermark_DoesNotThrow(long? previousUsn, long? currentUsn)
+    public void VerifyContinuity_UsnNotBehindTheWatermark_DoesNotThrow(long previousUsn, long? currentUsn)
     {
         var invocationId = Guid.NewGuid();
-        var previous = new LdapConnectorRootDse { InvocationId = invocationId, HighestCommittedUsn = previousUsn };
-        var current = new LdapConnectorRootDse { InvocationId = invocationId, HighestCommittedUsn = currentUsn };
+        var previous = UsnWatermark(previousUsn, invocationId, dnsHostName: null);
+        var current = new LdapConnectorRootDse { InvocationId = invocationId, CurrentHighestCommittedUsn = currentUsn };
 
-        Assert.That(() => Source().VerifyContinuity(previous, current), Throws.Nothing);
+        Assert.That(() => Source().VerifyContinuity([Partition()], previous, current), Throws.Nothing);
     }
 
     #endregion
@@ -318,12 +415,16 @@ public class LdapUsnDeltaSourceTests
     #region HasBaseline
 
     [Test]
+    public void HasBaseline_NoWatermark_IsFalse() =>
+        Assert.That(Source().HasBaseline(null), Is.False);
+
+    [Test]
     public void HasBaseline_NoHighestCommittedUsn_IsFalse() =>
-        Assert.That(Source().HasBaseline(new LdapConnectorRootDse { InvocationId = Guid.NewGuid() }), Is.False);
+        Assert.That(Source().HasBaseline(new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Usn, InvocationId = Guid.NewGuid() }), Is.False);
 
     [Test]
     public void HasBaseline_WatermarkPresent_IsTrue() =>
-        Assert.That(Source().HasBaseline(new LdapConnectorRootDse { HighestCommittedUsn = 0 }), Is.True);
+        Assert.That(Source().HasBaseline(UsnWatermark(0, invocationId: null, dnsHostName: null)), Is.True);
 
     #endregion
 
@@ -342,6 +443,50 @@ public class LdapUsnDeltaSourceTests
             Assert.That(search.Filter, Is.EqualTo("(&(objectClass=user)(uSNChanged>=43))"));
             Assert.That(search.Scope, Is.EqualTo(SearchScope.Subtree));
             Assert.That(search.Attributes.Cast<string>(), Is.SupersetOf(new[] { "objectGUID", "displayName", "objectClass", "isDeleted" }));
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoPartitionsWithDifferentWatermarks_SearchesEachFromItsOwnUsnAsync()
+    {
+        // corp.local was last read at USN 42 and the child domain at 7000, by different Run Profiles (#2715).
+        const string otherContainerDn = "OU=Staff," + OtherPartitionDn;
+        var corp = Partition();
+        var child = Partition(OtherPartitionDn, otherContainerDn);
+        var context = Context([corp, child], watermarks: new Dictionary<int, LdapPartitionWatermark>
+        {
+            [corp.Id] = UsnWatermark(42, invocationId: null, dnsHostName: null),
+            [child.Id] = UsnWatermark(7000, invocationId: null, dnsHostName: null)
+        });
+
+        await Source().ReadChangesAsync(context, new ConnectedSystemImportResult(), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_sent.Single(r => r.DistinguishedName == ContainerDn).Filter, Is.EqualTo("(&(objectClass=user)(uSNChanged>=43))"));
+            Assert.That(_sent.Single(r => r.DistinguishedName == otherContainerDn).Filter, Is.EqualTo("(&(objectClass=user)(uSNChanged>=7001))"),
+                "the child domain is not re-read from corp.local's older watermark");
+        }
+    }
+
+    [Test]
+    public async Task ReadChangesAsync_TwoPartitions_SearchesEachPartitionsTombstonesFromItsOwnUsnAsync()
+    {
+        var corp = Partition();
+        var child = Partition(OtherPartitionDn, "OU=Staff," + OtherPartitionDn);
+        var context = Context([corp, child], watermarks: new Dictionary<int, LdapPartitionWatermark>
+        {
+            [corp.Id] = UsnWatermark(7000, invocationId: null, dnsHostName: null),
+            [child.Id] = UsnWatermark(42, invocationId: null, dnsHostName: null)
+        });
+
+        await Source().ReadChangesAsync(context, new ConnectedSystemImportResult(), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_sent.Single(r => r.DistinguishedName == DeletedObjectsDn).Filter, Is.EqualTo("(&(isDeleted=TRUE)(uSNChanged>=7001))"),
+                "corp.local's deletions are read from its own watermark, not the child domain's older one");
+            Assert.That(_sent.Single(r => r.DistinguishedName == OtherPartitionsDeletedObjectsDn).Filter, Is.EqualTo("(&(isDeleted=TRUE)(uSNChanged>=43))"));
         }
     }
 
@@ -728,10 +873,13 @@ public class LdapUsnDeltaSourceTests
         IReadOnlyList<ConnectedSystemPaginationToken>? tokens = null, bool supportsPaging = true, int pageSize = 500) =>
         Context([partition], objectType, tokens, supportsPaging, pageSize);
 
+    /// <summary>A change read of the given partitions; each reads from <see cref="Watermark"/> unless given its own.</summary>
     private LdapDeltaReadContext Context(IReadOnlyList<ConnectedSystemPartition> partitions, ConnectedSystemObjectType? objectType = null,
-        IReadOnlyList<ConnectedSystemPaginationToken>? tokens = null, bool supportsPaging = true, int pageSize = 500) => new()
+        IReadOnlyList<ConnectedSystemPaginationToken>? tokens = null, bool supportsPaging = true, int pageSize = 500,
+        IReadOnlyDictionary<int, LdapPartitionWatermark>? watermarks = null) => new()
     {
-        PreviousRootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory, HighestCommittedUsn = Watermark },
+        PreviousRootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory },
+        Watermarks = watermarks ?? partitions.ToDictionary(partition => partition.Id, _ => UsnWatermark(Watermark, invocationId: null, dnsHostName: null)),
         // Microsoft AD pages; Samba AD is the AD-family directory that does not.
         CurrentRootDse = new LdapConnectorRootDse { DirectoryType = supportsPaging ? LdapDirectoryType.ActiveDirectory : LdapDirectoryType.SambaAD },
         TargetPartitions = partitions,
@@ -743,6 +891,13 @@ public class LdapUsnDeltaSourceTests
         Notes = _notes,
         Host = _host.Object
     };
+
+    private static LdapPartitionWatermark UsnWatermark(long usn, Guid? invocationId, string? dnsHostName) =>
+        new() { Kind = LdapDeltaSourceKind.Usn, Usn = usn, InvocationId = invocationId, DnsHostName = dnsHostName };
+
+    /// <summary>The capture of a run reading the given partitions, none of which has a watermark yet.</summary>
+    private Task<IReadOnlyDictionary<int, LdapPartitionWatermark?>> CaptureAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, params ConnectedSystemPartition[] partitions) =>
+        Source().CaptureWatermarksAsync(rootDseEntry, rootDse, partitions.ToDictionary(partition => partition.Id, _ => (LdapPartitionWatermark?)null), partitions, Timeout);
 
     private static SearchResultEntry ChangedEntry(string dn) =>
         LdapTestResponses.Entry(dn, ("objectClass", "user"), ("displayName", "Someone"));

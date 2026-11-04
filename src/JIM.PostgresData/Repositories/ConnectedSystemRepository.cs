@@ -566,6 +566,214 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         await isolatedContext.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// The one statement that removes the watermarks of a Connected System's deselected Partitions (#2715), shared by
+    /// the server's deselection hook (<see cref="DeleteWatermarksOfDeselectedPartitionsAsync"/>) and the import's
+    /// end-of-run write (<see cref="RecordImportWatermarksAsync"/>), so the two can never disagree about what
+    /// "deselected" means. {0} is the Connected System id.
+    /// </summary>
+    private const string DeleteWatermarksOfDeselectedPartitionsSql = """
+        DELETE FROM "ConnectedSystemPartitionWatermarks" AS w
+        USING "ConnectedSystemPartitions" AS p
+        WHERE w."PartitionId" = p."Id"
+          AND w."ConnectedSystemId" = {0}
+          AND NOT p."Selected"
+        """;
+
+    /// <inheritdoc />
+    public async Task<List<ConnectedSystemPartitionWatermark>> GetPartitionWatermarksAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemPartitionWatermarks
+            .AsNoTracking()
+            .Where(w => w.ConnectedSystemId == connectedSystemId)
+            .OrderBy(w => w.PartitionId)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Records what a completed import reached (see the interface doc). On relational providers it is raw SQL and
+    /// <c>ExecuteUpdateAsync</c> in one transaction, touching no tracked state: the persisted connector data first,
+    /// then the guarded upsert, the clears and the deselected-Partition sweep. The upsert joins the Partitions table,
+    /// which both skips a Partition removed while the run was going (a foreign key violation here, after the run has
+    /// staged everything, would be the worst possible moment) and keeps another Connected System's Partitions out of
+    /// reach. <c>ON CONFLICT</c> rather than read-then-write, because two imports of one Connected System can record at
+    /// once. The in-memory test provider runs none of this SQL, so it falls back to an isolated context over the same
+    /// store with the same observable result, as <see cref="UpdateConnectedSystemPersistedConnectorDataAsync"/> does.
+    /// </summary>
+    public async Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(int connectedSystemId, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string> partitionWatermarks, IReadOnlyCollection<int> partitionWatermarksToClear, DateTime recordedAt)
+    {
+        ArgumentNullException.ThrowIfNull(partitionWatermarks);
+        ArgumentNullException.ThrowIfNull(partitionWatermarksToClear);
+
+        if (!Repository.Database.Database.IsRelational())
+            return await RecordImportWatermarksViaIsolatedContextAsync(connectedSystemId, persistedConnectorData, partitionWatermarks, partitionWatermarksToClear, recordedAt);
+
+        var database = Repository.Database.Database;
+
+        // Enrol in the caller's transaction where there is one; Npgsql does not support nested transactions.
+        var ownsTransaction = database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction ? await database.BeginTransactionAsync() : null;
+
+        if (persistedConnectorData != null)
+        {
+            await Repository.Database.ConnectedSystems
+                .Where(cs => cs.Id == connectedSystemId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorData));
+        }
+
+        var recorded = 0;
+        if (partitionWatermarks.Count > 0)
+        {
+            var assignments = string.Join(", ", PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarksUpdate
+                .Select(column => $"\"{column}\" = EXCLUDED.\"{column}\""));
+
+            // The SELECT list below MUST match PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarks in order.
+            // The Connected System comes from the Partition row, never from the caller, so a row can only ever be filed
+            // under the Connected System that owns its Partition.
+            var upsertSql = $"""
+                INSERT INTO "ConnectedSystemPartitionWatermarks" ({BulkSqlHelpers.ToQuotedList(PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarks)})
+                SELECT v."PartitionId", p."ConnectedSystemId", v."Value", @recordedAt
+                FROM unnest(@partitionIds, @values) AS v("PartitionId", "Value")
+                INNER JOIN "ConnectedSystemPartitions" AS p ON p."Id" = v."PartitionId"
+                WHERE p."ConnectedSystemId" = @connectedSystemId
+                ON CONFLICT ("PartitionId") DO UPDATE SET {assignments}
+                """;
+
+            var ordered = partitionWatermarks.OrderBy(watermark => watermark.Key).ToList();
+            recorded = await database.ExecuteSqlRawAsync(upsertSql,
+                new NpgsqlParameter("partitionIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                    { Value = ordered.Select(watermark => watermark.Key).ToArray() },
+                new NpgsqlParameter("values", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+                    { Value = ordered.Select(watermark => watermark.Value).ToArray() },
+                new NpgsqlParameter("recordedAt", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = recordedAt },
+                new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+        }
+
+        var cleared = 0;
+        if (partitionWatermarksToClear.Count > 0)
+        {
+            cleared = await database.ExecuteSqlRawAsync(
+                """
+                DELETE FROM "ConnectedSystemPartitionWatermarks"
+                WHERE "ConnectedSystemId" = @connectedSystemId AND "PartitionId" = ANY(@partitionIds)
+                """,
+                new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId },
+                new NpgsqlParameter("partitionIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                    { Value = partitionWatermarksToClear.ToArray() });
+        }
+
+        var swept = await database.ExecuteSqlRawAsync(DeleteWatermarksOfDeselectedPartitionsSql, connectedSystemId);
+
+        if (ownsTransaction)
+            await transaction!.CommitAsync();
+
+        return new ImportWatermarkRecordingResult
+        {
+            PartitionWatermarksRecorded = recorded,
+            PartitionWatermarksCleared = cleared,
+            DeselectedPartitionWatermarksRemoved = swept
+        };
+    }
+
+    /// <summary>
+    /// The in-memory test provider's form of <see cref="RecordImportWatermarksAsync"/>: the same observable result,
+    /// saved through an isolated context so the shared one's tracked graph is never flushed. Never taken by a
+    /// relational provider.
+    /// </summary>
+    private async Task<ImportWatermarkRecordingResult> RecordImportWatermarksViaIsolatedContextAsync(int connectedSystemId, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string> partitionWatermarks, IReadOnlyCollection<int> partitionWatermarksToClear, DateTime recordedAt)
+    {
+        await using var isolatedContext = CreateIsolatedContext(nameof(RecordImportWatermarksAsync));
+
+        if (persistedConnectorData != null)
+        {
+            var connectedSystem = await isolatedContext.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == connectedSystemId);
+            connectedSystem.PersistedConnectorData = persistedConnectorData;
+        }
+
+        var partitions = await isolatedContext.ConnectedSystemPartitions
+            .Where(p => p.ConnectedSystem.Id == connectedSystemId)
+            .Select(p => new { p.Id, p.Selected })
+            .ToListAsync();
+        var partitionIds = partitions.Select(p => p.Id).ToHashSet();
+        var deselectedIds = partitions.Where(p => !p.Selected).Select(p => p.Id).ToHashSet();
+        var existing = (await isolatedContext.ConnectedSystemPartitionWatermarks
+                .AsTracking()
+                .Where(w => w.ConnectedSystemId == connectedSystemId)
+                .ToListAsync())
+            .ToDictionary(w => w.PartitionId);
+
+        var recorded = 0;
+        foreach (var (partitionId, value) in partitionWatermarks.Where(watermark => partitionIds.Contains(watermark.Key)))
+        {
+            if (existing.TryGetValue(partitionId, out var row))
+            {
+                row.Value = value;
+                row.RecordedAt = recordedAt;
+            }
+            else
+            {
+                row = new ConnectedSystemPartitionWatermark { PartitionId = partitionId, ConnectedSystemId = connectedSystemId, Value = value, RecordedAt = recordedAt };
+                isolatedContext.ConnectedSystemPartitionWatermarks.Add(row);
+                existing[partitionId] = row;
+            }
+
+            recorded++;
+        }
+
+        var toClear = partitionWatermarksToClear.Where(existing.ContainsKey).Select(id => existing[id]).ToList();
+        isolatedContext.ConnectedSystemPartitionWatermarks.RemoveRange(toClear);
+
+        var toSweep = existing.Values.Where(row => deselectedIds.Contains(row.PartitionId) && !toClear.Contains(row)).ToList();
+        isolatedContext.ConnectedSystemPartitionWatermarks.RemoveRange(toSweep);
+
+        await isolatedContext.SaveChangesAsync();
+
+        return new ImportWatermarkRecordingResult
+        {
+            PartitionWatermarksRecorded = recorded,
+            PartitionWatermarksCleared = toClear.Count,
+            DeselectedPartitionWatermarksRemoved = toSweep.Count
+        };
+    }
+
+    /// <summary>
+    /// Removes the watermarks of the Connected System's deselected Partitions (see the interface doc), with the
+    /// statement the import's end-of-run write shares. The in-memory test provider runs no SQL, so it removes them
+    /// through an isolated context instead.
+    /// </summary>
+    public async Task<int> DeleteWatermarksOfDeselectedPartitionsAsync(int connectedSystemId)
+    {
+        if (Repository.Database.Database.IsRelational())
+            return await Repository.Database.Database.ExecuteSqlRawAsync(DeleteWatermarksOfDeselectedPartitionsSql, connectedSystemId);
+
+        await using var isolatedContext = CreateIsolatedContext(nameof(DeleteWatermarksOfDeselectedPartitionsAsync));
+        var deselectedIds = await isolatedContext.ConnectedSystemPartitions
+            .Where(p => p.ConnectedSystem.Id == connectedSystemId && !p.Selected)
+            .Select(p => p.Id)
+            .ToListAsync();
+        var rows = await isolatedContext.ConnectedSystemPartitionWatermarks
+            .AsTracking()
+            .Where(w => w.ConnectedSystemId == connectedSystemId && deselectedIds.Contains(w.PartitionId))
+            .ToListAsync();
+        isolatedContext.ConnectedSystemPartitionWatermarks.RemoveRange(rows);
+        await isolatedContext.SaveChangesAsync();
+        return rows.Count;
+    }
+
+    /// <summary>
+    /// A short-lived context over the same in-memory store as the shared one, for the non-relational fallbacks that
+    /// must write only what they are asked to, never the shared context's tracked graph.
+    /// </summary>
+    private JimDbContext CreateIsolatedContext(string caller)
+    {
+        if (Repository.Database.GetService<IDbContextOptions>() is not DbContextOptions<JimDbContext> options)
+            throw new InvalidOperationException($"{caller}: the non-relational fallback needs the context's own options to open a context over the same store.");
+
+        return new JimDbContext(options);
+    }
+
     public async Task UpdateConnectedSystemSchemaAsync(ConnectedSystem connectedSystem)
     {
         // Reconcile the object types/attributes against tracked current state first (adds + updates),
@@ -8535,6 +8743,14 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
+        // 9. Delete the Partitions' Delta Import watermarks (#2715, Decision 4): an empty Connector Space has no
+        //    baseline, so each Partition's next Delta Import must read every object in it rather than only the changes
+        //    after a point the cleared objects were read from. On Connected System deletion the rows would go by cascade
+        //    anyway; removing them here keeps the clear and the delete saying the same thing.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPartitionWatermarks"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
         if (ownsTransaction)
             await transaction!.CommitAsync();
 
@@ -8942,6 +9158,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         db.ConnectedSystemContainers.RemoveRange(await db.ConnectedSystemContainers.AsTracking()
             .Where(c => (c.ConnectedSystem != null && c.ConnectedSystem.Id == connectedSystemId)
                         || (c.Partition != null && c.Partition.ConnectedSystem.Id == connectedSystemId)).ToListAsync());
+        // The relational schema cascades these from the Partition and the Connected System; the in-memory provider
+        // cascades only to tracked dependents, and nothing tracks a watermark, so they are removed explicitly.
+        db.ConnectedSystemPartitionWatermarks.RemoveRange(await db.ConnectedSystemPartitionWatermarks.AsTracking()
+            .Where(w => w.ConnectedSystemId == connectedSystemId).ToListAsync());
         db.ConnectedSystemPartitions.RemoveRange(await db.ConnectedSystemPartitions.AsTracking().Where(p => p.ConnectedSystem.Id == connectedSystemId).ToListAsync());
         db.ConnectedSystemAttributes.RemoveRange(await db.ConnectedSystemAttributes.AsTracking()
             .Where(a => a.ConnectedSystemObjectType != null && a.ConnectedSystemObjectType.ConnectedSystemId == connectedSystemId).ToListAsync());

@@ -903,6 +903,48 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the Delta Import watermark JIM holds for each Partition of a Connected System that has one (#2715). A
+    /// Partition missing from the result has no watermark, so its next Delta Import reads every object in it.
+    /// </summary>
+    public async Task<List<ConnectedSystemPartitionWatermark>> GetConnectedSystemPartitionWatermarksAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPartitionWatermarksAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// Records what a completed import reached (#2715), as runtime state for the same reasons as
+    /// <see cref="UpdateConnectedSystemPersistedConnectorDataAsync"/>: no Activity, no configuration snapshot. In one
+    /// transaction, it writes the persisted connector data unless <paramref name="persistedConnectorData"/> is null,
+    /// records each Partition's watermark (a null value clears the Partition's, so its next Delta Import reads every
+    /// object in it), and removes the watermarks of Partitions no longer selected.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System the import read; its persisted connector data is kept in step.</param>
+    /// <param name="persistedConnectorData">The new persisted connector data, or null to leave it as it is.</param>
+    /// <param name="partitionWatermarks">What the import reached for each Partition, by Partition id.</param>
+    public async Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(ConnectedSystem connectedSystem, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string?> partitionWatermarks)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        ArgumentNullException.ThrowIfNull(partitionWatermarks);
+
+        var toRecord = partitionWatermarks
+            .Where(watermark => watermark.Value != null)
+            .ToDictionary(watermark => watermark.Key, watermark => watermark.Value!);
+        var toClear = partitionWatermarks
+            .Where(watermark => watermark.Value == null)
+            .Select(watermark => watermark.Key)
+            .ToList();
+
+        var result = await Application.Repository.ConnectedSystems.RecordImportWatermarksAsync(
+            connectedSystem.Id, persistedConnectorData, toRecord, toClear, DateTime.UtcNow);
+
+        if (persistedConnectorData != null)
+            connectedSystem.PersistedConnectorData = persistedConnectorData;
+
+        return result;
+    }
+
+    /// <summary>
     /// Persists a runtime status change (e.g. resetting <see cref="ConnectedSystemStatus.Deleting"/> back to
     /// <see cref="ConnectedSystemStatus.Active"/> after a failed deletion) without creating an Activity or capturing a
     /// configuration snapshot. Status is runtime state, not configuration; routing it through the full
@@ -1786,6 +1828,7 @@ public partial class ConnectedSystemServer
     {
         ProtectEncryptedSettingValues(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystem.Id);
     }
 
     /// <summary>
@@ -1796,6 +1839,26 @@ public partial class ConnectedSystemServer
     {
         ProtectEncryptedSettingValues(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystem.Id);
+    }
+
+    /// <summary>
+    /// #2715, Decision 5: once a save has left a Partition deselected, its Delta Import watermark goes. A Partition
+    /// selected again later must read every object in it, not resume from a watermark taken before the objects it held
+    /// were obsoleted while it was out of scope. Called after every save that can change a Partition's selection: the
+    /// Connected System graph saves above and the single-Partition update. Removing it here, rather than only at the
+    /// end of the next import, also covers a deselect followed by an import that obsoletes the Partition's objects
+    /// but fails before recording anything, then a reselect. The import's end-of-run write sweeps with the same
+    /// statement, for any path that changes the selection without coming through here.
+    /// </summary>
+    private async Task RemoveWatermarksOfDeselectedPartitionsAsync(int connectedSystemId)
+    {
+        var removed = await Application.Repository.ConnectedSystems.DeleteWatermarksOfDeselectedPartitionsAsync(connectedSystemId);
+        if (removed > 0)
+        {
+            Log.Information("RemoveWatermarksOfDeselectedPartitionsAsync: Removed the Delta Import watermarks of {Count} deselected Partition(s) of Connected System {ConnectedSystemId}; each reads every object in it the next time it is selected and imported.",
+                removed, connectedSystemId);
+        }
     }
 
     /// <summary>
@@ -4030,24 +4093,143 @@ public partial class ConnectedSystemServer
     /// and the point it reached. The recorded values are the Connected System's persisted connector data, in whatever
     /// form its Connector keeps it, so only that Connector can say what they mean.
     /// <para>
+    /// A Connector that keeps a watermark per Partition (<see cref="IConnectorPartitionWatermarks"/>, #2715) describes
+    /// each Partition's recorded value, and the points are merged into the one <see cref="ImportReadRange.From"/> and
+    /// <see cref="ImportReadRange.To"/>, each scoped to the Partition's name as the Activity recorded it, so the range
+    /// still reads correctly after the Partition is renamed or removed. A Partition that had no watermark before the run
+    /// has no point in <see cref="ImportReadRange.From"/>: its read started from the beginning.
+    /// </para>
+    /// <para>
     /// Null when the Activity recorded no watermark, its Connected System has since been deleted, or its Connector
-    /// does not implement <see cref="IConnectorImportWatermarkDescription"/>; the raw values are all there is then.
+    /// describes neither kind of watermark; the raw values are all there is then.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
     public async Task<ImportReadRange?> GetImportReadRangeAsync(Activity activity)
     {
-        if ((activity.ImportWatermarkFrom == null && activity.ImportWatermarkTo == null) || !activity.ConnectedSystemId.HasValue)
+        var hasPartitionWatermarks = activity.ImportPartitionWatermarksFrom != null || activity.ImportPartitionWatermarksTo != null;
+        if ((activity.ImportWatermarkFrom == null && activity.ImportWatermarkTo == null && !hasPartitionWatermarks) || !activity.ConnectedSystemId.HasValue)
             return null;
 
         var connectedSystem = await GetConnectedSystemCoreAsync(activity.ConnectedSystemId.Value);
-        if (connectedSystem == null || CreateConnector(connectedSystem) is not IConnectorImportWatermarkDescription describer)
+        if (connectedSystem == null)
+            return null;
+
+        var connector = CreateConnector(connectedSystem);
+        var describer = connector as IConnectorImportWatermarkDescription;
+        var partitionDescriber = hasPartitionWatermarks ? connector as IConnectorPartitionWatermarks : null;
+        if (describer == null && partitionDescriber == null)
             return null;
 
         return new ImportReadRange
         {
-            From = describer.DescribeImportWatermark(activity.ImportWatermarkFrom, Log.Logger),
-            To = describer.DescribeImportWatermark(activity.ImportWatermarkTo, Log.Logger)
+            From = MergeImportWatermarkDescriptions(describer?.DescribeImportWatermark(activity.ImportWatermarkFrom, Log.Logger),
+                DescribePartitionWatermarks(partitionDescriber, activity.ImportPartitionWatermarksFrom)),
+            To = MergeImportWatermarkDescriptions(describer?.DescribeImportWatermark(activity.ImportWatermarkTo, Log.Logger),
+                DescribePartitionWatermarks(partitionDescriber, activity.ImportPartitionWatermarksTo))
+        };
+    }
+
+    /// <summary>
+    /// Where each Partition of a Connected System's next Delta Import reads changes after (#2715, Decision 3): the
+    /// watermark JIM holds for it, when an import last recorded it, and what its Connector reads the value as. A Partition
+    /// missing from the result has no watermark, so its next Delta Import reads every object in it and records one.
+    /// <para>
+    /// Null when the Connected System does not exist or its Connector does not keep a watermark per Partition
+    /// (<see cref="IConnectorPartitionWatermarks"/>): there is nothing per Partition to show then, and the surfaces say
+    /// nothing rather than reporting every Partition as unrecorded. Empty when the Connector keeps them but none is held.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<List<DescribedPartitionWatermark>?> GetDescribedPartitionWatermarksAsync(int connectedSystemId)
+    {
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        return connectedSystem == null ? null : await GetDescribedPartitionWatermarksAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Where each Partition of a Connected System the caller has already loaded (at least its Core) reads changes
+    /// after; see the overload taking an id. Null when its Connector does not keep a watermark per Partition.
+    /// </summary>
+    /// <remarks>
+    /// Pass a Connected System loaded for this call, never one a page is editing: creating its Connector encrypts any
+    /// credential setting it finds held in clear, in place.
+    /// </remarks>
+    public async Task<List<DescribedPartitionWatermark>?> GetDescribedPartitionWatermarksAsync(ConnectedSystem connectedSystem)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystem);
+        if (CreateConnector(connectedSystem) is not IConnectorPartitionWatermarks describer)
+            return null;
+
+        var watermarks = await Application.Repository.ConnectedSystems.GetPartitionWatermarksAsync(connectedSystem.Id);
+        return watermarks
+            .Select(watermark => new DescribedPartitionWatermark
+            {
+                PartitionId = watermark.PartitionId,
+                Value = watermark.Value,
+                RecordedAt = AsUtc(watermark.RecordedAt),
+                Description = describer.DescribePartitionWatermark(watermark.Value, Log.Logger)
+            })
+            .ToList();
+
+        // The column holds UTC; a read that comes back without its kind is UTC still, and must not be shifted as local.
+        static DateTime AsUtc(DateTime value) => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
+
+    /// <summary>
+    /// #2715: an import's recorded Partition watermarks as one description, each Partition's points scoped to the name the
+    /// Activity recorded for it. A Partition whose value its Connector finds no watermark in (none recorded, or one the
+    /// Connector cannot read) contributes no point. Null when no Partition contributes one.
+    /// </summary>
+    private static ImportWatermarkDescription? DescribePartitionWatermarks(IConnectorPartitionWatermarks? describer, List<ImportPartitionWatermark>? watermarks)
+    {
+        if (describer == null || watermarks == null)
+            return null;
+
+        var described = watermarks
+            .Select(watermark => (watermark.PartitionName, Description: describer.DescribePartitionWatermark(watermark.Value, Log.Logger)))
+            .Where(partition => partition.Description != null)
+            .Select(partition => (partition.PartitionName, Description: partition.Description!))
+            .ToList();
+        if (described.Count == 0)
+            return null;
+
+        return new ImportWatermarkDescription
+        {
+            Kind = string.Join(", ", described.Select(partition => partition.Description.Kind).Distinct(StringComparer.OrdinalIgnoreCase)),
+            Points = described
+                .SelectMany(partition => partition.Description.Points.Select(point => new ImportWatermarkPoint
+                {
+                    // A Connector that keeps more than one position per Partition scopes each within the Partition.
+                    Scope = point.Scope == null ? partition.PartitionName : $"{partition.PartitionName}: {point.Scope}",
+                    Number = point.Number,
+                    Time = point.Time,
+                    Text = point.Text
+                }))
+                .ToList()
+        };
+    }
+
+    /// <summary>
+    /// One description of an import's watermarks from its Connected System-level and its Partition descriptions, either
+    /// of which may be absent.
+    /// </summary>
+    private static ImportWatermarkDescription? MergeImportWatermarkDescriptions(ImportWatermarkDescription? connectedSystemLevel, ImportWatermarkDescription? partitions)
+    {
+        if (connectedSystemLevel == null || partitions == null)
+            return connectedSystemLevel ?? partitions;
+
+        return new ImportWatermarkDescription
+        {
+            Kind = string.Equals(connectedSystemLevel.Kind, partitions.Kind, StringComparison.OrdinalIgnoreCase)
+                ? connectedSystemLevel.Kind
+                : $"{connectedSystemLevel.Kind}, {partitions.Kind}",
+            Points = [.. connectedSystemLevel.Points, .. partitions.Points]
         };
     }
 
@@ -7268,7 +7450,7 @@ public partial class ConnectedSystemServer
         await ExecuteScopeConfigurationChangeAsync(
             connectedSystemId,
             $"Update partition: {partition.Name}",
-            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            () => UpdateConnectedSystemPartitionAndItsWatermarkAsync(partition, connectedSystemId),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
@@ -7284,8 +7466,18 @@ public partial class ConnectedSystemServer
         await ExecuteScopeConfigurationChangeAsync(
             connectedSystemId,
             $"Update partition: {partition.Name}",
-            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            () => UpdateConnectedSystemPartitionAndItsWatermarkAsync(partition, connectedSystemId),
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Saves a Partition, then removes its Delta Import watermark if the save left it deselected (#2715, Decision 5;
+    /// see <see cref="RemoveWatermarksOfDeselectedPartitionsAsync"/>).
+    /// </summary>
+    private async Task UpdateConnectedSystemPartitionAndItsWatermarkAsync(ConnectedSystemPartition partition, int connectedSystemId)
+    {
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+        await RemoveWatermarksOfDeselectedPartitionsAsync(connectedSystemId);
     }
 
     /// <summary>

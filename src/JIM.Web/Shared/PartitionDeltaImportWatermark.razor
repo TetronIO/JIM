@@ -1,0 +1,64 @@
+@using JIM.Models.Staging
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Where a selected partition's next Delta Import reads changes after, under its name on the Scope tab (#2715, Decision
+    3). Read-only: imports record watermarks, nothing here changes one. Renders nothing for a partition JIM does not
+    import, and nothing for a Connector that keeps no watermark per partition, so a call site places it unconditionally.
+*@
+
+@if (Partition.Selected && Watermarks != null)
+{
+    var watermark = Watermarks.GetValueOrDefault(Partition.Id);
+    var description = watermark?.Description;
+    <div class="jim-scope-partition-watermark" data-testid="jim-scope-partition-watermark"
+         data-watermark-state="@(watermark == null ? "none" : description == null ? "unreadable" : "recorded")">
+        @if (watermark != null && description != null)
+        {
+            var recordedAt = watermark.RecordedAt;
+            <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" Class="jim-scope-partition-watermark-icon" />
+            <span>
+                Next Delta Import reads changes after
+                <span class="jim-scope-partition-watermark-position">@ImportWatermarkText.Positions(description)</span>
+            </span>
+            <span class="jim-scope-partition-watermark-recorded" aria-hidden="true">·</span>
+            <MudTooltip Arrow="true" Placement="Placement.Top" Text="@recordedAt.ToLocalTime().ToFriendlyDate()">
+                <span class="jim-scope-partition-watermark-recorded">Recorded @recordedAt.ToRelativeTime()</span>
+            </MudTooltip>
+        }
+        else if (watermark != null)
+        {
+            <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" Size="Size.Small" Color="Color.Warning" />
+            <span>
+                The recorded watermark could not be read. The next Delta Import reads every object in this partition, as a
+                Full Import does, and records a new one.
+            </span>
+        }
+        else
+        {
+            <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" Color="Color.Info" />
+            <span>
+                No watermark recorded. The next Delta Import reads every object in this partition, as a Full Import does,
+                and records one.
+            </span>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The partition, with its selection as the tab currently holds it: deselecting one hides its line at once.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ConnectedSystemPartition Partition { get; set; } = null!;
+
+    /// <summary>
+    /// Every watermark the Connected System holds, by partition id, or null where its Connector keeps none per
+    /// partition. A selected partition missing from it has none.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyDictionary<int, DescribedPartitionWatermark>? Watermarks { get; set; }
+}

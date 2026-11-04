@@ -118,7 +118,7 @@ Delta import reads `cn=accesslog` one level deep. Grant that database's own acce
 --8<-- "test/integration/docker/openldap/acl/jim-accesslog-access.ldif"
 ```
 
-How long the accesslog keeps entries is the overlay's own `olcAccessLogPurge` (for example 7 days: `07+00:00 01+00:00`). Keep that maximum age longer than twice the longest gap between Delta Imports. A Delta Import's watermark is the latest write to its own partitions, which can already be almost one gap old when it is taken, so by the time the next Delta Import checks it, it can be up to two gaps old; a Delta Import that finds the purge has gone past its watermark asks for a Full Import (see [Import](jim-ldap-connector.md#import)).
+How long the accesslog keeps entries is the overlay's own `olcAccessLogPurge` (for example 7 days: `07+00:00 01+00:00`). Keep that maximum age longer than twice the longest gap between Delta Imports of any one partition: a partition that only a weekly Delta Import reads needs more than two weeks, however often the other partitions are read. Each partition keeps its own watermark, the latest write its last import found, which can already be almost one gap old when it is taken, so by the time that partition's next Delta Import checks it, it can be up to two gaps old; a Delta Import that finds the purge has gone past a partition's watermark asks for a Full Import that reads that partition (see [OpenLDAP](jim-ldap-connector-delta-import.md#openldap)).
 
 OpenLDAP enforces `olcSizeLimit` against non-rootDN clients even with paging controls in play, so lift it for JIM on the accesslog database too, or set it unlimited there. A Delta Import the limit stops part-way fails, naming the limit, rather than carry on from a point that could miss a change. A server hosting only one suffix has only one group: delete the second `by group.exact=... read` clause and its placeholder. Under this rule a suffix administrator can no longer read `cn=accesslog` themselves; that is intended, since only the service accounts that run delta imports need to. An administrator who needs to inspect it can still bind as the accesslog database's own rootDN.
 
@@ -166,7 +166,7 @@ Delta Import reads `cn=changelog`, which the Retro Changelog plug-in creates wit
 --8<-- "test/integration/docker/dirsrv/aci/jim-changelog-access.ldif"
 ```
 
-The plug-in has to be on before this rule can be applied, because `cn=changelog` does not exist until it is. Enable it, turn on the recording of deleted entries (which `dsconf` does not expose, so it is set on the plug-in entry directly), give the changelog a maximum age longer than the longest gap between Delta Imports, keep `userPassword` out of it, and restart the directory:
+The plug-in has to be on before this rule can be applied, because `cn=changelog` does not exist until it is. Enable it, turn on the recording of deleted entries (which `dsconf` does not expose, so it is set on the plug-in entry directly), give the changelog a maximum age longer than the longest gap between Delta Imports of any one partition, keep `userPassword` out of it, and restart the directory:
 
 ```text
 dsconf <instance> plugin retro-changelog enable

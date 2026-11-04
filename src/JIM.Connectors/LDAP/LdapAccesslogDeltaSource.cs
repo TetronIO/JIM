@@ -11,18 +11,19 @@ namespace JIM.Connectors.LDAP;
 
 /// <summary>
 /// The change source for OpenLDAP: the accesslog overlay's cn=accesslog database (slapo-accesslog), where every
-/// successful write operation is logged with its reqStart timestamp. The watermark is the latest reqStart seen;
-/// a Delta Import reads the write operations at or after it and fetches each affected object's current state.
+/// successful write operation is logged with its reqStart timestamp. Each partition's watermark is a reqStart its
+/// last import read to (#2715); a Delta Import reads each partition's write operations after its own watermark and
+/// fetches each affected object's current state.
 /// <para>
 /// OpenLDAP enforces olcSizeLimit (default 500) as a hard cap for non-rootDN clients, even with paging controls.
 /// The bind account used by the connector is typically not the rootDN of the cn=accesslog database, so paging
 /// alone cannot bypass the limit. The watermark capture works within it: when the size limit is exceeded, the
 /// latest timestamp from the partial results narrows the next query, walking forward through the accesslog from the
-/// previous watermark (from the start of the log on a first import) until every entry since has been scanned, first
-/// within the run's partitions and across the whole log only when nothing new was written within them. The
-/// change read does not: it pages under the directory's own cursor, and a directory that stops it at the limit fails
-/// the Delta Import, since resuming from a timestamp could miss an operation that started earlier and was logged
-/// later.
+/// oldest of the run's partitions' watermarks (from the start of the log when any has none) until every entry since
+/// has been scanned, first within the run's partitions and across the whole log only for the partitions within which
+/// nothing new was written. The change read does not: it pages under the directory's own cursor, and a directory
+/// that stops it at the limit fails the Delta Import, since resuming from a timestamp could miss an operation that
+/// started earlier and was logged later.
 /// </para>
 /// <para>
 /// An accesslog that cannot be read is never taken for one that is empty. The readiness check reads the
@@ -49,144 +50,182 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     /// <inheritdoc />
     /// <remarks>
-    /// Runs during both Full and Delta Imports: a Full Import establishes the baseline for the first Delta Import,
-    /// and a Delta Import captures the current position so the next one starts from here. The rootDSE entry itself
-    /// carries nothing this source needs.
     /// <para>
-    /// The watermark is left empty when cn=accesslog cannot be read (missing, refused, or unreachable), so that the
-    /// next Delta Import finds no baseline and performs a Full Import rather than reading nothing from a log it
+    /// Each target Partition's watermark is the reqStart its next Delta Import reads writes from, taken once for the run
+    /// (#2715). The rootDSE carries nothing this source needs, so only cn=accesslog is read:
+    /// </para>
+    /// <list type="number">
+    /// <item>A directory that sorts (the sssvlv overlay) answers with the latest write in the log, in one search, and
+    /// every target Partition takes it. That search is not confined to the Partitions: within a quiet one it would
+    /// return that Partition's last write however old, the watermark the purge would then remove.</item>
+    /// <item>Otherwise the log is walked within the size limit (<see cref="QueryAccesslogWithSizeLimitHandling"/>). When
+    /// any target Partition has no watermark, nothing short of the whole log is sure to hold its latest write, so the
+    /// whole log is walked, as on a first import, and every target Partition takes the latest write in it.</item>
+    /// <item>Otherwise the walk starts from the oldest target watermark, since every write any target Partition has yet
+    /// to read is at or after it, rather than from the start of the log (#2704); and it is confined to the run's
+    /// Partitions, as the change read is, since cn=accesslog is shared by every suffix on the server (#2712). Each
+    /// Partition whose watermark the latest write found is older than takes it.</item>
+    /// <item>The rest, within which nothing was written after their own watermarks, take the latest write anywhere from
+    /// the oldest of their watermarks, so a quiet Partition keeps advancing with the log rather than standing still
+    /// until the purge removes the entry its watermark names. When nothing at all is logged from there (that entry was
+    /// purged with nothing newer, or the directory was restored to before it), the whole log is walked, and the
+    /// continuity check that follows refuses a Delta Import, as it always did.</item>
+    /// </list>
+    /// <para>
+    /// That is at most the searches one Connected System-level watermark took. Each Partition's watermark is a logged
+    /// write's reqStart, never later than the end of the log when this run's change read starts: a Partition given a
+    /// write made to another Partition, or to another suffix, has that run read its own writes up to that point, so it
+    /// costs at most a re-read, never a change.
+    /// </para>
+    /// <para>
+    /// Every target Partition's watermark is null when cn=accesslog cannot be read (missing, refused, or unreachable),
+    /// so that its next Delta Import finds no baseline and reads every object rather than reading nothing from a log it
     /// cannot see and reporting "no changes". Only a readable, empty accesslog gets a generated timestamp: after a
-    /// snapshot restore clears it there is genuinely nothing before now, and a baseline saves the next Delta Import
-    /// an unnecessary Full Import.
-    /// </para>
-    /// <para>
-    /// The previous record's watermark, when there is one, is where a directory that cannot sort starts looking, so
-    /// only what was written since is read rather than the whole log (#2704); and that log is shared by every suffix
-    /// on the server, so the search is confined to the run's partitions as well, exactly as the change read is
-    /// (#2712). The latest write within them is a correct place for the next change read to start, since it reads
-    /// nothing outside them. It is never later than the latest write in the log, so it can cost the next Delta Import
-    /// a re-read, never a change. When nothing new was written within them, the watermark is the latest write
-    /// anywhere from the previous one on, as it always was, so it keeps advancing with the log rather than standing
-    /// still until the purge removes it. When nothing at all is logged from there on, the whole log is read.
-    /// </para>
-    /// <para>
-    /// Whichever way it was found, the watermark is a logged write's reqStart, at or after the previous watermark
-    /// whenever anything is logged there; <see cref="VerifyContinuity"/> reads only the previous watermark's own
-    /// entry, so what it makes of a purge or a restore is unchanged.
+    /// snapshot restore clears it there is genuinely nothing before now, and a baseline saves the next Delta Import an
+    /// unnecessary full read. <see cref="VerifyContinuity"/> reads only a previous watermark's own entry, so what it
+    /// makes of a purge or a restore is unchanged.
     /// </para>
     /// </remarks>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout)
+    public Task<IReadOnlyDictionary<int, LdapPartitionWatermark?>> CaptureWatermarksAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse,
+        IReadOnlyDictionary<int, LdapPartitionWatermark?> previous, IReadOnlyList<ConnectedSystemPartition> targetPartitions, TimeSpan searchTimeout)
     {
+        if (targetPartitions.Count == 0)
+            return Task.FromResult<IReadOnlyDictionary<int, LdapPartitionWatermark?>>(new Dictionary<int, LdapPartitionWatermark?>());
+
         try
         {
-            rootDse.LastAccesslogTimestamp = QueryAccesslogForLatestTimestamp(previous?.LastAccesslogTimestamp, PartitionSuffixes(namingContexts), searchTimeout);
+            return Task.FromResult<IReadOnlyDictionary<int, LdapPartitionWatermark?>>(TakeWatermarks(previous, targetPartitions, searchTimeout));
         }
         catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
         {
-            LeaveWatermarkEmpty(rootDse, "it was not found");
-            return Task.CompletedTask;
+            return Task.FromResult(LeaveWatermarksEmpty(targetPartitions, "it was not found"));
         }
         catch (DirectoryOperationException ex)
         {
-            LeaveWatermarkEmpty(rootDse, $"the directory refused the search: {DirectorysWords(ex)}");
-            return Task.CompletedTask;
+            return Task.FromResult(LeaveWatermarksEmpty(targetPartitions, $"the directory refused the search: {DirectorysWords(ex)}"));
         }
         catch (LdapException ex) when (ex.ErrorCode == 32) // noSuchObject, the legacy shape
         {
-            LeaveWatermarkEmpty(rootDse, "it was not found");
-            return Task.CompletedTask;
+            return Task.FromResult(LeaveWatermarksEmpty(targetPartitions, "it was not found"));
         }
         catch (LdapException ex)
         {
-            LeaveWatermarkEmpty(rootDse, $"the directory could not be reached: {DirectorysWords(ex)}");
-            return Task.CompletedTask;
+            return Task.FromResult(LeaveWatermarksEmpty(targetPartitions, $"the directory could not be reached: {DirectorysWords(ex)}"));
         }
-
-        if (string.IsNullOrEmpty(rootDse.LastAccesslogTimestamp))
-        {
-            rootDse.LastAccesslogTimestamp = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
-            rootDse.LastAccesslogTimestampIsLogged = false;
-            _logger.Information("LdapAccesslogDeltaSource: The accesslog at {AccesslogDn} is readable but empty; using the generated timestamp {Timestamp} as the watermark so the next Delta Import has a baseline",
-                AccesslogDn, rootDse.LastAccesslogTimestamp);
-            return Task.CompletedTask;
-        }
-
-        rootDse.LastAccesslogTimestampIsLogged = true;
-        return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Records that no watermark could be taken, and why. A generated timestamp would give the next Delta Import a
-    /// baseline it has no right to; an empty one makes it perform a Full Import and say so.
+    /// The four steps <see cref="CaptureWatermarksAsync"/> describes. A missing, refused or unreachable accesslog is
+    /// left to the caller as the exception the directory raised.
     /// </summary>
-    private void LeaveWatermarkEmpty(LdapConnectorRootDse rootDse, string reason)
+    private Dictionary<int, LdapPartitionWatermark?> TakeWatermarks(IReadOnlyDictionary<int, LdapPartitionWatermark?> previous,
+        IReadOnlyList<ConnectedSystemPartition> targetPartitions, TimeSpan searchTimeout)
     {
-        rootDse.LastAccesslogTimestamp = null;
-        rootDse.LastAccesslogTimestampIsLogged = null;
-        _logger.Warning("LdapAccesslogDeltaSource: No watermark was taken from {AccesslogDn}: {Reason}. The next Delta Import will have no baseline and will perform a Full Import.",
-            AccesslogDn, reason);
-    }
+        // 1. Server-side sort (reverse) with SizeLimit=1: the single latest entry, avoiding size limit issues entirely.
+        var sorted = QueryAccesslogWithServerSideSort(searchTimeout);
+        if (sorted != null)
+            return Every(targetPartitions, Logged(sorted));
 
-    /// <summary>
-    /// Queries OpenLDAP's cn=accesslog for the most recent reqStart timestamp, to be used as the
-    /// delta import watermark. Uses a multi-strategy approach to handle server-side size limits:
-    /// 1. Server-side sort (reverse by reqStart) with SizeLimit=1 to get only the latest entry.
-    ///    This requires the sssvlv overlay to be enabled on the server. It is not confined to the partitions: within
-    ///    a quiet partition it would return that partition's last write however old, the watermark the purge would
-    ///    then remove.
-    /// 2. If sorting is not supported, walks forward through the log within the size limit (see
-    ///    <see cref="QueryAccesslogWithSizeLimitHandling"/>), starting from the previous watermark when there is one,
-    ///    and first within the run's partitions (#2712). A write within them newer than the previous watermark is
-    ///    the watermark. Otherwise every write from the previous watermark on is walked (#2704): the latest write is
-    ///    there whenever anything is logged there, so this finds what a walk of the whole log would while reading
-    ///    only what was written since. When nothing is logged there (the watermark's entry was purged with nothing
-    ///    newer, or the directory was restored to before it), the whole log is walked, exactly as on a first import.
-    /// Null when the accesslog is readable and holds no write operations. A missing, refused or unreachable
-    /// accesslog is left to the caller as the exception the directory raised.
-    /// </summary>
-    private string? QueryAccesslogForLatestTimestamp(string? previousTimestamp, IReadOnlyList<string> partitionSuffixes, TimeSpan searchTimeout)
-    {
-        // Strategy 1: Server-side sort (reverse) with SizeLimit=1
-        // This gets only the single latest entry, avoiding size limit issues entirely.
-        var result = QueryAccesslogWithServerSideSort(searchTimeout);
-        if (result != null)
-            return result;
-
-        // Strategy 2: a walk within the size limit, from the previous watermark when there is one.
-        if (string.IsNullOrEmpty(previousTimestamp))
+        // 2. A Partition with no watermark: the whole log, as on a first import.
+        var withoutWatermark = targetPartitions.Where(partition => !HasBaseline(previous.GetValueOrDefault(partition.Id))).ToList();
+        if (withoutWatermark.Count > 0)
         {
-            _logger.Debug("QueryAccesslogForLatestTimestamp: No previous watermark to start from; walking the whole accesslog");
-            return QueryAccesslogWithSizeLimitHandling(fromTimestamp: null, [], searchTimeout);
+            _logger.Debug("TakeWatermarks: No previous watermark to start from for {Partitions}; walking the whole accesslog",
+                LogSanitiser.Sanitise(LdapConnectorUtilities.DescribePartitions(withoutWatermark)));
+            return Every(targetPartitions, LatestInTheWholeLog(searchTimeout));
         }
 
-        if (partitionSuffixes.Count > 0)
+        // 3. From the oldest target watermark, within the run's Partitions. The walk finds a watermark's own entry
+        // again when it was a write within them, so only a later write is evidence that anything new was written.
+        var readFrom = targetPartitions.ToDictionary(partition => partition.Id, partition => previous[partition.Id]!.AccesslogTimestamp!);
+        var partitionSuffixes = PartitionSuffixes(targetPartitions.Select(partition => partition.ExternalId));
+        var oldest = readFrom.Values.Min(StringComparer.Ordinal)!;
+        var latestWithin = QueryAccesslogWithSizeLimitHandling(oldest, partitionSuffixes, searchTimeout);
+
+        var taken = new Dictionary<int, LdapPartitionWatermark?>();
+        var quiet = new List<ConnectedSystemPartition>();
+        foreach (var partition in targetPartitions)
         {
-            // The walk from the previous watermark finds that watermark's own entry again when it was a write within
-            // these partitions, so only a later write is evidence that anything new was written to them.
-            result = QueryAccesslogWithSizeLimitHandling(previousTimestamp, partitionSuffixes, searchTimeout);
-            if (result != null && string.CompareOrdinal(result, previousTimestamp) > 0)
+            if (latestWithin != null && string.CompareOrdinal(latestWithin, readFrom[partition.Id]) > 0)
+                taken[partition.Id] = Logged(latestWithin);
+            else
+                quiet.Add(partition);
+        }
+
+        if (taken.Count > 0)
+        {
+            _logger.Debug("TakeWatermarks: Watermark {Timestamp} taken for {Partitions} from the writes within the run's partitions after the oldest of their watermarks, {Oldest}",
+                LogSanitiser.Sanitise(latestWithin), LogSanitiser.Sanitise(LdapConnectorUtilities.DescribePartitions(targetPartitions.Where(p => taken.ContainsKey(p.Id)).ToList())),
+                LogSanitiser.Sanitise(oldest));
+        }
+
+        // 4. The quiet rest: the latest write anywhere from the oldest of their own watermarks, so they advance with the
+        // log; the whole log when nothing is logged from there.
+        if (quiet.Count > 0)
+        {
+            var quietOldest = quiet.Select(partition => readFrom[partition.Id]).Min(StringComparer.Ordinal)!;
+
+            // With no partition to confine it to, the walk in step 3 was already every write from the oldest target
+            // watermark, so it holds the latest write from any later point too, when there is one.
+            var latestAnywhere = partitionSuffixes.Count == 0
+                ? (latestWithin != null && string.CompareOrdinal(latestWithin, quietOldest) >= 0 ? latestWithin : null)
+                : QueryAccesslogWithSizeLimitHandling(quietOldest, [], searchTimeout);
+
+            LdapPartitionWatermark watermark;
+            if (latestAnywhere != null)
             {
-                _logger.Debug("QueryAccesslogForLatestTimestamp: Watermark {Timestamp} taken from the writes within the partitions {Partitions} after the previous watermark {PreviousTimestamp}",
-                    LogSanitiser.Sanitise(result), LogSanitiser.Sanitise(string.Join("; ", partitionSuffixes)), LogSanitiser.Sanitise(previousTimestamp));
-                return result;
+                _logger.Debug("TakeWatermarks: Nothing new was written within {Partitions} after their watermarks; watermark {Timestamp} taken from every write at or after the oldest of them, {Oldest}, " +
+                    "so they still advance with the log", LogSanitiser.Sanitise(LdapConnectorUtilities.DescribePartitions(quiet)), LogSanitiser.Sanitise(latestAnywhere), LogSanitiser.Sanitise(quietOldest));
+                watermark = Logged(latestAnywhere);
+            }
+            else
+            {
+                _logger.Debug("TakeWatermarks: Nothing is logged at or after {Oldest}, the oldest watermark of {Partitions} (its entry was purged with nothing newer, " +
+                    "or the directory was restored to before it); walking the whole accesslog", LogSanitiser.Sanitise(quietOldest), LogSanitiser.Sanitise(LdapConnectorUtilities.DescribePartitions(quiet)));
+                watermark = LatestInTheWholeLog(searchTimeout);
             }
 
-            _logger.Debug("QueryAccesslogForLatestTimestamp: Nothing new was written within the partitions {Partitions} after the previous watermark {PreviousTimestamp}; " +
-                "walking every write from the previous watermark on, so the watermark still advances with the log",
-                LogSanitiser.Sanitise(string.Join("; ", partitionSuffixes)), LogSanitiser.Sanitise(previousTimestamp));
+            foreach (var partition in quiet)
+                taken[partition.Id] = watermark;
         }
 
-        result = QueryAccesslogWithSizeLimitHandling(previousTimestamp, [], searchTimeout);
-        if (result != null)
-        {
-            _logger.Debug("QueryAccesslogForLatestTimestamp: Watermark {Timestamp} taken from every write at or after the previous watermark {PreviousTimestamp}",
-                LogSanitiser.Sanitise(result), LogSanitiser.Sanitise(previousTimestamp));
-            return result;
-        }
+        return targetPartitions.ToDictionary(partition => partition.Id, partition => taken[partition.Id]);
+    }
 
-        _logger.Debug("QueryAccesslogForLatestTimestamp: Nothing is logged at or after the previous watermark {PreviousTimestamp} (its entry was purged with nothing newer, " +
-            "or the directory was restored to before it); walking the whole accesslog", LogSanitiser.Sanitise(previousTimestamp));
-        return QueryAccesslogWithSizeLimitHandling(fromTimestamp: null, [], searchTimeout);
+    /// <summary>
+    /// The latest write the whole log holds, or, when it holds none, a generated timestamp naming no entry: a readable,
+    /// empty accesslog has genuinely nothing before now, and a baseline saves the next Delta Import a full read.
+    /// </summary>
+    private LdapPartitionWatermark LatestInTheWholeLog(TimeSpan searchTimeout)
+    {
+        var latest = QueryAccesslogWithSizeLimitHandling(fromTimestamp: null, [], searchTimeout);
+        if (latest != null)
+            return Logged(latest);
+
+        var generated = LdapConnectorUtilities.GenerateAccesslogFallbackTimestamp();
+        _logger.Information("LdapAccesslogDeltaSource: The accesslog at {AccesslogDn} is readable but empty; using the generated timestamp {Timestamp} as the watermark so the next Delta Import has a baseline",
+            AccesslogDn, generated);
+        return new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Accesslog, AccesslogTimestamp = generated, AccesslogTimestampIsLogged = false };
+    }
+
+    /// <summary>A watermark naming a logged write, which the next Delta Import can read back to prove the log still reaches it.</summary>
+    private static LdapPartitionWatermark Logged(string reqStart) =>
+        new() { Kind = LdapDeltaSourceKind.Accesslog, AccesslogTimestamp = reqStart, AccesslogTimestampIsLogged = true };
+
+    /// <summary>The one watermark for every target Partition.</summary>
+    private static Dictionary<int, LdapPartitionWatermark?> Every(IEnumerable<ConnectedSystemPartition> targetPartitions, LdapPartitionWatermark watermark) =>
+        targetPartitions.ToDictionary(partition => partition.Id, _ => (LdapPartitionWatermark?)watermark);
+
+    /// <summary>
+    /// Logs that no watermark could be taken, and why, and returns none for every target Partition. A generated
+    /// timestamp would give their next Delta Import a baseline it has no right to; none makes it read every object and
+    /// say so.
+    /// </summary>
+    private IReadOnlyDictionary<int, LdapPartitionWatermark?> LeaveWatermarksEmpty(IReadOnlyList<ConnectedSystemPartition> targetPartitions, string reason)
+    {
+        _logger.Warning("LdapAccesslogDeltaSource: No watermark was taken from {AccesslogDn}: {Reason}. The next Delta Import of {Partitions} will have no baseline and will read every object in them.",
+            AccesslogDn, reason, LogSanitiser.Sanitise(LdapConnectorUtilities.DescribePartitions(targetPartitions)));
+        return targetPartitions.ToDictionary(partition => partition.Id, _ => (LdapPartitionWatermark?)null);
     }
 
     /// <summary>
@@ -326,23 +365,44 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// The accesslog search both the watermark walk and the change read make: the successful write operations at or
-    /// after a reqStart (all of them when there is none to start from), to entries within the given partitions (any
-    /// entry when none is given). dnSubtreeMatch keeps the other databases' writes on the server.
+    /// The watermark walk's search: the successful write operations at or after a reqStart (all of them when there is
+    /// none to start from), to entries within the given partitions (any entry when none is given). dnSubtreeMatch keeps
+    /// the other databases' writes on the server.
     /// </summary>
     private static string WriteOperations(string? fromTimestamp, IReadOnlyList<string> partitionSuffixes)
     {
         if (fromTimestamp == null && partitionSuffixes.Count == 0)
             return WriteOperationsFilter;
 
-        var from = fromTimestamp == null
-            ? string.Empty
-            : $"(reqStart>={LdapConnectorUtilities.EscapeLdapFilterValue(fromTimestamp)})";
+        var from = fromTimestamp == null ? string.Empty : AtOrAfter(fromTimestamp);
         var withinPartitions = partitionSuffixes.Count == 0
             ? string.Empty
-            : $"(|{string.Concat(partitionSuffixes.Select(s => $"(reqDN:dnSubtreeMatch:={LdapConnectorUtilities.EscapeLdapFilterValue(s)})"))})";
+            : $"(|{string.Concat(partitionSuffixes.Select(Within))})";
         return $"(&(objectClass=auditWriteObject)(reqResult=0){from}{withinPartitions})";
     }
+
+    /// <summary>
+    /// The change read's search: the successful write operations to entries within each partition at or after that
+    /// partition's own watermark, one clause per partition, any of them matching (#2715). dnSubtreeMatch keeps the other
+    /// databases' writes on the server, and each bound keeps what a partition's last import already read there too. A
+    /// partition with no distinguished name to confine its clause to is read from its watermark wherever a write was
+    /// made, as the read always was when no partition could be named.
+    /// </summary>
+    /// <param name="partitionsFrom">Each partition's distinguished name and watermark, in the run's partition order,
+    /// which is the same on every page, so every page asks the question its paging cookie was issued for.</param>
+    private static string WriteOperations(IEnumerable<(string Suffix, string FromTimestamp)> partitionsFrom)
+    {
+        var clauses = partitionsFrom.Select(partition => string.IsNullOrEmpty(partition.Suffix)
+            ? AtOrAfter(partition.FromTimestamp)
+            : $"(&{Within(partition.Suffix)}{AtOrAfter(partition.FromTimestamp)})");
+        return $"(&(objectClass=auditWriteObject)(reqResult=0)(|{string.Concat(clauses)}))";
+    }
+
+    /// <summary>A write started at or after the given reqStart.</summary>
+    private static string AtOrAfter(string timestamp) => $"(reqStart>={LdapConnectorUtilities.EscapeLdapFilterValue(timestamp)})";
+
+    /// <summary>A write to an entry within the given partition, its own entry included.</summary>
+    private static string Within(string partitionSuffix) => $"(reqDN:dnSubtreeMatch:={LdapConnectorUtilities.EscapeLdapFilterValue(partitionSuffix)})";
 
     /// <summary>
     /// The partitions an accesslog search is confined to, by distinguished name: those named, less any without one.
@@ -375,35 +435,37 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     /// <inheritdoc />
     /// <remarks>
-    /// The watermark is the reqStart of the last write the last import read, which is also the RDN of that write's
-    /// accesslog entry, so whether the accesslog still reaches back to it is one base read away (#2008). When the
-    /// entry is gone, the accesslog was purged past it (olcAccessLogPurge removes entries older than its maximum age,
-    /// so this happens when Delta Imports stop for longer than that) or the directory was restored to before it;
-    /// either way the writes between it and the oldest entry still held may be gone too, and a timestamp watermark
-    /// cannot otherwise tell. When nothing was written in that time nothing was lost, but no read can tell that
-    /// apart, so the run is refused all the same. A generated watermark names no entry and is not checked; nor is a
-    /// record from before JIM kept which kind it is. Where cn=accesslog itself is missing or refused, the readiness
-    /// check that runs next names that, so this one says nothing.
+    /// The watermark is the reqStart of a write the last import of these partitions read to, which is also the RDN of
+    /// that write's accesslog entry, so whether the accesslog still reaches back to it is one base read away (#2008).
+    /// When the entry is gone, the accesslog was purged past it (olcAccessLogPurge removes entries older than its
+    /// maximum age, so this happens when a partition's Delta Imports stop for longer than that) or the directory was
+    /// restored to before it; either way the writes between it and the oldest entry still held may be gone too, and a
+    /// timestamp watermark cannot otherwise tell. When nothing was written in that time nothing was lost, but no read
+    /// can tell that apart, so the run is refused all the same, naming the partitions holding the watermark, since only
+    /// a Full Import that reads them re-establishes their baseline (#2715). A generated watermark names no entry and is
+    /// not checked; nor is a record from before JIM kept which kind it is. Where cn=accesslog itself is missing or
+    /// refused, the readiness check that runs next names that, so this one says nothing.
     /// </remarks>
-    public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    public void VerifyContinuity(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        if (previous.LastAccesslogTimestampIsLogged != true || string.IsNullOrEmpty(previous.LastAccesslogTimestamp))
+        if (previous.AccesslogTimestampIsLogged != true || string.IsNullOrEmpty(previous.AccesslogTimestamp))
             return;
 
-        var watermark = previous.LastAccesslogTimestamp;
+        var watermark = previous.AccesslogTimestamp;
         if (IsStillLogged(watermark) != false || ProbeAccesslog().Outcome != LdapDeltaSourceOutcome.Available)
             return;
 
-        _logger.Warning("LdapAccesslogDeltaSource: Refusing the Delta Import; the accesslog no longer holds the entry the last import ended at ({Watermark})",
-            LogSanitiser.Sanitise(watermark));
+        var described = LdapConnectorUtilities.DescribePartitions(partitions);
+        _logger.Warning("LdapAccesslogDeltaSource: Refusing the Delta Import; the accesslog no longer holds the entry the last import of {Partitions} ended at ({Watermark})",
+            LogSanitiser.Sanitise(described), LogSanitiser.Sanitise(watermark));
 
         throw new CannotPerformDeltaImportException(
-            $"The directory's accesslog no longer holds the change the last import ended at (reqStart {watermark}), so the changes logged after it " +
+            $"The directory's accesslog no longer holds the change the last import of {described} ended at (reqStart {watermark}), so the changes logged after it " +
             "may be gone too. The usual cause is that the accesslog's purge (olcAccessLogPurge) removed entries older than its maximum age because " +
             "Delta Imports did not run for longer than that; it also happens when the directory is restored from a backup or snapshot. If nothing " +
             "was written in that time nothing was lost, but JIM cannot tell, and a Delta Import would silently miss any changes that were. Run a " +
-            "Full Import, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than twice the " +
-            "longest gap between Delta Imports.");
+            $"Full Import that reads {described}, which also detects deletions by absence, to re-establish the baseline, and keep the purge age longer than twice the " +
+            "longest gap between Delta Imports of any one partition.");
     }
 
     /// <summary>
@@ -480,7 +542,8 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
     }
 
     /// <inheritdoc />
-    public bool HasBaseline(LdapConnectorRootDse previous) => !string.IsNullOrEmpty(previous.LastAccesslogTimestamp);
+    public bool HasBaseline(LdapPartitionWatermark? watermark) =>
+        watermark is { Kind: LdapDeltaSourceKind.Accesslog } && !string.IsNullOrEmpty(watermark.AccesslogTimestamp);
 
     #endregion
 
@@ -590,30 +653,36 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
     /// <inheritdoc />
     /// <remarks>
-    /// Queries cn=accesslog for write operations at or after the previous watermark timestamp, one page per call. For
-    /// each change, fetches the current state of the affected object through the host; a deletion is built from its
-    /// own accesslog entry, because the object is no longer there to fetch.
+    /// Queries cn=accesslog for the write operations within each target partition at or after that partition's own
+    /// watermark, one page per call (#2715). For each change, fetches the current state of the affected object
+    /// through the host; a deletion is built from its own accesslog entry, because the object is no longer there to
+    /// fetch.
     /// <para>
-    /// cn=accesslog is shared by every database on the server, so the read is confined to the target partitions on
-    /// the server rather than read whole and filtered here. The pages come from RFC 2696 Simple Paged Results: the
-    /// directory's cursor carries the read from one page to the next, so nothing falls between pages however the
-    /// log's entries are ordered. A directory that stops the read at its size limit fails it, because an account the
-    /// limit applies to cannot read the whole log.
+    /// cn=accesslog is shared by every database on the server, so the read is confined on the server, each partition
+    /// by a clause carrying its own watermark, rather than read whole and filtered here. Each write the directory
+    /// returns is then judged here by the watermark of the partition it lies in, the one whose suffix is its longest
+    /// match: one suffix can be hosted beneath another, and the enclosing partition's clause then returns the nested
+    /// partition's writes since the enclosing partition's watermark. The pages come from RFC 2696 Simple Paged
+    /// Results: the directory's cursor carries the read from one page to the next, so nothing falls between pages
+    /// however the log's entries are ordered, and every page asks the same question, since every page is handed the
+    /// same watermarks. A directory that stops the read at its size limit fails it, because an account the limit
+    /// applies to cannot read the whole log.
     /// </para>
     /// </remarks>
     /// <exception cref="CannotPerformDeltaImportException">The directory refused the accesslog search, has no accesslog to search, or stopped the search at its size limit.</exception>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
-        // The import establishes HasBaseline before calling, so the watermark is present.
-        var previousTimestamp = context.PreviousRootDse.LastAccesslogTimestamp!;
+        // The import establishes HasBaseline for every target Partition before calling, so each has a timestamp.
+        var readFrom = context.TargetPartitions.ToDictionary(partition => partition.Id, partition => context.Watermarks[partition.Id].AccesslogTimestamp!);
+        var distinctWatermarks = readFrom.Values.Distinct(StringComparer.Ordinal).ToList();
 
-        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since {previousTimestamp}...");
+        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, distinctWatermarks.Count == 1
+            ? $"Querying changes since {distinctWatermarks[0]}..."
+            : $"Querying changes in {context.TargetPartitions.Count:N0} partitions, each since its own watermark...");
 
-        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes since {PreviousTimestamp}", previousTimestamp);
+        _logger.Debug("GetDeltaResultsUsingAccesslog: Querying for changes in each partition since its own watermark: {Watermarks}",
+            LogSanitiser.Sanitise(string.Join("; ", context.TargetPartitions.Select(partition => $"{partition.ExternalId} since {readFrom[partition.Id]}"))));
 
-        // Build partition suffix list for filtering: OpenLDAP shares cn=accesslog across
-        // all databases, so we must exclude entries from other suffixes.
-        var partitionSuffixes = PartitionSuffixes(context.TargetPartitions.Select(p => p.ExternalId));
         // Partition filtering alone is not the same selection a full import makes: within a partition, only the
         // selected Containers are imported from, and each carries its own scope. Applying that here keeps a delta
         // import to the objects a full import would have returned.
@@ -621,9 +690,12 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
 
         var cookie = context.PaginationTokens.SingleOrDefault(t => t.Name == PaginationTokenName)?.ByteValue;
 
-        // LDAP only supports >= (not >), so we use >= and skip the watermark's own entry in code. Confined to the
-        // target partitions on the server; with no partition to name, the read is not narrowed.
-        var request = new SearchRequest(AccesslogDn, WriteOperations(previousTimestamp, partitionSuffixes), SearchScope.OneLevel, ChangeAttributes);
+        // LDAP only supports >= (not >), so each partition's clause asks for >= and the watermark's own entry is
+        // skipped in code. OpenLDAP shares cn=accesslog across all databases, so each clause is also confined to its
+        // partition, leaving the other suffixes' writes on the server.
+        var request = new SearchRequest(AccesslogDn,
+            WriteOperations(context.TargetPartitions.Select(partition => (partition.ExternalId, readFrom[partition.Id]))),
+            SearchScope.OneLevel, ChangeAttributes);
         var pageControl = new PageResultRequestControl(context.PageSize) { IsCritical = false };
         if (cookie is { Length: > 0 })
             pageControl.Cookie = cookie;
@@ -663,6 +735,7 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
         var objectsReadBefore = result.ImportObjects.Count;
         var totalEntries = 0;
         var skippedOutOfScope = 0;
+        var skippedAlreadyRead = 0;
         // Track processed DNs to avoid importing the same object multiple times when the
         // accesslog has multiple changes for the same DN (e.g., 3 member modifications to
         // the same group). Since we fetch current state rather than replaying individual
@@ -685,10 +758,10 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             if (string.IsNullOrEmpty(reqDn) || string.IsNullOrEmpty(reqStart))
                 continue;
 
-            // The search is confined to the target partitions on the server; this keeps the selection exact
-            // whatever the directory made of the filter, at the cost of a string comparison.
-            if (partitionSuffixes.Count > 0 &&
-                !partitionSuffixes.Any(suffix => reqDn.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
+            // The search is confined to the target partitions on the server; this keeps the selection exact whatever
+            // the directory made of the filter, and finds the partition whose watermark the write is judged by.
+            var partition = LdapConnectorUtilities.PartitionJudging(reqDn, context.TargetPartitions, candidate => readFrom[candidate.Id], StringComparer.Ordinal);
+            if (partition == null)
             {
                 skippedOutOfScope++;
                 continue;
@@ -702,9 +775,14 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
                 continue;
             }
 
-            // Skip the exact timestamp match from the previous watermark
-            if (reqStart == previousTimestamp)
+            // The partition's last import read everything up to its watermark: the watermark's own entry, which the
+            // read's >= returns, and a write before it, which an enclosing partition's clause returns when this
+            // partition's suffix is nested beneath that one's.
+            if (string.CompareOrdinal(reqStart, readFrom[partition.Id]) <= 0)
+            {
+                skippedAlreadyRead++;
                 continue;
+            }
 
             totalEntries++;
 
@@ -760,8 +838,8 @@ internal sealed class LdapAccesslogDeltaSource : ILdapDeltaSource
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken(PaginationTokenName, pageResponse.Cookie));
 
         _logger.Debug("GetDeltaResultsUsingAccesslog: Processed {TotalEntries} change entries on this page. " +
-            "Skipped {SkippedOutOfScope} entries outside the selected scope.",
-            totalEntries, skippedOutOfScope);
+            "Skipped {SkippedOutOfScope} entries outside the selected scope, and {SkippedAlreadyRead} its partition's last import had read.",
+            totalEntries, skippedOutOfScope, skippedAlreadyRead);
     }
 
     /// <summary>

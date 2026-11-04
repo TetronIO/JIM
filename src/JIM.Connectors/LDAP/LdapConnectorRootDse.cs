@@ -2,13 +2,22 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using System.Text.Json.Serialization;
 
 namespace JIM.Connectors.LDAP;
 
 /// <summary>
-/// Holder of key synchronisation-related information about an LDAP directory from its rootDSE object.
-/// This data is persisted between synchronisation runs to support delta imports.
+/// Holder of key synchronisation-related information about an LDAP directory from its rootDSE object: its type and
+/// capabilities, the domain controller reached and pinned, and where its changelog is. Persisted between
+/// synchronisation runs as the Connected System's connector data, so later runs and the Connected System page know
+/// what the directory is.
 /// </summary>
+/// <remarks>
+/// It holds no Delta Import position. Each Partition keeps its own (<see cref="LdapPartitionWatermark"/>, #2715), so a
+/// run that reads one Partition cannot move another's. A record written before then carries the positions it used to
+/// hold (HighestCommittedUsn, LastChangeNumber, LastChangeTime, LastAccesslogTimestamp,
+/// LastAccesslogTimestampIsLogged); they are ignored on read and dropped by the next write.
+/// </remarks>
 internal class LdapConnectorRootDse
 {
     /// <summary>
@@ -17,26 +26,12 @@ internal class LdapConnectorRootDse
     public string? DnsHostName { get; set; }
 
     /// <summary>
-    /// For Active Directory: The highest committed Update Sequence Number (USN) at the time of the last sync.
-    /// Used for delta imports - we query for objects where uSNChanged > this value.
+    /// For Active Directory and Samba AD: the domain controller's highestCommittedUSN as this import's rootDSE read
+    /// found it, for the check that it has not gone back behind a Partition's watermark. Never persisted: it is the
+    /// directory's position now, and a Partition's position is its own watermark.
     /// </summary>
-    public long? HighestCommittedUsn { get; set; }
-
-    /// <summary>
-    /// For changelog-based directories (389 Directory Server, generic directories publishing a
-    /// draft-good-ldap-changelog): the highest change number the last import saw. A Delta Import reads the
-    /// changelog for entries numbered above it. Null when no readable changelog existed at the time, which is
-    /// what makes the next Delta Import fall back to a Full Import rather than read nothing.
-    /// </summary>
-    public long? LastChangeNumber { get; set; }
-
-    /// <summary>
-    /// For directories with a changelog: the changeTime of the change numbered <see cref="LastChangeNumber"/>, when
-    /// the changelog held that change and recorded one. The next Delta Import reads that change back and compares,
-    /// to prove the number still names the same change rather than one written after a restore reused it. Null when
-    /// there was no such entry or time to record, and on a record from before JIM kept this; the check is then skipped.
-    /// </summary>
-    public string? LastChangeTime { get; set; }
+    [JsonIgnore]
+    public long? CurrentHighestCommittedUsn { get; set; }
 
     /// <summary>
     /// Where the directory says its changelog is (the rootDSE's <c>changelog</c> attribute), or null when it
@@ -52,25 +47,10 @@ internal class LdapConnectorRootDse
     public long? FirstChangeNumber { get; set; }
 
     /// <summary>
-    /// The newest change number, when the rootDSE advertises it. Taken as the watermark in preference to
-    /// enumerating the changelog to find it.
+    /// The newest change number, when the rootDSE advertises it. Taken as each Partition's watermark in preference
+    /// to enumerating the changelog to find it.
     /// </summary>
     public long? AdvertisedLastChangeNumber { get; set; }
-
-    /// <summary>
-    /// For OpenLDAP with accesslog overlay: The reqStart timestamp of the last processed entry.
-    /// Used for delta imports — we query cn=accesslog for entries with reqStart > this value.
-    /// Format: Generalised time (e.g., "20260326183000.000000Z").
-    /// </summary>
-    public string? LastAccesslogTimestamp { get; set; }
-
-    /// <summary>
-    /// For OpenLDAP: whether <see cref="LastAccesslogTimestamp"/> is the reqStart of a write the accesslog logged
-    /// (true), and so names an entry the next Delta Import can read back to prove the accesslog still reaches it, or
-    /// a timestamp generated because the accesslog was empty (false), which names none. Null with no watermark, and
-    /// on a record from before JIM kept this; either way the next Delta Import has no entry to check.
-    /// </summary>
-    public bool? LastAccesslogTimestampIsLogged { get; set; }
 
     /// <summary>
     /// The detected directory server type, determined from rootDSE capabilities during connection.
@@ -80,8 +60,9 @@ internal class LdapConnectorRootDse
 
     /// <summary>
     /// For Active Directory / Samba AD: the invocationId of the domain controller's NTDS Settings object.
-    /// AD USNs are scoped to the DC that issued them, so a persisted USN watermark is only meaningful when
-    /// read back against the same DC. The invocationId changes when a DC is restored from backup (a new
+    /// AD USNs are scoped to the DC that issued them, so a USN watermark is only meaningful when read back
+    /// against the same DC; each Partition's watermark carries the invocationId it was taken against, and this is
+    /// the one the last import reached, shown on the Connected System page. The invocationId changes when a DC is restored from backup (a new
     /// invocationId is generated to prevent USN reuse against stale replication state), so comparing it
     /// between the run that produced the watermark and the current connection detects both a restore and a
     /// connection to an entirely different DC (for example, via DNS round-robin against a domain name Host).

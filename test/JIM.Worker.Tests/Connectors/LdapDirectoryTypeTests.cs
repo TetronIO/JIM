@@ -444,15 +444,24 @@ public class LdapDirectoryTypeTests
     #region persisted record compatibility
 
     /// <summary>
-    /// The change number used to be persisted as a 32-bit value; a record written then must still read.
+    /// A record written before each Partition kept its own watermark (#2715) carries the positions it used to hold; it
+    /// must still read, as the directory it describes, and the next write leaves them out.
     /// </summary>
     [Test]
-    public void LdapConnectorRootDse_PersistedIntLastChangeNumber_ReadsAsLong()
+    public void LdapConnectorRootDse_RecordHoldingTheWatermarksItUsedTo_ReadsAndIsWrittenWithoutThem()
     {
-        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>("{\"DirectoryType\":3,\"LastChangeNumber\":42}");
+        const string legacy = "{\"DirectoryType\":3,\"LastChangeNumber\":42,\"LastChangeTime\":\"20261007190130Z\",\"HighestCommittedUsn\":9,\"LastAccesslogTimestamp\":\"20261024202113.992856Z\",\"LastAccesslogTimestampIsLogged\":true}";
 
-        Assert.That(deserialised!.LastChangeNumber, Is.EqualTo(42L));
-        Assert.That(deserialised.ChangelogDn, Is.Null);
+        var deserialised = JsonSerializer.Deserialize<LdapConnectorRootDse>(legacy);
+        var rewritten = JsonSerializer.Serialize(deserialised);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deserialised!.DirectoryType, Is.EqualTo(LdapDirectoryType.Generic));
+            Assert.That(deserialised.ChangelogDn, Is.Null);
+            Assert.That(rewritten, Does.Not.Contain("\"LastChangeNumber\"").And.Not.Contain("\"HighestCommittedUsn\"")
+                .And.Not.Contain("\"LastAccesslogTimestamp\"").And.Not.Contain("\"LastAccesslogTimestampIsLogged\"").And.Not.Contain("\"LastChangeTime\""));
+        }
     }
 
     #endregion

@@ -43,6 +43,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<AuxiliaryClassDiscoveryRun> AuxiliaryClassDiscoveryRuns { get; set; } = null!;
     public virtual DbSet<AuxiliaryClassDiscoveryResult> AuxiliaryClassDiscoveryResults { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPartitionWatermark> ConnectedSystemPartitionWatermarks { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPasswordSynchronisation> ConnectedSystemPasswordSynchronisations { get; set; } = null!;
     public virtual DbSet<ConfigurationChangeSynchronisation> ConfigurationChangeSynchronisations { get; set; } = null!;
@@ -602,6 +603,8 @@ public class JimDbContext : DbContext
             .IsUnique();
 
         ConfigureScimStore(modelBuilder);
+
+        ConfigurePartitionWatermarks(modelBuilder);
 
         // ApiKey to Role many-to-many relationship
         modelBuilder.Entity<ApiKey>()
@@ -1982,6 +1985,43 @@ public class JimDbContext : DbContext
             change.HasIndex(c => new { c.ConnectedSystemId, c.ConnectedSystemObjectTypeId })
                 .HasDatabaseName("IX_ConfigurationChangeSynchronisations_ConnectedSystemId_ObjectTypeId");
         });
+    }
+
+    /// <summary>
+    /// Per-Partition Delta Import watermarks (#2715): one row per Partition, holding the Connector's own value. Both
+    /// foreign keys cascade, in the spirit of the "Configuration ownership" block: a watermark means nothing once its
+    /// Partition or Connected System is gone, so a hierarchy refresh that removes a Partition, deleting a Connected
+    /// System, and the factory reset's truncate all take the rows with them. PostgreSQL accepts the two cascade paths
+    /// (Connected System to Partition to row, and Connected System to row). Declared without navigations, so the rows
+    /// stay out of configuration snapshots and out of the graph a Connected System save marks for update.
+    /// <para>
+    /// An import Activity's record of the values it read and recorded is JSON on the Activity rather than rows here:
+    /// Activities are audit records, kept after their Connected System is deleted.
+    /// </para>
+    /// </summary>
+    private static void ConfigurePartitionWatermarks(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ConnectedSystemPartitionWatermark>(watermark =>
+        {
+            watermark.HasKey(w => w.PartitionId);
+            watermark.Property(w => w.PartitionId).ValueGeneratedNever();
+            watermark.HasOne<ConnectedSystemPartition>().WithOne().HasForeignKey<ConnectedSystemPartitionWatermark>(w => w.PartitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            // Redundant with the Partition's own, and kept for the per-Connected System read and the deselected-Partition
+            // sweep, both of which key on it.
+            watermark.HasOne<ConnectedSystem>().WithMany().HasForeignKey(w => w.ConnectedSystemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Activity>()
+            .Property(a => a.ImportPartitionWatermarksFrom)
+            .HasConversion(ImportPartitionWatermarkJson.Converter, ImportPartitionWatermarkJson.Comparer)
+            .HasColumnType("text");
+
+        modelBuilder.Entity<Activity>()
+            .Property(a => a.ImportPartitionWatermarksTo)
+            .HasConversion(ImportPartitionWatermarkJson.Converter, ImportPartitionWatermarkJson.Comparer)
+            .HasColumnType("text");
     }
 
     /// <summary>

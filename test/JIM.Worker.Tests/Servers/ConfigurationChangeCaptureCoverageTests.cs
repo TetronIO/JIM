@@ -219,6 +219,30 @@ public class ConfigurationChangeCaptureCoverageTests
         Assert.That(_completedActivity, Is.Null);
     }
 
+    [Test]
+    public async Task RecordImportWatermarksAsync_DoesNotCreateActivityOrCaptureSnapshotAsync()
+    {
+        // #2715: per-Partition watermarks are machine-generated runtime state written by every import, exactly like the
+        // persisted connector data above; neither may record a Connected System Update.
+        var connectedSystem = BuildConnectedSystem();
+        connectedSystem.PersistedConnectorData = "watermark-cookie-v1";
+        _csRepo.Setup(r => r.RecordImportWatermarksAsync(connectedSystem.Id, "watermark-cookie-v2", It.IsAny<IReadOnlyDictionary<int, string>>(),
+                It.IsAny<IReadOnlyCollection<int>>(), It.IsAny<DateTime>()))
+            .ReturnsAsync(new ImportWatermarkRecordingResult());
+
+        await _jim.ConnectedSystems.RecordImportWatermarksAsync(connectedSystem, "watermark-cookie-v2",
+            new Dictionary<int, string?> { [10] = "corp-2", [11] = null });
+
+        Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("watermark-cookie-v2"));
+        _csRepo.Verify(r => r.RecordImportWatermarksAsync(connectedSystem.Id, "watermark-cookie-v2",
+            It.Is<IReadOnlyDictionary<int, string>>(d => d.Count == 1 && d[10] == "corp-2"),
+            It.Is<IReadOnlyCollection<int>>(c => c.SequenceEqual(new[] { 11 })), It.IsAny<DateTime>()), Times.Once);
+        _csRepo.Verify(r => r.UpdateConnectedSystemAsync(It.IsAny<ConnectedSystem>()), Times.Never,
+            "the watermark write must never take the graph-marking update path");
+        Assert.That(_createdActivity, Is.Null, "an import's watermarks are runtime state, not a configuration change, and must not create an Activity");
+        Assert.That(_completedActivity, Is.Null);
+    }
+
     // -- idempotent capture guard ------------------------------------------------------------------------------------------
 
     [Test]

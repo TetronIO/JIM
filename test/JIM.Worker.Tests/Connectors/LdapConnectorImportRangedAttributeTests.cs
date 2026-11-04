@@ -60,7 +60,7 @@ public class LdapConnectorImportRangedAttributeTests
             Partitions = [new ConnectedSystemPartition { ExternalId = "DC=corp,DC=local", Name = "corp", Selected = true, Containers = [] }]
         };
         var import = new LdapConnectorImport(connectedSystem, new ConnectedSystemRunProfile { Name = "Full Import", RunType = ConnectedSystemRunType.FullImport },
-            new LdapConnection("localhost"), null, 1, [], null, null, "dc1.corp.local", _ => true, Logger, CancellationToken.None, new RecordingConnectorProgress());
+            new LdapConnection("localhost"), null, 1, [], null, null, null, "dc1.corp.local", _ => true, Logger, CancellationToken.None, new RecordingConnectorProgress());
 
         var executor = new Mock<ILdapOperationExecutor>();
         executor.Setup(e => e.SendRequest(It.IsAny<DirectoryRequest>(), It.IsAny<TimeSpan>()))

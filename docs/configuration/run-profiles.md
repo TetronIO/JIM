@@ -51,21 +51,21 @@ How many objects an import asks the Connected System for at a time: the page of 
 
 For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), an import Run Profile can read a single partition or file, so a Connected System can have several import Run Profiles of the same run type, each reading a different one. With no **File Path**, an import reads the Connected System's own **File Path**. Export and synchronisation Run Profiles take neither.
 
-A Run Profile that targets no partition reads from every partition currently selected on the Connected System, so it follows your selections automatically.
+A Run Profile that targets no partition reads every partition selected on the Connected System, so it follows your selections. Each partition keeps its own Delta Import watermark, so importing one partition never moves another's; a Delta Import reads every object in its partitions instead when any of them has none yet (see [Import Watermarks](import-watermarks.md)).
 
 ### When a targeted partition is deselected
 
-Selecting a partition on the Connected System's Scope tab is how you tell JIM which parts of a directory it manages, and that decision binds every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
+Selecting partitions on the Connected System's Scope tab decides what JIM manages, for every Run Profile. If you deselect a partition that a Run Profile targets, that Run Profile becomes **inoperable**: JIM refuses to run it, naming the Run Profile and the partition, rather than reading scope you have withdrawn. The Run Profiles tab marks it **Not selected** beside the partition name, the REST API returns `targetsDeselectedPartition` on the Run Profile, and `Get-JIMRunProfile` surfaces the same property, so you can find every affected Run Profile before a scheduled run reaches one:
 
 ```powershell
 Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object targetsDeselectedPartition
 ```
 
-To resolve it, either select the partition again, or edit the Run Profile to target a partition that is selected. Deleting the Run Profile is also valid where the partition has genuinely been retired.
+To resolve it, select the partition again, retarget the Run Profile, or delete it if the partition is retired.
 
 !!! warning "Deselecting a partition or container changes what a Full Import considers deleted"
 
-    A Full Import treats any object it does not find as deleted from the Connected System, which marks the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls their contributed attribute values. Narrowing import scope therefore has consequences well beyond "JIM stops reading these objects". Review the scope change before saving it.
+    A Full Import treats any object it does not find as deleted from the Connected System, which marks the corresponding Connected System Objects obsolete and, on the next synchronisation, disconnects them and recalls their contributed attribute values. Review the scope change before saving it.
 
 ## :material-eye-check-outline: Verification Mode (Full Import)
 
@@ -122,7 +122,7 @@ A Delta Import marks as deleted the objects the Connected System reports deleted
 Unlike a Full Import, a Delta Import only reads each change once, so a withheld deletion must not be lost. A run that withholds its deletions keeps the change-tracking position it started from, and each following Delta Import reads the same deletions again and withholds them again, with the same warning, until you act on it:
 
 - If the deletions are a mistake, fix them in the Connected System (restore the deleted objects). The next Delta Import then reads the restored objects too.
-- If the deletions are intended, raise the limit, or run a second Delta Import Run Profile without these limits by hand (see [Letting a legitimate mass change through](#letting-a-legitimate-mass-change-through)). It reads the same changes, because the change-tracking position belongs to the Connected System, not the Run Profile.
+- If the deletions are intended, raise the limit, or run a second Delta Import Run Profile without these limits by hand (see [Letting a legitimate mass change through](#letting-a-legitimate-mass-change-through)). Reading the same partitions, it reads the same changes, because the change-tracking position belongs to the Connected System, or each partition, not the Run Profile.
 - Alternatively, run a Full Import: its own deletion limits then apply.
 
 Each Delta Import re-reads everything since that position until the deletions are let through or fixed, so act on the warning promptly.

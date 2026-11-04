@@ -258,6 +258,38 @@ public class SystemResetDatabaseTests
         Assert.That(await verify.RetiredGeneratedValues.AnyAsync(), Is.False, "a factory reset forgets every retired value");
     }
 
+    /// <summary>
+    /// Partition watermarks (#2715) hang off the Connected System and its Partitions, so the truncate empties them by
+    /// cascade. Pinned so a later change to their foreign keys cannot leave a reset system holding watermarks for
+    /// Partitions that no longer exist.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_PartitionWatermarksExist_RemovesThemAsync()
+    {
+        await SeedAsync();
+        await using (var seed = NewContext())
+        {
+            var system = await seed.ConnectedSystems.AsTracking().FirstAsync();
+            var partition = new ConnectedSystemPartition { ConnectedSystem = system, ExternalId = "dc=corp,dc=local", Name = "corp.local", Selected = true };
+            seed.ConnectedSystemPartitions.Add(partition);
+            await seed.SaveChangesAsync();
+            seed.ConnectedSystemPartitionWatermarks.Add(new ConnectedSystemPartitionWatermark
+            {
+                PartitionId = partition.Id,
+                ConnectedSystemId = system.Id,
+                Value = "watermark",
+                RecordedAt = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).System.ResetSystemAsync(includeAdministrators: false);
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystemPartitionWatermarks.AnyAsync(), Is.False, "a factory reset forgets every Partition watermark");
+    }
+
     [Test]
     public async Task ResetSystemAsync_IncludeAdministrators_RemovesAdministratorsTooAsync()
     {

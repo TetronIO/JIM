@@ -14,10 +14,13 @@ namespace JIM.Worker.Tests.Workflows;
 /// page, whether the Connector read every object in the run's scope (<see cref="ConnectedSystemImportResult.CompleteRead"/>),
 /// as one that falls back to a full read does; a page beyond the list, and every page when it is null, says it did not.
 /// <paramref name="beforePage"/>, when given, is called with each page's index (from 0) before that page is returned, so a
-/// test can act part-way through a run, as an administrator cancelling it does.
+/// test can act part-way through a run, as an administrator cancelling it does. <paramref name="partitionWatermarksByPage"/>
+/// gives, page by page, the <see cref="ConnectedSystemImportResult.PartitionWatermarks"/> to return; this Connector does not
+/// implement <see cref="IConnectorPartitionWatermarks"/>, so any it returns are ones JIM never handed it (#2715).
 /// </summary>
 internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject>> pages, string? firstPageWatermark = null,
-    IReadOnlyList<bool>? completeReadByPage = null, Action<int>? beforePage = null) : IConnector, IConnectorImportUsingCalls
+    IReadOnlyList<bool>? completeReadByPage = null, Action<int>? beforePage = null,
+    IReadOnlyList<Dictionary<int, string?>?>? partitionWatermarksByPage = null) : IConnector, IConnectorImportUsingCalls
 {
     private int _nextPage;
 
@@ -45,7 +48,8 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
         {
             ImportObjects = page,
             PersistedConnectorData = _nextPage == 1 ? firstPageWatermark : null,
-            CompleteRead = completeReadByPage != null && pageIndex < completeReadByPage.Count && completeReadByPage[pageIndex]
+            CompleteRead = completeReadByPage != null && pageIndex < completeReadByPage.Count && completeReadByPage[pageIndex],
+            PartitionWatermarks = partitionWatermarksByPage != null && pageIndex < partitionWatermarksByPage.Count ? partitionWatermarksByPage[pageIndex] : null
         };
         if (_nextPage < pages.Count)
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken("page", _nextPage.ToString()));
