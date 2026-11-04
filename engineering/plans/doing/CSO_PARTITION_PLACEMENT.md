@@ -1,6 +1,6 @@
 # Truthful Connected System Object Partition
 
-- **Status:** Doing (Phase 0 complete)
+- **Status:** Doing (Phases 0 and 1 complete)
 - **Issue:** [#2723](https://github.com/TetronIO/JIM/issues/2723)
 - **Related:** [#2715](https://github.com/TetronIO/JIM/issues/2715) (per-Partition watermarks; this is its Follow-up 1), [#2720](https://github.com/TetronIO/JIM/issues/2720)
 - **Design:** approved 4 November 2026 (decisions D1 to D5 below, all as recommended)
@@ -88,7 +88,7 @@ Each phase starts with failing tests.
 - `OnDelete(DeleteBehavior.SetNull)` in `JimDbContext`, a migration, `DeletePathForeignKeyCoverageTests`, `MigrationDesignerChainTests`, `dotnet ef migrations has-pending-model-changes`.
 - Confirmed by the red test, which drives `ImportConnectedSystemHierarchyAsync` with the Connected System loaded change-tracked, as the REST endpoint loads it: the save failed with `23503: update or delete on table "ConnectedSystemPartitions" violates foreign key constraint "FK_ConnectedSystemObjects_ConnectedSystemPartitions_PartitionId" on table "ConnectedSystemObjects"`. Recording that failure on the Activity saves on the same context, which still holds the Partition marked deleted, so it failed again with the same error and the Activity was left **In Progress** with no error message. The portal's **Retrieve Hierarchy** never reached it: it saves a graph loaded on another context, so a removed Partition is reported as removed but its row (with its Containers and objects) stays. On the REST path the removed Partition's Containers are kept with no Partition and no Connected System. None of these three is changed here.
 
-### Phase 1: Capability and the LDAP rule
+### Phase 1: Capability and the LDAP rule ✅
 
 - `IConnectorPartitionPlacement` in JIM.Models; LDAP implementation over `PartitionForDn`.
 - `test/JIM.Worker.Tests/Connectors/LdapConnectorPartitionPlacementTests.cs`: one Partition; nested suffixes return the longest match; outside every Partition returns null; an unreadable DN returns null; an escaped comma in the leaf RDN is not placed in a look-alike suffix.
@@ -147,3 +147,13 @@ See below. Move this plan to `engineering/plans/done/` in the pull request that 
 - OpenLDAP subordinate glue returning nested-suffix entries in a superior search; AD domain-NC searches not returning DomainDnsZones objects.
 - Partitions being loaded at export preparation.
 - Whether an Active Directory cross-domain move keeps the objectGUID and reports a delete in the source Partition.
+
+## Departures
+
+What was built differently from the plan above, and why.
+
+| Phase | Plan | Built | Why |
+|-------|------|-------|-----|
+| 1 | The LDAP Connector implements the capability with `LdapConnectorUtilities.PartitionForDn` | The rule moved into `LdapPartitionPlacer`; `PartitionForDn` (the watermark judge) now delegates to it | One rule either way, and the placer can parse each Partition's DN once per run rather than once per object; the watermark path keeps its per-call form |
+| 1 | `IConnectorPartitionPlacement` answers which Partition an identifier is in | `PreparePartitionPlacement(partitions)` returns an `IConnectorPartitionPlacer` whose `GetPartition(identifier)` answers | The prepared placer is what lets the Connector parse Partitions once; the policy prepares one over the selected Partitions and, only where some are deselected, one over them all |
+| 1 | No answer for a Connector without the capability | `ConnectedSystemPartitionPlacement.Prepare` also has no answer for a Connected System with no Partitions | Placing among no Partitions would only count every object as placed nowhere |
