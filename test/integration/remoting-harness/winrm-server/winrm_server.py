@@ -69,6 +69,14 @@ RECEIVE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_RECEIVE_TIMEOUT_SECONDS", 
 IDLE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_IDLE_TIMEOUT_SECONDS", "120"))
 # WinRM's MaxEnvelopeSizekb, 500 by default on Windows: the largest request body it accepts.
 MAX_REQUEST_BYTES = int(os.environ.get("WINRM_MAX_ENVELOPE_SIZE_KB", "500")) * 1024
+
+# The stand-in Exchange endpoint (#2021): a session on the Microsoft.Exchange configuration is a restricted, no-language
+# pwsh with the fake Exchange commands, all of them visible to most accounts and some hidden from the accounts named
+# here, as Exchange's role-based access control hides a command an account's roles do not grant.
+EXCHANGE_CONFIGURATION = "/microsoft.exchange"
+EXCHANGE_SESSION_FILE = os.environ.get("WINRM_EXCHANGE_SESSION_FILE", "/opt/fake-exchange/exchange.pssc")
+EXCHANGE_LIMITED_SESSION_FILE = os.environ.get("WINRM_EXCHANGE_LIMITED_SESSION_FILE", "/opt/fake-exchange/exchange-limited.pssc")
+EXCHANGE_LIMITED_ACCOUNTS = {name.strip().lower() for name in os.environ.get("WINRM_EXCHANGE_LIMITED_ACCOUNTS", "").split(",") if name.strip()}
 DURATION = re.compile(r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$")
 
 
@@ -146,8 +154,11 @@ class PowerShellProcess:
     PACKET = re.compile(
         r"<(?P<kind>DataAck|CommandAck|CloseAck|SignalAck|Data)(?=[\s/>])(?P<attrs>[^>]*?)(?:/>|>(?P<body>[^<]*)</Data>)")
 
-    def __init__(self):
-        self.process = subprocess.Popen(["pwsh", "-NoLogo", "-NoProfile", "-s"], stdin=subprocess.PIPE,
+    def __init__(self, configuration_file: "str | None" = None):
+        arguments = ["pwsh", "-NoLogo", "-NoProfile", "-s"]
+        if configuration_file:
+            arguments += ["-ConfigurationFile", configuration_file]
+        self.process = subprocess.Popen(arguments, stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
         self.output = {}  # PSGuid (lower case) -> queue of (stream, base64 fragments)
         self.acks = {}  # (kind, PSGuid) -> threading.Event
@@ -201,11 +212,19 @@ class PowerShellProcess:
             pass
 
 
+def session_file_for(resource_uri: str, principal: str) -> "str | None":
+    """The session configuration file for a shell: the fake Exchange's for the Microsoft.Exchange configuration."""
+    if not (resource_uri or "").lower().endswith(EXCHANGE_CONFIGURATION):
+        return None
+    account = (principal or "").split("@", 1)[0].lower()
+    return EXCHANGE_LIMITED_SESSION_FILE if account in EXCHANGE_LIMITED_ACCOUNTS else EXCHANGE_SESSION_FILE
+
+
 class Shell:
-    def __init__(self, shell_id: str, resource_uri: str):
+    def __init__(self, shell_id: str, resource_uri: str, principal: str = ""):
         self.shell_id = shell_id
         self.resource_uri = resource_uri
-        self.pwsh = PowerShellProcess()
+        self.pwsh = PowerShellProcess(session_file_for(resource_uri, principal))
         self.done = set()  # pipelines whose PIPELINE_STATE has been delivered
 
 
@@ -245,7 +264,7 @@ def shell_from(envelope) -> "Shell":
     return shell
 
 
-def handle(envelope_bytes: bytes) -> bytes:
+def handle(envelope_bytes: bytes, principal: str = "") -> bytes:
     envelope = ET.fromstring(envelope_bytes)
     action = envelope.findtext("s:Header/a:Action", namespaces=NS)
     message_id = envelope.findtext("s:Header/a:MessageID", namespaces=NS) or ""
@@ -271,7 +290,8 @@ def handle(envelope_bytes: bytes) -> bytes:
         # same, so the harness catches a client that keeps using its own.
         shell_id = str(uuid.uuid4()).upper()
         creation = shell_element.findtext("{http://schemas.microsoft.com/powershell}creationXml") or ""
-        shell = Shell(shell_id, resource_uri)
+        shell = Shell(shell_id, resource_uri, principal)
+        LOG.info("shell %s on %s for %s", shell_id, resource_uri, principal or "an unknown principal")
         with SHELLS_LOCK:
             SHELLS[shell_id] = shell
         if creation:
@@ -375,6 +395,13 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         LOG.debug(format, *args)
 
+    def _principal(self) -> str:
+        """The Kerberos principal this connection authenticated as, which decides what a fake Exchange shows it."""
+        try:
+            return str(self.context.client_principal or "")
+        except (AttributeError, spnego.exceptions.SpnegoError):
+            return ""
+
     def _reply(self, status: int, body: bytes = b"", content_type: str = "", headers=None):
         self.send_response(status)
         for name, value in (headers or {}).items():
@@ -420,7 +447,7 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
                 LOG.warning("refused request: message encryption over HTTPS")
                 self._reply(400, headers=headers)
                 return
-            self._reply(200, handle(body), "application/soap+xml;charset=UTF-8", headers)
+            self._reply(200, handle(body, self._principal()), "application/soap+xml;charset=UTF-8", headers)
             return
 
         try:
@@ -430,7 +457,7 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
             self._reply(400, headers=headers)
             return
 
-        reply = handle(plaintext)
+        reply = handle(plaintext, self._principal())
 
         encrypted, content_type = encrypt_message(self.context, reply)
         self._reply(200, encrypted, content_type, headers)

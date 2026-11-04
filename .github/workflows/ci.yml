@@ -377,7 +377,7 @@ jobs:
       id: scope
       run: |
         changed=$(git diff --name-only "$BASE_SHA" HEAD)
-        if echo "$changed" | grep -qE '^(src/Tetron\.PowerShellRemoting/|test/Tetron\.PowerShellRemoting\.(Tests|ImageProbe)/|test/integration/remoting-harness/|src/JIM\.(Worker|Web)/Dockerfile$|src/JIM\.Connectors/JIM\.Connectors\.csproj$|\.github/workflows/ci\.yml$)'; then
+        if echo "$changed" | grep -qE '^(src/Tetron\.PowerShellRemoting/|test/Tetron\.PowerShellRemoting\.(Tests|ImageProbe)/|test/integration/remoting-harness/|src/JIM\.(Worker|Web)/Dockerfile$|src/JIM\.Connectors/JIM\.Connectors\.csproj$|src/JIM\.Connectors/LDAP/(LdapExchange|ILdapExchange|ExchangeKerberos)|test/JIM\.Worker\.Tests/Connectors/LdapExchange|\.github/workflows/ci\.yml$)'; then
           echo "run=true" >> "$GITHUB_OUTPUT"
         else
           echo "run=false" >> "$GITHUB_OUTPUT"
@@ -390,10 +390,14 @@ jobs:
         dotnet-version: 10.0.x
     - name: Restore dependencies
       if: steps.scope.outputs.run == 'true'
-      run: dotnet restore test/Tetron.PowerShellRemoting.Tests/ --locked-mode
+      run: |
+        dotnet restore test/Tetron.PowerShellRemoting.Tests/ --locked-mode
+        dotnet restore test/JIM.Worker.Tests/ --locked-mode
     - name: Build
       if: steps.scope.outputs.run == 'true'
-      run: dotnet build test/Tetron.PowerShellRemoting.Tests/ --no-restore
+      run: |
+        dotnet build test/Tetron.PowerShellRemoting.Tests/ --no-restore
+        dotnet build test/JIM.Worker.Tests/ --no-restore
     # Docker Hub rate-limits anonymous pulls, so the KDC image (the digest docker-compose.yml pins) is pulled up front
     # with a retry rather than letting the harness script's compose up fail on a transient refusal.
     - name: Pull the KDC image
@@ -409,15 +413,25 @@ jobs:
     - name: Start the remoting harness
       if: steps.scope.outputs.run == 'true'
       run: pwsh -File ./test/integration/remoting-harness/Start-RemotingHarness.ps1
-    # The HTTPS tests reach the stand-in server by the name on its certificate.
-    - name: Resolve the stand-in server's certificate name
+    # The HTTPS tests reach the stand-in server by the name on its certificate, and the LDAP Connector's Exchange check
+    # reaches the domain controller by the name on its LDAPS certificate, which is also the KDC its sign-in asks.
+    - name: Resolve the harness's certificate names
       if: steps.scope.outputs.run == 'true'
-      run: echo "${JIM_REMOTING_HARNESS_WINRM} winrm-harness.harness.test winrm-harness" | sudo tee -a /etc/hosts
+      run: |
+        echo "${JIM_REMOTING_HARNESS_WINRM} winrm-harness.harness.test winrm-harness" | sudo tee -a /etc/hosts
+        echo "${JIM_REMOTING_HARNESS_KDC} dc1.harness.test" | sudo tee -a /etc/hosts
     - name: Run the remoting harness tests (RequiresRemotingHarness)
       if: steps.scope.outputs.run == 'true'
       env:
         JIM_REMOTING_HARNESS_REQUIRED: 'true'
       run: dotnet test test/Tetron.PowerShellRemoting.Tests/ --no-build --filter "Category=RequiresRemotingHarness" --verbosity normal
+    # The LDAP Connector's Exchange settings check end to end (#2021): the directory over LDAPS, Kerberos, and a sign-in
+    # to the stand-in Exchange endpoint.
+    - name: Run the LDAP Connector's Exchange check against the harness (RequiresRemotingHarness)
+      if: steps.scope.outputs.run == 'true'
+      env:
+        JIM_REMOTING_HARNESS_REQUIRED: 'true'
+      run: dotnet test test/JIM.Worker.Tests/ --no-build --filter "Category=RequiresRemotingHarness" --verbosity normal
     # Built as scan-images builds them, with the same build arguments, so they come from the cache scan-images keeps;
     # read-only here, since scan-images writes it.
     - name: Set up Docker Buildx
