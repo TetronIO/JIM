@@ -30,6 +30,7 @@ public class SchedulerServerSafeStartTests
 {
     private const int HealthyConnectedSystemId = 1;
     private const int DeletingConnectedSystemId = 2;
+    private const int DisabledRunProfileConnectedSystemId = 3;
 
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
@@ -128,7 +129,15 @@ public class SchedulerServerSafeStartTests
             Status = id == DeletingConnectedSystemId ? ConnectedSystemStatus.Deleting : ConnectedSystemStatus.Active,
             RunProfiles = new List<ConnectedSystemRunProfile>
             {
-                new() { Id = id * 100, Name = "Full Import", RunType = ConnectedSystemRunType.FullImport }
+                new()
+                {
+                    Id = id * 100,
+                    Name = "Full Import",
+                    RunType = ConnectedSystemRunType.FullImport,
+                    // A disabled Run Profile refuses to run (#2740), the other way a step comes to be impossible to queue.
+                    Enabled = id != DisabledRunProfileConnectedSystemId,
+                    DisabledReason = id == DisabledRunProfileConnectedSystemId ? ConnectedSystemRunProfileDisabledReason.Manual : null
+                }
             }
         };
 
@@ -269,6 +278,31 @@ public class SchedulerServerSafeStartTests
             Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
             Assert.That(failed.Status, Is.EqualTo(ActivityStatus.FailedWithError), "the skipped step shows why it did not run");
             Assert.That(failed.ScheduleStepId, Is.EqualTo(stepThree.Id));
+        }
+    }
+
+    [Test]
+    public async Task StartScheduleExecutionAsync_StepRunsADisabledRunProfile_RecordsAFailedActivityWithTheReasonAsync()
+    {
+        // A step whose Run Profile is disabled fails the way one whose Run Profile is missing does (#2740): it is recorded
+        // as a failed step saying why, and the step's Continue On Failure decides whether the rest runs.
+        var schedule = CreateSchedule(
+            Step(0, HealthyConnectedSystemId),
+            Step(1, DisabledRunProfileConnectedSystemId, continueOnFailure: true),
+            Step(2, HealthyConnectedSystemId));
+
+        var execution = await _application.Scheduler.StartScheduleExecutionAsync(schedule, ActivityInitiatorType.System, null, "Test");
+
+        var failed = _createdActivities.Single(a => a.ScheduleStepIndex == 1);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(failed.Status, Is.EqualTo(ActivityStatus.FailedWithError));
+            Assert.That(failed.ErrorMessage, Is.EqualTo(
+                "Could not be queued: Run Profile 'Full Import' is disabled, so it cannot run. An administrator disabled it. Enable it again to run it."));
+            Assert.That(failed.ConnectedSystemRunProfileId, Is.EqualTo(DisabledRunProfileConnectedSystemId * 100));
+            Assert.That(_createdTasks.Select(t => t.ScheduleStepIndex), Is.EqualTo(new int?[] { 0, 2 }),
+                "the disabled Run Profile is never queued, and the rest of the Schedule is");
+            Assert.That(execution!.Status, Is.EqualTo(ScheduleExecutionStatus.InProgress));
         }
     }
 
