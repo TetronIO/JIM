@@ -104,6 +104,24 @@ public class LdapExchangeCheckFailuresTests
     }
 
     [Test]
+    public void Describe_TransportWordsWithoutAFullStop_AreEndedBeforeJimsAdvice()
+    {
+        // The transport's own words rarely end in a full stop ("Connection refused"); run on into the advice that
+        // follows, they read as one garbled sentence.
+        var error = new HttpRequestException("Connection refused", new SocketException((int)SocketError.ConnectionRefused));
+
+        Assert.That(Describe(error), Does.Contain("Connection refused. Check"));
+    }
+
+    [Test]
+    public void Describe_TransportWordsEndingInAFullStop_AreNotGivenASecond()
+    {
+        var error = new HttpRequestException("Connection refused.", new SocketException((int)SocketError.ConnectionRefused));
+
+        Assert.That(Describe(error), Does.Not.Contain(".."));
+    }
+
+    [Test]
     public void Describe_ServerDidNotAnswer_SaysSo()
     {
         Assert.That(Describe(new TimeoutException("The request timed out.")), Does.Contain("did not answer"));

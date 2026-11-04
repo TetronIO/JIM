@@ -40,14 +40,14 @@ internal static class LdapExchangeCheckFailures
         return failure.Kind switch
         {
             RemoteFailureKind.Authentication when Find<WSManFaultException>(error) is { } refusal =>
-                $"Exchange refused {signIn.Principal}: {refusal.Message} The account signed in to the domain, but Exchange does not let it use remote PowerShell. " +
+                $"Exchange refused {signIn.Principal}: {Sentence(refusal.Message)} The account signed in to the domain, but Exchange does not let it use remote PowerShell. " +
                 "Add it to Exchange's Recipient Management role group, and check its remote PowerShell access is not turned off.",
             RemoteFailureKind.Connection =>
-                $"JIM could not reach Exchange at {endpoint}: {failure.Message} Check the Exchange server's name, and that this server can reach it on port {endpoint.Port}.",
+                $"JIM could not reach Exchange at {endpoint}: {Sentence(failure.Message)} Check the Exchange server's name, and that this server can reach it on port {endpoint.Port}.",
             RemoteFailureKind.Timeout =>
-                $"Exchange at {endpoint} did not answer: {failure.Message} Check the server is running, and that nothing between this server and it is holding the connection.",
+                $"Exchange at {endpoint} did not answer: {Sentence(failure.Message)} Check the server is running, and that nothing between this server and it is holding the connection.",
             RemoteFailureKind.Certificate =>
-                $"JIM does not trust Exchange's certificate at {endpoint}: {failure.Message} Add the certificate authority that issued it in Certificates, " +
+                $"JIM does not trust Exchange's certificate at {endpoint}: {Sentence(failure.Message)} Add the certificate authority that issued it in Certificates, " +
                 "and use the server's name as its certificate gives it.",
             _ => $"Exchange at {endpoint} refused the session: {failure.Message}"
         };
@@ -73,6 +73,15 @@ internal static class LdapExchangeCheckFailures
             $"JIM could not reach the domain controller {signIn.Kdc} on port 88 to sign in to Exchange with Kerberos. Check this server can reach it.",
         _ => $"Kerberos refused the sign-in for {signIn.Principal} through {signIn.Kdc}: {kerberos.Message}"
     };
+
+    /// <summary>
+    /// Another system's words, ended as a sentence so the advice that follows them reads as its own.
+    /// </summary>
+    private static string Sentence(string words)
+    {
+        var trimmed = words.Trim();
+        return trimmed.Length == 0 || trimmed[^1] is '.' or '!' or '?' ? trimmed : $"{trimmed}.";
+    }
 
     private static T? Find<T>(Exception error) where T : Exception
     {
