@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A Delta Import that reads every object instead of its changes, as one with no watermark to continue from does, now marks the objects no longer there as deleted, within the Run Profile's deletion limits, rather than leaving them in JIM until a Full Import. (#2720)
 - 🐛 An import that reads one LDAP partition, Full or Delta, no longer moves another partition's Delta Import starting point, so partition-targeted Delta Imports no longer skip changes. (#2715)
 - 🐛 Importing a Connected System's hierarchy through the REST API or PowerShell no longer fails when a partition removed from the directory still holds objects; the partition is removed and its objects are kept. (#2723)
+- 🐛 A partition-targeted import now detects the deletion of objects first imported by an unscoped Run Profile or provisioned by JIM, and retries a provisioned object no import has confirmed: JIM records each object in the partition it is in. (#2723)
 
 ### Security
 

@@ -49,9 +49,9 @@ How many objects an import asks the Connected System for at a time: the page of 
 
 ## :material-folder-outline: Partition and file path
 
-For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), an import Run Profile can read a single partition or file, so a Connected System can have several import Run Profiles of the same run type, each reading a different one. With no **File Path**, an import reads the Connected System's own **File Path**. Export and synchronisation Run Profiles take neither.
+For a Connector that exposes partitions (the LDAP Connector) or reads files (the File Connector), an import Run Profile can read a single partition or file, so a Connected System can have several import Run Profiles of one run type, each reading a different one. With no **File Path**, an import reads the Connected System's own **File Path**. Export and synchronisation Run Profiles take neither.
 
-A Run Profile that targets no partition reads every partition selected on the Connected System, so it follows your selections. Each partition keeps its own Delta Import watermark, so importing one partition never moves another's; a Delta Import reads every object in its partitions instead when any of them has none yet (see [Import Watermarks](import-watermarks.md)).
+A Run Profile that targets no partition reads every partition selected on the Connected System; one that targets a partition covers [every object in it](partitions-and-containers.md#which-partition-an-object-is-in), deletion detection and limits included. Each partition keeps its own Delta Import watermark, so importing one never moves another's; a Delta Import reads its partitions in full when any has none ([Import Watermarks](import-watermarks.md)).
 
 ### When a targeted partition is deselected
 
