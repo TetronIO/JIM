@@ -1,0 +1,17 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# The stand-in Microsoft.Exchange endpoint for an account whose roles do not cover mailboxes or the server
+# configuration: Enable-Mailbox, Set-Mailbox and Get-ExchangeServer are hidden from it, as Exchange hides a command an
+# account's roles do not grant.
+@{
+    SchemaVersion    = '2.0.0.0'
+    SessionType      = 'RestrictedRemoteServer'
+    ModulesToImport  = '/opt/fake-exchange/FakeExchange.psm1'
+    VisibleFunctions = @(
+        'Get-Recipient', 'Get-User', 'Get-Contact', 'Get-Group'
+        'Enable-MailUser', 'Set-MailUser'
+        'Enable-MailContact', 'Set-MailContact'
+        'Enable-DistributionGroup', 'Set-DistributionGroup'
+    )
+}

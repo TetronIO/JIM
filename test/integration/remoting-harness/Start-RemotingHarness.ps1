@@ -13,7 +13,10 @@
       matches once the container restarts, and Samba then listens on loopback only.
     - Creates the client account (svc-winrm) and the WinRM service account (winrm-harness) with its SPNs
       HTTP/winrm-harness.harness.test and HTTP/winrm-harness, if they do not exist.
-    - Exports the service's keytab to -OutputDirectory.
+    - Creates svc-exchange-limited, the account the stand-in Exchange endpoint hides mailbox and server commands from
+      (#2021), if it does not exist.
+    - Exports the service's keytab to -OutputDirectory, and the domain controller's LDAPS certificate authority, which
+      the LDAP Connector's Exchange check trusts to read the directory over LDAPS.
 
     In GitHub Actions it also writes the JIM_REMOTING_HARNESS_* variables to GITHUB_ENV for the steps that follow.
 
@@ -102,6 +105,10 @@ if ($users -notcontains 'svc-winrm') {
     Invoke-Samba "samba-tool user create svc-winrm 'Client@123!'" | Out-Null
     Invoke-Samba 'samba-tool user setexpiry svc-winrm --noexpiry' | Out-Null
 }
+if ($users -notcontains 'svc-exchange-limited') {
+    Invoke-Samba "samba-tool user create svc-exchange-limited 'Limited@123!'" | Out-Null
+    Invoke-Samba 'samba-tool user setexpiry svc-exchange-limited --noexpiry' | Out-Null
+}
 if ($users -notcontains 'winrm-harness') {
     Invoke-Samba "samba-tool user create winrm-harness 'Service@123!'" | Out-Null
     Invoke-Samba 'samba-tool user setexpiry winrm-harness --noexpiry' | Out-Null
@@ -118,6 +125,12 @@ $keytab = Join-Path $OutputDirectory 'winrm-harness.keytab'
 Invoke-Samba 'rm -f /tmp/winrm-harness.keytab && samba-tool domain exportkeytab /tmp/winrm-harness.keytab --principal=HTTP/winrm-harness.harness.test' | Out-Null
 docker cp -q "${container}:/tmp/winrm-harness.keytab" $keytab
 if (-not $IsWindows) { chmod 600 $keytab }
+
+# The domain controller's LDAPS certificate is issued by Samba's own CA, created on its first TLS use; an LDAPS bind
+# makes sure it exists before it is copied out.
+$dcCaCertificate = Join-Path $OutputDirectory 'dc-ca.crt'
+Invoke-Samba 'echo | timeout 10 openssl s_client -connect 127.0.0.1:636 >/dev/null 2>&1; true' | Out-Null
+docker cp -q "${container}:/usr/local/samba/private/tls/ca.pem" $dcCaCertificate
 
 # The stand-in WinRM server reads its Kerberos configuration, keytab and TLS certificate from -OutputDirectory.
 Set-Content -NoNewline -Path (Join-Path $OutputDirectory 'krb5.conf') -Value @"
@@ -175,6 +188,7 @@ if ($env:GITHUB_ENV) {
         "JIM_REMOTING_HARNESS_KEYTAB=$keytab"
         "JIM_REMOTING_HARNESS_WINRM=$winrmAddress"
         "JIM_REMOTING_HARNESS_CA=$caCertificate"
+        "JIM_REMOTING_HARNESS_DC_CA=$dcCaCertificate"
     )
 }
 
@@ -184,4 +198,5 @@ Write-Host "  JIM_REMOTING_HARNESS_KDC=$address"
 Write-Host "  JIM_REMOTING_HARNESS_KEYTAB=$keytab"
 Write-Host "  JIM_REMOTING_HARNESS_WINRM=$winrmAddress"
 Write-Host "  JIM_REMOTING_HARNESS_CA=$caCertificate"
-[pscustomobject]@{ Kdc = $address; Keytab = $keytab; WinRM = $winrmAddress; CaCertificate = $caCertificate }
+Write-Host "  JIM_REMOTING_HARNESS_DC_CA=$dcCaCertificate"
+[pscustomobject]@{ Kdc = $address; Keytab = $keytab; WinRM = $winrmAddress; CaCertificate = $caCertificate; DcCaCertificate = $dcCaCertificate }

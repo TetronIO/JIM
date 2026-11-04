@@ -24,7 +24,9 @@ function Set-JIMConnectedSystem {
 
     .PARAMETER SettingValues
         The Connector settings to change, as a hashtable keyed by setting ID (from Get-JIMConnectorDefinition) whose
-        values are hashtables holding a stringValue, intValue or checkboxValue.
+        values are hashtables holding a stringValue, intValue or checkboxValue. The Connector checks them before
+        anything is saved: a setting it refuses fails the change, and one it only warns about is saved, with a
+        warning saying what will not work as it stands.
 
     .PARAMETER MaxExportParallelism
         How many export batches run at once, where the Connector supports exporting in parallel. 1 exports one batch
@@ -56,7 +58,8 @@ function Set-JIMConnectedSystem {
         Returns the Connected System as changed.
 
     .OUTPUTS
-        With -PassThru, the Connected System as changed; otherwise nothing.
+        With -PassThru, the Connected System as changed, plus SettingWarnings: the warnings its settings raised.
+        Otherwise nothing. Each warning is also written to the warning stream.
 
     .EXAMPLE
         Set-JIMConnectedSystem -Id 1 -Name "Updated Name"
@@ -218,6 +221,16 @@ function Set-JIMConnectedSystem {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated Connected System: $systemId"
+
+                # The settings saved; each warning says what will not work as they stand.
+                foreach ($settingWarning in @($result.settingWarnings | Where-Object { $_ })) {
+                    if ($settingWarning.setting) {
+                        Write-Warning "$($settingWarning.setting): $($settingWarning.message)"
+                    }
+                    else {
+                        Write-Warning $settingWarning.message
+                    }
+                }
 
                 if ($PassThru) {
                     $result

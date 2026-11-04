@@ -8,9 +8,9 @@ namespace JIM.Connectors.LDAP;
 
 /// <summary>
 /// Discovers the domain controllers in an AD-family forest, with the Active Directory Site each belongs to
-/// (issue #1167). Only called for directories where <see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/> is true
-/// (Active Directory, Samba AD); callers are responsible for that check, since discovery relies on the
-/// CN=Sites,CN=Configuration hierarchy other LDAP directories do not have.
+/// (issue #1167), and the Exchange servers in an Active Directory forest (#2021). Only called for directories where
+/// <see cref="LdapConnectorRootDse.IsActiveDirectoryFamily"/> is true (Active Directory, Samba AD); callers are
+/// responsible for that check, since discovery relies on the configuration partition other LDAP directories do not have.
 /// </summary>
 internal class LdapConnectorDirectoryServers
 {
@@ -60,6 +60,43 @@ internal class LdapConnectorDirectoryServers
                 });
 
             return LdapConnectorUtilities.MapNtdsDsaEntriesToDirectoryServers(entries, _logger);
+        });
+    }
+
+    /// <summary>
+    /// Searches CN=Microsoft Exchange,CN=Services,&lt;configurationNamingContext&gt; for msExchExchangeServer objects,
+    /// one per Exchange server in the forest. A forest without Exchange has no such container, and no servers.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The rootDSE did not expose a configurationNamingContext.</exception>
+    internal async Task<List<ConnectorDirectoryServer>> GetExchangeServersAsync()
+    {
+        return await Task.Run(() =>
+        {
+            var configurationNamingContext = LdapConnectorUtilities.GetConfigurationNamingContext(_executor, _logger);
+            if (string.IsNullOrEmpty(configurationNamingContext))
+                throw new InvalidOperationException("Couldn't get configuration naming context from rootDSE, so Exchange servers cannot be discovered.");
+
+            var exchangeDn = $"CN=Microsoft Exchange,CN=Services,{configurationNamingContext}";
+            var request = new SearchRequest(exchangeDn, "(objectClass=msExchExchangeServer)", SearchScope.Subtree,
+                "networkAddress", "serialNumber", "msExchServerSite");
+
+            List<SearchResultEntry> entries;
+            try
+            {
+                entries = LdapPagedSearch.ReadAll(_executor, request, _supportsPaging, LdapConnectorConstants.METADATA_SEARCH_PAGE_SIZE, _logger, "Exchange server");
+            }
+            catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
+            {
+                _logger.Debug("GetExchangeServersAsync: {ExchangeDn} does not exist; Exchange is not installed in this forest", exchangeDn);
+                return [];
+            }
+
+            _logger.Debug("GetExchangeServersAsync: Found {Count} msExchExchangeServer entries under {ExchangeDn}", entries.Count, exchangeDn);
+
+            return LdapConnectorUtilities.MapExchangeServerEntries(entries.Select(entry => (
+                (IReadOnlyList<string>?)LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "networkAddress") ?? [],
+                LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "serialNumber"),
+                LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "msExchServerSite"))), _logger);
         });
     }
 

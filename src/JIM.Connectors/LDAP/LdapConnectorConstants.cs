@@ -207,10 +207,21 @@ internal static class LdapConnectorConstants
     internal const string SETTING_USERNAME = "Username";
 
     /// <summary>
+    /// The domain controller every connection is pinned to, when set: the setting directory server discovery fills.
+    /// </summary>
+    internal const string SETTING_PREFERRED_DOMAIN_CONTROLLER = "Preferred Domain Controller";
+
+    /// <summary>
     /// The Exchange heading's checkbox (#2021): whether this Connected System makes the objects it provisions Exchange
     /// recipients. Active Directory only, and behind the Exchange recipients feature flag while it is built.
     /// </summary>
     internal const string SETTING_MANAGE_EXCHANGE_RECIPIENTS = "Manage Exchange recipients";
+
+    /// <summary>
+    /// The Exchange server whose remote PowerShell endpoint JIM signs in to (#2021): a host name, or a full http:// or
+    /// https:// address. Required while Exchange recipients are managed.
+    /// </summary>
+    internal const string SETTING_EXCHANGE_SERVER = "Exchange server";
 
     /// <summary>
     /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).

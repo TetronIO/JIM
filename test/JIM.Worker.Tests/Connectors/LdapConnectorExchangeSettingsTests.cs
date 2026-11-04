@@ -2,7 +2,9 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.LDAP;
+using JIM.Models.Staging;
 using NUnit.Framework;
+using Serilog;
 
 namespace JIM.Worker.Tests.Connectors;
 
@@ -37,4 +39,43 @@ public class LdapConnectorExchangeSettingsTests
     {
         Assert.That(LdapExchangeSettings.DirectoryTypeRefusal(manageExchangeRecipients: false, Enum.Parse<LdapDirectoryType>(directoryType)), Is.Null);
     }
+
+    [Test]
+    public async Task CheckSettingsAsync_ExchangeNotManaged_ChecksNothingAndLearnsNothingAsync()
+    {
+        using var connector = new LdapConnector();
+
+        var result = await connector.CheckSettingsAsync(Settings(manageExchange: false, exchangeServer: null), Logger(), CancellationToken.None);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Results, Is.Empty);
+            Assert.That(result.Facts, Is.Empty, "turning Exchange off clears what an earlier check learnt");
+        }
+    }
+
+    [TestCase("ftp://ex1.panoply.local/")]
+    [TestCase("ex1 panoply local")]
+    public async Task CheckSettingsAsync_ExchangeServerUnusable_RefusesOnThatSettingBeforeReachingAnythingAsync(string exchangeServer)
+    {
+        using var connector = new LdapConnector();
+        var settings = Settings(manageExchange: true, exchangeServer);
+
+        var result = await connector.CheckSettingsAsync(settings, Logger(), CancellationToken.None);
+
+        var refusal = result.Results.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(refusal.IsValid, Is.False);
+            Assert.That(refusal.SettingValue!.Setting.Name, Is.EqualTo(LdapConnectorConstants.SETTING_EXCHANGE_SERVER));
+        }
+    }
+
+    private static List<ConnectedSystemSettingValue> Settings(bool manageExchange, string? exchangeServer) =>
+    [
+        new() { Setting = new ConnectorDefinitionSetting { Name = LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS, Type = ConnectedSystemSettingType.CheckBox }, CheckboxValue = manageExchange },
+        new() { Setting = new ConnectorDefinitionSetting { Name = LdapConnectorConstants.SETTING_EXCHANGE_SERVER, Type = ConnectedSystemSettingType.String }, StringValue = exchangeServer }
+    ];
+
+    private static ILogger Logger() => new LoggerConfiguration().CreateLogger();
 }

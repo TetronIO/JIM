@@ -98,13 +98,13 @@ public class ConnectedSystemSettingValidityTests
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_StillReportsWhatTheConnectorItselfFinds()
+    public async Task ValidateConnectedSystemSettingsAsync_StillReportsWhatTheConnectorItselfFindsAsync()
     {
         // Unchanged, and the reason the split is safe: the Settings tab and the settings-writing REST endpoint both
         // call this, so an administrator configuring connectivity is still told the target cannot be reached.
         var connectedSystem = BuildFileConnectedSystem("/nowhere/never-created.csv");
 
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         Assert.That(results.Any(r => !r.IsValid), Is.True);
     }

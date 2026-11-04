@@ -67,6 +67,17 @@ public class ConnectedSystem : IAuditable
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
+    /// What the Connector's settings check learnt the last time the settings were saved (#2021): facts about a system
+    /// the settings name besides the target itself, such as the Exchange version the sign-in found. Shown with the
+    /// Connector's detected facts. Null when the Connector has no such check, or the last check learnt nothing.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="PersistedConnectorData"/>, which every import rewrites: these are written only by
+    /// the save that ran the check. Not configuration, so never part of a configuration snapshot.
+    /// </remarks>
+    public List<ConnectorCapability>? SettingsCheckFacts { get; set; }
+
+    /// <summary>
     /// The password policy JIM discovered on this Connected System, where the Connector is able to read one.
     /// Null when the Connector cannot discover policies, or when nothing has been discovered yet.
     /// <para>

@@ -171,24 +171,24 @@ public class ConnectedSystemObjectTypeSelectionValidationTests
     #region Settings validation
 
     [Test]
-    public void ValidateConnectedSystemSettings_ConnectorRefusesTheSelection_CarriesTheRefusal()
+    public async Task ValidateConnectedSystemSettingsAsync_ConnectorRefusesTheSelection_CarriesTheRefusalAsync()
     {
         _connector.RefuseWhenSelected("AppUser", "Delta Import Mode is 'Watermark Column', but Object Type 'AppUser' has no 'watermarkColumn'.");
         var connectedSystem = CreateConnectedSystem(("Person", true), ("AppUser", true));
 
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         Assert.That(results.Where(result => !result.IsValid).Select(result => result.ErrorMessage), Has.Exactly(1).Items.And.Some.Contains("AppUser"),
             "The Settings tab and the settings-writing endpoint show the administrator that the mode they are saving cannot serve what is selected.");
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_NoSchemaImportedYet_AsksTheConnectorWithNothingSelected()
+    public async Task ValidateConnectedSystemSettingsAsync_NoSchemaImportedYet_AsksTheConnectorWithNothingSelectedAsync()
     {
         var connectedSystem = CreateConnectedSystem();
         connectedSystem.ObjectTypes = null;
 
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         using (Assert.EnterMultipleScope())
         {

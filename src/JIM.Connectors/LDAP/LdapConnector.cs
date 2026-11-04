@@ -16,7 +16,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IConnectorSettingsCheck, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -175,7 +175,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
-    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
+    private readonly string _settingPreferredDomainController = LdapConnectorConstants.SETTING_PREFERRED_DOMAIN_CONTROLLER;
     private readonly string _settingGlobalCatalogServer = "Global Catalog Server";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
@@ -249,6 +249,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             // Exchange (#2021): behind its feature flag until the feature ships (#2681)
             new() { Name = "Exchange", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading, FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key },
             new() { Name = LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS, Description = "Active Directory only. Makes the objects this Connected System provisions Exchange recipients (mailboxes, mail users, mail contacts and mail-enabled groups), as declared by the Exchange attributes their Synchronisation Rules flow.", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.CheckBox, FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key },
+            new() { Name = LdapConnectorConstants.SETTING_EXCHANGE_SERVER, RequiredWhenSetting = LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS, RequiredWhenValue = "true", Description = "The Exchange server JIM signs in to, as the account above, to create and update recipients: its host name, such as ex1.panoply.local, or its full remote PowerShell address. A host name uses http, where Kerberos encrypts the session; for an https:// address, add the certificate authority that issued the server's certificate in Certificates. JIM works out the Kerberos sign-in from the directory settings.", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String, FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key },
 
             new() { Name = "Group Membership", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingGroupPlaceholderMemberDn, Required = false, Description = "Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.", DefaultStringValue = LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
@@ -281,6 +282,73 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         return response;
     }
+    #endregion
+
+    #region IConnectorSettingsCheck members
+    /// <summary>
+    /// The Exchange check behind <see cref="CheckSettingsAsync"/>. Replaceable so tests can stand a fake Exchange in.
+    /// </summary>
+    internal LdapExchangeSettingsCheck ExchangeSettingsCheck { get; set; } = LdapExchangeSettingsCheck.ForThisProcess();
+
+    /// <summary>
+    /// When Exchange recipients are managed (#2021, PRD requirements 2 and 3), signs in to Exchange as the directory
+    /// account, with the Kerberos sign-in worked out from the directory: a sign-in that fails refuses the save, and an
+    /// account that may not run some of the commands JIM needs is a warning. Learns the Exchange version and the sign-in
+    /// it used. With Exchange not managed, there is nothing to check, and nothing learnt.
+    /// </summary>
+    public async Task<ConnectorSettingsCheckResult> CheckSettingsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger, CancellationToken cancellationToken)
+    {
+        var manage = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS);
+        if (manage?.CheckboxValue != true)
+            return new ConnectorSettingsCheckResult();
+
+        var serverSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_EXCHANGE_SERVER);
+        var endpoint = LdapExchangeSignIn.ParseExchangeServer(serverSetting?.StringValue);
+        if (endpoint.Endpoint == null)
+            return ExchangeCheckRefused(serverSetting, endpoint.Refusal!);
+
+        var usernameSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == _settingUsername);
+        var passwordSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == _settingPassword);
+        if (usernameSetting?.StringValue is not { Length: > 0 } username || passwordSetting?.StringEncryptedValue is not { Length: > 0 } storedPassword)
+            return ExchangeCheckRefused(usernameSetting, "JIM signs in to Exchange as the directory account, so it needs the Username and Password above.");
+
+        LdapExchangeSignInResolution resolution;
+        try
+        {
+            // The connection the quick validation has just proved; no persisted state, so it reaches the Preferred Domain
+            // Controller or the Host, and the domain controller it reaches is the KDC the sign-in asks.
+            OpenImportConnection(settingValues, null, logger);
+            resolution = LdapExchangeDirectoryLookup.Resolve(_connection!, username, logger);
+        }
+        catch (Exception ex) when (ex is LdapException or DirectoryOperationException or InvalidSettingValuesException)
+        {
+            return ExchangeCheckRefused(usernameSetting, $"JIM could not read the directory account to sign in to Exchange as: {ex.Message}");
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+
+        if (resolution.SignIn == null)
+            return ExchangeCheckRefused(usernameSetting, resolution.Refusal!);
+
+        var password = _credentialProtection?.Unprotect(storedPassword) ?? storedPassword;
+        var trustedCertificates = ServerCertificateDiagnosis.LoadTrustedCertificates(_certificateProvider);
+        try
+        {
+            return await ExchangeSettingsCheck.CheckAsync(resolution.SignIn, endpoint.Endpoint, password, [.. trustedCertificates], serverSetting, logger, cancellationToken);
+        }
+        finally
+        {
+            foreach (var certificate in trustedCertificates)
+                certificate.Dispose();
+        }
+    }
+
+    private static ConnectorSettingsCheckResult ExchangeCheckRefused(ConnectedSystemSettingValue? settingValue, string message) => new()
+    {
+        Results = [new ConnectorSettingValueValidationResult { SettingValue = settingValue, IsValid = false, ErrorMessage = message }]
+    };
     #endregion
 
     #region IConnectorSchema members
@@ -567,22 +635,29 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     #region IConnectorDirectoryServers members
     /// <summary>
-    /// Discovery fills the Preferred Domain Controller setting, and since it only succeeds against Active Directory
-    /// and Samba AD (see <see cref="GetDirectoryServersAsync"/>), "domain controllers" is the right word for every
-    /// server it can return.
+    /// Domain controllers for the Preferred Domain Controller setting, and Exchange servers for the Exchange server
+    /// setting (#2021). Both are read from the forest's configuration partition, so discovery only succeeds against
+    /// Active Directory and Samba AD (see <see cref="GetDirectoryServersAsync"/>).
     /// </summary>
-    public ConnectorDirectoryServerDiscovery DirectoryServerDiscovery => new(_settingPreferredDomainController, "domain controllers");
+    public IReadOnlyList<ConnectorDirectoryServerDiscovery> DirectoryServerDiscoveries { get; } =
+    [
+        new(LdapConnectorConstants.SETTING_PREFERRED_DOMAIN_CONTROLLER, "domain controllers"),
+        new(LdapConnectorConstants.SETTING_EXCHANGE_SERVER, "Exchange servers")
+    ];
 
     /// <summary>
-    /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
-    /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
-    /// #1167) rather than having to already know a hostname. Purely informational: this never writes to any
-    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the
-    /// CN=Sites,CN=Configuration hierarchy that other LDAP directories do not have.
+    /// Lists the servers in the connected AD-family directory's forest for one setting: its domain controllers, with
+    /// the Active Directory Site each belongs to, for Preferred Domain Controller (issue #1167); or its Exchange
+    /// servers, with Site and version, for Exchange server (#2021). Purely informational: this never writes to any
+    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the configuration
+    /// partition that other LDAP directories do not have.
     /// </summary>
-    /// <exception cref="NotSupportedException">The connected directory is not AD-family.</exception>
-    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    /// <exception cref="NotSupportedException">No discovery fills that setting, or the connected directory is not AD-family.</exception>
+    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, string targetSettingName, ILogger logger)
     {
+        var discovery = DirectoryServerDiscoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName)
+            ?? throw new NotSupportedException($"The LDAP Connector cannot discover servers for the setting '{targetSettingName}'.");
+
         // No persisted connector state applies to a discovery-only connection.
         OpenImportConnection(settingValues, null, logger);
 
@@ -593,10 +668,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
             if (!rootDse.IsActiveDirectoryFamily)
-                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType));
+                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType, discovery.ServerTerm));
 
             var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
-            return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
+            return targetSettingName == LdapConnectorConstants.SETTING_EXCHANGE_SERVER
+                ? await ldapConnectorDirectoryServers.GetExchangeServersAsync()
+                : await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally
         {
@@ -1444,8 +1521,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// The refusal an administrator reads in the Discover Domain Controllers dialog. Names the directory the way
     /// the rest of the portal does (<see cref="DescribeDirectory"/>), not by the enum's identifier.
     /// </summary>
-    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType) =>
-        $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
+    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType, string serverTerm = "domain controllers") =>
+        $"Discovering {serverTerm} is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
 
     private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
     {

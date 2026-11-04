@@ -206,7 +206,7 @@ public class ConnectedSystemCredentialEncryptionTests
         };
 
         IList<ConnectorSettingValueValidationResult> results = [];
-        Assert.That(() => results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem), Throws.Nothing);
+        Assert.That(async () => results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem), Throws.Nothing);
 
         using (Assert.EnterMultipleScope())
         {

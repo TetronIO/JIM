@@ -1053,6 +1053,48 @@ internal static class LdapConnectorUtilities
     }
 
     /// <summary>
+    /// Maps the msExchExchangeServer objects in an Active Directory forest's configuration partition to the Exchange
+    /// servers the Discover action offers for the Exchange server setting (#2021, D6).
+    /// </summary>
+    /// <param name="entries">Each server object's networkAddress values, serialNumber and msExchServerSite.</param>
+    /// <param name="logger">Logger for a skipped-entry note.</param>
+    /// <returns>
+    /// One <see cref="ConnectorDirectoryServer"/> per server with a TCP address (<c>ncacn_ip_tcp:host</c>), ordered by
+    /// host name: its Site the leaf of msExchServerSite, its version the serialNumber. A server with no TCP address is
+    /// skipped: JIM cannot offer a server it cannot name.
+    /// </returns>
+    internal static List<ConnectorDirectoryServer> MapExchangeServerEntries(
+        IEnumerable<(IReadOnlyList<string> NetworkAddresses, string? SerialNumber, string? SiteDn)> entries,
+        ILogger logger)
+    {
+        const string tcpAddressPrefix = "ncacn_ip_tcp:";
+        var servers = new List<ConnectorDirectoryServer>();
+        foreach (var (networkAddresses, serialNumber, siteDn) in entries)
+        {
+            var hostName = networkAddresses
+                .Where(address => address.StartsWith(tcpAddressPrefix, StringComparison.OrdinalIgnoreCase))
+                .Select(address => address[tcpAddressPrefix.Length..].Trim())
+                .FirstOrDefault(host => host.Length > 0);
+            if (hostName == null)
+            {
+                logger.Debug("MapExchangeServerEntries: An Exchange server object has no TCP network address. Skipping; JIM cannot offer a server it cannot name.");
+                continue;
+            }
+
+            servers.Add(new ConnectorDirectoryServer
+            {
+                HostName = hostName,
+                Site = siteDn != null && LdapDistinguishedName.TryParse(siteDn, out var site) && site.LeafRdn.Components.Count > 0
+                    ? site.LeafRdn.Components[0].Value
+                    : null,
+                Version = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber
+            });
+        }
+
+        return servers.OrderBy(server => server.HostName, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
     /// Resolves which server a connection should be opened against, and why (issue #230 Phase 2). This
     /// is the single point where the domain controller/directory server for a connection is decided, so
     /// that the connection factory (and therefore every parallel connection in a run) resolves to the

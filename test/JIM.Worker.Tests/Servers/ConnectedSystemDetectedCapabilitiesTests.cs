@@ -104,6 +104,41 @@ public class ConnectedSystemDetectedCapabilitiesTests
         Assert.That(result!.Single(c => c.Name == "Vendor").Value, Is.EqualTo("OpenLDAP Foundation"));
     }
 
+    [Test]
+    public async Task GetConnectedSystemDetectedCapabilitiesAsync_SettingsCheckLearntFacts_ListsThemAfterTheConnectorsAsync()
+    {
+        // What the Exchange sign-in learnt on the last save sits beside what the directory said on the last import (#2021).
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.ActiveDirectory, DnsHostName = "dc1.panoply.local" };
+        var connectedSystem = CreateConnectedSystem(ConnectorConstants.LdapConnectorName, JsonSerializer.Serialize(rootDse));
+        connectedSystem.SettingsCheckFacts =
+        [
+            new ConnectorCapability { Name = "Exchange", Value = "Version 15.2 (Build 1544.4)" },
+            new ConnectorCapability { Name = "Exchange Sign-in", Value = "svc-jim@PANOPLY.LOCAL, by Kerberos through dc1.panoply.local" }
+        ];
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemCoreAsync(connectedSystem.Id, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _jim.ConnectedSystems.GetConnectedSystemDetectedCapabilitiesAsync(connectedSystem.Id);
+
+        Assert.That(result!.Select(c => c.Name).TakeLast(2), Is.EqualTo(new[] { "Exchange", "Exchange Sign-in" }));
+        Assert.That(result!.First().Name, Is.EqualTo("Directory Type"), "the Connector's own facts come first");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemDetectedCapabilitiesAsync_ConnectorWithoutDetectedCapabilitiesButWithCheckFacts_ListsTheFactsAsync()
+    {
+        var connectedSystem = CreateConnectedSystem(ConnectorConstants.FileConnectorName, persistedConnectorData: null);
+        connectedSystem.SettingsCheckFacts = [new ConnectorCapability { Name = "Checked", Value = "Yes" }];
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetConnectedSystemCoreAsync(connectedSystem.Id, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+
+        var result = await _jim.ConnectedSystems.GetConnectedSystemDetectedCapabilitiesAsync(connectedSystem.Id);
+
+        Assert.That(result!.Select(c => c.Name), Is.EqualTo(new[] { "Checked" }));
+    }
+
     private static ConnectedSystem CreateConnectedSystem(string connectorName, string? persistedConnectorData)
     {
         return new ConnectedSystem

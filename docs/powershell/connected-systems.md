@@ -296,7 +296,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>] [-Descript
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
 | `Name` | `string` | No |  | The new name of the Connected System. |
 | `Description` | `string` | No |  | What the Connected System is for, for administrators. |
-| `SettingValues` | `hashtable` | No |  | The Connector settings to change, as a hashtable keyed by setting ID (from `Get-JIMConnectorDefinition`) whose values are hashtables holding a stringValue, intValue or checkboxValue. |
+| `SettingValues` | `hashtable` | No |  | The Connector settings to change, as a hashtable keyed by setting ID (from `Get-JIMConnectorDefinition`) whose values are hashtables holding a stringValue, intValue or checkboxValue. The Connector checks them before anything is saved: a setting it refuses fails the change, and one it only warns about is saved, with a warning saying what will not work as it stands. |
 | `MaxExportParallelism` | `int` | No |  | How many export batches run at once, where the Connector supports exporting in parallel. 1 exports one batch at a time. From 1 to 16. |
 | `RequireSecureTransport` | `switch` | No |  | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Off by default, because a signed and sealed bind is a legitimate encrypted alternative that cannot be detected from the Connected System's settings alone. Pass `-RequireSecureTransport` to turn it on and `-RequireSecureTransport:$false` to turn it off. Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password. |
 | `InitialPasswordTimeToLive` | `timespan` | No |  | How long an account provisioned into the Connected System stays owed an initial password before JIM records an expiry and stops trying, as a TimeSpan. Seven days until one is set. Raise it ahead of an outage longer than the current window, or every account provisioned while the Connected System is unreachable expires without a password. |
@@ -306,7 +306,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>] [-Descript
 
 ### Output
 
-With `-PassThru`, the Connected System as changed; otherwise nothing.
+With `-PassThru`, the Connected System as changed, plus SettingWarnings: the warnings its settings raised. Otherwise nothing. Each warning is also written to the warning stream.
 
 Properties as under [Get-JIMConnectedSystem](#get-jimconnectedsystem).
 <!-- END GENERATED: Set-JIMConnectedSystem -->

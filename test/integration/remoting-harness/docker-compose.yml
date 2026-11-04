@@ -49,6 +49,9 @@ services:
       - WINRM_IDLE_TIMEOUT_SECONDS=5
       - WINRM_TLS_CERTIFICATE=/etc/harness/winrm-tls.crt
       - WINRM_TLS_KEY=/etc/harness/winrm-tls.key
+      # The account the stand-in Exchange endpoint hides mailbox and server commands from, as an account without those
+      # Exchange roles sees it.
+      - WINRM_EXCHANGE_LIMITED_ACCOUNTS=svc-exchange-limited
     volumes:
       - ${JIM_REMOTING_HARNESS_DIR:?Run Start-RemotingHarness.ps1}:/etc/harness:ro
     depends_on:

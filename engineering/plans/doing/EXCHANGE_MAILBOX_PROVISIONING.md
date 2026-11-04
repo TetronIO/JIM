@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete, Phase 5 against a stand-in for Exchange; Phase 2 next)
+- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete, Phase 5 against a stand-in for Exchange; Phase 2's settings check done (2a), the Connector's session next (2b))
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -105,12 +105,12 @@ There is no certificate setting type. Rather than add one for a single field, an
 
 This replaces the original design's Worker-side list of every Exchange-enabled Connected System, which the web process could not have kept and which a session's own request makes unnecessary.
 
-Per requirement 2, the realm and KDC are derived, never entered:
-- **Principal:** the configured Username (`DOMAIN\name`, UPN or DN) is resolved through the directory to the account's `userPrincipalName`, or to `sAMAccountName@<domain DNS name>`.
-- **Realm:** the upper-cased DNS name of the account's domain.
-- **KDC:** the Connected System's pinned domain controller.
+Per requirement 2, the realm and KDC are derived, never entered. **Amended 2026-11-04 (Phase 2):**
+- **Principal:** the configured Username (`DOMAIN\name`, UPN, DN or a bare name) is resolved through the directory to the account's entry, and the principal is its `sAMAccountName@REALM`. Not the UPN: a UPN whose suffix is not the realm (`svc-jim@panoply.com` in `PANOPLY.LOCAL`) would need Kerberos enterprise names.
+- **Realm:** the account entry's `DC=` components, upper-cased. A `DOMAIN\name` naming another NetBIOS domain, or an entry outside the connected domain, is refused with that reason: a stated limit of the first version.
+- **KDC:** the domain controller the LDAP bind reached (its rootDSE `dnsHostName`): the Preferred Domain Controller when one is set, otherwise whichever the Host resolved to. Neither the save path nor the lane's session open sees the pin, which lives in persisted connector data, so the pin as first designed could not be followed. Every domain controller is a KDC, so this is as valid, and the save check and the lane derive the same sign-in from the settings alone.
 
-The resolution runs at save time (Phase 2), and its result is shown among the detected facts.
+The resolution runs at save time (Phase 2), and its result is shown among the detected facts. What the check learns lives in the Connected System's own `SettingsCheckFacts`, written by the save that ran the check, because `PersistedConnectorData`, where the directory's facts live, is rewritten by every import.
 
 ### D9. Type mismatches and type changes become follow-ups without a queued change
 
@@ -150,12 +150,18 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
 
 ### Phase 2: Exchange settings, sign-in and detected facts (4 days; requirements 1 to 3)
 
+In two pull requests. **2a (done):** the settings, D5's warnings on every surface, D6's discovery per setting, the
+save-time check (`IConnectorSettingsCheck`, a new capability the server runs once the quick validation has refused
+nothing) with its facts, and the stand-in Exchange endpoint in the harness, a restricted no-language session whose
+commands an RBAC-limited account cannot see, against which the whole check runs in CI. **2b (next):** the Connector's
+session and convergence, quiet session close, and the lab run.
+
 - **Settings:** add Exchange server (text, with the Discover action from D6) under the Exchange heading, shown only while Manage Exchange recipients is ticked (`RequiredWhenSetting`). The heading and the checkbox, and their refusal on a directory that is not Active Directory, came with Phase 3.
 - **Refusals on save:**
   - An unreachable endpoint, or a sign-in Exchange refuses, each with the classified reason (clock skew named plainly).
 - **Warning on save:** cmdlets missing from the session, named with the recipient types each affects (D5).
 - **Detected facts:** the Exchange version, and the derived principal, realm and KDC.
-- **Docs and coverage:** settings rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page started, and the RBAC role in `jim-ldap-connector-permissions.md`. The network requirements say that the web container, not only the Worker, reaches the KDC (88) and Exchange (80, or 443 for HTTPS), since the save-time check signs in from it (D8).
+- **Docs and coverage:** moved to Phase 8. COV-6 forbids a settings row for a setting behind an In Development flag, and a page about a feature customers cannot turn on would mislead them; they are written when the flag comes off.
 - **Quiet session close** (from Phase 1): find what sends the Pings ex1's front end logged as HTTP 500 when the spike's sessions closed (the library sends none of its own), and close without them, proven by ex1's logs in this phase's lab run.
 - **Tests:**
   - the validation severity, refusal and warning paths, with the session mocked behind D4's interface;
@@ -257,6 +263,7 @@ Built ahead of the spike's go, against the capability interface rather than Exch
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.
   - A GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412).
   - Runs at Medium, so batching crosses a page boundary.
+- **Docs and coverage** (from Phase 2): the Exchange server and Manage Exchange recipients rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page, the RBAC role in `jim-ldap-connector-permissions.md` (the Recipient Management role group covers every command JIM needs), and the network requirements: the web container, not only the Worker, reaches the domain controller on 88 and Exchange on 80 or 443, since the save-time check signs in from it (D8).
 - **Compliance:** SC-8 in `engineering/COMPLIANCE_MAPPING.md` moves from planned to in place.
 - **Developer guide:** `engineering/DEVELOPER_GUIDE.md` gains the remoting library's boundary.
 - **Flag removal:** the flag goes, and the PRD and this plan move to `done/` in the PR that closes #2021.
