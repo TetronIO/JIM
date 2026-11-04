@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using JIM.Application.Expressions;
+using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Expressions;
 using JIM.Models.Logic;
@@ -71,23 +72,33 @@ public static class SchemaRefreshDependentDetector
         if (readers != null)
             dependents.RemovedAttributeReaders = FindRemovedAttributeReaders(result, readers);
 
+        // Redefinitions (data type, plurality) invalidate whatever reads or writes the attribute. A writability change
+        // is kept apart because it touches writers alone, and held in one map with the redefinitions it could hide
+        // a data type change on the same attribute from the mappings reading it.
         var changedByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
+        var madeReadOnlyByTypeIdAndAttributeId = new Dictionary<int, Dictionary<int, SchemaAttributeDefinitionChange>>();
         foreach (var (type, changes) in result.ChangedAttributes
                      .Select(kvp => (Type: result.FindPreRefreshType(kvp.Key), Changes: kvp.Value))
                      .Where(entry => entry.Type != null)
                      .Select(entry => (Type: entry.Type!, entry.Changes)))
         {
             var byAttributeId = new Dictionary<int, SchemaAttributeDefinitionChange>();
-            foreach (var change in changes)
+            var madeReadOnly = new Dictionary<int, SchemaAttributeDefinitionChange>();
+            foreach (var (change, attributeId) in changes
+                         .Select(c => (Change: c, AttributeId: FindPreRefreshAttributeId(type, c.AttributeName)))
+                         .Where(entry => entry.AttributeId.HasValue)
+                         .Select(entry => (entry.Change, entry.AttributeId!.Value)))
             {
-                // A change names the attribute as the Connector now does, which may differ only in case from the
-                // snapshot's name; an exact name wins where both exist.
-                var attribute = type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.Ordinal))
-                    ?? type.Attributes.FirstOrDefault(a => string.Equals(a.Name, change.AttributeName, StringComparison.OrdinalIgnoreCase));
-                if (attribute != null)
-                    byAttributeId[attribute.Id] = change;
+                if (change.Aspect != SchemaAttributeChangeAspect.Writability)
+                    byAttributeId[attributeId] = change;
+                else if (change.NewValue == nameof(AttributeWritability.ReadOnly))
+                    madeReadOnly[attributeId] = change;
+
+                // A target now set on creation only still validates, so it invalidates nothing; the change itself is
+                // reported, and the Attribute Flow goes on writing the attribute when it creates an object.
             }
             changedByTypeIdAndAttributeId[type.Id] = byAttributeId;
+            madeReadOnlyByTypeIdAndAttributeId[type.Id] = madeReadOnly;
         }
 
         foreach (var rule in syncRules)
@@ -112,10 +123,11 @@ public static class SchemaRefreshDependentDetector
             var removedIds = removedAttributeIdsByTypeId.TryGetValue(rule.ConnectedSystemObjectTypeId, out var ids) ? ids : null;
             var removedNames = removedAttributeNamesByTypeId.TryGetValue(rule.ConnectedSystemObjectTypeId, out var names) ? names : null;
             var changedIds = changedByTypeIdAndAttributeId.TryGetValue(rule.ConnectedSystemObjectTypeId, out var changed) ? changed : null;
+            var madeReadOnlyIds = madeReadOnlyByTypeIdAndAttributeId.TryGetValue(rule.ConnectedSystemObjectTypeId, out var madeReadOnly) ? madeReadOnly : null;
 
             foreach (var mapping in rule.AttributeFlowRules)
             {
-                var invalidation = FindMappingInvalidation(mapping, removedIds, removedNames, changedIds, refreshDescription);
+                var invalidation = FindMappingInvalidation(mapping, removedIds, removedNames, changedIds, madeReadOnlyIds, refreshDescription);
                 if (invalidation == null)
                     continue;
 
@@ -138,14 +150,15 @@ public static class SchemaRefreshDependentDetector
 
     /// <summary>
     /// Why one mapping is invalidated, or null when it is not: a removed attribute mapped directly (either
-    /// direction), a removed attribute consumed inside an Expression, or a redefined attribute the mapping was
-    /// validated against.
+    /// direction), a removed attribute consumed inside an Expression, a redefined attribute the mapping was
+    /// validated against, or an export target that became read-only.
     /// </summary>
     private static (string Reason, bool ViaExpression)? FindMappingInvalidation(
         SyncRuleMapping mapping,
         HashSet<int>? removedAttributeIds,
         HashSet<string>? removedAttributeNames,
         Dictionary<int, SchemaAttributeDefinitionChange>? changedAttributes,
+        Dictionary<int, SchemaAttributeDefinitionChange>? madeReadOnlyAttributes,
         string refreshDescription)
     {
         // A mapping reading or writing a credential attribute (password, unicodePwd) is invalidated on every refresh,
@@ -163,6 +176,8 @@ public static class SchemaRefreshDependentDetector
                 return ($"Attribute '{mapping.TargetConnectedSystemAttribute?.Name}' is no longer reported by the Connected System ({refreshDescription}).", false);
             if (changedAttributes?.TryGetValue(exportTargetId, out var targetChange) == true)
                 return (DescribeDefinitionChange(targetChange, refreshDescription), false);
+            if (madeReadOnlyAttributes?.TryGetValue(exportTargetId, out var readOnlyChange) == true)
+                return ($"Attribute '{readOnlyChange.AttributeName}' became read-only at the Connected System, so this Attribute Flow can no longer write it ({refreshDescription}).", false);
         }
 
         foreach (var source in mapping.Sources)
@@ -261,9 +276,23 @@ public static class SchemaRefreshDependentDetector
             .ToList();
     }
 
+    /// <summary>
+    /// The pre-refresh id of the attribute a change names. A change names the attribute as the Connector now does,
+    /// which may differ only in case from the snapshot's name; an exact name wins where both exist.
+    /// </summary>
+    private static int? FindPreRefreshAttributeId(SchemaRefreshPreRefreshType type, string attributeName) =>
+        (type.Attributes.FirstOrDefault(a => string.Equals(a.Name, attributeName, StringComparison.Ordinal))
+            ?? type.Attributes.FirstOrDefault(a => string.Equals(a.Name, attributeName, StringComparison.OrdinalIgnoreCase)))?.Id;
+
     private static string DescribeDefinitionChange(SchemaAttributeDefinitionChange change, string refreshDescription, string readBy = "")
     {
-        var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
+        var aspect = change.Aspect switch
+        {
+            SchemaAttributeChangeAspect.DataType => "data type",
+            SchemaAttributeChangeAspect.Plurality => "plurality",
+            SchemaAttributeChangeAspect.Writability => "writability",
+            _ => change.Aspect.ToString()
+        };
         return $"Attribute '{change.AttributeName}'{readBy} changed {aspect} from {change.OldValue} to {change.NewValue} at the Connected System ({refreshDescription}).";
     }
 
