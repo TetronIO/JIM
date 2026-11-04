@@ -120,7 +120,7 @@ A Connector whose Connected System has Partitions must also say which Partition 
 What JIM passes:
 
 - **The object's Secondary External ID, else its External ID**, as an import reads it: for the LDAP Connector, the distinguished name. JIM places every object a run might create or update from, so never a delete, and never an object you reported you could not read (an object-level import error); one with an unreadable attribute value is still placed. Make sure every such object carries its identifier: the LDAP Connector synthesises `distinguishedName` where the directory does not return it.
-- **After an export creates or renames an object**, the Secondary External ID the export reported (`ConnectedSystemExportResult.SecondaryExternalId`), else the one JIM holds, so a provisioned object is placed before any import confirms it.
+- **After an export creates or renames an object**, the Secondary External ID the export reported (`ConnectedSystemExportResult.SecondaryExternalId`), else the one JIM holds, else the External ID, reported then held, so a provisioned object is placed before any import confirms it. The Partition is written once the export's result is recorded and never fails the export: one JIM could not record is reported as a warning on the export Activity, and the next import that reads the object records it.
 
 Rules for the answer:
 

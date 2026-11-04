@@ -1,6 +1,6 @@
 # Truthful Connected System Object Partition
 
-- **Status:** Doing (Phases 0 to 3 complete)
+- **Status:** Done (all phases complete)
 - **Issue:** [#2723](https://github.com/TetronIO/JIM/issues/2723)
 - **Related:** [#2715](https://github.com/TetronIO/JIM/issues/2715) (per-Partition watermarks; this is its Follow-up 1), [#2720](https://github.com/TetronIO/JIM/issues/2720)
 - **Design:** approved 4 November 2026 (decisions D1 to D5 below, all as recommended)
@@ -106,7 +106,7 @@ Each phase starts with failing tests.
 - `Workflows/ProvisionedObjectPartitionTests.cs`: a successful create stamps the Partition written to; a scoped Full Import retries a never-confirmed exported create (red today); does not retry one in another Partition; provisioned, confirmed by an unscoped import, then deleted, is marked deleted by a scoped Full Import; an export result without a DN uses the provisioned DN; a rename into another Partition restamps, and one outside every Partition keeps the stored value; a Connector without the capability records nothing; the placement is prepared once per run; one summary log line; a Partition that cannot be recorded leaves the Create recorded.
 - `CsoPartitionIdPersistenceDatabaseTests`: the narrow update sets only the Partition column; tracked instances match and a later save succeeds. `BulkSqlColumnConventionTests` passes with the exemption comment.
 
-### Phase 4: Integration, documentation, changelog, plan lifecycle
+### Phase 4: Integration, documentation, changelog, plan lifecycle ✅
 
 See below. Move this plan to `engineering/plans/done/` in the pull request that closes #2723.
 
@@ -168,3 +168,6 @@ What was built differently from the plan above, and why.
 | 3 | `UpdateConnectedSystemObjectPartitionsAsync` with tracked instances fixed up | As planned, and it writes only rows whose Partition differs and returns how many changed; the fix-up generalises `ConnectedSystemObjectMarkFixUp` to a per-object value | The export batch's own write (`UpdateConnectedSystemObjectsWithNewAttributeValuesAsync`) inserts attribute values and never writes the object's row, so it could not carry the Partition. Writing only what differs keeps an unchanged row's version (`xmin`) where it was |
 | 3 | One summary log line per run | The export's line, with the import's counts (placed, in no Partition, changed) and the number not recorded, on the run's `ExportExecutionResult`, accumulated across parallel batches as its other counts are | Matches the import's summary, so the two read alike |
 | 3 | `ProvisionedObjectPartitionTests`: "provisioned, confirmed by an unscoped import, then deleted, is marked deleted by a scoped Full Import" | Kept, green from the start | Phase 2 already places a provisioned object at its confirming import, which is what this scenario turns on |
+| 3 | A Partition that cannot be recorded is counted in the run's summary | Also a warning on the export Activity (`ExportOutcomeMessage.ForPartitionsNotRecorded`) | Never left to the service log alone, as an Initial Password JIM could not stage is reported |
+| 4 | `docs/configuration/run-profiles.md` explains a Partition-scoped run's coverage | A new section, "Which partition an object is in", on `partitions-and-containers.md`, with a decision diagram; `run-profiles.md` points to it | The run profiles page was at its word budget, and partitions are that page's subject |
+| 4 | Scenario 009 step `UnscopedCreatedDeletion` | As planned, with each partition's count compared before and after Full Import (Unscoped), since the count includes the Obsolete object `PartitionDeletion` leaves; Samba AD runs it with one user and one scoped Full Import | The single-partition directories have no second Partition to scope to |
