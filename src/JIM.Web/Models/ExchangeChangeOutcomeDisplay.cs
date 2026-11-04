@@ -106,7 +106,7 @@ public static class ExchangeChangeOutcomeDisplay
             ExchangeChangeState.Parked => change.LastAttemptedAt is { } last
                 ? $"Since {last.ToLocalTime().ToFriendlyDate()}"
                 : "Waiting for somebody to retry it",
-            _ => "Holds until the account's declared state changes"
+            _ => "Waits on a new declared state"
         };
     }
 

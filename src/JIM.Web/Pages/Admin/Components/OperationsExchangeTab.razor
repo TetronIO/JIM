@@ -82,7 +82,9 @@
             </MudTooltip>
             @if (_summary.NotMadeCount > 0)
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_summary.NotMadeCount.ToString("N0") recipient type changes not made</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @(_summary.NotMadeCount == 1 ? "1 is a recipient type change not made" : $"{_summary.NotMadeCount:N0} are recipient type changes not made")
+                </MudText>
             }
         </MudPaper>
     </MudItem>
@@ -182,7 +184,7 @@
                 <OneLineText Text="@context.Item.ConnectedSystemName" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn Sortable="false" HeaderStyle="width: 300px;" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
+        <TemplateColumn Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudTooltip Arrow="true" Placement="Placement.Top">
                     <TooltipContent>
@@ -196,10 +198,14 @@
                     var (label, modifier, _) = ExchangeChangeOutcomeDisplay.Pill(context.Item.State);
                     var detail = ExchangeChangeOutcomeDisplay.QueueDetail(context.Item);
                 }
-                <span class="jim-one-line-list" title="@detail">
-                    <span class="@($"jim-status-pill jim-status-pill--{modifier}")"><span class="jim-status-dot"></span>@label</span>
-                    <span class="jim-one-line-list-value mud-text-secondary">@detail</span>
-                </span>
+                @* Capped, so the detail clips here rather than taking the width the Reason column needs: Exchange's own
+                   words are what point at the remedy. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 20rem;">
+                    <span class="jim-one-line-list" title="@detail">
+                        <span class="@($"jim-status-pill jim-status-pill--{modifier}")"><span class="jim-status-dot"></span>@label</span>
+                        <span class="jim-one-line-list-value mud-text-secondary">@detail</span>
+                    </span>
+                </div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn Sortable="false" HeaderClass="jim-fill-column" CellClass="jim-fill-column">
@@ -448,8 +454,8 @@
         var count = _grid?.TotalItems ?? 0;
         await RetryAsync(
             CurrentFilter(_grid?.SearchText),
-            confirmation: $"Attempt the {Describe(count)} shown again? Only the parked and retrying changes among them are retried; " +
-                          "the rest are already due, being applied, or wait on a change to what is declared.");
+            confirmation: $"Attempt the {Describe(count)} shown again? Parked and retrying changes are retried; any others are " +
+                          "already due, being applied, or waiting on a change to what is declared.");
     }
 
     /// <summary>
