@@ -58,7 +58,8 @@ function Set-JIMConnectedSystem {
         Returns the Connected System as changed.
 
     .OUTPUTS
-        With -PassThru, the Connected System as changed; otherwise nothing.
+        With -PassThru, the Connected System as changed, with the warnings its settings raised (settingWarnings);
+        otherwise nothing. Each warning is also written to the warning stream.
 
     .EXAMPLE
         Set-JIMConnectedSystem -Id 1 -Name "Updated Name"
@@ -114,7 +115,7 @@ function Set-JIMConnectedSystem {
         Remove-JIMConnectedSystem
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
-    [OutputType('JIM.ConnectedSystemDetailDto')]
+    [OutputType('JIM.ConnectedSystemSaveResponse')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [int]$Id,

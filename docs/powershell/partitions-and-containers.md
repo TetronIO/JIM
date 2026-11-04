@@ -156,7 +156,7 @@ Discovers the directory servers in a Connected System's directory, for choosing 
 ### Syntax
 
 ```powershell
-Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
+Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int> [-Setting <string>]
 ```
 
 ### Parameters
@@ -164,16 +164,18 @@ Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes |  | The ID of the Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
+| `Setting` | `string` | No |  | The name of the setting to discover servers for, when the connector discovers servers for more than one. Leave it out for the connector's first (Preferred Domain Controller, for the LDAP connector). |
 
 ### Output
 
-One entry per server found: its HostName, the Active Directory Site it belongs to (empty for directories that have no Sites), and the id and name of the setting its host name is a value for.
+One entry per server found: its HostName, the Active Directory Site it belongs to (empty for directories that have no Sites), its Version where the directory records one (empty for a domain controller), and the id and name of the setting its host name is a value for.
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `HostName` | `string` | The fully qualified domain name of the directory server, e.g. "dc01.corp.local". |
 | `Site` | `string` | The Active Directory Site the server belongs to, e.g. "Default-First-Site-Name". Empty for directories that have no concept of Sites. |
-| `TargetSettingId` | `int` | The id of the Connected System setting this server's host name is a value for (for the LDAP Connector, Preferred Domain Controller): the key to use when setting it with `Set-JIMConnectedSystem -SettingValues` or the update endpoint. Empty only if the Connected System does not carry the setting its Connector names. |
+| `Version` | `string` | The server's version as the directory records it; empty when the directory records none, as for a domain controller. |
+| `TargetSettingId` | `int` | The id of the Connected System setting this server's host name is a value for (for the LDAP Connector's domain controllers, Preferred Domain Controller): the key to use when setting it with `Set-JIMConnectedSystem -SettingValues` or the update endpoint. Empty only if the Connected System does not carry the setting its Connector names. |
 | `TargetSettingName` | `string` | The name of the Connected System setting this server's host name is a value for, e.g. "Preferred Domain Controller". |
 <!-- END GENERATED: Get-JIMConnectedSystemDirectoryServer -->
 

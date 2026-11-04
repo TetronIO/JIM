@@ -189,6 +189,8 @@ warning saying what overtook it (the REST response carries it in `warnings`).
 
 ## :material-pencil-lock-outline: Confirming a configuration change
 
+When you save a Connected System's settings, its Connector checks them first. Anything it refuses stops the save and is shown beside the setting concerned. Something that will not work as the settings stand, but does not stop the Connected System working, is a warning instead: the settings save, and the warning is shown beneath them until the next save. The REST API returns warnings in `settingWarnings`, and `Set-JIMConnectedSystem` writes each one as a PowerShell warning.
+
 Changing a Connected System's settings, schema, or partition selection is confirmed before it saves where the change affects synchronisation. Deselecting an Object Type or a partition is treated as destructive: the next Full Import marks the Connected System Objects imported through it obsolete, and the following synchronisation disconnects them and deprovisions whatever they are joined to. See [Configuration changes](configuration-changes.md).
 
 ## :material-playlist-check: Common workflows

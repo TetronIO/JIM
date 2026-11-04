@@ -12,7 +12,7 @@ public class ConnectedSystemSaveResponse : ConnectedSystemDetailDto
 {
     /// <summary>
     /// Warnings the Connector raised about the settings the request wrote: something that will not work as the
-    /// settings stand, such as an account that may not create one kind of Exchange recipient. The save went ahead
+    /// settings stand, such as an account that may not run some of the commands a feature needs. The save went ahead
     /// regardless. Always present; empty when there are none, and when the request wrote no settings.
     /// </summary>
     public List<ConnectedSystemSettingWarningDto> SettingWarnings { get; set; } = [];

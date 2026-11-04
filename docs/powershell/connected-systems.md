@@ -296,7 +296,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>] [-Descript
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) |  | A Connected System from `Get-JIMConnectedSystem`, through the pipeline. Accepts pipeline input. |
 | `Name` | `string` | No |  | The new name of the Connected System. |
 | `Description` | `string` | No |  | What the Connected System is for, for administrators. |
-| `SettingValues` | `hashtable` | No |  | The Connector settings to change, as a hashtable keyed by setting ID (from `Get-JIMConnectorDefinition`) whose values are hashtables holding a stringValue, intValue or checkboxValue. |
+| `SettingValues` | `hashtable` | No |  | The Connector settings to change, as a hashtable keyed by setting ID (from `Get-JIMConnectorDefinition`) whose values are hashtables holding a stringValue, intValue or checkboxValue. The Connector checks them before anything is saved: a setting it refuses fails the change, and one it only warns about is saved, with a warning saying what will not work as it stands. |
 | `MaxExportParallelism` | `int` | No |  | How many export batches run at once, where the Connector supports exporting in parallel. 1 exports one batch at a time. From 1 to 16. |
 | `RequireSecureTransport` | `switch` | No |  | Refuse to send a password to this Connected System over a connection JIM cannot confirm is encrypted. Governs every password JIM sends here: the first password on an account it provisions, one set by hand, and a synchronised password change. Off by default, because a signed and sealed bind is a legitimate encrypted alternative that cannot be detected from the Connected System's settings alone. Pass `-RequireSecureTransport` to turn it on and `-RequireSecureTransport:$false` to turn it off. Nothing is discarded when JIM refuses: queued password changes wait, and accounts stay owed their first password. |
 | `InitialPasswordTimeToLive` | `timespan` | No |  | How long an account provisioned into the Connected System stays owed an initial password before JIM records an expiry and stops trying, as a TimeSpan. Seven days until one is set. Raise it ahead of an outage longer than the current window, or every account provisioned while the Connected System is unreachable expires without a password. |
@@ -306,9 +306,30 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>] [-Descript
 
 ### Output
 
-With `-PassThru`, the Connected System as changed; otherwise nothing.
+With `-PassThru`, the Connected System as changed, with the warnings its settings raised (settingWarnings); otherwise nothing. Each warning is also written to the warning stream.
 
-Properties as under [Get-JIMConnectedSystem](#get-jimconnectedsystem).
+| Property | Type | Description |
+|----------|------|-------------|
+| `SettingWarnings` | `object[]` | Warnings the Connector raised about the settings the request wrote: something that will not work as the settings stand, such as an account that may not run some of the commands a feature needs. The save went ahead regardless. Always present; empty when there are none, and when the request wrote no settings. Each has `Setting` and `Message`. |
+| `Id` | `int` | The ID of the Connected System. |
+| `Name` | `string` | The name of the Connected System. |
+| `Description` | `string` | What the Connected System is for, for administrators; empty when none is given. |
+| `Created` | `datetime` | When the Connected System was created (UTC). |
+| `LastUpdated` | `datetime` | When the Connected System was last changed (UTC); empty if it never has been. |
+| `Status` | `string` | Whether the Connected System takes part in synchronisation: Active, Disabled, or Deleting while a deletion is under way. One of `Active`, `Disabled` or `Deleting`. |
+| `SettingValuesValid` | `bool` | Whether the Connector has validated the Connected System's current settings. False on a new Connected System, and again after any setting changes, until they are validated. |
+| `Connector` | `object` | The Connector the Connected System uses. It has `Id` and `Name`. |
+| `ObjectTypes` | `object[]` | The Connected System's Object Types, from its imported schema. Each has `Id`, `Name`, `Created`, `Selected`, `RemoveContributedAttributesOnObsoletion`, `AttributeCount`, `Tags`, `IsInternal`, `IsAuxiliary`, `ManagesClassMembership`, `MergedAuxiliaryClassObjectTypeIds`, `StructuralCarrierObjectTypeId` and `Attributes`. |
+| `ObjectCount` | `int` | How many Connected System Objects the Connected System holds. |
+| `PendingExportCount` | `int` | How many Pending Exports are waiting to be exported to the Connected System. |
+| `MaxExportParallelism` | `int` | How many export batches run at once, where the Connector supports exporting in parallel; empty or 1 exports one batch at a time. |
+| `InitialPasswordTimeToLive` | `string` | How long an account provisioned into this Connected System stays owed an initial password before JIM records an expiry and stops trying. Empty means JIM's default of seven days, and is reported as empty rather than as the default so a caller can tell a system configured to seven days from one never configured. |
+| `RequireSecureTransport` | `bool` | Whether JIM refuses to send a password to this Connected System over a connection it cannot confirm is encrypted. Governs every password JIM sends here: the initial password on an account it provisions, one an administrator sets by hand, and a synchronised password change. |
+| `UnresolvedReferenceHandling` | `string` | How an imported reference value that cannot be resolved to a Connected System Object is treated. The default, Error, fails the object; Warn records an Activity warning instead; Ignore records neither, while still logging the occurrence. One of `Error`, `Warn` or `Ignore`. |
+| `ConfigurationDrift` | `object` | Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Empty on the create and update responses, which describe the write that just happened rather than the system's readiness. It has `HasPendingChanges`, `IsDeterminable`, `NeverFullySynchronised`, `TrackingDisabled`, `LastFullSynchronisation`, `MostRecentChange`, `ChangeCount`, `HighestChangeClass` and `AwaitingSynchronisation`. |
+| `StrandedValueSweepArmedAt` | `datetime` | When a stranded-value sweep was armed by a Connector Space clear, or empty when no sweep is armed. The sweep runs at the first Full Synchronisation of this Connected System after LastSuccessfulFullImportCompletedAt is later than this timestamp; until then it stays armed and a Full Synchronisation does nothing beyond ordinary synchronisation. |
+| `LastSuccessfulFullImportCompletedAt` | `datetime` | When the most recent Full Import of this Connected System completed successfully, or empty if none ever has. An import that completed with object-level errors does not count. |
+| `DependentDerivedFlows` | `object[]` | On the response to an import-schema call that disabled or removed its dependents only: the Metaverse-Derived Attribute Flows, on any Connected System, that disabling or removing those Synchronisation Rules and mappings left with a missing input (an attribute they read lost its last enabled contributor). The refresh went ahead regardless; each flow's Missing Input Behaviour now decides what it contributes. Always present; empty on every other response. Each has `MappingId`, `TargetMetaverseAttributeName`, `SyncRuleId`, `SyncRuleName`, `ConnectedSystemId`, `ConnectedSystemName` and `MissingInputs`. |
 <!-- END GENERATED: Set-JIMConnectedSystem -->
 
 ### Examples
