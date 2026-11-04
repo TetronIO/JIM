@@ -167,7 +167,7 @@ public class ProvisionedObjectPartitionTests : WorkflowTestBase
     {
         // Where an object is, is worth less than knowing it was created: a Create whose result went unrecorded would be
         // sent again. The object keeps the Partition it had, for the import that confirms it to record, and the failure is
-        // counted in the run's summary.
+        // counted in the run's summary and reported on the Activity.
         const string dn = "uid=new,ou=people,dc=corp,dc=local";
         var objectGuid = Guid.NewGuid();
         var (provisioned, export) = SeedProvisioning(dn);
@@ -185,6 +185,7 @@ public class ProvisionedObjectPartitionTests : WorkflowTestBase
             Assert.That(provisioned.AttributeValues.Any(value => value.GuidValue == objectGuid), Is.True, "with the External ID it was given");
             Assert.That(provisioned.PartitionId, Is.Null);
             Assert.That(summaries.Select(summary => summary.Properties["NotRecorded"].ToString()).ToList(), Is.EqualTo(new[] { "1" }));
+            Assert.That(activity.WarningMessage, Does.StartWith("1 object an export created or renamed"), "and never left to the service log alone");
         }
     }
 

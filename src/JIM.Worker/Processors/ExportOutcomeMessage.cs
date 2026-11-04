@@ -132,6 +132,20 @@ internal static class ExportOutcomeMessage
               "Exchange for them until their declared state is exported again. The service log names the objects and the cause.";
 
     /// <summary>
+    /// The warning for objects an export created or renamed whose Partition JIM could not record (#2723). A warning, not
+    /// a failure: the exports succeeded and are recorded, and each object keeps the Partition it had until the next import
+    /// that reads it records where it is; until then, a Partition-scoped import cannot see it there.
+    /// </summary>
+    /// <param name="objects">How many objects' Partitions could not be recorded.</param>
+    internal static string ForPartitionsNotRecorded(int objects) =>
+        objects == 1
+            ? "1 object an export created or renamed was written, but JIM could not record which partition it is in, so a partition-targeted " +
+              "import cannot see it there until the next import that reads it records where it is. The service log names the object and the cause."
+            : $"{objects:N0} objects an export created or renamed were written, but JIM could not record which partition they are in, so a " +
+              "partition-targeted import cannot see them there until the next import that reads them records where they are. The service log " +
+              "names the objects and the cause.";
+
+    /// <summary>
     /// The warning for accounts whose enabled state an export wrote where JIM could not check, and record against, any
     /// Initial Password still owed to them (#2064). Delivering such a password would then follow the Synchronisation
     /// Rule's setting rather than the Attribute Flow, which is why the export run says so; most accounts are owed

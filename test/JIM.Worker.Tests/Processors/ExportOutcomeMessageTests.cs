@@ -159,6 +159,17 @@ public class ExportOutcomeMessageTests
         Assert.That(ExportOutcomeMessage.ForExchangeChangesNotStaged(objects), Does.StartWith(expectedStart));
     }
 
+    /// <summary>
+    /// Objects an export created or renamed whose Partition JIM could not record (#2723) reach the export Activity as a
+    /// warning rather than only the service log.
+    /// </summary>
+    [TestCase(1, "1 object ")]
+    [TestCase(1_250, "1,250 objects ")]
+    public void ForPartitionsNotRecorded_StartsWithTheCount(int objects, string expectedStart)
+    {
+        Assert.That(ExportOutcomeMessage.ForPartitionsNotRecorded(objects), Does.StartWith(expectedStart));
+    }
+
     [TestCase(1, "1 ")]
     [TestCase(1_250, "1,250 ")]
     public void ForInitialPasswordMarkingFailed_StartsWithTheCount(int accounts, string expectedStart)
