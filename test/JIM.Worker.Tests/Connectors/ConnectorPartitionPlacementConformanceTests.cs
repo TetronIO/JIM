@@ -26,27 +26,28 @@ public class ConnectorPartitionPlacementConformanceTests
         var connectorTypes = ConnectorTypes();
         Assert.That(connectorTypes, Does.Contain(typeof(LdapConnector)), "precondition: the enumeration finds the Connectors");
 
-        var problems = new List<string>();
-        foreach (var type in connectorTypes)
-        {
-            if (type.GetConstructor(Type.EmptyTypes) == null)
-            {
-                problems.Add($"{type.Name}: has no parameterless constructor, so this test cannot ask whether it supports Partitions");
-                continue;
-            }
-
-            var connector = (IConnectorCapabilities)Activator.CreateInstance(type)!;
-            try
-            {
-                if (connector.SupportsPartitions && connector is not IConnectorPartitionPlacement)
-                    problems.Add($"{type.Name}: supports Partitions but does not implement {nameof(IConnectorPartitionPlacement)}");
-            }
-            finally
-            {
-                (connector as IDisposable)?.Dispose();
-            }
-        }
+        var problems = connectorTypes
+            .Where(type => type.GetConstructor(Type.EmptyTypes) == null)
+            .Select(type => $"{type.Name}: has no parameterless constructor, so this test cannot ask whether it supports Partitions")
+            .Concat(connectorTypes
+                .Where(type => type.GetConstructor(Type.EmptyTypes) != null)
+                .Where(SupportsPartitionsWithoutPlacement)
+                .Select(type => $"{type.Name}: supports Partitions but does not implement {nameof(IConnectorPartitionPlacement)}"))
+            .ToList();
 
         Assert.That(problems, Is.Empty, string.Join("\n", problems));
+    }
+
+    private static bool SupportsPartitionsWithoutPlacement(Type connectorType)
+    {
+        var connector = (IConnectorCapabilities)Activator.CreateInstance(connectorType)!;
+        try
+        {
+            return connector.SupportsPartitions && connector is not IConnectorPartitionPlacement;
+        }
+        finally
+        {
+            (connector as IDisposable)?.Dispose();
+        }
     }
 }

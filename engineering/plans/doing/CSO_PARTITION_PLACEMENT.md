@@ -1,6 +1,6 @@
 # Truthful Connected System Object Partition
 
-- **Status:** Doing (Phases 0 and 1 complete)
+- **Status:** Doing (Phases 0 to 2 complete)
 - **Issue:** [#2723](https://github.com/TetronIO/JIM/issues/2723)
 - **Related:** [#2715](https://github.com/TetronIO/JIM/issues/2715) (per-Partition watermarks; this is its Follow-up 1), [#2720](https://github.com/TetronIO/JIM/issues/2720)
 - **Design:** approved 4 November 2026 (decisions D1 to D5 below, all as recommended)
@@ -95,7 +95,7 @@ Each phase starts with failing tests.
 - `JIM.Models.Tests` policy tests: an inner deselected suffix prefers the selected outer; no selected match falls back to any Partition; a Connector without the capability returns null.
 - A conformance test: every Connector with `SupportsPartitions` implements the capability.
 
-### Phase 2: Import processor
+### Phase 2: Import processor ✅
 
 - Placement in the hydration pre-pass; restamp replaces `SyncImportTaskProcessor.cs:2988-2991`; the skip predicate becomes "stored equals placement"; one summary log line.
 - `Workflows/ImportPartitionPlacementTests.cs`: an unscoped Full Import stamps each object's Partition; unscoped-created then deleted is marked deleted by a scoped Full Import (the issue); a scoped Full Import does not mark another Partition's object deleted; a moved object is restamped with no execution item; placed nowhere keeps the stored value; no capability keeps the Run Profile stamp; a reported delete leaves the Partition; a confirming import stamps a provisioned object; the deletion-limit base counts unscoped-created objects; an Object Type change retires an unscoped-created held object.
@@ -157,3 +157,8 @@ What was built differently from the plan above, and why.
 | 1 | The LDAP Connector implements the capability with `LdapConnectorUtilities.PartitionForDn` | The rule moved into `LdapPartitionPlacer`; `PartitionForDn` (the watermark judge) now delegates to it | One rule either way, and the placer can parse each Partition's DN once per run rather than once per object; the watermark path keeps its per-call form |
 | 1 | `IConnectorPartitionPlacement` answers which Partition an identifier is in | `PreparePartitionPlacement(partitions)` returns an `IConnectorPartitionPlacer` whose `GetPartition(identifier)` answers | The prepared placer is what lets the Connector parse Partitions once; the policy prepares one over the selected Partitions and, only where some are deselected, one over them all |
 | 1 | No answer for a Connector without the capability | `ConnectedSystemPartitionPlacement.Prepare` also has no answer for a Connected System with no Partitions | Placing among no Partitions would only count every object as placed nowhere |
+| 2 | No answer keeps the stored value | No answer keeps the stored value; where nothing is stored either, the Run Profile's Partition, for an existing object as for a new one | The old backfill becomes the last fallback (`PartitionIdToRecord`: placement, else stored, else the Run Profile's), so create and update agree, nothing is ever cleared, and a Connector without the capability keeps exactly today's behaviour, skip predicate included |
+| 2 | The skip predicate becomes "the stored Partition equals the placement" | "The stored Partition equals the Partition the run would record" | The same where the object is placed; elsewhere it is today's predicate, so an object placed nowhere is not denied its skip on every run |
+| 2 | Every non-delete import object is placed | Every object the run might create or update: not a delete, and not one the Connector could not read (an object-level import error); one with an unreadable attribute value is placed | Nothing is created or updated from an object the Connector could not read, so counting it as placed nowhere would only raise a false warning |
+| 2 | One summary log line: restamped, placed nowhere | The line also counts objects placed in a Partition, and the import span carries all three | The placed count is the denominator that makes the other two readable |
+| 2 | `CsoPartitionIdPersistenceDatabaseTests` covers the restamp if not already covered | A characterisation test (`PartitionMovedWithNothingElseChanged`), green from the start | The raw bulk update writes `PartitionId` for every object in the update list, changed or not, and an import always puts every compared object in that list; the existing backfill test covered null to a value, the new one covers one Partition to another through the `ISyncRepository` call the import makes |

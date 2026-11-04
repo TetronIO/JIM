@@ -145,4 +145,55 @@ public class CsoPartitionIdPersistenceDatabaseTests
         Assert.That(persisted.PartitionId, Is.EqualTo(partitionId),
             "The import processor's PartitionId backfill must be persisted by the bulk update, not silently discarded.");
     }
+
+    [Test]
+    public async Task UpdateConnectedSystemObjectsAsync_PartitionMovedWithNothingElseChanged_PersistsTheNewPartitionAsync()
+    {
+        // #2723: an import restamps an object whose placement moved from one Partition to another with nothing else about
+        // it changed, so no attribute value is written; the row update alone must carry the new Partition.
+        var (systemId, typeId, externalIdAttributeId, oldPartitionId) = await SeedConnectedSystemGraphAsync();
+        int newPartitionId;
+        await using (var seed = NewContext())
+        {
+            var system = await seed.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == systemId);
+            var partition = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system, Name = "DC=partners,DC=example", ExternalId = $"partition-{Guid.NewGuid():N}", Selected = true
+            };
+            seed.ConnectedSystemPartitions.Add(partition);
+            await seed.SaveChangesAsync();
+            newPartitionId = partition.Id;
+        }
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = systemId,
+            TypeId = typeId,
+            ExternalIdAttributeId = externalIdAttributeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.NotJoined,
+            Created = DateTime.UtcNow,
+            PartitionId = oldPartitionId
+        };
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.Add(cso);
+            await seed.SaveChangesAsync();
+        }
+
+        cso.PartitionId = newPartitionId;
+
+        // Act: the call the import's save phase makes, with no attribute value additions or removals
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            await repository.Sync.UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { cso }, [], []);
+        }
+
+        // Assert
+        await using var readContext = NewContext();
+        var persisted = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(o => o.Id == cso.Id);
+        Assert.That(persisted.PartitionId, Is.EqualTo(newPartitionId));
+    }
 }
