@@ -83,7 +83,7 @@ else
                 the hierarchy.
             </InfoPopover>
             <MudButton Variant="Variant.Filled" Size="Size.Small" Disabled="@_hierarchyBeingRetrieved"
-                       OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto">
+                       OnClick="HandleImportHierarchyAsync" DropShadow="false" Class="ms-auto" data-testid="jim-hierarchy-refresh">
                 @if (_hierarchyBeingRetrieved)
                 {
                     <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
@@ -585,6 +585,12 @@ else
 
     private async Task HandleImportHierarchyAsync()
     {
+        // The refresh saves the hierarchy it reads and the page then reloads this Connected System, so a selection
+        // edited but not saved is gone afterwards (#2743). Never without the administrator choosing it.
+        var discardingEdits = _selectionEdited;
+        if (discardingEdits && !await ConfirmDiscardingUnsavedEditsAsync())
+            return;
+
         // attribute the import to the user
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
@@ -596,7 +602,9 @@ else
 
         try
         {
-            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem, user);
+            // By id: the refresh loads and saves its own change-tracked copy (#2743). The page reloads this tab's
+            // Connected System afterwards (OnConnectedSystemChanged below), so the tab shows what was saved.
+            _hierarchyRefreshResult = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(ConnectedSystem.Id, user);
 
             if (_hierarchyRefreshResult.Success)
             {
@@ -620,6 +628,14 @@ else
                 Snackbar.Add($"Hierarchy refresh failed: {_hierarchyRefreshResult.ErrorMessage}", Severity.Error);
             }
 
+            // The reload below replaces the edited selection with the saved one, so there is nothing left unsaved,
+            // and a preview of the edits no longer describes anything.
+            if (discardingEdits)
+            {
+                _selectionEdited = false;
+                DiscardScopeSelectionPreview();
+            }
+
             await OnConnectedSystemChanged.InvokeAsync();
         }
         catch (Exception ex)
@@ -633,6 +649,17 @@ else
             StateHasChanged();
         }
     }
+
+    /// <summary>
+    /// Asks whether to refresh the hierarchy at the cost of the selection edits not yet saved.
+    /// </summary>
+    /// <returns>True to discard the edits and refresh; false to keep them.</returns>
+    private async Task<bool> ConfirmDiscardingUnsavedEditsAsync() =>
+        await DialogService.ShowMessageBoxAsync(
+            "Discard unsaved changes?",
+            "Refreshing the hierarchy discards your unsaved changes to what this Connected System imports.",
+            yesText: "Discard and Refresh",
+            cancelText: "Cancel") == true;
 
     private async Task CopyHierarchyChangesToClipboardAsync()
     {

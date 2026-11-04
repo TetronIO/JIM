@@ -4,9 +4,11 @@
 using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Connectors;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
+using JIM.Models.Staging.DTOs;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -527,8 +529,7 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     /// and the whole refresh failed. Clearing the objects' Partition is the right answer rather than deleting them:
     /// whether an object has gone from the directory is for deletion detection to decide, not for a hierarchy refresh.
     ///
-    /// Driven through the server's own refresh, on a context configured as JIM.Web runs it, with the Connected System
-    /// loaded change-tracked in the scope it is saved from, as the REST endpoint loads it.
+    /// Driven through the server's own refresh, on a context configured as JIM.Web runs it.
     /// </remarks>
     [Test]
     public async Task RefreshHierarchy_PartitionHoldingConnectedSystemObjectsNoLongerInTheDirectory_RemovesItAndClearsTheirPartitionAsync()
@@ -597,10 +598,9 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         await using (var ctx = NewContext())
         {
             var jim = new JimApplication(new PostgresDataRepository(ctx), connectorFactory: new StubConnectorFactory(connector));
-            var system = (await jim.ConnectedSystems.GetConnectedSystemAsync(systemId, withChangeTracking: true))!;
             var initiator = await ctx.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
 
-            var result = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(system, initiator);
+            var result = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(systemId, initiator);
 
             Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
         }
@@ -620,16 +620,286 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
-    /// A Connector whose hierarchy is whatever the test says the directory holds.
+    /// A Partition the directory no longer holds is removed by a refresh started from the portal, along with its
+    /// Containers (#2743).
     /// </summary>
-    private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions) : IConnector, IConnectorPartitions
+    /// <remarks>
+    /// The portal's call shape: the Connected System page loads its Connected System on one context and lets it go,
+    /// and the Scope tab runs the refresh on a context of its own, both configured as JIM.Web runs them. The refresh
+    /// used to take the page's detached graph and merge into it, and removing a Partition from a graph nothing tracks
+    /// marks nothing deleted: the save attached only what was still reachable, so the Partition, its Containers and
+    /// every Connected System Object stamped with it survived, while the refresh reported it removed. It now takes
+    /// the Connected System's id and loads its own tracked copy, so there is no graph to hand over.
+    ///
+    /// The Containers are asserted as rows, not as a Partition's children. Even on a tracked graph, EF Core only
+    /// clears a removed Partition's Containers' link to it, because that link is optional, which leaves the rows
+    /// behind belonging to nothing; the refresh deletes them explicitly.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_FromThePortal_PartitionNoLongerInTheDirectory_RemovesItAndItsContainersAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // The directory no longer has Glitterband; Yellowstone is unchanged.
+        var connector = new StubPartitionsConnector([YellowstoneAsDiscovered(includeGroups: true)]);
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+        Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(), Is.EqualTo(new[] { "dc=yellowstone,dc=local" }),
+                "the Partition the directory no longer holds must be removed, as the refresh reported");
+            Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EquivalentTo(new[] { "People", "Groups", "Admins" }),
+                "the removed Partition's Containers go with it, and the kept Partition's stay");
+        }
+    }
+
+    /// <summary>
+    /// A Container the directory no longer holds is removed by a refresh started from the portal, along with the
+    /// Containers beneath it, while its Partition stays (#2743).
+    /// </summary>
+    /// <remarks>
+    /// The same detached-graph fault as the Partition test above, one level down: removing a Container from a
+    /// collection nothing tracks deletes nothing. A tracked graph alone is not enough here either, for the reason
+    /// given above: a Container's links to its Partition and to its parent are both optional.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_FromThePortal_ContainerNoLongerInTheDirectory_RemovesItAndItsDescendantsAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // The directory no longer has Groups (nor, with it, Admins); both Partitions are still there.
+        var connector = new StubPartitionsConnector([YellowstoneAsDiscovered(includeGroups: false), GlitterbandAsDiscovered()]);
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+        Assert.That(result.RemovedContainers.Select(c => c.Name), Is.EquivalentTo(new[] { "Groups", "Admins" }), "precondition");
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EquivalentTo(new[] { "People", "Staff" }),
+                "the Container the directory no longer holds, and the one beneath it, must be removed");
+            Assert.That(await verify.ConnectedSystemPartitions.CountAsync(), Is.EqualTo(2), "both Partitions are still in the directory");
+        }
+    }
+
+    /// <summary>
+    /// A Container moved out of one the directory no longer holds is kept, in its new home and still selected, while
+    /// the one it left is removed (#2743).
+    /// </summary>
+    /// <remarks>
+    /// Guards the refresh's explicit deletions. Deleting a Container takes everything still beneath it, so the
+    /// Container moved out of it must no longer count as beneath it, and must not be counted among the removed.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_ContainerMovedOutOfOneNoLongerInTheDirectory_KeepsTheMovedContainerAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // Admins has moved from Groups to People, and Groups has gone.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: false);
+        yellowstone.Containers.Single(c => c.Name == "People").ChildContainers
+            .Add(new ConnectorContainer("ou=Admins,ou=People,dc=yellowstone,dc=local", "Admins") { StableId = AdminsStableId });
+        var connector = new StubPartitionsConnector([yellowstone, GlitterbandAsDiscovered()]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Admins" }), "precondition");
+            Assert.That(result.RemovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Groups" }), "precondition");
+        }
+
+        await using var verify = NewContext();
+        var containers = await verify.ConnectedSystemContainers.ToListAsync();
+        var people = containers.Single(c => c.Name == "People");
+        var admins = containers.SingleOrDefault(c => c.Name == "Admins");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Admins", "Staff" }),
+                "the Container the directory no longer holds is removed, and the one moved out of it is kept");
+            Assert.That(admins?.ParentContainerId, Is.EqualTo(people.Id), "the moved Container sits under its new parent");
+            Assert.That(admins?.Selected, Is.True, "and keeps its selection");
+        }
+    }
+
+    /// <summary>
+    /// A refresh whose save fails finishes its Activity as a failure carrying the reason, and the save's own
+    /// exception reaches the caller (#2742).
+    /// </summary>
+    /// <remarks>
+    /// The save is made to fail for a real reason: two refreshes of one Connected System at once. While this one reads
+    /// the directory, another that started a moment later saves first, having found Groups gone and removed it. This
+    /// one still holds Groups, so its update of that row matches nothing and the save fails.
+    ///
+    /// The failure handler used to record the failure on the same context whose save had just failed, which still
+    /// held the changes that broke it, so its own save failed the same way: the Activity stayed In Progress with no
+    /// message, and the caller was handed the handler's exception rather than the refresh's.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_SaveFails_FailsTheActivityAndRethrowsTheSaveFailureAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // This refresh's directory read still has Groups, and adds Contractors beneath People. The other refresh
+        // removes Groups (and, by cascade, Admins) while this one is reading.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Single(c => c.Name == "People").ChildContainers
+            .Add(new ConnectorContainer("ou=Contractors,ou=People,dc=yellowstone,dc=local", "Contractors"));
+        var connector = new StubPartitionsConnector([yellowstone, GlitterbandAsDiscovered()], whileReadingAsync: async () =>
+        {
+            await using var otherRefresh = NewContext();
+            await otherRefresh.ConnectedSystemContainers.Where(c => c.Name == "Groups").ExecuteDeleteAsync();
+        });
+
+        DbUpdateException? thrown;
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx), connectorFactory: new StubConnectorFactory(connector));
+            var initiator = await ctx.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+
+            thrown = Assert.ThrowsAsync<DbUpdateConcurrencyException>(async () =>
+                await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(systemId, initiator));
+        }
+
+        await using var verify = NewContext();
+        var activity = await verify.Activities.SingleAsync(a => a.TargetOperationType == ActivityTargetOperationType.ImportHierarchy);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(thrown?.StackTrace, Does.Not.Contain(nameof(ActivityServer.FailActivityWithErrorAsync)),
+                "the caller must be handed the refresh's own failure, not one raised while recording it");
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.FailedWithError),
+                "a refresh that failed must not leave its Activity In Progress for ever");
+            Assert.That(activity.ErrorMessage, Is.Not.Null.And.Not.Empty, "the Activity must say why it failed");
+            Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EquivalentTo(new[] { "People", "Staff" }),
+                "nothing of the failed refresh is saved: Contractors is not added, and only the other refresh's removal stands");
+        }
+    }
+
+    /// <summary>
+    /// Runs a refresh the way the portal's Scope tab does: the Connected System page loads its Connected System on one
+    /// context and lets it go, and the tab refreshes on another, naming the page's Connected System by its id. Both
+    /// contexts are configured as JIM.Web runs them.
+    /// </summary>
+    private async Task<HierarchyRefreshResult> RefreshAsThePortalDoesAsync(int systemId, Guid initiatorId, StubPartitionsConnector connector)
+    {
+        ConnectedSystem pageConnectedSystem;
+        await using (var pageContext = NewContext())
+        {
+            var page = new JimApplication(new PostgresDataRepository(pageContext));
+            pageConnectedSystem = (await page.ConnectedSystems.GetConnectedSystemAsync(systemId, withChangeTracking: true))!;
+        }
+
+        await using var tabContext = NewContext();
+        var tab = new JimApplication(new PostgresDataRepository(tabContext), connectorFactory: new StubConnectorFactory(connector));
+        var initiator = await tabContext.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+        return await tab.ConnectedSystems.ImportConnectedSystemHierarchyAsync(pageConnectedSystem.Id, initiator);
+    }
+
+    /// <summary>
+    /// The directory's own identifier for Admins, which survives a move.
+    /// </summary>
+    private const string AdminsStableId = "admins-stable-id";
+
+    /// <summary>
+    /// Seeds a directory holding two selected partitions: Yellowstone, with People, and Groups holding Admins; and
+    /// Glitterband, with Staff. Returns the Connected System's id and the id of a security principal to attribute a
+    /// refresh to.
+    /// </summary>
+    private async Task<(int SystemId, Guid InitiatorId)> SeedTwoPartitionDirectoryAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test LDAP Connector", SupportsPartitions = true, SupportsPartitionContainers = true };
+        var setting = new ConnectorDefinitionSetting { Name = "Host", Type = ConnectedSystemSettingType.String };
+        connectorDefinition.Settings.Add(setting);
+        var system = new ConnectedSystem
+        {
+            Name = "Test Directory",
+            ConnectorDefinition = connectorDefinition,
+            SettingValues = [new ConnectedSystemSettingValue { Setting = setting, StringValue = "directory.example.local" }]
+        };
+
+        var yellowstone = new ConnectedSystemPartition
+        {
+            ConnectedSystem = system, ExternalId = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Selected = true, Containers = []
+        };
+        yellowstone.Containers.Add(new ConnectedSystemContainer
+        {
+            Partition = yellowstone, ExternalId = "ou=People,dc=yellowstone,dc=local", Name = "People", Selected = true
+        });
+        var groups = new ConnectedSystemContainer
+        {
+            Partition = yellowstone, ExternalId = "ou=Groups,dc=yellowstone,dc=local", Name = "Groups", Selected = true
+        };
+        // Admins carries the directory's own identifier, so a refresh can recognise it wherever it moves.
+        groups.AddChildContainer(new ConnectedSystemContainer
+        {
+            ExternalId = "ou=Admins,ou=Groups,dc=yellowstone,dc=local", Name = "Admins", StableId = AdminsStableId, Selected = true
+        });
+        yellowstone.Containers.Add(groups);
+
+        var glitterband = new ConnectedSystemPartition
+        {
+            ConnectedSystem = system, ExternalId = "dc=glitterband,dc=local", Name = "dc=glitterband,dc=local", Selected = true, Containers = []
+        };
+        glitterband.Containers.Add(new ConnectedSystemContainer
+        {
+            Partition = glitterband, ExternalId = "ou=Staff,dc=glitterband,dc=local", Name = "Staff", Selected = true
+        });
+
+        // A hierarchy refresh is a configuration change, recorded against a security principal or not at all.
+        var mvUserType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+        var initiator = new MetaverseObject { Type = mvUserType, CachedDisplayName = "Test Administrator" };
+
+        seed.AddRange(connectorDefinition, system, yellowstone, glitterband, mvUserType, initiator);
+        await seed.SaveChangesAsync();
+
+        return (system.Id, initiator.Id);
+    }
+
+    /// <summary>
+    /// Yellowstone as the directory reports it: People always, and Groups with Admins beneath it when asked for.
+    /// </summary>
+    private static ConnectorPartition YellowstoneAsDiscovered(bool includeGroups)
+    {
+        var containers = new List<ConnectorContainer> { new("ou=People,dc=yellowstone,dc=local", "People") };
+        if (includeGroups)
+        {
+            var groups = new ConnectorContainer("ou=Groups,dc=yellowstone,dc=local", "Groups");
+            groups.ChildContainers.Add(new ConnectorContainer("ou=Admins,ou=Groups,dc=yellowstone,dc=local", "Admins"));
+            containers.Add(groups);
+        }
+
+        return new ConnectorPartition { Id = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Containers = containers };
+    }
+
+    /// <summary>
+    /// Glitterband as the directory reports it: Staff.
+    /// </summary>
+    private static ConnectorPartition GlitterbandAsDiscovered() => new()
+    {
+        Id = "dc=glitterband,dc=local",
+        Name = "dc=glitterband,dc=local",
+        Containers = [new ConnectorContainer("ou=Staff,dc=glitterband,dc=local", "Staff")]
+    };
+
+    /// <summary>
+    /// A Connector whose hierarchy is whatever the test says the directory holds, and which can run something else
+    /// while it is being read, to stand in for whatever else happens meanwhile.
+    /// </summary>
+    private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions, Func<Task>? whileReadingAsync = null) : IConnector, IConnectorPartitions
     {
         public string Name => "Stub Partitions Connector";
         public string? Description => null;
         public string? Url => null;
 
-        public Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger) =>
-            Task.FromResult(partitions);
+        public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+        {
+            if (whileReadingAsync != null)
+                await whileReadingAsync();
+
+            return partitions;
+        }
     }
 
     private sealed class StubConnectorFactory(IConnector connector) : IConnectorFactory

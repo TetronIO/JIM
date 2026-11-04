@@ -1838,6 +1838,20 @@ public interface IConnectedSystemRepository
     public Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
     /// <summary>
+    /// Persists a hierarchy refresh: the Connected System with its Partitions and Containers as the refresh left them,
+    /// and the deletion of every Partition and Container the refresh removed, in one save.
+    /// </summary>
+    /// <param name="connectedSystem">The refreshed Connected System, change-tracked by this repository's context.
+    /// A detached instance is refused rather than saved, because removing a Partition or Container from a detached
+    /// graph deletes nothing (#2743).</param>
+    /// <param name="removedPartitions">The Partitions the refresh removed. Each one's Containers are among
+    /// <paramref name="removedContainers"/>.</param>
+    /// <param name="removedContainers">The Containers the refresh removed, with every Container beneath them.</param>
+    public Task UpdateConnectedSystemHierarchyAsync(ConnectedSystem connectedSystem,
+        IReadOnlyCollection<ConnectedSystemPartition> removedPartitions,
+        IReadOnlyCollection<ConnectedSystemContainer> removedContainers);
+
+    /// <summary>
     /// Gets every Connected System setting value that holds a value for an encrypted setting
     /// (<see cref="ConnectedSystemSettingType.StringEncrypted"/>), across all Connected Systems, with its Setting
     /// loaded. Used by the startup pass that encrypts any credential found stored in clear.

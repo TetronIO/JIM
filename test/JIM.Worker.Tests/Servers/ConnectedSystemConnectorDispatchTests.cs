@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Data;
+using JIM.Data.Repositories;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -22,13 +23,20 @@ public class ConnectedSystemConnectorDispatchTests
     private const string UnknownConnectorName = "Nonexistent Connector";
 
     private JimApplication _jim = null!;
+    private Mock<IConnectedSystemRepository> _connectedSystemRepository = null!;
     private string _tempCsvPath = null!;
 
     [SetUp]
     public void SetUp()
     {
         TestUtilities.SetEnvironmentVariables();
-        _jim = new JimApplication(new Mock<IRepository>().Object);
+
+        // Only the Connected System repository is configured: the hierarchy import loads the Connected System it
+        // refreshes, by id. Anything else reaching the repository fails with a NullReferenceException.
+        var repository = new Mock<IRepository>();
+        _connectedSystemRepository = new Mock<IConnectedSystemRepository>();
+        repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystemRepository.Object);
+        _jim = new JimApplication(repository.Object);
 
         // FileConnector settings need a file to exist for import modes; the connector reads it as CSV regardless
         // of extension, and the hierarchy test only needs the Connected System to be constructible.
@@ -72,10 +80,10 @@ public class ConnectedSystemConnectorDispatchTests
     public void ImportConnectedSystemHierarchyAsync_FileConnector_ThrowsNotSupportedException()
     {
         // Arrange: the File Connector does not implement IConnectorPartitions, so hierarchy import is unsupported.
-        var connectedSystem = CreateFileConnectorConnectedSystem();
+        var connectedSystem = Stored(CreateFileConnectorConnectedSystem());
 
         // Act & Assert
-        var exception = Assert.ThrowsAsync<NotSupportedException>(async () => await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy: null));
+        var exception = Assert.ThrowsAsync<NotSupportedException>(async () => await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem.Id, initiatedBy: null));
         Assert.That(exception.Message, Does.Contain("hierarchy"));
     }
 
@@ -83,11 +91,20 @@ public class ConnectedSystemConnectorDispatchTests
     public void ImportConnectedSystemHierarchyAsync_UnknownConnectorDefinition_ThrowsNotSupportedException()
     {
         // Arrange
-        var connectedSystem = CreateUnknownConnectorConnectedSystem();
+        var connectedSystem = Stored(CreateUnknownConnectorConnectedSystem());
 
         // Act & Assert
-        var exception = Assert.ThrowsAsync<NotSupportedException>(async () => await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem, initiatedBy: null));
+        var exception = Assert.ThrowsAsync<NotSupportedException>(async () => await _jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystem.Id, initiatedBy: null));
         Assert.That(exception.Message, Does.Contain(UnknownConnectorName));
+    }
+
+    /// <summary>
+    /// Makes the Connected System loadable by its id, change-tracked, as the hierarchy import loads it.
+    /// </summary>
+    private ConnectedSystem Stored(ConnectedSystem connectedSystem)
+    {
+        _connectedSystemRepository.Setup(r => r.GetConnectedSystemAsync(connectedSystem.Id, true)).ReturnsAsync(connectedSystem);
+        return connectedSystem;
     }
 
     /// <summary>
