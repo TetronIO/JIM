@@ -1,6 +1,6 @@
 # Truthful Connected System Object Partition
 
-- **Status:** Doing (Phase 0 in progress)
+- **Status:** Doing (Phase 0 complete)
 - **Issue:** [#2723](https://github.com/TetronIO/JIM/issues/2723)
 - **Related:** [#2715](https://github.com/TetronIO/JIM/issues/2715) (per-Partition watermarks; this is its Follow-up 1), [#2720](https://github.com/TetronIO/JIM/issues/2720)
 - **Design:** approved 4 November 2026 (decisions D1 to D5 below, all as recommended)
@@ -82,10 +82,11 @@ Watermarks (positions per Partition, not object stamps), Export Run Profiles, th
 
 Each phase starts with failing tests.
 
-### Phase 0: Partition removal sets objects' Partition to null (D5, bottom pull request)
+### Phase 0: Partition removal sets objects' Partition to null (D5, bottom pull request) ✅
 
 - Red: `ConnectedSystemHierarchyPersistenceDatabaseTests.RefreshHierarchy_PartitionHoldingConnectedSystemObjectsNoLongerInTheDirectory_RemovesItAndClearsTheirPartitionAsync` (RequiresPostgres).
 - `OnDelete(DeleteBehavior.SetNull)` in `JimDbContext`, a migration, `DeletePathForeignKeyCoverageTests`, `MigrationDesignerChainTests`, `dotnet ef migrations has-pending-model-changes`.
+- Confirmed by the red test, which drives `ImportConnectedSystemHierarchyAsync` with the Connected System loaded change-tracked, as the REST endpoint loads it: the save failed with `23503: update or delete on table "ConnectedSystemPartitions" violates foreign key constraint "FK_ConnectedSystemObjects_ConnectedSystemPartitions_PartitionId" on table "ConnectedSystemObjects"`. Recording that failure on the Activity saves on the same context, which still holds the Partition marked deleted, so it failed again with the same error and the Activity was left **In Progress** with no error message. The portal's **Retrieve Hierarchy** never reached it: it saves a graph loaded on another context, so a removed Partition is reported as removed but its row (with its Containers and objects) stays. On the REST path the removed Partition's Containers are kept with no Partition and no Connected System. None of these three is changed here.
 
 ### Phase 1: Capability and the LDAP rule
 
@@ -143,7 +144,6 @@ See below. Move this plan to `engineering/plans/done/` in the pull request that 
 
 ## Inferred, Not Yet Confirmed
 
-- The 23503 failure on a hierarchy refresh with referencing objects (Phase 0's red test confirms it).
 - OpenLDAP subordinate glue returning nested-suffix entries in a superior search; AD domain-NC searches not returning DomainDnsZones objects.
 - Partitions being loaded at export preparation.
 - Whether an Active Directory cross-domain move keeps the objectGUID and reports a delete in the source Partition.
