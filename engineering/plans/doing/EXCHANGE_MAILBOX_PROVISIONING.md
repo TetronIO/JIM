@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 under way; the spike's go on 2026-11-03 unblocks Phases 1 and 2)
+- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 complete apart from the Attribute Flow tab's Exchange recipients panel; Phase 1 under way)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -92,9 +92,18 @@ Requirement 3 needs a warning that does not refuse the save (a cmdlet the accoun
 
 There is no certificate setting type. Rather than add one for a single field, an `https://` Exchange endpoint is validated against JIM's existing trusted certificate store (`IConnectorCertificateAware`), as LDAPS is. **This changes requirement 1's "CA certificate, shown only for an `https://` endpoint" into "trust the Exchange server's CA in Certificates"**, with the setting's help text saying so and the save-time check naming the missing certificate when it fails.
 
-### D8. Kerberos configuration is generated per Worker
+### D8. Kerberos configuration is generated per process, in the Worker and the web process
 
-`Krb5Configuration` and `KerberosEnvironment` already exist in the library. A Worker-side `ExchangeKerberosConfiguration` service builds one `krb5.conf` holding every Exchange-enabled Connected System's realm. It rewrites the file when a Connected System's settings change, which needs no restart (the spike confirmed it), and points `KRB5_CONFIG` at it before the first session opens.
+`Krb5Configuration` and `KerberosEnvironment` already exist in the library. **Amended 2026-11-04:** sessions open in the web process as well as the Worker, because saving Exchange settings runs the save-time check (D4, D5) where the portal and the REST API save them, as the LDAP connectivity check already does. So the configuration is per process, not per Worker, and both images carry MIT Kerberos and the environment PowerShell needs.
+
+`ExchangeKerberosConfiguration` (in the LDAP Connector, which opens every session) is that process's one `krb5.conf`:
+- a session asks for its realm and KDC just before it opens;
+- realms are only ever added, so one a Connected System still uses never disappears from under its sessions;
+- where two Connected Systems pin different domain controllers in one domain, both are listed as KDCs, the most recently asked for first;
+- the file is rewritten only when what it says changes, in a private directory under the temporary path, which needs no restart (the spike confirmed it);
+- `KRB5_CONFIG` is set once, before the first session.
+
+This replaces the original design's Worker-side list of every Exchange-enabled Connected System, which the web process could not have kept and which a session's own request makes unnecessary.
 
 Per requirement 2, the realm and KDC are derived, never entered:
 - **Principal:** the configured Username (`DOMAIN\name`, UPN or DN) is resolved through the directory to the account's `userPrincipalName`, or to `sAMAccountName@<domain DNS name>`.
@@ -128,13 +137,16 @@ Tests run with it on. Once the integration scenarios pass, the last PR removes t
 
 Each phase is one pull request, built test-first. Docs and a changelog entry go in the same PR wherever the phase is user-facing (while flagged, the changelog says so). Rough effort assumes one engineer and the spike's library as it stands.
 
-### Phase 1: Library into production and the Worker image (2 days)
+### Phase 1: Library into production, the Worker and web images (2 days)
 
-- Reference `Tetron.PowerShellRemoting` from the LDAP Connector, and set `XDG_CACHE_HOME=/tmp/.cache` and `POWERSHELL_TELEMETRY_OPTOUT=1` in the Worker image (spike finding).
-- Carry the spike's open items: the 16 KB-chunk and large-payload framing cases against recorded Windows fixtures from the lab re-run, and an end-to-end test of renewing an expired ticket-granting ticket.
-- Add the `ExchangeKerberosConfiguration` service (D8), with `krb5.conf` rendering tests (AES only, no reverse DNS, `0600`).
-- Add the feature flag (D11).
-- **Done when:** the Worker image, booted read-only as UID 1654, opens a harness session through the LDAP Connector's reference. `remoting-harness-tests` is green in CI.
+- Reference `Tetron.PowerShellRemoting` from the LDAP Connector, and set `XDG_CACHE_HOME=/tmp/.cache` and `POWERSHELL_TELEMETRY_OPTOUT=1` in the Worker **and web** images (spike finding; the web image for D8's save-time sessions). The web image also gains MIT `libgssapi-krb5-2`, pinned to the Worker's version.
+- Add `ExchangeKerberosConfiguration` (D8, per process). The library's own tests already pin the rendering (AES only, no reverse DNS, `0600`); the service's tests cover merging, rewriting only on change, concurrency and the private directory.
+- Carry the spike's open items:
+  - **TGT renewal:** an end-to-end harness test of a session outliving its ticket-granting ticket, both for a new connection and for a command running across the expiry. The harness KDC refuses service tickets for a TGT with about two minutes or less to run, so the tests use 150-second tickets. Both passed first time: the library signs in again as it stands, so the tests pin that rather than drive a fix.
+  - **Large payloads:** harness tests from 1 KB to 5 MB either side of 16 KB, and a read-only lab test against ex1. Session statistics now report the largest message each way, so a test can prove it crossed 16 KB.
+  - **No recorded fixtures (changed 2026-11-04):** a recorded Kerberos-sealed exchange can be replayed only with its session key, a secret, and a plaintext recording does not test the framing in question. The live lab test is the Windows proof, and can be re-run.
+- **Moved out:** the feature flag (D11) shipped in Phase 3; quiet session close moves to Phase 2, since only ex1's front-end logs show the Ping 500s it is about.
+- **Done when:** the Worker and web images, booted read-only as UID 1654, each open a harness session (`Test-ImageRemoting.ps1`, in `remoting-harness-tests`), and `remoting-harness-tests` is green in CI.
 
 ### Phase 2: Exchange settings, sign-in and detected facts (4 days; requirements 1 to 3)
 
@@ -143,7 +155,8 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
   - An unreachable endpoint, or a sign-in Exchange refuses, each with the classified reason (clock skew named plainly).
 - **Warning on save:** cmdlets missing from the session, named with the recipient types each affects (D5).
 - **Detected facts:** the Exchange version, and the derived principal, realm and KDC.
-- **Docs and coverage:** settings rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page started, and the RBAC role in `jim-ldap-connector-permissions.md`.
+- **Docs and coverage:** settings rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page started, and the RBAC role in `jim-ldap-connector-permissions.md`. The network requirements say that the web container, not only the Worker, reaches the KDC (88) and Exchange (80, or 443 for HTTPS), since the save-time check signs in from it (D8).
+- **Quiet session close** (from Phase 1): find what sends the Pings ex1's front end logged as HTTP 500 when the spike's sessions closed (the library sends none of its own), and close without them, proven by ex1's logs in this phase's lab run.
 - **Tests:**
   - the validation severity, refusal and warning paths, with the session mocked behind D4's interface;
   - principal and realm derivation for all three username forms;

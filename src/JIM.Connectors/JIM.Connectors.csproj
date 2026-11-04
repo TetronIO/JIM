@@ -31,5 +31,8 @@
     <ProjectReference Include="..\JIM.Models\JIM.Models.csproj" />
     <ProjectReference Include="..\JIM.Utilities\JIM.Utilities.csproj" />
     <ProjectReference Include="..\JIM.Scim\JIM.Scim.csproj" />
+    <!-- PowerShell remoting to Exchange from Linux, for the LDAP Connector's Exchange recipients (#2021). Its
+         System.Management.Automation dependency therefore reaches every image built on JIM.Application. -->
+    <ProjectReference Include="..\Tetron.PowerShellRemoting\Tetron.PowerShellRemoting.csproj" />
   </ItemGroup>
 </Project>

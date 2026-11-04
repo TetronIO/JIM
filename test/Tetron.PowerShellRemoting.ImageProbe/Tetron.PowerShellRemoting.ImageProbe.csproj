@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Opens one PowerShell remoting session from inside a shipped JIM image (#2021), to prove what the image itself
+    contributes: MIT Kerberos, the environment System.Management.Automation needs, and a read-only root filesystem.
+    The remoting-harness-tests CI job copies it into the Worker and web images and runs it as they are deployed. It is a
+    test tool and never ships.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tetron.PowerShellRemoting\Tetron.PowerShellRemoting.csproj" />
+  </ItemGroup>
+
+</Project>

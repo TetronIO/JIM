@@ -103,6 +103,46 @@ public class ExchangeLabTests
             Assert.That(errors, Is.Empty);
             Assert.That(output, Has.Count.GreaterThan(100));
             Assert.That(output.Select(o => o.Properties["Name"]?.Value?.ToString()), Has.Some.EqualTo("Enable-Mailbox"));
+
+            // WinRM splits encrypted messages over 16 KB into parts for some protocols. A response this size decoding at
+            // all is the proof that Exchange does not split a Kerberos-sealed one, or that the decoder reads it if it does.
+            Assert.That(RemoteSessionFactory.GetStatistics(_runspace!).LargestResponseBytes, Is.GreaterThan(16 * 1024),
+                "the responses really crossed 16 KB");
+        }
+    }
+
+    /// <summary>
+    /// A parameter of a megabyte, which PowerShell remoting has to fragment across several WS-Management messages, each
+    /// within Exchange's maximum envelope size. Whatever Exchange makes of the identity, an answer from Exchange proves the
+    /// whole of it arrived; a transport failure, or a broken runspace, is what this guards against.
+    /// </summary>
+    [Test]
+    public async Task InvokeAsync_OneMegabyteParameter_ReachesExchangeWholeAsync()
+    {
+        var identity = $"jim-phase1-size-{LargePayloadHarnessTests.Payload(1024 * 1024)}";
+        using var ps = PowerShell.Create(_runspace!);
+        ps.AddCommand("Get-Recipient").AddParameter("Identity", identity).AddParameter("ErrorAction", "Continue");
+
+        string answer;
+        try
+        {
+            await ps.InvokeAsync();
+            answer = string.Join(" | ", ps.Streams.Error.Select(e => $"{e.FullyQualifiedErrorId}: {e.Exception.Message[..Math.Min(200, e.Exception.Message.Length)]}"));
+        }
+        catch (RuntimeException error)
+        {
+            // A terminating error raised by Exchange (a parameter it refuses) is as much an answer as an error record.
+            answer = $"{error.ErrorRecord?.FullyQualifiedErrorId}: {error.Message[..Math.Min(200, error.Message.Length)]}";
+        }
+
+        var statistics = RemoteSessionFactory.GetStatistics(_runspace!);
+        TestContext.Out.WriteLine($"Exchange answered: {answer}");
+        TestContext.Out.WriteLine($"Largest request {statistics.LargestRequestBytes} bytes, largest response {statistics.LargestResponseBytes} bytes.");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(answer, Is.Not.Empty, "a missing recipient is an error from Exchange, not silence");
+            Assert.That(statistics.LargestRequestBytes, Is.GreaterThan(16 * 1024));
+            Assert.That(_runspace!.RunspaceStateInfo.State, Is.EqualTo(RunspaceState.Opened));
         }
     }
 

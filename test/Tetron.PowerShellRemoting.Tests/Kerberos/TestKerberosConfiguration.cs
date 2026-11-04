@@ -16,6 +16,26 @@ internal static class TestKerberosConfiguration
 
     internal static void Apply() => _ = ConfigurationPath.Value;
 
+    /// <summary>
+    /// Points Kerberos at a copy of the configuration that asks the KDC for tickets lasting <paramref name="lifetime"/>,
+    /// until the result is disposed. For tests of what happens when a ticket runs out, which would otherwise wait the ten
+    /// hours Active Directory issues them for. Kerberos rereads its configuration for every login, so only logins made
+    /// while it is in force get the short tickets.
+    /// </summary>
+    internal static IDisposable UseTicketLifetime(TimeSpan lifetime)
+    {
+        var path = ConfigurationPath.Value;
+        var text = File.ReadAllText(path);
+        var shortened = text.Replace("[libdefaults]\n", $"[libdefaults]\n    ticket_lifetime = {(int)lifetime.TotalSeconds}s\n", StringComparison.Ordinal);
+        if (shortened == text)
+            throw new InvalidOperationException("The generated krb5.conf has no [libdefaults] section to shorten tickets in.");
+
+        var shortPath = $"{path}.short-tickets";
+        File.WriteAllText(shortPath, shortened);
+        KerberosEnvironment.UseConfiguration(shortPath);
+        return new Restore(path, shortPath);
+    }
+
     private static string Write()
     {
         var realms = new List<KerberosRealm>();
@@ -28,5 +48,14 @@ internal static class TestKerberosConfiguration
         Krb5Configuration.WriteAsync(path, realms).GetAwaiter().GetResult();
         KerberosEnvironment.UseConfiguration(path);
         return path;
+    }
+
+    private sealed class Restore(string path, string shortPath) : IDisposable
+    {
+        public void Dispose()
+        {
+            KerberosEnvironment.UseConfiguration(path);
+            File.Delete(shortPath);
+        }
     }
 }

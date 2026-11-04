@@ -81,12 +81,17 @@ internal sealed class WinRMConnection : IDisposable
                         $"The WinRM server answered HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
 
                 if (!_options.UsesMessageEncryption)
+                {
+                    _statistics.RecordMessage(envelope.Length, body.Length);
                     return body;
+                }
 
                 var contentType = response.Content.Headers.ContentType?.ToString() ?? "";
                 try
                 {
-                    return WinRMEncryptedMessage.Decode(body, contentType, _context!);
+                    var plaintext = WinRMEncryptedMessage.Decode(body, contentType, _context!);
+                    _statistics.RecordMessage(envelope.Length, plaintext.Length);
+                    return plaintext;
                 }
                 catch (WinRMEncryptionException error)
                 {

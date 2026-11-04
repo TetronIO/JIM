@@ -21,6 +21,8 @@ WORKDIR /app
 # Pin apt package versions for reproducible builds
 # Update these versions when bumping base image digests
 # Note: libldap-2.5-0 was renamed to libldap2 in Ubuntu Noble (OpenLDAP 2.6)
+# libgssapi-krb5-2 (MIT Kerberos) also carries PowerShell remoting's Kerberos sign-in and message encryption to
+# Exchange (#2021); the web image pins the same version for the same reason.
 #
 # Apply Ubuntu's published fixes at build time. Microsoft rebuilds the base image on its own
 # cadence, so a digest can trail the noble archive by weeks; upgrading here is what makes the
@@ -54,6 +56,13 @@ RUN echo "apt refresh: ${APT_REFRESH}" \
 # the jim-connector-files-volume is mounted on first container start.
 RUN mkdir -p /data/keys /var/log/jim /connector-files \
     && chown -R app:app /data/keys /var/log/jim /connector-files
+
+# PowerShell remoting to Exchange (#2021) hosts System.Management.Automation, which creates its cache under
+# $HOME/.cache on first use. The root filesystem is read-only, so without this every PowerShell type fails to
+# initialise and no session opens; /tmp is the one writable path. Telemetry is off: JIM is air-gap deployable,
+# and only remote runspaces are ever created, so nothing runs PowerShell in this process.
+ENV XDG_CACHE_HOME=/tmp/.cache \
+    POWERSHELL_TELEMETRY_OPTOUT=1
 
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
