@@ -294,6 +294,12 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithExchangeChangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsWithExchangeChangeAsync(connectedSystemId, connectedSystemObjectIds);
 
+    public Task<List<PendingExchangeChange>> GetExchangeChangesByActivityAsync(IReadOnlyCollection<Guid> activityIds)
+        => _inner.GetExchangeChangesByActivityAsync(activityIds);
+
+    public Task<PendingExchangeChange?> GetExchangeChangeForConnectedSystemObjectAsync(Guid connectedSystemObjectId)
+        => _inner.GetExchangeChangeForConnectedSystemObjectAsync(connectedSystemObjectId);
+
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId)
         => _inner.GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(connectedSystemId);
 

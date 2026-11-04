@@ -174,7 +174,7 @@ Resume-JIMPendingPasswordChange [-Id <guid[]>] [-ConnectedSystemId <int>] [-Stat
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid[]` | No |  | The IDs of the queued changes to retry. Combines with the other criteria rather than replacing them, so `-Status` Parked alongside piped changes means these changes, if they are still parked. Accepts pipeline input by property name. |
-| `ConnectedSystemId` | `int` | No |  | Retry the changes queued for this Connected System. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | No |  | Retry the changes queued for this Connected System. |
 | `Status` | `string` | No |  | Retry only changes in this state. An Expired change is never retried, so `-Status` Expired matches nothing. One of `Pending`, `Parked`, `Expired` or `Cancelled`. |
 | `FailureReason` | `string` | No |  | Retry only changes whose last attempt failed this way. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
 | `MetaverseObjectId` | `guid` | No |  | Retry only this Metaverse Object's queued changes. |
@@ -237,7 +237,7 @@ It asks for confirmation before it acts: `-WhatIf` shows what it would do, and `
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid[]` | No |  | The IDs of the queued changes to cancel. Combines with the other criteria rather than replacing them, so `-Status` Parked alongside piped changes means these changes, if they are still parked. Accepts pipeline input by property name. |
-| `ConnectedSystemId` | `int` | No |  | Cancel the changes queued for this Connected System. Accepts pipeline input by property name. |
+| `ConnectedSystemId` | `int` | No |  | Cancel the changes queued for this Connected System. |
 | `Status` | `string` | No |  | Cancel only changes in this state. An Expired or Cancelled change keeps the outcome it has, so those states match nothing. One of `Pending`, `Parked`, `Expired` or `Cancelled`. |
 | `FailureReason` | `string` | No |  | Cancel only changes whose last attempt failed this way. One of `None`, `Transient`, `ConfigurationFault`, `PolicyRejection`, `TargetObjectNotFound` or `UnsupportedOperation`. |
 | `MetaverseObjectId` | `guid` | No |  | Cancel only this Metaverse Object's queued changes. |

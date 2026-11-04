@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
 - ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)
 - ✨ An Initial Password now sits under the export item that provisioned the account, which shows where it stands as a follow-up (also in the Causality Explorer, the REST API and PowerShell), so an export no longer adds one Activity per account to the Activity list. (#2668)
+- ✨ An export run's Activity now counts where its Initial Passwords stand (delivered, retrying, parked and so on), its row on the Activity list shows them at a glance, and the REST API and `Get-JIMActivityStats` return the same counts. (#2021)
 
 ### Changed
 
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.
+- 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
 - 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)
 - 🐛 Typing a column name into an SQL Object Type's **Add column** anchor picker now works: it no longer adds a column named after the first letter typed. Every name picker in the Object Types editor takes a name once you choose it from the list, press Enter or move on, instead of on every keystroke. (#2570)
 - 🐛 People JIM creates or changes outside synchronisation, such as the initial administrator at first sign-in, now reach their accounts at the next synchronisation, changed and removed values included; the run's review step is now called **Export Review**. (#2615)
@@ -35,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 JIM's images move to .NET and ASP.NET Core 10.0.14, fixing CVE-2026-111497, an out-of-bounds write in the runtime's Brotli decoder.
 - 🔒 JIM no longer keeps a plain-text copy of its OpenID Connect client secret in the database; the copy it wrote at every start is removed on upgrade, and the encrypted copy JIM uses is unchanged. (#2684)
 - 🔒 Connector credentials entered in the portal, such as an LDAP Connector password or a SCIM Client Secret, are now encrypted at rest; they were stored unencrypted, as only the REST API encrypted them. Credentials already stored unencrypted are encrypted automatically when JIM next starts, so nothing needs re-entering, and JIM now refuses any stored credential it finds unencrypted rather than using it. (#2680)
 

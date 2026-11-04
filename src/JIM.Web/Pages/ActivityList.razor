@@ -362,6 +362,10 @@
                                         </MudChip>
                                     </MudTooltip>
                                 }
+                                @if (_followUpSummaries.TryGetValue(activity.Id, out var followUpLines))
+                                {
+                                    <RunFollowUpChips Lines="followUpLines" />
+                                }
                             }
                             @* Errors shown for all run types *@
                             @if (activity.TotalErrors > 0)
@@ -611,6 +615,7 @@
     // from this page's own replace navigations (which must not).
     private bool? _appliedIsMyActivity;
     private Dictionary<Guid, int> _childActivityCounts = new();
+    private readonly Dictionary<Guid, IReadOnlyList<FollowUpSummaryLine>> _followUpSummaries = new();
     private Guid? _currentUserId;
     private string _pageTitle = "Activity";
     private string _pageDescription = "Monitor all activity across the system. View operations initiated by users or automated processes, including synchronisations, configuration changes, and system events.";
@@ -834,6 +839,16 @@
         var childCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
         foreach (var (activityId, childCount) in childCounts)
             _childActivityCounts[activityId] = childCount;
+
+        // Follow-up chips for this window's export runs (#2021, Phase 6), merged the same way: what each run's exports
+        // set in motion, and where it stands now. One read for the window.
+        var exportRunIds = result.Results
+            .Where(a => a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && GetEffectiveRunType(a.ConnectedSystemRunType, a.TargetName) == "Export")
+            .Select(a => a.Id)
+            .ToList();
+        foreach (var (runId, counts) in await jim.Activities.GetFollowUpSummariesAsync(exportRunIds))
+            _followUpSummaries[runId] = FollowUpSummaryDisplay.From(counts);
 
         // A newest-first read of the top of the list is exactly what the polling loop fingerprints, so refresh
         // its baseline here and the poll only fires for changes the reader has not already been shown.

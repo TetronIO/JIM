@@ -55,7 +55,10 @@ public class ActivityTargetOperationTypeOrdinalTests
         [ActivityTargetOperationType.Receive] = 22,
 
         // Exchange recipient management (#2021): making an account the Exchange recipient its Synchronisation Rule declares.
-        [ActivityTargetOperationType.SetExchangeRecipient] = 23
+        [ActivityTargetOperationType.SetExchangeRecipient] = 23,
+        [ActivityTargetOperationType.WithdrawExchangeRecipient] = 24,
+        [ActivityTargetOperationType.ReplaceExchangeRecipient] = 25,
+        [ActivityTargetOperationType.RetryExchangeRecipient] = 26
     };
 
     [Test]

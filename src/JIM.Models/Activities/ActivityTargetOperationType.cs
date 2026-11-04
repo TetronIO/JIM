@@ -131,5 +131,25 @@ public enum ActivityTargetOperationType
     /// recipient, or updating its alias and addresses. Used with <see cref="ActivityTargetType.ExchangeRecipient"/>,
     /// the way <see cref="SetPassword"/> is used with a password.
     /// </summary>
-    SetExchangeRecipient = 23
+    SetExchangeRecipient = 23,
+
+    /// <summary>
+    /// The Exchange delivery lane dropped a queued Exchange change without asking Exchange, because it was no longer
+    /// owed: the account or the Synchronisation Rule that declared it was removed, or the account's declaration moved
+    /// on (#2021). Used with <see cref="ActivityTargetType.ExchangeRecipient"/>, as a child of the change's Activity.
+    /// </summary>
+    WithdrawExchangeRecipient = 24,
+
+    /// <summary>
+    /// A newer declared state for the same account replaced a queued Exchange change before it was delivered (#2021).
+    /// Used with <see cref="ActivityTargetType.ExchangeRecipient"/>, as a child of the replaced change's Activity; the
+    /// newer state has an Activity of its own.
+    /// </summary>
+    ReplaceExchangeRecipient = 25,
+
+    /// <summary>
+    /// An administrator asked JIM to attempt queued Exchange changes again, having fixed whatever stopped them (#2021),
+    /// as <see cref="RetryPasswordDelivery"/> does for passwords.
+    /// </summary>
+    RetryExchangeRecipient = 26
 }

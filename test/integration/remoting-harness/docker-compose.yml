@@ -1,0 +1,68 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+#
+# The Remote PowerShell harness for Tetron.PowerShellRemoting (#2021, spike Phase 1a): a Kerberos realm and a
+# stand-in WinRM server, so the transport can be built and tested without a Windows host. It proves our code
+# against an independent implementation, not Windows' behaviour; the AD lab does that (Phase 1b).
+#
+# Self-contained: its own network and volumes, nothing shared with the JIM stack or the integration lab.
+
+name: jim-remoting-harness
+
+services:
+  kdc:
+    # Samba AD as the KDC, so tickets look like Active Directory's (AES, a PAC, SPNs on accounts).
+    image: diegogslomp/samba-ad-dc:latest@sha256:9606e448ddd6d63a5707275e802bdc4f27e5eff1e3abbca2876f87001d1dcf40
+    container_name: remoting-harness-kdc
+    hostname: dc1
+    domainname: harness.test
+    privileged: true
+    environment:
+      - REALM=HARNESS.TEST
+      - DOMAIN=HARNESS
+      - ADMIN_PASS=Harness@123!
+      - DNS_FORWARDER=127.0.0.11
+    volumes:
+      - kdc-var:/usr/local/samba/var
+      - kdc-private:/usr/local/samba/private
+      - kdc-etc:/usr/local/samba/etc
+    networks:
+      harness:
+        aliases:
+          - dc1.harness.test
+
+  winrm-server:
+    # The stand-in WinRM server: Kerberos through pyspnego, WinRM message encryption, WS-Management shell
+    # operations, and PowerShell remoting itself through pwsh -s. Start-RemotingHarness.ps1 writes its krb5.conf
+    # and the service keytab into JIM_REMOTING_HARNESS_DIR before starting it.
+    build:
+      context: ./winrm-server
+      args:
+        EXTRA_CA_CERTS_BASE64: ${JIM_BUILD_EXTRA_CA_BASE64:-}
+    image: jim-remoting-harness-winrm:local
+    container_name: remoting-harness-winrm
+    hostname: winrm-harness
+    environment:
+      - WINRM_SERVICE_HOST=winrm-harness.harness.test
+      # HTTP.sys closes idle connections after 120 seconds; the harness does it after 5, so the tests reach the
+      # client's re-authentication quickly. KerberosHarness.ServerIdleTimeout must match.
+      - WINRM_IDLE_TIMEOUT_SECONDS=5
+      - WINRM_TLS_CERTIFICATE=/etc/harness/winrm-tls.crt
+      - WINRM_TLS_KEY=/etc/harness/winrm-tls.key
+    volumes:
+      - ${JIM_REMOTING_HARNESS_DIR:?Run Start-RemotingHarness.ps1}:/etc/harness:ro
+    depends_on:
+      - kdc
+    networks:
+      harness:
+        aliases:
+          - winrm-harness.harness.test
+
+volumes:
+  kdc-var:
+  kdc-private:
+  kdc-etc:
+
+networks:
+  harness:
+    name: jim-remoting-harness

@@ -83,5 +83,6 @@ public class CausalityLineageFollowUpTests
     }
 
     private static ExecutionItemFollowUpDisplay FollowUp(string state, bool running) =>
-        new(Guid.NewGuid(), "Initial password", "Yellowstone APAC", state, running ? "warn" : "ok", "Next attempt soon", running, T0);
+        new(Guid.NewGuid(), "Initial password", "Yellowstone APAC", state, running ? "warn" : "ok", "Next attempt soon", running, T0,
+            ActivityTargetType.PasswordSynchronisation);
 }

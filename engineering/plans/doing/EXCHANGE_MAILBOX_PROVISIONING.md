@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phases 1, 2 and 6 onwards wait on the spike's go)
+- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 under way; the spike's go on 2026-11-03 unblocks Phases 1 and 2)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/doing/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
@@ -8,7 +8,7 @@
 
 ## Overview
 
-The PRD lets an administrator make JIM-provisioned Active Directory objects Exchange recipients by flowing a few connector-defined attributes ("Exchange Recipient Type", "Exchange Alias" and so on) on an export Synchronisation Rule. After a successful directory write, JIM queues a durable Exchange change, and a background delivery lane runs the Exchange cmdlets over the spike's remoting library. Each change is a follow-up of the export item that caused it (#2668), with retry, parking and cancellation like the Password Delivery Service.
+The PRD lets an administrator make JIM-provisioned Active Directory objects Exchange recipients by flowing a few connector-defined attributes ("Exchange Recipient Type", "Exchange Alias" and so on) on an export Synchronisation Rule. After a successful directory write, JIM queues a durable Exchange change, and a background delivery lane runs the Exchange cmdlets over the spike's remoting library. Each change is a follow-up of the export item that caused it (#2668), with retry and parking like the Password Delivery Service.
 
 This plan maps every requirement onto JIM's existing code, sets the order of work, and records the design decisions the PRD left to it. It is written against `main` as of 2026-11-01, which includes #2668 (PR TetronIO/JIM#2677).
 
@@ -53,7 +53,7 @@ This is what makes requirement 7 ("when declared state differs from its last imp
 **Confirmation waits for Exchange.** The directory write does not make a connector-defined change, so it must not be confirmed, retried or reported like one:
 - **The hold.** Export marks each connector-defined change it hands to the queue `AwaitsExchange` (any decision but "not a recipient"), persisted with the batch. The confirming import holds such a change (not confirmed, not retried, no item) while the object has a queue row in any status, and judges it as any other change once it has none (the lane deletes a delivered row). An import that does not return the object judges a hold whose row has gone after reconciliation, against the last imported value, so a withdrawn or deleted row never strands it. Export evaluation and Drift Detection do not restate a held change, as for a change awaiting an Initial Password.
 - **No optimistic apply.** Export never records a declared value on the Connected System Object; only an import changes one (requirement 12), so staging always reads what Exchange last stamped.
-- **Re-staging is the same change.** A re-stage the queue finds unchanged writes no new follow-up. A Cancelled row with the same declared state is left Cancelled (decision 11).
+- **Re-staging is the same change.** A re-stage the queue finds unchanged writes no new follow-up. A Parked row with the same declared state is left Parked.
 
 **An empty declared value lets Exchange decide.** Exchange chooses the database, Email Address Policies the primary SMTP address, and `mailNickname` gives the alias. No flow, export evaluation or drift correction stages a clearing change for a connector-defined attribute, and reconciliation confirms one that sets no value whatever the import shows. So an imported address that policy set never counts as a difference.
 
@@ -112,7 +112,7 @@ Neither is delivered. Each is staged as a terminal queue row with status Refused
 
 ### D10. Retention: Exchange follow-ups use the general history period (confirmed)
 
-The general retention pass excludes Password Synchronisation Activities, which are kept for 365 days. Exchange follow-ups get a new `ActivityTargetType.ExchangeRecipient` and fall under the **general 90-day period**, the same as the export items they hang from. That avoids the dangling "Export item no longer retained" link that password follow-ups show after 90 days. Terminal queue rows (Parked or Cancelled) are pruned by the same pass, after the same period.
+The general retention pass excludes Password Synchronisation Activities, which are kept for 365 days. Exchange follow-ups get a new `ActivityTargetType.ExchangeRecipient` and fall under the **general 90-day period**, the same as the export items they hang from. That avoids the dangling "Export item no longer retained" link that password follow-ups show after 90 days. Parked queue rows are pruned by the same pass, after the same period.
 
 ### D11. Incremental delivery behind a feature flag (confirmed)
 
@@ -175,9 +175,8 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
 - **The `PendingExchangeChange` entity and migration:**
   - target: Connected System, Connected System Object and Metaverse Object;
   - declared state (the five values) and the `DomainController` (D3);
-  - `Status` (Pending, Delivering, Parked, Cancelled, and Refused for D9's terminal refusals), failure kind, attempt count, `FirstFailedAt` (for the 24-hour park), `NextRetryAt`;
+  - `Status` (Pending, Delivering, Parked, and Refused for D9's terminal refusals), failure kind, attempt count, `FirstFailedAt` (for the 24-hour park), `NextRetryAt`;
   - claim fields and the parent `ActivityId`;
-  - cancellation, holding the cancelled declared state so an identical re-stage stays Cancelled (decision 11).
   - A unique key on the Connected System Object gives "Superseded" by UPSERT, as the password queue does.
   - Column lists come from a new `PendingExchangeChangeBulkColumns`, guarded by `BulkInsertColumnCompletenessTests` and a round-trip test.
 - **`ExportExecutionServer.StageExchangeChangesForBatchAsync`,** beside `StageInitialPasswordsForBatchAsync`:
@@ -188,7 +187,7 @@ Phase 3 runs before Phase 2, which needs the spike's go. It therefore also carri
 - **Confirmation waits for Exchange** (D2): the `AwaitsExchange` mark and the import's hold and release, no optimistic apply of connector-defined values, no clearing change for an empty declared value, and `Unmanaged` recipients.
 - **Withdrawal** moved to Phase 5. When the object or the declaring Synchronisation Rule is removed first (requirement 11's Withdrawn), the lane withdraws the change at claim time, as the password lane does. The queue already keeps the row with its references cleared, so the lane can find it.
 - **Tests:**
-  - staging per disposition (inserted, superseded, coalesced, cancelled-and-held);
+  - staging per disposition (inserted, superseded, coalesced, parked-and-held);
   - D9's misfit and type-change follow-ups;
   - the `DomainController` captured from a two-server setup;
   - a `RequiresPostgres` test of the UPSERT and its unique key;
@@ -203,7 +202,7 @@ Built ahead of the spike's go, against the capability interface rather than Exch
 - **`ExchangeDeliveryServer`:**
   - claims due rows with `FOR UPDATE SKIP LOCKED` under a two-minute lease (twice the password lane's, since one converge can take seconds), in batches of 100, at most 1,000 per pass;
   - opens one session per lane (`MaximumSessionsPerConnectedSystem = 1`, raised once decision 4's measurement exists) and converges each change in order;
-  - deletes delivered rows; every lane write is guarded on the row still being Delivering under that lane's claim, so a supersession, a cancellation or another deliverer's reclaim survives;
+  - deletes delivered rows; every lane write is guarded on the row still being Delivering under that lane's claim, so a supersession or another deliverer's reclaim survives;
   - withdraws, without asking Exchange, a change whose account or declaring Synchronisation Rule was removed, or whose account's declaration has moved on since it was queued (below);
   - records a session that cannot be opened against every change claimed, so it shows against the person as Retrying (Scenario 5);
   - logs a per-lane summary with the session's Kerberos logins, connections and commands (requirement 27).
@@ -212,18 +211,19 @@ Built ahead of the spike's go, against the capability interface rather than Exch
 - **The stale change is closed, from both ends.** Export evaluation kept a change awaiting Exchange when the declaration went back to what Exchange last stamped, because a sent change awaiting its confirming import is exempt from already-current withdrawal; its queued change would then have made a recipient nobody declares. A change awaiting Exchange now follows the Initial Password hold's rule: withdrawn unless the evaluation restates it exactly. The lane, in turn, reads each account's declared state now (its imported Exchange values with the changes still held for Exchange laid over) and withdraws a queued change that no longer matches it. A change still owed after that is queued again by the account's next export, because its released hold is judged unconfirmed and retried.
 - **Health and retention:**
   - Service Health has a `WorkerExchange` service ("Worker · Exchange"), expected only while the flag is on and left out entirely while it is off; while off, the service runs no lane and writes no heartbeat. The portal's banners name it when it alone is down or stalled.
-  - Retention follows D10: Parked and Cancelled rows past the general period are removed with the Activities they follow up; Refused rows are kept, because they stop a misfit being reported again. A removed Parked row releases its hold, so a change still owed is attempted once more after the general period.
-- **Tests:** the state machine and backoff; the lane against a fake Connector (delivered, retrying, parked, the Activity rule, withdrawal three ways, a session failure, cancellation, the pass bound); a `RequiresPostgres` fixture for the claim with two claimants, the lease, every guard, the outlook, retention and the per-object read; health with the flag on and off; retention.
+  - Retention follows D10: Parked rows past the general period are removed with the Activities they follow up; Refused rows are kept, because they stop a misfit being reported again. A removed Parked row releases its hold, so a change still owed is attempted once more after the general period.
+- **Tests:** the state machine and backoff; the lane against a fake Connector (delivered, retrying, parked, the Activity rule, withdrawal three ways, a session failure, the lane stopped part-way, the pass bound); a `RequiresPostgres` fixture for the claim with two claimants, the lease, every guard, the outlook, retention and the per-object read; health with the flag on and off; retention.
 - **Moved to Phase 2,** because they need the remoting library in production (Phase 1) or the spike's failure catalogue: the classification table from `RemoteFailure`, and the harness test with the stand-in server preloaded with fake `Enable-Mailbox` / `Get-Recipient`.
 
 ### Phase 6: Surfaces (6 days; requirements 4, 13, 28)
 
-- **Follow-ups.** `ExecutionItemFollowUp` gains an Exchange outcome beside `PasswordOutcomes`. `ExecutionItemFollowUpDisplay` maps it ("Mailbox", "Shared mailbox", "Mail contact" and so on, with Delivered, Queued, Retrying, Parked or Cancelled). The item page, the Lineage, the timeline and the Activity page then show Exchange follow-ups with no further work, because #2668 built them on that model.
+- **No Cancel (decided 2026-11-03, PRD decision 16).** Retry is the only administrator action on a queued change. Phases 4 to 6a had carried a Cancelled status, its three columns and a `CancelExchangeRecipient` operation for this phase to use; nothing ever set them, and they are removed (a migration drops the columns) before the actions are built.
+- **Follow-ups.** `ExecutionItemFollowUp` gains an Exchange outcome beside `PasswordOutcomes`. `ExecutionItemFollowUpDisplay` maps it ("Mailbox", "Shared mailbox", "Mail contact" and so on, with Queued, Delivering, Retrying, Parked, Delivered, Withdrawn, Replaced, Refused or Not made). The item page, the Lineage, the timeline and the Activity page then show Exchange follow-ups with no further work, because #2668 built them on that model.
 - **Run-level summary.** The run's row in the Activities list and the run's own page sum its follow-ups by outcome (requirement 13, first bullet). This covers password follow-ups too; #2668 left it out.
-- **Operations Exchange tab** (decision 14): summary cards, filters, a virtualised grid, and per-row and "shown" retry and cancel, modelled on `OperationsPasswordsTab`.
+- **Operations Exchange tab** (decision 14): summary cards, filters, a virtualised grid, and per-row and "shown" retry, modelled on `OperationsPasswordsTab`.
 - **REST and PowerShell:**
-  - REST: `GET/POST api/v1/exchange/queue`, `queue/summary`, `queue/retry` and `queue/cancel`.
-  - PowerShell: `Get-JIMPendingExchangeChange`, `Resume-JIMPendingExchangeChange` and `Stop-JIMPendingExchangeChange`, each with Pester tests and generated reference pages.
+  - REST: `GET api/v1/exchange/queue`, `queue/summary` and `POST queue/retry`.
+  - PowerShell: `Get-JIMPendingExchangeChange` and `Resume-JIMPendingExchangeChange`, each with Pester tests and generated reference pages.
 - **Connected System Object.** The object shows its declared recipient state beside the imported one, with any outstanding change and a link to it.
 - **Exchange recipients panel** on the Attribute Flow tab (requirement 4): it lists the applicable attributes with their flows or default behaviour, and Set, Edit, Remove and Stop open the standard flow dialog or confirmation. It is portal-only by design, and needs a UI artefact for review.
 - **Tests:** bUnit tests for the panel and the tab, controller tests, and display-model tests for the new outcomes.

@@ -158,7 +158,6 @@ public class SyncRepositoryExchangeChangeStagingTests
             row.NextRetryAt = DateTime.UtcNow.AddMinutes(4);
             row.ClaimedAt = DateTime.UtcNow;
             row.ClaimedBy = "worker-1a2b3c4d";
-            row.CancelledAt = DateTime.UtcNow;
         });
         var refusal = Change(csoId, recipientType: "SharedMailbox");
         refusal.Status = PendingExchangeChangeStatus.Refused;
@@ -179,7 +178,6 @@ public class SyncRepositoryExchangeChangeStagingTests
             Assert.That(stored.NextRetryAt, Is.Null);
             Assert.That(stored.ClaimedAt, Is.Null);
             Assert.That(stored.ClaimedBy, Is.Null);
-            Assert.That(stored.CancelledAt, Is.Null);
         }
     }
 
@@ -210,7 +208,7 @@ public class SyncRepositoryExchangeChangeStagingTests
     /// </summary>
     [TestCase(PendingExchangeChangeStatus.Refused, PendingExchangeChangeStatus.Pending)]
     [TestCase(PendingExchangeChangeStatus.Pending, PendingExchangeChangeStatus.Refused)]
-    [TestCase(PendingExchangeChangeStatus.Cancelled, PendingExchangeChangeStatus.Refused)]
+    [TestCase(PendingExchangeChangeStatus.Parked, PendingExchangeChangeStatus.Refused)]
     public async Task StageExchangeChangesAsync_SameDeclaredStateWhoseRefusalChanged_SupersedesAsync(
         PendingExchangeChangeStatus existingStatus, PendingExchangeChangeStatus offeredStatus)
     {
@@ -255,19 +253,11 @@ public class SyncRepositoryExchangeChangeStagingTests
     }
 
     [Test]
-    public async Task StageExchangeChangesAsync_CancelledRowWithTheSameDeclaredState_LeavesItUnchangedAsync()
+    public async Task StageExchangeChangesAsync_SameDeclaredStateNullAndEmptyAlike_LeavesItUnchangedAsync()
     {
         var csoId = Guid.NewGuid();
-        var cancelledAt = DateTime.UtcNow.AddMinutes(-30);
-        var cancelledById = Guid.NewGuid();
         // Declared with a null alias; re-staged with an empty one, which declares the same thing.
-        var existing = await StagedAsync(csoId, row =>
-        {
-            row.Status = PendingExchangeChangeStatus.Cancelled;
-            row.CancelledAt = cancelledAt;
-            row.CancelledById = cancelledById;
-            row.CancelledByName = "Ada Lovelace";
-        }, alias: null);
+        var existing = await StagedAsync(csoId, row => row.Status = PendingExchangeChangeStatus.Parked, alias: null);
         var existingId = existing.Id;
         var activityId = existing.ActivityId;
         var restaged = Change(csoId, alias: "");
@@ -278,15 +268,12 @@ public class SyncRepositoryExchangeChangeStagingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Unchanged));
-            Assert.That(outcomes[0].ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
+            Assert.That(outcomes[0].ExistingStatus, Is.EqualTo(PendingExchangeChangeStatus.Parked));
             Assert.That(outcomes[0].RowId, Is.EqualTo(existingId));
             Assert.That(outcomes[0].PreviousActivityId, Is.Null);
             Assert.That(restaged.Id, Is.EqualTo(existingId));
             Assert.That(_repo.PendingExchangeChanges, Has.Count.EqualTo(1));
-            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Cancelled));
-            Assert.That(stored.CancelledAt, Is.EqualTo(cancelledAt));
-            Assert.That(stored.CancelledById, Is.EqualTo(cancelledById));
-            Assert.That(stored.CancelledByName, Is.EqualTo("Ada Lovelace"));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Parked));
             Assert.That(stored.ActivityId, Is.EqualTo(activityId), "a held row keeps its own Activity");
             Assert.That(stored.DomainController, Is.EqualTo("dc01.corp.example"));
         }
@@ -368,15 +355,16 @@ public class SyncRepositoryExchangeChangeStagingTests
     }
 
     [Test]
-    public async Task StageExchangeChangesAsync_CancelledRowWithADifferentDeclaredState_SupersedesAndClearsTheCancellationAsync()
+    public async Task StageExchangeChangesAsync_ParkedRowWithADifferentDeclaredState_SupersedesAndClearsTheParkAsync()
     {
         var csoId = Guid.NewGuid();
         var existing = await StagedAsync(csoId, row =>
         {
-            row.Status = PendingExchangeChangeStatus.Cancelled;
-            row.CancelledAt = DateTime.UtcNow;
-            row.CancelledById = Guid.NewGuid();
-            row.CancelledByName = "Ada Lovelace";
+            row.Status = PendingExchangeChangeStatus.Parked;
+            row.FailureKind = ExchangeChangeFailureKind.Refused;
+            row.FailureMessage = "The alias is already in use.";
+            row.AttemptCount = 4;
+            row.FirstFailedAt = DateTime.UtcNow.AddHours(-25);
         });
         var existingId = existing.Id;
 
@@ -388,9 +376,10 @@ public class SyncRepositoryExchangeChangeStagingTests
             Assert.That(outcomes[0].Disposition, Is.EqualTo(ExchangeChangeStagingDisposition.Superseded));
             Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
             Assert.That(stored.RecipientType, Is.EqualTo("MailUser"));
-            Assert.That(stored.CancelledAt, Is.Null);
-            Assert.That(stored.CancelledById, Is.Null);
-            Assert.That(stored.CancelledByName, Is.Null);
+            Assert.That(stored.FailureKind, Is.Null);
+            Assert.That(stored.FailureMessage, Is.Null);
+            Assert.That(stored.AttemptCount, Is.Zero);
+            Assert.That(stored.FirstFailedAt, Is.Null);
         }
     }
 

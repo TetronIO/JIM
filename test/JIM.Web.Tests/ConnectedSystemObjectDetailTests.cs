@@ -22,6 +22,7 @@ using JIM.Web.Pages.Admin;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
 
@@ -52,6 +53,8 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _connectedSystems = new Mock<IConnectedSystemRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
+        // Feature flags off: the page asks whether the in-development Exchange recipients panel is available (#2021).
+        repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
 
         _connectedSystems
             .Setup(r => r.GetConnectedSystemHeaderAsync(ConnectedSystemId))

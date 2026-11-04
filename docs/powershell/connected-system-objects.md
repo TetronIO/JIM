@@ -129,6 +129,7 @@ The objects, the one object, its values of `-AttributeName`, or with `-Count` ho
 | `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name; empty when it is not joined or has none. |
 | `AttributeValues` | `object[]` | The object's attribute values, one entry per value. A multi-valued attribute with many values may be cut short; AttributeValueSummaries says so. Each has `Id`, `AttributeId`, `AttributeName`, `StringValue`, `DateTimeValue`, `IntValue`, `LongValue`, `DecimalValue`, `ByteValue`, `GuidValue`, `BoolValue` and `ReferenceValueId`. |
 | `AttributeValueSummaries` | `object[]` | For each attribute whose values were cut short, how many it holds and how many came back; empty when nothing was cut short. `Get-JIMConnectedSystemObjectAttributeValue` reads the rest. Each has `AttributeName`, `TotalCount`, `ReturnedCount` and `HasMore`. |
+| `ExchangeRecipient` | `object` | The account's Exchange recipient: what is declared, what the last import read back, and any change still owed to Exchange. Empty where Exchange has no part in the account, and always empty while Exchange recipient management is not available. It has `Declared`, `Imported`, `IsInStep` and `QueuedChange`. |
 
 **With `-Id` and `-AttributeName`, or `-Id` and `-AttributeName` and `-All`**:
 

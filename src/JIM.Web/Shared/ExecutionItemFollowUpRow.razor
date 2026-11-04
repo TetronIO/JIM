@@ -25,5 +25,10 @@
     [Parameter, EditorRequired]
     public ExecutionItemFollowUpDisplay FollowUp { get; set; } = null!;
 
-    private string Icon => FollowUp.Title == "Initial password" ? Icons.Material.Filled.Key : Icons.Material.Filled.SubdirectoryArrowRight;
+    private string Icon => FollowUp.Kind switch
+    {
+        JIM.Models.Activities.ActivityTargetType.PasswordSynchronisation => Icons.Material.Filled.Key,
+        JIM.Models.Activities.ActivityTargetType.ExchangeRecipient => Icons.Material.Filled.Email,
+        _ => Icons.Material.Filled.SubdirectoryArrowRight
+    };
 }

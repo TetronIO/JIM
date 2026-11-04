@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -124,7 +124,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 # takes seconds (COPY 1.8 s and generation 2.0 s on a CI runner, #1798), and the skip only
 # meant a local build proved less than a release build. jim-openapi-generate still refreshes
 # the static document on disk when the API surface changes.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:d5633778c754e89a386882eddf8dbee6942447a8a4b8267c19cf1e1158d0b0ac AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:de0ee358cdd672f7017a003bed21e9ac9ed48a27c922a59b18175b6e82fa7fee AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
 # DOTNET_gcServer=0 for the same reason scripts/Generate-OpenApiDoc.ps1 sets it: generation

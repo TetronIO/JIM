@@ -209,6 +209,14 @@ Describe 'Resume-JIMPendingPasswordChange' {
                 Should -Not -BeNullOrEmpty
         }
 
+        It 'Should take only the ids from piped rows' {
+            # A queued change's row carries its ConnectedSystemId too. Bound from the pipeline, the last row's value
+            # would be sent alongside every id, and the server, combining the two, would retry only that system's.
+            $command.Parameters['ConnectedSystemId'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and ($_.ValueFromPipelineByPropertyName -or $_.ValueFromPipeline) } |
+                Should -BeNullOrEmpty
+        }
+
         It 'Should require EntireQueue rather than borrowing -All from the Get cmdlet' {
             # -All means "every page" on Get-JIMPendingPasswordChange. Reusing the word here, where it would
             # mean "every change in the deployment", is how somebody ends up retrying the whole queue.
@@ -237,6 +245,26 @@ Describe 'Resume-JIMPendingPasswordChange' {
             }
         }
 
+        It 'Should retry piped changes from several Connected Systems, not only the last row''s system' {
+            # Rows as Get-JIMPendingPasswordChange returns them: each carries its Connected System.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AffectedCount = 3 } }
+
+                $rows = @(
+                    [PSCustomObject]@{ Id = [guid]::NewGuid(); ConnectedSystemId = 3; Status = 'Parked' }
+                    [PSCustomObject]@{ Id = [guid]::NewGuid(); ConnectedSystemId = 4; Status = 'Parked' }
+                    [PSCustomObject]@{ Id = [guid]::NewGuid(); ConnectedSystemId = 4; Status = 'Parked' }
+                )
+                $rows | Resume-JIMPendingPasswordChange -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ids.Count -eq 3 -and -not $Body.ContainsKey('connectedSystemId')
+                }
+            }
+        }
+
         It 'Should post to the retry endpoint with the filter it was given' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
@@ -250,6 +278,22 @@ Describe 'Resume-JIMPendingPasswordChange' {
                     $Method -eq 'POST' -and
                     $Body.connectedSystemId -eq 3 -and
                     $Body.status -eq 'Parked'
+                }
+            }
+        }
+
+        It 'Should send -Search as the request''s search text, which the retry then honours' {
+            # #2725: the server ignored it and retried every change the other criteria matched. The cmdlet's half is
+            # to send it; the server's half is covered by the controller and repository tests.
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AffectedCount = 1 } }
+
+                Resume-JIMPendingPasswordChange -Search 'Ada' -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/password-synchronisation/queue/retry' -and $Body.searchText -eq 'Ada'
                 }
             }
         }
@@ -330,6 +374,12 @@ Describe 'Stop-JIMPendingPasswordChange' {
         It 'Should require EntireQueue for a queue-wide cancellation' {
             $command.Parameters['EntireQueue'] | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should take only the ids from piped rows' {
+            $command.Parameters['ConnectedSystemId'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and ($_.ValueFromPipelineByPropertyName -or $_.ValueFromPipeline) } |
+                Should -BeNullOrEmpty
+        }
     }
 
     Context 'Requests' {
@@ -361,6 +411,23 @@ Describe 'Stop-JIMPendingPasswordChange' {
                     Stop-JIMPendingPasswordChange -Force | Out-Null
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Body.ids.Count -eq 2 }
+            }
+        }
+
+        It 'Should cancel piped changes from several Connected Systems, not only the last row''s system' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                Mock Invoke-JIMApi { [PSCustomObject]@{ AffectedCount = 2 } }
+
+                @(
+                    [PSCustomObject]@{ Id = [guid]::NewGuid(); ConnectedSystemId = 3; Status = 'Pending' }
+                    [PSCustomObject]@{ Id = [guid]::NewGuid(); ConnectedSystemId = 7; Status = 'Pending' }
+                ) | Stop-JIMPendingPasswordChange -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ids.Count -eq 2 -and -not $Body.ContainsKey('connectedSystemId')
+                }
             }
         }
     }

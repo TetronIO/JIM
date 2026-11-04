@@ -148,7 +148,7 @@ public class CausalityObjectTimelineTests : JimComponentTestContext
         var export = Row(ObjectChangeType.Exported, "Exported:1", Cause("Owen Hart"));
         var other = Row(ObjectChangeType.Updated, "CsoUpdated:1", Cause("Owen Hart"));
         var followUp = new JIM.Web.Models.ExecutionItemFollowUpDisplay(Guid.NewGuid(), "Initial password", "Glitterband EMEA",
-            "Retrying", "warn", "Timed out. Next attempt soon", true, DateTime.UtcNow);
+            "Retrying", "warn", "Timed out. Next attempt soon", true, DateTime.UtcNow, JIM.Models.Activities.ActivityTargetType.PasswordSynchronisation);
         var followUps = new Dictionary<Guid, IReadOnlyList<JIM.Web.Models.ExecutionItemFollowUpDisplay>>
         {
             [export.Entry.RunProfileExecutionItemId] = [followUp]

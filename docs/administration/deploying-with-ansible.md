@@ -9,9 +9,6 @@ audience: implementer
 
 To deploy JIM across RHEL servers with Ansible, use Red Hat's podman system role: `redhat.rhel_system_roles.podman`, from the RHEL System Roles, or its upstream `fedora.linux_system_roles.podman`. The role installs Podman's Quadlet units, stores Podman secrets, opens firewalld ports and, for a rootless account, enables lingering, which is everything [the installer](deployment.md#what-the-installer-does) does on Podman. JIM ships no role or collection of its own: the playbook below deploys the same files as the installer, rootful, as the installer does by default. [Rootless](#rootless) shows what changes to run JIM rootless, as an account named `jim`.
 
-!!! warning "Not yet verified on RHEL"
-    This playbook follows the podman system role's documented usage, but has not yet been run end to end on a RHEL host. Try it on a test server before you use it across an estate. If it fails there, nothing on the server is lost: [the installer](deployment.md) deploys the same files, rootful or rootless, and is tested on every change to JIM.
-
 This page covers Podman on RHEL only. For Docker, deploy with [the installer](deployment.md) on each server.
 
 ```jim-diagram
@@ -34,8 +31,10 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
 - **Ansible** with the RHEL System Roles (`dnf install rhel-system-roles`), or `ansible-galaxy collection install fedora.linux_system_roles`.
 - **JIM's Podman files** from the [release](https://github.com/TetronIO/JIM/releases) you are deploying, in the playbook's `files/` folder: `jim.yaml`, `jim-database.yaml` (for the bundled PostgreSQL), `jim.network`, and `jim-config.yaml` with your settings filled in (see the [Configuration Reference](configuration.md#podman)).
 - **JIM's certificate** for its name, as `files/tls.crt`, followed by any intermediate CA certificates, and its unencrypted private key.
-- **The secrets in Ansible Vault**: the database password, your identity provider's client secret, and the certificate's private key. For the bundled PostgreSQL, choose a strong database password: the database is created with it on first start.
-- **For an air-gapped server**, JIM's images loaded into root's Podman (rootless, the `jim` account's) before the play, from the release bundle's `docker-images` folder (see [Installing on Podman by Hand](podman-by-hand.md), step 3). The role otherwise downloads them.
+- **The secrets in Ansible Vault**, as `jim_db_password`, `jim_sso_secret` and `jim_tls_key`: the database password, your identity provider's client secret, and the certificate's private key. A vault file in the playbook's `group_vars/jim_servers/` folder applies to every server in the group (`ansible-vault create group_vars/jim_servers/vault.yml`). For the bundled PostgreSQL, choose a strong database password: the database is created with it on first start.
+- **For an air-gapped server**:
+    - JIM's images loaded into root's Podman before the play, from the release bundle's `docker-images` folder (see [Installing on Podman by Hand](podman-by-hand.md), step 3), and `podman_pull_image: false` uncommented in the playbook. The role otherwise downloads every image, even one already loaded. Rootless, the images go into the `jim` account's Podman, so create the account first, as [Rootless, by hand](podman-by-hand.md#rootless-by-hand) does; the play then finds it already there.
+    - The server's package repositories reachable through your own mirror, or Podman and firewalld already installed and the repositories disabled. The firewall role asks the package manager for firewalld on every run, which fails while a repository it cannot reach is enabled.
 
 ## :material-file-document-outline: The Playbook
 
@@ -46,6 +45,9 @@ Read [Running JIM on Podman](podman.md) first: it explains the files, and the ch
 
   vars:
     # From Ansible Vault: jim_db_password, jim_sso_secret, jim_tls_key
+
+    # Air-gapped, with JIM's images loaded before the play: uncomment, or the role tries to download them again.
+    # podman_pull_image: false
 
     podman_secrets:
       - name: jim-secrets

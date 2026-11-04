@@ -73,7 +73,7 @@ Describe 'Test-LabMatrix' {
 
         $errors | Should -Contain "u24-docker-ag: runtime 'containerd' is not docker or podman"
         $errors | Should -Contain "u24-docker-ag: network 'lan' is not airgap or online"
-        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak, ReverseProxy"
+        $errors | Should -Contain "u24-docker-ag: scenario 'Upgrade-ish' is not one of Install, Upgrade, InstallerCases, ExternalDatabase, Soak, ReverseProxy, Ansible"
     }
 
     It 'refuses a cell given less memory than JIM needs' {
@@ -313,6 +313,10 @@ Describe 'Get-LabCellMemory' {
         Get-LabCellMemory -Cell @{ Name = 'a'; MemoryGiB = 6; ProxyMemoryGiB = 1 } | Should -Be 7
     }
 
+    It 'adds the memory of the VM that brings an Ansible cell its packages' {
+        Get-LabCellMemory -Cell @{ Name = 'a'; Scenario = 'Ansible'; MemoryGiB = 6 } | Should -Be 8
+    }
+
     It 'reads a cell read back from JSON' {
         Get-LabCellMemory -Cell ('{"Name":"a","MemoryGiB":6,"DatabaseMemoryGiB":2}' | ConvertFrom-Json) | Should -Be 8
     }
@@ -530,6 +534,23 @@ Describe 'The matrix in Cells.psd1' {
             ForEach-Object { "$($_.Proxy) $($_.Runtime)" } | Sort-Object -Unique)
 
         $proxied | Should -Be @('Local docker', 'Remote docker', 'Remote podman')
+    }
+
+    It 'deploys with Deploying on RHEL with Ansible rootful and rootless, on RHEL 9 and RHEL 10 stand-ins' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $deployed = @($matrix.Cells | Where-Object { $_.Scenario -eq 'Ansible' } |
+            ForEach-Object { "$($matrix.Images[$_.Image].Os) $(if ($_.Rootless) { 'rootless' } else { 'rootful' })" } | Sort-Object)
+
+        $deployed | Should -Be @('AlmaLinux 9 rootful', 'AlmaLinux 9 rootless', 'CentOS Stream 10 rootful', 'CentOS Stream 10 rootless')
+    }
+
+    It 'installs air-gapped with setup.sh rootful and rootless on the RHEL 9 and RHEL 10 stand-ins, as the Podman PRD requires' {
+        $matrix = Import-PowerShellDataFile (Join-Path $PSScriptRoot '..' 'Cells.psd1')
+        $installed = @($matrix.Cells |
+            Where-Object { $_.Scenario -eq 'Install' -and $_.Network -eq 'airgap' -and $matrix.Images[$_.Image].Os -match '^(AlmaLinux|CentOS Stream) ' } |
+            ForEach-Object { "$($matrix.Images[$_.Image].Os) $(if ($_.Rootless) { 'rootless' } else { 'rootful' })" } | Sort-Object)
+
+        $installed | Should -Be @('AlmaLinux 9 rootful', 'AlmaLinux 9 rootless', 'CentOS Stream 10 rootful', 'CentOS Stream 10 rootless')
     }
 
     It 'upgrades from its oldest release on Docker and both kinds of Podman' {
@@ -784,5 +805,195 @@ Describe 'ConvertTo-LabPinnedInstaller' {
 
     It 'fails on an installer it cannot pin, rather than installing the latest release unnoticed' {
         { ConvertTo-LabPinnedInstaller -Script 'echo nothing to pin' -Tag 'v0.16.0' } | Should -Throw '*GITHUB_API_URL*'
+    }
+}
+
+Describe 'Test-LabBootFinished' {
+    It 'is finished once systemd is <System> and cloud-init is done' -ForEach @(@{ System = 'running' }, @{ System = 'degraded' }) {
+        Test-LabBootFinished -SystemState $System -SystemExitCode 0 -CloudInit 'status: done' -CloudInitExitCode 0 | Should -BeTrue
+    }
+
+    It 'is not finished while systemd says <System>' -ForEach @(@{ System = 'starting' }, @{ System = 'initializing' }, @{ System = 'stopping' }) {
+        Test-LabBootFinished -SystemState $System -SystemExitCode 1 -CloudInit 'status: done' -CloudInitExitCode 0 | Should -BeFalse
+    }
+
+    It 'is finished when cloud-init is done with recoverable errors (exit code 2)' {
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit 'status: done' -CloudInitExitCode 2 | Should -BeTrue
+    }
+
+    It 'is not finished when the wait for cloud-init was cut off, as by the VM rebooting' {
+        # AlmaLinux VMs reboot once on their first boot; a helper VM's agent answered in the first boot, the wait for
+        # cloud-init ended with the reboot, and the lab started work on a VM that was about to go down.
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit 'Error: LXD VM agent is not currently running' -CloudInitExitCode 255 |
+            Should -BeFalse
+    }
+
+    It 'is not finished while cloud-init says <Status>' -ForEach @(@{ Status = 'status: running' }, @{ Status = 'status: not started' }, @{ Status = '' }) {
+        Test-LabBootFinished -SystemState 'running' -SystemExitCode 0 -CloudInit $Status -CloudInitExitCode 0 | Should -BeFalse
+    }
+
+    It 'is not finished when the agent did not answer the systemd question' {
+        Test-LabBootFinished -SystemState 'Error: LXD VM agent is not currently running (running)' -SystemExitCode 255 -CloudInit 'status: done' -CloudInitExitCode 0 |
+            Should -BeFalse
+    }
+}
+
+Describe 'Test-LabRhelFamily' {
+    It 'is true for <Os>' -ForEach @(
+        @{ Os = 'AlmaLinux 9' }, @{ Os = 'CentOS Stream 10' }, @{ Os = 'Rocky Linux 9' }, @{ Os = 'Red Hat Enterprise Linux 10' }
+    ) {
+        Test-LabRhelFamily -Os $Os | Should -BeTrue
+    }
+
+    It 'is false for <Os>' -ForEach @(@{ Os = 'Ubuntu 24.04' }, @{ Os = 'AlmaLinuxish' }, @{ Os = '' }) {
+        Test-LabRhelFamily -Os $Os | Should -BeFalse
+    }
+}
+
+Describe 'Test-LabMatrix for Ansible cells' {
+    BeforeAll {
+        function New-AnsibleMatrix {
+            $matrix = New-TestMatrix
+            $matrix.Cells[1].Scenario = 'Ansible'
+            $matrix
+        }
+    }
+
+    It 'accepts Podman on a RHEL-family host, rootful or rootless' {
+        Test-LabMatrix -Matrix (New-AnsibleMatrix) | Should -BeNullOrEmpty
+        $matrix = New-AnsibleMatrix
+        $matrix.Cells[1].Rootless = $false
+        Test-LabMatrix -Matrix $matrix | Should -BeNullOrEmpty
+    }
+
+    It 'names an Ansible cell on Docker, which the page does not cover' {
+        $matrix = New-AnsibleMatrix
+        $matrix.Cells[1].Runtime = 'docker'
+        $matrix.Cells[1].Remove('Rootless')
+        Test-LabMatrix -Matrix $matrix | Should -Be @('alma-podrl-ag: an Ansible cell is Podman on RHEL, as Deploying on RHEL with Ansible covers')
+    }
+
+    It 'names an Ansible cell on Ubuntu, which the page does not cover' {
+        $matrix = New-AnsibleMatrix
+        $matrix.Images['u24-podman'] = @{ Image = 'jimlab/u24-podman'; Os = 'Ubuntu 24.04' }
+        $matrix.Cells[1].Image = 'u24-podman'
+        Test-LabMatrix -Matrix $matrix | Should -Be @('alma-podrl-ag: an Ansible cell is Podman on RHEL, as Deploying on RHEL with Ansible covers')
+    }
+}
+
+Describe 'ConvertTo-LabAnsiblePlaybook' {
+    BeforeAll {
+        $page = Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'deploying-with-ansible.md'
+        $getCommand = Join-Path $PSScriptRoot '..' '..' 'Get-DocumentedCommand.ps1'
+        $playbook = & $getCommand -Path $page -Heading 'The Playbook'
+        $rootless = & $getCommand -Path $page -Heading 'Rootless'
+    }
+
+    It 'returns the page''s playbook as it is, for a rootful JIM' {
+        ConvertTo-LabAnsiblePlaybook -Playbook $playbook | Should -BeExactly $playbook
+    }
+
+    It 'adds the account to the play''s vars, for a rootless JIM' {
+        $result = ConvertTo-LabAnsiblePlaybook -Playbook $playbook -Rootless $rootless
+
+        $result | Should -Match '(?m)^  vars:\r?\n    podman_run_as_user: jim\r?\n    podman_run_as_group: jim\r?\n'
+        ([regex]::Matches($result, '(?m)^  vars:')).Count | Should -Be 1
+        $result | Should -Not -Match 'the rest as above'
+    }
+
+    It 'runs the rootless pre_tasks before the play''s own, in one pre_tasks list' {
+        $result = ConvertTo-LabAnsiblePlaybook -Playbook $playbook -Rootless $rootless
+
+        ([regex]::Matches($result, '(?m)^  pre_tasks:')).Count | Should -Be 1
+        $account = $result.IndexOf('- name: Create the account that runs JIM')
+        $threshold = $result.IndexOf('- name: Apply the port threshold')
+        $networkManager = $result.IndexOf('- name: Keep NetworkManager off Podman''s interfaces')
+        $account | Should -BeGreaterThan $result.IndexOf('  pre_tasks:')
+        $threshold | Should -BeGreaterThan $account
+        $networkManager | Should -BeGreaterThan $threshold
+        $result | Should -Match '(?m)^      when: jim_sysctl\.changed$'
+    }
+
+    It 'keeps everything else the playbook sets' {
+        $result = ConvertTo-LabAnsiblePlaybook -Playbook $playbook -Rootless $rootless
+
+        foreach ($line in @('    podman_secrets:', '    podman_quadlet_specs:', '    podman_firewall:', '    - redhat.rhel_system_roles.podman', '  post_tasks:')) {
+            $result | Should -Match ('(?m)^' + [regex]::Escape($line) + '$')
+        }
+    }
+
+    It 'turns off pulling the images, for an air-gapped server, as the playbook''s own comment says' {
+        $result = ConvertTo-LabAnsiblePlaybook -Playbook $playbook -AirGapped
+
+        $result | Should -Match '(?m)^    podman_pull_image: false$'
+        $result | Should -Not -Match '(?m)^\s*# podman_pull_image: false'
+    }
+
+    It 'stops when the playbook no longer offers to turn off pulling, so a changed page is noticed' {
+        { ConvertTo-LabAnsiblePlaybook -Playbook ($playbook -replace '(?m)^\s*# podman_pull_image: false.*\r?\n', '') -AirGapped } |
+            Should -Throw '*podman_pull_image*'
+    }
+
+    It 'stops when the page''s blocks no longer have the shape it merges, so a changed page is noticed' {
+        { ConvertTo-LabAnsiblePlaybook -Playbook ($playbook -replace '(?m)^  pre_tasks:', '  tasks:') -Rootless $rootless } |
+            Should -Throw '*pre_tasks*'
+        { ConvertTo-LabAnsiblePlaybook -Playbook $playbook -Rootless ($rootless -replace '(?m)^  vars:', '  variables:') } |
+            Should -Throw '*vars*'
+    }
+}
+
+Describe 'ConvertTo-LabAnsibleCommand' {
+    It 'runs the page''s command with the lab''s inventory and playbook, reading the vault password from a file' {
+        ConvertTo-LabAnsibleCommand -Command 'ansible-playbook -i <inventory> <playbook>.yml --ask-vault-pass' `
+            -Inventory 'inventory' -Playbook 'jim' -VaultPasswordFile 'vault-pass' |
+            Should -BeExactly 'ansible-playbook -i inventory jim.yml --vault-password-file vault-pass'
+    }
+
+    It 'takes the command from the page' {
+        $page = Join-Path $PSScriptRoot '..' '..' '..' '..' '..' 'docs' 'administration' 'deploying-with-ansible.md'
+        $command = ((Get-Content -Raw $page) | Select-String '`(ansible-playbook [^`]+)`').Matches[0].Groups[1].Value
+
+        ConvertTo-LabAnsibleCommand -Command $command -Inventory 'inventory' -Playbook 'jim' -VaultPasswordFile 'vault-pass' |
+            Should -BeExactly 'ansible-playbook -i inventory jim.yml --vault-password-file vault-pass'
+    }
+
+    It 'stops when the command no longer asks for the vault password, or names its files differently' {
+        { ConvertTo-LabAnsibleCommand -Command 'ansible-playbook -i <inventory> <playbook>.yml' -Inventory 'i' -Playbook 'p' -VaultPasswordFile 'v' } |
+            Should -Throw '*--ask-vault-pass*'
+        { ConvertTo-LabAnsibleCommand -Command 'ansible-playbook -i hosts site.yml --ask-vault-pass' -Inventory 'i' -Playbook 'p' -VaultPasswordFile 'v' } |
+            Should -Throw '*<inventory>*'
+    }
+}
+
+Describe 'ConvertTo-LabPodmanConfig' {
+    BeforeAll {
+        $config = @'
+data:
+  JIM_DB_HOSTNAME: jim-database
+  JIM_SSO_AUTHORITY: ""
+  JIM_SSO_CLIENT_ID: ""
+  JIM_SSO_CLAIM_TYPE: sub
+  JIM_SSO_INITIAL_ADMIN: ""
+'@
+    }
+
+    It 'fills in the settings given, quoted' {
+        $result = ConvertTo-LabPodmanConfig -Config $config -Setting @{
+            JIM_SSO_AUTHORITY = 'http://10.78.0.1:8180/realms/jim'; JIM_SSO_CLIENT_ID = 'jim-web'; JIM_SSO_INITIAL_ADMIN = '0001'
+        }
+
+        $result | Should -Match '(?m)^  JIM_SSO_AUTHORITY: "http://10\.78\.0\.1:8180/realms/jim"$'
+        $result | Should -Match '(?m)^  JIM_SSO_CLIENT_ID: "jim-web"$'
+        $result | Should -Match '(?m)^  JIM_DB_HOSTNAME: jim-database$'
+    }
+
+    It 'replaces a setting the file already gives a value' {
+        ConvertTo-LabPodmanConfig -Config $config -Setting @{ JIM_SSO_CLAIM_TYPE = 'oid'; JIM_SSO_AUTHORITY = 'a'; JIM_SSO_CLIENT_ID = 'b'; JIM_SSO_INITIAL_ADMIN = 'c' } |
+            Should -Match '(?m)^  JIM_SSO_CLAIM_TYPE: "oid"$'
+    }
+
+    It 'stops when a setting is not in the file, or one the file leaves empty is not given' {
+        { ConvertTo-LabPodmanConfig -Config $config -Setting @{ JIM_NOT_A_SETTING = 'x' } } | Should -Throw '*JIM_NOT_A_SETTING*'
+        { ConvertTo-LabPodmanConfig -Config $config -Setting @{ JIM_SSO_AUTHORITY = 'a' } } | Should -Throw '*JIM_SSO_CLIENT_ID*'
     }
 }

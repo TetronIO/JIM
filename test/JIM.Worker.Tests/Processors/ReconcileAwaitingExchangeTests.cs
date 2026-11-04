@@ -35,7 +35,7 @@ public class ReconcileAwaitingExchangeTests
 
     [TestCase(PendingExchangeChangeStatus.Pending)]
     [TestCase(PendingExchangeChangeStatus.Parked)]
-    [TestCase(PendingExchangeChangeStatus.Cancelled)]
+    [TestCase(PendingExchangeChangeStatus.Refused)]
     public async Task ReconcilePendingExports_ChangeAwaitingExchangeWithAQueuedChange_HoldsItWithNoItemAsync(PendingExchangeChangeStatus queuedStatus)
     {
         var fixture = BuildFixture(awaitsExchange: true, importedRecipientType: ExchangeRecipientTypes.None);

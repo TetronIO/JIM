@@ -192,6 +192,38 @@ Describe 'Get-JIMConnectedSystemObject' {
         }
     }
 
+    Context 'Exchange recipient' {
+
+        AfterEach {
+            InModuleScope JIM { $script:JIMConnection = $null }
+        }
+
+        # An account's Exchange recipient (#2021, Phase 6) reaches the caller with the rest of the object.
+        It 'Returns the object''s declared and imported Exchange recipient and its queued change' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $csoId = [guid]::NewGuid()
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id                = $csoId
+                        exchangeRecipient = [PSCustomObject]@{
+                            declared     = [PSCustomObject]@{ recipientType = 'Mailbox'; alias = 'dmorgan' }
+                            imported     = [PSCustomObject]@{ recipientType = $null }
+                            isInStep     = $false
+                            queuedChange = [PSCustomObject]@{ state = 'Retrying'; attemptCount = 2 }
+                        }
+                    }
+                }
+
+                $cso = Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id $csoId
+
+                $cso.exchangeRecipient.declared.recipientType | Should -Be 'Mailbox'
+                $cso.exchangeRecipient.queuedChange.state | Should -Be 'Retrying'
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match "/connector-space/$csoId$" }
+            }
+        }
+    }
+
     Context 'Pagination safety (-All bounding)' {
 
         It 'Should expose a Force switch in the ListAll parameter set' {

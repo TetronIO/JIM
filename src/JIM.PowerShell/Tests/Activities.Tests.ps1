@@ -342,6 +342,35 @@ Describe 'Get-JIMActivity' {
 
 Describe 'Get-JIMActivityStats' {
 
+    Context 'Follow-ups' {
+
+        AfterEach {
+            InModuleScope JIM { $script:JIMConnection = $null }
+        }
+
+        # What a run's exports set in motion (#2021, Phase 6) reaches the caller with the rest of its statistics.
+        It 'Returns where the run''s follow-ups stand, by kind and state' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        totalObjectsProcessed = 12
+                        followUps             = @(
+                            [PSCustomObject]@{ kind = 'PasswordSynchronisation'; state = 'Set'; count = 12 }
+                            [PSCustomObject]@{ kind = 'ExchangeRecipient'; state = 'Retrying'; count = 1 }
+                        )
+                    }
+                }
+
+                $stats = Get-JIMActivityStats -Id ([guid]::NewGuid())
+
+                $stats.followUps.Count | Should -Be 2
+                ($stats.followUps | Where-Object kind -EQ 'ExchangeRecipient').state | Should -Be 'Retrying'
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -match '/stats$' }
+            }
+        }
+    }
+
     Context 'Parameter Validation' {
 
         BeforeAll {

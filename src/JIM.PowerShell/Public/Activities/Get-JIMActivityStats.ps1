@@ -8,7 +8,9 @@ function Get-JIMActivityStats {
 
     .DESCRIPTION
         Retrieves detailed execution statistics for a Run Profile activity, including
-        counts of processed items, errors, and timing information.
+        counts of processed items, errors, and timing information. For an export run,
+        followUps also says where the work it set in motion stands now: its Initial
+        Passwords and Exchange recipient changes, counted by kind and state.
 
         This cmdlet only works with activities that are Run Profile executions.
 

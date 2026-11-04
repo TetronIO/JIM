@@ -17,10 +17,12 @@
 
     Then it runs its scenario, from scenarios/<Scenario>.ps1 (README.md says what each checks), and every scenario
     ends by checking that nothing crashed: no container has restarted, and the kernel has logged no fault or container
-    AppArmor denial since the last boot (Select-KernelFault.ps1).
+    AppArmor denial since the last boot (Select-KernelFault.ps1). On an RHEL-family image it also checks that SELinux
+    is still enforcing and has denied nothing since the last boot.
 
     Results go to results.json in -OutputPath, with the cell's log (cell.log) and everything else the scenario saves.
-    The VM, and an ExternalDatabase cell's database server or a ReverseProxy cell's proxy, are deleted afterwards, unless -KeepVm says otherwise.
+    The VM, and an ExternalDatabase cell's database server, a ReverseProxy cell's proxy or a helper VM still running, are deleted
+    afterwards, unless -KeepVm says otherwise.
 
 .PARAMETER CellName
     The cell, as Cells.psd1 names it.
@@ -104,6 +106,8 @@ $caPath = Join-Path $OutputPath 'ca.crt'
 $databaseVm = $null
 # A ReverseProxy cell's nginx server, a VM of its own, which the scenario sets up.
 $proxyVm = $null
+# A VM a scenario starts for a while, such as the one that fetches an Ansible cell's packages.
+$helperVm = $null
 
 #region What every scenario uses
 
@@ -224,6 +228,18 @@ function Test-SignInCheck {
     }
 }
 
+function Test-SelinuxCheck {
+    # From the journal, which has every denial the kernel reports: the lab's images, like LXD's, have no auditd, so no
+    # ausearch, and without it the kernel logs them itself. Denials the policy marks dontaudit are hidden either way.
+    # Any denial counts, not only a container's: nothing on the host should be denied while JIM is installed on it.
+    param([string]$When)
+    $mode = Invoke-LabVm -Name $vm -Command @('getenforce')
+    $denials = @(Invoke-LabVm -Name $vm -Command @('bash', '-c', 'journalctl -b --no-pager | grep -E "avc:\s+denied" || true') |
+        Where-Object { $_ })
+    Add-Check "${When}: SELinux enforcing, and no denial since boot" ("$mode" -eq 'Enforcing' -and $denials.Count -eq 0) `
+        $(if ("$mode" -ne 'Enforcing') { "getenforce says $mode" } elseif ($denials) { "$($denials.Count): $($denials | Select-Object -First 2)" })
+}
+
 function Test-StabilityCheck {
     # A crashing service is restarted and soon looks healthy again, so readiness alone cannot show it (#1953).
     $restarts = Invoke-Guest -Action Restarts
@@ -232,6 +248,9 @@ function Test-StabilityCheck {
     $faults = @($kernel | & (Join-Path $PSScriptRoot '..' 'Select-KernelFault.ps1'))
     Add-Check 'since the last boot, no kernel fault and no AppArmor denial of a container' ($faults.Count -eq 0) `
         "$($faults | Select-Object -First 2)"
+    if (Test-LabRhelFamily -Os $cell.Os) {
+        Test-SelinuxCheck 'at the end'
+    }
 }
 
 function Copy-Bundle {
@@ -393,7 +412,7 @@ finally {
         Vm = $vm
     } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $OutputPath 'results.json')
 
-    $vms = @($vm) + @($databaseVm, $proxyVm | Where-Object { $_ })
+    $vms = @($vm) + @($databaseVm, $proxyVm, $helperVm | Where-Object { $_ })
     if ($KeepVm -eq 'Always' -or ($KeepVm -eq 'OnFailure' -and $failed)) {
         Write-CellLog "kept VM $($vms -join ' and ')"
     }

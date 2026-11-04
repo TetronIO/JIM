@@ -2731,6 +2731,18 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(queued);
     }
 
+    public Task<List<PendingExchangeChange>> GetExchangeChangesByActivityAsync(IReadOnlyCollection<Guid> activityIds)
+    {
+        var asked = activityIds.ToHashSet();
+        return Task.FromResult(_pendingExchangeChanges.Values.Where(c => asked.Contains(c.ActivityId)).Select(CopyExchangeChange).ToList());
+    }
+
+    public Task<PendingExchangeChange?> GetExchangeChangeForConnectedSystemObjectAsync(Guid connectedSystemObjectId)
+    {
+        var change = _pendingExchangeChanges.Values.SingleOrDefault(c => c.ConnectedSystemObjectId == connectedSystemObjectId);
+        return Task.FromResult(change == null ? null : CopyExchangeChange(change));
+    }
+
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsAwaitingExchangeAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         var asked = connectedSystemObjectIds.ToHashSet();
@@ -3931,9 +3943,6 @@ public class SyncRepository : ISyncRepository
         row.NextRetryAt = null;
         row.ClaimedAt = null;
         row.ClaimedBy = null;
-        row.CancelledAt = null;
-        row.CancelledById = null;
-        row.CancelledByName = null;
     }
 
     // ---- Exchange queue delivery (#2021, Phase 5) ----------------------------------------------------------------
@@ -4023,9 +4032,8 @@ public class SyncRepository : ISyncRepository
     public Task<int> DeleteTerminalExchangeChangesAsync(DateTime olderThan, int maxRecords)
     {
         var deleting = _pendingExchangeChanges.Values
-            .Where(c => c.Status is PendingExchangeChangeStatus.Parked or PendingExchangeChangeStatus.Cancelled
-                        && (c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
-            .OrderBy(c => c.CancelledAt ?? c.LastAttemptedAt ?? c.CreatedAt)
+            .Where(c => c.Status == PendingExchangeChangeStatus.Parked && (c.LastAttemptedAt ?? c.CreatedAt) < olderThan)
+            .OrderBy(c => c.LastAttemptedAt ?? c.CreatedAt)
             .Take(maxRecords)
             .Select(c => c.Id)
             .ToList();
@@ -4100,10 +4108,7 @@ public class SyncRepository : ISyncRepository
         NextRetryAt = source.NextRetryAt,
         ClaimedAt = source.ClaimedAt,
         ClaimedBy = source.ClaimedBy,
-        ActivityId = source.ActivityId,
-        CancelledAt = source.CancelledAt,
-        CancelledById = source.CancelledById,
-        CancelledByName = source.CancelledByName
+        ActivityId = source.ActivityId
     };
 
     public Task<int> MarkOwedInitialPasswordsAsSetByAttributeFlowAsync(int connectedSystemId, IReadOnlyCollection<Guid> connectedSystemObjectIds)
@@ -4476,14 +4481,7 @@ public class SyncRepository : ISyncRepository
             })
             .ToList();
 
-        if (!string.IsNullOrWhiteSpace(filter.SearchText))
-        {
-            var search = filter.SearchText.Trim();
-            headers = headers
-                .Where(h => (h.MetaverseObjectDisplayName ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
-                            || h.ConnectedSystemName.Contains(search, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
+        // The search is applied by FilterPasswordChanges, which retry and cancel share, so all three narrow alike.
 
         IOrderedEnumerable<PendingPasswordChangeHeader> ordered = sortBy?.ToLowerInvariant() switch
         {
@@ -4608,6 +4606,17 @@ public class SyncRepository : ISyncRepository
         {
             var ids = filter.Ids.ToList();
             query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        // The same search the list applies, so retry and cancel act on the changes shown and no others (#2725).
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var search = filter.SearchText.Trim();
+            query = query.Where(c =>
+                (_mvos.TryGetValue(c.MetaverseObjectId, out var mvo) ? mvo.CachedDisplayName ?? string.Empty : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (_connectedSystems.TryGetValue(c.ConnectedSystemId, out var cs) ? cs.Name : string.Empty)
+                    .Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
         return query.ToList();

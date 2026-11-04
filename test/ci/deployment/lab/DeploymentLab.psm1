@@ -15,11 +15,15 @@
 
 Set-StrictMode -Version Latest
 
-$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak', 'ReverseProxy')
+$script:Scenarios = @('Install', 'Upgrade', 'InstallerCases', 'ExternalDatabase', 'Soak', 'ReverseProxy', 'Ansible')
 $script:Proxies = @('Remote', 'Local')
 $script:Runtimes = @('docker', 'podman')
 $script:Networks = @('airgap', 'online')
 $script:MinimumMemoryGiB = 4
+# An Ansible cell's VM on the online network that fetches Ansible's packages, while the cell's own VM starts.
+$script:AnsibleHelperMemoryGiB = 2
+# The operating systems Deploying on RHEL with Ansible covers, as Cells.psd1 names an image's.
+$script:RhelFamily = '^(AlmaLinux|CentOS Stream|Rocky Linux|Red Hat Enterprise Linux) '
 
 #region The matrix
 
@@ -90,6 +94,12 @@ function Test-LabMatrix {
         elseif ($cell.ContainsKey('Proxy') -or $cell.ContainsKey('ProxyMemoryGiB')) {
             "${name}: Proxy and ProxyMemoryGiB are for ReverseProxy cells only"
         }
+        if ($cell.Scenario -eq 'Ansible') {
+            $os = if ($Matrix.Images.ContainsKey($cell.Image)) { "$($Matrix.Images[$cell.Image].Os)" } else { '' }
+            if ($cell.Runtime -ne 'podman' -or -not (Test-LabRhelFamily -Os $os)) {
+                "${name}: an Ansible cell is Podman on RHEL, as Deploying on RHEL with Ansible covers"
+            }
+        }
         # Online cells test what is published, not the commit, so a run takes them only when asked for by their tag
         # (Select-LabCell); the tag and the network must agree for that to hold.
         $taggedOnline = 'online' -in @($cell.Tags)
@@ -115,11 +125,21 @@ function Test-LabMatrix {
     }
 }
 
+function Test-LabRhelFamily {
+    <#
+    .SYNOPSIS
+        Whether an image's operating system is Red Hat Enterprise Linux or one standing in for it: SELinux enforcing,
+        firewalld, NetworkManager, as the lab's RHEL-family images are built.
+    #>
+    param([AllowEmptyString()][string]$Os)
+    "$Os " -match $script:RhelFamily
+}
+
 function Get-LabCellMemory {
     <#
     .SYNOPSIS
         Returns the GiB of memory a cell takes while it runs: its VM's, and its database server's or proxy's if it
-        has one.
+        has one, or an Ansible cell's VM that fetches its packages.
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -128,7 +148,8 @@ function Get-LabCellMemory {
         [object]$Cell
     )
 
-    [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB') + [int](Get-LabValue $Cell 'ProxyMemoryGiB')
+    $helper = if ("$(Get-LabValue $Cell 'Scenario')" -eq 'Ansible') { $script:AnsibleHelperMemoryGiB } else { 0 }
+    [int](Get-LabValue $Cell 'MemoryGiB') + [int](Get-LabValue $Cell 'DatabaseMemoryGiB') + [int](Get-LabValue $Cell 'ProxyMemoryGiB') + $helper
 }
 
 function Select-LabCell {
@@ -209,6 +230,123 @@ function ConvertTo-LabProxyConfig {
         $Config = $Config.Replace('jim-app.example.com', $JimName)
     }
     $Config.Replace('jim.example.com', $UserName)
+}
+
+function ConvertTo-LabAnsiblePlaybook {
+    <#
+    .SYNOPSIS
+        Returns Deploying on RHEL with Ansible's playbook, with its Rootless changes made when -Rootless gives them, and
+        image pulls turned off for an air-gapped server with -AirGapped.
+
+    .DESCRIPTION
+        The page gives the playbook for a rootful JIM, then for a rootless one only what to add: the account in the
+        play's vars, and pre_tasks that create it and lower the port threshold. This adds them where the page says,
+        the vars at the top of the play's vars and the pre_tasks before the play's own, as a reader merging the two
+        would. It stops if either block no longer has a vars: and a pre_tasks: at the play's level, so a change to
+        the page is noticed rather than tested around. -AirGapped uncomments the playbook's podman_pull_image: false,
+        as the page says to once the images are loaded, and stops if the playbook no longer offers it.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Playbook,
+
+        [string]$Rootless,
+
+        [switch]$AirGapped
+    )
+
+    if ($AirGapped) {
+        $pull = '(?m)^(\s*)# (podman_pull_image: false)\s*$'
+        if ($Playbook -notmatch $pull) {
+            throw "Deploying on RHEL with Ansible's playbook no longer offers # podman_pull_image: false for an air-gapped server"
+        }
+        $Playbook = $Playbook -replace $pull, '$1$2'
+    }
+    if (-not $Rootless) {
+        return $Playbook
+    }
+    foreach ($key in @('vars', 'pre_tasks')) {
+        if ($Playbook -notmatch "(?m)^  ${key}:\s*$") {
+            throw "Deploying on RHEL with Ansible's playbook no longer has a play-level ${key}:"
+        }
+        if ($Rootless -notmatch "(?m)^  ${key}:\s*$") {
+            throw "Deploying on RHEL with Ansible's Rootless changes no longer have a play-level ${key}:"
+        }
+    }
+    $split = [regex]::Match($Rootless, '(?ms)^  vars:\s*?\r?\n(?<vars>.*?)^  pre_tasks:\s*?\r?\n(?<tasks>.*)$')
+    # The vars to add, without the page's reminder that the rest are as before, or blank lines.
+    $vars = @($split.Groups['vars'].Value -split '\r?\n' | Where-Object { $_.Trim() -and $_.Trim() -notmatch '^#' })
+    $tasks = $split.Groups['tasks'].Value.TrimEnd()
+    $Playbook = [regex]::Replace($Playbook, '(?m)^  vars:\s*?\r?\n', { param($m) $m.Value + ($vars -join "`n") + "`n" }, 'None', [timespan]::FromSeconds(5))
+    [regex]::Replace($Playbook, '(?m)^  pre_tasks:\s*?\r?\n', { param($m) $m.Value + $tasks + "`n`n" }, 'None', [timespan]::FromSeconds(5))
+}
+
+function ConvertTo-LabAnsibleCommand {
+    <#
+    .SYNOPSIS
+        Returns Deploying on RHEL with Ansible's command to run the play, with the lab's inventory and playbook, and
+        the vault password read from a file rather than asked for, as no one is at the keyboard.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [Parameter(Mandatory)]
+        [string]$Inventory,
+
+        [Parameter(Mandatory)]
+        [string]$Playbook,
+
+        [Parameter(Mandatory)]
+        [string]$VaultPasswordFile
+    )
+
+    if ($Command -notmatch '(^|\s)--ask-vault-pass(\s|$)') {
+        throw "Deploying on RHEL with Ansible's command no longer asks for the vault password (--ask-vault-pass): $Command"
+    }
+    if ($Command -notmatch '<inventory>' -or $Command -notmatch '<playbook>') {
+        throw "Deploying on RHEL with Ansible's command no longer names <inventory> and <playbook>: $Command"
+    }
+    $Command.Replace('<inventory>', $Inventory).Replace('<playbook>', $Playbook).Replace('--ask-vault-pass', "--vault-password-file $VaultPasswordFile")
+}
+
+function ConvertTo-LabPodmanConfig {
+    <#
+    .SYNOPSIS
+        Returns the release's jim-config.yaml with the settings given filled in, as an administrator fills it in by
+        hand: every value quoted, as the file says to quote anything YAML might read otherwise.
+
+    .DESCRIPTION
+        It stops if a setting given is not in the file, or if the file still leaves one empty, which JIM would not
+        start with.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Config,
+
+        [Parameter(Mandatory)]
+        [hashtable]$Setting
+    )
+
+    foreach ($name in $Setting.Keys) {
+        $pattern = "(?m)^(  $([regex]::Escape($name)): ).*$"
+        if ($Config -notmatch $pattern) {
+            throw "jim-config.yaml has no setting $name"
+        }
+        $value = '"' + ($Setting[$name] -replace '\\', '\\' -replace '"', '\"') + '"'
+        $Config = [regex]::Replace($Config, $pattern, { param($m) $m.Groups[1].Value + $value }, 'None', [timespan]::FromSeconds(5))
+    }
+    $empty = @([regex]::Matches($Config, '(?m)^  (\w+): ""\s*$') | ForEach-Object { $_.Groups[1].Value })
+    if ($empty) {
+        throw "jim-config.yaml still leaves $($empty -join ', ') empty"
+    }
+    $Config
 }
 
 function Get-LabProxyFile {
@@ -774,6 +912,28 @@ function Invoke-LabVm {
     Invoke-LabLxc -Arguments ($arguments + '--' + $Command) -AllowFailure:$AllowFailure -LogPath $LogPath
 }
 
+function Test-LabBootFinished {
+    <#
+    .SYNOPSIS
+        Whether a VM has finished booting, from what `systemctl is-system-running --wait` and `cloud-init status --wait`
+        said and how they ended: systemd running or degraded (either is booted), and cloud-init done.
+
+    .DESCRIPTION
+        Both answers count only if the agent gave them (exit code 255 is lxc saying the agent did not). AlmaLinux VMs
+        reboot once on their first boot, and a VM's agent can answer in that boot: a wait for cloud-init cut off by
+        the reboot is not a finished boot, though systemd said running a moment before.
+    #>
+    param(
+        [AllowEmptyString()][string]$SystemState,
+        [int]$SystemExitCode,
+        [AllowEmptyString()][string]$CloudInit,
+        [int]$CloudInitExitCode
+    )
+    $SystemExitCode -ne 255 -and $SystemState -match '^\s*(running|degraded)\s*$' -and
+        # cloud-init exits 2 for done with recoverable errors, which is still done.
+        $CloudInitExitCode -in 0, 2 -and $CloudInit -match '(?m)^status: done\s*$'
+}
+
 function Wait-LabVm {
     <#
     .SYNOPSIS
@@ -789,10 +949,10 @@ function Wait-LabVm {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
-        # is-system-running --wait returns once boot is over, as running or degraded; either is booted.
         $state = Invoke-LabVm -Name $Name -Command @('systemctl', 'is-system-running', '--wait') -AllowFailure
-        if ($LASTEXITCODE -ne 255 -and "$state" -match 'running|degraded') {
-            Invoke-LabVm -Name $Name -Command @('cloud-init', 'status', '--wait') -AllowFailure | Out-Null
+        $stateExit = $LASTEXITCODE
+        $cloudInit = Invoke-LabVm -Name $Name -Command @('cloud-init', 'status', '--wait') -AllowFailure
+        if (Test-LabBootFinished -SystemState "$state" -SystemExitCode $stateExit -CloudInit "$cloudInit" -CloudInitExitCode $LASTEXITCODE) {
             return
         }
         Start-Sleep -Seconds 3
@@ -898,6 +1058,60 @@ function Copy-LabFile {
         $arguments += '--recursive'
     }
     Invoke-LabLxc -Arguments $arguments | Out-Null
+}
+
+function New-LabCertificate {
+    <#
+    .SYNOPSIS
+        Makes a server certificate for -Name (and -IpAddress), from a certificate authority made for the purpose, as
+        an organisation's own CA would issue one, with openssl on the lab host. Returns the paths of the certificate
+        and its unencrypted key, in -Folder; the CA's certificate goes to -CaPath, and its key is not kept.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Folder,
+
+        [Parameter(Mandatory)]
+        [string]$CaPath,
+
+        [Parameter(Mandatory)]
+        [string]$Name,
+
+        [string]$IpAddress,
+
+        [string]$CaName = 'JIM deployment lab CA'
+    )
+
+    New-Item -ItemType Directory -Path $Folder -Force | Out-Null
+    $extensions = Join-Path $Folder 'server.ext'
+    $subjectAltName = "DNS:$Name" + $(if ($IpAddress) { ",IP:$IpAddress" })
+    "subjectAltName=$subjectAltName`nbasicConstraints=critical,CA:FALSE`nkeyUsage=critical,digitalSignature,keyEncipherment`nextendedKeyUsage=serverAuth" |
+        Set-Content $extensions
+    $caKey = Join-Path $Folder 'ca.key'
+    $certificate = Join-Path $Folder 'server.crt'
+    $key = Join-Path $Folder 'server.key'
+    $request = Join-Path $Folder 'server.csr'
+    $commands = @(
+        , @('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', $caKey, '-out', $CaPath, '-days', '2',
+            '-subj', "/CN=$CaName", '-addext', 'basicConstraints=critical,CA:TRUE', '-addext', 'keyUsage=critical,keyCertSign,cRLSign')
+        , @('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', $key, '-out', $request, '-subj', "/CN=$Name")
+        , @('x509', '-req', '-in', $request, '-CA', $CaPath, '-CAkey', $caKey, '-CAcreateserial', '-out', $certificate,
+            '-days', '2', '-extfile', $extensions)
+    )
+    try {
+        foreach ($arguments in $commands) {
+            $output = $null | & openssl @arguments 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                throw "openssl $($arguments[0]) failed: $output"
+            }
+        }
+    }
+    finally {
+        Remove-Item $caKey, $request, $extensions -ErrorAction SilentlyContinue
+    }
+    @{ Certificate = $certificate; Key = $key }
 }
 
 function Set-LabVmProfile {
@@ -1193,8 +1407,8 @@ function Get-LabReleaseBundle {
 
 #endregion
 
-Export-ModuleMember -Function Test-LabMatrix, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
+Export-ModuleMember -Function Test-LabMatrix, Test-LabRhelFamily, Test-LabBootFinished, ConvertTo-LabAnsiblePlaybook, ConvertTo-LabAnsibleCommand, ConvertTo-LabPodmanConfig, Test-LabRedirectRefused, ConvertTo-LabLxcNameFilter, ConvertTo-LabProxyConfig, Get-LabProxyFile, Select-LabCell, Get-LabCellMemory, Get-LabMemoryBudget, Select-LabCellToStart,
     Get-LabPostgresMemory, ConvertTo-LabMegabytes, Test-LabVersionAtMost, Get-LabNextVersion, ConvertTo-LabRootlessCommand,
     Get-LabSetupMessage, Get-LabImageNameToDrop, Compare-LabFingerprint, Get-LabLoginForm, Get-LabFormPost, Format-LabReport, Invoke-LabLxc,
-    Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, Get-LabVmAddress,
+    Invoke-LabVm, Wait-LabVm, New-LabVm, Remove-LabVm, Restart-LabVm, Set-LabVmProfile, Copy-LabFile, New-LabCertificate, Get-LabVmAddress,
     Invoke-LabSignIn, Get-LabPowerShellArchive, Get-LabReleaseBundle, Select-LabReleaseTag, ConvertTo-LabPinnedInstaller

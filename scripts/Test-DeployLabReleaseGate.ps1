@@ -64,7 +64,7 @@ $script:DeployLabContext = 'jim-deploy-lab'
 
 function Get-DeployLabRemedy {
     param([string]$Sha = 'the commit')
-    return "There is no override: fix the cause, then run deploy-lab.yml on $Sha (merging the release pull request starts it; otherwise gh workflow run deploy-lab.yml --ref main, while $Sha is the head of main), wait for it to finish (about 45 minutes), and check again."
+    return "There is no override: fix the cause, then run deploy-lab.yml on $Sha (merging the release pull request starts it; otherwise gh workflow run deploy-lab.yml --ref main, while $Sha is the head of main), wait for it to finish (about 60 minutes), and check again."
 }
 
 $script:DeployLabNotReportedReason = 'the deployment lab has not run on this exact commit. It starts by itself nightly on main and when a change to VERSION reaches main, or on demand, so a commit that was none of these has none.'

@@ -920,7 +920,7 @@ public partial class SyncRepository
     /// Narrows a queue query to what a filter names. Kept separate from the header projection so the retry and
     /// cancel actions apply exactly the same rules the list did, rather than a re-typed approximation of them.
     /// </summary>
-    private static IQueryable<PendingPasswordChange> ApplyChangeFilter(
+    private IQueryable<PendingPasswordChange> ApplyChangeFilter(
         IQueryable<PendingPasswordChange> query,
         PendingPasswordChangeFilter filter)
     {
@@ -957,6 +957,17 @@ public partial class SyncRepository
         {
             var ids = filter.Ids.ToList();
             query = query.Where(c => ids.Contains(c.Id));
+        }
+
+        // The same search the list applies (ApplyHeaderFilter), so an action taken on "the changes shown" acts on the
+        // changes shown and no others (#2725). Reached through correlated lookups rather than a join, because retry and
+        // cancel run as set-based updates over this query.
+        if (!string.IsNullOrWhiteSpace(filter.SearchText))
+        {
+            var searchPattern = LikePattern.Contains(filter.SearchText.Trim());
+            query = query.Where(c =>
+                _context.MetaverseObjects.Any(m => m.Id == c.MetaverseObjectId && m.CachedDisplayName != null && EF.Functions.ILike(m.CachedDisplayName, searchPattern))
+                || _context.ConnectedSystems.Any(cs => cs.Id == c.ConnectedSystemId && EF.Functions.ILike(cs.Name, searchPattern)));
         }
 
         return query;

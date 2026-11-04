@@ -1,9 +1,9 @@
 # Podman Support - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2 and 3 complete; Phase 4's check required, awaiting the RHEL acceptance run)
+- **Status:** Done (all four phases complete; the RHEL acceptance run is made by the deployment lab, #2698)
 - **Created:** 2026-09-25
 - **Issue:** [#1808](https://github.com/TetronIO/JIM/issues/1808)
-- **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/doing/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
+- **PRD:** [PRD_PODMAN_SUPPORT.md](../../prd/done/PRD_PODMAN_SUPPORT.md) (this plan answers the PRD's open questions in [Decisions](#decisions) and withdraws requirement 12, per D8)
 
 ## Overview
 
@@ -219,7 +219,7 @@ These answer the PRD's open questions (OQ). Each was chosen on the evidence abov
 **D12. Ansible: a documented route using Red Hat's podman system role, with the same files.**
 - Larger RHEL estates deploy with Ansible (scenario 2). Red Hat's podman system role (`redhat.rhel_system_roles.podman`, upstream `fedora.linux_system_roles.podman`) installs Kubernetes YAML as Quadlet units, runs rootless as a named user, and opens firewalld ports.
 - JIM ships no role or collection of its own. A documentation page gives an example playbook that deploys the release's Podman files rootless as `jim`, equivalent to `setup.sh`. Secrets go through the same Secret document as D1, templated from Ansible Vault and played like any other kube specification.
-- The playbook is verified by hand in the RHEL acceptance run (D5), not in CI: testing it in CI would add the role's collection as a dependency, which needs approval under the dependency policy. Revisit if the page drifts.
+- The playbook was to be verified by hand in the RHEL acceptance run (D5), not in CI, because testing it would add the role's collection as a dependency. Revisited in #2698: the maintainer approved `ansible-core` and `rhel-system-roles` as test-only dependencies of the deployment lab, installed from the distribution's own packages on the test VM only, and the lab's Ansible cells now run the page's playbook on every lab run, so it cannot drift.
 - **Rejected:** a JIM Ansible collection. It would be a second installer to maintain, for customers who already have Red Hat's role.
 
 ## Implementation Phases
@@ -340,7 +340,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
 - Without systemd (Podman 4.9): the installer's rootful fallback, renewal, and an external PostgreSQL server.
 - Docker regression of the refactored installer: bundle install, reinstall keeping the password, the new certificate path.
 
-**Not verified here:** SELinux enforcing and cgroup v2. The sandbox's hybrid cgroups could run pods under systemd only in the configuration used above (private cgroup namespace, `runc`, cgroup v1), and its kernel has no SELinux. Phase 4's CI job (on a real systemd host with cgroup v2) and the RHEL acceptance run cover them. The Ansible page follows the role's documented example and has not been run (D12).
+**Not verified here:** SELinux enforcing and cgroup v2. The sandbox's hybrid cgroups could run pods under systemd only in the configuration used above (private cgroup namespace, `runc`, cgroup v1), and its kernel has no SELinux. Phase 4's CI job (on a real systemd host with cgroup v2) and the RHEL acceptance run cover them. The Ansible page followed the role's documented example and had not been run (D12); the deployment lab now runs it (Phase 4, step 6).
 
 **Measured, and decided:** rootless networking hides the client's address on both Podman 4.9 (slirp4netns) and 5.8 (pasta): JIM recorded one internal address for a client in another network namespace. Rootful keeps it on both: JIM recorded the client's own address, on 5.8 for a client outside the CentOS Stream 9 host. Security audit events and rate limiting of unauthenticated requests therefore cannot tell rootless clients apart. The product owner chose rootful as the default (see above); the documentation warns against rootless where client addresses matter.
 
@@ -374,7 +374,7 @@ Delivered as one PR: the files, the installer, the release and the documentation
 
    **Found on GitHub's Ubuntu runner, and detected by the installer:** the runner image sets `XDG_CONFIG_HOME` and `XDG_RUNTIME_DIR` for every account in `/etc/environment`, pointing at the runner's own folders. The rootless account's systemd user manager inherits them, so the Quadlet generator looked for JIM's units in the wrong folder and generated none, and Podman used a runtime folder the account does not own. A customer host configured the same way failed the same way, silently. `setup.sh` now reads the account's manager environment before installing anything and stops, naming each setting, where such settings usually live and how to restart the manager, when `XDG_CONFIG_HOME`, `XDG_DATA_HOME` or `XDG_RUNTIME_DIR` is not the account's own (Pester tests in `test/ci/deployment/Tests/SetupScript.Tests.ps1`, which source the installer). It does not override them: they are the host's configuration, and rootful is unaffected. The job removes those lines before the rootless leg.
 5. **Required check** ✅ Added to the `main` ruleset on 2026-09-29, after 40 green runs and none failed, 5 cancelled by newer pushes (D6). It adds a median of about a minute and a half to a merge, finishing after the slowest other required check on 28 of 40 commits (at most 6m37s).
-6. **Manual acceptance:** pending. The RHEL virtual machine run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, recorded in the PR that closes #1808. The steps, checks and results template are in [PODMAN_RHEL_ACCEPTANCE.md](PODMAN_RHEL_ACCEPTANCE.md).
+6. **RHEL acceptance** ✅ The run from D5, covering `setup.sh` rootless and rootful and the D12 playbook, is made by #1876's deployment lab on AlmaLinux 9 and CentOS Stream 10 (standing in for RHEL 9 and 10), SELinux enforcing, air-gapped, nightly and on every release, rather than once by hand (#2698). The checks, and what the lab does not cover, are in [PODMAN_RHEL_ACCEPTANCE.md](PODMAN_RHEL_ACCEPTANCE.md#results).
 
 **Verified before the PR:** the Docker leg in the cloud sandbox (Docker 29, containerd image store), both Podman legs on the CentOS Stream 9 test host (Podman 5.8, systemd), and the parity comparison across all three. The Ubuntu runner (Podman 4.9) is proven by the job itself.
 

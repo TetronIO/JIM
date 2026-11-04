@@ -57,6 +57,7 @@ public class ExchangeDeliveryTests
     private ExchangeDeliveryServer NewServer(int claimBatchSize = ExchangeDeliveryServer.ClaimBatchSize, int maximumChangesPerPass = ExchangeDeliveryServer.MaximumChangesPerPass) => new(
         _syncRepository,
         () => _connectedSystemRepository.Object,
+        () => new Mock<IActivityRepository>().Object,
         _ => _resolvedConnector,
         activity =>
         {
@@ -391,6 +392,8 @@ public class ExchangeDeliveryTests
             var outcome = _activities.Single();
             Assert.That(outcome.ParentActivityId, Is.EqualTo(change.ActivityId));
             Assert.That(outcome.Status, Is.EqualTo(ActivityStatus.Complete), "a withdrawal is not a failure");
+            Assert.That(outcome.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.WithdrawExchangeRecipient),
+                "a withdrawal is told apart from a delivery by what it is, not by its words");
             Assert.That(outcome.Message, Does.Contain(reason));
         }
     }

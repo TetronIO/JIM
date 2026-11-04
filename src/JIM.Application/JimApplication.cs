@@ -217,6 +217,7 @@ public class JimApplication : IDisposable
             SyncRepo,
             // Resolved when a lane runs, for the reason PasswordSynchronisation's is: Repository is not yet assigned here.
             () => Repository!.ConnectedSystems,
+            () => Repository!.Activity,
             connectedSystem => ConnectedSystems.CreateConnector(connectedSystem),
             // Delivery outcomes are recorded by an unattended worker pass, so they are attributed to JIM itself.
             activity => Activities.CreateSystemActivityAsync(activity),

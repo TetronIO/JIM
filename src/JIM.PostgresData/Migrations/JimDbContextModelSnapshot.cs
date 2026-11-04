@@ -355,6 +355,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("MetaverseObjectId")
                         .HasDatabaseName("IX_Activities_MetaverseObjectId");
 
+                    b.HasIndex("ParentActivityId")
+                        .HasDatabaseName("IX_Activities_ParentActivityId")
+                        .HasFilter("\"ParentActivityId\" IS NOT NULL");
+
                     b.HasIndex("ParentRunProfileExecutionItemId")
                         .HasDatabaseName("IX_Activities_ParentRunProfileExecutionItemId")
                         .HasFilter("\"ParentRunProfileExecutionItemId\" IS NOT NULL");
@@ -5006,15 +5010,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CancelledById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CancelledByName")
-                        .HasColumnType("text");
-
                     b.Property<DateTime?>("ClaimedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -5072,6 +5067,10 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActivityId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PendingExchangeChanges_ActivityId_Unique");
 
                     b.HasIndex("ConnectedSystemObjectId")
                         .IsUnique()
@@ -5333,6 +5332,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ActivityId")
+                        .HasDatabaseName("IX_PendingPasswordChanges_ActivityId");
 
                     b.HasIndex("ConnectedSystemObjectId");
 
