@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 3, 4 and 5 complete, Phase 5 against a stand-in for Exchange; Phase 6 complete apart from the Attribute Flow tab's Exchange recipients panel; Phase 1 under way)
+- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete, Phase 5 against a stand-in for Exchange; Phase 2 next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -137,7 +137,7 @@ Tests run with it on. Once the integration scenarios pass, the last PR removes t
 
 Each phase is one pull request, built test-first. Docs and a changelog entry go in the same PR wherever the phase is user-facing (while flagged, the changelog says so). Rough effort assumes one engineer and the spike's library as it stands.
 
-### Phase 1: Library into production, the Worker and web images (2 days)
+### Phase 1: Library into production, the Worker and web images (2 days) ✅
 
 - Reference `Tetron.PowerShellRemoting` from the LDAP Connector, and set `XDG_CACHE_HOME=/tmp/.cache` and `POWERSHELL_TELEMETRY_OPTOUT=1` in the Worker **and web** images (spike finding; the web image for D8's save-time sessions). The web image also gains MIT `libgssapi-krb5-2`, pinned to the Worker's version.
 - Add `ExchangeKerberosConfiguration` (D8, per process). The library's own tests already pin the rendering (AES only, no reverse DNS, `0600`); the service's tests cover merging, rewriting only on change, concurrency and the private directory.
@@ -228,7 +228,7 @@ Built ahead of the spike's go, against the capability interface rather than Exch
 - **Tests:** the state machine and backoff; the lane against a fake Connector (delivered, retrying, parked, the Activity rule, withdrawal three ways, a session failure, the lane stopped part-way, the pass bound); a `RequiresPostgres` fixture for the claim with two claimants, the lease, every guard, the outlook, retention and the per-object read; health with the flag on and off; retention.
 - **Moved to Phase 2,** because they need the remoting library in production (Phase 1) or the spike's failure catalogue: the classification table from `RemoteFailure`, and the harness test with the stand-in server preloaded with fake `Enable-Mailbox` / `Get-Recipient`.
 
-### Phase 6: Surfaces (6 days; requirements 4, 13, 28)
+### Phase 6: Surfaces (6 days; requirements 4, 13, 28) ✅
 
 - **No Cancel (decided 2026-11-03, PRD decision 16).** Retry is the only administrator action on a queued change. Phases 4 to 6a had carried a Cancelled status, its three columns and a `CancelExchangeRecipient` operation for this phase to use; nothing ever set them, and they are removed (a migration drops the columns) before the actions are built.
 - **Follow-ups.** `ExecutionItemFollowUp` gains an Exchange outcome beside `PasswordOutcomes`. `ExecutionItemFollowUpDisplay` maps it ("Mailbox", "Shared mailbox", "Mail contact" and so on, with Queued, Delivering, Retrying, Parked, Delivered, Withdrawn, Replaced, Refused or Not made). The item page, the Lineage, the timeline and the Activity page then show Exchange follow-ups with no further work, because #2668 built them on that model.
@@ -238,7 +238,10 @@ Built ahead of the spike's go, against the capability interface rather than Exch
   - REST: `GET api/v1/exchange/queue`, `queue/summary` and `POST queue/retry`.
   - PowerShell: `Get-JIMPendingExchangeChange` and `Resume-JIMPendingExchangeChange`, each with Pester tests and generated reference pages.
 - **Connected System Object.** The object shows its declared recipient state beside the imported one, with any outstanding change and a link to it.
-- **Exchange recipients panel** on the Attribute Flow tab (requirement 4): it lists the applicable attributes with their flows or default behaviour, and Set, Edit, Remove and Stop open the standard flow dialog or confirmation. It is portal-only by design, and needs a UI artefact for review.
+- **Exchange recipients panel** on the Attribute Flow tab (requirement 4): it lists the applicable attributes with their flows or default behaviour, and Set, Edit, Remove and Stop open the standard flow dialog or confirmation. It is portal-only by design. Built to the approved portal mock's screen 2, with today's button conventions:
+  - **When it shows:** an export rule, the flag on, and an Object Type carrying the connector-defined Exchange attributes, which schema discovery adds only while the Connected System manages Exchange recipients. A group shows three rows, since the Connector never gives it Database or External Address.
+  - **Set** opens the Add Attribute Flow dialog with the target fixed. **Edit** and **Remove** are the tab's own.
+  - **Stop provisioning recipients** removes every Exchange flow, saved with the rule as every change on the tab is. Its confirmation says existing recipients are left as they are.
 - **Tests:** bUnit tests for the panel and the tab, controller tests, and display-model tests for the new outcomes.
 
 ### Phase 7: GAL synchronisation (4 days; requirements 21 to 24)

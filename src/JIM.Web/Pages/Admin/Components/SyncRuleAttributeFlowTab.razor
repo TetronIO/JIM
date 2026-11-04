@@ -17,7 +17,20 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<MudPaper Class="pa-4" Outlined="true">
+@{
+    // Recomputed on every render from the rule's own flows, so it can never disagree with the grid below it.
+    var exchangeRecipientFlows = ExchangeRecipientFlows.For(SyncRule, _exchangeRecipientsEnabled);
+}
+@if (exchangeRecipientFlows != null)
+{
+    <SyncRuleExchangeRecipientsPanel Flows="exchangeRecipientFlows" SyncRuleName="@SyncRule.Name"
+                                     OnSet="HandleExchangeRecipientSetAsync"
+                                     OnEdit="HandleEditAttributeFlowRuleAsync"
+                                     OnRemove="HandleAttributeFlowRuleDeleteClickAsync"
+                                     OnStop="HandleStopExchangeRecipientsAsync" />
+}
+
+<MudPaper Class="@(exchangeRecipientFlows != null ? "pa-4 mt-6" : "pa-4")" Outlined="true">
     <div class="d-flex align-center">
         <MudText Typo="Typo.h6">Attribute Flow</MudText>
         <TermHint Term="Term.AttributeFlow" />
@@ -903,6 +916,16 @@
     public EventCallback OnChanged { get; set; }
 
     private bool _addAttributeFlowRuleDialogVisible;
+
+    // Whether the ExchangeRecipients feature is on (#2021), read once: the Exchange recipients panel shows only while it is.
+    private bool _exchangeRecipientsEnabled;
+    private bool _exchangeRecipientsFlagRead;
+
+    // Set when the Exchange recipients panel opened the dialog for one attribute: the target is chosen and stays fixed,
+    // since the panel's row is that attribute. The ordinary Add and Edit clear it.
+    private bool _targetFixedByExchangePanel;
+
+    private string? ExchangePanelTargetHelperText => _targetFixedByExchangePanel ? "Chosen by Exchange recipients" : null;
     // Medium rather than the default Small: the dialog carries the attribute priority list (#91 Surface 1), whose
     // Connected System and Synchronisation Rule names wrap onto three lines each at 600px and are unreadable.
     private static readonly DialogOptions NarrowDialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Medium };
@@ -983,6 +1006,7 @@
                         {
                             <MudSelect T="ConnectedSystemObjectTypeAttribute" Value="_attributeFlowMapping.TargetConnectedSystemAttribute" ValueChanged="OnGeneratedConnectedSystemTargetChanged"
                                 Label="Assign the value to" Placeholder="Please select the target Connected System attribute" Required="true"
+                                Disabled="_targetFixedByExchangePanel" HelperText="@ExchangePanelTargetHelperText"
                                 Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                                 @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
                                 {
@@ -1035,6 +1059,7 @@
                         <MudSelect T="ConnectedSystemObjectTypeAttribute"
                             @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" @bind-Value:after="ScheduleFlowAnalysisAsync" Label="Assign the value to"
                             Placeholder="Please select the target Connected System attribute" Required="true"
+                            Disabled="_targetFixedByExchangePanel" HelperText="@ExchangePanelTargetHelperText"
                             Variant="Variant.Outlined" ToStringFunc="@ConnectedSystemAttributeLabel">
                             @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
                             {
@@ -1211,6 +1236,13 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (SyncRule.Direction == SyncRuleDirection.Export && !_exchangeRecipientsFlagRead)
+        {
+            _exchangeRecipientsFlagRead = true;
+            using var flags = JimFactory.Create();
+            _exchangeRecipientsEnabled = await flags.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
+        }
+
         if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystemId <= 0 ||
             _passwordSynchronisationReadForConnectedSystemId == SyncRule.ConnectedSystemId)
             return;
@@ -1458,6 +1490,7 @@
 
     private async Task HandleOpenAddAttributeFlowRuleDialogAsync()
     {
+        _targetFixedByExchangePanel = false;
         _attributeFlowMapping = new SyncRuleMapping();
         _attributeFlowMappingSource = new SyncRuleMappingSource();
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
@@ -1485,6 +1518,7 @@
 
     private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
     {
+        _targetFixedByExchangePanel = false;
         _attributeFlowMapping = mapping;
 
         // Remember what this mapping targeted when the dialog opened. The priority context has to distinguish a
@@ -1657,7 +1691,8 @@
     /// </summary>
     private List<StandardMappingSuggestion> GetStandardMappingSuggestions()
     {
-        if (_attributeFlowMappingSourceType != "Attribute" || !_standardMappingHints.HasHints)
+        // A target the Exchange recipients panel chose is not open to suggestion.
+        if (_targetFixedByExchangePanel || _attributeFlowMappingSourceType != "Attribute" || !_standardMappingHints.HasHints)
             return [];
 
         if (SyncRule.Direction == SyncRuleDirection.Import)
@@ -2172,6 +2207,19 @@
                 return;
         }
 
+        StageAttributeFlowRemoval(attributeFlowRule, keepContributedValues);
+
+        await LoadDerivedFlowStepsAsync();
+        await RefreshFlowGridAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Takes <paramref name="attributeFlowRule"/> off the rule and records how its removal is saved. The removal takes
+    /// effect when the page saves the rule, as every change on this tab does.
+    /// </summary>
+    private void StageAttributeFlowRemoval(SyncRuleMapping attributeFlowRule, bool keepContributedValues)
+    {
         SyncRule.AttributeFlowRules.Remove(attributeFlowRule);
 
         // record the choice for EVERY staged removal of a persisted mapping, not just the keeps: a removal
@@ -2191,6 +2239,32 @@
                 TargetMetaverseAttributeId = attributeFlowRule.TargetMetaverseAttributeId ?? attributeFlowRule.TargetMetaverseAttribute?.Id
             });
         }
+    }
+
+    /// <summary>
+    /// The Exchange recipients panel's Set (#2021, PRD requirement 4): the ordinary Add Attribute Flow dialog, with the
+    /// target already chosen and fixed, since the panel's row is that attribute.
+    /// </summary>
+    private async Task HandleExchangeRecipientSetAsync(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        await HandleOpenAddAttributeFlowRuleDialogAsync();
+        _attributeFlowMapping!.TargetConnectedSystemAttribute = attribute;
+        _targetFixedByExchangePanel = true;
+        await ScheduleFlowAnalysisAsync();
+    }
+
+    /// <summary>
+    /// The Exchange recipients panel's Stop, once the administrator has confirmed: every Attribute Flow to an Exchange
+    /// attribute comes off the rule, saved with it. Export flows put no values on Metaverse Objects and nothing derives
+    /// from them, so none needs the recall-or-keep choice or the derived-flow check that a single removal can.
+    /// </summary>
+    private async Task HandleStopExchangeRecipientsAsync()
+    {
+        if (ExchangeRecipientFlows.For(SyncRule, _exchangeRecipientsEnabled) is not { } exchangeFlows)
+            return;
+
+        foreach (var flow in exchangeFlows.Flows)
+            StageAttributeFlowRemoval(flow, keepContributedValues: false);
 
         await LoadDerivedFlowStepsAsync();
         await RefreshFlowGridAsync();
