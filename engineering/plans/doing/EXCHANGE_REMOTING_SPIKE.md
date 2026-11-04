@@ -372,6 +372,8 @@ None was in the client. That is weak evidence: the stand-in and the client share
 - **A CI job for the harness.** The tests skip without it today.
 - **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
+**Where they went (2026-11-04):** both are #2021's Phase 1 ([implementation plan](EXCHANGE_MAILBOX_PROVISIONING.md)), with the go's own open items (`XDG_CACHE_HOME`, the Worker image's run and ticket renewal). The harness job (`remoting-harness-tests`) runs on every pull request that touches the library. The large-payload cases have harness tests and a read-only lab test, which runs at the next lab window. This plan moves to `done/` once that run is recorded here.
+
 ### Phase 0: prior-art survey (2026-10-21)
 
 **Q0: nothing is adoptable as a dependency, but there is a much better route than writing PSRP ourselves.**

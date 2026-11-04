@@ -358,11 +358,14 @@ jobs:
     # here the harness script stands the realm and the server up and exports the variables that run them.
     # JIM_REMOTING_HARNESS_REQUIRED turns a missing harness into a failure, so a harness that did not come up cannot
     # pass this job by skipping every test.
-    # Pull requests that change the remoting library, its tests or the harness, and nothing else: provisioning the
-    # realm takes several minutes. Not a required check, so a run that decides it has nothing to test blocks nothing.
+    # It then opens a session from inside the Worker and web images, run read-only as they are deployed
+    # (Test-ImageRemoting.ps1): the images carry the Kerberos library and the environment remoting needs.
+    # Pull requests that change the remoting library, its tests, the harness, or what the images give it, and nothing
+    # else: provisioning the realm takes several minutes. Not a required check, so a run that decides it has nothing to
+    # test blocks nothing.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
@@ -374,7 +377,7 @@ jobs:
       id: scope
       run: |
         changed=$(git diff --name-only "$BASE_SHA" HEAD)
-        if echo "$changed" | grep -qE '^(src/Tetron\.PowerShellRemoting/|test/Tetron\.PowerShellRemoting\.Tests/|test/integration/remoting-harness/|\.github/workflows/ci\.yml$)'; then
+        if echo "$changed" | grep -qE '^(src/Tetron\.PowerShellRemoting/|test/Tetron\.PowerShellRemoting\.(Tests|ImageProbe)/|test/integration/remoting-harness/|src/JIM\.(Worker|Web)/Dockerfile$|src/JIM\.Connectors/JIM\.Connectors\.csproj$|\.github/workflows/ci\.yml$)'; then
           echo "run=true" >> "$GITHUB_OUTPUT"
         else
           echo "run=false" >> "$GITHUB_OUTPUT"
@@ -415,6 +418,48 @@ jobs:
       env:
         JIM_REMOTING_HARNESS_REQUIRED: 'true'
       run: dotnet test test/Tetron.PowerShellRemoting.Tests/ --no-build --filter "Category=RequiresRemotingHarness" --verbosity normal
+    # Built as scan-images builds them, with the same build arguments, so they come from the cache scan-images keeps;
+    # read-only here, since scan-images writes it.
+    - name: Set up Docker Buildx
+      if: steps.scope.outputs.run == 'true'
+      id: buildx
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+    - name: Date the apt upgrade layer
+      if: steps.scope.outputs.run == 'true'
+      id: apt_refresh
+      run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+    - name: Build jim-worker
+      if: steps.scope.outputs.run == 'true'
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        context: .
+        file: src/JIM.Worker/Dockerfile
+        load: true
+        tags: jim-worker:probe
+        build-args: |
+          VERSION=scan
+          APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
+        cache-from: type=gha,scope=jim-worker
+    - name: Build jim-web
+      if: steps.scope.outputs.run == 'true'
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        context: .
+        file: src/JIM.Web/Dockerfile
+        load: true
+        tags: jim-web:probe
+        build-args: |
+          VERSION=scan
+          APT_REFRESH=${{ steps.apt_refresh.outputs.date }}
+        cache-from: type=gha,scope=jim-web
+    - name: Open a session from inside the Worker image
+      if: steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/integration/remoting-harness/Test-ImageRemoting.ps1 -Image jim-worker:probe
+    - name: Open a session from inside the web image
+      if: steps.scope.outputs.run == 'true'
+      run: pwsh -File ./test/integration/remoting-harness/Test-ImageRemoting.ps1 -Image jim-web:probe
     - name: Show the harness logs
       if: failure() && steps.scope.outputs.run == 'true'
       run: |
