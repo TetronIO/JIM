@@ -76,6 +76,15 @@ public class ExportExecutionServer
     /// </summary>
     private bool _stageExchangeChanges;
 
+    /// <summary>
+    /// #2723: where the current export run's Connector says each object it writes is (<see cref="IConnectorPartitionPlacement"/>),
+    /// so a successful Create or rename records the Partition the object was written to. Prepared once at the start of a
+    /// run, so the Connector parses the Connected System's Partitions once, and read by every batch the run processes, its
+    /// parallel batches included, which is safe because a prepared placement is immutable. Null for a Connector that
+    /// cannot place objects, for a Connected System with no Partitions, and between runs.
+    /// </summary>
+    private ConnectedSystemPartitionPlacement? _partitionPlacement;
+
     internal ExportExecutionServer(JimApplication application, ISyncRepository syncRepo)
     {
         Application = application;
@@ -221,6 +230,11 @@ public class ExportExecutionServer
         _containersCreated = containersCreated;
         _stageExchangeChanges = connector is IConnectorExportUsingCalls
                                 && await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
+
+        // #2723: from the run's own Connector, the primary. A parallel batch's Connector is another instance of the same
+        // Connector, so it would place every object the same way; preparing once is what spares each batch the parsing.
+        var partitionPlacement = ConnectedSystemPartitionPlacement.Prepare(connector, connectedSystem.Partitions);
+        _partitionPlacement = partitionPlacement;
         try
         {
             // Execute exports using the connector with batch-loading
@@ -238,6 +252,7 @@ public class ExportExecutionServer
             _collisionRemediation = null;
             _containersCreated = null;
             _stageExchangeChanges = false;
+            _partitionPlacement = null;
         }
 
         // Second pass: retry any exports with deferred references that might now be resolvable
@@ -290,6 +305,28 @@ public class ExportExecutionServer
                 "because the recipient type does not fit the object, {TypeChangeCount} type change(s) not made, {FailedCount} that could not be recorded",
                 connectedSystem.Name, result.ExchangeChangesStagedCount, result.ExchangeChangesSupersededCount, result.ExchangeChangesUnchangedCount,
                 result.ExchangeChangesRefusedCount, result.ExchangeTypeChangesNotMadeCount, result.ExchangeChangeStagingFailedCount);
+        }
+
+        // #2723: where the run recorded the objects it created or renamed, for a Connector that places objects, and only when
+        // it wrote any. An object in no Partition kept the Partition JIM held for it, which a Partition-scoped run's retry of
+        // an unconfirmed Create reads, so that is worth a warning: usually the Connected System's Partitions are out of date.
+        if (partitionPlacement != null && result.PlacedInAPartitionCount + result.PlacedInNoPartitionCount + result.PartitionRecordingFailedCount > 0)
+        {
+            if (result.PlacedInNoPartitionCount > 0 || result.PartitionRecordingFailedCount > 0)
+            {
+                Log.Warning("ExecuteExportsAsync: Partition placement summary for {SystemName}: Placed in a Partition: {Placed}, In no Partition: {InNoPartition}, " +
+                    "Objects whose Partition changed: {Restamped}, Not recorded: {NotRecorded}. An object in no Partition, or whose Partition was not recorded, " +
+                    "keeps the Partition JIM held for it until an import reads it; if one of the Connected System's Partitions is missing, retrieve its hierarchy.",
+                    connectedSystem.Name, result.PlacedInAPartitionCount, result.PlacedInNoPartitionCount, result.PartitionChangedCount,
+                    result.PartitionRecordingFailedCount);
+            }
+            else
+            {
+                Log.Information("ExecuteExportsAsync: Partition placement summary for {SystemName}: Placed in a Partition: {Placed}, In no Partition: {InNoPartition}, " +
+                    "Objects whose Partition changed: {Restamped}, Not recorded: {NotRecorded}.",
+                    connectedSystem.Name, result.PlacedInAPartitionCount, result.PlacedInNoPartitionCount, result.PartitionChangedCount,
+                    result.PartitionRecordingFailedCount);
+            }
         }
 
         // Only when it happened: most export runs meet no value already in use.
@@ -2001,6 +2038,10 @@ public class ExportExecutionServer
         into.SingleValuedContradictionRefusedCount += batchResult.SingleValuedContradictionRefusedCount;
         into.GeneratedValuesRemediatedCount += batchResult.GeneratedValuesRemediatedCount;
         into.GeneratedValuesNeedingDecisionCount += batchResult.GeneratedValuesNeedingDecisionCount;
+        into.PlacedInAPartitionCount += batchResult.PlacedInAPartitionCount;
+        into.PlacedInNoPartitionCount += batchResult.PlacedInNoPartitionCount;
+        into.PartitionChangedCount += batchResult.PartitionChangedCount;
+        into.PartitionRecordingFailedCount += batchResult.PartitionRecordingFailedCount;
         if (includeItems)
             into.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
     }
@@ -2677,6 +2718,12 @@ public class ExportExecutionServer
                 await derivedInputMarks.FlushAsync(repository);
                 derivedInputMarks.LogSummary();
             }
+
+            // #2723: where each object created or renamed was written, once its result is recorded with the External IDs
+            // above (a failure to record a Partition must not cost the Create its result); best-effort, and last, so it
+            // can hold up nothing above.
+            if (csosToUpdate.Count > 0)
+                await RecordPartitionPlacementsAsync(csosToUpdate, repository, result);
         }
         catch (Exception) when (heldUntilStaged.Count > 0)
         {
@@ -3865,6 +3912,124 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// #2723: records the Partition each object a successful export created or renamed was written to, from the name it
+    /// was written with, so a Partition-scoped run sees it there before any import has confirmed it: the retry of a Create
+    /// no import confirmed reads the Partition. An object its Connector places in none keeps the Partition JIM holds for
+    /// it; nothing is ever cleared. Does nothing for a run whose Connector cannot place objects.
+    /// <para>
+    /// Called once the batch's results are recorded (<see cref="BatchUpdateCsosAfterSuccessfulExportAsync"/>), and never
+    /// throws but for cancellation: where an object is matters less than knowing it was created, and a Create whose result
+    /// went unrecorded would be sent again. An object whose Partition cannot be recorded keeps the one it had, for the import
+    /// that next reads it to record, and is counted in the run's placement summary.
+    /// </para>
+    /// <para>
+    /// The Partition alone is written, in one statement for the batch: it is not a change for synchronisation to process,
+    /// so the objects are not marked for it, and each keeps the export's own execution item as its only one.
+    /// </para>
+    /// </summary>
+    /// <param name="written">Each object the batch created or renamed, with its export's result; its External IDs already
+    /// applied.</param>
+    /// <param name="repository">The batch's repository.</param>
+    /// <param name="result">The batch's result, which the placement counts are added to.</param>
+    private async Task RecordPartitionPlacementsAsync(
+        List<(ConnectedSystemObject Cso, ConnectedSystemExportResult ExportResult)> written,
+        ISyncRepository repository,
+        ExportExecutionResult result)
+    {
+        // Read once, for the whole batch: the run's placement does not change while its batches run.
+        var partitionPlacement = _partitionPlacement;
+        if (partitionPlacement == null || written.Count == 0)
+            return;
+
+        // What a failure would leave unrecorded: every object until each is placed, then those whose Partition changes.
+        IReadOnlyCollection<ConnectedSystemObject> atRisk = written.Select(w => w.Cso).ToList();
+        var changes = new List<(ConnectedSystemObject Cso, int PartitionId)>();
+        try
+        {
+            foreach (var (cso, exportResult) in written)
+            {
+                var partition = partitionPlacement.Place(GetPlacementIdentifier(cso, exportResult));
+                if (partition == null)
+                {
+                    result.PlacedInNoPartitionCount++;
+                    continue;
+                }
+
+                result.PlacedInAPartitionCount++;
+                if (cso.PartitionId != partition.Id)
+                    changes.Add((cso, partition.Id));
+            }
+
+            atRisk = changes.Select(change => change.Cso).ToList();
+            if (changes.Count == 0)
+                return;
+
+            using (Diagnostics.Diagnostics.Database.StartSpan("UpdateConnectedSystemObjectPartitions")
+                .SetTag("csoCount", changes.Count))
+            {
+                result.PartitionChangedCount += await repository.UpdateConnectedSystemObjectPartitionsAsync(
+                    changes.Select(change => (change.Cso.Id, change.PartitionId)).ToList());
+            }
+
+            foreach (var (cso, partitionId) in changes)
+            {
+                Log.Debug("RecordPartitionPlacementsAsync: Recorded CSO {CsoId} against Partition {PartitionId}, where it was recorded against {PreviousPartitionId}",
+                    cso.Id, partitionId, cso.PartitionId);
+                cso.PartitionId = partitionId;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A Connector's placer that threw (its contract says it must not), or a write that failed: the exports stand.
+            result.PartitionRecordingFailedCount += atRisk.Count;
+            Log.Error(ex, "RecordPartitionPlacementsAsync: Could not record the Partition of {Count} object(s) the export created or renamed on Connected System {ConnectedSystemId}. " +
+                "The exports succeeded and are recorded; each object keeps the Partition it had until the next import that reads it records where it is. " +
+                "Connected System Objects: {ConnectedSystemObjectIds}",
+                atRisk.Count, written[0].Cso.ConnectedSystemId, DescribeConnectedSystemObjectIds(atRisk.Select(cso => cso.Id)));
+        }
+    }
+
+    /// <summary>
+    /// #2723: what identifies an object an export has just written to its Connector for placement, as an import asks
+    /// (<see cref="IConnectorPartitionPlacement"/>): its Secondary External ID (for a directory, the distinguished name), as
+    /// the Connector reported writing it, else as JIM holds it, which is the name JIM provisioned; else its External ID,
+    /// likewise. Null where it has neither. The first stored value rather than the single-valued accessors, which throw on
+    /// a repeated value: placing an object must never fail an export that succeeded, and one JIM cannot place keeps the
+    /// Partition it holds.
+    /// </summary>
+    private static string? GetPlacementIdentifier(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)
+    {
+        if (!string.IsNullOrEmpty(exportResult.SecondaryExternalId))
+            return exportResult.SecondaryExternalId;
+
+        var storedSecondaryExternalId = cso.SecondaryExternalIdAttributeId is { } secondaryExternalIdAttributeId
+            ? GetStoredIdentifierText(cso, secondaryExternalIdAttributeId)
+            : null;
+        if (!string.IsNullOrEmpty(storedSecondaryExternalId))
+            return storedSecondaryExternalId;
+
+        return !string.IsNullOrEmpty(exportResult.ExternalId)
+            ? exportResult.ExternalId
+            : GetStoredIdentifierText(cso, cso.ExternalIdAttributeId);
+    }
+
+    /// <summary>
+    /// #2723: an object's first stored value for an identifying attribute, as text, or null where it holds none.
+    /// </summary>
+    private static string? GetStoredIdentifierText(ConnectedSystemObject cso, int attributeId)
+    {
+        var value = cso.AttributeValues.FirstOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == attributeId);
+        if (value == null)
+            return null;
+
+        return value.StringValue
+            ?? value.GuidValue?.ToString()
+            ?? value.IntValue?.ToString(CultureInfo.InvariantCulture)
+            ?? value.LongValue?.ToString(CultureInfo.InvariantCulture)
+            ?? (value.DecimalValue is { } decimalValue ? ExternalIdValue.ToCanonicalString(decimalValue) : null);
+    }
+
+    /// <summary>
     /// Records a failed attempt on an export (#2119): it stays Pending and is attempted again at the next export run.
     /// This is a synchronous version for batch processing - does not save to database.
     /// </summary>
@@ -4154,6 +4319,7 @@ public class ExportExecutionServer
             if (csosToUpdate.Count > 0)
             {
                 await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, SyncRepo);
+                await RecordPartitionPlacementsAsync(csosToUpdate, SyncRepo, result);
             }
 
             // Issue #1936: record the exported values. LAST among the CSO writes, after

@@ -54,6 +54,8 @@ public class ConnectedSystemObjectWriterCompletenessTests
         ["UpdateConnectedSystemObjectsWithNewAttributeValuesAsync"] =
             "nulls the import-state hash beside an export confirmation's values; the confirming import marks the object",
         ["NullImportStateForCsosAsync"] = "nulls the import-state hash; no data synchronisation reads changes",
+        ["UpdateConnectedSystemObjectPartitionsAsync"] =
+            "records the Partition an export wrote the object to (#2723); synchronisation reads no object's Partition",
         ["TryClaimConnectedSystemObjectForJoinAsync"] = "export matching joining the object: a synchronisation decision, not a data change",
         ["DisconnectConnectedSystemObjectsAsync"] = "synchronisation's own disconnection",
         ["DeleteMetaverseObjectsAsync"] = "releases the join of objects whose Metaverse Object is deleted: a synchronisation outcome",

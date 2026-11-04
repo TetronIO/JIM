@@ -281,6 +281,33 @@ public class ExportExecutionResult
     public int DeletesWithheld { get; set; }
 
     #endregion
+
+    #region Partition placement (issue #2723)
+
+    /// <summary>
+    /// Number of objects this run created or renamed that its Connector placed in one of the Connected System's
+    /// Partitions. Zero for a Connector that cannot place objects.
+    /// </summary>
+    public int PlacedInAPartitionCount { get; set; }
+
+    /// <summary>
+    /// Number of objects this run created or renamed that its Connector placed in none of the Connected System's
+    /// Partitions; each keeps the Partition JIM held for it. Zero for a Connector that cannot place objects.
+    /// </summary>
+    public int PlacedInNoPartitionCount { get; set; }
+
+    /// <summary>
+    /// Number of objects whose recorded Partition this run changed, to the one its Connector placed them in.
+    /// </summary>
+    public int PartitionChangedCount { get; set; }
+
+    /// <summary>
+    /// Number of objects this run created or renamed whose Partition could not be recorded; each keeps the Partition JIM
+    /// held for it until an import reads it. The exports themselves succeeded and are recorded.
+    /// </summary>
+    public int PartitionRecordingFailedCount { get; set; }
+
+    #endregion
 }
 
 /// <summary>
