@@ -1280,6 +1280,16 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_ConnectedSystemObjects_JoinObjectMatchingRuleId")
             .HasFilter("\"JoinObjectMatchingRuleId\" IS NOT NULL");
 
+        // The Partition an object is in. SetNull because a hierarchy refresh removes a Partition the directory no
+        // longer holds, and that must neither fail (NO ACTION refused the delete with 23503 while any object still
+        // named the Partition, failing the whole refresh) nor delete the objects: whether an object has gone from the
+        // directory is deletion detection's decision, not the refresh's (#2723).
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasOne(cso => cso.Partition)
+            .WithMany()
+            .HasForeignKey(cso => cso.PartitionId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Additional performance indexes for worker task queue processing
         // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
         modelBuilder.Entity<WorkerTask>()

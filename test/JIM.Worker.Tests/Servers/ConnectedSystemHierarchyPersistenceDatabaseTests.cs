@@ -1,13 +1,18 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Connectors;
+using JIM.Models.Core;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NUnit.Framework;
+using Serilog;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -510,5 +515,125 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
             Assert.That(await verify.ConnectedSystemPartitionWatermarks.Select(w => w.PartitionId).ToListAsync(), Is.EqualTo(new[] { yellowstoneId }),
                 "the removed Partition's watermark goes with it, and the kept one's stays");
         }
+    }
+
+    /// <summary>
+    /// A Partition the directory no longer holds is removed by a hierarchy refresh even while Connected System Objects
+    /// are still stamped with it; the objects stay, with no Partition (#2723).
+    /// </summary>
+    /// <remarks>
+    /// The test above seeds no objects, and that is the only reason it ever passed: the objects' foreign key to their
+    /// Partition had no delete rule, so PostgreSQL refused to delete a Partition any object still referenced (23503)
+    /// and the whole refresh failed. Clearing the objects' Partition is the right answer rather than deleting them:
+    /// whether an object has gone from the directory is for deletion detection to decide, not for a hierarchy refresh.
+    ///
+    /// Driven through the server's own refresh, on a context configured as JIM.Web runs it, with the Connected System
+    /// loaded change-tracked in the scope it is saved from, as the REST endpoint loads it.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_PartitionHoldingConnectedSystemObjectsNoLongerInTheDirectory_RemovesItAndClearsTheirPartitionAsync()
+    {
+        int systemId, yellowstoneId, glitterbandId;
+        Guid initiatorId, yellowstoneObjectId;
+        Guid[] glitterbandObjectIds;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test LDAP Connector", SupportsPartitions = true };
+            var setting = new ConnectorDefinitionSetting { Name = "Host", Type = ConnectedSystemSettingType.String };
+            connectorDefinition.Settings.Add(setting);
+            var system = new ConnectedSystem
+            {
+                Name = "Test Directory",
+                ConnectorDefinition = connectorDefinition,
+                SettingValues = [new ConnectedSystemSettingValue { Setting = setting, StringValue = "directory.example.local" }]
+            };
+            var yellowstone = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system, ExternalId = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Selected = true
+            };
+            var glitterband = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system, ExternalId = "dc=glitterband,dc=local", Name = "dc=glitterband,dc=local", Selected = true
+            };
+            var userType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+            var externalIdAttribute = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = "entryUUID", ConnectedSystemObjectType = userType, Type = AttributeDataType.Guid, IsExternalId = true, Selected = true
+            };
+            userType.Attributes.Add(externalIdAttribute);
+
+            // A hierarchy refresh is a configuration change, recorded against a security principal or not at all.
+            var mvUserType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+            var initiator = new MetaverseObject { Type = mvUserType, CachedDisplayName = "Test Administrator" };
+
+            seed.AddRange(connectorDefinition, system, yellowstone, glitterband, userType, mvUserType, initiator);
+            await seed.SaveChangesAsync();
+
+            ConnectedSystemObject NewObject(ConnectedSystemPartition partition) => new()
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = system.Id,
+                TypeId = userType.Id,
+                ExternalIdAttributeId = externalIdAttribute.Id,
+                Status = ConnectedSystemObjectStatus.Normal,
+                JoinType = ConnectedSystemObjectJoinType.NotJoined,
+                Created = DateTime.UtcNow,
+                PartitionId = partition.Id
+            };
+            var glitterbandObjects = new[] { NewObject(glitterband), NewObject(glitterband) };
+            var yellowstoneObject = NewObject(yellowstone);
+            seed.ConnectedSystemObjects.AddRange(glitterbandObjects);
+            seed.ConnectedSystemObjects.Add(yellowstoneObject);
+            await seed.SaveChangesAsync();
+
+            (systemId, yellowstoneId, glitterbandId, initiatorId) = (system.Id, yellowstone.Id, glitterband.Id, initiator.Id);
+            yellowstoneObjectId = yellowstoneObject.Id;
+            glitterbandObjectIds = glitterbandObjects.Select(o => o.Id).ToArray();
+        }
+
+        // The directory no longer has Glitterband.
+        var connector = new StubPartitionsConnector(
+            [new ConnectorPartition { Id = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Containers = [] }]);
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx), connectorFactory: new StubConnectorFactory(connector));
+            var system = (await jim.ConnectedSystems.GetConnectedSystemAsync(systemId, withChangeTracking: true))!;
+            var initiator = await ctx.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+
+            var result = await jim.ConnectedSystems.ImportConnectedSystemHierarchyAsync(system, initiator);
+
+            Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+        }
+
+        await using var verify = NewContext();
+        var objects = await verify.ConnectedSystemObjects.ToDictionaryAsync(o => o.Id, o => o.PartitionId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.Id).ToListAsync(), Is.EqualTo(new[] { yellowstoneId }),
+                "the refresh removes the Partition the directory no longer holds, and keeps the other");
+            Assert.That(objects.Keys, Is.EquivalentTo(glitterbandObjectIds.Append(yellowstoneObjectId)),
+                "removing a Partition deletes no Connected System Object; that is deletion detection's decision");
+            Assert.That(glitterbandObjectIds.Select(id => objects[id]), Is.All.Null,
+                $"the objects in the removed Partition (id {glitterbandId}) are left in no Partition");
+            Assert.That(objects[yellowstoneObjectId], Is.EqualTo(yellowstoneId), "an object in a kept Partition keeps it");
+        }
+    }
+
+    /// <summary>
+    /// A Connector whose hierarchy is whatever the test says the directory holds.
+    /// </summary>
+    private sealed class StubPartitionsConnector(List<ConnectorPartition> partitions) : IConnector, IConnectorPartitions
+    {
+        public string Name => "Stub Partitions Connector";
+        public string? Description => null;
+        public string? Url => null;
+
+        public Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settings, ILogger logger) =>
+            Task.FromResult(partitions);
+    }
+
+    private sealed class StubConnectorFactory(IConnector connector) : IConnectorFactory
+    {
+        public IConnector Create(string connectorName, ICredentialProtection? credentialProtection = null, ICertificateProvider? certificateProvider = null) => connector;
     }
 }
