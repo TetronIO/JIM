@@ -3780,6 +3780,36 @@ function Get-PartitionDeltaImportWatermark {
     return $watermarks
 }
 
+function Get-PartitionObjectCount {
+    <#
+    .SYNOPSIS
+        How many Connected System Objects JIM records in each partition of a Connected System.
+
+    .DESCRIPTION
+        Read with Get-JIMConnectedSystemObject -Count -PartitionId, which counts an object under the partition JIM
+        recorded for it. A partition-scoped import reads the Connector Space the same way, so an object counted under
+        no partition is one that partition's runs cannot see. Obsolete objects are counted too. Throws when a count
+        cannot be read, rather than reading as an empty partition.
+
+    .OUTPUTS
+        A hashtable of partition id (int) to count (int). Every partition of the Connected System is present.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ConnectedSystemId
+    )
+
+    $counts = @{}
+    foreach ($partition in @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ConnectedSystemId)) {
+        $count = Get-JIMConnectedSystemObject -ConnectedSystemId $ConnectedSystemId -Count -PartitionId ([int]$partition.id)
+        if ($null -eq $count) {
+            throw "Could not count the Connected System Objects in partition $($partition.id) ('$($partition.name)') of Connected System $ConnectedSystemId"
+        }
+        $counts[[int]$partition.id] = [int]$count
+    }
+    return $counts
+}
+
 function Get-ActivityPartitionWatermark {
     <#
     .SYNOPSIS
