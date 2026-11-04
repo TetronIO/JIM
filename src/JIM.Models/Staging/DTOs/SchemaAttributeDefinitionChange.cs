@@ -46,5 +46,11 @@ public enum SchemaAttributeChangeAspect
     /// <summary>
     /// The attribute's plurality (single-valued or multi-valued) was restated by the Connector.
     /// </summary>
-    Plurality = 1
+    Plurality = 1,
+
+    /// <summary>
+    /// The Connector restated the attribute as harder to write: set on creation only, or read-only. Only a
+    /// tightening is reported; an attribute becoming easier to write breaks no Attribute Flow.
+    /// </summary>
+    Writability = 2
 }

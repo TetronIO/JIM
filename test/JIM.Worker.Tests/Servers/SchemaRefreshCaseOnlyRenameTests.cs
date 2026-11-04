@@ -31,7 +31,9 @@ public class SchemaRefreshCaseOnlyRenameTests
             Selected = true,
             Attributes =
             [
-                new ConnectedSystemObjectTypeAttribute { Id = ObjectGuidAttributeId, Name = "objectGUID", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+                // Read-only, as the previous refresh stored it: the discovered schema below declares it so, and a
+                // writability the refresh would tighten is a definition change of its own (#2755).
+                new ConnectedSystemObjectTypeAttribute { Id = ObjectGuidAttributeId, Name = "objectGUID", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true, Writability = AttributeWritability.ReadOnly },
                 new ConnectedSystemObjectTypeAttribute { Id = MailAttributeId, Name = "mail", Type = AttributeDataType.Text, Selected = true }
             ]
         };

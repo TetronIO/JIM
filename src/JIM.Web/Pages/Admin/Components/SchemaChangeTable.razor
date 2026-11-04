@@ -117,7 +117,13 @@
 
     private static string Describe(SchemaAttributeDefinitionChange change)
     {
-        var aspect = change.Aspect == SchemaAttributeChangeAspect.DataType ? "data type" : "plurality";
+        var aspect = change.Aspect switch
+        {
+            SchemaAttributeChangeAspect.DataType => "data type",
+            SchemaAttributeChangeAspect.Plurality => "plurality",
+            SchemaAttributeChangeAspect.Writability => "writability",
+            _ => change.Aspect.ToString()
+        };
         return $"{change.AttributeName}: {aspect} {change.OldValue} → {change.NewValue}";
     }
 

@@ -386,6 +386,115 @@ public class SchemaRefreshDependentDetectorTests
         }
     }
 
+    [Test]
+    public void Detect_ExportMappingWritingAnAttributeThatBecameReadOnly_IsInvalidatedSayingItCanNoLongerBeWritten()
+    {
+        // A Connector can declare an attribute read-only that the Connected System itself would still accept
+        // (#2755: Exchange's own attributes), so nothing else stops the Attribute Flow writing it.
+        var result = new SchemaRefreshResult { Success = true };
+        result.AddChangedAttribute("user", WritabilityChange("faxNumber", AttributeWritability.Writable, AttributeWritability.ReadOnly));
+        var rule = ExportRule(18, "Directory Users Outbound", _userType);
+        rule.AttributeFlowRules.Add(MappingWriting(109, _faxAttr));
+        rule.AttributeFlowRules.Add(MappingWriting(110, _mailAttr));
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EqualTo(new[] { 109 }));
+            Assert.That(dependents.InvalidatedMappings.Select(m => m.Reason).FirstOrDefault(),
+                Does.Contain("faxNumber").And.Contain("read-only").And.Contain("can no longer write"));
+        }
+    }
+
+    [Test]
+    public void Detect_ImportMappingOrExpressionReadingAnAttributeThatBecameReadOnly_IsNotInvalidated()
+    {
+        // Read-only stops writes, not reads: an import goes on receiving the attribute exactly as before.
+        var result = new SchemaRefreshResult { Success = true };
+        result.AddChangedAttribute("user", WritabilityChange("faxNumber", AttributeWritability.Writable, AttributeWritability.ReadOnly));
+        var rule = ImportRule(19, "Directory Users Inbound", _userType);
+        rule.AttributeFlowRules.Add(MappingReading(111, _faxAttr));
+        var expressionMapping = new SyncRuleMapping
+        {
+            Id = 112,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 903, Name = "Fax Display", Type = AttributeDataType.Text }
+        };
+        expressionMapping.Sources.Add(new SyncRuleMappingSource { Order = 0, Expression = "\"Fax: \" + cs[\"faxNumber\"]" });
+        rule.AttributeFlowRules.Add(expressionMapping);
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        Assert.That(dependents.InvalidatedMappings, Is.Empty);
+    }
+
+    [Test]
+    public void Detect_ExportMappingWritingAnAttributeNowSetOnCreationOnly_IsNotInvalidated()
+    {
+        // The mapping validator permits a set-on-creation target, so the mapping still stands; it now flows only
+        // when the object is created, which the change itself reports.
+        var result = new SchemaRefreshResult { Success = true };
+        result.AddChangedAttribute("user", WritabilityChange("faxNumber", AttributeWritability.Writable, AttributeWritability.WritableOnCreate));
+        var rule = ExportRule(20, "Directory Users Outbound", _userType);
+        rule.AttributeFlowRules.Add(MappingWriting(113, _faxAttr));
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [rule], RefreshedAt);
+
+        Assert.That(dependents.InvalidatedMappings, Is.Empty);
+    }
+
+    [Test]
+    public void Detect_AttributeRetypedAndMadeReadOnlyInOneRefresh_InvalidatesBothItsReaderAndItsWriter()
+    {
+        // Two changes to one attribute: neither may hide the other.
+        var result = new SchemaRefreshResult { Success = true };
+        result.AddChangedAttribute("user", new SchemaAttributeDefinitionChange
+        {
+            AttributeName = "employeeNumber",
+            Aspect = SchemaAttributeChangeAspect.DataType,
+            OldValue = "Number",
+            NewValue = "Text"
+        });
+        result.AddChangedAttribute("user", WritabilityChange("employeeNumber", AttributeWritability.Writable, AttributeWritability.ReadOnly));
+        var inbound = ImportRule(21, "HR Users Inbound", _userType);
+        inbound.AttributeFlowRules.Add(MappingReading(114, _employeeNumberAttr));
+        var outbound = ExportRule(22, "Directory Users Outbound", _userType);
+        outbound.AttributeFlowRules.Add(MappingWriting(115, _employeeNumberAttr));
+
+        SeedPreRefreshSchema(result);
+        var dependents = SchemaRefreshDependentDetector.Detect(result, [inbound, outbound], RefreshedAt);
+
+        Assert.That(dependents.InvalidatedMappings.Select(m => m.MappingId), Is.EquivalentTo(new[] { 114, 115 }));
+    }
+
+    private static SchemaAttributeDefinitionChange WritabilityChange(string attributeName, AttributeWritability oldWritability, AttributeWritability newWritability) => new()
+    {
+        AttributeName = attributeName,
+        Aspect = SchemaAttributeChangeAspect.Writability,
+        OldValue = oldWritability.ToString(),
+        NewValue = newWritability.ToString()
+    };
+
+    private static SyncRule ExportRule(int id, string name, ConnectedSystemObjectType type) => new()
+    {
+        Id = id,
+        Name = name,
+        Direction = SyncRuleDirection.Export,
+        Enabled = true,
+        ConnectedSystemObjectTypeId = type.Id,
+        ConnectedSystemObjectType = type
+    };
+
+    private static SyncRuleMapping MappingWriting(int id, ConnectedSystemObjectTypeAttribute attribute)
+    {
+        var mapping = new SyncRuleMapping { Id = id, TargetConnectedSystemAttribute = attribute, TargetConnectedSystemAttributeId = attribute.Id };
+        mapping.Sources.Add(new SyncRuleMappingSource { Order = 0, MetaverseAttribute = new MetaverseAttribute { Id = 700 + id, Name = $"MV {attribute.Name}", Type = AttributeDataType.Text } });
+        return mapping;
+    }
+
     private static SyncRule ImportRule(int id, string name, ConnectedSystemObjectType type) => new()
     {
         Id = id,

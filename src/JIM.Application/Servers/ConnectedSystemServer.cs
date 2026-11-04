@@ -3318,6 +3318,22 @@ public partial class ConnectedSystemServer
                             existingAttribute.DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, existingAttribute.Type);
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
+
+                        // A tighter writability is a definition change (#2755): an export Attribute Flow validated
+                        // against a writable attribute may no longer be able to write it, and when the Connector
+                        // declared it read-only of its own accord the Connected System would still accept the write,
+                        // so nothing but this report stops the flow. A looser one breaks no mapping.
+                        if (existingAttribute.Writability != schemaAttribute.Writability &&
+                            existingAttribute.Writability.MostRestrictive(schemaAttribute.Writability) == schemaAttribute.Writability)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Writability,
+                                OldValue = existingAttribute.Writability.ToString(),
+                                NewValue = schemaAttribute.Writability.ToString()
+                            });
+                        }
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
 

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A schema refresh now lists an attribute that became harder to write, and flags each Attribute Flow writing one that became read-only, so **Apply & Disable Dependents** disables it. Before, the change applied silently and the flow kept writing it. (#2755)
 - 🐛 A setting added to a Connector since JIM was installed now shows on the Settings tab where the Connector places it, rather than at the end of its section under whichever heading came last.
 - 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.
 - 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
