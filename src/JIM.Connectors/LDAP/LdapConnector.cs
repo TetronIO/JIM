@@ -16,7 +16,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IConnectorSettingsCheck, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -282,6 +282,73 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
         return response;
     }
+    #endregion
+
+    #region IConnectorSettingsCheck members
+    /// <summary>
+    /// The Exchange check behind <see cref="CheckSettingsAsync"/>. Replaceable so tests can stand a fake Exchange in.
+    /// </summary>
+    internal LdapExchangeSettingsCheck ExchangeSettingsCheck { get; set; } = LdapExchangeSettingsCheck.ForThisProcess();
+
+    /// <summary>
+    /// When Exchange recipients are managed (#2021, PRD requirements 2 and 3), signs in to Exchange as the directory
+    /// account, with the Kerberos sign-in worked out from the directory: a sign-in that fails refuses the save, and an
+    /// account that may not run some of the commands JIM needs is a warning. Learns the Exchange version and the sign-in
+    /// it used. With Exchange not managed, there is nothing to check, and nothing learnt.
+    /// </summary>
+    public async Task<ConnectorSettingsCheckResult> CheckSettingsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger, CancellationToken cancellationToken)
+    {
+        var manage = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS);
+        if (manage?.CheckboxValue != true)
+            return new ConnectorSettingsCheckResult();
+
+        var serverSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == LdapConnectorConstants.SETTING_EXCHANGE_SERVER);
+        var endpoint = LdapExchangeSignIn.ParseExchangeServer(serverSetting?.StringValue);
+        if (endpoint.Endpoint == null)
+            return ExchangeCheckRefused(serverSetting, endpoint.Refusal!);
+
+        var usernameSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == _settingUsername);
+        var passwordSetting = settingValues.SingleOrDefault(sv => sv.Setting.Name == _settingPassword);
+        if (usernameSetting?.StringValue is not { Length: > 0 } username || passwordSetting?.StringEncryptedValue is not { Length: > 0 } storedPassword)
+            return ExchangeCheckRefused(usernameSetting, "JIM signs in to Exchange as the directory account, so it needs the Username and Password above.");
+
+        LdapExchangeSignInResolution resolution;
+        try
+        {
+            // The connection the quick validation has just proved; no persisted state, so it reaches the Preferred Domain
+            // Controller or the Host, and the domain controller it reaches is the KDC the sign-in asks.
+            OpenImportConnection(settingValues, null, logger);
+            resolution = LdapExchangeDirectoryLookup.Resolve(_connection!, username, logger);
+        }
+        catch (Exception ex) when (ex is LdapException or DirectoryOperationException or InvalidSettingValuesException)
+        {
+            return ExchangeCheckRefused(usernameSetting, $"JIM could not read the directory account to sign in to Exchange as: {ex.Message}");
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+
+        if (resolution.SignIn == null)
+            return ExchangeCheckRefused(usernameSetting, resolution.Refusal!);
+
+        var password = _credentialProtection?.Unprotect(storedPassword) ?? storedPassword;
+        var trustedCertificates = ServerCertificateDiagnosis.LoadTrustedCertificates(_certificateProvider);
+        try
+        {
+            return await ExchangeSettingsCheck.CheckAsync(resolution.SignIn, endpoint.Endpoint, password, [.. trustedCertificates], serverSetting, logger, cancellationToken);
+        }
+        finally
+        {
+            foreach (var certificate in trustedCertificates)
+                certificate.Dispose();
+        }
+    }
+
+    private static ConnectorSettingsCheckResult ExchangeCheckRefused(ConnectedSystemSettingValue? settingValue, string message) => new()
+    {
+        Results = [new ConnectorSettingValueValidationResult { SettingValue = settingValue, IsValid = false, ErrorMessage = message }]
+    };
     #endregion
 
     #region IConnectorSchema members
