@@ -1,6 +1,6 @@
 # Run Profiles that Target a Removed Partition
 
-- **Status:** Doing
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#2740](https://github.com/TetronIO/JIM/issues/2740)
 - **Created:** 2026-11-04
 
@@ -89,7 +89,7 @@ The configuration snapshot records a disabled Run Profile's state (by presence, 
 
 ## Implementation Phases
 
-### Phase 1: Model and migration
+### Phase 1: Model and migration ✅
 
 - `Enabled`, `DisabledReason`, `DisabledPartitionName`, the enum, `RunProfileEnablement`, migration `AddRunProfileEnabledState`, repository copy of the three fields and the stored-state projection.
 - Tests: `RunProfileEnablementTests` (JIM.Models.Tests): the wording of each reason, the refusal, and the re-enabling rule; `RunProfileEnabledStatePersistenceDatabaseTests` (RequiresPostgres, NoTracking): existing rows migrate enabled, and an update persists the three fields.

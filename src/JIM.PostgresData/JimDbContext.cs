@@ -767,6 +767,15 @@ public class JimDbContext : DbContext
             .Property(rp => rp.AllowObjectTypeChanges)
             .HasDefaultValue(false);
 
+        // #2740: a Run Profile's enabled state. Defaults to true so every Run Profile that existed before the state did
+        // keeps running; the store-level default backfills existing rows on migration. The sentinel matches the default:
+        // left at the CLR default (false), EF would omit the column whenever a Run Profile was saved disabled, and the
+        // store default would silently enable it.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.Enabled)
+            .HasDefaultValue(true)
+            .HasSentinel(true);
+
         // An ObjectMatchingRule belongs to either a SyncRule or a ConnectedSystemObjectType, never both, and which
         // one decides what the rule is: owned by an Object Type it matches every account of that type (Simple
         // mode), owned by a Synchronisation Rule it matches only what that rule brings in (Advanced mode). Either

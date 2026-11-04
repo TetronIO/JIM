@@ -4986,6 +4986,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // export limits above; Layer 1's first Scenario 021 run found those missing from exactly here.
         tracked.MaxDetectedDeletions = runProfile.MaxDetectedDeletions;
         tracked.MaxDetectedDeletionsPercent = runProfile.MaxDetectedDeletionsPercent;
+        // #2740: the enabled state, copied by hand like everything above.
+        tracked.Enabled = runProfile.Enabled;
+        tracked.DisabledReason = runProfile.DisabledReason;
+        tracked.DisabledPartitionName = runProfile.DisabledPartitionName;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
@@ -5004,6 +5008,17 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemRunProfiles.
             Include(q => q.Partition).
             Where(q => q.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    public async Task<ConnectedSystemRunProfileEnabledState?> GetConnectedSystemRunProfileEnabledStateAsync(int connectedSystemRunProfileId)
+    {
+        // A projection, never an entity: on a tracking context (the Worker's) an entity query hands back the instance
+        // already in the identity map, edits and all, and the update would be judged against itself.
+        return await Repository.Database.ConnectedSystemRunProfiles
+            .AsNoTracking()
+            .Where(rp => rp.Id == connectedSystemRunProfileId)
+            .Select(rp => new ConnectedSystemRunProfileEnabledState(rp.Enabled, rp.DisabledReason, rp.DisabledPartitionName))
+            .SingleOrDefaultAsync();
     }
 
     public async Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId)

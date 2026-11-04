@@ -1191,6 +1191,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystem>> GetConnectedSystemsWithConnectorDefinitionsAsync();
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem);
     public Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// A Run Profile's enabled state as it is stored (#2740), read as a projection so that it never returns a tracked
+    /// instance an update has already edited. Null when there is no such Run Profile.
+    /// </summary>
+    public Task<ConnectedSystemRunProfileEnabledState?> GetConnectedSystemRunProfileEnabledStateAsync(int connectedSystemRunProfileId);
+
     public Task<PagedResultSet<ConnectedSystemObjectHeader>> GetConnectedSystemObjectHeadersAsync(
         int connectedSystemId,
         int page,
