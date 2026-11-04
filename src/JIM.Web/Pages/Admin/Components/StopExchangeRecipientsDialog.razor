@@ -1,0 +1,63 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The confirmation before the Exchange recipients panel removes a Synchronisation Rule's Attribute Flows to Exchange
+   attributes (#2021, PRD requirement 4). It says what happens to recipients already made, since removing the flows
+   declares their recipient type None, which this release reports and does not make in Exchange (requirement 16). *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Class="d-flex align-center">
+            <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Error" Class="mr-2" />
+            Stop provisioning Exchange recipients?
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText data-testid="jim-exchange-recipients-stop-intro">
+            This removes the @FlowCount Attribute @(FlowCount == 1 ? "Flow" : "Flows") that set Exchange attributes on
+            <b>@(SyncRuleName ?? "this Synchronisation Rule")</b>, when the rule is saved.
+        </MudText>
+        <MudAlert Severity="Severity.Info" Class="mt-3">
+            <b>Existing recipients are left as they are.</b> Objects already provisioned keep their recipients: their declared
+            recipient type becomes None, which is reported against each object and not made in Exchange. Objects provisioned
+            from now on get no recipient.
+        </MudAlert>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" data-testid="jim-exchange-recipients-stop-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" DropShadow="false" OnClick="Confirm"
+                   data-testid="jim-exchange-recipients-stop-confirm">Remove @FlowCount Attribute @(FlowCount == 1 ? "Flow" : "Flows")</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>The Synchronisation Rule the flows belong to.</summary>
+    [Parameter]
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>How many Attribute Flows stopping removes.</summary>
+    [Parameter]
+    public int FlowCount { get; set; }
+
+    /// <summary>Asks the administrator to confirm stopping recipient provisioning on a Synchronisation Rule.</summary>
+    /// <returns>True to go ahead, false when the administrator cancelled.</returns>
+    public static async Task<bool> ConfirmAsync(IDialogService dialogService, string? syncRuleName, int flowCount)
+    {
+        var parameters = new DialogParameters<StopExchangeRecipientsDialog>
+        {
+            { x => x.SyncRuleName, syncRuleName },
+            { x => x.FlowCount, flowCount }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<StopExchangeRecipientsDialog>("Stop provisioning Exchange recipients?", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Confirm() => MudDialog.Close(DialogResult.Ok(true));
+}

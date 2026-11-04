@@ -1,0 +1,134 @@
+@using JIM.Models.Logic
+@using JIM.Models.Staging
+@using JIM.Web.Models
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The way in to Exchange recipients on an export Synchronisation Rule (#2021, PRD requirement 4): one row per Exchange
+   attribute the rule's Object Type carries, with the Attribute Flow that sets it or what happens without one. It stores
+   nothing of its own. Set, Edit and Remove are the tab's own Attribute Flow actions, so the REST API and PowerShell
+   already offer everything it does; it is a portal affordance only. *@
+
+<MudPaper Class="pa-4" Outlined="true" data-testid="jim-exchange-recipients-panel">
+    <div class="d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Info" Class="mr-2" />
+        <MudText Typo="Typo.h6">Exchange recipients</MudText>
+    </div>
+
+    @if (!Flows.IsSetUp)
+    {
+        <div class="d-flex align-center justify-space-between flex-wrap gap-4 mt-3">
+            <div>
+                <MudText>Objects this rule provisions are not Exchange recipients.</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Declare what each one should be in Exchange: a mailbox, a shared, room or equipment mailbox, a mail user, a mail
+                    contact or a mail-enabled group. Its Connected System manages Exchange recipients.
+                </MudText>
+            </div>
+            <MudButton Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.Add" DropShadow="false"
+                       OnClick="SetUpAsync" data-testid="jim-exchange-recipients-set-up">Set up recipients</MudButton>
+        </div>
+    }
+    else
+    {
+        <MudSimpleTable Outlined="true" Class="mt-3">
+            <thead>
+                <tr>
+                    <th>Exchange attribute</th>
+                    <th>Set by</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Flows.Rows)
+                {
+                    <tr @key="row.Attribute.Name" data-testid="jim-exchange-recipients-row">
+                        <td>
+                            <AttributeChip Kind="AttributeChipKind.ConnectedSystem" Name="@row.Attribute.Name"
+                                           Tooltip="@row.Attribute.Description" />
+                        </td>
+                        <td>
+                            @if (row.Mapping is { } mapping)
+                            {
+                                <div class="jim-one-line-list">
+                                    @foreach (var source in mapping.Sources.OrderBy(s => s.Order))
+                                    {
+                                        <span class="jim-one-line-list-value">
+                                            @if (source.MetaverseAttribute is { } metaverseSource)
+                                            {
+                                                <AttributeChip Kind="AttributeChipKind.Metaverse" Name="@metaverseSource.Name"
+                                                               Tooltip="@Helpers.DescribeAttribute(AttributeChipKind.Metaverse, metaverseSource.Type, metaverseSource.AttributePlurality)" />
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(source.Expression))
+                                            {
+                                                <AttributeChip Kind="AttributeChipKind.Expression" Expression="@source.Expression" />
+                                            }
+                                        </span>
+                                    }
+                                    @if (!mapping.Enabled)
+                                    {
+                                        <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Disabled</MudChip>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@row.WithoutFlow</MudText>
+                            }
+                        </td>
+                        <td class="text-right" style="white-space: nowrap;">
+                            @if (row.Mapping is { } setMapping)
+                            {
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="@(() => OnEdit.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-edit">Edit</MudButton>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="@(() => OnRemove.InvokeAsync(setMapping))" data-testid="jim-exchange-recipients-remove">Remove</MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                           OnClick="@(() => OnSet.InvokeAsync(row.Attribute))" data-testid="jim-exchange-recipients-set">Set</MudButton>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        <div class="d-flex align-center justify-space-between flex-wrap gap-4 mt-3">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">These are this rule's own Attribute Flows, also listed below.</MudText>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Block" DropShadow="false"
+                       OnClick="StopAsync" data-testid="jim-exchange-recipients-stop">Stop provisioning recipients</MudButton>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>The rows to show; the tab builds them with <see cref="ExchangeRecipientFlows.For"/>.</summary>
+    [Parameter] public ExchangeRecipientFlows Flows { get; set; } = null!;
+
+    /// <summary>The Synchronisation Rule's name, for the confirmation before stopping.</summary>
+    [Parameter] public string? SyncRuleName { get; set; }
+
+    /// <summary>Add an Attribute Flow to this attribute, with the target already chosen.</summary>
+    [Parameter] public EventCallback<ConnectedSystemObjectTypeAttribute> OnSet { get; set; }
+
+    /// <summary>Edit this Attribute Flow, as the tab's own Edit does.</summary>
+    [Parameter] public EventCallback<SyncRuleMapping> OnEdit { get; set; }
+
+    /// <summary>Remove this Attribute Flow, as the tab's own Remove does.</summary>
+    [Parameter] public EventCallback<SyncRuleMapping> OnRemove { get; set; }
+
+    /// <summary>Remove every Attribute Flow to an Exchange attribute; raised only once the administrator has confirmed.</summary>
+    [Parameter] public EventCallback OnStop { get; set; }
+
+    // Setting up begins with the recipient type: without it, nothing else the panel sets makes an object a recipient.
+    private Task SetUpAsync() => OnSet.InvokeAsync(Flows.Rows[0].Attribute);
+
+    private async Task StopAsync()
+    {
+        if (await StopExchangeRecipientsDialog.ConfirmAsync(DialogService, SyncRuleName, Flows.Flows.Count))
+            await OnStop.InvokeAsync();
+    }
+}
