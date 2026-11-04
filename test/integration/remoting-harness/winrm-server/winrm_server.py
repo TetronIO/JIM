@@ -10,6 +10,8 @@ It does what a Windows WinRM endpoint does for PowerShell remoting, closely enou
   authenticated, as a WinRM listener with AllowUnencrypted=false refuses them.
 - The WS-Management shell operations PowerShell remoting uses (MS-PSRP 3.1.5.3): Create, Command, Send, Receive,
   Signal and Delete.
+- WinRM's limit on the size of a request (MaxEnvelopeSizekb, 500 KB by default): a larger one is refused with HTTP 413,
+  as Exchange's endpoint refused a 1 MB parameter sent in one request. A client has to split what it sends.
 - The PowerShell Remoting Protocol itself is not reimplemented: each shell's PSRP traffic is passed to its own
   `pwsh -s` process, PowerShell's out-of-process server.
 
@@ -65,6 +67,8 @@ SERVICE_HOST = os.environ.get("WINRM_SERVICE_HOST", "winrm-harness.harness.test"
 # How long a Receive waits for output when the client sends no w:OperationTimeout. WinRM honours the client's.
 RECEIVE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_RECEIVE_TIMEOUT_SECONDS", "10"))
 IDLE_TIMEOUT_SECONDS = float(os.environ.get("WINRM_IDLE_TIMEOUT_SECONDS", "120"))
+# WinRM's MaxEnvelopeSizekb, 500 by default on Windows: the largest request body it accepts.
+MAX_REQUEST_BYTES = int(os.environ.get("WINRM_MAX_ENVELOPE_SIZE_KB", "500")) * 1024
 DURATION = re.compile(r"^P(?:(?P<d>\d+)D)?(?:T(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?(?:(?P<s>\d+(?:\.\d+)?)S)?)?$")
 
 
@@ -403,6 +407,11 @@ class WinRMHandler(http.server.BaseHTTPRequestHandler):
 
         if not body:
             self._reply(200, headers=headers)
+            return
+
+        if len(body) > MAX_REQUEST_BYTES:
+            LOG.warning("refused request: %d bytes is over the %d-byte limit", len(body), MAX_REQUEST_BYTES)
+            self._reply(413, headers=headers)
             return
 
         if self.server.tls:

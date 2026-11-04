@@ -26,7 +26,7 @@ public sealed class RemoteSessionStatistics
     /// <summary>Commands (pipelines) the session has started.</summary>
     public long CommandsRun => Interlocked.Read(ref _commandsRun);
 
-    /// <summary>The largest WS-Management message sent, in bytes before encryption.</summary>
+    /// <summary>The largest WS-Management message sent, in bytes before encryption, whether or not the server accepted it.</summary>
     public long LargestRequestBytes => Interlocked.Read(ref _largestRequestBytes);
 
     /// <summary>The largest WS-Management message received, in bytes after decryption.</summary>
@@ -38,11 +38,10 @@ public sealed class RemoteSessionStatistics
 
     internal void RecordCommand() => Interlocked.Increment(ref _commandsRun);
 
-    internal void RecordMessage(long requestBytes, long responseBytes)
-    {
-        RaiseTo(ref _largestRequestBytes, requestBytes);
-        RaiseTo(ref _largestResponseBytes, responseBytes);
-    }
+    // A request is counted as it is sent, so one the server refuses (a 413, for being too large) still shows.
+    internal void RecordRequest(long bytes) => RaiseTo(ref _largestRequestBytes, bytes);
+
+    internal void RecordResponse(long bytes) => RaiseTo(ref _largestResponseBytes, bytes);
 
     private static void RaiseTo(ref long largest, long candidate)
     {

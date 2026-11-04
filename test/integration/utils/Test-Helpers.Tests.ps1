@@ -1875,6 +1875,47 @@ Describe 'Partition Delta Import watermark reads' {
     }
 }
 
+Describe 'Get-PartitionObjectCount' {
+    # Scenario 009 reads how many objects JIM records in each partition before and after an import, which is how an
+    # object recorded in no partition (one no partition-scoped run can see) shows up.
+    BeforeAll {
+        # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing the module.
+        function Get-JIMConnectedSystemPartition { param([int]$ConnectedSystemId) }
+        function Get-JIMConnectedSystemObject { param([int]$ConnectedSystemId, [switch]$Count, [int]$PartitionId) }
+    }
+
+    BeforeEach {
+        Mock Get-JIMConnectedSystemPartition {
+            @(
+                [PSCustomObject]@{ id = 3; name = 'dc=yellowstone,dc=local' },
+                [PSCustomObject]@{ id = 4; name = 'dc=glitterband,dc=local' }
+            )
+        }
+    }
+
+    It 'maps each partition to the number of objects JIM counts in it, zero included' {
+        # One mock answering per partition, not one filtered mock per partition: with two filtered behaviours, Pester
+        # evaluates the filters where the bound -Count switch shadows a variable of its own, and fails to compare.
+        Mock Get-JIMConnectedSystemObject { switch ($PartitionId) { 3 { 12 } 4 { 0 } } }
+
+        $counts = Get-PartitionObjectCount -ConnectedSystemId 7
+
+        $counts.Keys.Count | Should -Be 2
+        $counts[3] | Should -Be 12
+        $counts[3] | Should -BeOfType [int]
+        $counts.ContainsKey(4) | Should -BeTrue
+        $counts[4] | Should -Be 0
+        Should -Invoke Get-JIMConnectedSystemPartition -Times 1 -ParameterFilter { $ConnectedSystemId -eq 7 }
+        Should -Invoke Get-JIMConnectedSystemObject -Times 2 -ParameterFilter { $ConnectedSystemId -eq 7 -and $Count }
+    }
+
+    It 'throws, naming the partition, when its count cannot be read' {
+        Mock Get-JIMConnectedSystemObject { if ($PartitionId -eq 3) { 12 } }
+
+        { Get-PartitionObjectCount -ConnectedSystemId 7 } | Should -Throw '*partition 4*glitterband*'
+    }
+}
+
 Describe 'Import Activity reads' {
     BeforeAll {
         function Get-JIMActivity { param([string]$Id, [switch]$ExecutionItems) }

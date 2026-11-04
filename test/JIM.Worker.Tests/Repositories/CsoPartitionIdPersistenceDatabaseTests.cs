@@ -145,4 +145,163 @@ public class CsoPartitionIdPersistenceDatabaseTests
         Assert.That(persisted.PartitionId, Is.EqualTo(partitionId),
             "The import processor's PartitionId backfill must be persisted by the bulk update, not silently discarded.");
     }
+
+    [Test]
+    public async Task UpdateConnectedSystemObjectsAsync_PartitionMovedWithNothingElseChanged_PersistsTheNewPartitionAsync()
+    {
+        // #2723: an import restamps an object whose placement moved from one Partition to another with nothing else about
+        // it changed, so no attribute value is written; the row update alone must carry the new Partition.
+        var (systemId, typeId, externalIdAttributeId, oldPartitionId) = await SeedConnectedSystemGraphAsync();
+        int newPartitionId;
+        await using (var seed = NewContext())
+        {
+            var system = await seed.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == systemId);
+            var partition = new ConnectedSystemPartition
+            {
+                ConnectedSystem = system, Name = "DC=partners,DC=example", ExternalId = $"partition-{Guid.NewGuid():N}", Selected = true
+            };
+            seed.ConnectedSystemPartitions.Add(partition);
+            await seed.SaveChangesAsync();
+            newPartitionId = partition.Id;
+        }
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = systemId,
+            TypeId = typeId,
+            ExternalIdAttributeId = externalIdAttributeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.NotJoined,
+            Created = DateTime.UtcNow,
+            PartitionId = oldPartitionId
+        };
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.Add(cso);
+            await seed.SaveChangesAsync();
+        }
+
+        cso.PartitionId = newPartitionId;
+
+        // Act: the call the import's save phase makes, with no attribute value additions or removals
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            await repository.Sync.UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { cso }, [], []);
+        }
+
+        // Assert
+        await using var readContext = NewContext();
+        var persisted = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(o => o.Id == cso.Id);
+        Assert.That(persisted.PartitionId, Is.EqualTo(newPartitionId));
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemObjectPartitionsAsync_PlacedObject_WritesThePartitionAndNothingElseAsync()
+    {
+        // #2723: a successful export records where it wrote the object. Only the Partition is written: an object marked
+        // for synchronisation, or stripped of its import state hash, would cost the next Delta Synchronisation and Full
+        // Import work for a change neither reads.
+        var (systemId, typeId, externalIdAttributeId, oldPartitionId) = await SeedConnectedSystemGraphAsync();
+        var newPartitionId = await AddPartitionAsync(systemId);
+        var lastUpdated = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        var importStateHash = Guid.NewGuid();
+        var placed = NewCso(systemId, typeId, externalIdAttributeId, oldPartitionId, lastUpdated, importStateHash);
+        var bystander = NewCso(systemId, typeId, externalIdAttributeId, oldPartitionId, lastUpdated, importStateHash);
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.AddRange(placed, bystander);
+            await seed.SaveChangesAsync();
+        }
+
+        int changed;
+        int changedAgain;
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            changed = await repository.Sync.UpdateConnectedSystemObjectPartitionsAsync([(placed.Id, newPartitionId)]);
+            changedAgain = await repository.Sync.UpdateConnectedSystemObjectPartitionsAsync([(placed.Id, newPartitionId)]);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(o => o.Id == placed.Id);
+        var persistedBystander = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(o => o.Id == bystander.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.PartitionId, Is.EqualTo(newPartitionId));
+            Assert.That(changed, Is.EqualTo(1));
+            Assert.That(changedAgain, Is.Zero, "only a Partition that differs is written");
+            Assert.That(persisted.SynchronisationPending, Is.False, "a Partition-only change is not one for synchronisation to process");
+            Assert.That(persisted.ImportStateHash, Is.EqualTo(importStateHash), "where an object is is no part of what it holds");
+            Assert.That(persisted.LastUpdated, Is.EqualTo(lastUpdated));
+            Assert.That(persisted.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+            Assert.That(persistedBystander.PartitionId, Is.EqualTo(oldPartitionId));
+        }
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemObjectPartitionsAsync_TrackedInstance_IsBroughtIntoLineSoALaterSaveKeepsTheNewPartitionAsync()
+    {
+        // The Worker's context lives for the whole run: a tracked instance left holding the old Partition would read
+        // wrongly, and a whole-entity save of it would write the old Partition back over the new one.
+        var (systemId, typeId, externalIdAttributeId, oldPartitionId) = await SeedConnectedSystemGraphAsync();
+        var newPartitionId = await AddPartitionAsync(systemId);
+        var cso = NewCso(systemId, typeId, externalIdAttributeId, oldPartitionId, lastUpdated: null, importStateHash: null);
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemObjects.Add(cso);
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var writeContext = NewContext())
+        {
+            var tracked = await writeContext.ConnectedSystemObjects.AsTracking().SingleAsync(o => o.Id == cso.Id);
+            var repository = new PostgresDataRepository(writeContext);
+
+            await repository.Sync.UpdateConnectedSystemObjectPartitionsAsync([(cso.Id, newPartitionId)]);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(tracked.PartitionId, Is.EqualTo(newPartitionId));
+                Assert.That(writeContext.Entry(tracked).Property(o => o.PartitionId).IsModified, Is.False, "it reads as persisted, not as a change to save");
+            }
+
+            writeContext.Entry(tracked).State = EntityState.Modified;
+            tracked.LastUpdated = DateTime.UtcNow;
+            await writeContext.SaveChangesAsync();
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.ConnectedSystemObjects.AsNoTracking().SingleAsync(o => o.Id == cso.Id);
+        Assert.That(persisted.PartitionId, Is.EqualTo(newPartitionId), "the later whole-entity save kept the new Partition");
+    }
+
+    private async Task<int> AddPartitionAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var system = await seed.ConnectedSystems.AsTracking().SingleAsync(cs => cs.Id == systemId);
+        var partition = new ConnectedSystemPartition
+        {
+            ConnectedSystem = system, Name = "DC=partners,DC=example", ExternalId = $"partition-{Guid.NewGuid():N}", Selected = true
+        };
+        seed.ConnectedSystemPartitions.Add(partition);
+        await seed.SaveChangesAsync();
+        return partition.Id;
+    }
+
+    private static ConnectedSystemObject NewCso(int systemId, int typeId, int externalIdAttributeId, int partitionId, DateTime? lastUpdated,
+        Guid? importStateHash) => new()
+    {
+        Id = Guid.NewGuid(),
+        ConnectedSystemId = systemId,
+        TypeId = typeId,
+        ExternalIdAttributeId = externalIdAttributeId,
+        Status = ConnectedSystemObjectStatus.Normal,
+        JoinType = ConnectedSystemObjectJoinType.NotJoined,
+        Created = DateTime.UtcNow,
+        LastUpdated = lastUpdated,
+        ImportStateHash = importStateHash,
+        PartitionId = partitionId
+    };
 }

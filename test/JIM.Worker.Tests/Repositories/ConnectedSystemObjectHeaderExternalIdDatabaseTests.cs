@@ -493,7 +493,8 @@ public class ConnectedSystemObjectHeaderExternalIdDatabaseTests
                 "behaviour under test.");
 
         var executionItem = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
-        var cso = writer.Invoke(processor, [importObject, objectType, executionItem]) as ConnectedSystemObject;
+        // The last argument is the Partition to record (#2723); which Partition does not matter here.
+        var cso = writer.Invoke(processor, [importObject, objectType, executionItem, null]) as ConnectedSystemObject;
 
         Assert.That(cso, Is.Not.Null,
             $"The import writer rejected the test import object: {executionItem.ErrorType} {executionItem.ErrorMessage}");

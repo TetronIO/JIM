@@ -7,13 +7,15 @@ namespace Tetron.PowerShellRemoting.Tests;
 public class RemoteSessionStatisticsTests
 {
     [Test]
-    public void RecordMessage_SeveralMessages_KeepsTheLargestEachWay()
+    public void RecordRequestAndResponse_SeveralMessages_KeepTheLargestEachWay()
     {
         var statistics = new RemoteSessionStatistics();
 
-        statistics.RecordMessage(requestBytes: 10, responseBytes: 900);
-        statistics.RecordMessage(requestBytes: 700, responseBytes: 20);
-        statistics.RecordMessage(requestBytes: 30, responseBytes: 40);
+        statistics.RecordRequest(10);
+        statistics.RecordResponse(900);
+        statistics.RecordRequest(700);
+        statistics.RecordResponse(20);
+        statistics.RecordRequest(30);
 
         using (Assert.EnterMultipleScope())
         {
@@ -22,12 +24,34 @@ public class RemoteSessionStatisticsTests
         }
     }
 
+    /// <summary>
+    /// A request is counted as it is sent, so one the server refuses (a 413 for being too large) still shows: it is the
+    /// one a reader of the statistics most needs to see.
+    /// </summary>
     [Test]
-    public void RecordMessage_FromManyThreadsAtOnce_KeepsTheLargest()
+    public void RecordRequest_WithNoResponse_IsStillTheLargestRequest()
     {
         var statistics = new RemoteSessionStatistics();
 
-        Parallel.For(1, 10_001, i => statistics.RecordMessage(i, 10_001 - i));
+        statistics.RecordRequest(1_400_000);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(statistics.LargestRequestBytes, Is.EqualTo(1_400_000));
+            Assert.That(statistics.LargestResponseBytes, Is.Zero);
+        }
+    }
+
+    [Test]
+    public void RecordRequestAndResponse_FromManyThreadsAtOnce_KeepTheLargest()
+    {
+        var statistics = new RemoteSessionStatistics();
+
+        Parallel.For(1, 10_001, i =>
+        {
+            statistics.RecordRequest(i);
+            statistics.RecordResponse(10_001 - i);
+        });
 
         using (Assert.EnterMultipleScope())
         {

@@ -1,6 +1,7 @@
 # Exchange Remote PowerShell Transport Spike
 
-- **Status:** Doing (go decided 2026-11-03; the prototype lands as the basis of #2021's connector phases, and this plan moves to done with it)
+- **Status:** Done
+- **Note:** Go decided 2026-11-03. The prototype became the transport for #2021 ([implementation plan](../doing/EXCHANGE_MAILBOX_PROVISIONING.md)), whose Phase 1 closed the open items; the last lab run (2026-11-04) is recorded under Spike Results.
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -218,6 +219,21 @@ In that case, the write-up compares option A1 (own PSRP), option B (Windows-side
 
 ## Spike Results
 
+### Large payloads against Exchange (2026-11-04)
+
+**Windows does not split a Kerberos-sealed message into 16 KB parts, but it refuses a request over its envelope size, and a command's parameters went in one request. The second is fixed.** One read-only run of `ExchangeLabTests` against `ex1.panoply.local` as svc-jim, from `main` at `a64da8ac4` (#2021 Phase 1), by the lab agent. Six of seven passed.
+
+- **The 16 KB question, answered:** Exchange returned a 151,551-byte Kerberos-sealed response (`Get-Command`), and it decoded. Exchange keeps each response within the envelope size the client asks for (150 KB), in one sealed part.
+- **The failure:** a 1 MB bound parameter was refused with HTTP 413.
+  - Neither Exchange's logs (HttpProxy, Rps_Http) nor IIS's (W3SVC, HTTPERR) recorded the 413, so WinRM refused it before either saw it.
+  - ex1's `MaxEnvelopeSizekb` is 500. The client sent a command's whole first message, parameters and all, as one Command: 1.4 MB with base64. Only data after the Command was split.
+- **Why the harness missed it:** the stand-in server had no limit on a request's size, and accepted a 7 MB one.
+- **The fix:**
+  - the stand-in now refuses a request over 500 KB with HTTP 413, as Windows does, which made the harness's 1 MB and 5 MB cases fail as ex1 did;
+  - the client puts as much of a command's first message as one request holds in the Command, and sends the rest on stdin, in whole PSRP fragments, as Windows' own client does. Its largest request for a 5 MB parameter is now 133 KB;
+  - session statistics count a request as it is sent, so one the server refuses still shows; the run reported a largest request of 4,746 bytes because the refused one was never counted.
+- **Proof against Exchange:** the same test runs in #2021's Phase 2 lab run.
+
 ### Phase 3: fourth run against Exchange (2026-11-03)
 
 **Every Q4 cmdlet the go criteria name works against Exchange, with svc-jim's least-privilege roles. The one failure was the test's own set-up, and it is fixed.** Both suites ran at `f0ad013b6`, from the .NET SDK container on the lab's runner VM, against `ex1.panoply.local` as svc-jim:
@@ -372,7 +388,7 @@ None was in the client. That is weak evidence: the stand-in and the client share
 - **A CI job for the harness.** The tests skip without it today.
 - **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
-**Where they went (2026-11-04):** both are #2021's Phase 1 ([implementation plan](EXCHANGE_MAILBOX_PROVISIONING.md)), with the go's own open items (`XDG_CACHE_HOME`, the Worker image's run and ticket renewal). The harness job (`remoting-harness-tests`) runs on every pull request that touches the library. The large-payload cases have harness tests and a read-only lab test, which runs at the next lab window. This plan moves to `done/` once that run is recorded here.
+**Where they went (2026-11-04):** both are #2021's Phase 1 ([implementation plan](../doing/EXCHANGE_MAILBOX_PROVISIONING.md)), with the go's own open items (`XDG_CACHE_HOME`, the Worker image's run and ticket renewal). The harness job (`remoting-harness-tests`) runs on every pull request that touches the library. The large-payload cases have harness tests and a read-only lab test, whose run is recorded above.
 
 ### Phase 0: prior-art survey (2026-10-21)
 

@@ -16,7 +16,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorPartitionPlacement, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -70,6 +70,14 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         ArgumentNullException.ThrowIfNull(container);
 
         return LdapConnectorUtilities.IsDnWithinContainerScope(objectIdentifier, container);
+    }
+
+    /// <inheritdoc />
+    public IConnectorPartitionPlacer PreparePartitionPlacement(IReadOnlyCollection<ConnectedSystemPartition> partitions)
+    {
+        ArgumentNullException.ThrowIfNull(partitions);
+
+        return new LdapPartitionPlacer(partitions);
     }
 
     /// <summary>

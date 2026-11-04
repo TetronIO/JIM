@@ -1053,8 +1053,11 @@ The **ImportRuleChange** step (issue [#2615](https://github.com/TetronIO/JIM/iss
 | 8 | **UnscopedDelta** | Change users in each partition; Delta Import (Unscoped) imports both, with an `importReadRange` point per partition; the scoped Delta Imports then import nothing |
 | 9 | **PartitionDeletion** | (two partitions) Delete a user in the second partition; only the second partition's Delta Import marks it deleted |
 | 10 | **ReselectedPartition** | (two partitions) Deselect and reselect the second partition; Delta Import (Unscoped) reads every object instead, warns naming that partition and deletes nothing; the second partition's Delta Import then reads changes again |
+| 11 | **UnscopedCreatedDeletion** | (every directory type, #2723) Add a user to each partition; Full Import (Unscoped) imports them, and each partition's `Get-JIMConnectedSystemObject -Count -PartitionId` grows by exactly its own user; delete them in the directory; Full Import (Scoped) marks only its own partition's user deleted, then Full Import (Scoped - Second) the other |
 
 Every run a Delta Import step makes is checked against the partition watermarks JIM holds before and after it (`Get-JIMConnectedSystemPartition`'s `deltaImportWatermark`, and the Activity's `importPartitionWatermarksFrom` / `To`): it starts each partition it reads from that partition's watermark, records one for each, and leaves every other partition's exactly as it was. Each step also names exactly which objects it expects updated or deleted, and requires nothing read unchanged, so a Delta Import that read too much or too little fails. The Delta Import Run Profiles read three objects per page and each step changes four users per partition, so on OpenLDAP and 389 Directory Server every change read crosses a Connector page boundary, at any template: there the scenario adds five users of its own to each partition for these steps. (Samba AD is read unpaged, so its reads come back in one page whatever the page size; a full read of OpenLDAP or 389 Directory Server drains its LDAP pages within one Connector call, as it always has.) Samba AD and the Active Directory lab have one domain partition, so they run DeltaBaseline, CrossPartitionDelta and UnscopedDelta, with Delta Import (Unscoped) as the second Run Profile: both read the one partition and share its watermark, which exercises the Update Sequence Number path.
+
+UnscopedCreatedDeletion runs last, on every directory type, and proves that a Connected System Object is recorded in the partition it is in rather than the one its first import's Run Profile targeted (#2723): an object an unscoped run created used to be recorded in no partition, so no partition-scoped run counted it or detected its deletion. The count assertion compares each partition's count before and after Full Import (Unscoped), because the count includes obsolete objects (PartitionDeletion leaves one). On Samba AD and the Active Directory lab it adds one user to `OU=TestUsers` and runs the one scoped Full Import. Run on its own, like a Delta Import step, it first runs the scoped Full Imports, so every object it did not add is already in its partition.
 
 **Script**: `test/integration/scenarios/Invoke-Scenario-009-PartitionScopedImports.ps1`
 
@@ -1066,6 +1069,7 @@ Every run a Delta Import step makes is checked against the partition watermarks 
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step UnscopedImport
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step Comparison
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step CrossPartitionDelta   # runs the scoped Full Imports first
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step UnscopedCreatedDeletion   # likewise
 
 # Run all steps sequentially
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step All

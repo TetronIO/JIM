@@ -421,6 +421,18 @@ public interface ISyncRepository
     Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     /// <summary>
+    /// Records the Partition each Connected System Object is in (#2723): an object a successful export created or
+    /// renamed, placed by its Connector from the name it was written with. Writes <c>PartitionId</c> alone, in one
+    /// statement, and only on rows where it differs. Nothing else about the object changes, so it is not marked for
+    /// synchronisation (<c>SynchronisationPending</c>) and keeps its import state hash: where an object is changes
+    /// nothing a synchronisation or an import reads. Tracked instances of the written rows are brought into line. No-op
+    /// when <paramref name="placements"/> is empty.
+    /// </summary>
+    /// <param name="placements">Each object and the Partition to record for it.</param>
+    /// <returns>The number of objects whose Partition changed.</returns>
+    Task<int> UpdateConnectedSystemObjectPartitionsAsync(IReadOnlyCollection<(Guid ConnectedSystemObjectId, int PartitionId)> placements);
+
+    /// <summary>
     /// Persists an optimistic export apply delta (issue #1079): bulk-inserts newly exported
     /// attribute value rows and bulk-deletes superseded ones. Touches NO parent CSO row (Status,
     /// LastUpdated and every other CSO field are left exactly as they were): keeping a no-op

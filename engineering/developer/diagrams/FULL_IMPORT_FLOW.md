@@ -111,7 +111,7 @@ For each object in an import page, within `ProcessImportObjectsAsync`:
 
 ```mermaid
 flowchart TD
-    Entry([For each import object<br/>dates and Booleans normalised, #2153<br/>untyped deletions typed, #1066<br/>repeats found for the whole page first, #2063]) --> ConnErr{Connector flagged<br/>an error on it?}
+    Entry([For each import object<br/>dates and Booleans normalised, #2153<br/>untyped deletions typed, #1066<br/>repeats found for the whole page first, #2063<br/>each non-delete placed in a Partition<br/>by its Connector first, #2723]) --> ConnErr{Connector flagged<br/>an error on it?}
     ConnErr -->|Object-level| ConnErrSkip[RPEI: mapped Connector error<br/>Skip object]
     ConnErr -->|Attribute-level,<br/>External ID unreadable| ConnErrSkip
     ConnErr -->|Attribute-level| ConnErrKeep[RPEI lists every unreadable value, #2066<br/>Those attributes dropped from the<br/>import object: left as JIM held them<br/>Object still processed, left unstamped]
@@ -132,7 +132,7 @@ flowchart TD
     CrossPageDup -->|No| SameBatchDup{Returned more than<br/>once on this page? #2063}
     SameBatchDup -->|Yes| BothDupErr[RPEI: DuplicateObject<br/>Every copy rejected, no random winner<br/>Object held under another<br/>Object Type is kept]
 
-    SameBatchDup -->|No| HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
+    SameBatchDup -->|No| HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>stored Partition is the one<br/>this run would record #2723}
     HashSkip -->|Yes| SkipObject[Skip hydration and diff<br/>Remove RPEI, count as skipped<br/>Not added to update list<br/>External ID already collected<br/>for deletion detection]
     HashSkip -->|No| CheckDelete{Connector says<br/>Delete?}
 
@@ -154,13 +154,13 @@ flowchart TD
     HeldElsewhere -->|No| CreateCso
     HeldElsewhere -->|Yes| TypeChangeAllowed{Full Import whose Run Profile<br/>allows Object Type changes?}
     TypeChangeAllowed -->|No| RefuseTypeChange[RPEI: ObjectTypeChanged<br/>naming both Object Types<br/>Nothing created; held CSO kept<br/>and excluded from deletion detection]
-    TypeChangeAllowed -->|Yes| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>RPEI: Added<br/>A held CSO is left to<br/>deletion detection]
+    TypeChangeAllowed -->|Yes| CreateCso[Create new CSO<br/>Map all import attributes<br/>to CSO attribute values<br/>Partition: its placement, else<br/>the Run Profile's #2723<br/>RPEI: Added<br/>A held CSO is left to<br/>deletion detection]
     CreateCso --> AddToCreate[Add to create list<br/>Update seenExternalIds<br/>with CSO reference]
 
     CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
     CheckProvisioning -->|Yes| TransitionNormal[Transition to Normal status<br/>Object confirmed in target system]
     CheckProvisioning -->|No| UpdateCso
-    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes<br/>usually a no-op for a CSO whose<br/>export was optimistically applied #1079]
+    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes<br/>usually a no-op for a CSO whose<br/>export was optimistically applied #1079<br/>Restamp the Partition where its<br/>placement differs, no RPEI #2723]
     UpdateCso --> HasChanges{Attribute<br/>changes?}
     HasChanges -->|Yes| RpeiUpdated[RPEI: Updated]
     HasChanges -->|No| RpeiNoChange[No RPEI created<br/>CSO still added to update list<br/>for reference resolution]
@@ -331,7 +331,7 @@ flowchart TD
 
 - **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
-- **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete.
+- **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete. A CSO's Partition is where its Connector places it (`IConnectorPartitionPlacement`, #2723; the LDAP Connector by distinguished name), not the Run Profile that first read it, so that scope holds every object in the Partition, including those an unscoped run created or JIM provisioned; see `engineering/developer/connectors.md` > Saying which Partition an object is in.
 
 - **Cancellation safety**<br /> When a cancellation is requested, the page being read is finished and no further pages are requested. Staging happens only after every page has been read, so a run cancelled while reading persists no Connected System Objects at all; one cancelled after deletion detection skips persistence, and one cancelled after saving skips reconciliation. In every case the run's new watermark is not recorded (#1868), so the next Delta Import re-reads anything the cancelled run did not stage.
 

@@ -522,51 +522,12 @@ internal static class LdapConnectorUtilities
     /// LDAP compares names. Null when it lies in none of them, or does not read as a distinguished name.
     /// </summary>
     /// <remarks>
-    /// The longest, because OpenLDAP and 389 Directory Server can host one suffix beneath another (a subordinate
-    /// database), so an entry in the nested suffix lies under both. RDN by RDN, because a change attributed to the wrong
-    /// Partition is read against the wrong Partition's watermark (#2715): a raw suffix comparison would put
-    /// <c>uid=pat,adc=corp,dc=local</c>, or a value holding an escaped comma, under <c>dc=corp,dc=local</c>.
+    /// The rule is <see cref="LdapPartitionPlacer"/>'s, which also places each object an import reads in its Partition
+    /// (#2723), so the Partition whose watermark judges a change (#2715) is always the Partition the changed object is
+    /// recorded in. This form parses the Partitions on every call; a caller placing many names prepares a placer once.
     /// </remarks>
-    internal static ConnectedSystemPartition? PartitionForDn(string? distinguishedName, IReadOnlyCollection<ConnectedSystemPartition> partitions)
-    {
-        if (!LdapDistinguishedName.TryParse(distinguishedName, out var dn))
-            return null;
-
-        // OrderByDescending is stable, so of two Partitions naming the same suffix the first given wins.
-        return partitions
-            .Select(partition => (Partition: partition, Dn: LdapDistinguishedName.TryParse(partition.ExternalId, out var partitionDn) ? partitionDn : null))
-            .Where(candidate => candidate.Dn != null && EndsWithRdns(dn, candidate.Dn))
-            .OrderByDescending(candidate => candidate.Dn!.Rdns.Count)
-            .Select(candidate => candidate.Partition)
-            .FirstOrDefault();
-    }
-
-    /// <summary>Whether a DN's last RDNs are exactly those of a suffix, each compared as LDAP compares names.</summary>
-    private static bool EndsWithRdns(LdapDistinguishedName dn, LdapDistinguishedName suffix)
-    {
-        var offset = dn.Rdns.Count - suffix.Rdns.Count;
-        if (offset < 0)
-            return false;
-
-        for (var i = 0; i < suffix.Rdns.Count; i++)
-        {
-            if (!RdnsAreEqual(dn.Rdns[offset + i], suffix.Rdns[i]))
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Whether two RDNs name the same thing: the same attribute types with the same values, case-insensitively, in any
-    /// order (a multi-valued RDN's components are a set). Values are compared unescaped, so <c>cn=a\,b</c> and
-    /// <c>cn=a\2Cb</c> agree.
-    /// </summary>
-    private static bool RdnsAreEqual(LdapRelativeDistinguishedName left, LdapRelativeDistinguishedName right) =>
-        left.Components.Count == right.Components.Count
-        && left.Components.All(component => right.Components.Any(other =>
-            string.Equals(component.Type, other.Type, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(component.Value.Trim(), other.Value.Trim(), StringComparison.OrdinalIgnoreCase)));
+    internal static ConnectedSystemPartition? PartitionForDn(string? distinguishedName, IReadOnlyCollection<ConnectedSystemPartition> partitions) =>
+        new LdapPartitionPlacer(partitions).GetPartition(distinguishedName);
 
     /// <summary>
     /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
