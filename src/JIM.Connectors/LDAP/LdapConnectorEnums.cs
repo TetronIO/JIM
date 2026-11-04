@@ -93,3 +93,25 @@ internal enum LdapDeltaSourceKind
     /// <summary>389 Directory Server and generic directories: a draft-good-ldap-changelog cn=changelog.</summary>
     Changelog
 }
+
+/// <summary>
+/// How the account in a Connected System's Username setting is found in the directory, for the Exchange sign-in
+/// (#2021): by whichever form the administrator wrote it in.
+/// </summary>
+internal enum LdapExchangeAccountLookupKind
+{
+    /// <summary>
+    /// <c>DOMAIN\name</c>, or a bare name: the account's sAMAccountName.
+    /// </summary>
+    SamAccountName,
+
+    /// <summary>
+    /// <c>name@suffix</c>: the account's userPrincipalName, whatever its suffix.
+    /// </summary>
+    UserPrincipalName,
+
+    /// <summary>
+    /// The account's distinguished name.
+    /// </summary>
+    DistinguishedName
+}

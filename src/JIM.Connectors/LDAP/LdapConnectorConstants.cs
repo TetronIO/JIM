@@ -213,6 +213,12 @@ internal static class LdapConnectorConstants
     internal const string SETTING_MANAGE_EXCHANGE_RECIPIENTS = "Manage Exchange recipients";
 
     /// <summary>
+    /// The Exchange server whose remote PowerShell endpoint JIM signs in to (#2021): a host name, or a full http:// or
+    /// https:// address. Required while Exchange recipients are managed.
+    /// </summary>
+    internal const string SETTING_EXCHANGE_SERVER = "Exchange server";
+
+    /// <summary>
     /// LDAP object classes that require at least one member value (MUST constraint on the member attribute).
     /// When exporting to directories using these classes, a placeholder member is injected
     /// to satisfy the schema constraint when the group would otherwise be empty.
