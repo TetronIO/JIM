@@ -2072,10 +2072,11 @@ public partial class ConnectedSystemServer
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
     public void CopyConnectorSettingsToConnectorDefinition(IConnectorSettings connector, ConnectorDefinition connectorDefinition)
     {
-        foreach (var connectorSetting in connector.GetSettings())
+        foreach (var (connectorSetting, position) in connector.GetSettings().Select((setting, position) => (setting, position)))
         {
             connectorDefinition.Settings.Add(new ConnectorDefinitionSetting
             {
+                DisplayOrder = position,
                 Category = connectorSetting.Category,
                 DefaultCheckboxValue = connectorSetting.DefaultCheckboxValue,
                 DefaultStringValue = connectorSetting.DefaultStringValue,

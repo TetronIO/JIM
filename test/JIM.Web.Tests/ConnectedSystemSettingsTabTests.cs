@@ -114,6 +114,31 @@ public class ConnectedSystemSettingsTabTests : JimComponentTestContext
     }
 
     [Test]
+    public void SettingsTab_SettingAddedAfterInstall_RendersInTheConnectorsDeclaredPositionNotByItsId()
+    {
+        // On an installation that predates a setting, the new one has the highest id: sorted by id, it came last in its
+        // section, under whatever heading happened to be there.
+        var settings = new List<ConnectorDefinitionSetting>
+        {
+            new() { Id = 1, Name = "Exchange", Type = ConnectedSystemSettingType.Heading, Category = ConnectedSystemSettingCategory.Connectivity, DisplayOrder = 0 },
+            new() { Id = 2, Name = "Manage Exchange recipients", Type = ConnectedSystemSettingType.CheckBox, Category = ConnectedSystemSettingCategory.Connectivity, DisplayOrder = 1 },
+            new() { Id = 3, Name = "Group Membership", Type = ConnectedSystemSettingType.Heading, Category = ConnectedSystemSettingCategory.Connectivity, DisplayOrder = 3 },
+            new() { Id = 4, Name = "Group Placeholder Member DN", Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity, DisplayOrder = 4 },
+            new() { Id = 9, Name = "Exchange server", Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity, DisplayOrder = 2 }
+        };
+        var connectedSystem = new ConnectedSystem
+        {
+            Name = "PANOPLY",
+            SettingValues = settings.Select(s => new ConnectedSystemSettingValue { Id = s.Id, Setting = s }).ToList()
+        };
+
+        var cut = RenderTab(connectedSystem);
+
+        var rendered = cut.FindComponents<ConnectedSystemSettingField>().Select(f => f.Instance.SettingValue.Setting.Name);
+        Assert.That(rendered, Is.EqualTo(new[] { "Exchange", "Manage Exchange recipients", "Exchange server", "Group Membership", "Group Placeholder Member DN" }));
+    }
+
+    [Test]
     public void SettingsTab_WhileTheControllingValueSelectsIt_ShowsTheConditionalSetting()
     {
         var cut = RenderTab(ConnectedSystemWithConditionalSettings(OAuth));
