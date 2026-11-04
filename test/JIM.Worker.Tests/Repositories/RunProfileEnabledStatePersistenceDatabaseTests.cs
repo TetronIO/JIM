@@ -166,6 +166,73 @@ public class RunProfileEnabledStatePersistenceDatabaseTests
         Assert.That(stored, Is.Null);
     }
 
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_FromTheServerOnANoTrackingContext_DisablesAndOnlyEnablesWithAScopeAsync()
+    {
+        // The portal's path: the server, on a context configured as JIM.Web runs it, judging each update against what is
+        // stored. Disabling records that an administrator did it; a Run Profile a removed partition disabled is not
+        // enabled again until the update says what it reads.
+        var systemId = await SeedConnectedSystemAsync();
+        var runProfileId = await SeedRunProfileAsync(systemId);
+        var initiatorId = await SeedInitiatorAsync();
+
+        await UpdateThroughTheServerAsync(systemId, initiatorId, rp => rp.Enabled = false);
+        var disabled = await ReadAsync(runProfileId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(disabled.Enabled, Is.False);
+            Assert.That(disabled.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.Manual));
+        }
+
+        // As a hierarchy refresh leaves it.
+        await using (var ctx = NewContext())
+        {
+            await ctx.ConnectedSystemRunProfiles.Where(rp => rp.Id == runProfileId).ExecuteUpdateAsync(set => set
+                .SetProperty(rp => rp.DisabledReason, ConnectedSystemRunProfileDisabledReason.PartitionRemoved)
+                .SetProperty(rp => rp.DisabledPartitionName, "dc=glitterband,dc=local"));
+        }
+
+        Assert.ThrowsAsync<ArgumentException>(() => UpdateThroughTheServerAsync(systemId, initiatorId, rp => rp.Enabled = true),
+            "enabling it with nothing chosen would have it read every selected partition");
+        Assert.That((await ReadAsync(runProfileId)).Enabled, Is.False, "the refused update saved nothing");
+
+        await UpdateThroughTheServerAsync(systemId, initiatorId, rp => rp.Enabled = true, allSelectedPartitions: true);
+        var enabled = await ReadAsync(runProfileId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(enabled.Enabled, Is.True);
+            Assert.That(enabled.DisabledReason, Is.Null);
+            Assert.That(enabled.DisabledPartitionName, Is.Null);
+        }
+    }
+
+    private async Task UpdateThroughTheServerAsync(int systemId, Guid initiatorId, Action<ConnectedSystemRunProfile> edit, bool allSelectedPartitions = false)
+    {
+        await using var ctx = NewContext();
+        var jim = new JIM.Application.JimApplication(new PostgresDataRepository(ctx));
+        var initiator = await ctx.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
+        var runProfile = (await jim.ConnectedSystems.GetConnectedSystemRunProfilesAsync(systemId)).Single();
+        edit(runProfile);
+        await jim.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiator, allSelectedPartitions);
+    }
+
+    private async Task<ConnectedSystemRunProfile> ReadAsync(int runProfileId)
+    {
+        await using var verify = NewContext();
+        return await verify.ConnectedSystemRunProfiles.SingleAsync(rp => rp.Id == runProfileId);
+    }
+
+    private async Task<Guid> SeedInitiatorAsync()
+    {
+        await using var seed = NewContext();
+        // A change to configuration is recorded against a security principal or not at all.
+        var userType = new JIM.Models.Core.MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
+        var initiator = new JIM.Models.Core.MetaverseObject { Type = userType, CachedDisplayName = "Test Administrator" };
+        seed.AddRange(userType, initiator);
+        await seed.SaveChangesAsync();
+        return initiator.Id;
+    }
+
     private async Task<int> SeedConnectedSystemAsync()
     {
         await using var seed = NewContext();

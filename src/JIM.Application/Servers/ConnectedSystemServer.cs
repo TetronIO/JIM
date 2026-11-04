@@ -9302,7 +9302,8 @@ public partial class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy,
+        bool allSelectedPartitions = false)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -9315,6 +9316,8 @@ public partial class ConnectedSystemServer
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
         if (safeguardsError != null)
             throw new ArgumentException(safeguardsError);
+
+        await ApplyRunProfileEnabledStateChangeAsync(connectedSystemRunProfile, allSelectedPartitions);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -9339,7 +9342,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates a Connected System Run Profile (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey,
+        bool allSelectedPartitions = false)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -9352,6 +9356,8 @@ public partial class ConnectedSystemServer
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
         if (safeguardsError != null)
             throw new ArgumentException(safeguardsError);
+
+        await ApplyRunProfileEnabledStateChangeAsync(connectedSystemRunProfile, allSelectedPartitions);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -9370,6 +9376,21 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Applies an update's enabled state against the state that is stored (#2740), throwing when the update is refused:
+    /// enabling a Run Profile that a removed partition disabled without saying what it reads. Read as a projection, so the
+    /// judgement is never made against a tracked copy the caller already edited.
+    /// </summary>
+    /// <exception cref="ArgumentException">The update would enable a Run Profile a removed partition disabled with no
+    /// Partition and without <paramref name="allSelectedPartitions"/>.</exception>
+    private async Task ApplyRunProfileEnabledStateChangeAsync(ConnectedSystemRunProfile connectedSystemRunProfile, bool allSelectedPartitions)
+    {
+        var stored = await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileEnabledStateAsync(connectedSystemRunProfile.Id);
+        var refusal = RunProfileEnablement.ApplyEnabledStateChange(stored, connectedSystemRunProfile, allSelectedPartitions);
+        if (refusal != null)
+            throw new ArgumentException(refusal);
     }
 
     public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)
