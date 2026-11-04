@@ -207,6 +207,11 @@ internal static class LdapConnectorConstants
     internal const string SETTING_USERNAME = "Username";
 
     /// <summary>
+    /// The domain controller every connection is pinned to, when set: the setting directory server discovery fills.
+    /// </summary>
+    internal const string SETTING_PREFERRED_DOMAIN_CONTROLLER = "Preferred Domain Controller";
+
+    /// <summary>
     /// The Exchange heading's checkbox (#2021): whether this Connected System makes the objects it provisions Exchange
     /// recipients. Active Directory only, and behind the Exchange recipients feature flag while it is built.
     /// </summary>

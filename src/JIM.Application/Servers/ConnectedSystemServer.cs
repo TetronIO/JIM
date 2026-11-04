@@ -4271,22 +4271,24 @@ public partial class ConnectedSystemServer
 
     #region Connected System Directory Servers
     /// <summary>
-    /// Discovers the directory servers in this Connected System's directory (for the LDAP Connector, the domain
-    /// controllers in its forest, with the Active Directory Site each belongs to), so an administrator can be shown
-    /// a choice for the setting the Connector names rather than having to already know a hostname (issue #1167).
+    /// Discovers the servers in this Connected System's directory for one setting (for the LDAP Connector, the domain
+    /// controllers in its forest for Preferred Domain Controller, or its Exchange servers for Exchange server), so an
+    /// administrator can be shown a choice rather than having to already know a hostname (issue #1167, #2021).
     /// <para>
     /// Deliberately not recorded as an Activity, for the same reason as <see cref="RunPasswordPreflightAsync"/>:
-    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the
-    /// setting it informs (<see cref="ConnectorDirectoryServerDiscovery.TargetSettingName"/>); the setting is intent,
-    /// and only the administrator's own selection in the portal, REST API caller, or PowerShell caller updates it.
+    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the setting it
+    /// informs; the setting is intent, and only the administrator's own selection in the portal, REST API caller, or
+    /// PowerShell caller updates it.
     /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
+    /// <param name="targetSettingName">The setting the servers are for, one of <see cref="GetDirectoryServerDiscoveriesAsync"/>; null for the first.</param>
     /// <param name="draftSettingValues">Connectivity settings entered on screen but not yet saved, applied over the saved ones (encrypted settings always come from the saved values). Supplied by the portal so an administrator configuring a system can discover before saving, mirroring <see cref="CertificateServer.ReadServerCertificateAsync"/>.</param>
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
-    /// <exception cref="NotSupportedException">The Connector does not support directory server discovery, or (thrown by the Connector) the connected directory is not AD-family.</exception>
+    /// <exception cref="NotSupportedException">The Connector does not discover servers for that setting (or for any), the setting is not available, or (thrown by the Connector) the connected directory cannot answer.</exception>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, string? targetSettingName = null,
+        IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
@@ -4300,26 +4302,39 @@ public partial class ConnectedSystemServer
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
             throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery.");
 
-        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering directory servers for Connected System {ConnectedSystemId}.", connectedSystemId);
-        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, Log.Logger);
+        var discoveries = await AvailableDiscoveriesAsync(connectedSystem, directoryServersConnector);
+        var discovery = targetSettingName == null
+            ? discoveries.FirstOrDefault()
+            : discoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName);
+        if (discovery == null)
+        {
+            throw new NotSupportedException(targetSettingName == null
+                ? $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."
+                : $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot discover servers for the setting '{targetSettingName}'.");
+        }
+
+        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering {ServerTerm} for Connected System {ConnectedSystemId}.",
+            discovery.ServerTerm, connectedSystemId);
+        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, discovery.TargetSettingName, Log.Logger);
     }
 
     /// <summary>
-    /// What this Connected System's Connector says about directory server discovery (which setting it fills, and
-    /// what the directory calls its servers), or null when it does not support discovery. The portal places the
-    /// Discover action beside the setting the Connector names, so nothing above the Connector needs to know which
-    /// Connector it is.
+    /// What this Connected System's Connector can discover, each for the setting it fills (for the LDAP Connector,
+    /// domain controllers and Exchange servers), or nothing when it does not support discovery. The portal places a
+    /// Discover action beside each setting named, so nothing above the Connector needs to know which Connector it is.
+    /// A discovery whose setting is not offered (behind a feature flag that is off, or not carried by this Connected
+    /// System) is left out.
     /// <para>
     /// A property of the Connector, not of the current settings: stable for the life of a Connected System, so it
     /// can be asked once, mirroring <see cref="JIM.Application.Servers.CertificateServer.SupportsServerCertificateReadAsync"/>.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<ConnectorDirectoryServerDiscovery?> GetDirectoryServerDiscoveryAsync(int connectedSystemId)
+    public async Task<IReadOnlyList<ConnectorDirectoryServerDiscovery>> GetDirectoryServerDiscoveriesAsync(int connectedSystemId)
     {
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return null;
+            return [];
 
         IConnector connector;
         try
@@ -4329,11 +4344,26 @@ public partial class ConnectedSystemServer
         catch (NotSupportedException)
         {
             // A Connector Definition with no built-in Connector behind it supports nothing.
-            return null;
+            return [];
         }
 
         using var connectorDisposable = connector as IDisposable;
-        return (connector as IConnectorDirectoryServers)?.DirectoryServerDiscovery;
+        return connector is IConnectorDirectoryServers directoryServers
+            ? await AvailableDiscoveriesAsync(connectedSystem, directoryServers)
+            : [];
+    }
+
+    private async Task<List<ConnectorDirectoryServerDiscovery>> AvailableDiscoveriesAsync(ConnectedSystem connectedSystem, IConnectorDirectoryServers connector)
+    {
+        var available = new List<ConnectorDirectoryServerDiscovery>();
+        foreach (var discovery in connector.DirectoryServerDiscoveries)
+        {
+            var setting = connectedSystem.SettingValues.FirstOrDefault(sv => sv.Setting.Name == discovery.TargetSettingName)?.Setting;
+            if (setting != null && await IsSettingAvailableAsync(setting))
+                available.Add(discovery);
+        }
+
+        return available;
     }
     #endregion
 
@@ -4343,7 +4373,7 @@ public partial class ConnectedSystemServer
     /// when it has none. The portal offers its catalogue-driven editor for the setting the Connector names, so
     /// nothing above the Connector needs to know which Connector it is (issue #2570).
     /// <para>
-    /// A property of the Connector, not of the current settings, mirroring <see cref="GetDirectoryServerDiscoveryAsync"/>.
+    /// A property of the Connector, not of the current settings, mirroring <see cref="GetDirectoryServerDiscoveriesAsync"/>.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>

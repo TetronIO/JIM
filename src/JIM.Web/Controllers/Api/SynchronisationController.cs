@@ -2574,15 +2574,17 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Lists the servers in the Connected System's directory, using its currently saved connectivity settings, so
-    /// a value can be chosen for the setting its Connector fills from discovery. For the LDAP Connector these are
-    /// the domain controllers in an Active Directory or Samba AD forest, with the Active Directory Site each
-    /// belongs to, and the setting is Preferred Domain Controller. Purely informational: this never writes to any
-    /// setting; only an administrator's own subsequent update of the Connected System does that.
+    /// a value can be chosen for a setting its Connector fills from discovery. A Connector can discover servers for
+    /// more than one setting: name the setting with <c>setting</c>, or leave it out for the first. For the LDAP
+    /// Connector the first is Preferred Domain Controller, whose servers are the domain controllers in an Active
+    /// Directory or Samba AD forest, with the Active Directory Site each belongs to. Purely informational: this never
+    /// writes to any setting; only an administrator's own subsequent update of the Connected System does that.
     /// </remarks>
     /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
+    /// <param name="setting">The name of the setting to discover servers for; the Connector's first when left out.</param>
     /// <returns>The discovered directory servers, each naming the setting (by id and name) its host name is a value for.</returns>
     /// <response code="200">The directory servers discovered.</response>
-    /// <response code="400">The Connector does not support directory server discovery, or does not support it for this directory (the LDAP Connector discovers only in Active Directory and Samba AD).</response>
+    /// <response code="400">The Connector does not support directory server discovery, does not discover servers for the setting named, or does not support it for this directory (the LDAP Connector discovers only in Active Directory and Samba AD).</response>
     /// <response code="404">No Connected System with that identifier exists.</response>
     /// <response code="502">JIM could not discover directory servers, e.g. the directory was unreachable or refused the credentials.</response>
     [HttpGet("connected-systems/{connectedSystemId:int}/directory-servers", Name = "GetConnectedSystemDirectoryServers")]
@@ -2591,7 +2593,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status502BadGateway)]
-    public async Task<IActionResult> GetConnectedSystemDirectoryServersAsync(int connectedSystemId)
+    public async Task<IActionResult> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, [FromQuery] string? setting = null)
     {
         _logger.LogTrace("Discovering directory servers for Connected System: {Id}", connectedSystemId);
 
@@ -2599,10 +2601,15 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var discovery = await _application.ConnectedSystems.GetDirectoryServerDiscoveryAsync(connectedSystemId);
-        if (discovery == null)
+        var discoveries = await _application.ConnectedSystems.GetDirectoryServerDiscoveriesAsync(connectedSystemId);
+        if (discoveries.Count == 0)
             return BadRequest(ApiErrorResponse.BadRequest(
                 $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."));
+
+        var discovery = setting == null ? discoveries[0] : discoveries.FirstOrDefault(d => d.TargetSettingName == setting);
+        if (discovery == null)
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot discover servers for the setting '{setting}'. It can for: {string.Join(", ", discoveries.Select(d => d.TargetSettingName))}."));
 
         // Each server names the setting it is a value for, by id as well as name, so a caller can set it without
         // knowing which Connector it is talking to (Set-JIMConnectedSystem keys settings by id).
@@ -2611,7 +2618,7 @@ public class SynchronisationController(
 
         try
         {
-            var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId);
+            var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId, discovery.TargetSettingName);
             return Ok(directoryServers.Select(s => ConnectedSystemDirectoryServerDto.FromModel(s, discovery.TargetSettingName, targetSettingId)));
         }
         catch (NotSupportedException ex)

@@ -83,6 +83,33 @@ Describe 'Get-JIMConnectedSystemDirectoryServer' {
         }
     }
 
+    Context 'Discovering for a named setting' {
+
+        It 'Passes -Setting to the endpoint, escaped, so the servers are those for that setting' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { @() }
+
+                Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 42 -Setting 'Preferred Domain Controller' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/synchronisation/connected-systems/42/directory-servers?setting=Preferred%20Domain%20Controller'
+                }
+            }
+        }
+
+        It 'Leaves the setting out when -Setting is not given, so the Connector''s first discovery answers' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { @() }
+
+                Get-JIMConnectedSystemDirectoryServer -ConnectedSystemId 42 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter { $Endpoint -notmatch '\?' }
+            }
+        }
+    }
+
     Context 'Response handling' {
 
         It 'Emits nothing when no domain controllers are discovered' {
@@ -156,6 +183,14 @@ Describe 'Get-JIMConnectedSystemDirectoryServer' {
 
         It 'Should document the site output field' {
             ($help.returnValues | Out-String) | Should -Match 'site'
+        }
+
+        It 'Should document the version output field' {
+            ($help.returnValues | Out-String) | Should -Match 'version'
+        }
+
+        It 'Should document the Setting parameter' {
+            $help.Parameters.Parameter | Where-Object { $_.Name -eq 'Setting' } | Should -Not -BeNullOrEmpty
         }
     }
 }

@@ -4,12 +4,13 @@
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// What a Connector implementing <see cref="Interfaces.IConnectorDirectoryServers"/> says about its directory
-/// server discovery, so the portal can offer the Discover action without knowing which Connector it is talking to.
+/// One kind of server a Connector implementing <see cref="Interfaces.IConnectorDirectoryServers"/> can discover, and
+/// the setting it fills, so the portal can offer a Discover action beside that setting without knowing which Connector
+/// it is talking to.
 /// </summary>
-/// <param name="TargetSettingName">The name of the free-text Connectivity setting a selected server's host name fills
-/// in; the portal shows the Discover action beside that field and nowhere else. Must match a String setting the
-/// Connector declares in <c>GetSettings()</c>.</param>
+/// <param name="TargetSettingName">The name of the free-text setting a selected server's host name fills in; the portal
+/// shows this Discover action beside that field and nowhere else. Must match a String setting the Connector declares in
+/// <c>GetSettings()</c>, and identifies the discovery: no two of a Connector's discoveries fill the same setting.</param>
 /// <param name="ServerTerm">What the directory calls its servers, plural and in lower case as it reads mid-sentence,
 /// e.g. "domain controllers". Used in the action's title, progress and empty-result text.</param>
 public sealed record ConnectorDirectoryServerDiscovery(string TargetSettingName, string ServerTerm);

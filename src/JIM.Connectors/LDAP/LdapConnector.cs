@@ -175,7 +175,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     #region IConnectorSettings members
     // variablising the names to reduce repetition later on, i.e. when we go to consume setting values JIM passes in, or when validating administrator-supplied settings
     private readonly string _settingDirectoryServer = "Host";
-    private readonly string _settingPreferredDomainController = "Preferred Domain Controller";
+    private readonly string _settingPreferredDomainController = LdapConnectorConstants.SETTING_PREFERRED_DOMAIN_CONTROLLER;
     private readonly string _settingGlobalCatalogServer = "Global Catalog Server";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
@@ -635,22 +635,29 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
     #region IConnectorDirectoryServers members
     /// <summary>
-    /// Discovery fills the Preferred Domain Controller setting, and since it only succeeds against Active Directory
-    /// and Samba AD (see <see cref="GetDirectoryServersAsync"/>), "domain controllers" is the right word for every
-    /// server it can return.
+    /// Domain controllers for the Preferred Domain Controller setting, and Exchange servers for the Exchange server
+    /// setting (#2021). Both are read from the forest's configuration partition, so discovery only succeeds against
+    /// Active Directory and Samba AD (see <see cref="GetDirectoryServersAsync"/>).
     /// </summary>
-    public ConnectorDirectoryServerDiscovery DirectoryServerDiscovery => new(_settingPreferredDomainController, "domain controllers");
+    public IReadOnlyList<ConnectorDirectoryServerDiscovery> DirectoryServerDiscoveries { get; } =
+    [
+        new(LdapConnectorConstants.SETTING_PREFERRED_DOMAIN_CONTROLLER, "domain controllers"),
+        new(LdapConnectorConstants.SETTING_EXCHANGE_SERVER, "Exchange servers")
+    ];
 
     /// <summary>
-    /// Lists the domain controllers in the connected AD-family directory's forest, with the Active Directory Site
-    /// each belongs to, so an administrator can choose one for the Preferred Domain Controller setting (issue
-    /// #1167) rather than having to already know a hostname. Purely informational: this never writes to any
-    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the
-    /// CN=Sites,CN=Configuration hierarchy that other LDAP directories do not have.
+    /// Lists the servers in the connected AD-family directory's forest for one setting: its domain controllers, with
+    /// the Active Directory Site each belongs to, for Preferred Domain Controller (issue #1167); or its Exchange
+    /// servers, with Site and version, for Exchange server (#2021). Purely informational: this never writes to any
+    /// setting, and only Active Directory / Samba AD are supported, since discovery relies on the configuration
+    /// partition that other LDAP directories do not have.
     /// </summary>
-    /// <exception cref="NotSupportedException">The connected directory is not AD-family.</exception>
-    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    /// <exception cref="NotSupportedException">No discovery fills that setting, or the connected directory is not AD-family.</exception>
+    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, string targetSettingName, ILogger logger)
     {
+        var discovery = DirectoryServerDiscoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName)
+            ?? throw new NotSupportedException($"The LDAP Connector cannot discover servers for the setting '{targetSettingName}'.");
+
         // No persisted connector state applies to a discovery-only connection.
         OpenImportConnection(settingValues, null, logger);
 
@@ -661,10 +668,12 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
             if (!rootDse.IsActiveDirectoryFamily)
-                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType));
+                throw new NotSupportedException(DirectoryServerDiscoveryUnsupportedMessage(rootDse.DirectoryType, discovery.ServerTerm));
 
             var ldapConnectorDirectoryServers = new LdapConnectorDirectoryServers(new LdapOperationExecutor(_connection), logger, rootDse.SupportsPaging);
-            return await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
+            return targetSettingName == LdapConnectorConstants.SETTING_EXCHANGE_SERVER
+                ? await ldapConnectorDirectoryServers.GetExchangeServersAsync()
+                : await ldapConnectorDirectoryServers.GetDirectoryServersAsync();
         }
         finally
         {
@@ -1512,8 +1521,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// The refusal an administrator reads in the Discover Domain Controllers dialog. Names the directory the way
     /// the rest of the portal does (<see cref="DescribeDirectory"/>), not by the enum's identifier.
     /// </summary>
-    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType) =>
-        $"Discovering domain controllers is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
+    internal static string DirectoryServerDiscoveryUnsupportedMessage(LdapDirectoryType directoryType, string serverTerm = "domain controllers") =>
+        $"Discovering {serverTerm} is only supported for Active Directory and Samba AD. This Connected System's directory was detected as {DescribeDirectory(directoryType)}.";
 
     private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
     {

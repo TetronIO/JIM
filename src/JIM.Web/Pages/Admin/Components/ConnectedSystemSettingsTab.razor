@@ -90,7 +90,7 @@
                                                                      ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(groupMembers[k])"
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                                      DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
-                                                                     DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
+                                                                     DirectoryServerTerm="@DirectoryServerTermFor(groupMembers[k])"
                                                                      ConnectedSystemId="@ConnectedSystem.Id" />
                                     }
                                 </MudPaper>
@@ -135,7 +135,7 @@
                                                              ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(settingValue)"
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
-                                                             DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
+                                                             DirectoryServerTerm="@DirectoryServerTermFor(settingValue)"
                                                              ConnectedSystemId="@ConnectedSystem.Id" />
                                 j++;
                             }
@@ -419,11 +419,11 @@
     private List<ConnectorSettingValueValidationResult> _settingWarnings = [];
 
     /// <summary>
-    /// What this Connected System's Connector says about directory server discovery (issue #1167), or null when
-    /// it does not support it. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>: a
-    /// property of the Connector, stable for the life of the Connected System.
+    /// What this Connected System's Connector can discover, each for the setting it fills (issue #1167, #2021); empty
+    /// when it supports none. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>: a property
+    /// of the Connector, stable for the life of the Connected System.
     /// </summary>
-    private ConnectorDirectoryServerDiscovery? _directoryServerDiscovery;
+    private IReadOnlyList<ConnectorDirectoryServerDiscovery> _directoryServerDiscoveries = [];
 
     /// <summary>
     /// The setting this Connected System's Connector reads its catalogue to help write (#2570), or null when it
@@ -473,7 +473,7 @@
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;
-            _directoryServerDiscovery = null;
+            _directoryServerDiscoveries = [];
             _catalogueDeclaration = null;
             _catalogueSource = null;
             return;
@@ -481,7 +481,7 @@
 
         using var jim = JimFactory.Create();
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
-        _directoryServerDiscovery = await jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+        _directoryServerDiscoveries = await jim.ConnectedSystems.GetDirectoryServerDiscoveriesAsync(ConnectedSystem.Id);
         _catalogueDeclaration = await jim.ConnectedSystems.GetCatalogueDeclarationAsync(ConnectedSystem.Id);
 
         // Kept across renders so the editor's catalogue reads are not repeated each time this tab re-renders. The
@@ -504,11 +504,18 @@
         (ConnectedSystem.ObjectTypes ?? []).Where(objectType => objectType.Selected).Select(objectType => objectType.Name);
 
     /// <summary>
-    /// Whether <paramref name="settingValue"/> is the field the Discover action targets: the one the Connector
-    /// itself names, so nothing here knows which Connector it is or what its settings are called.
+    /// Whether <paramref name="settingValue"/> is a field a Discover action targets: one the Connector itself names,
+    /// so nothing here knows which Connector it is or what its settings are called.
     /// </summary>
-    private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) =>
-        _directoryServerDiscovery != null && settingValue.Setting.Name == _directoryServerDiscovery.TargetSettingName;
+    private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) => DiscoveryFor(settingValue) != null;
+
+    /// <summary>
+    /// What the Connector calls the servers discovered for <paramref name="settingValue"/>, e.g. "domain controllers".
+    /// </summary>
+    private string? DirectoryServerTermFor(ConnectedSystemSettingValue settingValue) => DiscoveryFor(settingValue)?.ServerTerm;
+
+    private ConnectorDirectoryServerDiscovery? DiscoveryFor(ConnectedSystemSettingValue settingValue) =>
+        _directoryServerDiscoveries.FirstOrDefault(discovery => discovery.TargetSettingName == settingValue.Setting.Name);
 
     /// <summary>
     /// Gates the Discover... action on the Connected System's required Connectivity settings currently having a
@@ -517,7 +524,7 @@
     /// </summary>
     private bool CanDiscoverDirectoryServers()
     {
-        if (_directoryServerDiscovery == null)
+        if (_directoryServerDiscoveries.Count == 0)
             return false;
 
         return ConnectedSystem.SettingValues
