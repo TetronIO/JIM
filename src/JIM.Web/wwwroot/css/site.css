@@ -4621,6 +4621,46 @@ html[lang] .jim-kv-table td:first-child {
     margin-top: 4px;
 }
 
+/* A Connector that keeps a watermark per partition (#2715): one row each, every value in full, never clipped. Below
+   its minimum width the table scrolls sideways within itself rather than widening the Summary or squeezing a value
+   into a sliver. Qualified to beat MudBlazor's own simple-table rules, which load after this sheet. */
+.jim-import-partition-watermarks {
+    margin-top: 4px;
+}
+
+.jim-import-partition-watermarks .mud-simple-table .mud-table-container {
+    overflow-x: auto;
+}
+
+.jim-import-partition-watermarks .mud-simple-table table {
+    min-width: 560px;
+    table-layout: fixed;
+}
+
+.jim-import-partition-watermarks-name-col {
+    width: 26%;
+}
+
+.jim-import-partition-watermarks .mud-simple-table table tbody tr > td,
+.jim-import-partition-watermarks .mud-simple-table table tbody tr > th {
+    vertical-align: top;
+}
+
+/* A row header names a partition by its distinguished name, so it keeps its own case: the site-wide simple-table
+   header rule capitalises every th, which suits column headings and not a DN. */
+.jim-import-partition-watermarks .mud-simple-table table tbody tr > th.jim-import-partition-watermark-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    overflow-wrap: anywhere;
+}
+
+.jim-json-syntax.jim-import-partition-watermark-value {
+    padding: 6px 8px;
+    overflow-wrap: anywhere;
+}
+
 /* ─── Tooltip measure ─── */
 
 /* MudBlazor sets no max-width on a tooltip, so a long explanatory one grows to a single line as wide
@@ -5994,6 +6034,33 @@ html[lang] .jim-picker-row > .mud-input-control {
     font-weight: 600;
     color: var(--mud-palette-text-primary);
     overflow-wrap: anywhere;
+}
+
+/* Where a selected partition's next Delta Import starts (#2715): a recessed line under its name, above the picker. It
+   wraps rather than clipping, so a long position or a narrow window loses nothing. */
+.jim-scope-partition-watermark {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin: 0 1rem 1rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--jim-inner-surface, var(--mud-palette-background));
+    border-radius: var(--jim-container-radius);
+    font-size: 0.875rem;
+    color: var(--mud-palette-text-primary);
+}
+
+.jim-scope-partition-watermark-icon {
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-scope-partition-watermark-position {
+    font-variant-numeric: tabular-nums;
+}
+
+.jim-scope-partition-watermark-recorded {
+    color: var(--mud-palette-text-secondary);
 }
 
 .jim-scope-actions {

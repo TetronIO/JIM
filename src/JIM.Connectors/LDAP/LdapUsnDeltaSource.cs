@@ -31,15 +31,17 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
     }
 
     /// <summary>
-    /// Records the HighestCommittedUSN the rootDSE carries and, from the NTDS Settings object the rootDSE's
-    /// dsServiceName names, the domain controller's invocationId, so a later Delta Import can tell whether it has
-    /// reached the same domain controller as the one that produced the watermark (see
+    /// Takes the HighestCommittedUSN the rootDSE carries as every target Partition's watermark and, from the NTDS
+    /// Settings object the rootDSE's dsServiceName names, the domain controller's invocationId, so a later Delta Import
+    /// can tell whether it has reached the same domain controller as the one that issued the watermark (see
     /// <see cref="LdapConnectorUtilities.VerifyDomainControllerIdentity"/>). invocationId is not itself a rootDSE
     /// attribute, hence the second read.
     /// </summary>
-    public Task CaptureWatermarkAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse, LdapConnectorRootDse? previous, IReadOnlyCollection<string> namingContexts, TimeSpan searchTimeout)
+    public Task<IReadOnlyDictionary<int, LdapPartitionWatermark?>> CaptureWatermarksAsync(SearchResultEntry rootDseEntry, LdapConnectorRootDse rootDse,
+        IReadOnlyDictionary<int, LdapPartitionWatermark?> previous, IReadOnlyList<ConnectedSystemPartition> targetPartitions, TimeSpan searchTimeout)
     {
-        rootDse.HighestCommittedUsn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN");
+        var usn = LdapConnectorUtilities.GetEntryAttributeLongValue(rootDseEntry, "HighestCommittedUSN");
+        rootDse.CurrentHighestCommittedUsn = usn;
 
         var dsServiceName = LdapConnectorUtilities.GetEntryAttributeStringValue(rootDseEntry, "dsServiceName");
         if (string.IsNullOrEmpty(dsServiceName))
@@ -52,18 +54,27 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
             rootDse.InvocationId = QueryInvocationId(dsServiceName, searchTimeout);
         }
 
-        return Task.CompletedTask;
+        // One read of the rootDSE, before any partition's search, so the USN is safe for every target partition: each
+        // one's search starts after the point it names. Each watermark names the domain controller that issued it, so
+        // whichever partition's Delta Import next meets a different one can tell (#230, #2715).
+        LdapPartitionWatermark? watermark = null;
+        if (usn is null)
+            _logger.Warning("LdapUsnDeltaSource: The rootDSE carried no highestCommittedUSN, so no watermark was taken; the next Delta Import of each partition reads every object in it");
+        else
+            watermark = new LdapPartitionWatermark { Kind = LdapDeltaSourceKind.Usn, Usn = usn, InvocationId = rootDse.InvocationId, DnsHostName = rootDse.DnsHostName };
+
+        return Task.FromResult<IReadOnlyDictionary<int, LdapPartitionWatermark?>>(targetPartitions.ToDictionary(partition => partition.Id, _ => watermark));
     }
 
     /// <summary>
     /// Guards against a USN-based Delta Import silently connecting to a different domain controller than the one
-    /// that produced the persisted watermark (see #230), then against a watermark the directory has gone back
+    /// that issued the Partitions' watermark (see #230), then against a watermark the directory has gone back
     /// behind (see #1869). Identity comes first, because USNs from two invocationIds are not comparable.
     /// </summary>
-    public void VerifyContinuity(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    public void VerifyContinuity(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        LdapConnectorUtilities.VerifyDomainControllerIdentity(previous, current, _logger);
-        VerifyUsnHasNotGoneBackwards(previous, current);
+        LdapConnectorUtilities.VerifyDomainControllerIdentity(partitions, previous, current, _logger);
+        VerifyUsnHasNotGoneBackwards(partitions, previous, current);
     }
 
     /// <summary>
@@ -75,20 +86,21 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
     /// rollback can no longer be seen here, so this catches it only until then. Missing data on either side is not
     /// itself a reason to fail.
     /// </summary>
-    private void VerifyUsnHasNotGoneBackwards(LdapConnectorRootDse previous, LdapConnectorRootDse current)
+    private void VerifyUsnHasNotGoneBackwards(IReadOnlyList<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse current)
     {
-        if (previous.HighestCommittedUsn is not { } watermark || current.HighestCommittedUsn is not { } currentUsn || currentUsn >= watermark)
+        if (previous.Usn is not { } watermark || current.CurrentHighestCommittedUsn is not { } currentUsn || currentUsn >= watermark)
             return;
 
-        _logger.Warning("LdapUsnDeltaSource: Refusing the Delta Import; the domain controller's HighestCommittedUSN is {CurrentUsn}, below the recorded watermark {Watermark}",
-            currentUsn, watermark);
+        var described = LdapConnectorUtilities.DescribePartitions(partitions);
+        _logger.Warning("LdapUsnDeltaSource: Refusing the Delta Import; the domain controller's HighestCommittedUSN is {CurrentUsn}, below the watermark {Watermark} of {Partitions}",
+            currentUsn, watermark, LogSanitiser.Sanitise(described));
 
         throw new CannotPerformDeltaImportException(
             $"Delta import aborted: the domain controller's highest committed update sequence number (USN) has gone backwards since " +
-            $"the watermark was recorded (watermark: {watermark}, current: {currentUsn}). A domain controller's USN only ever increases, " +
+            $"the watermark for {described} was recorded (watermark: {watermark}, current: {currentUsn}). A domain controller's USN only ever increases, " +
             "so the usual cause is that the directory was restored from a backup or snapshot in a way that kept its invocationId: its " +
             "update sequence numbers restart from the restored point, and changes made since reuse numbers the watermark has already " +
-            "passed, so a Delta Import reading from it would silently miss changes. Run a Full Import to re-establish the delta baseline.");
+            $"passed, so a Delta Import reading from it would silently miss changes. Run a Full Import that reads {described} to re-establish the delta baseline.");
     }
 
     /// <summary>
@@ -143,25 +155,30 @@ internal sealed class LdapUsnDeltaSource : ILdapDeltaSource
         }
     };
 
-    public bool HasBaseline(LdapConnectorRootDse previous) => previous.HighestCommittedUsn.HasValue;
+    /// <inheritdoc />
+    public bool HasBaseline(LdapPartitionWatermark? watermark) => watermark is { Kind: LdapDeltaSourceKind.Usn, Usn: not null };
 
     /// <summary>
     /// Reads one page of changes: for each target partition, the objects of each selected Object Type changed in
-    /// each top-level selected Container since the watermark, then the partition's tombstones. Each search pages
-    /// under a token of its own, so on a later page only the searches whose token was carried forward run again.
+    /// each top-level selected Container since that partition's own watermark, then the partition's tombstones since
+    /// it. Each search pages under a token of its own, so on a later page only the searches whose token was carried
+    /// forward run again.
     /// </summary>
     public async Task ReadChangesAsync(LdapDeltaReadContext context, ConnectedSystemImportResult result, CancellationToken cancellationToken)
     {
-        // The shell established HasBaseline before calling, so the watermark is there to read.
-        var previousUsn = context.PreviousRootDse.HighestCommittedUsn!.Value;
+        // The shell established HasBaseline for every target Partition before calling, so each has a USN to read from.
+        var usns = context.TargetPartitions.Select(partition => context.Watermarks[partition.Id].Usn!.Value).Distinct().ToList();
+        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, usns.Count == 1
+            ? $"Querying changes since USN {usns[0]:N0}..."
+            : $"Querying changes in {context.TargetPartitions.Count:N0} partitions, each since its own USN...");
 
-        _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Previous USN: {PreviousUsn}", previousUsn);
-
-        await context.Host.EnterPhaseAsync(LdapConnectorPhases.QueryChanges, $"Querying changes since USN {previousUsn:N0}...");
-
-        // For AD, query objects where uSNChanged > previous HighestCommittedUSN
+        // For AD, query objects where uSNChanged > the partition's watermark
         foreach (var selectedPartition in context.TargetPartitions)
         {
+            var previousUsn = context.Watermarks[selectedPartition.Id].Usn!.Value;
+            _logger.Debug("GetDeltaImportObjects: Using AD USN-based delta import. Partition {Partition} reads changes after USN {PreviousUsn}",
+                LogSanitiser.Sanitise(selectedPartition.Name), previousUsn);
+
             // Use GetTopLevelSelectedContainers to avoid duplicates when both parent and child containers are selected
             foreach (var selectedContainer in ConnectedSystemUtilities.GetTopLevelSelectedContainers(selectedPartition))
             {

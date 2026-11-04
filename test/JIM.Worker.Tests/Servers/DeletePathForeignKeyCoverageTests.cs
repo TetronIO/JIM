@@ -141,6 +141,9 @@ public class DeletePathForeignKeyCoverageTests
             "DeferredReferences",
             "ConnectedSystemObjectAttributeValues",
             "ConnectedSystemObjects",
+            // Removed by a statement of its own (step 9, the Connector Space clear, #2715), and by cascade from
+            // ConnectedSystemPartitions (step 5) and the Connected System besides.
+            "ConnectedSystemPartitionWatermarks",
             // Statements in DeleteConnectedSystemAsync itself.
             "ConnectedSystemContainers",
             "ConnectedSystemRunProfiles",

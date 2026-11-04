@@ -173,7 +173,9 @@
 
             @* An import's watermarks: what range a Delta Import read, or where the next Delta Import starts. *@
             <ImportReadRangeField RunType="@_activity.ConnectedSystemRunType" WatermarkFrom="@_activity.ImportWatermarkFrom"
-                                  WatermarkTo="@_activity.ImportWatermarkTo" ReadRange="@_importReadRange" />
+                                  WatermarkTo="@_activity.ImportWatermarkTo" ReadRange="@_importReadRange"
+                                  PartitionWatermarksFrom="@_activity.ImportPartitionWatermarksFrom"
+                                  PartitionWatermarksTo="@_activity.ImportPartitionWatermarksTo" />
 
             @* ─── The preview behind this change (#134) ─── *@
             @switch (ActivityPreviewProvenance.For(_activity))
@@ -2021,8 +2023,12 @@
             if (updated == null)
                 return;
 
-            // The watermark the run reached is recorded only as it finishes, so describe it once it arrives.
-            var watermarksChanged = updated.ImportWatermarkFrom != _activity?.ImportWatermarkFrom || updated.ImportWatermarkTo != _activity?.ImportWatermarkTo;
+            // The watermark the run reached is recorded only as it finishes, so describe it once it arrives. Each list of
+            // Partition watermarks (#2715) is written once, so its arriving is all that has to be noticed; a fresh read
+            // is always a new list, so comparing the lists themselves would describe them again on every tick.
+            var watermarksChanged = updated.ImportWatermarkFrom != _activity?.ImportWatermarkFrom || updated.ImportWatermarkTo != _activity?.ImportWatermarkTo
+                || (updated.ImportPartitionWatermarksFrom == null) != (_activity?.ImportPartitionWatermarksFrom == null)
+                || (updated.ImportPartitionWatermarksTo == null) != (_activity?.ImportPartitionWatermarksTo == null);
             var runEnded = _activity?.Status == ActivityStatus.InProgress && updated.Status != ActivityStatus.InProgress;
             _activity = updated;
             _lastRefreshUtc = DateTime.UtcNow;

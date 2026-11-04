@@ -172,6 +172,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("FirstSeen")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ImportPartitionWatermarksFrom")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ImportPartitionWatermarksTo")
+                        .HasColumnType("text");
+
                     b.Property<string>("ImportWatermarkFrom")
                         .HasColumnType("text");
 
@@ -4150,6 +4156,28 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemPartitions");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartitionWatermark", b =>
+                {
+                    b.Property<int>("PartitionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("PartitionId");
+
+                    b.HasIndex("ConnectedSystemId");
+
+                    b.ToTable("ConnectedSystemPartitionWatermarks");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordPolicy", b =>
                 {
                     b.Property<int>("Id")
@@ -6753,6 +6781,21 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("ConnectedSystem");
+                });
+
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPartitionWatermark", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", null)
+                        .WithOne()
+                        .HasForeignKey("JIM.Models.Staging.ConnectedSystemPartitionWatermark", "PartitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordPolicy", b =>

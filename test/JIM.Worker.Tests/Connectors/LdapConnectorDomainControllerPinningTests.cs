@@ -83,7 +83,7 @@ public class LdapConnectorDomainControllerPinningTests
     public void ResolveEffectiveServer_PersistedDataHasNoPin_FallsBackToHost()
     {
         // e.g. a non-AD-family directory, or a baseline recorded while a Preferred Domain Controller was configured.
-        var persistedData = JsonSerializer.Serialize(new LdapConnectorRootDse { PinnedDirectoryServer = null, HighestCommittedUsn = 123 });
+        var persistedData = JsonSerializer.Serialize(new LdapConnectorRootDse { PinnedDirectoryServer = null, InvocationId = Guid.NewGuid() });
 
         var (server, source) = LdapConnectorUtilities.ResolveEffectiveServer(
             null, persistedData, "host.jim.test", Logger);
@@ -243,18 +243,18 @@ public class LdapConnectorDomainControllerPinningTests
 
     #endregion
 
-    #region MergePinnedDirectoryServerIntoPersistedData: watermark preservation
+    #region MergePinnedDirectoryServerIntoPersistedData: preservation of everything else
 
     [Test]
-    public void MergePinnedDirectoryServerIntoPersistedData_UpdatesOnlyThePin_PreservesEveryWatermarkFieldExactly()
+    public void MergePinnedDirectoryServerIntoPersistedData_UpdatesOnlyThePin_PreservesEveryOtherFieldExactly()
     {
         var invocationId = Guid.NewGuid();
         var original = new LdapConnectorRootDse
         {
             DnsHostName = "dc1.jim.test",
-            HighestCommittedUsn = 987654321,
-            LastChangeNumber = 42,
-            LastAccesslogTimestamp = "20260326183000.000000Z",
+            NamingContexts = ["DC=jim,DC=test"],
+            FirstChangeNumber = 7,
+            AdvertisedLastChangeNumber = 42,
             DirectoryType = LdapDirectoryType.ActiveDirectory,
             InvocationId = invocationId,
             VendorName = "Microsoft",
@@ -269,10 +269,11 @@ public class LdapConnectorDomainControllerPinningTests
         Assert.That(updated, Is.Not.Null);
         Assert.That(updated!.PinnedDirectoryServer, Is.EqualTo("new-dc.jim.test"), "The pin must be updated to the new value");
 
-        // Every other field must survive byte-for-byte in meaning: a regressed watermark corrupts delta imports.
-        Assert.That(updated.HighestCommittedUsn, Is.EqualTo(original.HighestCommittedUsn));
-        Assert.That(updated.LastChangeNumber, Is.EqualTo(original.LastChangeNumber));
-        Assert.That(updated.LastAccesslogTimestamp, Is.EqualTo(original.LastAccesslogTimestamp));
+        // Every other field must survive byte-for-byte in meaning: the directory type decides how the next Delta Import
+        // reads changes, and the invocationId is what the Connected System page shows.
+        Assert.That(updated.NamingContexts, Is.EqualTo(original.NamingContexts));
+        Assert.That(updated.FirstChangeNumber, Is.EqualTo(original.FirstChangeNumber));
+        Assert.That(updated.AdvertisedLastChangeNumber, Is.EqualTo(original.AdvertisedLastChangeNumber));
         Assert.That(updated.InvocationId, Is.EqualTo(original.InvocationId));
         Assert.That(updated.DnsHostName, Is.EqualTo(original.DnsHostName));
         Assert.That(updated.DirectoryType, Is.EqualTo(original.DirectoryType));
@@ -280,15 +281,14 @@ public class LdapConnectorDomainControllerPinningTests
     }
 
     [Test]
-    public void MergePinnedDirectoryServerIntoPersistedData_ClearingThePin_PreservesEveryWatermarkFieldExactly()
+    public void MergePinnedDirectoryServerIntoPersistedData_ClearingThePin_PreservesEveryOtherFieldExactly()
     {
         // The invalidation path: same guarantee, but the new value is null (clearing the pin).
         var invocationId = Guid.NewGuid();
         var original = new LdapConnectorRootDse
         {
-            HighestCommittedUsn = 111,
-            LastChangeNumber = 22,
-            LastAccesslogTimestamp = "20260101000000.000000Z",
+            DnsHostName = "dc1.jim.test",
+            NamingContexts = ["DC=jim,DC=test"],
             DirectoryType = LdapDirectoryType.SambaAD,
             InvocationId = invocationId,
             PinnedDirectoryServer = "stale-dc.jim.test"
@@ -301,9 +301,8 @@ public class LdapConnectorDomainControllerPinningTests
 
         Assert.That(updated, Is.Not.Null);
         Assert.That(updated!.PinnedDirectoryServer, Is.Null);
-        Assert.That(updated.HighestCommittedUsn, Is.EqualTo(original.HighestCommittedUsn));
-        Assert.That(updated.LastChangeNumber, Is.EqualTo(original.LastChangeNumber));
-        Assert.That(updated.LastAccesslogTimestamp, Is.EqualTo(original.LastAccesslogTimestamp));
+        Assert.That(updated.DnsHostName, Is.EqualTo(original.DnsHostName));
+        Assert.That(updated.NamingContexts, Is.EqualTo(original.NamingContexts));
         Assert.That(updated.InvocationId, Is.EqualTo(original.InvocationId));
         Assert.That(updated.DirectoryType, Is.EqualTo(original.DirectoryType));
     }
@@ -318,7 +317,7 @@ public class LdapConnectorDomainControllerPinningTests
         Assert.That(updated, Is.Not.Null);
         Assert.That(updated!.PinnedDirectoryServer, Is.EqualTo("new-dc.jim.test"));
         Assert.That(updated.DirectoryType, Is.EqualTo(LdapDirectoryType.ActiveDirectory));
-        Assert.That(updated.HighestCommittedUsn, Is.Null);
+        Assert.That(updated.InvocationId, Is.Null);
     }
 
     [Test]
@@ -346,7 +345,6 @@ public class LdapConnectorDomainControllerPinningTests
         var oldJson = JsonSerializer.Serialize(new
         {
             DnsHostName = "dc1.jim.test",
-            HighestCommittedUsn = 555,
             DirectoryType = LdapDirectoryType.ActiveDirectory
         });
 
@@ -354,7 +352,7 @@ public class LdapConnectorDomainControllerPinningTests
 
         Assert.That(rootDse, Is.Not.Null);
         Assert.That(rootDse!.PinnedDirectoryServer, Is.Null);
-        Assert.That(rootDse.HighestCommittedUsn, Is.EqualTo(555));
+        Assert.That(rootDse.DnsHostName, Is.EqualTo("dc1.jim.test"));
     }
 
     #endregion
@@ -422,7 +420,7 @@ public class LdapConnectorDomainControllerPinningTests
         {
             DirectoryType = LdapDirectoryType.ActiveDirectory,
             PinnedDirectoryServer = "127.0.0.1", // nothing listening on port 1 below
-            HighestCommittedUsn = 123456,
+            DnsHostName = "dc1.jim.test",
             InvocationId = Guid.NewGuid()
         });
 
@@ -436,7 +434,7 @@ public class LdapConnectorDomainControllerPinningTests
         var updated = JsonSerializer.Deserialize<LdapConnectorRootDse>(closeResult!);
         Assert.That(updated, Is.Not.Null);
         Assert.That(updated!.PinnedDirectoryServer, Is.Null, "The pin must be cleared");
-        Assert.That(updated.HighestCommittedUsn, Is.EqualTo(123456), "The watermark must survive the invalidation untouched");
+        Assert.That(updated.DnsHostName, Is.EqualTo("dc1.jim.test"), "Everything but the pin must survive the invalidation untouched");
     }
 
     [Test]

@@ -344,6 +344,23 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void PartitionWatermarkBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemPartitionWatermark), "ConnectedSystemPartitionWatermarks",
+            PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarks);
+    }
+
+    [Test]
+    public void PartitionWatermarkUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ConnectedSystemPartitionWatermarks",
+            PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarks,
+            [PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarksUpdate],
+            PartitionWatermarkBulkColumns.ConnectedSystemPartitionWatermarksUpdateExclusions);
+    }
+
+    [Test]
     public void PendingExportAttributeValueChangeUpdateColumns_HaveAConsciousHomeForEveryColumn()
     {
         AssertUpdateListsCoverInsertList(

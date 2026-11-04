@@ -55,7 +55,7 @@ JIM detects the directory type from the Root DSE during schema discovery and adj
 ### Import
 
 - **Full Import**<br /> Reads all objects from selected partitions and object types.
-- **Delta Import**<br /> Imports only changes since the last import run.
+- **Delta Import**<br /> Imports only the changes since each partition's last import; every partition keeps its own watermark.
     - **Active Directory**<br /> Uses update sequence number (USN) change tracking, against the domain controller JIM pinned.
     - **OpenLDAP**<br /> Uses the accesslog overlay (`cn=accesslog`).
     - **389 Directory Server and generic directories**<br /> Uses the directory's changelog.

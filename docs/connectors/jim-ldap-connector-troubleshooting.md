@@ -12,7 +12,7 @@ Each entry is titled by what you see on a run or in the log. For a run that ends
 ```jim-diagram
 archetype: decision
 title: Where an LDAP Connected System stops, and the first fix
-desc: "First, does JIM reach the directory server? If not, check the Host, the port (389 for LDAP, 636 for LDAPS) and the firewall, from inside the JIM container. If an LDAPS connection fails and JIM shows the certificate, read it: JIM names the check it failed and what to do. Second, does the sign-in succeed? On invalid credentials, check the username format for the authentication type, and the password. If the directory requires LDAP signing or encryption, turn on Use Secure Connection (LDAPS)? with port 636, trusting a private certificate authority under Admin > Certificates first. Third, if an import stops at the directory's search limit, exempt the JIM group from the limits rather than raising them for every client; if a Delta Import fails with a domain controller mismatch, run a Full Import."
+desc: "First, does JIM reach the directory server? If not, check the Host, the port (389 for LDAP, 636 for LDAPS) and the firewall, from inside the JIM container. If an LDAPS connection fails and JIM shows the certificate, read it: JIM names the check it failed and what to do. Second, does the sign-in succeed? On invalid credentials, check the username format for the authentication type, and the password. If the directory requires LDAP signing or encryption, turn on Use Secure Connection (LDAPS)? with port 636, trusting a private certificate authority under Admin > Certificates first. Third, if an import stops at the directory's search limit, exempt the JIM group from the limits rather than raising them for every client; if a Delta Import is refused naming a partition (a domain controller mismatch, a purged accesslog or a trimmed changelog), run a Full Import that reads that partition."
 questions:
   - { id: reach, label: "Does JIM reach the server?" }
   - { id: bind, label: "Does the sign-in succeed?" }
@@ -23,7 +23,7 @@ outcomes:
   - { id: creds, label: Check the username and password, sub: its format must suit the authentication type }
   - { id: ldaps, label: Turn on LDAPS, sub: "port 636; trust a private CA first" }
   - { id: limits, label: Exempt the JIM group from the limits, sub: not the limit for every client }
-  - { id: full, label: Run a Full Import, sub: it records a new watermark }
+  - { id: full, label: Run a Full Import, sub: of the partition it names }
 answers:
   - { from: reach, to: network, label: "no" }
   - { from: reach, to: cert, label: "no, over LDAPS" }
@@ -32,7 +32,7 @@ answers:
   - { from: bind, to: ldaps, label: signing or encryption required }
   - { from: bind, to: run, label: "yes" }
   - { from: run, to: limits, label: stopped at a search limit }
-  - { from: run, to: full, label: domain controller mismatch }
+  - { from: run, to: full, label: "refused, naming a partition" }
 ```
 
 ## :material-lan-disconnect: Connection failures
@@ -81,31 +81,49 @@ On OpenLDAP, the account JIM binds as is subject to `olcSizeLimit` on the `cn=ac
 
 If delta imports return no changes when changes are expected:
 
-- JIM no longer completes a Delta Import that could not read the directory's change source: such a run ends as Failed with error naming the source (the Deleted Objects container, `cn=accesslog`, or the changelog DN) and the remedy, and the schema refresh preview warns of the same gap. Start there; a Delta Import that completes successfully with no changes has read the source and found none.
+- JIM does not complete a Delta Import that could not read the directory's change source: such a run ends as Failed with error naming the source (the Deleted Objects container, `cn=accesslog`, or the changelog DN) and the remedy, and the schema refresh preview warns of the same gap. Start there; a Delta Import that completes successfully with no changes has read the source and found none.
 - **Active Directory**: verify that the service account has read access to the `uSNChanged` attribute, and that the domain controller it reached is the one that issued the watermark (see the next section).
 - **OpenLDAP**: verify that the accesslog overlay is configured and that the service account may read `cn=accesslog` (the access-control rule under [OpenLDAP](jim-ldap-connector-delta-import.md#openldap)).
 - **389 Directory Server and generic directories**: verify that the changelog exists (389 Directory Server: `dsconf <instance> plugin retro-changelog enable`, then restart) and that the service account may read it (389 Directory Server: the `cn=changelog` rule under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server)). A Delta Import whose last import found no readable changelog performs a Full Import, says so, and records the watermark; the Delta Imports after it read the changelog.
 - **389 Directory Server, deletions in particular**: a Delta Import that refuses to run naming `nsslapd-log-deleted` has found the Retro Changelog plug-in not recording deleted entries; set it to `on` on `cn=Retro Changelog Plugin,cn=plugins,cn=config` and restart the directory. A run that completes with a warning that JIM could not confirm the plug-in records deleted entries needs the plug-in rule under [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server), which grants the service account read on that entry. A run that warns that a particular deletion could not be identified read a deletion recorded before the setting was turned on; a Full Import detects it by absence.
-- Run a full import to re-baseline, then test delta import again.
+- Run a Full Import of the partition to re-baseline it, then test the Delta Import again.
 
 ## :material-form-textbox-password: Password Modify refused with "Confidentiality required"
 
 389 Directory Server accepts the Password Modify operation only over a secure connection, and there is no setting on the directory that relaxes this. Turn on "Use Secure Connection (LDAPS)?" on the Connected System, switching the port to the directory's LDAPS port (636 by default), and if the directory's certificate is issued by a private certificate authority, add that authority under Admin > Certificates first. See [Setting Passwords](jim-ldap-connector-passwords.md#setting-passwords). Nothing is lost in the meantime: a password change the directory refused is parked, with the directory's own words, rather than retried into the same refusal, and an account owed its first password stays owed it; [Passwords](../concepts/passwords.md) says how parked work is released.
 
+## :material-history: Delta Import fails with "Run a Full Import that reads the partition ..."
+
+A Delta Import refuses to run when the directory cannot be shown to continue from the watermark of a partition it reads, since reading changes after that watermark could silently miss some. The refusal says what JIM found, names the partition, and ends by asking for a Full Import that reads it.
+
+**Cause.** The directory's record of changes does not run unbroken from the partition's watermark, the point its last import recorded: the directory was restored, a different server answered, or its log was purged or trimmed past that point. The refusal opens with what JIM found:
+
+- **Active Directory and Samba AD:** "Delta import aborted: the domain controller's invocationId has changed since the watermark for the partition ...", or the same for its hostname, or its highest committed update sequence number "has gone backwards"; see [the next entry](#delta-import-fails-with-a-domain-controller-mismatch-error).
+- **OpenLDAP:** "The directory's accesslog no longer holds the change the last import of the partition ... ended at": the purge (`olcAccessLogPurge`) or a restore removed it; see [OpenLDAP](jim-ldap-connector-delta-import.md#openldap).
+- **389 Directory Server and generic directories:** "The directory's changelog no longer holds the changes since the last import of the partition ...", "has gone back since the last import of", or "no longer holds the change the last import of ... ended at": the changelog was trimmed, or the directory restored; see [389 Directory Server and generic directories](jim-ldap-connector-delta-import.md#389-directory-server-and-generic-directories).
+
+Partitions whose last imports recorded the same watermark are named together ("the partitions DC=corp,DC=local and DC=emea,DC=corp,DC=local"). Where several watermarks fail their checks, JIM checks every one before it stops and refuses once, its message giving each refusal in turn, so one run tells you every partition to repair.
+
+**Fix.** Run a Full Import that reads every partition the message names: one whose Run Profile targets that partition, or one that targets no partition and so reads every selected partition. A Full Import of another partition leaves the refused partition's watermark as it was, and that partition's Delta Imports go on refusing. On OpenLDAP and 389 Directory Server, keep the log's maximum age longer than the gaps between that partition's Delta Imports, as [OpenLDAP](jim-ldap-connector-permissions.md#openldap) and [389 Directory Server](jim-ldap-connector-permissions.md#389-directory-server) describe.
+
+**Check.** The partition's next Delta Import completes without the refusal, and the Connected System's **Scope** tab shows its watermark freshly recorded.
+
+Nothing is lost by the refusal: the Delta Import imports nothing and changes no watermark, so every partition keeps the point it had, and a Delta Import whose Run Profile reads only other partitions runs as normal. The Full Import detects deletions by absence, within its Run Profile's deletion limits.
+
 ## :material-server-minus-outline: Delta import fails with a domain controller mismatch error
 
-Active Directory and Samba AD Delta Imports check that they are still talking to the same domain controller that produced the persisted USN watermark, and fail fast with an error naming the previous and current domain controller (or their invocationId) if not. This is expected, protective behaviour, not a bug: a USN watermark from one domain controller is meaningless against another, and continuing regardless risks silently skipping or re-importing changes.
+Active Directory and Samba AD Delta Imports check that they are still talking to the domain controller that issued each partition's USN watermark, and fail fast with an error naming the partition and the previous and current domain controller (or their invocationId) if not. This is expected, protective behaviour, not a bug: a USN watermark from one domain controller is meaningless against another, and continuing regardless risks silently skipping or re-importing changes.
 
-The error names both invocationIds (or both hostnames, for a watermark recorded before JIM began recording the invocationId): "Delta import aborted: the domain controller's invocationId has changed since the watermark was recorded (previous: ..., current: ...)", followed by the likely causes and the remedy. The failed Delta Import changes nothing: the recorded watermark is left exactly as it was, so every Delta Import fails the same way until a Full Import runs. There are two common causes:
+The error names both invocationIds (or both hostnames, where an invocationId could not be read): "Delta import aborted: the domain controller's invocationId has changed since the watermark for the partition DC=corp,DC=local was recorded (previous: ..., current: ...)", followed by the likely causes and the remedy. The failed Delta Import changes nothing: every recorded watermark is left exactly as it was, so every Delta Import that reads the partition fails the same way until a Full Import that reads it runs. There are two common causes:
 
 - **The directory was restored from a backup, snapshot or checkpoint.** A domain controller restored this way is issued a new invocationId even though its hostname is unchanged, and its USNs restart from the restored point. Changes made after the restore reuse USN values the watermark has already passed, so a Delta Import reading from that watermark would silently miss them; JIM refuses to read any change instead.
 - **A different domain controller answered.** With [domain controller discovery and pinning](jim-ldap-connector-topology.md#domain-controller-discovery-and-pinning) in place, the most common case is the previously pinned domain controller having become unreachable: JIM already cleared the pin and failed that run outright, and the following run resolved via Host, discovered a different domain controller, and re-pinned to it.
 
-A restore that keeps the domain controller's invocationId (a file-level or volume snapshot restore that bypasses Active Directory's own restore process) is caught a different way. A live domain controller's highest committed USN never goes backwards, so when it is now below the recorded watermark the Delta Import fails fast with "Delta import aborted: the domain controller's highest committed update sequence number (USN) has gone backwards since the watermark was recorded (watermark: ..., current: ...)". The remedy is the same Full Import. JIM can only see this kind of restore while the directory's USN is still behind the watermark: once enough changes have been made since the restore to carry it past, it looks like ordinary progress, so run a Full Import after any restore rather than relying on the Delta Import to notice.
+A restore that keeps the domain controller's invocationId (a file-level or volume snapshot restore that bypasses Active Directory's own restore process) is caught a different way. A live domain controller's highest committed USN never goes backwards, so when it is now below a partition's recorded watermark the Delta Import fails fast with "Delta import aborted: the domain controller's highest committed update sequence number (USN) has gone backwards since the watermark for the partition DC=corp,DC=local was recorded (watermark: ..., current: ...)". The remedy is the same Full Import. JIM can only see this kind of restore while the directory's USN is still behind the watermark: once enough changes have been made since the restore to carry it past, it looks like ordinary progress, so run a Full Import after any restore rather than relying on the Delta Import to notice.
 
 What to do:
 
-- Run a Full Import. It imports everything, and records the domain controller's current invocationId together with a new USN watermark, so the Delta Imports after it run normally for as long as that domain controller keeps its invocationId.
+- Run a Full Import that reads the partition the error names, as [the entry above](#delta-import-fails-with-run-a-full-import-that-reads-the-partition) describes. It reads every object in its partitions, and records the domain controller's current invocationId together with a new USN watermark for each, so the Delta Imports after it run normally for as long as that domain controller keeps its invocationId.
 - If you need consistent affinity to one specific domain controller regardless of availability, set Preferred Domain Controller rather than relying on auto-discovery.
 - If the account JIM connects as cannot read the domain controller's NTDS Settings object, the invocationId cannot be read. JIM then compares hostnames only, which catches a different domain controller but catches a restore of the same one only through the USN check above, and logs a warning that identity could not be verified. Grant the account read access to that object to restore the stronger check.
 

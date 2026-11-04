@@ -482,6 +482,93 @@ internal static class LdapConnectorUtilities
         ContainerSpecificity.ResolveMostSpecific(distinguishedName, connectedSystemContainers, IsDnWithinContainerScope);
 
     /// <summary>
+    /// The partitions a message to an administrator is about, by the names they know them by: "the partition corp.local",
+    /// "the partitions corp.local and partners.local", "the partitions a, b and c". Lower-case "partition", as the
+    /// customer documentation writes it.
+    /// </summary>
+    internal static string DescribePartitions(IReadOnlyCollection<ConnectedSystemPartition> partitions)
+    {
+        var names = PartitionNames(partitions);
+        return names.Count switch
+        {
+            0 => "no partition",
+            1 => $"the partition {names[0]}",
+            _ => $"the partitions {string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}"
+        };
+    }
+
+    /// <summary>Each partition's name, or its distinguished name where it has none.</summary>
+    private static List<string> PartitionNames(IEnumerable<ConnectedSystemPartition> partitions) =>
+        partitions.Select(partition => string.IsNullOrWhiteSpace(partition.Name) ? partition.ExternalId : partition.Name).ToList();
+
+    /// <summary>
+    /// The target Partition whose watermark a logged change is judged by: the Partition its DN lies in
+    /// (<see cref="PartitionForDn"/>), or else a Partition with no distinguished name, which cannot be told apart by
+    /// suffix and so takes what no named Partition claims; of several such, the one whose watermark sorts oldest, so
+    /// nothing one of them has yet to read is judged read. Null when the change lies in none of them.
+    /// </summary>
+    /// <remarks>
+    /// One rule for every change source that reads a directory-wide log (#2715): dropping what no named Partition
+    /// claims would have a run read nothing for a Partition with no DN, and say nothing. Unreachable for a naming
+    /// context a directory advertises, which always has a DN.
+    /// </remarks>
+    internal static ConnectedSystemPartition? PartitionJudging<T>(string? distinguishedName, IReadOnlyCollection<ConnectedSystemPartition> partitions,
+        Func<ConnectedSystemPartition, T> watermark, IComparer<T> order) =>
+        PartitionForDn(distinguishedName, partitions)
+        ?? partitions.Where(partition => string.IsNullOrEmpty(partition.ExternalId)).MinBy(watermark, order);
+
+    /// <summary>
+    /// The Partition a distinguished name lies in: the one whose DN is the longest suffix of it, compared RDN by RDN as
+    /// LDAP compares names. Null when it lies in none of them, or does not read as a distinguished name.
+    /// </summary>
+    /// <remarks>
+    /// The longest, because OpenLDAP and 389 Directory Server can host one suffix beneath another (a subordinate
+    /// database), so an entry in the nested suffix lies under both. RDN by RDN, because a change attributed to the wrong
+    /// Partition is read against the wrong Partition's watermark (#2715): a raw suffix comparison would put
+    /// <c>uid=pat,adc=corp,dc=local</c>, or a value holding an escaped comma, under <c>dc=corp,dc=local</c>.
+    /// </remarks>
+    internal static ConnectedSystemPartition? PartitionForDn(string? distinguishedName, IReadOnlyCollection<ConnectedSystemPartition> partitions)
+    {
+        if (!LdapDistinguishedName.TryParse(distinguishedName, out var dn))
+            return null;
+
+        // OrderByDescending is stable, so of two Partitions naming the same suffix the first given wins.
+        return partitions
+            .Select(partition => (Partition: partition, Dn: LdapDistinguishedName.TryParse(partition.ExternalId, out var partitionDn) ? partitionDn : null))
+            .Where(candidate => candidate.Dn != null && EndsWithRdns(dn, candidate.Dn))
+            .OrderByDescending(candidate => candidate.Dn!.Rdns.Count)
+            .Select(candidate => candidate.Partition)
+            .FirstOrDefault();
+    }
+
+    /// <summary>Whether a DN's last RDNs are exactly those of a suffix, each compared as LDAP compares names.</summary>
+    private static bool EndsWithRdns(LdapDistinguishedName dn, LdapDistinguishedName suffix)
+    {
+        var offset = dn.Rdns.Count - suffix.Rdns.Count;
+        if (offset < 0)
+            return false;
+
+        for (var i = 0; i < suffix.Rdns.Count; i++)
+        {
+            if (!RdnsAreEqual(dn.Rdns[offset + i], suffix.Rdns[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Whether two RDNs name the same thing: the same attribute types with the same values, case-insensitively, in any
+    /// order (a multi-valued RDN's components are a set). Values are compared unescaped, so <c>cn=a\,b</c> and
+    /// <c>cn=a\2Cb</c> agree.
+    /// </summary>
+    private static bool RdnsAreEqual(LdapRelativeDistinguishedName left, LdapRelativeDistinguishedName right) =>
+        left.Components.Count == right.Components.Count
+        && left.Components.All(component => right.Components.Any(other =>
+            string.Equals(component.Type, other.Type, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(component.Value.Trim(), other.Value.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    /// <summary>
     /// Removes the optional whitespace some directories emit after each DN separator, leaving a form that can
     /// be compared component by component. Escaped separators are left alone.
     /// </summary>
@@ -639,33 +726,36 @@ internal static class LdapConnectorUtilities
 
     /// <summary>
     /// Guards a USN-based delta import against silently running against a different domain controller
-    /// than the one that produced the persisted watermark. AD/Samba AD USNs are scoped to the issuing
+    /// than the one that issued a Partition's watermark. AD/Samba AD USNs are scoped to the issuing
     /// DC's invocationId, so a DNS round-robin Host resolving to a different DC (or a DC restored from
-    /// backup, which is issued a new invocationId) would otherwise make the persisted
-    /// <see cref="LdapConnectorRootDse.HighestCommittedUsn"/> meaningless: subsequent USN comparisons
-    /// against the new DC can silently skip changes or re-import stale ones.
+    /// backup, which is issued a new invocationId) would otherwise make the Partition's
+    /// <see cref="LdapPartitionWatermark.Usn"/> meaningless: subsequent USN comparisons against the new DC
+    /// can silently skip changes or re-import stale ones.
     /// </summary>
     /// <remarks>
     /// Comparison order:
     /// <list type="number">
-    ///   <item>Both runs' <see cref="LdapConnectorRootDse.InvocationId"/> are present: compare directly.
-    ///   A mismatch is conclusive (different DC, or the same DC restored from backup) and throws.</item>
-    ///   <item>Either invocationId is missing (a baseline persisted before this guard was added, or the
-    ///   current run's invocationId query failed, for example due to permissions): fall back to a
-    ///   case-insensitive comparison of <see cref="LdapConnectorRootDse.DnsHostName"/>. A mismatch throws.
-    ///   This catches the detectable subset of mismatches even when the stronger signal is unavailable;
-    ///   it cannot detect a restore of the same DC.</item>
+    ///   <item>Both the watermark's <see cref="LdapPartitionWatermark.InvocationId"/> and the current
+    ///   <see cref="LdapConnectorRootDse.InvocationId"/> are present: compare directly. A mismatch is
+    ///   conclusive (different DC, or the same DC restored from backup) and throws.</item>
+    ///   <item>Either invocationId is missing (the watermark's issuing DC could not be read, or the current
+    ///   run's invocationId query failed, for example due to permissions): fall back to a case-insensitive
+    ///   comparison of the DC hostnames. A mismatch throws. This catches the detectable subset of mismatches
+    ///   even when the stronger signal is unavailable; it cannot detect a restore of the same DC.</item>
     ///   <item>Neither comparison is possible: proceed without failing the import, logging a warning that
     ///   identity could not be verified. Missing data must never itself fail a delta import.</item>
     /// </list>
+    /// Each Partition's watermark carries the DC that issued it (#2715), so this also catches a Partition read last
+    /// through another DC than the one this run reached, which a single Connected System-level record could not.
     /// </remarks>
-    /// <param name="previousRootDse">The RootDSE info persisted by the run that produced the current watermark.</param>
+    /// <param name="partitions">The Partitions holding <paramref name="previous"/>, named in the refusal.</param>
+    /// <param name="previous">The Partition watermark, as recorded by the run that took it.</param>
     /// <param name="currentRootDse">The RootDSE info just queried on the connection about to perform the delta import.</param>
     /// <param name="logger">Logger for diagnostics; identifiers sourced from the directory are sanitised before logging.</param>
-    /// <exception cref="CannotPerformDeltaImportException">The domain controller identity has changed between the two runs.</exception>
-    internal static void VerifyDomainControllerIdentity(LdapConnectorRootDse previousRootDse, LdapConnectorRootDse currentRootDse, ILogger logger)
+    /// <exception cref="CannotPerformDeltaImportException">The domain controller identity has changed since the watermark was taken.</exception>
+    internal static void VerifyDomainControllerIdentity(IReadOnlyCollection<ConnectedSystemPartition> partitions, LdapPartitionWatermark previous, LdapConnectorRootDse currentRootDse, ILogger logger)
     {
-        var previousInvocationId = previousRootDse.InvocationId;
+        var previousInvocationId = previous.InvocationId;
         var currentInvocationId = currentRootDse.InvocationId;
 
         if (previousInvocationId.HasValue && currentInvocationId.HasValue)
@@ -673,22 +763,22 @@ internal static class LdapConnectorUtilities
             if (previousInvocationId.Value == currentInvocationId.Value)
                 return;
 
-            logger.Warning("VerifyDomainControllerIdentity: Domain controller invocationId mismatch. Previous: {PreviousInvocationId}, Current: {CurrentInvocationId}.",
-                previousInvocationId.Value, currentInvocationId.Value);
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller invocationId mismatch for partition(s) {Partitions}. Previous: {PreviousInvocationId}, Current: {CurrentInvocationId}.",
+                LogSanitiser.Sanitise(string.Join(", ", PartitionNames(partitions))), previousInvocationId.Value, currentInvocationId.Value);
 
             throw new CannotPerformDeltaImportException(
-                $"Delta import aborted: the domain controller's invocationId has changed since the watermark was recorded " +
+                $"Delta import aborted: the domain controller's invocationId has changed since the watermark for {DescribePartitions(partitions)} was recorded " +
                 $"(previous: {previousInvocationId.Value}, current: {currentInvocationId.Value}). The usual cause is that the " +
                 "directory was restored from a backup or snapshot: the domain controller is then issued a new invocationId and its " +
                 "update sequence numbers restart from the restored point, so a Delta Import reading from the recorded watermark " +
                 "would silently miss changes. It can also happen when a domain name configured as Host resolves to a different " +
-                "domain controller (DNS round-robin). Run a Full Import to re-establish the delta baseline.");
+                $"domain controller (DNS round-robin). Run a Full Import that reads {DescribePartitions(partitions)} to re-establish the delta baseline.");
         }
 
         // The invocationId pair is incomplete (a baseline persisted before this guard was added, or the
         // current run's invocationId query failed); fall back to comparing the DC hostnames. Weaker (it
         // cannot detect a restore of the same DC) but catches the detectable subset of mismatches.
-        var previousHostname = previousRootDse.DnsHostName;
+        var previousHostname = previous.DnsHostName;
         var currentHostname = currentRootDse.DnsHostName;
 
         if (!string.IsNullOrEmpty(previousHostname) && !string.IsNullOrEmpty(currentHostname))
@@ -696,13 +786,13 @@ internal static class LdapConnectorUtilities
             if (string.Equals(previousHostname, currentHostname, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            logger.Warning("VerifyDomainControllerIdentity: Domain controller hostname mismatch (invocationId not available for comparison). Previous: {PreviousHostname}, Current: {CurrentHostname}.",
-                LogSanitiser.Sanitise(previousHostname), LogSanitiser.Sanitise(currentHostname));
+            logger.Warning("VerifyDomainControllerIdentity: Domain controller hostname mismatch for partition(s) {Partitions} (invocationId not available for comparison). Previous: {PreviousHostname}, Current: {CurrentHostname}.",
+                LogSanitiser.Sanitise(string.Join(", ", PartitionNames(partitions))), LogSanitiser.Sanitise(previousHostname), LogSanitiser.Sanitise(currentHostname));
 
             throw new CannotPerformDeltaImportException(
-                $"Delta import aborted: the domain controller hostname has changed since the watermark was recorded " +
+                $"Delta import aborted: the domain controller hostname has changed since the watermark for {DescribePartitions(partitions)} was recorded " +
                 $"(previous: {previousHostname}, current: {currentHostname}). This can happen when a domain name configured " +
-                "as Host resolves to a different domain controller (DNS round-robin). Run a Full Import to re-establish the delta baseline.");
+                $"as Host resolves to a different domain controller (DNS round-robin). Run a Full Import that reads {DescribePartitions(partitions)} to re-establish the delta baseline.");
         }
 
         logger.Warning("VerifyDomainControllerIdentity: Could not verify domain controller identity between the previous watermark and the current " +
@@ -1130,15 +1220,16 @@ internal static class LdapConnectorUtilities
 
     /// <summary>
     /// Updates only the <see cref="LdapConnectorRootDse.PinnedDirectoryServer"/> field of persisted
-    /// connector data, leaving every other field (the USN/changelog/accesslog watermarks, invocationId,
-    /// directory type, vendor name) exactly as replayed (issue #230 Phase 2). Used by both the export-path
+    /// connector data, leaving every other field (invocationId, directory type, vendor name, naming
+    /// contexts) exactly as replayed (issue #230 Phase 2). Used by both the export-path
     /// pin creation (<c>CloseExportConnection</c>) and the pin invalidation on a failed pinned connection
     /// (<c>CloseImportConnection</c>/<c>CloseExportConnection</c>): the two callers differ only in whether
     /// they pass a new pin or null.
     /// </summary>
     /// <remarks>
-    /// Preserving the watermark fields byte-for-byte in meaning is a correctness requirement: a regressed
-    /// watermark corrupts delta imports. Malformed or absent previous data is tolerated (the specific
+    /// Preserving the other fields byte-for-byte in meaning is a correctness requirement: the invocationId
+    /// recorded here is what the Connected System page shows, and the directory type decides how the next
+    /// Delta Import reads changes. The Partition watermarks are held apart (#2715) and are untouched by this. Malformed or absent previous data is tolerated (the specific
     /// deserialisation exception is caught and a warning logged) by starting from a minimal record that
     /// carries only the pin and <paramref name="fallbackDirectoryType"/> - there is nothing else to
     /// recover from data that could not be read.

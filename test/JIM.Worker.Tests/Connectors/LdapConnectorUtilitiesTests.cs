@@ -975,6 +975,48 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+    #region PartitionForDn tests (#2715)
+
+    [Test]
+    public void PartitionForDn_NestedSuffixes_ChoosesTheLongestMatch()
+    {
+        // OpenLDAP and 389 Directory Server can host one suffix beneath another, so an entry in the nested suffix is
+        // under both, and its change belongs to the nested one's watermark.
+        var outer = new ConnectedSystemPartition { Id = 1, Name = "corp", ExternalId = "dc=corp,dc=local" };
+        var nested = new ConnectedSystemPartition { Id = 2, Name = "partners", ExternalId = "ou=partners,dc=corp,dc=local" };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(LdapConnectorUtilities.PartitionForDn("uid=pat,ou=people,ou=partners,dc=corp,dc=local", [outer, nested]), Is.SameAs(nested));
+            Assert.That(LdapConnectorUtilities.PartitionForDn("uid=pat,ou=people,ou=partners,dc=corp,dc=local", [nested, outer]), Is.SameAs(nested), "whichever order the partitions come in");
+            Assert.That(LdapConnectorUtilities.PartitionForDn("uid=cal,ou=people,dc=corp,dc=local", [outer, nested]), Is.SameAs(outer));
+            Assert.That(LdapConnectorUtilities.PartitionForDn("OU=Partners,DC=Corp,DC=Local", [outer, nested]), Is.SameAs(nested), "the suffix entry itself, compared as LDAP compares names");
+            Assert.That(LdapConnectorUtilities.PartitionForDn("uid=ann,dc=other,dc=local", [outer, nested]), Is.Null);
+        }
+    }
+
+    [TestCase("cn=Smith\\,dc=corp,dc=local", Description = "an escaped comma is part of the value, so the entry is one RDN under dc=local")]
+    [TestCase("uid=pat,adc=corp,dc=local", Description = "an attribute type that only ends like the partition's")]
+    [TestCase("uid=pat,dc=notcorp,dc=local", Description = "a value that only ends like the partition's")]
+    public void PartitionForDn_SuffixWithoutAnRdnBoundary_DoesNotMatch(string dn)
+    {
+        var partition = new ConnectedSystemPartition { Id = 1, Name = "corp", ExternalId = "dc=corp,dc=local" };
+
+        Assert.That(LdapConnectorUtilities.PartitionForDn(dn, [partition]), Is.Null);
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("not a distinguished name")]
+    public void PartitionForDn_NoReadableDn_MatchesNothing(string? dn)
+    {
+        var partition = new ConnectedSystemPartition { Id = 1, Name = "corp", ExternalId = "dc=corp,dc=local" };
+
+        Assert.That(LdapConnectorUtilities.PartitionForDn(dn, [partition]), Is.Null);
+    }
+
+    #endregion
+
     #region rootDSE changelog attributes (draft-good-ldap-changelog)
 
     /// <summary>

@@ -449,4 +449,66 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups" }),
             "a repeat import of an unchanged hierarchy must leave exactly the same containers");
     }
+
+    /// <summary>
+    /// A Partition the directory no longer holds is removed by a hierarchy refresh, and its Delta Import watermark
+    /// (#2715) goes with it by cascade; one the directory still holds keeps its watermark, because Partitions are
+    /// matched by their external id, so a refresh does not replace them.
+    /// </summary>
+    /// <remarks>
+    /// Loaded change-tracked in the scope it is saved from, as the REST endpoint does: removing a Partition from a
+    /// tracked Connected System's collection is what deletes its row.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_PartitionNoLongerInTheDirectory_RemovesItsWatermarkAsync()
+    {
+        var systemId = await SeedAsync();
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId))!;
+            ConnectedSystemServer.MergeHierarchy(system,
+            [
+                new ConnectorPartition { Id = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Containers = [] },
+                new ConnectorPartition { Id = "dc=glitterband,dc=local", Name = "dc=glitterband,dc=local", Containers = [] }
+            ]);
+            // A refresh discovers Partitions unselected; only a selected Partition is read, and so holds a watermark.
+            foreach (var partition in system.Partitions!)
+                partition.Selected = true;
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        int yellowstoneId, glitterbandId;
+        await using (var ctx = NewContext())
+        {
+            var partitions = await ctx.ConnectedSystemPartitions.ToListAsync();
+            yellowstoneId = partitions.Single(p => p.ExternalId == "dc=yellowstone,dc=local").Id;
+            glitterbandId = partitions.Single(p => p.ExternalId == "dc=glitterband,dc=local").Id;
+            await new PostgresDataRepository(ctx).ConnectedSystems.RecordImportWatermarksAsync(systemId, null,
+                new Dictionary<int, string> { [yellowstoneId] = "yellowstone-1", [glitterbandId] = "glitterband-1" }, [], DateTime.UtcNow);
+        }
+
+        // The directory no longer has Glitterband.
+        var trackedOptions = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        await using (var ctx = new JimDbContext(trackedOptions))
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var system = (await repository.ConnectedSystems.GetConnectedSystemAsync(systemId, withChangeTracking: true))!;
+            var result = ConnectedSystemServer.MergeHierarchy(system,
+                [new ConnectorPartition { Id = "dc=yellowstone,dc=local", Name = "dc=yellowstone,dc=local", Containers = [] }]);
+            Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+            await repository.ConnectedSystems.UpdateConnectedSystemAsync(system);
+        }
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemPartitions.AnyAsync(p => p.Id == glitterbandId), Is.False, "precondition: the refresh removed the Partition");
+            Assert.That(await verify.ConnectedSystemPartitionWatermarks.Select(w => w.PartitionId).ToListAsync(), Is.EqualTo(new[] { yellowstoneId }),
+                "the removed Partition's watermark goes with it, and the kept one's stays");
+        }
+    }
 }

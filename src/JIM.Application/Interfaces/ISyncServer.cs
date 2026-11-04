@@ -97,6 +97,19 @@ public interface ISyncServer
     /// </summary>
     Task UpdateConnectedSystemPersistedConnectorDataAsync(ConnectedSystem connectedSystem, string? persistedConnectorData);
 
+    /// <summary>
+    /// Gets the Delta Import watermark JIM holds for each Partition of a Connected System that has one (#2715).
+    /// </summary>
+    Task<List<ConnectedSystemPartitionWatermark>> GetConnectedSystemPartitionWatermarksAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Records what a completed import reached, as runtime state (no Activity, no configuration snapshot), in one
+    /// transaction: the persisted connector data when not null, each Partition watermark (a null value clears that
+    /// Partition's), and the removal of the watermarks of Partitions no longer selected (#2715).
+    /// </summary>
+    Task<ImportWatermarkRecordingResult> RecordImportWatermarksAsync(ConnectedSystem connectedSystem, string? persistedConnectorData,
+        IReadOnlyDictionary<int, string?> partitionWatermarks);
+
     #endregion
 
     #region MVO Deletion with Change Tracking

@@ -16,7 +16,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetectedCapabilities, IConnectorPartitionWatermarks, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorDirectoryServers, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorManagedScope, IConnectorContainment, IConnectorContainerObjectCounts, IConnectorRecommendedExportParallelism, IConnectorPhases, IConnectorSecureEndpoint, IConnectorObjectClassUsage, IConnectorUniquenessProbe, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -76,10 +76,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// The persisted connector state replayed by JIM at connection open (issue #230), including any
     /// pinned domain controller. Read by <see cref="OpenImportConnection"/> to resolve the effective
     /// server, and re-read by <see cref="CloseImportConnection"/>/<see cref="CloseExportConnection"/> as
-    /// the base to merge a pin update into, so any other persisted field (USN/changelog/accesslog
-    /// watermarks, invocationId) survives untouched.
+    /// the base to merge a pin update into, so any other persisted field (the directory's type, its
+    /// invocationId) survives untouched. It holds no Delta Import position: each Partition's is
+    /// <see cref="_partitionWatermarks"/>.
     /// </summary>
     private string? _persistedConnectorData;
+
+    /// <summary>
+    /// The Delta Import watermark JIM holds for each Partition the run targets, handed over once before the import
+    /// connection opens (#2715), and passed to every page's import unchanged. Null until JIM hands it, which the import
+    /// reads as no watermark for any Partition.
+    /// </summary>
+    private IReadOnlyDictionary<int, string?>? _partitionWatermarks;
 
     /// <summary>
     /// Where the server used by the most recent <see cref="OpenImportConnection"/> call came from (issue
@@ -496,39 +504,34 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     };
     #endregion
 
-    #region IConnectorImportWatermarkDescription members
-    /// <summary>
-    /// Reads the one value in the persisted rootDSE that is a Delta Import watermark, chosen by the directory's delta
-    /// source: the highest committed Update Sequence Number (Active Directory, Samba AD), the access log time
-    /// (OpenLDAP), or the last change log entry (389 Directory Server and generic directories). Everything else
-    /// persisted is the directory's detected capabilities, not a position.
-    /// </summary>
-    public ImportWatermarkDescription? DescribeImportWatermark(string? persistedConnectorData, ILogger logger)
+    #region IConnectorPartitionWatermarks members
+    /// <inheritdoc />
+    public void SetPartitionWatermarks(IReadOnlyDictionary<int, string?> watermarks)
     {
-        if (string.IsNullOrEmpty(persistedConnectorData))
+        ArgumentNullException.ThrowIfNull(watermarks);
+        _partitionWatermarks = watermarks;
+    }
+
+    /// <summary>
+    /// Reads one Partition's Delta Import watermark as its change source holds it: the highest committed Update
+    /// Sequence Number (Active Directory, Samba AD), the access log time (OpenLDAP), or the last change log entry (389
+    /// Directory Server and generic directories). The domain controller a USN was issued by, and whether an access log
+    /// time names a logged entry, are what JIM checks the watermark against, not where it is, so they are not described.
+    /// One point, unscoped: JIM scopes it by the Partition's name. Never throws.
+    /// </summary>
+    public ImportWatermarkDescription? DescribePartitionWatermark(string? value, ILogger logger)
+    {
+        var watermark = LdapPartitionWatermark.Parse(value, logger);
+        if (watermark == null)
             return null;
 
-        LdapConnectorRootDse? rootDse;
-        try
+        return watermark.Kind switch
         {
-            rootDse = JsonSerializer.Deserialize<LdapConnectorRootDse>(persistedConnectorData);
-        }
-        catch (JsonException ex)
-        {
-            logger.Warning(ex, "DescribeImportWatermark: Failed to deserialise persisted connector data. Describing no watermark.");
-            return null;
-        }
-
-        if (rootDse == null)
-            return null;
-
-        return rootDse.DeltaSourceKind switch
-        {
-            LdapDeltaSourceKind.Usn when rootDse.HighestCommittedUsn.HasValue =>
-                Watermark("Update Sequence Number", new ImportWatermarkPoint { Number = rootDse.HighestCommittedUsn }),
-            LdapDeltaSourceKind.Changelog when rootDse.LastChangeNumber.HasValue =>
-                Watermark("change log entry", new ImportWatermarkPoint { Number = rootDse.LastChangeNumber }),
-            LdapDeltaSourceKind.Accesslog when TryParseAccesslogTimestamp(rootDse.LastAccesslogTimestamp, out var time) =>
+            LdapDeltaSourceKind.Usn when watermark.Usn.HasValue =>
+                Watermark("Update Sequence Number", new ImportWatermarkPoint { Number = watermark.Usn }),
+            LdapDeltaSourceKind.Changelog when watermark.ChangeNumber.HasValue =>
+                Watermark("change log entry", new ImportWatermarkPoint { Number = watermark.ChangeNumber }),
+            LdapDeltaSourceKind.Accesslog when TryParseAccesslogTimestamp(watermark.AccesslogTimestamp, out var time) =>
                 Watermark("access log", new ImportWatermarkPoint { Time = time }),
             _ => null
         };
@@ -988,7 +991,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
         // The server this session actually connected through, and a probe for any other, so the import can
         // prove a discovered domain controller reachable before pinning it (issue #230 Phase 2).
         var connectedServer = _openConnectionPlan?.EffectiveServer ?? string.Empty;
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, preferredDomainController, connectedServer, server => CanConnectTo(server, logger), logger, cancellationToken, progress);
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, _partitionWatermarks, preferredDomainController, connectedServer, server => CanConnectTo(server, logger), logger, cancellationToken, progress);
 
         switch (runProfile.RunType)
         {

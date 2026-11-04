@@ -123,6 +123,8 @@ Get-JIMConnectedSystemPartition -ConnectedSystemId <int>
 
 The partitions, each with its tree of containers. Every container carries the same properties as the containers `Set-JIMConnectedSystemContainer` returns. A container's ObjectCount of 0 means it was searched and found empty; `$null` means nobody has counted it.
 
+For a Connector that keeps a Delta Import watermark for each partition, such as the LDAP Connector, each partition's DeltaImportWatermark says where its next Delta Import reads changes after and when an import last recorded it. It is read-only: imports record it. `$null` means the partition holds none, so its next Delta Import reads every object in it, as a Full Import does, and records one; a partition that is not selected holds none.
+
 | Property | Type | Description |
 |----------|------|-------------|
 | `Id` | `int` | The ID of the partition. |
@@ -131,6 +133,7 @@ The partitions, each with its tree of containers. Every container carries the sa
 | `Selected` | `bool` | Whether JIM imports from the partition. |
 | `ConnectedSystemId` | `int` | The ID of the Connected System the partition belongs to. |
 | `Containers` | `object[]` | The partition's top-level containers, each with its child containers. Each has `Id`, `Name`, `ExternalId`, `Description`, `Hidden`, `Selected`, `Excluded`, `Scope`, `ObjectCount`, `SubtreeObjectCount`, `PartitionId`, `ConnectedSystemId` and `ChildContainers`. |
+| `DeltaImportWatermark` | `object` | Where the partition's next Delta Import reads changes after, for a Connector that keeps a Delta Import watermark for each partition (the LDAP Connector does). Empty when none is held for the partition, so its next Delta Import reads every object in it, as a Full Import does, and records one; a partition that is not selected holds none. Always empty for a Connector that keeps no watermark per partition. It has `Value`, `RecordedAt` and `Description`. |
 <!-- END GENERATED: Get-JIMConnectedSystemPartition -->
 
 ### Examples

@@ -3700,6 +3700,150 @@ function Get-ActivityChangeCount {
     }
 }
 
+function Get-ImportObjectCount {
+    <#
+    .SYNOPSIS
+        What an import Activity reported for the objects it read: how many it added, updated, deleted and found
+        unchanged.
+
+    .DESCRIPTION
+        An import that read only changes reports nothing unchanged, so Unchanged tells a Delta Import that read its
+        changes apart from one that read every object instead. Throws when the Activity's statistics cannot be read,
+        rather than reading as an import that saw nothing.
+
+    .OUTPUTS
+        A hashtable with Added, Updated, Deleted and Unchanged, each an int.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId
+    )
+
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+    if (-not $stats) {
+        throw "Could not read the statistics of import Activity $ActivityId"
+    }
+
+    return @{
+        Added     = [int]$stats.totalCsoAdds
+        Updated   = [int]$stats.totalCsoUpdates
+        Deleted   = [int]$stats.totalCsoDeletes
+        Unchanged = [int]$stats.totalUnchanged
+    }
+}
+
+function Get-ActivityItemDisplayName {
+    <#
+    .SYNOPSIS
+        The display names of an Activity's Run Profile Execution Items of one change type, sorted.
+
+    .DESCRIPTION
+        Says which objects an import added, updated or deleted, not only how many: a scenario that writes known
+        values to known objects can then require exactly those objects and no others.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Added', 'Updated', 'Deleted')]
+        [string]$ObjectChangeType
+    )
+
+    $items = @(Get-JIMActivity -Id $ActivityId -ExecutionItems | Where-Object { "$($_.objectChangeType)" -eq $ObjectChangeType })
+    return @($items | ForEach-Object { "$($_.displayName)" } | Sort-Object)
+}
+
+function Get-PartitionDeltaImportWatermark {
+    <#
+    .SYNOPSIS
+        Where each partition of a Connected System's next Delta Import starts: the watermark JIM holds for it.
+
+    .DESCRIPTION
+        Read from Get-JIMConnectedSystemPartition, whose deltaImportWatermark is empty for a partition with no
+        watermark (its next Delta Import reads every object in it) and for a Connector that keeps none per partition.
+
+    .OUTPUTS
+        A hashtable of partition id (int) to the watermark's value exactly as the Connector keeps it, or $null where
+        JIM holds none. Every partition of the Connected System is present.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$ConnectedSystemId
+    )
+
+    $watermarks = @{}
+    foreach ($partition in @(Get-JIMConnectedSystemPartition -ConnectedSystemId $ConnectedSystemId)) {
+        $watermark = $partition.PSObject.Properties['deltaImportWatermark']
+        $watermarks[[int]$partition.id] = if ($watermark -and $null -ne $watermark.Value) { [string]$watermark.Value.value } else { $null }
+    }
+    return $watermarks
+}
+
+function Get-ActivityPartitionWatermark {
+    <#
+    .SYNOPSIS
+        The per-partition Delta Import watermarks an import Activity records: where each partition it read started
+        (From), or what it recorded for each once it had staged everything it read (To).
+
+    .OUTPUTS
+        A hashtable of partition id (int) to value: $null for a partition that had no watermark (From) or whose
+        watermark the run cleared (To). $null itself when the Activity recorded none on that side, which for To means
+        the run kept every watermark it started with.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        $Activity,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('From', 'To')]
+        [string]$Direction
+    )
+
+    $property = $Activity.PSObject.Properties["importPartitionWatermarks$Direction"]
+    if (-not $property -or $null -eq $property.Value) {
+        return $null
+    }
+
+    $watermarks = @{}
+    foreach ($entry in @($property.Value)) {
+        $watermarks[[int]$entry.partitionId] = if ($null -eq $entry.value) { $null } else { [string]$entry.value }
+    }
+    return $watermarks
+}
+
+function Get-ImportReadRangeScope {
+    <#
+    .SYNOPSIS
+        The scope each point of an import Activity's read range names, on the side asked for, sorted.
+
+    .DESCRIPTION
+        importReadRange describes the watermarks an import started from (From) and recorded (To) as the Connector
+        reads them. A Connector that keeps a watermark per partition gives one point per partition, scoped by the
+        partition's name. Returns nothing when the Activity has no read range, or none on that side.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        $Activity,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('From', 'To')]
+        [string]$Direction
+    )
+
+    $range = $Activity.PSObject.Properties['importReadRange']
+    if (-not $range -or $null -eq $range.Value) {
+        return @()
+    }
+
+    $side = $range.Value.PSObject.Properties[$Direction.ToLowerInvariant()]
+    if (-not $side -or $null -eq $side.Value) {
+        return @()
+    }
+
+    return @(@($side.Value.points) | ForEach-Object { "$($_.scope)" } | Sort-Object)
+}
+
 function Assert-NoUnresolvedReferences {
     <#
     .SYNOPSIS

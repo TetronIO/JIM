@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
 - 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
+- 🔄 Each LDAP partition now keeps its own Delta Import watermark. After upgrading, the first Delta Import to read each partition reads every object in it once, which also picks up any change a partition-targeted import skipped. (#2715)
 
 ### Fixed
 
@@ -33,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 When a Synchronisation Rule starts or stops contributing to a Metaverse Attribute, the other rules contributing to it now record their renumbered priorities in their own Configuration History, instead of showing them later as changes nobody made. (#2630)
 - 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 - 🐛 A Delta Import that reads every object instead of its changes, as one with no watermark to continue from does, now marks the objects no longer there as deleted, within the Run Profile's deletion limits, rather than leaving them in JIM until a Full Import. (#2720)
+- 🐛 An import that reads one LDAP partition, Full or Delta, no longer moves another partition's Delta Import starting point, so partition-targeted Delta Imports no longer skip changes. (#2715)
 
 ### Security
 

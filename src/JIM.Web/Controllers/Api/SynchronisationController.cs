@@ -1739,9 +1739,17 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
         var partitions = await _application.ConnectedSystems.GetConnectedSystemPartitionsAsync(connectedSystem);
-        var dtos = partitions.Select(ConnectedSystemPartitionDto.FromEntity);
+        var watermarks = await GetPartitionDeltaImportWatermarksAsync(connectedSystem);
+        var dtos = partitions.Select(p => ConnectedSystemPartitionDto.FromEntity(p, watermarks?.GetValueOrDefault(p.Id)));
         return Ok(dtos);
     }
+
+    /// <summary>
+    /// Each Partition's current Delta Import watermark, by Partition id (#2715), or null when the Connected System's
+    /// Connector keeps none per Partition.
+    /// </summary>
+    private async Task<Dictionary<int, DescribedPartitionWatermark>?> GetPartitionDeltaImportWatermarksAsync(ConnectedSystem connectedSystem) =>
+        (await _application.ConnectedSystems.GetDescribedPartitionWatermarksAsync(connectedSystem))?.ToDictionary(watermark => watermark.PartitionId);
 
     /// <summary>
     /// Update a Partition
@@ -1789,9 +1797,10 @@ public class SynchronisationController(
         else
             await _application.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition, connectedSystemId, initiatedBy);
 
-        // Reload to get full entity with relationships
+        // Reload to get full entity with relationships, and the watermark as the save left it: deselection removes it.
         var updated = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
-        return Ok(ConnectedSystemPartitionDto.FromEntity(updated!));
+        var watermarks = await GetPartitionDeltaImportWatermarksAsync(connectedSystem);
+        return Ok(ConnectedSystemPartitionDto.FromEntity(updated!, watermarks?.GetValueOrDefault(partitionId)));
     }
 
     /// <summary>

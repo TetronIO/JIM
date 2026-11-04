@@ -1017,7 +1017,15 @@ public class ConnectedSystemPartitionDto
     /// </summary>
     public List<ConnectedSystemContainerDto> Containers { get; set; } = new();
 
-    public static ConnectedSystemPartitionDto FromEntity(ConnectedSystemPartition entity)
+    /// <summary>
+    /// Where the partition's next Delta Import reads changes after, for a Connector that keeps a Delta Import watermark
+    /// for each partition (the LDAP Connector does). Empty when none is held for the partition, so its next Delta
+    /// Import reads every object in it, as a Full Import does, and records one; a partition that is not selected holds
+    /// none. Always empty for a Connector that keeps no watermark per partition.
+    /// </summary>
+    public PartitionDeltaImportWatermarkDto? DeltaImportWatermark { get; set; }
+
+    public static ConnectedSystemPartitionDto FromEntity(ConnectedSystemPartition entity, DescribedPartitionWatermark? deltaImportWatermark = null)
     {
         return new ConnectedSystemPartitionDto
         {
@@ -1028,9 +1036,45 @@ public class ConnectedSystemPartitionDto
             ConnectedSystemId = entity.ConnectedSystem?.Id ?? 0,
             Containers = entity.Containers?
                 .Select(ConnectedSystemContainerDto.FromEntity)
-                .ToList() ?? new()
+                .ToList() ?? new(),
+            DeltaImportWatermark = deltaImportWatermark == null ? null : PartitionDeltaImportWatermarkDto.FromEntity(deltaImportWatermark)
         };
     }
+}
+
+/// <summary>
+/// Where a partition's next Delta Import reads changes after: the watermark JIM holds for it, and when an import last
+/// recorded it.
+/// </summary>
+public class PartitionDeltaImportWatermarkDto
+{
+    /// <summary>
+    /// The watermark, exactly as the Connector keeps it.
+    /// </summary>
+    public string Value { get; set; } = null!;
+
+    /// <summary>
+    /// When an import that read the partition last recorded the watermark (UTC), whether or not the value changed: in
+    /// effect, when the partition's changes were last read.
+    /// </summary>
+    public DateTime RecordedAt { get; set; }
+
+    /// <summary>
+    /// The watermark as the Connector reads it: a <c>Kind</c> (what it counts in, such as <c>access log</c> or
+    /// <c>Update Sequence Number</c>) and its <c>Points</c>, each with a <c>Number</c>, a UTC <c>Time</c> or a
+    /// <c>Text</c> value. Empty when the Connector cannot read the value.
+    /// </summary>
+    public ImportWatermarkDescription? Description { get; set; }
+
+    /// <summary>
+    /// Creates the DTO from a Partition's described watermark.
+    /// </summary>
+    public static PartitionDeltaImportWatermarkDto FromEntity(DescribedPartitionWatermark watermark) => new()
+    {
+        Value = watermark.Value,
+        RecordedAt = watermark.RecordedAt,
+        Description = watermark.Description
+    };
 }
 
 /// <summary>

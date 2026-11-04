@@ -1047,6 +1047,14 @@ The **ImportRuleChange** step (issue [#2615](https://github.com/TetronIO/JIM/iss
 | 2 | **ScopedImport2** | (OpenLDAP only) Full Import scoped to the second partition -> only that partition's objects are imported |
 | 3 | **UnscopedImport** | Full Import without `PartitionId` -> imports from all selected partitions |
 | 4 | **Comparison** | Verify counts are consistent (scoped subsets sum to unscoped total) |
+| 5 | **DeltaBaseline** | Both Delta Import Run Profiles read changes with no warning: each partition has a watermark from its Full Import |
+| 6 | **CrossPartitionDelta** | Change users in each partition; Delta Import (Scoped) imports only the first partition's changes, then Delta Import (Scoped - Second) imports the second's (the #2715 regression) |
+| 7 | **ScopedFullThenDelta** | (two partitions) Change users in the second partition; Full Import (Scoped); the second partition's Delta Import still imports them |
+| 8 | **UnscopedDelta** | Change users in each partition; Delta Import (Unscoped) imports both, with an `importReadRange` point per partition; the scoped Delta Imports then import nothing |
+| 9 | **PartitionDeletion** | (two partitions) Delete a user in the second partition; only the second partition's Delta Import marks it deleted |
+| 10 | **ReselectedPartition** | (two partitions) Deselect and reselect the second partition; Delta Import (Unscoped) reads every object instead, warns naming that partition and deletes nothing; the second partition's Delta Import then reads changes again |
+
+Every run a Delta Import step makes is checked against the partition watermarks JIM holds before and after it (`Get-JIMConnectedSystemPartition`'s `deltaImportWatermark`, and the Activity's `importPartitionWatermarksFrom` / `To`): it starts each partition it reads from that partition's watermark, records one for each, and leaves every other partition's exactly as it was. Each step also names exactly which objects it expects updated or deleted, and requires nothing read unchanged, so a Delta Import that read too much or too little fails. The Delta Import Run Profiles read three objects per page and each step changes four users per partition, so on OpenLDAP and 389 Directory Server every change read crosses a Connector page boundary, at any template: there the scenario adds five users of its own to each partition for these steps. (Samba AD is read unpaged, so its reads come back in one page whatever the page size; a full read of OpenLDAP or 389 Directory Server drains its LDAP pages within one Connector call, as it always has.) Samba AD and the Active Directory lab have one domain partition, so they run DeltaBaseline, CrossPartitionDelta and UnscopedDelta, with Delta Import (Unscoped) as the second Run Profile: both read the one partition and share its watermark, which exercises the Update Sequence Number path.
 
 **Script**: `test/integration/scenarios/Invoke-Scenario-009-PartitionScopedImports.ps1`
 
@@ -1057,12 +1065,13 @@ The **ImportRuleChange** step (issue [#2615](https://github.com/TetronIO/JIM/iss
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step ScopedImport
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step UnscopedImport
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step Comparison
+./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step CrossPartitionDelta   # runs the scoped Full Imports first
 
 # Run all steps sequentially
 ./Invoke-Scenario-009-PartitionScopedImports.ps1 -Step All
 ```
 
-> **Note**: Nano or Micro templates are recommended; the scenario validates run-profile filtering rather than data scale.
+> **Note**: Micro is enough to iterate; sign off a change to imports or the LDAP Connector at Medium or above, where the Full Synchronisation crosses a page boundary too.
 
 ---
 
