@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Shared;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
+using MudBlazor.Extensions;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -151,6 +153,36 @@ public class NavigableMudTabsTests : JimComponentTestContext
         await cut.FindAll(".mud-tab")[1].ClickAsync();
 
         cut.WaitForAssertion(() => Assert.That(slugs, Is.EqualTo(new[] { "password-history" })));
+    }
+
+    /// <summary>
+    /// A tab that appears only once something has been read (the Operations page's Exchange tab, behind a feature
+    /// flag) registers after the bar's first render. A link to it must still open it, rather than leave the reader on
+    /// the first tab with the URL still naming the one they asked for.
+    /// </summary>
+    [Test]
+    public void LinkedTab_ThatRegistersAfterTheFirstRender_IsOpenedWhenItArrives()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/operations?t=exchange");
+        var cut = Render<NavigableMudTabs>(p => p.Add(c => c.ChildContent, Panels("Activity", "Passwords")));
+        Assert.That(cut.FindComponent<MudTabs>().Instance.GetState(x => x.ActivePanelIndex), Is.Zero, "nothing called Exchange yet");
+
+        cut.Render(p => p.Add(c => c.ChildContent, Panels("Activity", "Passwords", "Exchange")));
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<MudTabs>().Instance.GetState(x => x.ActivePanelIndex), Is.EqualTo(2)));
+    }
+
+    [Test]
+    public async Task LinkedTab_ThatArrivesAfterTheReaderPickedATab_LeavesTheReadersChoiceAloneAsync()
+    {
+        Services.GetRequiredService<NavigationManager>().NavigateTo("/admin/operations?t=exchange");
+        var cut = Render<NavigableMudTabs>(p => p.Add(c => c.ChildContent, Panels("Activity", "Passwords")));
+
+        await cut.FindAll(".mud-tab")[1].ClickAsync();
+        cut.Render(p => p.Add(c => c.ChildContent, Panels("Activity", "Passwords", "Exchange")));
+
+        cut.WaitForAssertion(() => Assert.That(cut.FindComponent<MudTabs>().Instance.GetState(x => x.ActivePanelIndex), Is.EqualTo(1),
+            "a tab arriving late must not take the reader away from the one they chose"));
     }
 
     private static RenderFragment Panels(params string[] titles)
