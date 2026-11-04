@@ -4612,6 +4612,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
                     b.PrimitiveCollection<List<string>>("DropDownValues")
                         .HasColumnType("text[]");
 

@@ -36,7 +36,8 @@
                                 .Where(sv => sv.Setting.Category == settingCategory)
                                 .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
                                 .Where(sv => !_unavailableSettingIds.Contains(sv.Setting.Id))
-                                .OrderBy(sv => sv.Setting.Id)
+                                .OrderBy(sv => sv.Setting.DisplayOrder)
+                                .ThenBy(sv => sv.Setting.Id)
                                 .ToList();
                             var headingCount = categorySettings.Count(sv => sv.Setting.Type == ConnectedSystemSettingType.Heading);
                             var headingsRendered = 0;
