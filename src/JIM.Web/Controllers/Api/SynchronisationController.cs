@@ -3030,19 +3030,30 @@ public class SynchronisationController(
     /// </summary>
     /// <remarks>
     /// Connects to the external system and retrieves its Partition and Container hierarchy. Existing selections are preserved where possible using a match-and-merge approach. If previously selected items were removed, the <c>hasSelectedItemsRemoved</c> flag will be set in the response.
+    ///
+    /// Removing a partition that Run Profiles target would leave them reading every selected partition, so the
+    /// optional body's <c>runProfileAction</c> says what to do instead. <c>Disable</c>, the default, applies the
+    /// refresh and disables each such Run Profile, naming each in <c>affectedRunProfiles</c>. <c>Cancel</c> applies
+    /// nothing and answers 409, naming them.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="request">Optional: what to do with Run Profiles that target a partition the refresh removes. Omit the body to disable them.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <response code="200">Hierarchy imported successfully.</response>
     /// <response code="400">Hierarchy import failed (e.g., connection error, invalid settings).</response>
     /// <response code="404">Connected System not found.</response>
+    /// <response code="409">With <c>runProfileAction</c> set to <c>Cancel</c>, nothing was changed, because the refresh
+    /// would remove a partition that Run Profiles target; the body names each one. Send the request again with
+    /// <c>Disable</c> to apply the refresh and disable them, or point them at another partition first.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/import-hierarchy", Name = "ImportConnectedSystemHierarchy")]
     [ProducesResponseType(typeof(HierarchyRefreshResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(HierarchyRefreshRefusedResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId)
+    public async Task<IActionResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ImportConnectedSystemHierarchyRequest? request = null)
     {
         _logger.LogInformation("Hierarchy import requested for Connected System: {Id}", connectedSystemId);
 
@@ -3061,16 +3072,25 @@ public class SynchronisationController(
 
         try
         {
-            // Call the appropriate overload based on authentication method
+            // Call the appropriate overload based on authentication method. No body disables the Run Profiles that
+            // target a removed partition (#2740), so a script that names no choice never widens one.
+            var runProfileAction = request?.RunProfileAction ?? RemovedPartitionRunProfileAction.Disable;
             JIM.Models.Staging.DTOs.HierarchyRefreshResult result;
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, apiKey);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, apiKey, runProfileAction);
             else
-                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, initiatedBy);
+                result = await _application.ConnectedSystems.ImportConnectedSystemHierarchyAsync(connectedSystemId, initiatedBy, runProfileAction);
 
-            _logger.LogInformation("Hierarchy imported for Connected System: {Id} ({Name}). Summary: {Summary}",
-                connectedSystemId, connectedSystem.Name, result.GetSummary());
+            if (!result.Applied)
+            {
+                _logger.LogInformation("Hierarchy refresh for Connected System {Id} applied nothing: it would remove a partition {Count} Run Profile(s) target",
+                    connectedSystemId, result.AffectedRunProfiles.Count);
+                return Conflict(HierarchyRefreshRefusedResponse.FromModel(result));
+            }
+
+            _logger.LogInformation("Hierarchy imported for Connected System: {Id} ({Name}). Summary: {Summary}. Run Profiles disabled: {Disabled}",
+                connectedSystemId, connectedSystem.Name, result.GetSummary(), result.AffectedRunProfiles.Count);
 
             return Ok(HierarchyRefreshResultDto.FromModel(result));
         }
@@ -3486,7 +3506,7 @@ public class SynchronisationController(
     /// <param name="request">Optional: the Full Synchronisation preview read before starting the run. Omit the body to run without one.</param>
     /// <returns>The execution response with Activity and task IDs for tracking.</returns>
     /// <response code="202">Run Profile execution has been queued.</response>
-    /// <response code="400">The run could not be queued, or <c>previewActivityId</c> is not a completed Full Synchronisation preview of this Connected System cited by a Full Synchronisation Run Profile.</response>
+    /// <response code="400">The run could not be queued: for example the Run Profile is disabled (the message says why), or <c>previewActivityId</c> is not a completed Full Synchronisation preview of this Connected System cited by a Full Synchronisation Run Profile.</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPost("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}/execute", Name = "ExecuteRunProfile")]
@@ -3659,7 +3679,7 @@ public class SynchronisationController(
     /// <param name="request">The update request with new values.</param>
     /// <returns>The updated Run Profile details.</returns>
     /// <response code="200">Run Profile updated successfully.</response>
-    /// <response code="400">Invalid request, or a setting that is not valid for the Run Profile's Run Type (for example AllowObjectTypeChanges on anything other than a Full Import).</response>
+    /// <response code="400">Invalid request; a setting that is not valid for the Run Profile's Run Type (for example AllowObjectTypeChanges on anything other than a Full Import); both <c>partitionId</c> and <c>allSelectedPartitions</c>; or <c>enabled</c> true for a Run Profile a hierarchy refresh disabled by removing its partition, without <c>partitionId</c> or <c>allSelectedPartitions</c>.</response>
     /// <response code="404">Connected System or Run Profile not found.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
     [HttpPut("connected-systems/{connectedSystemId:int}/run-profiles/{runProfileId:int}", Name = "UpdateRunProfile")]
@@ -3690,9 +3710,18 @@ public class SynchronisationController(
         if (runProfile == null)
             return NotFound(ApiErrorResponse.NotFound($"Run Profile with ID {runProfileId} not found for Connected System {connectedSystemId}."));
 
+        // A Run Profile reads one partition or every selected one, never both (#2740).
+        if (request.PartitionId.HasValue && request.AllSelectedPartitions)
+            return BadRequest(ApiErrorResponse.BadRequest("Give partitionId or allSelectedPartitions, not both: a Run Profile reads one partition, or every selected partition."));
+
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
             runProfile.Name = request.Name;
+
+        // Omitted leaves it unchanged. Whether enabling is allowed, and why a disabled Run Profile is disabled, is the
+        // server's to judge against what is stored.
+        if (request.Enabled.HasValue)
+            runProfile.Enabled = request.Enabled.Value;
 
         if (request.PageSize.HasValue)
             runProfile.PageSize = request.PageSize.Value;
@@ -3747,9 +3776,9 @@ public class SynchronisationController(
         {
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, apiKey);
+                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, apiKey, request.AllSelectedPartitions);
             else
-                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy);
+                await _application.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(runProfile, initiatedBy, request.AllSelectedPartitions);
 
             _logger.LogInformation("Updated Run Profile: {Id} ({Name})", runProfile.Id, LogSanitiser.Sanitise(runProfile.Name));
 

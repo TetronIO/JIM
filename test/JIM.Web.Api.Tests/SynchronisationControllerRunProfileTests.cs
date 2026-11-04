@@ -1313,4 +1313,115 @@ public class SynchronisationControllerRunProfileTests
     }
 
     #endregion
+
+    #region Enabled state (#2740)
+
+    private ConnectedSystemRunProfile SetUpOneRunProfile(int connectedSystemId, int runProfileId, bool enabled = true,
+        ConnectedSystemRunProfileDisabledReason? reason = null, string? disabledPartitionName = null)
+    {
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            Id = runProfileId,
+            Name = "Full Import (Glitterband)",
+            ConnectedSystemId = connectedSystemId,
+            RunType = ConnectedSystemRunType.FullImport,
+            PageSize = 100,
+            Enabled = enabled,
+            DisabledReason = reason,
+            DisabledPartitionName = disabledPartitionName
+        };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(BuildSystemSupportingEveryRunType(connectedSystemId));
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfilesAsync(connectedSystemId))
+            .ReturnsAsync(() => new List<ConnectedSystemRunProfile> { runProfile });
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfileEnabledStateAsync(runProfileId))
+            .ReturnsAsync(new JIM.Models.Staging.DTOs.ConnectedSystemRunProfileEnabledState(enabled, reason, disabledPartitionName));
+        return runProfile;
+    }
+
+    [Test]
+    public async Task GetRunProfilesAsync_DisabledRunProfile_ReturnsItsStateAndWhyAsync()
+    {
+        SetUpOneRunProfile(1, 10, enabled: false, ConnectedSystemRunProfileDisabledReason.PartitionRemoved, "dc=glitterband,dc=local");
+
+        var result = await _controller.GetRunProfilesAsync(1) as OkObjectResult;
+        var dto = (result?.Value as IEnumerable<RunProfileDto>)?.Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto, Is.Not.Null);
+            Assert.That(dto!.Enabled, Is.False);
+            Assert.That(dto.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.PartitionRemoved));
+            Assert.That(dto.DisabledPartitionName, Is.EqualTo("dc=glitterband,dc=local"));
+        }
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_EnabledFalse_DisablesItAsync()
+    {
+        SetUpOneRunProfile(1, 10);
+
+        var result = await _controller.UpdateRunProfileAsync(1, 10, new UpdateRunProfileRequest { Enabled = false });
+
+        var dto = (result as OkObjectResult)?.Value as RunProfileDto;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto?.Enabled, Is.False);
+            Assert.That(dto?.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.Manual), "disabled by hand");
+        }
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp => !rp.Enabled)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_EnablingOneARemovedPartitionDisabledWithNoScope_ReturnsBadRequestNamingTheRemedyAsync()
+    {
+        SetUpOneRunProfile(1, 10, enabled: false, ConnectedSystemRunProfileDisabledReason.PartitionRemoved, "dc=glitterband,dc=local");
+
+        var result = await _controller.UpdateRunProfileAsync(1, 10, new UpdateRunProfileRequest { Enabled = true });
+
+        var error = (result as BadRequestObjectResult)?.Value as ApiErrorResponse;
+        Assert.That(error?.Message, Does.Contain("choose the partition it reads, or choose all selected partitions"),
+            "re-enabling must say what it reads, and the refusal says how");
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_EnablingOneARemovedPartitionDisabledForAllSelectedPartitions_EnablesItAsync()
+    {
+        SetUpOneRunProfile(1, 10, enabled: false, ConnectedSystemRunProfileDisabledReason.PartitionRemoved, "dc=glitterband,dc=local");
+
+        var result = await _controller.UpdateRunProfileAsync(1, 10, new UpdateRunProfileRequest { Enabled = true, AllSelectedPartitions = true });
+
+        var dto = (result as OkObjectResult)?.Value as RunProfileDto;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto?.Enabled, Is.True);
+            Assert.That(dto?.DisabledReason, Is.Null);
+            Assert.That(dto?.PartitionName, Is.Null, "it reads every selected partition");
+        }
+    }
+
+    [Test]
+    public async Task UpdateRunProfileAsync_PartitionIdAndAllSelectedPartitions_ReturnsBadRequestAsync()
+    {
+        SetUpOneRunProfile(1, 10);
+
+        var result = await _controller.UpdateRunProfileAsync(1, 10, new UpdateRunProfileRequest { PartitionId = 2, AllSelectedPartitions = true });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    [Test]
+    public async Task ExecuteRunProfileAsync_DisabledRunProfile_ReturnsBadRequestSayingWhyAsync()
+    {
+        var runProfile = SetUpOneRunProfile(1, 10, enabled: false, ConnectedSystemRunProfileDisabledReason.Manual);
+
+        var result = await _controller.ExecuteRunProfileAsync(1, 10);
+
+        var error = (result as BadRequestObjectResult)?.Value as ApiErrorResponse;
+        Assert.That(error?.Message, Is.EqualTo(RunProfileEnablement.DescribeRunRefusal(runProfile)));
+    }
+
+    #endregion
 }

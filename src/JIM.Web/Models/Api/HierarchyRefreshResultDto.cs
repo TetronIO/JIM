@@ -81,6 +81,18 @@ public class HierarchyRefreshResultDto
     public List<HierarchyMoveItemDto> MovedContainers { get; set; } = new();
 
     /// <summary>
+    /// Whether the refresh was saved. Always true on a successful response: a refresh asked to cancel when Run Profiles
+    /// target a partition it would remove answers 409 instead.
+    /// </summary>
+    public bool Applied { get; set; }
+
+    /// <summary>
+    /// The Run Profiles the refresh disabled because they targeted a partition it removed, each with that partition's
+    /// name. Empty when the refresh removed no partition a Run Profile targets.
+    /// </summary>
+    public List<HierarchyRefreshRunProfileDto> AffectedRunProfiles { get; set; } = new();
+
+    /// <summary>
     /// Creates an API DTO from the domain model.
     /// </summary>
     public static HierarchyRefreshResultDto FromModel(HierarchyRefreshResult result)
@@ -100,7 +112,9 @@ public class HierarchyRefreshResultDto
             AddedContainers = result.AddedContainers.Select(HierarchyChangeItemDto.FromModel).ToList(),
             RemovedContainers = result.RemovedContainers.Select(HierarchyChangeItemDto.FromModel).ToList(),
             RenamedContainers = result.RenamedContainers.Select(HierarchyRenameItemDto.FromModel).ToList(),
-            MovedContainers = result.MovedContainers.Select(HierarchyMoveItemDto.FromModel).ToList()
+            MovedContainers = result.MovedContainers.Select(HierarchyMoveItemDto.FromModel).ToList(),
+            Applied = result.Applied,
+            AffectedRunProfiles = result.AffectedRunProfiles.Select(HierarchyRefreshRunProfileDto.FromModel).ToList()
         };
     }
 }

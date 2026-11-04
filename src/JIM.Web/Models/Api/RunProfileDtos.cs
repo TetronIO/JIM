@@ -36,6 +36,24 @@ public class RunProfileDto
     public int PageSize { get; set; }
 
     /// <summary>
+    /// Whether this Run Profile can run. A disabled Run Profile is refused wherever a run can start: the portal, the
+    /// REST API, PowerShell and Schedule steps, where the step fails with the reason.
+    /// </summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Why this Run Profile is disabled: <c>Manual</c> when an administrator disabled it, or <c>PartitionRemoved</c>
+    /// when a hierarchy refresh removed the partition it targeted. Null while it is enabled.
+    /// </summary>
+    public ConnectedSystemRunProfileDisabledReason? DisabledReason { get; set; }
+
+    /// <summary>
+    /// For a Run Profile a hierarchy refresh disabled, the name of the partition it removed, which is what the Run
+    /// Profile used to read. Null otherwise.
+    /// </summary>
+    public string? DisabledPartitionName { get; set; }
+
+    /// <summary>
     /// The partition name if this Run Profile targets a specific partition.
     /// </summary>
     public string? PartitionName { get; set; }
@@ -91,6 +109,9 @@ public class RunProfileDto
             ConnectedSystemId = runProfile.ConnectedSystemId,
             RunType = runProfile.RunType,
             PageSize = runProfile.PageSize,
+            Enabled = runProfile.Enabled,
+            DisabledReason = runProfile.DisabledReason,
+            DisabledPartitionName = runProfile.DisabledPartitionName,
             PartitionName = runProfile.Partition?.Name,
             TargetsDeselectedPartition = runProfile.TargetsADeselectedPartition(),
             FilePath = runProfile.FilePath,
