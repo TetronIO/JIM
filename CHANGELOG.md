@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Changing an Attribute Priority order now says which Object Types the next synchronisation, Delta or Full, processes in full: the portal says so before you save rather than calling for a Full Synchronisation, the REST response lists them, and the cmdlets warn. (#2650)
 - 🐛 A Delta Import that reads every object instead of its changes, as one with no watermark to continue from does, now marks the objects no longer there as deleted, within the Run Profile's deletion limits, rather than leaving them in JIM until a Full Import. (#2720)
 - 🐛 An import that reads one LDAP partition, Full or Delta, no longer moves another partition's Delta Import starting point, so partition-targeted Delta Imports no longer skip changes. (#2715)
+- 🐛 Importing a Connected System's hierarchy through the REST API or PowerShell no longer fails when a partition removed from the directory still holds objects; the partition is removed and its objects are kept. (#2723)
 
 ### Security
 
