@@ -729,7 +729,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// partition that other LDAP directories do not have.
     /// </summary>
     /// <exception cref="NotSupportedException">No discovery fills that setting, or the connected directory is not AD-family.</exception>
-    public async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, string targetSettingName, ILogger logger)
+    public async Task<ConnectorDirectoryServerDiscoveryResult> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settingValues, string targetSettingName, ILogger logger)
     {
         var discovery = DirectoryServerDiscoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName)
             ?? throw new NotSupportedException($"The LDAP Connector cannot discover servers for the setting '{targetSettingName}'.");

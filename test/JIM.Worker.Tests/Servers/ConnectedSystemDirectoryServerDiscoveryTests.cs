@@ -210,9 +210,9 @@ public class ConnectedSystemDirectoryServerDiscoveryTests
             new ConnectorDirectoryServerDiscovery("Preferred Server", "directory servers"),
             new ConnectorDirectoryServerDiscovery("Mail Server", "mail servers"));
         connector.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Mail Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "mail1.example.org", Version = "Version 15.2" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult(null, [new ConnectorDirectoryServer { HostName = "mail1.example.org", Version = "Version 15.2" }]));
 
-        var servers = await _jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, "Mail Server");
+        var servers = (await _jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, "Mail Server")).Servers;
 
         Assert.That(servers.Select(s => (s.HostName, s.Version)), Is.EqualTo(new[] { ("mail1.example.org", (string?)"Version 15.2") }));
     }
@@ -224,9 +224,9 @@ public class ConnectedSystemDirectoryServerDiscoveryTests
             new ConnectorDirectoryServerDiscovery("Preferred Server", "directory servers"),
             new ConnectorDirectoryServerDiscovery("Mail Server", "mail servers"));
         connector.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Preferred Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "dc1.example.org" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult(null, [new ConnectorDirectoryServer { HostName = "dc1.example.org" }]));
 
-        var servers = await _jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId);
+        var servers = (await _jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId)).Servers;
 
         Assert.That(servers.Single().HostName, Is.EqualTo("dc1.example.org"));
     }

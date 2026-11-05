@@ -991,6 +991,28 @@ internal static class LdapConnectorUtilities
     /// </summary>
     /// <param name="ntdsDsaDn">The Distinguished Name of an nTDSDSA object.</param>
     /// <returns>The server object's Distinguished Name, or null if <paramref name="ntdsDsaDn"/> does not parse, or has no parent (a single-RDN DN, which an nTDSDSA object can never genuinely be).</returns>
+    /// <summary>
+    /// The DNS name a distinguished name sits in: its <c>DC=</c> components, in lower case and joined with dots, such as
+    /// "panoply.local" for <c>CN=Configuration,DC=panoply,DC=local</c>. Of the configuration partition's name, that is
+    /// the forest's. Null when it has none or is not a distinguished name.
+    /// </summary>
+    internal static string? DnsDomainFrom(string distinguishedName)
+    {
+        if (!LdapDistinguishedName.TryParse(distinguishedName, out var parsed))
+            return null;
+
+        var domainComponents = parsed.Rdns
+            .SelectMany(rdn => rdn.Components)
+            .Where(component => string.Equals(component.Type, "DC", StringComparison.OrdinalIgnoreCase))
+            .Select(component => component.Value.ToLowerInvariant())
+            .ToList();
+
+        return domainComponents.Count == 0 ? null : string.Join('.', domainComponents);
+    }
+
+    /// <summary>
+    /// The server object's Distinguished Name from an nTDSDSA object's.
+    /// </summary>
     internal static string? GetServerDnFromNtdsDsaDn(string ntdsDsaDn)
     {
         return LdapDistinguishedName.TryParse(ntdsDsaDn, out var parsed) ? parsed.Parent?.ToString() : null;

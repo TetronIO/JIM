@@ -2618,8 +2618,9 @@ public class SynchronisationController(
 
         try
         {
-            var directoryServers = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId, discovery.TargetSettingName);
-            return Ok(directoryServers.Select(s => ConnectedSystemDirectoryServerDto.FromModel(s, discovery.TargetSettingName, targetSettingId)));
+            // The forest the discovery names is for the portal's wording; the API returns the servers alone.
+            var discovered = await _application.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(connectedSystemId, discovery.TargetSettingName);
+            return Ok(discovered.Servers.Select(s => ConnectedSystemDirectoryServerDto.FromModel(s, discovery.TargetSettingName, targetSettingId)));
         }
         catch (NotSupportedException ex)
         {

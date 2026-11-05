@@ -1061,4 +1061,19 @@ public class LdapConnectorUtilitiesTests
     }
 
     #endregion
+
+    #region DnsDomainFrom
+
+    [TestCase("CN=Configuration,DC=panoply,DC=local", "panoply.local")]
+    [TestCase("CN=Configuration,DC=Corp,DC=Example,DC=COM", "corp.example.com")]
+    [TestCase("dc=resurgam,dc=local", "resurgam.local")]
+    [TestCase("CN=Configuration,O=Example", null)]
+    [TestCase("not a distinguished name", null)]
+    [TestCase("", null)]
+    public void DnsDomainFrom_DistinguishedName_IsItsDomainComponentsInLowerCase(string distinguishedName, string? expected)
+    {
+        Assert.That(LdapConnectorUtilities.DnsDomainFrom(distinguishedName), Is.EqualTo(expected));
+    }
+
+    #endregion
 }

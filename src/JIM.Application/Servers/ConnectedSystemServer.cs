@@ -4317,7 +4317,7 @@ public partial class ConnectedSystemServer
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
     /// <exception cref="NotSupportedException">The Connector does not discover servers for that setting (or for any), the setting is not available, or (thrown by the Connector) the connected directory cannot answer.</exception>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, string? targetSettingName = null,
+    public async Task<ConnectorDirectoryServerDiscoveryResult> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, string? targetSettingName = null,
         IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.

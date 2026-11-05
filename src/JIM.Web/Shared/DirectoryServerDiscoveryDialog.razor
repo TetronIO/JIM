@@ -9,13 +9,14 @@
     Lists the servers JIM discovers in a Connected System's directory for one setting, so an administrator can pick
     one instead of having to already know a hostname. Selecting a row fills the field the dialog was opened from on
     the settings page; nothing here writes anything on its own. The wording uses the Connector's own term for those
-    servers (the LDAP Connector's are domain controllers, or Exchange servers). Failures (an unreachable directory,
+    servers (the LDAP Connector's are domain controllers, or Exchange servers), and names the forest it searched where
+    the Connector can tell, so an empty result says where nothing was found. Failures (an unreachable directory,
     refused credentials) render inside the dialog with a Retry action rather than crashing the page.
 *@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">@Title(ServerTerm)</MudText>
+        <MudText Typo="Typo.h6" data-testid="jim-directory-server-discovery-title">@Title(ServerTerm, _forestName)</MudText>
     </TitleContent>
     <DialogContent>
         @if (_loading)
@@ -31,8 +32,8 @@
         }
         else if (_directoryServers is { Count: 0 })
         {
-            <MudAlert Severity="Severity.Info">
-                JIM did not find any @(ServerTerm) in this directory.
+            <MudAlert Severity="Severity.Info" data-testid="jim-directory-server-discovery-empty">
+                JIM did not find any @(ServerTerm) in @(_forestName is { } forest ? $"the {forest} forest" : "this directory").
             </MudAlert>
         }
         else if (_directoryServers != null)
@@ -139,6 +140,7 @@
     private bool _loading = true;
     private string? _errorMessage;
     private List<ConnectorDirectoryServer>? _directoryServers;
+    private string? _forestName;
 
     // A Version column only when a server has one: domain controllers have none, Exchange servers do.
     private bool _showVersion => _directoryServers?.Any(server => !string.IsNullOrEmpty(server.Version)) == true;
@@ -158,7 +160,9 @@
         try
         {
             using var jim = JimFactory.Create();
-            _directoryServers = await jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, TargetSettingName, DraftSettingValues);
+            var discovered = await jim.ConnectedSystems.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, TargetSettingName, DraftSettingValues);
+            _forestName = discovered.ForestName;
+            _directoryServers = discovered.Servers;
         }
         // Dialog boundary: any discovery failure (an unreachable directory, refused credentials, a directory
         // the Connector cannot discover servers in) must render inside the dialog rather than crash the page, so every failure
@@ -172,6 +176,9 @@
         {
             _loading = false;
             StateHasChanged();
+            // The title, which names the forest once discovery has, is drawn by the dialog's frame rather than this
+            // component, so the frame is asked to draw again too.
+            MudDialog.StateHasChanged();
         }
     }
 
@@ -181,10 +188,14 @@
 
     /// <summary>
     /// "Discover Domain Controllers" from "domain controllers": the term reads in lower case mid-sentence and in
-    /// title case as the dialog's title. Words already carrying capitals (an acronym) are left as they are.
+    /// title case as the dialog's title. Words already carrying capitals (an acronym) are left as they are. Once the
+    /// discovery has named the forest it searched, the title says which ("Discover Exchange Servers in panoply.local").
     /// </summary>
-    private static string Title(string serverTerm) =>
-        $"Discover {System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(serverTerm)}";
+    private static string Title(string serverTerm, string? forestName = null)
+    {
+        var title = $"Discover {System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(serverTerm)}";
+        return forestName == null ? title : $"{title} in {forestName}";
+    }
 
     /// <summary>
     /// Opens the dialog and returns the selected server's FQDN, or null when the administrator closed the dialog

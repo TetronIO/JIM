@@ -48,10 +48,42 @@ public class LdapConnectorDirectoryServersPagingTests
                 return LdapTestResponses.EmptySearchResponse();
             });
 
-        var servers = await new LdapConnectorDirectoryServers(executor.Object, Logger, supportsPaging: true).GetDirectoryServersAsync();
+        var servers = (await new LdapConnectorDirectoryServers(executor.Object, Logger, supportsPaging: true).GetDirectoryServersAsync()).Servers;
 
         Assert.That(servers.Select(server => server.HostName), Is.EquivalentTo(new[] { "dc1.corp.local", "dc2.corp.local" }),
             "The second domain controller is on the second page.");
+    }
+
+    [Test]
+    public async Task GetDirectoryServersAsync_AnyForest_NamesTheForestTheConfigurationPartitionBelongsToAsync()
+    {
+        var result = await new LdapConnectorDirectoryServers(ConfigurationOnly().Object, Logger, supportsPaging: true).GetDirectoryServersAsync();
+
+        Assert.That(result.ForestName, Is.EqualTo("corp.local"));
+    }
+
+    [Test]
+    public async Task GetExchangeServersAsync_ForestWithNoExchangeServers_StillNamesTheForestAsync()
+    {
+        // So the portal can say "no Exchange servers in the corp.local forest" rather than "in this directory".
+        var result = await new LdapConnectorDirectoryServers(ConfigurationOnly().Object, Logger, supportsPaging: true).GetExchangeServersAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Servers, Is.Empty);
+            Assert.That(result.ForestName, Is.EqualTo("corp.local"));
+        }
+    }
+
+    /// <summary>A directory that answers the rootDSE's configurationNamingContext and nothing else.</summary>
+    private static Mock<ILdapOperationExecutor> ConfigurationOnly()
+    {
+        var executor = new Mock<ILdapOperationExecutor>();
+        executor.Setup(e => e.SendRequest(It.IsAny<DirectoryRequest>()))
+            .Returns((DirectoryRequest request) => request is SearchRequest { Scope: SearchScope.Base } search && search.Attributes.Contains("configurationNamingContext")
+                ? LdapTestResponses.SearchResponseWith("", ("configurationNamingContext", ConfigurationDn))
+                : LdapTestResponses.EmptySearchResponse());
+        return executor;
     }
 
     private static string NtdsDsaDn(string server) => $"CN=NTDS Settings,CN={server},CN=Servers,CN=Default-First-Site-Name,CN=Sites,{ConfigurationDn}";
