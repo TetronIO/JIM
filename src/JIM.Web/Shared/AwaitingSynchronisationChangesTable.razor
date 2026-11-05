@@ -31,7 +31,7 @@
                     @if (group.Changes.Count > 1)
                     {
                         <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                       OnClick="@(() => Toggle(key))"
+                                       Size="Size.Small" OnClick="@(() => Toggle(key))"
                                        aria-label="@(expanded ? "Hide the changes" : $"Show the {group.Changes.Count:N0} changes")"
                                        aria-expanded="@(expanded ? "true" : "false")"
                                        data-testid="jim-change-group-expand" />
