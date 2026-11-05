@@ -36,9 +36,12 @@ public class RemoteSessionHardeningHarnessTests
             var stopwatch = Stopwatch.StartNew();
             await ps.StopAsync(null, null);
 
-            // A remote pipeline that is stopped ends the invocation with the server's own record of it, so it surfaces
-            // as a RemoteException ("The pipeline has been stopped."), not a local PipelineStoppedException. The
-            // invocation state is what says it was stopped rather than failed.
+            // A remote pipeline that is stopped ends the invocation with an exception whose type depends on which of the
+            // server's messages arrives first: its record of the stop (a RemoteException, "The pipeline has been
+            // stopped."), its state change (a PSRemotingDataStructureException, "The remote pipeline has been
+            // stopped."), or neither (a local PipelineStoppedException). CI has seen both remote forms. So the test
+            // holds to what callers rely on: the invocation state says it was stopped, and RemoteFailure classifies it
+            // as Stopped, whichever type arrived.
             Exception? ended = null;
             try
             {
@@ -52,7 +55,7 @@ public class RemoteSessionHardeningHarnessTests
             using (Assert.EnterMultipleScope())
             {
                 Assert.That(ps.InvocationStateInfo.State, Is.EqualTo(PSInvocationState.Stopped));
-                Assert.That(ended, Is.InstanceOf<PipelineStoppedException>().Or.InstanceOf<RemoteException>());
+                Assert.That(ended, Is.Not.Null, "the invocation ends in an exception");
                 Assert.That(RemoteFailure.FromException(ended!, ps.InvocationStateInfo.State).Kind, Is.EqualTo(RemoteFailureKind.Stopped));
                 Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(15)));
             }
