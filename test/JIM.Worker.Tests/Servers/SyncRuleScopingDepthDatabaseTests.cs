@@ -17,7 +17,8 @@ namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
 /// Real-PostgreSQL verification that a Synchronisation Rule's scoping criteria tree loads, and is accounted for, at
-/// every depth the editor lets an administrator build.
+/// every depth the editor lets an administrator build, including a connection criterion another system's deletion must
+/// find (#2021).
 /// </summary>
 /// <remarks>
 /// The criteria editor offers "add group" inside every group, so a tree can nest to any depth, but the rule loaders
@@ -379,6 +380,68 @@ public class SyncRuleScopingDepthDatabaseTests
         Assert.That(await NewJimApplication(ctx).ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, initiator), Is.True,
             "Failed to create the import rule with a nested scoping tree.");
         return rule.Id;
+    }
+
+    [Test]
+    public async Task GetSyncRuleNamesWithConnectionCriteriaToAsync_CriterionNestedInAnotherSystemsRule_IsFoundAndBlocksTheDeletionAsync()
+    {
+        // #2021: RESURGAM's GAL rule tests "has a user in Finance App" two groups deep. Deleting Finance App would drop
+        // that criterion and change the rule's scope, so the deletion is refused, while the system's own rule, which
+        // goes with it, does not count.
+        var ids = await SeedAsync();
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = await seed.ConnectorDefinitions.FirstAsync();
+            var resurgam = new ConnectedSystem { Name = "RESURGAM AD", ConnectorDefinitionId = connectorDefinition.Id, ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule };
+            var contact = new ConnectedSystemObjectType { Name = "contact", ConnectedSystem = resurgam, Selected = true };
+            seed.ConnectedSystems.Add(resurgam);
+            seed.ConnectedSystemObjectTypes.Add(contact);
+            seed.SyncRules.Add(ConnectionRule("GAL: Finance App people into RESURGAM", resurgam, contact, ids, nested: true));
+            seed.SyncRules.Add(ConnectionRule("Finance App's own rule", null, null, ids, nested: false));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var jim = NewJimApplication(ctx);
+        var names = await new PostgresDataRepository(ctx).ConnectedSystems.GetSyncRuleNamesWithConnectionCriteriaToAsync(ids.SystemId);
+        var result = await jim.ConnectedSystems.DeleteAsync(ids.SystemId, initiatedBy: null);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(names, Is.EqualTo(new[] { "GAL: Finance App people into RESURGAM" }));
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.ErrorMessage, Does.Contain("GAL: Finance App people into RESURGAM"));
+            Assert.That(await ctx.ConnectedSystems.AnyAsync(cs => cs.Id == ids.SystemId), Is.True, "nothing was deleted");
+        }
+    }
+
+    private static SyncRule ConnectionRule(string name, ConnectedSystem? system, ConnectedSystemObjectType? objectType, SeedIds ids, bool nested)
+    {
+        var criterion = new SyncRuleScopingCriteria { ConnectedObjectTypeId = ids.CsTypeId, ComparisonType = SearchComparisonType.HasValue };
+        var top = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        if (nested)
+            top.ChildGroups.Add(new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.Any, Criteria = [criterion] });
+        else
+            top.Criteria.Add(criterion);
+
+        var rule = new SyncRule
+        {
+            Name = name,
+            Direction = SyncRuleDirection.Export,
+            MetaverseObjectTypeId = ids.MvTypeId,
+            ObjectScopingCriteriaGroups = [top]
+        };
+        if (system != null)
+        {
+            rule.ConnectedSystem = system;
+            rule.ConnectedSystemObjectType = objectType!;
+        }
+        else
+        {
+            rule.ConnectedSystemId = ids.SystemId;
+            rule.ConnectedSystemObjectTypeId = ids.CsTypeId;
+        }
+        return rule;
     }
 
     private async Task<SeedIds> SeedAsync()
