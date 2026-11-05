@@ -422,6 +422,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
         // Skip post-processing on cancellation: cross-page references target unprocessed pages,
         // and the watermark must NOT advance so the next sync re-processes everything.
+        // The objects the run processed, taken now: the steps after the page loop count their own work on the Activity's
+        // counters while they run, and the completion message reports this figure whatever they leave behind (#2790).
+        var objectsProcessed = _activity.ObjectsProcessed;
+
         if (!_cancellationTokenSource.IsCancellationRequested)
         {
             // Resolve cross-page reference attributes.
@@ -464,8 +468,8 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             await ApplyClaimedConfigurationChangesAsync("Full Synchronisation");
 
             // Update activity message with throughput summary
-            var syncCompleteMessage = $"Sync complete: {_activity.ObjectsProcessed:N0} objects" +
-                throughput.FormatCompletion(_activity.ObjectsProcessed);
+            var syncCompleteMessage = $"Sync complete: {objectsProcessed:N0} objects" +
+                throughput.FormatCompletion(objectsProcessed);
             await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
             // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).

@@ -5435,6 +5435,12 @@ public abstract class SyncTaskProcessorBase
         var unreadableRecords = 0;
         List<Guid>? previousBatchIds = null;
 
+        // The step counts the Metaverse Objects it reviews while it runs (below); the run's figures are the Connected
+        // System Objects it processed, so they are put back when it finishes, as cross-page reference resolution does,
+        // and the run's completion message counts those rather than the review (#2790).
+        var runObjectsToProcess = _activity.ObjectsToProcess;
+        var runObjectsProcessed = _activity.ObjectsProcessed;
+
         while (!_cancellationTokenSource.IsCancellationRequested)
         {
             var flaggedIds = await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(batchSize);
@@ -5555,6 +5561,9 @@ public abstract class SyncTaskProcessorBase
             if (flaggedIds.Count < batchSize)
                 break;
         }
+
+        _activity.ObjectsToProcess = runObjectsToProcess;
+        _activity.ObjectsProcessed = runObjectsProcessed;
 
         // An unreadable record means changes made outside synchronisation that this run could not deliver, and the record
         // is cleared with the flag, so nothing would ever say so: one warning on the Activity, which completes with it,

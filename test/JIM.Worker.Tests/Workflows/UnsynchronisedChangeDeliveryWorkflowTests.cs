@@ -354,6 +354,46 @@ public class UnsynchronisedChangeDeliveryWorkflowTests : WorkflowTestBase
 
     #endregion
 
+    #region The run reports the objects it processed, not the review's count
+
+    [Test]
+    public async Task FullSync_EndsWithAnExportReview_ReportsTheObjectsItProcessedAsync()
+    {
+        // Export Review counts the Metaverse Objects it reviews on the Activity's counters while it runs. The run's own
+        // figure is the Connected System Objects it processed, and the completion message and counters must say so
+        // once the review has finished (#2790): a run of a million objects reported "1 objects ... (avg 0 obj/s)".
+        var ctx = await SetUpAsync(directoryAccounts: false, provisioning: true);
+        await CreatePersonAsync(ctx, "E9", "Jay Admin");
+
+        var activity = await RunFullSyncAsync(ctx.Hr);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CreatesFor(ctx), Does.Contain("Jay Admin"), "arrange: the run reviewed the flagged person");
+            Assert.That(activity.ObjectsProcessed, Is.EqualTo(2), "Alice and Bob, the HR objects the run processed");
+            Assert.That(activity.ObjectsToProcess, Is.EqualTo(2));
+            Assert.That(activity.Message, Does.StartWith("Sync complete: 2 objects"));
+        }
+    }
+
+    [Test]
+    public async Task DeltaSync_NothingChangedButAnExportReview_ReportsNoObjectsProcessedAsync()
+    {
+        var ctx = await SetUpAsync(directoryAccounts: false, provisioning: true);
+        await CreatePersonAsync(ctx, "E9", "Jay Admin");
+
+        var activity = await RunUnrelatedDeltaSyncAsync(ctx);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(CreatesFor(ctx), Does.Contain("Jay Admin"), "arrange: the run reviewed the flagged person");
+            Assert.That(activity.ObjectsProcessed, Is.Zero, "no HR object had changed");
+            Assert.That(activity.Message, Does.StartWith("Sync complete: 0 objects"));
+        }
+    }
+
+    #endregion
+
     #region A drain that cannot clear stops
 
     [Test]
