@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261105090812_AddConnectedSystemManagesExchangeRecipients")]
+    [Migration("20261105104903_AddConnectedSystemManagesExchangeRecipients")]
     partial class AddConnectedSystemManagesExchangeRecipients
     {
         /// <inheritdoc />
@@ -6592,7 +6592,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", "Partition")
                         .WithMany("Containers")
-                        .HasForeignKey("PartitionId");
+                        .HasForeignKey("PartitionId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ConnectedSystem");
 
