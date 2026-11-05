@@ -66,7 +66,7 @@ public class HierarchyRefreshResult
 
     /// <summary>
     /// Partitions the refresh selected because a selected Container moved into them. A Container is only in scope while
-    /// its partition is selected, so without this the moved container's selection would mean nothing.
+    /// its partition is selected, so without this the moved Container's selection would mean nothing.
     /// </summary>
     /// <remarks>#2769.</remarks>
     public List<HierarchyPartitionSelectionItem> PartitionsSelectedForMovedContainers { get; set; } = new();

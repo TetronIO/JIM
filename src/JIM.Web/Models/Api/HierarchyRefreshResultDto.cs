@@ -82,7 +82,7 @@ public class HierarchyRefreshResultDto
 
     /// <summary>
     /// Partitions the refresh selected because a selected Container moved into them. A Container is only in scope while
-    /// its partition is selected, so without this the moved container's selection would mean nothing. Empty when the
+    /// its partition is selected, so without this the moved Container's selection would mean nothing. Empty when the
     /// refresh selected no partition.
     /// </summary>
     public List<HierarchyPartitionSelectionItemDto> PartitionsSelectedForMovedContainers { get; set; } = new();
