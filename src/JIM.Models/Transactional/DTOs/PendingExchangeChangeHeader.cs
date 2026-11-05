@@ -65,7 +65,7 @@ public class PendingExchangeChangeHeader
     /// <summary>The status of the change's own Activity, which tells a change JIM refused from one it does not make.</summary>
     public ActivityStatus ChangeActivityStatus { get; set; }
 
-    /// <summary>Where the change stands, as its follow-up shows it: Queued, Delivering, Retrying, Parked, Refused or NotMade.</summary>
+    /// <summary>Where the change stands, as its follow-up shows it: Queued, Held, Delivering, Retrying, Parked, Refused or NotMade.</summary>
     public ExchangeChangeState State => ExchangeChangeOutcome.StateOf(Status, LastAttemptedAt, ChangeActivityStatus, held: !ConnectedSystemManagesExchangeRecipients);
 
     /// <summary>

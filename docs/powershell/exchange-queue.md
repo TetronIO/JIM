@@ -17,7 +17,7 @@ ones that are stuck.
 ```jim-diagram
 archetype: comparison
 title: What a retry does to each queued Exchange change
-desc: "Resume-JIMPendingExchangeChange makes Parked changes, and Retrying changes that have been attempted, due at once: their attempts, failure and 24-hour park clock are reset and the Exchange delivery lane attempts them within seconds. It leaves Queued changes alone, because they are already due; Delivering changes, because Exchange is applying them now; and Refused and NotMade changes, which hold until what is declared for the account changes."
+desc: "Resume-JIMPendingExchangeChange makes Parked changes, and Retrying changes that have been attempted, due at once: their attempts, failure and 24-hour park clock are reset and the Exchange delivery lane attempts them within seconds. It leaves Queued changes alone, because they are already due; Held changes, which wait until their Connected System manages Exchange recipients again; Delivering changes, because Exchange is applying them now; and Refused and NotMade changes, which hold until what is declared for the account changes."
 columns:
   - { label: "Retried", sub: due at once }
   - { label: "Left alone", sub: nothing for a retry to do }
@@ -25,17 +25,18 @@ rows:
   - label: States
     cells:
       - { text: "`Parked` and `Retrying`" }
-      - { text: "`Queued`, `Delivering`, `Refused` and `NotMade`" }
+      - { text: "`Queued`, `Held`, `Delivering`, `Refused` and `NotMade`" }
   - label: Why
     cells:
       - { text: "JIM has stopped, or is waiting out a backoff", sub: "attempts, failure and park clock reset" }
-      - { text: "already due, being applied now, or waiting on a different declared state" }
+      - { text: "already due, held, being applied now, or waiting on a different declared state" }
 footer: "One request and one Activity, however many changes it covers"
 ```
 
-A queued change is Queued, Delivering, Retrying, Parked, Refused or NotMade. A change JIM has stopped trying (Parked) is
-retried once the cause is fixed. A change cannot be cancelled: to stop or correct one, change what is declared for the
-account, its source data or its Attribute Flow, and the newer state replaces the queued change.
+A queued change is Queued, Held, Delivering, Retrying, Parked, Refused or NotMade. A Held change waits, unattempted,
+while its Connected System does not manage Exchange recipients, and is delivered once it does again. A change JIM has
+stopped trying (Parked) is retried once the cause is fixed. A change cannot be cancelled: to stop or correct one, change
+what is declared for the account, its source data or its Attribute Flow, and the newer state replaces the queued change.
 
 ## :material-tray-full: Get-JIMPendingExchangeChange
 

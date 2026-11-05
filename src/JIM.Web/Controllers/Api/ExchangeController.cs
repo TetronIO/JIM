@@ -51,7 +51,7 @@ public class ExchangeController(
     /// </remarks>
     /// <param name="pagination">Pagination and sort parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="connectedSystemId">Optional. Restrict to one Connected System.</param>
-    /// <param name="state">Optional. Restrict to one state: Queued, Delivering, Retrying, Parked, Refused or NotMade.</param>
+    /// <param name="state">Optional. Restrict to one state: Queued, Held, Delivering, Retrying, Parked, Refused or NotMade.</param>
     /// <param name="failureKind">Optional. Restrict to changes whose last attempt failed this way.</param>
     /// <param name="metaverseObjectId">Optional. Restrict to one Metaverse Object's changes.</param>
     /// <param name="connectedSystemObjectId">Optional. Restrict to one account's change.</param>

@@ -165,7 +165,7 @@ public class ExchangeQueueActionRequest : IValidatableObject
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Restrict to changes in one state (Queued, Delivering, Retrying, Parked, Refused or NotMade), or omit for every state.
+    /// Restrict to changes in one state (Queued, Held, Delivering, Retrying, Parked, Refused or NotMade), or omit for every state.
     /// </summary>
     public ExchangeChangeState? State { get; set; }
 
