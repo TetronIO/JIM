@@ -97,9 +97,9 @@ public class ReconciliationCsoLoadDatabaseTests
 
         var dns = new Dictionary<string, string>();
         var members = new Dictionary<string, ConnectedSystemObject>();
-        foreach (var name in new[] { "alice", "bob", "carol", "dave", "erin" })
+        foreach (var (name, dn) in new[] { "alice", "bob", "carol", "dave", "erin" }
+                     .Select(n => (n, $"uid={n},ou=People,dc=glitterband,dc=local")))
         {
-            var dn = $"uid={name},ou=People,dc=glitterband,dc=local";
             dns[name] = dn;
             var cso = new ConnectedSystemObject { Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal };
             cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
