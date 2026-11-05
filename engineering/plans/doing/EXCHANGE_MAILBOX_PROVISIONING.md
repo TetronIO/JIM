@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete; Phase 2's settings check (2a), the Connector's delivery and the delivery hold (2b) done against the stand-in, quiet session close and the lab run next)
+- **Status:** Doing (Phases 1 to 6 complete; Phase 7, GAL synchronisation, next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -148,13 +148,13 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
 - **Moved out:** the feature flag (D11) shipped in Phase 3; quiet session close moves to Phase 2, since only ex1's front-end logs show the Ping 500s it is about.
 - **Done when:** the Worker and web images, booted read-only as UID 1654, each open a harness session (`Test-ImageRemoting.ps1`, in `remoting-harness-tests`), and `remoting-harness-tests` is green in CI.
 
-### Phase 2: Exchange settings, sign-in and detected facts (4 days; requirements 1 to 3)
+### Phase 2: Exchange settings, sign-in and detected facts (4 days; requirements 1 to 3) ✅
 
 In two pull requests. **2a (done):** the settings, D5's warnings on every surface, D6's discovery per setting, the
 save-time check (`IConnectorSettingsCheck`, a new capability the server runs once the quick validation has refused
 nothing) with its facts, and the stand-in Exchange endpoint in the harness, a restricted no-language session whose
 commands an RBAC-limited account cannot see, against which the whole check runs in CI. **2b:** the Connector's
-session and convergence (done), the delivery hold (done), then quiet session close and the lab run.
+session and convergence, the delivery hold, the quiet-close finding and the lab runs (all done).
 
 - **Settings:** add Exchange server (text, with the Discover action from D6) under the Exchange heading, shown only while Manage Exchange recipients is ticked (`RequiredWhenSetting`). The heading and the checkbox, and their refusal on a directory that is not Active Directory, came with Phase 3.
 - **Refusals on save:**
@@ -162,7 +162,7 @@ session and convergence (done), the delivery hold (done), then quiet session clo
 - **Warning on save:** cmdlets missing from the session, named with the recipient types each affects (D5).
 - **Detected facts:** the Exchange version, and the derived principal, realm and KDC.
 - **Docs and coverage:** moved to Phase 8. COV-6 forbids a settings row for a setting behind an In Development flag, and a page about a feature customers cannot turn on would mislead them; they are written when the flag comes off.
-- **Quiet session close** (from Phase 1): find what sends the Pings ex1's front end logged as HTTP 500 when the spike's sessions closed (the library sends none of its own), and close without them, proven by ex1's logs in this phase's lab run.
+- **Quiet session close** (from Phase 1): closed with no change to the transport (decided 2026-11-05). The "Ping" is the client's own shell-level Receive, the long poll on the runspace pool, which Exchange's proxy names a keep-alive. WS-Man ends it two ways, and ex1 logs each as an HTTP 500 because a SOAP fault travels as one: `w:InternalError` when the Delete closes the shell while the Ping is waiting, once per session, and `w:TimedOut` each time an idle session's Ping reaches the operation timeout, after which the client polls again. A control run with Windows PowerShell 5.1 (below) logged the same faults from the same requests in the same order, sending nothing before the Delete but the command's own terminate Signal. Changing the transport to silence a log line Windows' own client writes would add risk for nothing. Phase 8's Exchange page says so, so nobody chases these lines during an incident.
 - **The lab write suite** (`LdapExchangeRecipientDeliveryLabTests`, category `RequiresExchangeLabWrites`, gated on `JIM_LAB_ALLOW_WRITES=true`): the harness suite's twin against ex1, through the Connector's own sign-in, reads and commands.
     - **Fixtures:** created through Exchange and then disabled, leaving plain directory objects, as the spike's provisioning suite did. That needs only svc-jim's Recipient Management role. svc-jim's directory delegation covers users and groups but not contacts, which a real deployment exporting mail contacts would need ([#2774](https://github.com/TetronIO/JIM/issues/2774)).
     - **Cases:**
@@ -177,7 +177,9 @@ session and convergence (done), the delivery hold (done), then quiet session clo
         - **Read-only suite:** 7 of 7 passed. The 1 MB case reached Exchange whole: a 132,606-byte request, answered by Exchange's own 128k filter-size limit, not a 413.
         - **Write suite:** stopped in setup, before any Connector session. `New-DistributionGroup -Type` is outside Recipient Management's role entry, which Exchange keeps in Security Group Creation and Membership. Without `-Type` the group is still universal.
         - **Clean-up:** it failed too. Exchange's `Remove-*` cmdlets remove recipients only, and the fixtures were still plain objects. Clean-up now removes each fixture as whatever it is at the end, making a plain one the simplest recipient of its kind first (`LabFixtureRemoval`). Six `jimlab*` objects were left for the nightly revert.
-        - **The HTTP 500 at close:** it is the long-poll keep-alive `Ping`. When the client deletes the shell, the Ping is still waiting, and ex1 aborts it with `w:InternalError` ("The I/O operation has been aborted", FriendlyError=StreamProxy). The sequence in one shell was Ping, then Terminate, Command, Receive, Terminate, and Delete (200 each), and then the Ping ended with a 500. So quiet close means not having a Ping outstanding when the shell is deleted.
+        - **The HTTP 500 at close:** it is the long-poll keep-alive `Ping`. When the client deletes the shell, the Ping is still waiting, and ex1 aborts it with `w:InternalError` ("The I/O operation has been aborted", FriendlyError=StreamProxy). The sequence in one shell was Ping, then Terminate, Command, Receive, Terminate, and Delete (200 each), and then the Ping ended with a 500.
+    - **Second lab run (2026-11-05), after #2777:** the write suite passed 9 of 9 and left nothing behind, each fixture taking one Enable-* before removal. Each session's open took up to 11.9 s, which was ex1 building its runspace, not the client. The 500s were one `w:InternalError` per session at close, plus one `w:TimedOut` on a Ping left idle past the 20-second operation timeout.
+    - **Control run with Windows' own client (2026-11-05, 15:10 to 15:17Z):** Windows PowerShell 5.1 on dc1, signed in as svc-jim with Kerberos, running only `Get-ExchangeServer`. Closing straight after a command, after 60 s idle with Windows' defaults (a 180 s operation timeout), and after 60 s idle with JIM's 20 s each logged one `w:InternalError` 500 on the Ping, ending the same millisecond as the Delete. With 20 s, the idle Pings ended in `w:TimedOut` every 20.04 to 20.06 s and were re-sent within about 33 ms. Windows sends the command's terminate Signal and then the Delete, as JIM does. The only difference is win32 status 64 on Windows' InternalError lines, because its client had already dropped the connection.
 - **Tests:**
   - the validation severity, refusal and warning paths, with the session mocked behind D4's interface;
   - principal and realm derivation for all three username forms;
@@ -299,7 +301,7 @@ Built ahead of the spike's go, against the capability interface rather than Exch
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.
   - A GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412).
   - Runs at Medium, so batching crosses a page boundary.
-- **Docs and coverage** (from Phase 2): the Exchange server and Manage Exchange recipients rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page, the RBAC role in `jim-ldap-connector-permissions.md` (the Recipient Management role group covers every command JIM needs), and the network requirements: the web container, not only the Worker, reaches the domain controller on 88 and Exchange on 80 or 443, since the save-time check signs in from it (D8).
+- **Docs and coverage** (from Phase 2): the Exchange server and Manage Exchange recipients rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page (including, under troubleshooting, that Exchange logs an HTTP 500 for the client's keep-alive Receive when each session closes, and each time an idle session reaches its operation timeout, exactly as it does for Windows PowerShell's own client; Phase 2's control run), the RBAC role in `jim-ldap-connector-permissions.md` (the Recipient Management role group covers every command JIM needs), and the network requirements: the web container, not only the Worker, reaches the domain controller on 88 and Exchange on 80 or 443, since the save-time check signs in from it (D8).
 - **Compliance:** SC-8 in `engineering/COMPLIANCE_MAPPING.md` moves from planned to in place.
 - **Developer guide:** `engineering/DEVELOPER_GUIDE.md` gains the remoting library's boundary.
 - **Flag removal:** the flag goes, and the PRD and this plan move to `done/` in the PR that closes #2021.
