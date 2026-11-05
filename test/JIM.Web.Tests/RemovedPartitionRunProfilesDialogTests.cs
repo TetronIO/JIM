@@ -52,6 +52,21 @@ public class RemovedPartitionRunProfilesDialogTests : JimComponentTestContext
             }));
     }
 
+    /// <summary>
+    /// The sentence that explains the choice is built from the counts, so it has to agree with them: one Run Profile
+    /// "targets" a partition, two "target" one, and two partitions are "them".
+    /// </summary>
+    [TestCase(1, 1, "a partition that 1 Run Profile targets. Removing it would leave that Run Profile")]
+    [TestCase(2, 1, "a partition that 2 Run Profiles target. Removing it would leave those Run Profiles")]
+    [TestCase(2, 2, "partitions that 2 Run Profiles target. Removing them would leave those Run Profiles")]
+    public void RemovedPartitionRunProfilesDialog_Explanation_AgreesWithTheCounts(int runProfiles, int partitions, string expected)
+    {
+        var (provider, _) = Show(Enumerable.Range(1, runProfiles)
+            .Select(i => Item(i, $"Import {i}", $"dc=p{(i - 1) % partitions},dc=local")).ToArray());
+
+        Assert.That(System.Text.RegularExpressions.Regex.Replace(provider.Markup, @"\s+", " "), Does.Contain(expected));
+    }
+
     [Test]
     public async Task RemovedPartitionRunProfilesDialog_DisableRunProfiles_GoesAheadAsync()
     {

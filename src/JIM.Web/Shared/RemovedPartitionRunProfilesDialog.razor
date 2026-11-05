@@ -10,7 +10,8 @@
 <MudDialog>
     <DialogContent>
         <MudText Class="mb-4">
-            The Connected System no longer has a partition that @RunProfileCountText target. Removing it would leave
+            The Connected System no longer has @(PartitionCount == 1 ? "a partition" : "partitions") that @RunProfileCountText
+            @(RunProfiles.Count == 1 ? "targets" : "target"). Removing @(PartitionCount == 1 ? "it" : "them") would leave
             @(RunProfiles.Count == 1 ? "that Run Profile" : "those Run Profiles") reading every selected partition, so
             nothing from this refresh has been saved yet.
         </MudText>
@@ -56,6 +57,9 @@
     public IReadOnlyList<HierarchyRefreshRunProfileItem> RunProfiles { get; set; } = [];
 
     private string RunProfileCountText => RunProfiles.Count == 1 ? "1 Run Profile" : $"{RunProfiles.Count} Run Profiles";
+
+    /// <summary>How many distinct partitions the listed Run Profiles target, which the explanation names as "it" or "them".</summary>
+    private int PartitionCount => RunProfiles.Select(runProfile => runProfile.PartitionName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
     private void Cancel() => MudDialog.Cancel();
 
