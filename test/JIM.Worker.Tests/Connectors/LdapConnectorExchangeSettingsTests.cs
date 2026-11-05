@@ -71,6 +71,51 @@ public class LdapConnectorExchangeSettingsTests
         }
     }
 
+    [TestCase(true)]
+    [TestCase(false)]
+    public void IsManagingExchangeRecipients_FollowsTheSetting(bool manageExchange)
+    {
+        using var connector = new LdapConnector();
+
+        Assert.That(connector.IsManagingExchangeRecipients(Settings(manageExchange, "ex1.panoply.local")), Is.EqualTo(manageExchange));
+    }
+
+    [Test]
+    public void OpenExchangeSessionAsync_ExchangeServerUnusable_IsRefusedSoItsChangesParkForAPerson()
+    {
+        using var connector = new LdapConnector();
+
+        var ex = Assert.ThrowsAsync<JIM.Models.Exchange.ExchangeSessionException>(() =>
+            connector.OpenExchangeSessionAsync(Settings(manageExchange: true, "ftp://ex1.panoply.local/"), CancellationToken.None));
+
+        Assert.That(ex!.FailureKind, Is.EqualTo(JIM.Models.Transactional.ExchangeChangeFailureKind.Refused));
+    }
+
+    [Test]
+    public void OpenExchangeSessionAsync_NoDirectoryAccount_IsRefusedNamingWhatIsMissing()
+    {
+        using var connector = new LdapConnector();
+
+        var ex = Assert.ThrowsAsync<JIM.Models.Exchange.ExchangeSessionException>(() =>
+            connector.OpenExchangeSessionAsync(Settings(manageExchange: true, "ex1.panoply.local"), CancellationToken.None));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ex!.FailureKind, Is.EqualTo(JIM.Models.Transactional.ExchangeChangeFailureKind.Refused));
+            Assert.That(ex.Message, Does.Contain("Username and Password"));
+        }
+    }
+
+    [Test]
+    public void SessionMembers_NoSessionOpen_AreSafe()
+    {
+        using var connector = new LdapConnector();
+
+        connector.CloseExchangeSession();
+
+        Assert.That(connector.GetSessionStatistics(), Is.EqualTo(JIM.Models.Exchange.ExchangeSessionStatistics.None));
+    }
+
     private static List<ConnectedSystemSettingValue> Settings(bool manageExchange, string? exchangeServer) =>
     [
         new() { Setting = new ConnectorDefinitionSetting { Name = LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS, Type = ConnectedSystemSettingType.CheckBox }, CheckboxValue = manageExchange },

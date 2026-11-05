@@ -35,6 +35,12 @@ public class ExchangeDeliveryRunResult
     /// <summary>The Connector cannot manage Exchange recipients, so the lane gave back everything it claimed.</summary>
     public bool ConnectorCannotManageExchangeRecipients { get; set; }
 
+    /// <summary>
+    /// True when the Connected System has Exchange recipient management turned off: its claimed changes were given back
+    /// unattempted, to wait until it is turned on again.
+    /// </summary>
+    public bool NotManagingExchangeRecipients { get; set; }
+
     /// <summary>Why the Exchange session could not be opened, or null where it opened (or was never needed).</summary>
     public string? SessionFailure { get; set; }
 
@@ -45,7 +51,7 @@ public class ExchangeDeliveryRunResult
     /// Whether the lane could not deliver at all. The scheduler then holds the system off for a poll rather than
     /// running the same failing lane back to back.
     /// </summary>
-    public bool CouldNotDeliver => ConnectorCannotManageExchangeRecipients || SessionFailure != null;
+    public bool CouldNotDeliver => ConnectorCannotManageExchangeRecipients || NotManagingExchangeRecipients || SessionFailure != null;
 
     /// <summary>Whether the lane found anything to do or to report.</summary>
     public bool HasSomethingToReport =>

@@ -19,6 +19,13 @@ namespace JIM.Models.Interfaces;
 public interface IConnectorExchangeRecipients
 {
     /// <summary>
+    /// Whether the Connected System these settings belong to manages Exchange recipients now. While it does not, the
+    /// lane leaves its queued changes waiting, unattempted, and delivers them once it does again: turning management off
+    /// holds delivery rather than failing it.
+    /// </summary>
+    bool IsManagingExchangeRecipients(IList<ConnectedSystemSettingValue> settings);
+
+    /// <summary>
     /// Opens the session the lane's changes are converged over, signed in with the Connected System's own
     /// credentials.
     /// </summary>

@@ -362,6 +362,15 @@ public class ExchangeDeliveryServer
                 return result;
             }
 
+            if (!exchange.IsManagingExchangeRecipients(connectedSystem.SettingValues))
+            {
+                // Management turned off holds delivery rather than failing it: the changes wait, unattempted, and are
+                // delivered once it is turned back on.
+                result.NotManagingExchangeRecipients = true;
+                result.ReleasedCount += await _syncRepo.ReleaseExchangeChangeClaimsAsync(claimed.Select(c => c.Id), claimedBy);
+                return result;
+            }
+
             await DeliverOverSessionAsync(connectedSystem, exchange, claimed, claimedBy, asOf, result, cancellationToken);
         }
         finally
@@ -607,6 +616,8 @@ public class ExchangeDeliveryServer
     {
         if (result.ConnectorCannotManageExchangeRecipients)
             return " The Connector cannot manage Exchange recipients.";
+        if (result.NotManagingExchangeRecipients)
+            return " The Connected System does not manage Exchange recipients now, so its changes wait.";
         return result.SessionFailure == null ? string.Empty : $" The Exchange session could not be opened: {LogSanitiser.Sanitise(result.SessionFailure)}";
     }
 }
