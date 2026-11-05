@@ -61,7 +61,8 @@ public class PendingExchangeChangeResponse
     public string RecipientType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Where the change stands: Queued (waiting for its first attempt), Delivering (Exchange is applying it now),
+    /// Where the change stands: Queued (waiting for its first attempt), Held (waiting, unattempted, because its Connected
+    /// System does not manage Exchange recipients now; delivered once it does again), Delivering (Exchange is applying it now),
     /// Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it
     /// waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an
     /// existing recipient's type, which JIM does not do). A refused or not-made change holds until its

@@ -78,6 +78,18 @@ public class ConnectedSystem : IAuditable
     public List<ConnectorCapability>? SettingsCheckFacts { get; set; }
 
     /// <summary>
+    /// Whether this Connected System manages Exchange recipients now (#2021): recorded from the Connector on every
+    /// settings save. While it does not, the Exchange delivery lane leaves its queued changes waiting, held rather than
+    /// failed, and delivers them once it does again.
+    /// </summary>
+    /// <remarks>
+    /// A typed column so the delivery queries can hold a system without knowing which Connector setting turns
+    /// management on; the Connector decides (<see cref="Interfaces.IConnectorExchangeRecipients.IsManagingExchangeRecipients"/>).
+    /// Derived from the settings, so never part of a configuration snapshot.
+    /// </remarks>
+    public bool ManagesExchangeRecipients { get; set; }
+
+    /// <summary>
     /// The password policy JIM discovered on this Connected System, where the Connector is able to read one.
     /// Null when the Connector cannot discover policies, or when nothing has been discovered yet.
     /// <para>

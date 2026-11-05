@@ -141,8 +141,14 @@ public class ExchangeDeliveryServer
         // One row per change at most: IX_PendingExchangeChanges_ActivityId_Unique.
         var rows = (await _syncRepo.GetExchangeChangesByActivityAsync(ids)).ToDictionary(r => r.ActivityId);
         var events = (await _activityRepo().GetExchangeChangeEventsAsync(ids)).ToLookup(e => e.ChangeActivityId);
+        // A waiting change on a system not managing Exchange recipients now is held, which only its system can say.
+        var held = await _syncRepo.GetConnectedSystemIdsNotManagingExchangeRecipientsAsync(rows.Values.Select(r => r.ConnectedSystemId).Distinct().ToList());
 
-        return changes.ToDictionary(a => a.Id, a => ExchangeChangeOutcome.Describe(a, rows.GetValueOrDefault(a.Id), events[a.Id]));
+        return changes.ToDictionary(a => a.Id, a =>
+        {
+            var row = rows.GetValueOrDefault(a.Id);
+            return ExchangeChangeOutcome.Describe(a, row, events[a.Id], held: row != null && held.Contains(row.ConnectedSystemId));
+        });
     }
 
     /// <summary>

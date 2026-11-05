@@ -37,6 +37,7 @@ public static class ExchangeChangeOutcomeDisplay
         ExchangeChangeState.Queued => ("Queued", "neutral", true),
         ExchangeChangeState.Delivering => ("Delivering", "neutral", true),
         ExchangeChangeState.Retrying => ("Retrying", "warn", true),
+        ExchangeChangeState.Held => ("Held", "warn", true),
         ExchangeChangeState.Delivered => ("Delivered", "ok", false),
         ExchangeChangeState.Withdrawn => ("Withdrawn", "ok", false),
         ExchangeChangeState.Replaced => ("Replaced", "neutral", false),
@@ -62,6 +63,9 @@ public static class ExchangeChangeOutcomeDisplay
 
             case ExchangeChangeState.Delivering:
                 return "Exchange is applying it now";
+
+            case ExchangeChangeState.Held:
+                return "Held: its Connected System does not manage Exchange recipients now; delivered once it does again";
 
             case ExchangeChangeState.Retrying:
             {
@@ -100,6 +104,7 @@ public static class ExchangeChangeOutcomeDisplay
         {
             ExchangeChangeState.Queued => "Due now",
             ExchangeChangeState.Delivering => "Exchange is applying it now",
+            ExchangeChangeState.Held => $"Waits until {change.ConnectedSystemName} manages Exchange recipients again",
             ExchangeChangeState.Retrying => change.NextRetryAt is { } next
                 ? $"Attempt {change.AttemptCount}; next {next.ToLocalTime().ToFriendlyDate()}"
                 : $"Attempt {change.AttemptCount}; due now",

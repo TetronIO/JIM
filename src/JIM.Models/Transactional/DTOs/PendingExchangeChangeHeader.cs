@@ -66,7 +66,13 @@ public class PendingExchangeChangeHeader
     public ActivityStatus ChangeActivityStatus { get; set; }
 
     /// <summary>Where the change stands, as its follow-up shows it: Queued, Delivering, Retrying, Parked, Refused or NotMade.</summary>
-    public ExchangeChangeState State => ExchangeChangeOutcome.StateOf(Status, LastAttemptedAt, ChangeActivityStatus);
+    public ExchangeChangeState State => ExchangeChangeOutcome.StateOf(Status, LastAttemptedAt, ChangeActivityStatus, held: !ConnectedSystemManagesExchangeRecipients);
+
+    /// <summary>
+    /// Whether the change's Connected System manages Exchange recipients now; while it does not, a waiting change is
+    /// held.
+    /// </summary>
+    public bool ConnectedSystemManagesExchangeRecipients { get; init; } = true;
 
     /// <summary>
     /// Whether an administrator can retry it: it is parked, or retrying after an attempt. A change not yet attempted is

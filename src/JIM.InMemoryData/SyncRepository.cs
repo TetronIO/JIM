@@ -3972,19 +3972,20 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease) =>
         Task.FromResult(_pendingExchangeChanges.Values
-            .Where(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease))
+            .Where(c => ManagesExchangeRecipients(c.ConnectedSystemId) && (c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)))
             .Select(c => c.ConnectedSystemId)
             .Distinct()
             .ToList());
 
     public Task<DeliveryQueueOutlook> GetExchangeQueueDeliveryOutlookAsync(DateTime asOf, TimeSpan claimLease)
     {
-        var retrying = _pendingExchangeChanges.Values
+        var managed = _pendingExchangeChanges.Values.Where(c => ManagesExchangeRecipients(c.ConnectedSystemId)).ToList();
+        var retrying = managed
             .Where(c => c.Status == PendingExchangeChangeStatus.Pending && c.NextRetryAt > asOf)
             .ToList();
         return Task.FromResult(new DeliveryQueueOutlook
         {
-            DueCount = _pendingExchangeChanges.Values.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
+            DueCount = managed.Count(c => c.IsDue(asOf) || c.IsClaimExpired(asOf, claimLease)),
             RetryingCount = retrying.Count,
             NextAttemptAt = retrying.Min(c => c.NextRetryAt)
         });
@@ -3995,7 +3996,7 @@ public class SyncRepository : ISyncRepository
         ArgumentException.ThrowIfNullOrWhiteSpace(claimedBy);
 
         var claimed = _pendingExchangeChanges.Values
-            .Where(c => c.ConnectedSystemId == connectedSystemId && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
+            .Where(c => c.ConnectedSystemId == connectedSystemId && ManagesExchangeRecipients(connectedSystemId) && (c.IsDue(asOf) || c.IsClaimExpired(asOf, lease)))
             .OrderBy(c => c.CreatedAt)
             .ThenBy(c => c.Id)
             .Take(Math.Max(maximum, 0))
@@ -4095,7 +4096,7 @@ public class SyncRepository : ISyncRepository
     public Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf)
     {
         var headers = FilterExchangeChangeHeaders(new PendingExchangeChangeFilter());
-        var due = _pendingExchangeChanges.Values.Count(c => c.IsDue(asOf));
+        var due = _pendingExchangeChanges.Values.Count(c => ManagesExchangeRecipients(c.ConnectedSystemId) && c.IsDue(asOf));
 
         return Task.FromResult(new ExchangeQueueSummary
         {
@@ -4105,9 +4106,24 @@ public class SyncRepository : ISyncRepository
             ParkedCount = headers.Count(h => h.State == ExchangeChangeState.Parked),
             RefusedCount = headers.Count(h => h.State == ExchangeChangeState.Refused),
             NotMadeCount = headers.Count(h => h.State == ExchangeChangeState.NotMade),
+            HeldCount = headers.Count(h => h.State == ExchangeChangeState.Held),
             DueCount = due
         });
     }
+
+    public Task<HashSet<int>> GetConnectedSystemIdsNotManagingExchangeRecipientsAsync(IReadOnlyCollection<int> connectedSystemIds) =>
+        Task.FromResult(connectedSystemIds.Where(id => !ManagesExchangeRecipients(id)).ToHashSet());
+
+    public Task<int> CountWaitingExchangeChangesAsync(int connectedSystemId) =>
+        Task.FromResult(_pendingExchangeChanges.Values.Count(c => c.ConnectedSystemId == connectedSystemId
+            && c.Status is PendingExchangeChangeStatus.Pending or PendingExchangeChangeStatus.Delivering));
+
+    /// <summary>
+    /// Whether a Connected System manages Exchange recipients now. One the store does not hold is taken as managing, so
+    /// a test that queues changes without registering its system is not silently held.
+    /// </summary>
+    private bool ManagesExchangeRecipients(int connectedSystemId) =>
+        !_connectedSystems.TryGetValue(connectedSystemId, out var system) || system.ManagesExchangeRecipients;
 
     public Task<List<RetriedExchangeChange>> RetryExchangeChangesAsync(PendingExchangeChangeFilter filter)
     {
@@ -4161,6 +4177,7 @@ public class SyncRepository : ISyncRepository
                 MetaverseObjectDisplayName = mvo?.CachedDisplayName,
                 MetaverseObjectTypePluralName = mvo?.Type?.PluralName,
                 RecipientType = c.RecipientType,
+                ConnectedSystemManagesExchangeRecipients = ManagesExchangeRecipients(c.ConnectedSystemId),
                 Status = c.Status,
                 FailureKind = c.FailureKind,
                 FailureMessage = c.FailureMessage,

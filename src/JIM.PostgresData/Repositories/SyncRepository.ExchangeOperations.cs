@@ -213,9 +213,10 @@ public partial class SyncRepository
     /// <inheritdoc />
     public async Task<List<int>> GetConnectedSystemIdsWithDueExchangeChangesAsync(DateTime asOf, TimeSpan claimLease)
     {
+        // A system not managing Exchange recipients now is held: counting its changes as due would have the service see
+        // permanent work and run a lane on every poll, as the password queue's own hold explains.
         var claimExpiredBefore = asOf - claimLease;
-        return await _context.PendingExchangeChanges
-            .AsNoTracking()
+        return await ManagedExchangeChanges()
             .Where(c => c.Status == PendingExchangeChangeStatus.Pending && (c.NextRetryAt == null || c.NextRetryAt <= asOf)
                         || c.Status == PendingExchangeChangeStatus.Delivering && c.ClaimedAt != null && c.ClaimedAt <= claimExpiredBefore)
             .Select(c => c.ConnectedSystemId)
@@ -228,7 +229,7 @@ public partial class SyncRepository
     {
         // One grouped round trip, read on every iteration of the delivery loop.
         var claimExpiredBefore = asOf - claimLease;
-        var outlook = await _context.PendingExchangeChanges.AsNoTracking()
+        var outlook = await ManagedExchangeChanges()
             .Where(c => c.Status == PendingExchangeChangeStatus.Pending || c.Status == PendingExchangeChangeStatus.Delivering)
             .GroupBy(_ => 1)
             .Select(g => new DeliveryQueueOutlook
@@ -266,6 +267,7 @@ public partial class SyncRepository
                 SELECT "Id"
                 FROM "PendingExchangeChanges"
                 WHERE "ConnectedSystemId" = {0}
+                  AND EXISTS (SELECT 1 FROM "ConnectedSystems" s WHERE s."Id" = {0} AND s."ManagesExchangeRecipients")
                   AND (("Status" = {1} AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {2}))
                     OR ("Status" = {3} AND "ClaimedAt" IS NOT NULL AND "ClaimedAt" <= {4}))
                 ORDER BY "CreatedAt", "Id"
@@ -559,6 +561,31 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    public Task<int> CountWaitingExchangeChangesAsync(int connectedSystemId) =>
+        _context.PendingExchangeChanges.AsNoTracking()
+            .CountAsync(c => c.ConnectedSystemId == connectedSystemId
+                             && (c.Status == PendingExchangeChangeStatus.Pending || c.Status == PendingExchangeChangeStatus.Delivering));
+
+    /// <inheritdoc />
+    public async Task<HashSet<int>> GetConnectedSystemIdsNotManagingExchangeRecipientsAsync(IReadOnlyCollection<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+        var ids = connectedSystemIds.ToList();
+        return (await _context.ConnectedSystems.AsNoTracking()
+            .Where(s => ids.Contains(s.Id) && !s.ManagesExchangeRecipients)
+            .Select(s => s.Id)
+            .ToListAsync()).ToHashSet();
+    }
+
+    /// <summary>The queue's changes on Connected Systems that manage Exchange recipients now: the ones delivery may take.</summary>
+    private IQueryable<PendingExchangeChange> ManagedExchangeChanges() =>
+        from change in _context.PendingExchangeChanges.AsNoTracking()
+        join system in _context.ConnectedSystems.AsNoTracking() on change.ConnectedSystemId equals system.Id
+        where system.ManagesExchangeRecipients
+        select change;
+
+    /// <inheritdoc />
     public async Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf)
     {
         // One aggregate over the queue, with the change Activity joined only to tell a refusal from a type change this
@@ -566,17 +593,19 @@ public partial class SyncRepository
         // reads as a refusal, the state a row with no Activity left can only be.
         var sql = $"""
             SELECT
-                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND c."LastAttemptedAt" IS NULL)::int AS "QueuedCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND s."ManagesExchangeRecipients" AND c."LastAttemptedAt" IS NULL)::int AS "QueuedCount",
                 COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Delivering})::int AS "DeliveringCount",
-                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND c."LastAttemptedAt" IS NOT NULL)::int AS "RetryingCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND s."ManagesExchangeRecipients" AND c."LastAttemptedAt" IS NOT NULL)::int AS "RetryingCount",
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND NOT s."ManagesExchangeRecipients")::int AS "HeldCount",
                 COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Parked})::int AS "ParkedCount",
                 COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Refused}
                                    AND a."Status" IS DISTINCT FROM {(int)ActivityStatus.CompleteWithWarning})::int AS "RefusedCount",
                 COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Refused}
                                    AND a."Status" = {(int)ActivityStatus.CompleteWithWarning})::int AS "NotMadeCount",
-                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending}
+                COUNT(*) FILTER (WHERE c."Status" = {(int)PendingExchangeChangeStatus.Pending} AND s."ManagesExchangeRecipients"
                                    AND (c."NextRetryAt" IS NULL OR c."NextRetryAt" <= @asOf))::int AS "DueCount"
             FROM "PendingExchangeChanges" c
+            JOIN "ConnectedSystems" s ON s."Id" = c."ConnectedSystemId"
             LEFT JOIN "Activities" a ON a."Id" = c."ActivityId"
             """;
 
@@ -592,7 +621,8 @@ public partial class SyncRepository
             ParkedCount = counts.ParkedCount,
             RefusedCount = counts.RefusedCount,
             NotMadeCount = counts.NotMadeCount,
-            DueCount = counts.DueCount
+            DueCount = counts.DueCount,
+            HeldCount = counts.HeldCount
         };
     }
 
@@ -663,6 +693,7 @@ public partial class SyncRepository
             ActivityId = change.ActivityId,
             ConnectedSystemId = change.ConnectedSystemId,
             ConnectedSystemName = system.Name,
+            ConnectedSystemManagesExchangeRecipients = system.ManagesExchangeRecipients,
             ConnectedSystemObjectId = change.ConnectedSystemObjectId,
             MetaverseObjectId = change.MetaverseObjectId,
             MetaverseObjectDisplayName = mvo == null ? null : mvo.CachedDisplayName,
@@ -700,8 +731,11 @@ public partial class SyncRepository
             // The states as ExchangeChangeOutcome.StateOf reads them, in terms the database can filter on.
             query = filter.State.Value switch
             {
-                ExchangeChangeState.Queued => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt == null),
-                ExchangeChangeState.Retrying => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null),
+                ExchangeChangeState.Queued => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.ConnectedSystemManagesExchangeRecipients
+                                                               && h.LastAttemptedAt == null),
+                ExchangeChangeState.Retrying => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && h.ConnectedSystemManagesExchangeRecipients
+                                                                 && h.LastAttemptedAt != null),
+                ExchangeChangeState.Held => query.Where(h => h.Status == PendingExchangeChangeStatus.Pending && !h.ConnectedSystemManagesExchangeRecipients),
                 ExchangeChangeState.Delivering => query.Where(h => h.Status == PendingExchangeChangeStatus.Delivering),
                 ExchangeChangeState.Parked => query.Where(h => h.Status == PendingExchangeChangeStatus.Parked),
                 ExchangeChangeState.Refused => query.Where(h => h.Status == PendingExchangeChangeStatus.Refused
@@ -758,6 +792,7 @@ public partial class SyncRepository
         public int RefusedCount { get; set; }
         public int NotMadeCount { get; set; }
         public int DueCount { get; set; }
+        public int HeldCount { get; set; }
     }
 
     #endregion

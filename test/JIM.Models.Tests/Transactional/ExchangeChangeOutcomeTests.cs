@@ -24,6 +24,27 @@ public class ExchangeChangeOutcomeTests
     // ---- On the queue: the row describes it ---------------------------------------------------------------------
 
     [Test]
+    public void Describe_WaitingRowOnASystemNotManagingExchangeRecipients_IsHeldAndStillRunning()
+    {
+        // Turning management off holds delivery: the change waits, and is delivered once management is back on.
+        var outcome = ExchangeChangeOutcome.Describe(ChangeActivity(), Row(PendingExchangeChangeStatus.Pending), [], held: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outcome.State, Is.EqualTo(ExchangeChangeState.Held));
+            Assert.That(outcome.IsSettled, Is.False, "a held change is still owed");
+        }
+    }
+
+    [TestCase(PendingExchangeChangeStatus.Parked, ExchangeChangeState.Parked)]
+    [TestCase(PendingExchangeChangeStatus.Delivering, ExchangeChangeState.Delivering)]
+    public void Describe_RowNotWaiting_IsNotHeldWhateverItsSystem(PendingExchangeChangeStatus status, ExchangeChangeState expected)
+    {
+        // Only a waiting change is held: one being delivered finishes, and one parked waits on a person either way.
+        Assert.That(ExchangeChangeOutcome.Describe(ChangeActivity(), Row(status), [], held: true).State, Is.EqualTo(expected));
+    }
+
+    [Test]
     public void Describe_RowNotYetAttempted_IsQueuedAndStillRunning()
     {
         var outcome = ExchangeChangeOutcome.Describe(ChangeActivity(), Row(PendingExchangeChangeStatus.Pending), []);

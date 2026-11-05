@@ -106,9 +106,26 @@ public class ExchangeQueueDisplayTests
         }
     }
 
-    private static PendingExchangeChangeHeader Change(PendingExchangeChangeStatus status, ExchangeChangeFailureKind? kind, string? message,
-        int attempts = 1, DateTime? next = null) => new()
+    [Test]
+    public void QueueDetail_Held_SaysItWaitsForTheConnectedSystemToManageExchangeRecipientsAgain()
     {
+        var held = Change(PendingExchangeChangeStatus.Pending, null, null, attempts: 0, manages: false);
+
+        var detail = ExchangeChangeOutcomeDisplay.QueueDetail(held);
+        var pill = ExchangeChangeOutcomeDisplay.Pill(held.State);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(held.State, Is.EqualTo(ExchangeChangeState.Held));
+            Assert.That(detail, Does.Contain("Panoply AD").And.Contain("manages Exchange recipients"));
+            Assert.That(pill.Running, Is.True, "a held change is still owed");
+        }
+    }
+
+    private static PendingExchangeChangeHeader Change(PendingExchangeChangeStatus status, ExchangeChangeFailureKind? kind, string? message,
+        int attempts = 1, DateTime? next = null, bool manages = true) => new()
+    {
+        ConnectedSystemManagesExchangeRecipients = manages,
         Id = Guid.NewGuid(),
         ConnectedSystemId = 3,
         ConnectedSystemName = "Panoply AD",

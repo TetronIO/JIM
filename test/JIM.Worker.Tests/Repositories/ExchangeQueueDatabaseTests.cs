@@ -172,6 +172,33 @@ public class ExchangeQueueDatabaseTests
     }
 
     [Test]
+    public async Task SystemsNotManagingExchangeRecipients_TheirWaitingChangesReadAsHeldEverywhereAsync()
+    {
+        // The queued and retrying changes become Held, in the summary and the list alike; what waits on a person
+        // (parked, refused, not made) and what is being delivered read as before.
+        await SeedAsync();
+        await using (var turnOff = NewContext())
+            await turnOff.Database.ExecuteSqlRawAsync("UPDATE \"ConnectedSystems\" SET \"ManagesExchangeRecipients\" = false");
+
+        await using var read = NewContext();
+        var summary = await Repository(read).Sync.GetExchangeQueueSummaryAsync(AsOf);
+        var held = await Repository(read).Sync.GetPendingExchangeChangeHeadersAsync(
+            new PendingExchangeChangeFilter { State = ExchangeChangeState.Held }, 0, 50, "created", false, includeTotalCount: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.HeldCount, Is.EqualTo(3));
+            Assert.That(summary.QueuedCount, Is.Zero);
+            Assert.That(summary.RetryingCount, Is.Zero);
+            Assert.That(summary.DueCount, Is.Zero);
+            Assert.That(summary.DeliveringCount, Is.EqualTo(1));
+            Assert.That(summary.WaitingOnAPersonCount, Is.EqualTo(3));
+            Assert.That(held.Results.Select(h => h.State), Is.All.EqualTo(ExchangeChangeState.Held));
+            Assert.That(held.TotalResults, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
     public async Task GetExchangeQueueSummaryAsync_EmptyQueue_IsAllZeroAsync()
     {
         await using var read = NewContext();
@@ -341,8 +368,8 @@ public class ExchangeQueueDatabaseTests
         await using var seed = NewContext();
 
         var connectorDefinition = new ConnectorDefinition { Name = "Panoply AD Connector", BuiltIn = true };
-        var panoply = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition };
-        var resurgam = new ConnectedSystem { Name = "Resurgam AD", ConnectorDefinition = connectorDefinition };
+        var panoply = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = true };
+        var resurgam = new ConnectedSystem { Name = "Resurgam AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = true };
         var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = panoply, Selected = true };
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
         seed.AddRange(connectorDefinition, panoply, resurgam, csType, mvType);

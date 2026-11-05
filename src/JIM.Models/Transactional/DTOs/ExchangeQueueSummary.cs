@@ -30,6 +30,12 @@ public class ExchangeQueueSummary
     /// <summary>How many queued or retrying changes a delivery pass would attempt now.</summary>
     public int DueCount { get; set; }
 
+    /// <summary>
+    /// Changes waiting, unattempted, because their Connected System does not manage Exchange recipients now. They are
+    /// delivered once it does again, so they are counted apart from what is queued or retrying.
+    /// </summary>
+    public int HeldCount { get; set; }
+
     /// <summary>How many wait on a person: parked, refused or not made.</summary>
     public int WaitingOnAPersonCount => ParkedCount + RefusedCount + NotMadeCount;
 }

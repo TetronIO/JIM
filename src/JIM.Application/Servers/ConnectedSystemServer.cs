@@ -2172,6 +2172,19 @@ public partial class ConnectedSystemServer
                 // that follows persists it, and a refused save persists nothing
                 connectedSystem.SettingsCheckFacts = check.Facts.Count == 0 ? null : check.Facts;
             }
+
+            // whether the system manages Exchange recipients now is the Connector's to say; the delivery lane holds a
+            // system that does not, so its waiting changes are kept rather than failed (#2021, decided 2026-11-05)
+            connectedSystem.ManagesExchangeRecipients = connector is IConnectorExchangeRecipients exchange
+                                                        && exchange.IsManagingExchangeRecipients(connectedSystem.SettingValues);
+            if (connector is IConnectorExchangeRecipients && !connectedSystem.ManagesExchangeRecipients && connectedSystem.Id != 0)
+            {
+                var waiting = await Application.Repository.Sync.CountWaitingExchangeChangesAsync(connectedSystem.Id);
+                if (waiting > 0)
+                    results.Add(ConnectorSettingValueValidationResult.Warning(null,
+                        $"Exchange delivery is held: {waiting} {(waiting == 1 ? "change is" : "changes are")} waiting. " +
+                        "They are delivered when this Connected System manages Exchange recipients again."));
+            }
         }
         finally
         {

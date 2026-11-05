@@ -3522,6 +3522,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("LastUpdatedByType")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("ManagesExchangeRecipients")
+                        .HasColumnType("boolean");
+
                     b.Property<int?>("MaxExportParallelism")
                         .HasColumnType("integer");
 

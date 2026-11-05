@@ -62,7 +62,7 @@ Get-JIMPendingExchangeChange -Summary
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | No (List, ListAll) |  | Only changes for this Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
-| `State` | `string` | No (List, ListAll) |  | Only changes in this state. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Refused` or `NotMade`. |
+| `State` | `string` | No (List, ListAll) |  | Only changes in this state. Held changes wait, unattempted, because their Connected System does not manage Exchange recipients now; they are delivered once it does again. One of `Queued`, `Held`, `Delivering`, `Retrying`, `Parked`, `Refused` or `NotMade`. |
 | `FailureKind` | `string` | No (List, ListAll) |  | Only changes whose last attempt failed this way. One of `ObjectNotFound`, `Refused`, `InsufficientPermissions`, `AuthenticationFailed` or `Unreachable`. |
 | `MetaverseObjectId` | `guid` | No (List, ListAll) |  | Only this Metaverse Object's changes. |
 | `ConnectedSystemObjectId` | `guid` | No (List, ListAll) |  | Only this account's change. The queue holds at most one per account. |
@@ -92,7 +92,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name. |
 | `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
 | `RecipientType` | `string` | The kind of recipient declared: Mailbox, SharedMailbox, RoomMailbox, EquipmentMailbox, MailUser, MailContact, MailEnabledGroup or None. |
-| `State` | `string` | Where the change stands: Queued (waiting for its first attempt), Delivering (Exchange is applying it now), Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an existing recipient's type, which JIM does not do). A refused or not-made change holds until its declared state changes. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Delivered`, `Withdrawn`, `Replaced`, `Refused` or `NotMade`. |
+| `State` | `string` | Where the change stands: Queued (waiting for its first attempt), Held (waiting, unattempted, because its Connected System does not manage Exchange recipients now; delivered once it does again), Delivering (Exchange is applying it now), Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an existing recipient's type, which JIM does not do). A refused or not-made change holds until its declared state changes. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Delivered`, `Withdrawn`, `Replaced`, `Refused`, `NotMade` or `Held`. |
 | `FailureKind` | `string` | How the last attempt failed, or empty for a change not attempted since it was queued or retried. One of `ObjectNotFound`, `Refused`, `InsufficientPermissions`, `AuthenticationFailed` or `Unreachable`. |
 | `FailureMessage` | `string` | Exchange's own words for the last failure, which say where the remedy lies, or JIM's reason for a refusal. |
 | `AttemptCount` | `int` | How many attempts have failed since the change was queued or last retried. |
@@ -114,6 +114,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `RefusedCount` | `int` | Changes JIM refused before asking Exchange, which hold until their declared state changes. |
 | `NotMadeCount` | `int` | Changes that would change an existing recipient's type, which JIM does not do. |
 | `DueCount` | `int` | How many queued or retrying changes a delivery pass would attempt now. |
+| `HeldCount` | `int` | Changes waiting, unattempted, because their Connected System does not manage Exchange recipients now. They are delivered once it does again, so they are counted apart from what is queued or retrying. |
 | `WaitingOnAPersonCount` | `int` | How many wait on a person: parked, refused or not made. |
 <!-- END GENERATED: Get-JIMPendingExchangeChange -->
 
