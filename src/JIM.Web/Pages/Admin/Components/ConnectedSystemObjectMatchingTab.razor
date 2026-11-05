@@ -30,7 +30,7 @@
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
         <MudText Class="mud-text-secondary">Simple</MudText>
         <MudSwitch T="bool"
-                   Value="@(ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule)"
+                   Value="@ModeSwitchShowsAdvanced"
                    ValueChanged="HandleObjectMatchingModeToggleAsync"
                    Color="Color.Primary" />
         <MudText Class="mud-text-secondary">Advanced</MudText>
@@ -218,6 +218,15 @@ else
     private bool _modeSwitchDialogVisible;
     private bool _switchingToAdvancedMode;
     private bool _modeSwitchInProgress;
+
+    /// <summary>
+    /// What the Simple/Advanced switch shows: the mode asked for while its confirmation is open, and the saved mode
+    /// otherwise. Bound to the saved mode alone, the switch kept the position it was clicked to after Cancel, because
+    /// the value it was given never changed and MudSwitch holds its own state until it does.
+    /// </summary>
+    private bool ModeSwitchShowsAdvanced => _modeSwitchDialogVisible
+        ? _switchingToAdvancedMode
+        : ConnectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.SyncRule;
 
     /// <summary>
     /// Slices one window of an Object Type's Object Matching Rules, always in Order sequence. The order decides

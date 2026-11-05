@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Cancelling the confirmation after moving a Connected System's Object Matching switch between Simple and Advanced now puts the switch back; before, it kept showing the mode that was never applied.
 - 🐛 A schema refresh now lists an attribute that became harder to write, and flags each Attribute Flow writing one that became read-only, so **Apply & Disable Dependents** disables it. Before, the change applied silently and the flow kept writing it. (#2755)
 - 🐛 A setting added to a Connector since JIM was installed now shows on the Settings tab where the Connector places it, rather than at the end of its section under whichever heading came last.
 - 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.

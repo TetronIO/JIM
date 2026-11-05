@@ -14,6 +14,7 @@ using JIM.Web.Pages.Admin.Components;
 using JIM.Web.Services;
 using JIM.Web.Shared;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -107,6 +108,23 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
         Assert.That(component.FindComponents<AttributeChip>().Select(c => c.Instance)
                 .Where(c => c.Kind == AttributeChipKind.Expression).Select(c => c.Expression),
             Does.Contain("\"E\" + Trim(cs[\"employeeId\"])"));
+    }
+
+    [Test]
+    public void ObjectMatchingTab_ModeSwitchCancelled_SwitchReturnsToTheCurrentMode()
+    {
+        // Cancelling the confirmation leaves the Connected System in Simple mode, so the switch must say Simple again
+        // rather than go on showing Advanced for a change that never happened.
+        var connectedSystem = ConnectedSystemWithMatchingRules();
+        var provider = Render<MudDialogProvider>();
+        var component = RenderMatchingTab(connectedSystem);
+        var modeSwitch = component.FindComponent<MudSwitch<bool>>();
+
+        modeSwitch.Find("input").Change(true);
+        provider.FindAll("button").Single(b => b.TextContent.Trim() == "Cancel").Click();
+
+        Assert.That(modeSwitch.Find("input").HasAttribute("checked"), Is.False,
+            "the mode is still Simple, so the switch must show Simple");
     }
 
     private IRenderedComponent<ConnectedSystemObjectMatchingTab> RenderMatchingTab(ConnectedSystem connectedSystem)
