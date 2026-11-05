@@ -244,10 +244,38 @@ public class DeletePathForeignKeyCoverageTests
         RemovedTables: [],
         SeveredForeignKeys: new Dictionary<string, string>());
 
+    /// <summary>
+    /// Deleting a Partition: today the hierarchy refresh, through
+    /// <c>ConnectedSystemRepository.UpdateConnectedSystemHierarchyAsync</c>, removing a Partition the Connected System
+    /// no longer holds. Its Containers, nested ones included, go with it by cascade; its Delta Import watermark goes by
+    /// cascade; its Connected System Objects are kept and leave the Partition (SET NULL), since whether an object has
+    /// gone is for deletion detection to decide (#2744).
+    /// <para>
+    /// The refresh also deletes the removed Containers explicitly, so it does not depend on the cascade; the cascade
+    /// is what makes any other delete of a Partition, a plain EF Core delete or raw SQL, leave nothing behind rather
+    /// than failing with <c>23503</c> or orphaning the Containers. <c>DeleteConnectedSystemPartitionAsync</c> is such a
+    /// delete, but nothing calls it today, and it does not clear the Run Profile reference below.
+    /// </para>
+    /// </summary>
+    private static readonly DeleteSurface PartitionDeletion = new(
+        Name: "deleting a Partition (ConnectedSystemRepository.UpdateConnectedSystemHierarchyAsync)",
+        DeleteRoots: ["ConnectedSystemPartitions"],
+        TruncatedTables: [],
+        RemovedTables: [],
+        SeveredForeignKeys: new Dictionary<string, string>
+        {
+            ["FK_ConnectedSystemRunProfiles_ConnectedSystemPartitions_Partit~"] =
+                "Deliberately not cleared by the database: a Run Profile with no Partition reads every selected " +
+                "Partition, so clearing it silently widens the Run Profile (#2740). The refresh disables each Run " +
+                "Profile that targets a removed Partition and clears its Partition before the delete " +
+                "(ConnectedSystemServer.ImportConnectedSystemHierarchyCoreAsync), or saves nothing."
+        });
+
     private static IEnumerable<TestCaseData> Surfaces()
     {
         yield return new TestCaseData(FactoryReset).SetName("{m}(factory reset)");
         yield return new TestCaseData(ConnectedSystemDeletion).SetName("{m}(Connected System deletion)");
+        yield return new TestCaseData(PartitionDeletion).SetName("{m}(Partition deletion)");
         yield return new TestCaseData(MetaverseObjectDeletion).SetName("{m}(Metaverse Object deletion)");
         yield return new TestCaseData(SyncRuleDeletion).SetName("{m}(Synchronisation Rule deletion)");
         yield return new TestCaseData(ActivityRetention).SetName("{m}(Activity retention)");
