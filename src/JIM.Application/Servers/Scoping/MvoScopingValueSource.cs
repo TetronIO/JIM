@@ -11,7 +11,10 @@ namespace JIM.Application.Servers.Scoping;
 /// A Metaverse Object as an export rule's scoping reads it. An asserted-null marker (#91) is not a value: scoping
 /// evaluates against a real value or genuine absence, so the marker reads exactly like an absent row.
 /// </summary>
-internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, IReadOnlyCollection<MetaverseAttribute>? schema = null) : IScopingValueSource
+/// <param name="connections">Which Object Types the object is joined to, for connection criteria (#2021); null when they were
+/// not read, which makes a connection criterion undecidable.</param>
+internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, IReadOnlyCollection<MetaverseAttribute>? schema = null,
+    MetaverseObjectConnections? connections = null) : IScopingValueSource
 {
     public bool TryGetAttribute(SyncRuleScopingCriteria criterion, out int attributeId, out AttributeDataType type, out string name)
     {
@@ -89,6 +92,8 @@ internal readonly struct MvoScopingValueSource(MetaverseObject metaverseObject, 
 
     public AttributeDataType? SchemaType(string attributeName) =>
         Schema?.FirstOrDefault(attribute => string.Equals(attribute.Name, attributeName, StringComparison.OrdinalIgnoreCase))?.Type;
+
+    public bool? HasConnection(int connectedObjectTypeId) => connections?.Has(metaverseObject.Id, connectedObjectTypeId);
 
     private IReadOnlyCollection<MetaverseAttribute>? Schema =>
         schema is { Count: > 0 } ? schema : (IReadOnlyCollection<MetaverseAttribute>?)metaverseObject.Type?.Attributes;

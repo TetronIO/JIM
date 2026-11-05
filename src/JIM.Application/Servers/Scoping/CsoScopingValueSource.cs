@@ -106,6 +106,9 @@ internal readonly struct CsoScopingValueSource(ConnectedSystemObject connectedSy
     public AttributeDataType? SchemaType(string attributeName) =>
         Schema?.FirstOrDefault(attribute => string.Equals(attribute.Name, attributeName, StringComparison.OrdinalIgnoreCase))?.Type;
 
+    /// <remarks>Connection criteria are for export rules only, and a Connected System Object has no connections to test.</remarks>
+    public bool? HasConnection(int connectedObjectTypeId) => null;
+
     private IReadOnlyCollection<ConnectedSystemObjectTypeAttribute>? Schema =>
         schema is { Count: > 0 } ? schema : (IReadOnlyCollection<ConnectedSystemObjectTypeAttribute>?)connectedSystemObject.Type?.Attributes;
 }

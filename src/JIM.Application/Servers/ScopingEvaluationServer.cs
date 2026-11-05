@@ -4,6 +4,7 @@
 using JIM.Application.Expressions;
 using JIM.Application.Servers.Scoping;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Logic.Scoping;
@@ -71,7 +72,9 @@ public class ScopingEvaluationServer
     /// </summary>
     /// <exception cref="InvalidOperationException">A criterion the evaluation reaches compares with an operator its
     /// attribute's type cannot take.</exception>
-    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule, DateTime? nowUtc = null)
+    /// <param name="connections">Which Object Types the object is joined to, read for connection criteria (#2021). A rule
+    /// with a connection criterion cannot be evaluated without them: <see cref="ScopingCriterionFailedException"/>.</param>
+    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule, DateTime? nowUtc = null, MetaverseObjectConnections? connections = null)
     {
         if (exportRule.Direction != SyncRuleDirection.Export)
         {
@@ -84,7 +87,8 @@ public class ScopingEvaluationServer
             return true;
 
         // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
-        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc ?? DateTime.UtcNow, _expressions);
+        return ScopingEvaluator.IsInScope(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes, connections),
+            nowUtc ?? DateTime.UtcNow, _expressions);
     }
 
     /// <summary>
@@ -94,12 +98,13 @@ public class ScopingEvaluationServer
     /// <see cref="ScopingRuleOutcome.Undetermined"/> where synchronisation would fail.
     /// </summary>
     /// <exception cref="ArgumentException"><paramref name="exportRule"/> is not an export rule.</exception>
-    public ScopingExplanation ExplainMvoForExportRule(MetaverseObject mvo, SyncRule exportRule, DateTime? nowUtc = null)
+    public ScopingExplanation ExplainMvoForExportRule(MetaverseObject mvo, SyncRule exportRule, DateTime? nowUtc = null,
+        MetaverseObjectConnections? connections = null)
     {
         if (exportRule.Direction != SyncRuleDirection.Export)
             throw new ArgumentException($"Synchronisation Rule {exportRule.Id} is not an export rule.", nameof(exportRule));
 
-        return Explain(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes), nowUtc);
+        return Explain(exportRule, new MvoScopingValueSource(mvo, exportRule.MetaverseObjectType?.Attributes, connections), nowUtc);
     }
 
     #endregion

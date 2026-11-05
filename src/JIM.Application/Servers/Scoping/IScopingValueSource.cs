@@ -65,4 +65,11 @@ internal interface IScopingValueSource
     /// is available. Explanations use it to decide whether an expression input's values may be shown.
     /// </summary>
     AttributeDataType? SchemaType(string attributeName);
+
+    /// <summary>
+    /// Whether the object is joined to a Connected System Object of the Object Type (#2021); null when its connections
+    /// were not read, which leaves a connection criterion undecidable rather than answered on a guess. Only a Metaverse
+    /// Object has connections; a Connected System Object always answers null.
+    /// </summary>
+    bool? HasConnection(int connectedObjectTypeId);
 }

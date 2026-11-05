@@ -67,6 +67,12 @@ public sealed class ScopingCriterionExplanation
     /// </summary>
     public string? Expression { get; set; }
 
+    /// <summary>
+    /// The Connected System Object Type a connection criterion tests the object for; null for an attribute or expression
+    /// criterion. <see cref="AttributeName"/> then names the type and its Connected System.
+    /// </summary>
+    public int? ConnectedObjectTypeId { get; set; }
+
     /// <summary>The attributes an expression criterion read, with the values the object held for each; empty otherwise.</summary>
     public List<ScopingExpressionInputExplanation> ExpressionInputs { get; set; } = [];
 
