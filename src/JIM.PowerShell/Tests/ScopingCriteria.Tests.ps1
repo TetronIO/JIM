@@ -309,6 +309,94 @@ Describe 'New-JIMScopingCriterion -Expression' {
     }
 }
 
+Describe 'New-JIMScopingCriterion connection criteria' {
+
+    It 'Sends the Object Type id, and no attribute or expression, in the create body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedObjectTypeId 70 -ComparisonType HasValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Body.connectedObjectTypeId -eq 70 -and
+                $Body.comparisonType -eq 'HasValue' -and
+                -not $Body.ContainsKey('metaverseAttributeId') -and
+                -not $Body.ContainsKey('expression')
+            }
+        }
+    }
+
+    It 'Resolves the Connected System and Object Type names to the type id' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Resolve-JIMConnectedSystem { [PSCustomObject]@{ id = 7; name = 'PANOPLY AD' } }
+            Mock Invoke-JIMApi {
+                if ($Endpoint -eq '/api/v1/synchronisation/connected-systems/7/object-types') {
+                    @(
+                        [PSCustomObject]@{ id = 70; name = 'user' }
+                        [PSCustomObject]@{ id = 71; name = 'contact' }
+                    )
+                }
+                else {
+                    [PSCustomObject]@{ id = 999 }
+                }
+            }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedSystemName 'PANOPLY AD' -ConnectedObjectTypeName 'contact' -ComparisonType HasNoValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and $Body.connectedObjectTypeId -eq 71 -and $Body.comparisonType -eq 'HasNoValue'
+            }
+        }
+    }
+
+    It 'Writes an error and creates nothing when the Object Type is not on the Connected System' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Resolve-JIMConnectedSystem { [PSCustomObject]@{ id = 7; name = 'PANOPLY AD' } }
+            Mock Invoke-JIMApi {
+                if ($Endpoint -eq '/api/v1/synchronisation/connected-systems/7/object-types') { @([PSCustomObject]@{ id = 70; name = 'user' }) }
+                else { [PSCustomObject]@{ id = 999 } }
+            }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedSystemName 'PANOPLY AD' -ConnectedObjectTypeName 'group' -ComparisonType HasValue -Confirm:$false -ErrorVariable failures -ErrorAction SilentlyContinue | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'POST' }
+            "$($failures[0])" | Should -BeLike "*'group'*PANOPLY AD*"
+        }
+    }
+
+    It 'Refuses a value comparison on a connection before calling the API' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -ConnectedObjectTypeId 70 -ComparisonType Equals -StringValue 'x' -Confirm:$false -ErrorVariable failures -ErrorAction SilentlyContinue | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 0 -Exactly
+            "$($failures[0])" | Should -BeLike '*HasValue*HasNoValue*'
+        }
+    }
+}
+
+Describe 'Set-JIMScopingCriterion connection criteria' {
+
+    It 'Sends the Object Type id in the update body' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -ConnectedObjectTypeId 70 -ComparisonType HasNoValue -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and $Body.connectedObjectTypeId -eq 70 -and $Body.comparisonType -eq 'HasNoValue'
+            }
+        }
+    }
+}
+
 Describe 'Set-JIMScopingCriterion -Expression' {
 
     It 'Sends the expression and its Compare As type in the update body' {
