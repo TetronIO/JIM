@@ -27,7 +27,7 @@ namespace JIM.Connectors.Sql;
 /// Everything a database server does differently from another one lives behind
 /// <see cref="ISqlProvider"/>, so this class never branches on which server it is talking to.
 /// </remarks>
-public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermarkDescription, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorCatalogue, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
+public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImportWatermark, IConnectorSettings, IConnectorObjectTypeSelectionValidation, IConnectorSchema, IConnectorCatalogue, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorSecureEndpoint, IConnectorPhases, IConnectorUniquenessProbe, IDisposable
 {
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
@@ -97,7 +97,7 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
     public string? Url => "https://github.com/TetronIO/JIM";
     #endregion
 
-    #region IConnectorImportWatermarkDescription members
+    #region IConnectorImportWatermark members
     /// <summary>
     /// The watermark is one position per configured Object Type and, in Watermark Column mode, one per related table
     /// as well, since each source keeps its own (see <see cref="SqlConnectorWatermark"/>). A number reads as a number;
@@ -126,6 +126,12 @@ public class SqlConnector : IConnector, IConnectorCapabilities, IConnectorImport
                 ? new ImportWatermarkPoint { Scope = scope, Number = number }
                 : new ImportWatermarkPoint { Scope = scope, Text = value.Value };
     }
+
+    /// <summary>
+    /// The watermark is all this Connector persists (see <see cref="CloseImportConnection"/>), so nothing remains once it
+    /// is removed.
+    /// </summary>
+    public string? RemoveImportWatermark(string persistedConnectorData, ILogger logger) => null;
     #endregion
 
     #region IConnectorCapabilities members

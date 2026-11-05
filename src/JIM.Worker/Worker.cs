@@ -543,6 +543,9 @@ public class Worker : BackgroundService
                                             newWorkerTask.Activity.ClearedConnectedSystemObjectCount = clearResult.ConnectedSystemObjectsRemoved;
                                             newWorkerTask.Activity.ClearedJoinRecordCount = clearResult.JoinRecordsWritten;
 
+                                            // the Delta Import starting points the clear removed (#2724); null when there were none
+                                            newWorkerTask.Activity.Message = clearResult.DescribeDeltaImportReset();
+
                                             // task completed successfully, complete the activity
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }

@@ -35,7 +35,7 @@ namespace JIM.Connectors.SCIM.ServiceProvider;
 /// </para>
 /// Implementation plan: engineering/plans/doing/SCIM_SERVER_DESIGN.md.
 /// </remarks>
-public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorScimResourceStoreAware, IConnectorImportWatermarkDescription
+public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingCalls, IConnectorScimResourceStoreAware, IConnectorImportWatermark
 {
     /// <summary>
     /// How long a tombstone is kept after an import has read it, so a deletion is still there to read for a while after a
@@ -116,7 +116,7 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
     }
     #endregion
 
-    #region IConnectorImportWatermarkDescription members
+    #region IConnectorImportWatermark members
     /// <summary>
     /// The watermark is the store change sequence the last import read up to.
     /// </summary>
@@ -127,6 +127,12 @@ public class ScimServiceProviderConnector : IConnector, IConnectorCapabilities, 
             ? null
             : new ImportWatermarkDescription { Kind = "change sequence", Points = [new ImportWatermarkPoint { Number = state.ChangeSequence }] };
     }
+
+    /// <summary>
+    /// The change sequence is all this Connector persists (<see cref="ScimServiceProviderImportState"/>), so nothing remains
+    /// once it is removed. With none, the next import also purges no tombstones, which is right: it has read none.
+    /// </summary>
+    public string? RemoveImportWatermark(string persistedConnectorData, ILogger logger) => null;
     #endregion
 
     #region IConnectorSchema members

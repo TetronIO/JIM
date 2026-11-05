@@ -247,7 +247,7 @@ DELETE FROM HR.IDM_CHANGE_LOG WHERE CHANGED_AT < SYSTIMESTAMP - INTERVAL '30' DA
 The **Delta Import Mode** setting is blank. Choose **Change-Log Table** (or **Watermark Column**) on the Connected System's Settings tab and save; JIM does not assume a mode, because a Delta Import with no change source would have to read everything every time.
 
 **"A Delta Import was requested, but JIM holds no watermark ... Every object was read instead"**<br />
-Expected on the first run and after changing the mode. If it recurs, the run is not completing, or the Run Profile's [deletion limits](../configuration/run-profiles.md#delta-import) withheld its deletions, which keeps the old watermark; check its Activity.
+Expected on the first run, after changing the mode and after clearing the Connector Space. If it recurs, the run is not completing, or the Run Profile's [deletion limits](../configuration/run-profiles.md#delta-import) withheld its deletions, which keeps the old watermark; check its Activity.
 
 **"Column 'CHANGE_TYPE' holds 'X', which the change-log configuration for Object Type 'Person' does not account for"**<br />
 The application wrote a change-type value you have not listed. Add it to `createValues`, `updateValues` or `deleteValues`, and re-run: the object is reported as an error until it is.

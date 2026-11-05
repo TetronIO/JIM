@@ -148,9 +148,9 @@ public class LdapPartitionWatermarkTests
     [Test]
     public void LdapConnector_DescribesItsWatermarksPerPartitionOnly()
     {
-        // The Connected System-level record holds no position (#2715); describing it as well would show an import's
-        // read range twice.
-        Assert.That(typeof(IConnectorImportWatermarkDescription).IsAssignableFrom(typeof(LdapConnector)), Is.False);
+        // The Connected System-level record holds no position (#2715): describing it as well would show an import's
+        // read range twice, and a Connector Space clear must keep it, the pinned domain controller included (#2724).
+        Assert.That(typeof(IConnectorImportWatermark).IsAssignableFrom(typeof(LdapConnector)), Is.False);
     }
 
     private static ImportWatermarkDescription? Describe(string? value)

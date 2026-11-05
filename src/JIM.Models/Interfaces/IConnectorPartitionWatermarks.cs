@@ -28,7 +28,7 @@ namespace JIM.Models.Interfaces;
 /// removes the watermarks of Partitions that are no longer selected.
 /// </para>
 /// <para>
-/// Like <see cref="IConnectorImportWatermarkDescription"/>, JIM never parses a value itself; it only hands it back to
+/// Like <see cref="IConnectorImportWatermark"/>, JIM never parses a value itself; it only hands it back to
 /// the Connector that wrote it. A Connector that implements this keeps its Connected System-level persisted connector
 /// data for anything else it needs to remember between runs.
 /// </para>

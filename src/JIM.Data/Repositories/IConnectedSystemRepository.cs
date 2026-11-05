@@ -2106,6 +2106,21 @@ public interface IConnectedSystemRepository
     Task<ClearConnectedSystemResult> DeleteAllConnectedSystemObjectsAndDependenciesAsync(int connectedSystemId, bool deleteChangeHistory, bool recordJoinsForReconciliation);
 
     /// <summary>
+    /// Clears a Connected System's Connector Space in one transaction (enrolling in an ambient one where there is one):
+    /// every Connected System Object and its dependencies, as <see cref="DeleteAllConnectedSystemObjectsAndDependenciesAsync"/>
+    /// removes them with joins recorded for the post-clear reconciliation sweep (#1605), every Partition's Delta Import
+    /// watermark, and the Connected System's persisted connector data replaced with
+    /// <paramref name="persistedConnectorDataAfterClear"/>, so no Delta Import starting point survives the objects it was
+    /// taken against (#2724).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to clear.</param>
+    /// <param name="deleteChangeHistory">If true, deletes ConnectedSystemObjectChanges. If false, nulls the CSO FK.</param>
+    /// <param name="persistedConnectorDataAfterClear">The persisted connector data to leave: what the Connector keeps
+    /// besides its Delta Import watermark, or null when it keeps nothing else. Always written.</param>
+    /// <returns>Counts of what the clear removed and recorded.</returns>
+    Task<ClearConnectedSystemResult> ClearConnectorSpaceAsync(int connectedSystemId, bool deleteChangeHistory, string? persistedConnectorDataAfterClear);
+
+    /// <summary>
     /// Deletes a Connected System and all its related data using bulk SQL operations for performance.
     /// Should only be called after verifying no sync operations are running.
     /// </summary>

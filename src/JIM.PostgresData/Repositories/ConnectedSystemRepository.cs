@@ -8788,22 +8788,45 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         //    baseline, so each Partition's next Delta Import must read every object in it rather than only the changes
         //    after a point the cleared objects were read from. On Connected System deletion the rows would go by cascade
         //    anyway; removing them here keeps the clear and the delete saying the same thing.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
+        var partitionWatermarksRemoved = await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystemPartitionWatermarks"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
         if (ownsTransaction)
             await transaction!.CommitAsync();
 
-        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs, wrote {JoinRecords} reconciliation join record(s)",
-            connectedSystemId, pendingExportCount, csoCount, joinRecordsWritten);
+        Log.Information("DeleteAllConnectedSystemObjectsAndDependenciesAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs, {PartitionWatermarks} Partition watermark(s), wrote {JoinRecords} reconciliation join record(s)",
+            connectedSystemId, pendingExportCount, csoCount, partitionWatermarksRemoved, joinRecordsWritten);
 
         return new ClearConnectedSystemResult
         {
             PendingExportsRemoved = pendingExportCount,
             ConnectedSystemObjectsRemoved = csoCount,
-            JoinRecordsWritten = joinRecordsWritten
+            JoinRecordsWritten = joinRecordsWritten,
+            PartitionWatermarksRemoved = partitionWatermarksRemoved
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<ClearConnectedSystemResult> ClearConnectorSpaceAsync(int connectedSystemId, bool deleteChangeHistory, string? persistedConnectorDataAfterClear)
+    {
+        // One transaction for the objects and every Delta Import starting point (#2724): a clear that removed the objects
+        // but left the watermark would have the next Delta Import read only the changes after it, and never bring the
+        // rest back. The deletion helper enrols in this transaction rather than starting its own.
+        var ownsTransaction = Repository.Database.Database.CurrentTransaction == null;
+        await using var transaction = ownsTransaction ? await Repository.Database.Database.BeginTransactionAsync() : null;
+
+        var result = await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: true);
+
+        // A single-column write that touches no tracked state; the caller keeps any tracked instance in step.
+        await Repository.Database.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(cs => cs.PersistedConnectorData, persistedConnectorDataAfterClear));
+
+        if (ownsTransaction)
+            await transaction!.CommitAsync();
+
+        return result;
     }
 
     /// <inheritdoc />

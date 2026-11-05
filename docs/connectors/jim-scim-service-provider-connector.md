@@ -162,7 +162,7 @@ A disabled key can be enabled again; a deleted one cannot. The same steps from P
 
 ## :material-database-refresh-outline: Rebuild the Connector Space from the store
 
-[Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space) of this Connected System leaves the store untouched: every User and Group the identity provider sent is still there. Run a **Full Import** and a **Full Synchronisation** afterwards, and the Connector Space is rebuilt from the store without the identity provider sending anything. Run the Full Import before the next Delta Import, which reads only changes and would not bring back what was cleared.
+[Clearing the Connector Space](../configuration/connector-space.md#clearing-the-connector-space) of this Connected System leaves the store untouched: every User and Group the identity provider sent is still there. Run a **Full Import** and a **Full Synchronisation** afterwards, and the Connector Space is rebuilt from the store without the identity provider sending anything. Clearing also removes the import watermark, so if your Schedule's Delta Import runs first it reads every resource instead, with a warning, and rebuilds the Connector Space just the same.
 
 Deleting the Connected System, by contrast, deletes its store and its keys with it. Nothing the identity provider sent can be recovered, and the identity provider's requests are refused from that moment.
 
