@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
 - 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
 - 🔄 Each LDAP partition now keeps its own Delta Import watermark. After upgrading, the first Delta Import to read each partition reads every object in it once, which also picks up any change a partition-targeted import skipped. (#2715)
+- 🔄 A hierarchy refresh selects a partition that a selected Container moves into, since a Container is only in scope while its partition is selected, and lists each partition it selected, with the Containers that moved in, in the portal, the REST API and PowerShell. (#2769)
 
 ### Fixed
 

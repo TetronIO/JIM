@@ -65,6 +65,13 @@ public class HierarchyRefreshResult
     public List<HierarchyMoveItem> MovedContainers { get; set; } = new();
 
     /// <summary>
+    /// Partitions the refresh selected because a selected container moved into them. A container is only in scope while
+    /// its partition is selected, so without this the moved container's selection would mean nothing.
+    /// </summary>
+    /// <remarks>#2769.</remarks>
+    public List<HierarchyPartitionSelectionItem> PartitionsSelectedForMovedContainers { get; set; } = new();
+
+    /// <summary>
     /// Whether the refresh was saved. False only when it was asked to cancel rather than disable the Run Profiles that
     /// target a Partition it would remove, and there were some: nothing was changed, and the lists above describe what
     /// the refresh found rather than what it did.
@@ -87,7 +94,8 @@ public class HierarchyRefreshResult
                               AddedContainers.Count > 0 ||
                               RemovedContainers.Count > 0 ||
                               RenamedContainers.Count > 0 ||
-                              MovedContainers.Count > 0;
+                              MovedContainers.Count > 0 ||
+                              PartitionsSelectedForMovedContainers.Count > 0;
 
     /// <summary>
     /// Whether any selected items were removed (potential data loss warning).
@@ -109,6 +117,10 @@ public class HierarchyRefreshResult
         if (added > 0) parts.Add($"{added} added");
         if (removed > 0) parts.Add($"{removed} removed");
         if (updated > 0) parts.Add($"{updated} updated");
+
+        // Said on its own rather than counted as an update: it widens what JIM imports, which no rename or move does.
+        var partitionsSelected = PartitionsSelectedForMovedContainers.Count;
+        if (partitionsSelected > 0) parts.Add($"{partitionsSelected} partition{(partitionsSelected == 1 ? "" : "s")} selected");
 
         return parts.Count > 0 ? string.Join(", ", parts) : "No changes";
     }
@@ -189,6 +201,28 @@ public class HierarchyRenameItem
     /// The type of item (Partition or Container).
     /// </summary>
     public HierarchyItemType ItemType { get; set; }
+}
+
+/// <summary>
+/// A partition the refresh selected because a selected container moved into it.
+/// </summary>
+public class HierarchyPartitionSelectionItem
+{
+    /// <summary>
+    /// The partition's external identifier (e.g., DN for LDAP).
+    /// </summary>
+    public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// The partition's human-readable name.
+    /// </summary>
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The external IDs of the containers whose move into the partition caused it to be selected: each is selected, or
+    /// holds a selected container.
+    /// </summary>
+    public List<string> ContainerExternalIds { get; set; } = new();
 }
 
 /// <summary>

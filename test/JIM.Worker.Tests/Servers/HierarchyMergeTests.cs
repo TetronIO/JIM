@@ -305,6 +305,7 @@ public class HierarchyMergeTests
             Assert.That(connectedSystem.Partitions!.Single(p => p.Name == "acme.local").Containers, Does.Not.Contain(corp), "and has left its old Partition");
             Assert.That(globex.Containers, Does.Contain(corp));
             Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Corp" }), "the move is reported as one");
+            Assert.That(result.PartitionsSelectedForMovedContainers, Is.Empty, "Globex was already selected, so no Partition was selected for it");
             Assert.That(result.MovedContainers.Select(c => (c.OldParentExternalId, c.NewParentExternalId, c.OldPartitionExternalId, c.NewPartitionExternalId)),
                 Is.EqualTo(new[] { ((string?)null, (string?)null, (string?)"DC=acme,DC=local", (string?)"DC=globex,DC=local") }),
                 "a top-level Container has no parent either side, so the report names the Partitions it moved between");
@@ -395,6 +396,9 @@ public class HierarchyMergeTests
             Assert.That(corp.Partition, Is.SameAs(initech));
             Assert.That(corp.Selected, Is.True, "it keeps its selection");
             Assert.That(initech.Selected, Is.True, "and its new Partition is selected, without which the selection would mean nothing");
+            Assert.That(result.PartitionsSelectedForMovedContainers.Select(p => (p.ExternalId, p.Name, string.Join("|", p.ContainerExternalIds))),
+                Is.EqualTo(new[] { ("DC=initech,DC=local", "initech.local", "OU=Corp,DC=initech,DC=local") }),
+                "the selection is reported, with the Container whose move caused it, so the refresh never changes scope silently");
             Assert.That(result.MovedContainers.Select(c => (c.Name, c.OldPartitionExternalId, c.NewPartitionExternalId)),
                 Is.EqualTo(new[] { ("Corp", (string?)"DC=acme,DC=local", (string?)"DC=initech,DC=local") }));
             Assert.That(result.AddedContainers, Is.Empty, "a move is not an addition");
@@ -692,6 +696,27 @@ public class HierarchyMergeTests
     #endregion
 
     #region HierarchyRefreshResult Change Detection Tests
+
+    [Test]
+    public void HierarchyRefreshResult_PartitionSelectedForAMovedContainer_CountsAsAChangeAndIsSummarised()
+    {
+        // A refresh whose only effect on scope was selecting a Partition still changed something, and must say so: the
+        // portal shows its results, and the Activity its summary, only when there are changes.
+        var result = new HierarchyRefreshResult
+        {
+            Success = true,
+            PartitionsSelectedForMovedContainers =
+            {
+                new HierarchyPartitionSelectionItem { ExternalId = "DC=initech,DC=local", Name = "initech.local", ContainerExternalIds = { "OU=Corp,DC=initech,DC=local" } }
+            }
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.HasChanges, Is.True);
+            Assert.That(result.GetSummary(), Does.Contain("1 partition selected"));
+        }
+    }
 
     [Test]
     public void HierarchyRefreshResult_TracksMultipleChanges()

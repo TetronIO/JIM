@@ -5127,16 +5127,26 @@ public partial class ConnectedSystemServer
         // A container cannot be in scope while its partition is not, so one that carries a selection into a partition
         // that is not selected (a partition this refresh discovered always arrives unselected) selects that partition,
         // as selecting the container on the Scope tab would have. Otherwise the selection the move kept would mean
-        // nothing, and its objects would still fall out of import scope (#2769).
-        foreach (var partition in containersToReparent
+        // nothing, and its objects would still fall out of import scope (#2769). Each is reported, with the containers
+        // that caused it, so a refresh never widens what JIM imports without saying so. Grouped before any partition is
+        // selected, so that every container moving into one partition is named, not only the first.
+        foreach (var receiving in containersToReparent
                      .Where(m => !m.Partition.Selected &&
                                  !ReferenceEquals(existingContainerPartitions.GetValueOrDefault(m.Container), m.Partition) &&
                                  HoldsASelection(m.Container))
-                     .Select(m => m.Partition))
+                     .GroupBy(m => m.Partition)
+                     .ToList())
         {
+            var partition = receiving.Key;
             partition.Selected = true;
-            Log.Information("MergeHierarchy: Selected Partition {Partition}, as a selected Container moved into it.",
-                LogSanitiser.Sanitise(partition.ExternalId));
+            result.PartitionsSelectedForMovedContainers.Add(new HierarchyPartitionSelectionItem
+            {
+                ExternalId = partition.ExternalId,
+                Name = partition.Name,
+                ContainerExternalIds = receiving.Select(m => m.Container.ExternalId).ToList()
+            });
+            Log.Information("MergeHierarchy: Selected Partition {Partition}, as {Count} selected Container(s) moved into it.",
+                LogSanitiser.Sanitise(partition.ExternalId), receiving.Count());
         }
 
         // Only now remove what the directory no longer holds. Running this last is what keeps a moved container:

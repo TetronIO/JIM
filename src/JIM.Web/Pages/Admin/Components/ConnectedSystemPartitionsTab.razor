@@ -121,6 +121,12 @@ else
                             Run Profiles disabled
                         </MudChip>
                     }
+                    @if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
+                    {
+                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text">
+                            Partitions selected
+                        </MudChip>
+                    }
                 </div>
             </TitleContent>
             <ChildContent>
@@ -154,6 +160,40 @@ else
                                     <tr @key="runProfile.RunProfileId">
                                         <td>@runProfile.RunProfileName</td>
                                         <td><span class="jim-code-inline">@runProfile.PartitionName</span></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    @* Partitions the refresh selected: it widened what JIM imports, so it says so *@
+                    @if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckBox" Class="mr-1" Color="Color.Info" />
+                            Partitions selected
+                        </MudText>
+                        <MudText Class="mb-2">
+                            A selected container moved into each of these partitions, and a container is only in scope while its partition is selected.
+                        </MudText>
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
+                            <thead>
+                                <tr>
+                                    <th>Partition</th>
+                                    <th>Containers moved in</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _hierarchyRefreshResult.PartitionsSelectedForMovedContainers)
+                                {
+                                    <tr @key="item.ExternalId">
+                                        <td>@item.Name</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">
+                                            @foreach (var containerExternalId in item.ContainerExternalIds)
+                                            {
+                                                <div>@containerExternalId</div>
+                                            }
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
@@ -667,6 +707,11 @@ else
                 {
                     Snackbar.Add("Hierarchy refreshed with warnings. Some selected items were removed.", Severity.Warning);
                 }
+                else if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
+                {
+                    // A refresh that widened what JIM imports says why, not only that it did.
+                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}. A selected container moved into each partition selected.", Severity.Info);
+                }
                 else if (_hierarchyRefreshResult.HasChanges)
                 {
                     Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}", Severity.Success);
@@ -732,6 +777,14 @@ else
             sb.AppendLine("RUN PROFILES DISABLED:");
             foreach (var runProfile in _hierarchyRefreshResult.AffectedRunProfiles)
                 sb.AppendLine($"  {runProfile.RunProfileName} (partition {runProfile.PartitionName})");
+            sb.AppendLine();
+        }
+
+        if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
+        {
+            sb.AppendLine("PARTITIONS SELECTED (a selected container moved into each):");
+            foreach (var item in _hierarchyRefreshResult.PartitionsSelectedForMovedContainers)
+                sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}): {string.Join(", ", item.ContainerExternalIds)}");
             sb.AppendLine();
         }
 

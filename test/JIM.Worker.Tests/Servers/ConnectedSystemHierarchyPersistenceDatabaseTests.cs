@@ -909,6 +909,9 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
                 "Contractors is still beneath Staff and still selected");
             Assert.That(riversidePartition.Selected, Is.True,
                 "a Container cannot be in scope while its Partition is not, so the Partition receiving a selected Container is selected");
+            Assert.That(result.PartitionsSelectedForMovedContainers.Select(p => (p.ExternalId, string.Join("|", p.ContainerExternalIds))),
+                Is.EqualTo(new[] { ("dc=riverside,dc=local", "ou=Staff,dc=riverside,dc=local") }),
+                "and the refresh reports that it selected it, naming the Container that moved in");
         }
     }
 
