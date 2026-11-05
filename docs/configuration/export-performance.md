@@ -35,7 +35,7 @@ JIM opens a connection to the target system for each batch it sends at once, and
 
 ## :material-swap-horizontal: How it combines with Export Concurrency
 
-Within each batch, the LDAP Connector also sends several changes at once: its [Export Concurrency](../connectors/jim-ldap-connector.md#export-settings). The two multiply. Two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the directory, so raise one at a time and watch the directory's load.
+Within each batch, the LDAP Connector also sends several changes at once: its [Export Concurrency](../connectors/jim-ldap-connector.md#export-settings). Left at its default of 4, it is raised to 16 when JIM imports the schema of an Active Directory, OpenLDAP or 389 Directory Server directory; Samba AD and other directories stay at 4. The two multiply. Two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the directory, so raise one at a time and watch the directory's load.
 
 Past two or three batches, JIM's own work of recording each batch's results is usually what limits an export, rather than the target system, so a higher value gains less.
 
