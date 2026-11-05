@@ -25,6 +25,8 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
     private const string Line = "[data-testid='jim-change-application-line']";
     private const string LineApplied = "[data-testid='jim-change-application-applied']";
     private const string LineAwaiting = "[data-testid='jim-change-application-awaiting']";
+    private const string Prediction = "[data-testid='jim-change-application-prediction']";
+    private const string PredictionLine = "[data-testid='jim-change-application-prediction-line']";
 
     // ─── A synchronisation run ───
 
@@ -171,6 +173,59 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
 
     // ─── Helpers ───
 
+    // ─── Predicted beside actual (#2618) ───
+
+    [Test]
+    public void ConfigurationChange_AppliedWithAComparison_ShowsOneLineWithPredictedAndActualPerOutcome()
+    {
+        var comparison = new ConfigurationChangePredictionComparison
+        {
+            PreviewActivityId = Guid.NewGuid(),
+            Lines =
+            [
+                new(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, 40, 38),
+                new(ActivityRunProfileExecutionItemSyncOutcomeType.Joined, 10, 12)
+            ]
+        };
+
+        var cut = RenderChange(Group("user", applied: true, comparison: comparison));
+
+        var lines = cut.FindAll(PredictionLine);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(lines, Has.Count.EqualTo(2));
+            Assert.That(lines[0].TextContent, Does.Contain("40").And.Contain("38"));
+            Assert.That(lines[1].TextContent, Does.Contain("10").And.Contain("12"));
+        }
+    }
+
+    [Test]
+    public void ConfigurationChange_AppliedWithoutAComparison_ShowsNoPredictionAtAll()
+    {
+        var cut = RenderChange(Group("user", applied: true));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll(LineApplied), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll(Prediction), Is.Empty, "no empty column or placeholder");
+        }
+    }
+
+    [Test]
+    public void ConfigurationChange_AwaitingWithAComparisonSomehow_ShowsNoPrediction()
+    {
+        // A comparison belongs to an applied change; nothing has been done to compare against until then.
+        var comparison = new ConfigurationChangePredictionComparison
+        {
+            PreviewActivityId = Guid.NewGuid(),
+            Lines = [new(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, 40, 0)]
+        };
+
+        var cut = RenderChange(Group("user", applied: false, comparison: comparison));
+
+        Assert.That(cut.FindAll(Prediction), Is.Empty);
+    }
+
     private IRenderedComponent<ActivityProcessedInFullSections> RenderRun(ActivityStatus status, params ActivityObjectTypeSynchronisation[] groups) =>
         Render<ActivityProcessedInFullSections>(p => p
             .Add(c => c.Groups, groups)
@@ -181,13 +236,15 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
         Render<ActivityConfigurationChangeApplication>(p => p.Add(c => c.Groups, groups));
 
     private static ActivityObjectTypeSynchronisation Group(
-        string objectTypeName, bool applied, int changes = 1, int? objectCount = null, Guid? appliedBy = null) => new()
+        string objectTypeName, bool applied, int changes = 1, int? objectCount = null, Guid? appliedBy = null,
+        ConfigurationChangePredictionComparison? comparison = null) => new()
     {
         ConnectedSystemId = 3,
         ConnectedSystemName = "HR Import",
         ConnectedSystemObjectTypeId = objectTypeName.GetHashCode(),
         ObjectTypeName = objectTypeName,
         ObjectCount = objectCount,
+        PredictionComparison = comparison,
         Changes = Enumerable.Range(1, changes).Select(i => new ConfigurationChangeSynchronisationSummary
         {
             Id = i,

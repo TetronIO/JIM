@@ -1792,6 +1792,28 @@ public partial class ActivityRepository : IActivityRepository
         public Dictionary<int, int> ExclusionDiscardCounts { get; } = new();
     }
 
+    public async Task<Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>> GetSyncOutcomeCountsForObjectTypeAsync(
+        Guid activityId, int connectedSystemObjectTypeId, IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> outcomes)
+    {
+        ArgumentNullException.ThrowIfNull(outcomes);
+        if (outcomes.Count == 0)
+            return [];
+
+        // Distinct items, so an object that records an outcome twice (once on the object, once on a child) counts once.
+        var rows = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .Where(o => o.ActivityRunProfileExecutionItem.ActivityId == activityId
+                        && outcomes.Contains(o.OutcomeType)
+                        && o.ActivityRunProfileExecutionItem.ConnectedSystemObject != null
+                        && o.ActivityRunProfileExecutionItem.ConnectedSystemObject.TypeId == connectedSystemObjectTypeId)
+            .Select(o => new { o.OutcomeType, o.ActivityRunProfileExecutionItemId })
+            .Distinct()
+            .GroupBy(o => o.OutcomeType)
+            .Select(g => new { OutcomeType = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        return rows.ToDictionary(row => row.OutcomeType, row => row.Count);
+    }
+
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
         // Get total objects processed from the activity itself (tracks all objects in scope)

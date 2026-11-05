@@ -107,6 +107,19 @@ The Connected System's next synchronisation, Delta or Full, processes every obje
 
 The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
 
+### Predicted and actual
+
+When you read a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) before saving a Synchronisation Rule's scope, the change's Activity shows what the preview predicted beside what the synchronisation that applied the change did, so you can see whether the preview told the truth. For example: **Projected: predicted 40, actual 38**.
+
+JIM shows the comparison only when both numbers measure the same thing, and otherwise shows only **Applied by**:
+
+- **One change**<br /> The synchronisation applied exactly one change to the Object Type. When several were saved before a run, each preview was made against a different version of the rules, and the run has one set of counts.
+- **A current preview**<br /> A preview informed the save, was complete, was of the rule you saved, and had not been overtaken by a run or another change before you saved.
+- **A comparable outcome**<br /> The preview counts the outcome the way a run records it. Today that is **Projected** and **Joined** for a scope preview. Other previews, such as Object Matching or Attribute Flow, describe differences from today's configuration that no run counts, so they are not compared.
+- **The processed Object Type**<br /> The actual count is for objects of that type only. It includes objects that changed for other reasons since the preview, so it can be higher than the prediction without the preview having been wrong.
+
+The same comparison is `PredictionComparison` on each entry of an Activity's `ConfigurationChangeSynchronisations`, in the REST API and in `Get-JIMActivity -Id`.
+
 ### Changes pending a Full Synchronisation
 
 Some changes no ordinary synchronisation applies by itself. A Connected System with such a change since its last Full Synchronisation shows an indicator in the Connected Systems list, and a notice on its page saying how many changes are waiting and when the last Full Synchronisation ran.

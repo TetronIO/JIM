@@ -182,19 +182,20 @@ public partial class ConnectedSystemServer
 
         var groups = new List<ActivityObjectTypeSynchronisation>();
         foreach (var group in changes.GroupBy(change => (change.ConnectedSystemId, change.ConnectedSystemObjectTypeId)))
-            groups.Add(await BuildActivityObjectTypeSynchronisationAsync(activity.Id, group.ToList()));
+            groups.Add(await BuildActivityObjectTypeSynchronisationAsync(activity, group.ToList()));
 
         return groups;
     }
 
     private async Task<ActivityObjectTypeSynchronisation> BuildActivityObjectTypeSynchronisationAsync(
-        Guid activityId, List<ConfigurationChangeSynchronisationSummary> changes)
+        Activity activity, List<ConfigurationChangeSynchronisationSummary> changes)
     {
         var first = changes[0];
 
         // Only a run has processed objects because of the changes, and only a run claims them. A configuration change
         // Activity never does, so it is not charged a count it has no use for.
-        int? objectCount = changes.Any(change => change.ClaimedByActivityId == activityId)
+        var isRun = changes.Any(change => change.ClaimedByActivityId == activity.Id);
+        int? objectCount = isRun
             ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(first.ConnectedSystemId, first.ConnectedSystemObjectTypeId, null)
             : null;
 
@@ -205,8 +206,44 @@ public partial class ConnectedSystemServer
             ConnectedSystemObjectTypeId = first.ConnectedSystemObjectTypeId,
             ObjectTypeName = first.ObjectTypeName,
             ObjectCount = objectCount,
-            Changes = changes
+            Changes = changes,
+            PredictionComparison = isRun ? null : await BuildPredictionComparisonAsync(activity, changes)
         };
+    }
+
+    /// <summary>
+    /// What the preview that informed a save predicted, beside what the synchronisation that applied the save did (#2618).
+    /// Null in every case where the two would not measure the same thing; see <see cref="ConfigurationChangePredictionPolicy"/>.
+    /// The cheap questions are asked first, so an Activity that cannot qualify costs no read beyond the ones it already made.
+    /// </summary>
+    private async Task<ConfigurationChangePredictionComparison?> BuildPredictionComparisonAsync(
+        Activity saveActivity, List<ConfigurationChangeSynchronisationSummary> changes)
+    {
+        // One change saved by this Activity for the type, applied: the run that applied it is named.
+        if (saveActivity.PreviewActivityId is not { } previewActivityId || saveActivity.PreviewOvertakenAt != null
+            || changes is not [{ AppliedAt: not null, ClaimedByActivityId: { } runId } change])
+            return null;
+
+        // The run's other changes to the type: several mean its one set of actual counts has no single preview to be
+        // measured against. Counted from the run's side because the save's own Activity cannot see them.
+        var claimedByRun = await Application.Repository.ConnectedSystems.GetConfigurationChangeSynchronisationSummariesForActivityAsync(
+            runId, ObjectTypeAwaitingSynchronisation.MaxChangesListed);
+        var changesBehindRun = claimedByRun.Count(claimed =>
+            claimed.ConnectedSystemId == change.ConnectedSystemId && claimed.ConnectedSystemObjectTypeId == change.ConnectedSystemObjectTypeId);
+
+        var preview = await Application.Repository.ConfigurationChangePreviews.GetPreviewAsync(previewActivityId);
+        if (preview == null)
+            return null;
+        var previewActivity = await Application.Activities.GetActivityAsync(previewActivityId);
+
+        var outcomes = ConfigurationChangePredictionPolicy.ComparableOutcomes(saveActivity, preview, previewActivity, change, changesBehindRun);
+        if (outcomes.Count == 0)
+            return null;
+
+        var actual = await Application.Repository.Activity.GetSyncOutcomeCountsForObjectTypeAsync(
+            runId, change.ConnectedSystemObjectTypeId, outcomes);
+
+        return ConfigurationChangePredictionPolicy.Compare(previewActivityId, preview, change.ConnectedSystemId, outcomes, actual);
     }
 
     /// <summary>

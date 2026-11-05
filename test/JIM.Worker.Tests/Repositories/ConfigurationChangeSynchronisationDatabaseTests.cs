@@ -660,6 +660,64 @@ public class ConfigurationChangeSynchronisationDatabaseTests
         }
     }
 
+    [Test]
+    public async Task GetSyncOutcomeCountsForObjectTypeAsync_RunWithOutcomesAcrossTypes_CountsOnlyTheNamedOutcomesOfTheNamedTypeAsync()
+    {
+        // #2618: the actual side of a prediction comparison must be limited to the processed Object Type's execution
+        // items of this run, count each object once per outcome, and ignore outcomes the comparison did not ask for.
+        var s = await SeedAsync();
+        Guid[] users, contacts;
+        await using (var ctx = NewContext())
+        {
+            Guid[] AddObjects(int typeId, int count, Guid runId, params ActivityRunProfileExecutionItemSyncOutcomeType[][] outcomesPerObject)
+            {
+                var ids = new Guid[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var cso = new ConnectedSystemObject
+                    {
+                        Id = Guid.NewGuid(), ConnectedSystemId = s.SystemId, TypeId = typeId,
+                        ExternalIdAttributeId = s.ExternalIdAttributeIdByTypeId[typeId],
+                        Status = ConnectedSystemObjectStatus.Normal, JoinType = ConnectedSystemObjectJoinType.NotJoined
+                    };
+                    ctx.ConnectedSystemObjects.Add(cso);
+                    var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = runId, ConnectedSystemObject = cso };
+                    foreach (var outcome in outcomesPerObject[i])
+                        item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome { Id = Guid.NewGuid(), OutcomeType = outcome });
+                    ctx.ActivityRunProfileExecutionItems.Add(item);
+                    ids[i] = cso.Id;
+                }
+                return ids;
+            }
+
+            var projected = new[] { ActivityRunProfileExecutionItemSyncOutcomeType.Projected };
+            var joined = new[] { ActivityRunProfileExecutionItemSyncOutcomeType.Joined };
+            var flowOnly = new[] { ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow };
+            // Three users: two projected (one of them twice, e.g. recorded again as a child), one joined, plus a flow-only user.
+            users = AddObjects(s.UserTypeId, 4, s.RunActivityId,
+                [ActivityRunProfileExecutionItemSyncOutcomeType.Projected, ActivityRunProfileExecutionItemSyncOutcomeType.Projected], projected, joined, flowOnly);
+            // A contact projected in the same run, and a user projected in a different run: neither is the user type of this run.
+            contacts = AddObjects(s.ContactTypeId, 1, s.RunActivityId, projected);
+            AddObjects(s.UserTypeId, 1, s.OtherRunActivityId, projected);
+            await ctx.SaveChangesAsync();
+        }
+
+        await using var read = NewContext(QueryTrackingBehavior.NoTracking);
+        var counts = await new PostgresDataRepository(read).Activity.GetSyncOutcomeCountsForObjectTypeAsync(
+            s.RunActivityId, s.UserTypeId,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.Projected, ActivityRunProfileExecutionItemSyncOutcomeType.Joined]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(users, Has.Length.EqualTo(4));
+            Assert.That(contacts, Has.Length.EqualTo(1));
+            Assert.That(counts, Has.Count.EqualTo(2), "attribute flow was not asked for");
+            Assert.That(counts[ActivityRunProfileExecutionItemSyncOutcomeType.Projected], Is.EqualTo(2),
+                "an object that recorded Projected twice counts once; other types and other runs do not count");
+            Assert.That(counts[ActivityRunProfileExecutionItemSyncOutcomeType.Joined], Is.EqualTo(1));
+        }
+    }
+
     /// <summary>
     /// Adds Connected System Objects of one type, all created <paramref name="created"/> and last updated
     /// <paramref name="lastUpdated"/>.

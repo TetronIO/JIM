@@ -246,6 +246,17 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
     /// <summary>
+    /// How many objects of one Connected System Object Type a run gave each of the named outcomes (#2618): execution items
+    /// of that type only, each object counted once per outcome however many times the outcome was recorded for it.
+    /// Outcomes with no items are absent from the result.
+    /// </summary>
+    /// <param name="activityId">The synchronisation run's Activity.</param>
+    /// <param name="connectedSystemObjectTypeId">The Connected System Object Type.</param>
+    /// <param name="outcomes">The outcomes to count.</param>
+    public Task<Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int>> GetSyncOutcomeCountsForObjectTypeAsync(
+        Guid activityId, int connectedSystemObjectTypeId, IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType> outcomes);
+
+    /// <summary>
     /// Gets a lightweight progress snapshot for an Activity (#202): a scalar projection of the
     /// progress fields plus an operation-type breakdown from the Activity's stat counter rows.
     /// Cheap enough to serve at a high read frequency while a run is executing; never

@@ -18,6 +18,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Transactional;
@@ -740,6 +741,81 @@ public class ActivitiesControllerTests
             Assert.That(types["group"].IsApplied, Is.False);
             Assert.That(types["group"].AppliedAt, Is.Null);
         }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_AppliedChangeInformedByAComparablePreview_ReportsPredictedBesideActualAsync()
+    {
+        var saveId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var previewId = Guid.NewGuid();
+        var summary = new ConfigurationChangeSynchronisationSummary
+        {
+            Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+            Reason = "HR Inbound: Scope changed", RequestedAt = DateTime.UtcNow.AddHours(-1), SyncRuleId = 11,
+            ConfigurationChangeActivityId = saveId, ClaimedByActivityId = runId, AppliedAt = DateTime.UtcNow.AddMinutes(-3)
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(saveId)).ReturnsAsync(new Activity
+        {
+            Id = saveId, TargetType = ActivityTargetType.SynchronisationRule, Status = ActivityStatus.Complete, PreviewActivityId = previewId
+        });
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(previewId)).ReturnsAsync(new Activity { Id = previewId, SyncRuleId = 11 });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(saveId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync([summary]);
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(runId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync([summary]);
+        var previews = new Mock<IConfigurationChangePreviewRepository>();
+        previews.Setup(r => r.GetPreviewAsync(previewId)).ReturnsAsync(new ConfigurationChangePreview
+        {
+            Surface = ConfigurationChangePreviewSurface.SynchronisationRuleScope,
+            ValidationStatus = ConfigurationChangePreviewStageStatus.Complete,
+            ImpactCountsStatus = ConfigurationChangePreviewStageStatus.Complete,
+            SummaryStatus = ConfigurationChangePreviewStageStatus.Complete,
+            DeltasStatus = ConfigurationChangePreviewStageStatus.Complete,
+            ImpactCounts = System.Text.Json.JsonSerializer.Serialize(new[]
+            {
+                new PreviewImpactCount(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, 40, 3)
+            })
+        });
+        _mockRepository.Setup(r => r.ConfigurationChangePreviews).Returns(previews.Object);
+        _mockActivityRepo.Setup(r => r.GetSyncOutcomeCountsForObjectTypeAsync(runId, 7, It.IsAny<IReadOnlyCollection<ActivityRunProfileExecutionItemSyncOutcomeType>>()))
+            .ReturnsAsync(new Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int> { [ActivityRunProfileExecutionItemSyncOutcomeType.Projected] = 38 });
+
+        var detail = (await _controller.GetActivityAsync(saveId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        var comparison = detail!.ConfigurationChangeSynchronisations.Single().PredictionComparison;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(comparison!.PreviewActivityId, Is.EqualTo(previewId));
+            var line = comparison.Lines.Single();
+            Assert.That(line.Outcome, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.Projected));
+            Assert.That(line.Predicted, Is.EqualTo(40));
+            Assert.That(line.Actual, Is.EqualTo(38));
+        }
+    }
+
+    [Test]
+    public async Task GetActivityAsync_AppliedChangeWithNoPreview_ReportsNoComparisonAsync()
+    {
+        var saveId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(saveId)).ReturnsAsync(new Activity
+        {
+            Id = saveId, TargetType = ActivityTargetType.SynchronisationRule, Status = ActivityStatus.Complete
+        });
+        _mockConnectedSystemRepo.Setup(r => r.GetConfigurationChangeSynchronisationSummariesForActivityAsync(saveId, ObjectTypeAwaitingSynchronisation.MaxChangesListed))
+            .ReturnsAsync(
+            [
+                new ConfigurationChangeSynchronisationSummary
+                {
+                    Id = 1, ConnectedSystemId = 3, ConnectedSystemName = "HR", ConnectedSystemObjectTypeId = 7, ObjectTypeName = "user",
+                    Reason = "x", RequestedAt = DateTime.UtcNow.AddHours(-1), ConfigurationChangeActivityId = saveId,
+                    ClaimedByActivityId = Guid.NewGuid(), AppliedAt = DateTime.UtcNow
+                }
+            ]);
+
+        var detail = (await _controller.GetActivityAsync(saveId) as OkObjectResult)?.Value as ActivityDetailDto;
+
+        Assert.That(detail!.ConfigurationChangeSynchronisations.Single().PredictionComparison, Is.Null);
     }
 
     [Test]

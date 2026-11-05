@@ -32,6 +32,22 @@
                             @($"a synchronisation{appliedSuffix}")
                         }
                     </span>
+                    @if (group.PredictionComparison is { } comparison)
+                    {
+                        @* Present only where the preview and the run count the same thing for the same objects (#2618), so
+                           a number here is never a different measure from the one beside it. *@
+                        <div class="mt-1 ml-4" data-testid="jim-change-application-prediction">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                What the preview predicted, and what the synchronisation did. The actual count includes objects of this type that changed for other reasons since the preview.
+                            </MudText>
+                            @foreach (var line in comparison.Lines)
+                            {
+                                <MudText Typo="Typo.body2" @key="line.Outcome" data-testid="jim-change-application-prediction-line">
+                                    @Helpers.GetOutcomeTypePlainName(line.Outcome): predicted @line.Predicted.ToString("N0"), actual @line.Actual.ToString("N0")
+                                </MudText>
+                            }
+                        </div>
+                    }
                 }
                 else
                 {

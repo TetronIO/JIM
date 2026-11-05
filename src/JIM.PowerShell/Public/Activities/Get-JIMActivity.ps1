@@ -90,6 +90,14 @@ function Get-JIMActivity {
         changes saved before it started, with the ObjectCount processed and whether it applied them. It is empty
         for every other Activity.
 
+        A configuration change Activity's entry also has PredictionComparison once a synchronisation has applied
+        the change, and only then: what the Configuration Change Preview that informed the save predicted, beside
+        what the synchronisation did. It has the PreviewActivityId and Lines, each with an Outcome, the Predicted
+        count and the Actual count. It is $null unless that synchronisation applied exactly one change to the
+        Object Type, the preview was current, complete and of the saved Synchronisation Rule, and the preview
+        counts the outcome the way a run records it (today the scoping preview's Projected and Joined). The Actual
+        count includes objects of the type that changed for other reasons since the preview.
+
     .EXAMPLE
         Get-JIMActivity
 

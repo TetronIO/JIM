@@ -66,6 +66,13 @@ public class ActivityObjectTypeSynchronisation
         : null;
 
     /// <summary>
+    /// For a configuration change Activity whose single change a synchronisation has applied: what the preview that informed
+    /// the save predicted, beside what that synchronisation did to the objects of this type (#2618). Null whenever the two
+    /// would not measure the same thing; the Activity then says only which run applied the change.
+    /// </summary>
+    public ConfigurationChangePredictionComparison? PredictionComparison { get; init; }
+
+    /// <summary>
     /// Where the changes a synchronisation run claimed stand, given how the run ended. A run applies the changes it claimed
     /// as it completes, whether or not individual objects had errors, and a run that failed or was cancelled applies none
     /// of them and leaves its claim for the next run to take over.
