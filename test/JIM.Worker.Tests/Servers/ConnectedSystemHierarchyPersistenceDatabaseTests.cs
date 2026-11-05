@@ -860,6 +860,107 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// A selected Container, with a selected Container beneath it, moved into a Partition this same refresh discovers is
+    /// kept: the one row each, re-homed, still selected, its Container Scope intact, and its Partition selected so the
+    /// selection still means something (#2769).
+    /// </summary>
+    /// <remarks>
+    /// The Partition's directory moved: Glitterband has gone and Riverside has appeared, holding Staff and Contractors.
+    /// A new Partition's Containers used to be built fresh from what the directory reported and never matched against
+    /// the Containers JIM held, so Staff and Contractors were deleted with Glitterband and came back as new, unselected
+    /// copies with the default Container Scope, taking their objects out of import scope.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_ContainerMovedIntoANewlyDiscoveredPartition_KeepsItAndWhatIsBeneathItAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await SetContainerScopeAsync("Staff", ConnectedSystemContainerScope.OneLevel);
+        await AddChildContainerAsync("Staff", "ou=Contractors,ou=Staff,dc=glitterband,dc=local", "Contractors", ContractorsStableId, selected: true);
+        var (staffId, contractorsId) = (await ContainerIdAsync("Staff"), await ContainerIdAsync("Contractors"));
+
+        var staff = new ConnectorContainer("ou=Staff,dc=riverside,dc=local", "Staff") { StableId = StaffStableId };
+        staff.ChildContainers.Add(new ConnectorContainer("ou=Contractors,ou=Staff,dc=riverside,dc=local", "Contractors") { StableId = ContractorsStableId });
+        var riverside = new ConnectorPartition { Id = "dc=riverside,dc=local", Name = "dc=riverside,dc=local", Containers = [staff] };
+        var connector = new StubPartitionsConnector([YellowstoneAsDiscovered(includeGroups: true), riverside]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+
+        await using var verify = NewContext();
+        var riversidePartition = await verify.ConnectedSystemPartitions.SingleAsync(p => p.ExternalId == "dc=riverside,dc=local");
+        var staffRows = await verify.ConnectedSystemContainers.Where(c => c.Name == "Staff").ToListAsync();
+        var contractorsRows = await verify.ConnectedSystemContainers.Where(c => c.Name == "Contractors").ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.AddedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=riverside,dc=local" }), "precondition");
+            Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+            Assert.That(result.MovedContainers.Select(c => (c.Name, c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ("Staff", (string?)"dc=glitterband,dc=local", (string?)"dc=riverside,dc=local") }),
+                "the move is reported, naming its Partitions; Contractors followed its parent and did not move of its own accord");
+            Assert.That(result.AddedContainers, Is.Empty, "neither is added afresh");
+            Assert.That(result.RemovedContainers, Is.Empty, "nor removed");
+
+            Assert.That(staffRows.Select(c => c.Id), Is.EqualTo(new[] { staffId }), "one Staff row, the one JIM already held");
+            Assert.That(contractorsRows.Select(c => c.Id), Is.EqualTo(new[] { contractorsId }), "one Contractors row, likewise");
+            Assert.That(staffRows.Select(c => (c.PartitionId, c.ParentContainerId, c.Selected, c.Scope)),
+                Is.EqualTo(new[] { ((int?)riversidePartition.Id, (int?)null, true, ConnectedSystemContainerScope.OneLevel) }),
+                "Staff sits at the top of the new Partition, still selected, its Container Scope intact");
+            Assert.That(contractorsRows.Select(c => (c.PartitionId, c.ParentContainerId, c.Selected, c.ExternalId)),
+                Is.EqualTo(new[] { ((int?)null, (int?)staffId, true, "ou=Contractors,ou=Staff,dc=riverside,dc=local") }),
+                "Contractors is still beneath Staff and still selected");
+            Assert.That(riversidePartition.Selected, Is.True,
+                "a Container cannot be in scope while its Partition is not, so the Partition receiving a selected Container is selected");
+            Assert.That(result.PartitionsSelectedForMovedContainers.Select(p => (p.ExternalId, string.Join("|", p.ContainerExternalIds))),
+                Is.EqualTo(new[] { ("dc=riverside,dc=local", "ou=Staff,dc=riverside,dc=local") }),
+                "and the refresh reports that it selected it, naming the Container that moved in");
+        }
+    }
+
+    /// <summary>
+    /// A selected Container moved beneath a Container this same refresh discovers is kept: the one row, beneath its new
+    /// parent, still selected, its Container Scope intact; and the new parent is added, unselected (#2769).
+    /// </summary>
+    /// <remarks>
+    /// A new Container's subtree used to be built fresh from what the directory reported and never matched, so Admins
+    /// was deleted from beneath Groups and came back beneath Tier 0 as a new, unselected copy.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_ContainerMovedBeneathANewlyDiscoveredContainer_KeepsItAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await SetContainerScopeAsync("Admins", ConnectedSystemContainerScope.OneLevel);
+        var adminsId = await ContainerIdAsync("Admins");
+
+        // Tier 0 is new beneath People, and Admins has moved into it from beneath Groups.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Single(c => c.Name == "Groups").ChildContainers.Clear();
+        var tier0 = new ConnectorContainer("ou=Tier 0,ou=People,dc=yellowstone,dc=local", "Tier 0");
+        tier0.ChildContainers.Add(new ConnectorContainer("ou=Admins,ou=Tier 0,ou=People,dc=yellowstone,dc=local", "Admins") { StableId = AdminsStableId });
+        yellowstone.Containers.Single(c => c.Name == "People").ChildContainers.Add(tier0);
+        var connector = new StubPartitionsConnector([yellowstone, GlitterbandAsDiscovered()]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+
+        await using var verify = NewContext();
+        var tier0Row = await verify.ConnectedSystemContainers.SingleOrDefaultAsync(c => c.Name == "Tier 0");
+        var adminsRows = await verify.ConnectedSystemContainers.Where(c => c.Name == "Admins").ToListAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers.Select(c => (c.Name, c.OldParentExternalId, c.NewParentExternalId, c.OldPartitionExternalId)),
+                Is.EqualTo(new[] { ("Admins", (string?)"ou=Groups,dc=yellowstone,dc=local", (string?)"ou=Tier 0,ou=People,dc=yellowstone,dc=local", (string?)null) }),
+                "the move is reported, from its old parent to its new one, within one Partition");
+            Assert.That(result.AddedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Tier 0" }), "only the new Container is added");
+            Assert.That(result.RemovedContainers, Is.Empty, "and nothing is removed");
+
+            Assert.That(tier0Row, Is.Not.Null, "the new Container is kept");
+            Assert.That(tier0Row?.Selected, Is.False, "and, matching nothing JIM held, arrives unselected");
+            Assert.That(adminsRows.Select(c => c.Id), Is.EqualTo(new[] { adminsId }), "one Admins row, the one JIM already held");
+            Assert.That(adminsRows.Select(c => (c.ParentContainerId, c.PartitionId, c.Selected, c.Scope)),
+                Is.EqualTo(new[] { (tier0Row?.Id, (int?)null, true, ConnectedSystemContainerScope.OneLevel) }),
+                "beneath its new parent, still selected, its Container Scope intact");
+        }
+    }
+
+    /// <summary>
     /// Asserts that Staff, seeded at the top of Glitterband, is kept at the top of Yellowstone with its selection and
     /// Container Scope, and that the refresh reported a move rather than a removal.
     /// </summary>
@@ -891,6 +992,23 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         await using var ctx = NewContext();
         await ctx.ConnectedSystemContainers.Where(c => c.Name == containerName)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Scope, scope));
+    }
+
+    private async Task<int> ContainerIdAsync(string containerName)
+    {
+        await using var ctx = NewContext();
+        return await ctx.ConnectedSystemContainers.Where(c => c.Name == containerName).Select(c => c.Id).SingleAsync();
+    }
+
+    private async Task AddChildContainerAsync(string parentName, string externalId, string name, string stableId, bool selected)
+    {
+        var parentId = await ContainerIdAsync(parentName);
+        await using var ctx = NewContext();
+        ctx.ConnectedSystemContainers.Add(new ConnectedSystemContainer
+        {
+            ParentContainerId = parentId, ExternalId = externalId, Name = name, StableId = stableId, Selected = selected
+        });
+        await ctx.SaveChangesAsync();
     }
 
     /// <summary>
@@ -1185,6 +1303,11 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     /// The directory's own identifier for Staff, which survives a move to another Partition.
     /// </summary>
     private const string StaffStableId = "staff-stable-id";
+
+    /// <summary>
+    /// The directory's own identifier for Contractors, a Container some tests add beneath Staff.
+    /// </summary>
+    private const string ContractorsStableId = "contractors-stable-id";
 
     /// <summary>
     /// Seeds a directory holding two selected partitions: Yellowstone, with People, and Groups holding Admins; and

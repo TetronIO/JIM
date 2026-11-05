@@ -81,6 +81,13 @@ public class HierarchyRefreshResultDto
     public List<HierarchyMoveItemDto> MovedContainers { get; set; } = new();
 
     /// <summary>
+    /// Partitions the refresh selected because a selected Container moved into them. A Container is only in scope while
+    /// its partition is selected, so without this the moved Container's selection would mean nothing. Empty when the
+    /// refresh selected no partition.
+    /// </summary>
+    public List<HierarchyPartitionSelectionItemDto> PartitionsSelectedForMovedContainers { get; set; } = new();
+
+    /// <summary>
     /// Whether the refresh was saved. Always true on a successful response: a refresh asked to cancel when Run Profiles
     /// target a partition it would remove answers 409 instead.
     /// </summary>
@@ -113,6 +120,7 @@ public class HierarchyRefreshResultDto
             RemovedContainers = result.RemovedContainers.Select(HierarchyChangeItemDto.FromModel).ToList(),
             RenamedContainers = result.RenamedContainers.Select(HierarchyRenameItemDto.FromModel).ToList(),
             MovedContainers = result.MovedContainers.Select(HierarchyMoveItemDto.FromModel).ToList(),
+            PartitionsSelectedForMovedContainers = result.PartitionsSelectedForMovedContainers.Select(HierarchyPartitionSelectionItemDto.FromModel).ToList(),
             Applied = result.Applied,
             AffectedRunProfiles = result.AffectedRunProfiles.Select(HierarchyRefreshRunProfileDto.FromModel).ToList()
         };
@@ -197,6 +205,38 @@ public class HierarchyRenameItemDto
             ItemType = item.ItemType.ToString()
         };
     }
+}
+
+/// <summary>
+/// A partition the refresh selected because a selected Container moved into it.
+/// </summary>
+public class HierarchyPartitionSelectionItemDto
+{
+    /// <summary>
+    /// The partition's external identifier (e.g., DN for LDAP).
+    /// </summary>
+    public string ExternalId { get; set; } = null!;
+
+    /// <summary>
+    /// The partition's human-readable name.
+    /// </summary>
+    public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// The external IDs of the containers whose move into the partition caused it to be selected: each is selected, or
+    /// holds a selected Container.
+    /// </summary>
+    public List<string> ContainerExternalIds { get; set; } = new();
+
+    /// <summary>
+    /// Creates an API DTO from the domain model.
+    /// </summary>
+    public static HierarchyPartitionSelectionItemDto FromModel(HierarchyPartitionSelectionItem item) => new()
+    {
+        ExternalId = item.ExternalId,
+        Name = item.Name,
+        ContainerExternalIds = item.ContainerExternalIds.ToList()
+    };
 }
 
 /// <summary>

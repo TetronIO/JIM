@@ -64,4 +64,32 @@ public class HierarchyRefreshResultDtoTests
             Assert.That(moved.NewPartitionExternalId, Is.Null);
         }
     }
+
+    [Test]
+    public void FromModel_PartitionSelectedForAMovedContainer_CarriesThePartitionAndItsContainers()
+    {
+        var model = new HierarchyRefreshResult
+        {
+            Success = true,
+            PartitionsSelectedForMovedContainers =
+            [
+                new HierarchyPartitionSelectionItem
+                {
+                    ExternalId = "DC=initech,DC=local", Name = "initech.local",
+                    ContainerExternalIds = ["OU=Corp,DC=initech,DC=local", "OU=Sales,DC=initech,DC=local"]
+                }
+            ]
+        };
+
+        var dto = HierarchyRefreshResultDto.FromModel(model);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.HasChanges, Is.True, "selecting a partition is a change");
+            Assert.That(dto.PartitionsSelectedForMovedContainers.Select(p => (p.ExternalId, p.Name)),
+                Is.EqualTo(new[] { ("DC=initech,DC=local", "initech.local") }));
+            Assert.That(dto.PartitionsSelectedForMovedContainers.SelectMany(p => p.ContainerExternalIds),
+                Is.EqualTo(new[] { "OU=Corp,DC=initech,DC=local", "OU=Sales,DC=initech,DC=local" }));
+        }
+    }
 }

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
 - 🔄 OpenLDAP: keep the accesslog's purge age (`olcAccessLogPurge`) longer than twice the longest gap between Delta Imports, not once. A Delta Import now takes its watermark from its own partitions' latest write, which can already be almost a gap old. (#2712)
 - 🔄 Each LDAP partition now keeps its own Delta Import watermark. After upgrading, the first Delta Import to read each partition reads every object in it once, which also picks up any change a partition-targeted import skipped. (#2715)
+- 🔄 A hierarchy refresh selects a partition that a selected Container moves into, since a Container is only in scope while its partition is selected, and lists each partition it selected, with the Containers that moved in, in the portal, the REST API and PowerShell. (#2769)
 
 ### Fixed
 
@@ -48,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A hierarchy refresh that fails while saving now finishes its Activity as failed with the reason, instead of leaving it in progress for ever, and reports the save's own error rather than one raised while recording it. (#2742)
 - 🐛 Refreshing a Connected System's hierarchy now removes the partitions and Containers it no longer holds, with the Containers beneath them, where it reported them removed but kept them; the **Scope** tab's Refresh now asks before discarding unsaved selections. (#2743)
 - 🐛 A hierarchy refresh that removes a partition a Run Profile targets no longer silently widens that Run Profile to every selected partition: you choose to disable those Run Profiles, or cancel the refresh. (#2740)
-- 🐛 A Container moved from the top of one partition to the top of another is now kept by a hierarchy refresh, with its selection and scope, and reported as moved, naming both partitions, in the portal, the REST API and PowerShell, instead of disappearing from JIM. (#2763)
+- 🐛 A hierarchy refresh keeps a Container moved to another partition, even a new one, or beneath a new Container, with its selection and scope, and reports the move, naming both partitions; it no longer vanishes or returns unselected. (#2763, #2769)
 
 ### Security
 
