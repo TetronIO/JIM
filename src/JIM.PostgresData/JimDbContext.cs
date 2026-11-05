@@ -1621,6 +1621,19 @@ public class JimDbContext : DbContext
             .HasForeignKey(c => c.ParentContainerId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // A Partition owns the Containers discovered in it (#2744). Only a top-level Container carries PartitionId; the
+        // ones beneath it carry only their parent, so the cascade above is what takes the rest of each branch. Left to
+        // convention this was NO ACTION: a Partition deleted by a single statement was refused with 23503, and one
+        // deleted through EF Core with its Containers loaded had their Partition cleared instead, leaving them behind
+        // belonging to nothing. The hierarchy refresh deletes the Containers it removes explicitly (#2753), so it does
+        // not depend on this; this is what makes every other delete of a Partition complete. Nothing else references a
+        // Container, and PostgreSQL has no objection to a nested Container being reachable by two cascade paths.
+        modelBuilder.Entity<ConnectedSystemPartition>()
+            .HasMany(p => p.Containers)
+            .WithOne(c => c.Partition)
+            .HasForeignKey(c => c.PartitionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // A Synchronisation Rule owns its Attribute Flow mappings, and a mapping owns the sources it reads from.
         // Exactly the Predefined Search chain above, and it was wrong the same way: deleting a rule nulled these
         // rather than removing them, so every mapping and source of every deleted rule stayed behind belonging to

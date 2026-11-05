@@ -723,6 +723,98 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// A Container moved out of a Partition the directory no longer holds, to beneath a Container in one it still
+    /// does, is kept in its new home while the Partition it left is removed (#2744).
+    /// </summary>
+    /// <remarks>
+    /// Guards the cascade from a Partition to its Containers. Deleting a Partition now takes every Container still in
+    /// it, so the Container moved out of it must no longer count as in it by the time the Partition is deleted; before
+    /// the cascade, getting this wrong would only have cleared its Partition, and now it would delete it.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_ContainerMovedOutOfAPartitionNoLongerInTheDirectory_KeepsTheMovedContainerAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+
+        // Glitterband has gone, and Staff now sits beneath People in Yellowstone.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Single(c => c.Name == "People").ChildContainers
+            .Add(new ConnectorContainer("ou=Staff,ou=People,dc=yellowstone,dc=local", "Staff") { StableId = StaffStableId });
+        var connector = new StubPartitionsConnector([yellowstone]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Staff" }), "precondition");
+        }
+
+        await using var verify = NewContext();
+        var people = await verify.ConnectedSystemContainers.SingleAsync(c => c.Name == "People");
+        var staff = await verify.ConnectedSystemContainers.SingleOrDefaultAsync(c => c.Name == "Staff");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(), Is.EqualTo(new[] { "dc=yellowstone,dc=local" }),
+                "the Partition the directory no longer holds is removed");
+            Assert.That(staff, Is.Not.Null, "the Container moved out of the removed Partition must not go with it");
+            Assert.That(staff?.ParentContainerId, Is.EqualTo(people.Id), "it sits under its new parent");
+            Assert.That(staff?.Selected, Is.True, "and keeps its selection");
+        }
+    }
+
+    /// <summary>
+    /// Deleting a Partition with a single statement, outside the hierarchy refresh, removes every Container in it,
+    /// nested ones included (#2744).
+    /// </summary>
+    /// <remarks>
+    /// The refresh deletes the Containers it removes explicitly, so it never relied on the database for this. Any other
+    /// delete does: with no delete rule on a Container's Partition, PostgreSQL refused this statement with 23503 for a
+    /// Partition holding Containers. Only top-level Containers carry the Partition; Admins, beneath Groups, goes by the
+    /// cascade from its parent Container.
+    /// </remarks>
+    [Test]
+    public async Task DeletePartition_BySingleStatement_RemovesItsContainersAndTheirDescendantsAsync()
+    {
+        await SeedTwoPartitionDirectoryAsync();
+
+        await using (var ctx = NewContext())
+            await ctx.ConnectedSystemPartitions.Where(p => p.ExternalId == "dc=yellowstone,dc=local").ExecuteDeleteAsync();
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EqualTo(new[] { "Staff" }),
+            "People, Groups and Admins go with Yellowstone; Glitterband's Staff stays");
+    }
+
+    /// <summary>
+    /// Deleting a Partition through EF Core, with its top-level Containers loaded, removes every Container in it, nested
+    /// ones included, rather than leaving them behind in no Partition (#2744).
+    /// </summary>
+    /// <remarks>
+    /// The other face of the same missing delete rule. Left to convention, EF Core cleared the loaded Containers'
+    /// Partition on the client and saved that, so the delete succeeded and People, Groups and Admins stayed behind,
+    /// belonging to nothing. Admins is deliberately not loaded: the database has to remove it.
+    /// </remarks>
+    [Test]
+    public async Task DeletePartition_ThroughEfCoreWithItsContainersLoaded_RemovesThemAndTheirDescendantsAsync()
+    {
+        await SeedTwoPartitionDirectoryAsync();
+
+        await using (var ctx = NewContext())
+        {
+            var yellowstone = await ctx.ConnectedSystemPartitions.AsTracking()
+                .Include(p => p.Containers)
+                .SingleAsync(p => p.ExternalId == "dc=yellowstone,dc=local");
+            Assert.That(yellowstone.Containers!.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups" }), "precondition");
+
+            await new PostgresDataRepository(ctx).ConnectedSystems.DeleteConnectedSystemPartitionAsync(yellowstone);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(), Is.EqualTo(new[] { "Staff" }),
+            "People, Groups and Admins go with Yellowstone; Glitterband's Staff stays");
+    }
+
+    /// <summary>
     /// A refresh whose save fails finishes its Activity as a failure carrying the reason, and the save's own
     /// exception reaches the caller (#2742).
     /// </summary>
@@ -959,6 +1051,11 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     private const string AdminsStableId = "admins-stable-id";
 
     /// <summary>
+    /// The directory's own identifier for Staff, which survives a move to another Partition.
+    /// </summary>
+    private const string StaffStableId = "staff-stable-id";
+
+    /// <summary>
     /// Seeds a directory holding two selected partitions: Yellowstone, with People, and Groups holding Admins; and
     /// Glitterband, with Staff. Returns the Connected System's id and the id of a security principal to attribute a
     /// refresh to.
@@ -1002,7 +1099,7 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         };
         glitterband.Containers.Add(new ConnectedSystemContainer
         {
-            Partition = glitterband, ExternalId = "ou=Staff,dc=glitterband,dc=local", Name = "Staff", Selected = true
+            Partition = glitterband, ExternalId = "ou=Staff,dc=glitterband,dc=local", Name = "Staff", StableId = StaffStableId, Selected = true
         });
 
         // A hierarchy refresh is a configuration change, recorded against a security principal or not at all.

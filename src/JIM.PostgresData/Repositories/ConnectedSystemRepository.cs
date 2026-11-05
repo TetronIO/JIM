@@ -513,10 +513,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // without its Connected System, but only clears a removed Container's link to its Partition or parent, since
         // either link is optional: the row stays behind, belonging to nothing (#2743).
         //
-        // Containers before Partitions, so a removed Partition's own Containers are already deleted, rather than
-        // having their Partition cleared, when the Partition's deletion cascades through the tracker. No Run Profile
-        // still targets a removed Partition by now: the refresh has disabled each one and cleared its Partition, or
-        // saved nothing at all (#2740), so the cascade never quietly widens one.
+        // A removed Partition's own Containers would also go with it by cascade (#2744); they are stated here too, so
+        // that what this method deletes never depends on what the tracker happens to have loaded. No Run Profile still
+        // targets a removed Partition by now: the refresh has disabled each one and cleared its Partition, or saved
+        // nothing at all (#2740), so the tracker never quietly widens one.
         foreach (var container in removedContainers)
             Repository.Database.Entry(container).State = EntityState.Deleted;
 

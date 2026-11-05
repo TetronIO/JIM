@@ -6586,7 +6586,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasOne("JIM.Models.Staging.ConnectedSystemPartition", "Partition")
                         .WithMany("Containers")
-                        .HasForeignKey("PartitionId");
+                        .HasForeignKey("PartitionId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("ConnectedSystem");
 
