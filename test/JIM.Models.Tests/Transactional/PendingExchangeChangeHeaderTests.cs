@@ -44,4 +44,28 @@ public class PendingExchangeChangeHeaderTests
             Assert.That(header.CanRetry, Is.EqualTo(row.CanRetry), "the list offers Retry exactly where the row would act on it");
         }
     }
+
+    [TestCase(PendingExchangeChangeStatus.Pending, false, ExchangeChangeState.Held, false)]
+    [TestCase(PendingExchangeChangeStatus.Pending, true, ExchangeChangeState.Held, false)]
+    [TestCase(PendingExchangeChangeStatus.Parked, true, ExchangeChangeState.Parked, true)]
+    public void CanRetry_SystemNotManagingExchangeRecipients_OnlyAParkedChangeOffersIt(PendingExchangeChangeStatus status, bool attempted,
+        ExchangeChangeState expected, bool canRetry)
+    {
+        // A held change waits on the switch, and a retry would only wipe its retry clock; a parked one waits on a person.
+        var header = new PendingExchangeChangeHeader
+        {
+            Status = status,
+            LastAttemptedAt = attempted ? At : null,
+            ChangeActivityStatus = ActivityStatus.Complete,
+            ConnectedSystemManagesExchangeRecipients = false
+        };
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(header.State, Is.EqualTo(expected));
+            Assert.That(header.CanRetry, Is.EqualTo(canRetry));
+            Assert.That(PendingExchangeChange.IsRetryable(status, attempted ? At : null, held: true), Is.EqualTo(canRetry),
+                "the rule the retry statements apply");
+        }
+    }
 }

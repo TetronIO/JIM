@@ -43,7 +43,8 @@
             }
             @if (_summary.HeldCount > 0)
             {
-                <MudTooltip Arrow="true" Placement="Placement.Top">
+                @* Inline="false": on its own line under the count, as the Refused tile's note is *@
+                <MudTooltip Arrow="true" Placement="Placement.Top" Inline="false">
                     <TooltipContent>
                         <TooltipText Text="These Connected Systems do not manage Exchange recipients now, so their changes wait unattempted. They are delivered once each manages Exchange recipients again." />
                     </TooltipContent>

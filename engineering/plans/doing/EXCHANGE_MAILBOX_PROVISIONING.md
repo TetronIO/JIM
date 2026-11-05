@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete; Phase 2's settings check (2a) and the Connector's delivery (2b) done against the stand-in, the delivery hold and the lab run next)
+- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete; Phase 2's settings check (2a), the Connector's delivery and the delivery hold (2b) done against the stand-in, quiet session close and the lab run next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -154,7 +154,7 @@ In two pull requests. **2a (done):** the settings, D5's warnings on every surfac
 save-time check (`IConnectorSettingsCheck`, a new capability the server runs once the quick validation has refused
 nothing) with its facts, and the stand-in Exchange endpoint in the harness, a restricted no-language session whose
 commands an RBAC-limited account cannot see, against which the whole check runs in CI. **2b:** the Connector's
-session and convergence (done), then the delivery hold, quiet session close and the lab run.
+session and convergence (done), the delivery hold (done), then quiet session close and the lab run.
 
 - **Settings:** add Exchange server (text, with the Discover action from D6) under the Exchange heading, shown only while Manage Exchange recipients is ticked (`RequiredWhenSetting`). The heading and the checkbox, and their refusal on a directory that is not Active Directory, came with Phase 3.
 - **Refusals on save:**
@@ -183,7 +183,12 @@ session and convergence (done), then the delivery hold, quiet session close and 
     | `ADServerUnavailableException`, `ADTransientException` | Unreachable |
     | Any other command failure | Refused, in Exchange's own words |
 
-  - **Manage Exchange recipients off.** `IsManagingExchangeRecipients` lets the lane give such a system's changes back unattempted instead of failing them. The proper hold (a typed column the due query reads, a Held state on every surface, a save warning, and a portal confirmation before switching off; decided 2026-11-05) is the next pull request.
+  - **Manage Exchange recipients off.** `IsManagingExchangeRecipients` lets the lane give such a system's changes back unattempted instead of failing them. That is the backstop; the hold (decided 2026-11-05) is what keeps the lane from claiming them at all:
+    - **A typed column.** `ConnectedSystem.ManagesExchangeRecipients` is written on every settings save from the Connector's `IsManagingExchangeRecipients`, so the core never names an LDAP setting. Its migration backfills it from the setting.
+    - **The lane holds without claiming.** The due list, the outlook, the claim statement and the queue summary leave a system that does not manage Exchange recipients out. Turning the switch back on lets its changes be claimed at their next due time; a held change keeps its retry clock.
+    - **A Held state** (`ExchangeChangeState.Held`): a Pending change on such a system reads Held on the Operations tab (counted under Queued as "N more held", with its own filter), on the follow-ups, over REST and through `Get-JIMPendingExchangeChange -State Held`. It offers no Retry, and a retry that names it leaves it alone, since resetting its clock while nothing can be attempted helps no one. A Parked change on such a system can still be retried, and then waits, held.
+    - **Saying so.** Saving with the switch off while changes wait returns a warning naming how many are held (portal, REST, `Set-JIMConnectedSystem`). The portal also confirms before a save turns the switch off, naming the schema-refresh trap: a refresh while it is off reports the Exchange attributes as removed, and only plain Apply keeps them. REST and PowerShell get the warning, not a gate: a confirmation is a portal affordance and their callers are scripts.
+    - **Runtime check.** On the sandbox stack, switching off showed the confirmation and then the warning; the Operations tab and PowerShell read five changes as Held with no Retry; a retry naming the held change affected nothing; switched back on, the change read Retrying, took a retry and was claimed by the lane within seconds.
   - **Harness.** The stand-in Exchange keeps its recipients in a file every shell shares, so the Connector's harness tests enable, update, re-run (nothing changes) and fail (not found, hidden command, missing database, type change, wrong password, unreachable) against it end to end. A runtime check on the sandbox stack delivered a queued change through the real lane: one Kerberos login, four commands, and the change's Activity history read refused, retried, set.
 
 ### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25) ✅

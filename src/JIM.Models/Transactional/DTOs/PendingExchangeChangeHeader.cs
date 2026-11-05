@@ -76,7 +76,8 @@ public class PendingExchangeChangeHeader
 
     /// <summary>
     /// Whether an administrator can retry it: it is parked, or retrying after an attempt. A change not yet attempted is
-    /// already due, one being delivered is getting its attempt, and a refused one waits on its declared state changing.
+    /// already due, one being delivered is getting its attempt, a refused one waits on its declared state changing, and a
+    /// held one waits on its Connected System managing Exchange recipients again.
     /// </summary>
-    public bool CanRetry => PendingExchangeChange.IsRetryable(Status, LastAttemptedAt);
+    public bool CanRetry => PendingExchangeChange.IsRetryable(Status, LastAttemptedAt, held: !ConnectedSystemManagesExchangeRecipients);
 }

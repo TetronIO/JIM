@@ -112,7 +112,8 @@ public class PendingExchangeChangeResponse
 
     /// <summary>
     /// Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due,
-    /// one being delivered is getting its attempt, and a refused one waits on its declared state changing.
+    /// one being delivered is getting its attempt, a refused one waits on its declared state changing, and a held one
+    /// waits on its Connected System managing Exchange recipients again.
     /// </summary>
     public bool CanRetry { get; set; }
 

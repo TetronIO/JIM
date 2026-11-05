@@ -634,7 +634,7 @@ public partial class SyncRepository
         // Chosen by the list's own query and filter, so an action on "the changes shown" acts on exactly those (#2725).
         var candidates = await ApplyExchangeChangeFilter(ExchangeChangeHeaders(), filter)
             .Where(h => h.Status == PendingExchangeChangeStatus.Parked
-                        || (h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null))
+                        || (h.Status == PendingExchangeChangeStatus.Pending && h.LastAttemptedAt != null && h.ConnectedSystemManagesExchangeRecipients))
             .Select(h => new { h.Id, h.ConnectedSystemName })
             .ToListAsync();
         if (candidates.Count == 0)
@@ -642,7 +642,8 @@ public partial class SyncRepository
         var systemNames = candidates.ToDictionary(c => c.Id, c => c.ConnectedSystemName);
 
         // The reset rechecks each row is still retryable as it writes it, so a change a deliverer claimed after the list
-        // was read is left to that deliverer. The columns cleared here MUST stay in step with PendingExchangeChange.Retry(),
+        // was read is left to that deliverer, and one whose system stopped managing Exchange recipients meanwhile stays
+        // held with its retry clock (PendingExchangeChange.IsRetryable). The columns cleared here MUST stay in step with PendingExchangeChange.Retry(),
         // which is the same transition in memory. Deliberately hand-written rather than driven from the bulk-columns
         // constant: it resets a fixed set of attempt and claim columns, and a future column must not be swept into it.
         // The update fires jim_exchange_change, which wakes the delivery lane.
@@ -652,7 +653,9 @@ public partial class SyncRepository
                 "NextRetryAt" = NULL, "FailureKind" = NULL, "FailureMessage" = NULL, "ClaimedAt" = NULL, "ClaimedBy" = NULL
             WHERE "Id" = ANY({0})
               AND ("Status" = {{(int)PendingExchangeChangeStatus.Parked}}
-                   OR ("Status" = {{(int)PendingExchangeChangeStatus.Pending}} AND "LastAttemptedAt" IS NOT NULL))
+                   OR ("Status" = {{(int)PendingExchangeChangeStatus.Pending}} AND "LastAttemptedAt" IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM "ConnectedSystems" s
+                                   WHERE s."Id" = "PendingExchangeChanges"."ConnectedSystemId" AND s."ManagesExchangeRecipients")))
             RETURNING *
             """;
 

@@ -258,6 +258,33 @@ public class ExchangeQueueDatabaseTests
     }
 
     [Test]
+    public async Task RetryExchangeChangesAsync_SystemsNotManagingExchangeRecipients_LeavesHeldChangesButRetriesParkedOnesAsync()
+    {
+        // A held change waits on the switch, not on a retry: resetting it would wipe its retry clock while nothing can be
+        // attempted. A parked one still takes the retry an administrator asks for once its cause is fixed, and then
+        // waits, held, like any other.
+        var s = await SeedAsync();
+        await using (var turnOff = NewContext())
+            await turnOff.Database.ExecuteSqlRawAsync("UPDATE \"ConnectedSystems\" SET \"ManagesExchangeRecipients\" = false");
+
+        await using (var act = NewContext())
+        {
+            var retried = await Repository(act).Sync.RetryExchangeChangesAsync(new PendingExchangeChangeFilter());
+
+            Assert.That(retried.Select(r => r.Id), Is.EquivalentTo(new[] { s.Parked }));
+        }
+
+        var rows = await RowsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows[s.Retrying].LastAttemptedAt, Is.Not.Null, "a held change keeps its attempt history");
+            Assert.That(rows[s.Retrying].NextRetryAt, Is.Not.Null);
+            Assert.That(rows[s.RetryingWithNoIdentity].LastAttemptedAt, Is.Not.Null);
+            Assert.That(rows[s.Parked].Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+        }
+    }
+
+    [Test]
     public async Task RetryExchangeChangesAsync_SearchText_RetriesExactlyTheRetryableChangesTheListShowsAsync()
     {
         var s = await SeedAsync();

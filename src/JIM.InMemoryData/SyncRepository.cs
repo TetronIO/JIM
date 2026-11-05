@@ -4132,7 +4132,7 @@ public class SyncRepository : ISyncRepository
         // Chosen through the list's own filter, as the PostgreSQL twin does, then retried through the row's own transition.
         var retrying = FilterExchangeChangeHeaders(filter)
             .Select(h => (h.ConnectedSystemName, Row: _pendingExchangeChanges[h.Id]))
-            .Where(x => x.Row.CanRetry)
+            .Where(x => PendingExchangeChange.IsRetryable(x.Row.Status, x.Row.LastAttemptedAt, held: !ManagesExchangeRecipients(x.Row.ConnectedSystemId)))
             .ToList();
         foreach (var (_, row) in retrying)
             row.Retry();

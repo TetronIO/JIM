@@ -93,6 +93,30 @@ public class ExchangeQueueRetryTests
     }
 
     [Test]
+    public async Task RetryAsync_HeldChange_IsLeftWithItsRetryClockAsync()
+    {
+        // Its Connected System stopped managing Exchange recipients after the failure: the change waits on the switch, so
+        // a retry would only wipe its history while nothing can be attempted.
+        var change = await SeedParkedAsync();
+        var stored = _syncRepository.PendingExchangeChanges[change.Id];
+        stored.Retry();
+        stored.Claim("worker-1:aaaa1111", At.AddMinutes(-10));
+        stored.RecordFailure(ExchangeChangeFailureKind.Unreachable, "The Exchange server did not answer.", At.AddMinutes(-10));
+        _syncRepository.SeedConnectedSystem(new ConnectedSystem { Id = 1, Name = "Panoply AD", ManagesExchangeRecipients = false });
+
+        var retried = await _server.RetryAsync(new PendingExchangeChangeFilter { Ids = [change.Id] }, null, new ApiKey { Id = Guid.NewGuid(), Name = "Automation" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(retried, Is.Zero);
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.LastAttemptedAt, Is.EqualTo(At.AddMinutes(-10)), "the held change keeps its attempt history");
+            Assert.That(stored.NextRetryAt, Is.Not.Null);
+            Assert.That(_created.Single().Message, Is.EqualTo("Nothing was retried: the change is no longer parked or retrying."));
+        }
+    }
+
+    [Test]
     public async Task RetryAsync_ChangeNoLongerRetryable_StillRecordsTheActionSayingNothingWasRetriedAsync()
     {
         // A named change that moved on before the click: the administrator must be able to see the retry ran and why it
