@@ -4,10 +4,12 @@
 @using JIM.Models.Logic
 @using JIM.Models.Search
 @using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
 @using JIM.Utilities
 @using JIM.Web.Models
 @using JIM.Web.Pages.Admin.Components
 @inject IExpressionEvaluator ExpressionEvaluator
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -44,20 +46,33 @@
     @foreach (var criteria in SyncRuleScopingCriteriaGroup.Criteria)
     {
         <div class="mt-5">
-            @if (criteria.IsExpression)
+            @if (criteria.IsConnection)
             {
-                <AttributeChip Kind="AttributeChipKind.Expression" Expression="@criteria.Expression"
-                               Tooltip="@($"Expression, compared as {criteria.CompareAs?.ToString().SplitOnCapitalLetters()}")" />
+                @* A connection criterion (#2021): whether the identity is joined to an object of the type, read as a sentence *@
+                var connectedType = criteria.ConnectedObjectType;
+                <MudChip T="string">@ConnectionOperatorLabel(criteria.ComparisonType)</MudChip>
+                <MudChip T="string" data-testid="jim-scoping-criterion-connection-type">@(connectedType?.Name ?? $"Object Type {criteria.ConnectedObjectTypeId}")</MudChip>
+                <span class="mx-1">in</span>
+                <ObjectChip Kind="ObjectChipKind.ConnectedSystem" Name="@connectedType?.ConnectedSystem?.Name"
+                            Href="@(connectedType != null ? $"/admin/connected-systems/{connectedType.ConnectedSystemId}" : null)" />
             }
             else
             {
-                <AttributeChip Kind="@(criteria.MetaverseAttribute != null ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
-                               Name="@criteria.GetAttributeName()" />
-            }
-            <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
-            @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
-            {
-                <MudChip T="string">@criteria.ToString()</MudChip>
+                @if (criteria.IsExpression)
+                {
+                    <AttributeChip Kind="AttributeChipKind.Expression" Expression="@criteria.Expression"
+                                   Tooltip="@($"Expression, compared as {criteria.CompareAs?.ToString().SplitOnCapitalLetters()}")" />
+                }
+                else
+                {
+                    <AttributeChip Kind="@(criteria.MetaverseAttribute != null ? AttributeChipKind.Metaverse : AttributeChipKind.ConnectedSystem)"
+                                   Name="@criteria.GetAttributeName()" />
+                }
+                <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
+                @if (SearchComparisonOperators.TakesValue(criteria.ComparisonType))
+                {
+                    <MudChip T="string">@criteria.ToString()</MudChip>
+                }
             }
             <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
                 <MudIconButton
@@ -118,11 +133,42 @@
         {
             <div class="d-flex align-center flex-wrap gap-3">
                 <MudText Typo="Typo.button" Class="mud-text-secondary">Compare</MudText>
-                <SegmentedToggle TValue="bool" Options="CompareOptions" Value="_compareExpression" ValueChanged="SetCompareExpression"
+                <SegmentedToggle TValue="CriterionKind" Options="CompareOptions" Value="_kind" ValueChanged="SetKindAsync"
                                  AriaLabel="Compare" TestId="jim-scoping-criterion-compare" />
             </div>
 
-            @if (_compareExpression)
+            @if (_kind == CriterionKind.Connection)
+            {
+                <MudSelect T="int?" Value="_connectionSystemId" ValueChanged="SetConnectionSystemAsync"
+                           Label="Connected System"
+                           Placeholder="Please select a Connected System"
+                           HelperText="The system whose objects the identity must, or must not, be joined to"
+                           Required="true"
+                           Class="mt-5"
+                           Variant="Variant.Outlined"
+                           data-testid="jim-scoping-criterion-connection-system"
+                           ToStringFunc="@(id => _connectedSystems.FirstOrDefault(cs => cs.Id == id)?.Name ?? string.Empty)">
+                    @foreach (var connectedSystem in _connectedSystems)
+                    {
+                        <MudSelectItem T="int?" Value="@connectedSystem.Id">@connectedSystem.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="int?" Value="_newSyncRuleScopingCriteria.ConnectedObjectTypeId" ValueChanged="SetConnectedObjectType"
+                           Label="Object Type"
+                           Placeholder="Please select an Object Type"
+                           Required="true"
+                           Disabled="@(_connectionSystemId == null)"
+                           Class="mt-5"
+                           Variant="Variant.Outlined"
+                           data-testid="jim-scoping-criterion-connection-type"
+                           ToStringFunc="@(id => _connectionObjectTypes.FirstOrDefault(t => t.Id == id)?.Name ?? string.Empty)">
+                    @foreach (var objectType in _connectionObjectTypes)
+                    {
+                        <MudSelectItem T="int?" Value="@objectType.Id">@objectType.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            else if (_kind == CriterionKind.Expression)
             {
                 <ExpressionEditor @ref="_expressionEditor" @bind-Value="_newSyncRuleScopingCriteria.Expression"
                                   Id="scoping-criterion-expression" Label="Expression" Required="true" Class="mt-5"
@@ -197,9 +243,17 @@
                     @bind-Value="NewScopingComparisonType"
                     Class="mt-5"
                     Variant="Variant.Outlined">
-            @foreach (var op in CriterionOperatorOptions.ForType(GetSelectedAttributeType() ?? AttributeDataType.NotSet, CriterionContext.Scoping))
+            @if (_kind == CriterionKind.Connection)
             {
-                <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
+                <MudSelectItem T="SearchComparisonType?" Value="@SearchComparisonType.HasValue">@ConnectionOperatorLabel(SearchComparisonType.HasValue)</MudSelectItem>
+                <MudSelectItem T="SearchComparisonType?" Value="@SearchComparisonType.HasNoValue">@ConnectionOperatorLabel(SearchComparisonType.HasNoValue)</MudSelectItem>
+            }
+            else
+            {
+                @foreach (var op in CriterionOperatorOptions.ForType(GetSelectedAttributeType() ?? AttributeDataType.NotSet, CriterionContext.Scoping))
+                {
+                    <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
+                }
             }
         </MudSelect>
 
@@ -242,16 +296,34 @@
     private bool _addCriteriaDialogVisible;
     private DialogOptions _dialogOptions = new() { FullWidth = true };
     private SyncRuleScopingCriteria? _newSyncRuleScopingCriteria;
-    private bool _compareExpression;
+    private CriterionKind _kind;
+    private List<ConnectedSystemHeader> _connectedSystems = [];
+    private List<ConnectedSystemObjectType> _connectionObjectTypes = [];
+    private int? _connectionSystemId;
+
+    /// <summary>What a criterion compares: an attribute's values, a computed value, or a connection (export rules only).</summary>
+    public enum CriterionKind { Attribute, Expression, Connection }
     private ExpressionEditor? _expressionEditor;
     private ScopingCriterionExpressionValidator? _expressionValidator;
 
-    private static readonly IReadOnlyList<SegmentedToggleOption<bool>> CompareOptions =
-    [
-        new(false, "Attribute", "jim-scoping-criterion-compare-attribute", Tooltip: "Compare the values an attribute holds"),
-        new(true, "Expression", "jim-scoping-criterion-compare-expression",
-            Tooltip: "Compare a value worked out from the object, for values the source stores in a different shape")
-    ];
+    private static readonly SegmentedToggleOption<CriterionKind> AttributeOption =
+        new(CriterionKind.Attribute, "Attribute", "jim-scoping-criterion-compare-attribute", Tooltip: "Compare the values an attribute holds");
+
+    private static readonly SegmentedToggleOption<CriterionKind> ExpressionOption =
+        new(CriterionKind.Expression, "Expression", "jim-scoping-criterion-compare-expression",
+            Tooltip: "Compare a value worked out from the object, for values the source stores in a different shape");
+
+    private static readonly SegmentedToggleOption<CriterionKind> ConnectionOption =
+        new(CriterionKind.Connection, "Connection", "jim-scoping-criterion-compare-connection",
+            Tooltip: "Test whether the identity is joined to an object of a type in a Connected System");
+
+    /// <summary>A connection is a Metaverse Object's, so only an export rule can test one.</summary>
+    private IReadOnlyList<SegmentedToggleOption<CriterionKind>> CompareOptions => Exporting
+        ? [AttributeOption, ExpressionOption, ConnectionOption]
+        : [AttributeOption, ExpressionOption];
+
+    private static string ConnectionOperatorLabel(SearchComparisonType comparisonType) =>
+        comparisonType == SearchComparisonType.HasNoValue ? "Has no" : "Has";
 
     private bool Exporting => SyncRule.Direction == SyncRuleDirection.Export;
 
@@ -289,7 +361,9 @@
     private void HandleShowAddCriteriaDialogButtonClick()
     {
         _newSyncRuleScopingCriteria = new SyncRuleScopingCriteria();
-        _compareExpression = false;
+        _kind = CriterionKind.Attribute;
+        _connectionSystemId = null;
+        _connectionObjectTypes = [];
         _addCriteriaDialogVisible = true;
     }
 
@@ -333,28 +407,89 @@
     }
 
     /// <summary>
-    /// Switches what the criterion compares. The other side's choice is dropped, so a criterion never carries both an
-    /// attribute and an expression, and an operator the new side's type does not offer is cleared.
+    /// Switches what the criterion compares. The other kinds' choices are dropped, so a criterion is only ever one kind,
+    /// and an operator the new kind does not offer is cleared.
     /// </summary>
-    private void SetCompareExpression(bool compareExpression)
+    private async Task SetKindAsync(CriterionKind kind)
     {
-        _compareExpression = compareExpression;
+        _kind = kind;
         if (_newSyncRuleScopingCriteria == null)
             return;
 
-        if (compareExpression)
-        {
-            _newSyncRuleScopingCriteria.MetaverseAttribute = null;
-            _newSyncRuleScopingCriteria.ConnectedSystemAttribute = null;
-            _newSyncRuleScopingCriteria.CompareAs ??= AttributeDataType.Text;
-        }
-        else
+        if (kind != CriterionKind.Expression)
         {
             _newSyncRuleScopingCriteria.Expression = null;
             _newSyncRuleScopingCriteria.CompareAs = null;
         }
+        if (kind != CriterionKind.Attribute)
+        {
+            _newSyncRuleScopingCriteria.MetaverseAttribute = null;
+            _newSyncRuleScopingCriteria.ConnectedSystemAttribute = null;
+        }
+        if (kind != CriterionKind.Connection)
+        {
+            _newSyncRuleScopingCriteria.ConnectedObjectType = null;
+            _newSyncRuleScopingCriteria.ConnectedObjectTypeId = null;
+            _connectionSystemId = null;
+            _connectionObjectTypes = [];
+        }
+
+        if (kind == CriterionKind.Expression)
+            _newSyncRuleScopingCriteria.CompareAs ??= AttributeDataType.Text;
+
+        if (kind == CriterionKind.Connection)
+        {
+            if (!SyncRuleScopingCriteria.IsConnectionOperator(_newSyncRuleScopingCriteria.ComparisonType))
+                _newSyncRuleScopingCriteria.ComparisonType = SearchComparisonType.NotSet;
+            if (_connectedSystems.Count == 0)
+            {
+                using var jim = JimFactory.Create();
+                _connectedSystems = (await jim.ConnectedSystems.GetConnectedSystemHeadersAsync()).OrderBy(cs => cs.Name).ToList();
+            }
+            return;
+        }
 
         HandleAttributeChanged();
+    }
+
+    /// <summary>Chooses the Connected System, loading its selected Object Types; the type chosen before is cleared.</summary>
+    private async Task SetConnectionSystemAsync(int? connectedSystemId)
+    {
+        _connectionSystemId = connectedSystemId;
+        _connectionObjectTypes = [];
+        if (_newSyncRuleScopingCriteria != null)
+        {
+            _newSyncRuleScopingCriteria.ConnectedObjectType = null;
+            _newSyncRuleScopingCriteria.ConnectedObjectTypeId = null;
+        }
+        if (connectedSystemId is not { } id)
+            return;
+
+        using var jim = JimFactory.Create();
+        _connectionObjectTypes = (await jim.ConnectedSystems.GetObjectTypesAsync(id))
+            .Where(t => t.Selected)
+            .OrderBy(t => t.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Names the Object Type; the navigation is kept so the criterion can be shown before it is saved, and the save
+    /// replaces it with the id.
+    /// </summary>
+    private void SetConnectedObjectType(int? objectTypeId)
+    {
+        if (_newSyncRuleScopingCriteria == null)
+            return;
+
+        var objectType = _connectionObjectTypes.FirstOrDefault(t => t.Id == objectTypeId);
+        if (objectType != null)
+            objectType.ConnectedSystem ??= new ConnectedSystem
+            {
+                Id = objectType.ConnectedSystemId,
+                Name = _connectedSystems.FirstOrDefault(cs => cs.Id == objectType.ConnectedSystemId)?.Name ?? string.Empty
+            };
+        _newSyncRuleScopingCriteria.ConnectedObjectType = objectType;
+        _newSyncRuleScopingCriteria.ConnectedObjectTypeId = objectType?.Id;
     }
 
     private void SetCompareAs(AttributeDataType compareAs)
@@ -388,7 +523,14 @@
         if (_newSyncRuleScopingCriteria == null)
             return true;
 
-        if (_compareExpression)
+        if (_kind == CriterionKind.Connection)
+        {
+            // A connection compares no value: an Object Type and Has or Has no are all it needs.
+            return _newSyncRuleScopingCriteria.ConnectedObjectTypeId == null ||
+                   !SyncRuleScopingCriteria.IsConnectionOperator(_newSyncRuleScopingCriteria.ComparisonType);
+        }
+
+        if (_kind == CriterionKind.Expression)
         {
             if (!_newSyncRuleScopingCriteria.IsExpression || ExpressionProblem() != null)
                 return true;
@@ -420,7 +562,10 @@
         if (_newSyncRuleScopingCriteria == null)
             return null;
 
-        if (_compareExpression)
+        if (_kind == CriterionKind.Connection)
+            return null;
+
+        if (_kind == CriterionKind.Expression)
             return _newSyncRuleScopingCriteria.CompareAs;
 
         if (SyncRule.Direction == SyncRuleDirection.Export)
