@@ -92,7 +92,7 @@ public class SynchronisationControllerDirectoryServersTests
         // A script needs the setting's id, not just its name, because Set-JIMConnectedSystem keys settings by id.
         var discovery = UseStubConnector();
         discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Preferred Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "server01.example.local", Site = "London" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult(null, [new ConnectorDirectoryServer { HostName = "server01.example.local", Site = "London" }]));
 
         var result = await _controller.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId);
 
@@ -113,7 +113,7 @@ public class SynchronisationControllerDirectoryServersTests
         // The second of the Connector's discoveries (#2021): asked for by the setting it fills.
         var discovery = UseStubConnector();
         discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Mail Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "mail01.example.local", Site = "London", Version = "Version 15.2 (Build 1544.4)" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult(null, [new ConnectorDirectoryServer { HostName = "mail01.example.local", Site = "London", Version = "Version 15.2 (Build 1544.4)" }]));
 
         var result = await _controller.GetConnectedSystemDirectoryServersAsync(ConnectedSystemId, setting: "Mail Server");
 

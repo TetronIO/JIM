@@ -22,11 +22,12 @@ public interface IConnectorDirectoryServers
     public IReadOnlyList<ConnectorDirectoryServerDiscovery> DirectoryServerDiscoveries { get; }
 
     /// <summary>
-    /// Discovers the servers for one of <see cref="DirectoryServerDiscoveries"/>.
+    /// Discovers the servers for one of <see cref="DirectoryServerDiscoveries"/>, and names the forest they were found in
+    /// where the Connector can tell.
     /// </summary>
     /// <param name="settings">The Connected System's settings, to connect with.</param>
     /// <param name="targetSettingName">The setting the servers are for: the discovery's <see cref="ConnectorDirectoryServerDiscovery.TargetSettingName"/>.</param>
     /// <param name="logger">Logger for diagnostics.</param>
     /// <exception cref="NotSupportedException">No discovery fills that setting, or the directory cannot answer it.</exception>
-    public Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settings, string targetSettingName, ILogger logger);
+    public Task<ConnectorDirectoryServerDiscoveryResult> GetDirectoryServersAsync(List<ConnectedSystemSettingValue> settings, string targetSettingName, ILogger logger);
 }

@@ -32,7 +32,7 @@ internal class LdapConnectorDirectoryServers
     /// object.
     /// </summary>
     /// <exception cref="InvalidOperationException">The rootDSE did not expose a configurationNamingContext, so the CN=Sites subtree cannot be located.</exception>
-    internal async Task<List<ConnectorDirectoryServer>> GetDirectoryServersAsync()
+    internal async Task<ConnectorDirectoryServerDiscoveryResult> GetDirectoryServersAsync()
     {
         return await Task.Run(() =>
         {
@@ -59,7 +59,8 @@ internal class LdapConnectorDirectoryServers
                     return (NtdsDsaDn: ntdsDsaDn, DnsHostName: dnsHostName);
                 });
 
-            return LdapConnectorUtilities.MapNtdsDsaEntriesToDirectoryServers(entries, _logger);
+            return new ConnectorDirectoryServerDiscoveryResult(LdapConnectorUtilities.DnsDomainFrom(configurationNamingContext),
+                LdapConnectorUtilities.MapNtdsDsaEntriesToDirectoryServers(entries, _logger));
         });
     }
 
@@ -68,7 +69,7 @@ internal class LdapConnectorDirectoryServers
     /// one per Exchange server in the forest. A forest without Exchange has no such container, and no servers.
     /// </summary>
     /// <exception cref="InvalidOperationException">The rootDSE did not expose a configurationNamingContext.</exception>
-    internal async Task<List<ConnectorDirectoryServer>> GetExchangeServersAsync()
+    internal async Task<ConnectorDirectoryServerDiscoveryResult> GetExchangeServersAsync()
     {
         return await Task.Run(() =>
         {
@@ -88,15 +89,15 @@ internal class LdapConnectorDirectoryServers
             catch (DirectoryOperationException ex) when (ex.Response?.ResultCode == ResultCode.NoSuchObject)
             {
                 _logger.Debug("GetExchangeServersAsync: {ExchangeDn} does not exist; Exchange is not installed in this forest", exchangeDn);
-                return [];
+                return new ConnectorDirectoryServerDiscoveryResult(LdapConnectorUtilities.DnsDomainFrom(configurationNamingContext), []);
             }
 
             _logger.Debug("GetExchangeServersAsync: Found {Count} msExchExchangeServer entries under {ExchangeDn}", entries.Count, exchangeDn);
 
-            return LdapConnectorUtilities.MapExchangeServerEntries(entries.Select(entry => (
+            return new ConnectorDirectoryServerDiscoveryResult(LdapConnectorUtilities.DnsDomainFrom(configurationNamingContext), LdapConnectorUtilities.MapExchangeServerEntries(entries.Select(entry => (
                 (IReadOnlyList<string>?)LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "networkAddress") ?? [],
                 LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "serialNumber"),
-                LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "msExchServerSite"))), _logger);
+                LdapConnectorUtilities.GetEntryAttributeStringValue(entry, "msExchServerSite"))), _logger));
         });
     }
 

@@ -55,19 +55,8 @@ internal static class LdapExchangeSignIn
     /// The Kerberos realm a distinguished name sits in: its <c>DC=</c> components, in capitals and joined with dots. Null
     /// when it has none or is not a distinguished name.
     /// </summary>
-    internal static string? RealmFrom(string distinguishedName)
-    {
-        if (!LdapDistinguishedName.TryParse(distinguishedName, out var parsed))
-            return null;
-
-        var domainComponents = parsed.Rdns
-            .SelectMany(rdn => rdn.Components)
-            .Where(component => string.Equals(component.Type, "DC", StringComparison.OrdinalIgnoreCase))
-            .Select(component => component.Value.ToUpperInvariant())
-            .ToList();
-
-        return domainComponents.Count == 0 ? null : string.Join('.', domainComponents);
-    }
+    internal static string? RealmFrom(string distinguishedName) =>
+        LdapConnectorUtilities.DnsDomainFrom(distinguishedName)?.ToUpperInvariant();
 
     /// <summary>
     /// The sign-in, or why there cannot be one.

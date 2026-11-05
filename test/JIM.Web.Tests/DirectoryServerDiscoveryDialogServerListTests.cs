@@ -43,9 +43,10 @@ public class DirectoryServerDiscoveryDialogServerListTests : JimComponentTestCon
             new ConnectorDirectoryServerDiscovery("Mail Server", "mail servers")
         ]);
         _discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Preferred Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "dc01.example.local", Site = "London" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult(null, [new ConnectorDirectoryServer { HostName = "dc01.example.local", Site = "London" }]));
         _discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Mail Server", It.IsAny<Serilog.ILogger>()))
-            .ReturnsAsync([new ConnectorDirectoryServer { HostName = "mail01.example.local", Site = "London", Version = "Version 15.2 (Build 1544.4)" }]);
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult("example.local",
+                [new ConnectorDirectoryServer { HostName = "mail01.example.local", Site = "London", Version = "Version 15.2 (Build 1544.4)" }]));
         var connectorFactory = new Mock<IConnectorFactory>();
         connectorFactory.Setup(f => f.Create(StubConnectorName, It.IsAny<ICredentialProtection?>(), It.IsAny<ICertificateProvider?>()))
             .Returns(connector.Object);
@@ -96,7 +97,44 @@ public class DirectoryServerDiscoveryDialogServerListTests : JimComponentTestCon
         }
     }
 
-    private IRenderedComponent<MudDialogProvider> ShowDialog(string targetSettingName, string serverTerm)
+    [Test]
+    public void DirectoryServerDiscoveryDialog_ForestNamedOnceDiscoveryFinishes_TitleSaysWhichForestWasSearched()
+    {
+        // As in the portal, the dialog first renders while discovery runs, and learns the forest only when it finishes:
+        // the title, which the dialog's frame draws, must follow.
+        var discovered = new TaskCompletionSource<ConnectorDirectoryServerDiscoveryResult>();
+        _discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Mail Server", It.IsAny<Serilog.ILogger>()))
+            .Returns(discovered.Task);
+        var provider = ShowDialog("Mail Server", "mail servers", awaitRows: false, awaitNothing: true);
+        provider.WaitForState(() => provider.FindAll("[data-testid='jim-directory-server-discovery-title']").Count > 0);
+
+        discovered.SetResult(new ConnectorDirectoryServerDiscoveryResult("example.local", [new ConnectorDirectoryServer { HostName = "mail01.example.local" }]));
+        provider.WaitForState(() => provider.FindAll(".jim-directory-server-row").Count > 0);
+
+        provider.WaitForAssertion(() =>
+            Assert.That(provider.Find("[data-testid='jim-directory-server-discovery-title']").TextContent, Does.Contain("example.local")));
+    }
+
+    [Test]
+    public void DirectoryServerDiscoveryDialog_NoForestNamed_TitleNamesNone()
+    {
+        var provider = ShowDialog("Preferred Server", "directory servers");
+
+        Assert.That(provider.Find("[data-testid='jim-directory-server-discovery-title']").TextContent, Does.Not.Contain(" in "));
+    }
+
+    [Test]
+    public void DirectoryServerDiscoveryDialog_NoServersInANamedForest_SaysWhichForestHasNone()
+    {
+        _discovery.Setup(c => c.GetDirectoryServersAsync(It.IsAny<List<ConnectedSystemSettingValue>>(), "Mail Server", It.IsAny<Serilog.ILogger>()))
+            .ReturnsAsync(new ConnectorDirectoryServerDiscoveryResult("example.local", []));
+
+        var provider = ShowDialog("Mail Server", "mail servers", awaitRows: false);
+
+        Assert.That(provider.Find("[data-testid='jim-directory-server-discovery-empty']").TextContent, Does.Contain("example.local"));
+    }
+
+    private IRenderedComponent<MudDialogProvider> ShowDialog(string targetSettingName, string serverTerm, bool awaitRows = true, bool awaitNothing = false)
     {
         var provider = Render<MudDialogProvider>();
         var parameters = new DialogParameters<DirectoryServerDiscoveryDialog>
@@ -106,7 +144,11 @@ public class DirectoryServerDiscoveryDialogServerListTests : JimComponentTestCon
             { x => x.ServerTerm, serverTerm }
         };
         provider.InvokeAsync(() => Services.GetRequiredService<IDialogService>().ShowAsync<DirectoryServerDiscoveryDialog>("Discover", parameters));
-        provider.WaitForState(() => provider.FindAll(".jim-directory-server-row").Count > 0);
+        if (awaitNothing)
+            return provider;
+        provider.WaitForState(() => awaitRows
+            ? provider.FindAll(".jim-directory-server-row").Count > 0
+            : provider.FindAll("[data-testid='jim-directory-server-discovery-empty']").Count > 0);
         return provider;
     }
 
