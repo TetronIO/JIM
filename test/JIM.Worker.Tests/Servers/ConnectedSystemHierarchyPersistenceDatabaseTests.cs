@@ -763,6 +763,131 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// A top-level Container moved to the top level of another Partition, which the directory still holds alongside
+    /// the one it left, is kept: re-homed under its new Partition, still selected, its Container Scope intact (#2763).
+    /// </summary>
+    /// <remarks>
+    /// A move used to be recognised only by a change of parent Container, and a top-level Container has none before or
+    /// after, so this one went unnoticed. It stayed in the Partition it had left, now carrying a Distinguished Name
+    /// from another, and its rediscovery in the new Partition matched it rather than adding it.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_TopLevelContainerMovedToTheTopOfAnotherKeptPartition_ReHomesItAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await SetContainerScopeAsync("Staff", ConnectedSystemContainerScope.OneLevel);
+
+        // Staff has moved from the top of Glitterband to the top of Yellowstone; Glitterband is still there.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Add(new ConnectorContainer("ou=Staff,dc=yellowstone,dc=local", "Staff") { StableId = StaffStableId });
+        var glitterband = GlitterbandAsDiscovered();
+        glitterband.Containers.Clear();
+        var connector = new StubPartitionsConnector([yellowstone, glitterband]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+
+        await AssertStaffReHomedToTheTopOfYellowstoneAsync(result, expectedPartitions: ["dc=yellowstone,dc=local", "dc=glitterband,dc=local"]);
+    }
+
+    /// <summary>
+    /// A top-level Container moved to the top level of another Partition is kept, re-homed and still selected, when
+    /// the Partition it left is removed by the same refresh (#2763).
+    /// </summary>
+    /// <remarks>
+    /// The case where the unnoticed move lost the Container altogether. Left in the removed Partition, it was counted
+    /// among the removed and deleted with it, explicitly and, since #2744, by cascade; and it was never added in its
+    /// new Partition either, so it vanished along with its selection and Container Scope.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_TopLevelContainerMovedToTheTopOfAnotherPartition_OldPartitionRemoved_ReHomesItAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await SetContainerScopeAsync("Staff", ConnectedSystemContainerScope.OneLevel);
+
+        // Glitterband has gone, and Staff now sits at the top of Yellowstone.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Add(new ConnectorContainer("ou=Staff,dc=yellowstone,dc=local", "Staff") { StableId = StaffStableId });
+        var connector = new StubPartitionsConnector([yellowstone]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+        Assert.That(result.RemovedPartitions.Select(p => p.ExternalId), Is.EqualTo(new[] { "dc=glitterband,dc=local" }), "precondition");
+
+        await AssertStaffReHomedToTheTopOfYellowstoneAsync(result, expectedPartitions: ["dc=yellowstone,dc=local"]);
+    }
+
+    /// <summary>
+    /// A nested Container moved beneath a Container in another Partition, which the directory still holds alongside
+    /// the one it left, is kept beneath its new parent, still selected, its Container Scope intact (#2763).
+    /// </summary>
+    /// <remarks>
+    /// The nested companion to the top-level cases above. A change of parent Container already reads as a move, so
+    /// this passed before the fix; it is here so that recognising a change of Partition does not disturb it.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_NestedContainerMovedBeneathAContainerInAnotherKeptPartition_KeepsItAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await SetContainerScopeAsync("Admins", ConnectedSystemContainerScope.OneLevel);
+
+        // Admins has moved from beneath Groups in Yellowstone to beneath Staff in Glitterband; both Partitions remain.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: true);
+        yellowstone.Containers.Single(c => c.Name == "Groups").ChildContainers.Clear();
+        var glitterband = GlitterbandAsDiscovered();
+        glitterband.Containers.Single().ChildContainers
+            .Add(new ConnectorContainer("ou=Admins,ou=Staff,dc=glitterband,dc=local", "Admins") { StableId = AdminsStableId });
+        var connector = new StubPartitionsConnector([yellowstone, glitterband]);
+
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+
+        await using var verify = NewContext();
+        var containers = await verify.ConnectedSystemContainers.ToListAsync();
+        var staff = containers.Single(c => c.Name == "Staff");
+        var admins = containers.SingleOrDefault(c => c.Name == "Admins");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Admins" }), "the refresh reports the move");
+            Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
+            Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups", "Admins", "Staff" }), "nothing is lost");
+            Assert.That(admins?.ParentContainerId, Is.EqualTo(staff.Id), "the moved Container sits under its new parent");
+            Assert.That(admins?.PartitionId, Is.Null, "a nested Container carries no Partition of its own");
+            Assert.That(admins?.ExternalId, Is.EqualTo("ou=Admins,ou=Staff,dc=glitterband,dc=local"), "and adopts its new Distinguished Name");
+            Assert.That(admins?.Selected, Is.True, "and keeps its selection");
+            Assert.That(admins?.Scope, Is.EqualTo(ConnectedSystemContainerScope.OneLevel), "and its Container Scope");
+        }
+    }
+
+    /// <summary>
+    /// Asserts that Staff, seeded at the top of Glitterband, is kept at the top of Yellowstone with its selection and
+    /// Container Scope, and that the refresh reported a move rather than a removal.
+    /// </summary>
+    private async Task AssertStaffReHomedToTheTopOfYellowstoneAsync(HierarchyRefreshResult result, string[] expectedPartitions)
+    {
+        await using var verify = NewContext();
+        var yellowstoneId = await verify.ConnectedSystemPartitions.Where(p => p.ExternalId == "dc=yellowstone,dc=local").Select(p => p.Id).SingleAsync();
+        var staff = await verify.ConnectedSystemContainers.SingleOrDefaultAsync(c => c.Name == "Staff");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Staff" }), "the refresh reports the move");
+            Assert.That(result.RemovedContainers.Select(c => c.Name), Does.Not.Contain("Staff"), "a move is not a removal");
+            Assert.That(result.AddedContainers.Select(c => c.Name), Does.Not.Contain("Staff"), "nor an addition");
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(), Is.EquivalentTo(expectedPartitions));
+            Assert.That(staff, Is.Not.Null, "the moved Container must not vanish");
+            Assert.That(staff?.PartitionId, Is.EqualTo(yellowstoneId), "it is re-homed under its new Partition");
+            Assert.That(staff?.ParentContainerId, Is.Null, "at the top level");
+            Assert.That(staff?.ExternalId, Is.EqualTo("ou=Staff,dc=yellowstone,dc=local"), "and adopts its new Distinguished Name");
+            Assert.That(staff?.Selected, Is.True, "and keeps its selection");
+            Assert.That(staff?.Scope, Is.EqualTo(ConnectedSystemContainerScope.OneLevel), "and its Container Scope");
+        }
+    }
+
+    private async Task SetContainerScopeAsync(string containerName, ConnectedSystemContainerScope scope)
+    {
+        await using var ctx = NewContext();
+        await ctx.ConnectedSystemContainers.Where(c => c.Name == containerName)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Scope, scope));
+    }
+
+    /// <summary>
     /// Deleting a Partition with a single statement, outside the hierarchy refresh, removes every Container in it,
     /// nested ones included (#2744).
     /// </summary>
