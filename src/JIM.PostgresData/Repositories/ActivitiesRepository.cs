@@ -822,7 +822,10 @@ public partial class ActivityRepository : IActivityRepository
                                 WHEN {(int)PendingExchangeChangeStatus.Parked} THEN 'Parked'
                                 WHEN {(int)PendingExchangeChangeStatus.Refused} THEN
                                     CASE WHEN f."Status" = {(int)ActivityStatus.CompleteWithWarning} THEN 'NotMade' ELSE 'Refused' END
-                                ELSE CASE WHEN q."LastAttemptedAt" IS NOT NULL THEN 'Retrying' ELSE 'Queued' END
+                                -- Pending: held while its system does not manage Exchange recipients
+                                -- (ExchangeChangeOutcome.StateOf), else retrying after an attempt, else queued.
+                                ELSE CASE WHEN NOT qs."ManagesExchangeRecipients" THEN 'Held'
+                                          WHEN q."LastAttemptedAt" IS NOT NULL THEN 'Retrying' ELSE 'Queued' END
                             END
                         WHEN c."Id" IS NOT NULL THEN
                             CASE c."TargetOperationType"
@@ -857,6 +860,7 @@ public partial class ActivityRepository : IActivityRepository
             FROM f
             LEFT JOIN "PendingExchangeChanges" q
                 ON f."TargetType" = {exchange} AND q."ActivityId" = f."Id"
+            LEFT JOIN "ConnectedSystems" qs ON qs."Id" = q."ConnectedSystemId"
             LEFT JOIN LATERAL (
                 SELECT x."Id", x."TargetOperationType", x."Status"
                 FROM "Activities" x

@@ -61,7 +61,8 @@ public class PendingExchangeChangeResponse
     public string RecipientType { get; set; } = string.Empty;
 
     /// <summary>
-    /// Where the change stands: Queued (waiting for its first attempt), Delivering (Exchange is applying it now),
+    /// Where the change stands: Queued (waiting for its first attempt), Held (waiting, unattempted, because its Connected
+    /// System does not manage Exchange recipients now; delivered once it does again), Delivering (Exchange is applying it now),
     /// Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it
     /// waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an
     /// existing recipient's type, which JIM does not do). A refused or not-made change holds until its
@@ -111,7 +112,8 @@ public class PendingExchangeChangeResponse
 
     /// <summary>
     /// Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due,
-    /// one being delivered is getting its attempt, and a refused one waits on its declared state changing.
+    /// one being delivered is getting its attempt, a refused one waits on its declared state changing, and a held one
+    /// waits on its Connected System managing Exchange recipients again.
     /// </summary>
     public bool CanRetry { get; set; }
 
@@ -163,7 +165,7 @@ public class ExchangeQueueActionRequest : IValidatableObject
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Restrict to changes in one state (Queued, Delivering, Retrying, Parked, Refused or NotMade), or omit for every state.
+    /// Restrict to changes in one state (Queued, Held, Delivering, Retrying, Parked, Refused or NotMade), or omit for every state.
     /// </summary>
     public ExchangeChangeState? State { get; set; }
 

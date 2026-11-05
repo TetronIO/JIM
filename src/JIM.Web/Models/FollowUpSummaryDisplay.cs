@@ -45,7 +45,7 @@ public static class FollowUpSummaryDisplay
     private static readonly string[] Order =
     [
         "Set", "Delivered", "Withdrawn", "Replaced", "Carried",
-        "Queued", "Delivering", "Retrying",
+        "Queued", "Delivering", "Retrying", "Held",
         "NotMade", "Parked", "Refused", "Expired", "Cancelled"
     ];
 

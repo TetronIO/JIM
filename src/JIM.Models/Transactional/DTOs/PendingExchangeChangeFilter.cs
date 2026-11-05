@@ -14,8 +14,8 @@ public class PendingExchangeChangeFilter
     public int? ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// Restrict to changes standing in one state, as their follow-ups read: Queued, Delivering, Retrying, Parked, Refused
-    /// or NotMade. Null for every state. A state reached only once a change has left the queue (Delivered, Withdrawn,
+    /// Restrict to changes standing in one state, as their follow-ups read: Queued, Held, Delivering, Retrying, Parked,
+    /// Refused or NotMade. Null for every state. A state reached only once a change has left the queue (Delivered, Withdrawn,
     /// Replaced) matches nothing.
     /// </summary>
     public ExchangeChangeState? State { get; set; }

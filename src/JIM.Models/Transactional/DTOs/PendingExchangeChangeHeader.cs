@@ -65,12 +65,19 @@ public class PendingExchangeChangeHeader
     /// <summary>The status of the change's own Activity, which tells a change JIM refused from one it does not make.</summary>
     public ActivityStatus ChangeActivityStatus { get; set; }
 
-    /// <summary>Where the change stands, as its follow-up shows it: Queued, Delivering, Retrying, Parked, Refused or NotMade.</summary>
-    public ExchangeChangeState State => ExchangeChangeOutcome.StateOf(Status, LastAttemptedAt, ChangeActivityStatus);
+    /// <summary>Where the change stands, as its follow-up shows it: Queued, Held, Delivering, Retrying, Parked, Refused or NotMade.</summary>
+    public ExchangeChangeState State => ExchangeChangeOutcome.StateOf(Status, LastAttemptedAt, ChangeActivityStatus, held: !ConnectedSystemManagesExchangeRecipients);
+
+    /// <summary>
+    /// Whether the change's Connected System manages Exchange recipients now; while it does not, a waiting change is
+    /// held.
+    /// </summary>
+    public bool ConnectedSystemManagesExchangeRecipients { get; init; } = true;
 
     /// <summary>
     /// Whether an administrator can retry it: it is parked, or retrying after an attempt. A change not yet attempted is
-    /// already due, one being delivered is getting its attempt, and a refused one waits on its declared state changing.
+    /// already due, one being delivered is getting its attempt, a refused one waits on its declared state changing, and a
+    /// held one waits on its Connected System managing Exchange recipients again.
     /// </summary>
-    public bool CanRetry => PendingExchangeChange.IsRetryable(Status, LastAttemptedAt);
+    public bool CanRetry => PendingExchangeChange.IsRetryable(Status, LastAttemptedAt, held: !ConnectedSystemManagesExchangeRecipients);
 }

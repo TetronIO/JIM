@@ -242,6 +242,32 @@ public class ExchangeDeliveryClaimDatabaseTests
     }
 
     [Test]
+    public async Task SystemNotManagingExchangeRecipients_IsHeldOutOfTheDueListTheOutlookAndTheClaimAsync()
+    {
+        // Turning management off holds delivery: the changes are kept, unattempted, and nothing counts them as due, or
+        // the service would see permanent work and run a lane on every poll.
+        var s = await SeedAsync(objectCount: 2, managing: false);
+        await QueueAsync(s, s.CsoIds[0]);
+        await QueueAsync(s, s.CsoIds[1], c => c.NextRetryAt = AsOf.AddMinutes(5));
+
+        await using var read = NewContext();
+        var outlook = await Repository(read).Sync.GetExchangeQueueDeliveryOutlookAsync(AsOf, Lease);
+        var dueSystems = await Repository(read).Sync.GetConnectedSystemIdsWithDueExchangeChangesAsync(AsOf, Lease);
+        await using var claim = NewContext();
+        var claimed = await Repository(claim).Sync.ClaimDueExchangeChangesAsync(s.SystemId, "worker-a", AsOf, Lease, 10);
+        var waiting = await Repository(claim).Sync.CountWaitingExchangeChangesAsync(s.SystemId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(outlook.DueCount, Is.Zero);
+            Assert.That(outlook.RetryingCount, Is.Zero);
+            Assert.That(dueSystems, Is.Empty);
+            Assert.That(claimed, Is.Empty);
+            Assert.That(waiting, Is.EqualTo(2), "held changes are kept, and still wait");
+        }
+    }
+
+    [Test]
     public async Task OutlookAndDueSystems_CountWhatALaneWouldAttemptAsync()
     {
         var s = await SeedAsync(objectCount: 4);
@@ -389,12 +415,12 @@ public class ExchangeDeliveryClaimDatabaseTests
         AwaitsExchange = awaitsExchange
     };
 
-    private async Task<Seeded> SeedAsync(int objectCount)
+    private async Task<Seeded> SeedAsync(int objectCount, bool managing = true)
     {
         await using var seed = NewContext();
 
         var connectorDefinition = new ConnectorDefinition { Name = "Panoply AD Connector", BuiltIn = true };
-        var system = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition };
+        var system = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = managing };
         var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
         seed.AddRange(connectorDefinition, system, csType, mvType);

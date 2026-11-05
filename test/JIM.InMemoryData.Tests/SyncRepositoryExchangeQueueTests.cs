@@ -27,8 +27,8 @@ public class SyncRepositoryExchangeQueueTests
     public void SetUp()
     {
         _repo = new SyncRepository();
-        _repo.SeedConnectedSystem(new ConnectedSystem { Id = 1, Name = "Panoply AD" });
-        _repo.SeedConnectedSystem(new ConnectedSystem { Id = 2, Name = "Resurgam AD" });
+        _repo.SeedConnectedSystem(new ConnectedSystem { Id = 1, Name = "Panoply AD", ManagesExchangeRecipients = true });
+        _repo.SeedConnectedSystem(new ConnectedSystem { Id = 2, Name = "Resurgam AD", ManagesExchangeRecipients = true });
     }
 
     [Test]

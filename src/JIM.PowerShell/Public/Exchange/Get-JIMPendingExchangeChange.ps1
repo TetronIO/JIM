@@ -34,7 +34,8 @@ function Get-JIMPendingExchangeChange {
         Only changes for this Connected System.
 
     .PARAMETER State
-        Only changes in this state.
+        Only changes in this state. Held changes wait, unattempted, because their Connected System does not manage
+        Exchange recipients now; they are delivered once it does again.
 
     .PARAMETER FailureKind
         Only changes whose last attempt failed this way.
@@ -110,7 +111,7 @@ function Get-JIMPendingExchangeChange {
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
-        [ValidateSet('Queued', 'Delivering', 'Retrying', 'Parked', 'Refused', 'NotMade')]
+        [ValidateSet('Queued', 'Held', 'Delivering', 'Retrying', 'Parked', 'Refused', 'NotMade')]
         [string]$State,
 
         [Parameter(ParameterSetName = 'List')]

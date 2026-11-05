@@ -40,7 +40,7 @@ Describe 'Get-JIMPendingExchangeChange' {
         It 'Should constrain State to the states a queued change can be in' {
             $validateSet = $command.Parameters['State'].Attributes |
                 Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
-            $validateSet.ValidValues | Should -Be @('Queued', 'Delivering', 'Retrying', 'Parked', 'Refused', 'NotMade')
+            $validateSet.ValidValues | Should -Be @('Queued', 'Held', 'Delivering', 'Retrying', 'Parked', 'Refused', 'NotMade')
         }
 
         It 'Should accept a Connected System by pipeline property name' {

@@ -352,9 +352,16 @@ public class PendingExchangeChange
     /// The rule behind <see cref="CanRetry"/>, for a change known only by its status and last attempt (a list row). The
     /// repository's retry statement applies the same rule in SQL.
     /// </summary>
-    public static bool IsRetryable(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt) =>
+    /// <param name="status">The change's status.</param>
+    /// <param name="lastAttemptedAt">When it was last attempted, if ever.</param>
+    /// <param name="held">
+    /// Whether its Connected System does not manage Exchange recipients now. A waiting change is then held: it waits on
+    /// the switch rather than on a retry, and a retry would only wipe its retry clock while nothing can be attempted. A
+    /// parked change still takes the retry, and then waits, held, like any other.
+    /// </param>
+    public static bool IsRetryable(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt, bool held = false) =>
         status == PendingExchangeChangeStatus.Parked
-        || (status == PendingExchangeChangeStatus.Pending && lastAttemptedAt != null);
+        || (status == PendingExchangeChangeStatus.Pending && lastAttemptedAt != null && !held);
 
     /// <summary>
     /// Makes the change due at once, as though it had just been queued (PRD requirement 11): every trace of the earlier

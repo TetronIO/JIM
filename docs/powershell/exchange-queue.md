@@ -17,7 +17,7 @@ ones that are stuck.
 ```jim-diagram
 archetype: comparison
 title: What a retry does to each queued Exchange change
-desc: "Resume-JIMPendingExchangeChange makes Parked changes, and Retrying changes that have been attempted, due at once: their attempts, failure and 24-hour park clock are reset and the Exchange delivery lane attempts them within seconds. It leaves Queued changes alone, because they are already due; Delivering changes, because Exchange is applying them now; and Refused and NotMade changes, which hold until what is declared for the account changes."
+desc: "Resume-JIMPendingExchangeChange makes Parked changes, and Retrying changes that have been attempted, due at once: their attempts, failure and 24-hour park clock are reset and the Exchange delivery lane attempts them within seconds. It leaves Queued changes alone, because they are already due; Held changes, which wait until their Connected System manages Exchange recipients again; Delivering changes, because Exchange is applying them now; and Refused and NotMade changes, which hold until what is declared for the account changes."
 columns:
   - { label: "Retried", sub: due at once }
   - { label: "Left alone", sub: nothing for a retry to do }
@@ -25,17 +25,18 @@ rows:
   - label: States
     cells:
       - { text: "`Parked` and `Retrying`" }
-      - { text: "`Queued`, `Delivering`, `Refused` and `NotMade`" }
+      - { text: "`Queued`, `Held`, `Delivering`, `Refused` and `NotMade`" }
   - label: Why
     cells:
       - { text: "JIM has stopped, or is waiting out a backoff", sub: "attempts, failure and park clock reset" }
-      - { text: "already due, being applied now, or waiting on a different declared state" }
+      - { text: "already due, held, being applied now, or waiting on a different declared state" }
 footer: "One request and one Activity, however many changes it covers"
 ```
 
-A queued change is Queued, Delivering, Retrying, Parked, Refused or NotMade. A change JIM has stopped trying (Parked) is
-retried once the cause is fixed. A change cannot be cancelled: to stop or correct one, change what is declared for the
-account, its source data or its Attribute Flow, and the newer state replaces the queued change.
+A queued change is Queued, Held, Delivering, Retrying, Parked, Refused or NotMade. A Held change waits, unattempted,
+while its Connected System does not manage Exchange recipients, and is delivered once it does again. A change JIM has
+stopped trying (Parked) is retried once the cause is fixed. A change cannot be cancelled: to stop or correct one, change
+what is declared for the account, its source data or its Attribute Flow, and the newer state replaces the queued change.
 
 ## :material-tray-full: Get-JIMPendingExchangeChange
 
@@ -62,7 +63,7 @@ Get-JIMPendingExchangeChange -Summary
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | No (List, ListAll) |  | Only changes for this Connected System. Accepts pipeline input by property name, `ConnectedSystemId` or `Id`. |
-| `State` | `string` | No (List, ListAll) |  | Only changes in this state. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Refused` or `NotMade`. |
+| `State` | `string` | No (List, ListAll) |  | Only changes in this state. Held changes wait, unattempted, because their Connected System does not manage Exchange recipients now; they are delivered once it does again. One of `Queued`, `Held`, `Delivering`, `Retrying`, `Parked`, `Refused` or `NotMade`. |
 | `FailureKind` | `string` | No (List, ListAll) |  | Only changes whose last attempt failed this way. One of `ObjectNotFound`, `Refused`, `InsufficientPermissions`, `AuthenticationFailed` or `Unreachable`. |
 | `MetaverseObjectId` | `guid` | No (List, ListAll) |  | Only this Metaverse Object's changes. |
 | `ConnectedSystemObjectId` | `guid` | No (List, ListAll) |  | Only this account's change. The queue holds at most one per account. |
@@ -92,7 +93,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `MetaverseObjectDisplayName` | `string` | That Metaverse Object's display name. |
 | `MetaverseObjectTypePluralName` | `string` | The plural name of that Metaverse Object's type, such as People. |
 | `RecipientType` | `string` | The kind of recipient declared: Mailbox, SharedMailbox, RoomMailbox, EquipmentMailbox, MailUser, MailContact, MailEnabledGroup or None. |
-| `State` | `string` | Where the change stands: Queued (waiting for its first attempt), Delivering (Exchange is applying it now), Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an existing recipient's type, which JIM does not do). A refused or not-made change holds until its declared state changes. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Delivered`, `Withdrawn`, `Replaced`, `Refused` or `NotMade`. |
+| `State` | `string` | Where the change stands: Queued (waiting for its first attempt), Held (waiting, unattempted, because its Connected System does not manage Exchange recipients now; delivered once it does again), Delivering (Exchange is applying it now), Retrying (waiting out a backoff after a failure that may clear by itself), Parked (JIM has stopped trying, so it waits on a person), Refused (JIM refused the declared state before asking Exchange) or NotMade (it would change an existing recipient's type, which JIM does not do). A refused or not-made change holds until its declared state changes. One of `Queued`, `Delivering`, `Retrying`, `Parked`, `Delivered`, `Withdrawn`, `Replaced`, `Refused`, `NotMade` or `Held`. |
 | `FailureKind` | `string` | How the last attempt failed, or empty for a change not attempted since it was queued or retried. One of `ObjectNotFound`, `Refused`, `InsufficientPermissions`, `AuthenticationFailed` or `Unreachable`. |
 | `FailureMessage` | `string` | Exchange's own words for the last failure, which say where the remedy lies, or JIM's reason for a refusal. |
 | `AttemptCount` | `int` | How many attempts have failed since the change was queued or last retried. |
@@ -101,7 +102,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `FirstFailedAt` | `datetime` | When the current run of failures began. JIM parks a change whose failures have gone on for 24 hours. |
 | `NextRetryAt` | `datetime` | When the next attempt falls due, or empty for a change due now or no longer attempted. |
 | `Due` | `bool` | Whether the Exchange delivery lane would attempt the change now. |
-| `CanRetry` | `bool` | Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due, one being delivered is getting its attempt, and a refused one waits on its declared state changing. |
+| `CanRetry` | `bool` | Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due, one being delivered is getting its attempt, a refused one waits on its declared state changing, and a held one waits on its Connected System managing Exchange recipients again. |
 
 **With `-Summary`**:
 
@@ -114,6 +115,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `RefusedCount` | `int` | Changes JIM refused before asking Exchange, which hold until their declared state changes. |
 | `NotMadeCount` | `int` | Changes that would change an existing recipient's type, which JIM does not do. |
 | `DueCount` | `int` | How many queued or retrying changes a delivery pass would attempt now. |
+| `HeldCount` | `int` | Changes waiting, unattempted, because their Connected System does not manage Exchange recipients now. They are delivered once it does again, so they are counted apart from what is queued or retrying. |
 | `WaitingOnAPersonCount` | `int` | How many wait on a person: parked, refused or not made. |
 <!-- END GENERATED: Get-JIMPendingExchangeChange -->
 
@@ -137,7 +139,8 @@ Get-JIMPendingExchangeChange -State Parked -All | Group-Object FailureKind | Sel
 
 Makes matching changes that are parked, or retrying after an attempt, due at once, with their attempts and 24-hour park
 clock reset; the Exchange delivery lane attempts them within seconds. A change not yet attempted is already due, one being
-delivered is left to finish, and a Refused or NotMade change holds until what is declared for the account changes.
+delivered is left to finish, a Held change waits for its Connected System to manage Exchange recipients again, and a
+Refused or NotMade change holds until what is declared for the account changes.
 
 <!-- BEGIN GENERATED: Resume-JIMPendingExchangeChange -->
 ### Syntax

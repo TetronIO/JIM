@@ -78,8 +78,8 @@ public class ExchangeControllerQueueTests
         _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
 
         _syncRepo = new SyncRepository();
-        _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = PanoplyId, Name = "Panoply AD" });
-        _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = ResurgamId, Name = "Resurgam AD" });
+        _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = PanoplyId, Name = "Panoply AD", ManagesExchangeRecipients = true });
+        _syncRepo.SeedConnectedSystem(new ConnectedSystem { Id = ResurgamId, Name = "Resurgam AD", ManagesExchangeRecipients = true });
 
         _application = new JimApplication(_repository.Object, syncRepository: _syncRepo);
         _controller = NewController(_application);

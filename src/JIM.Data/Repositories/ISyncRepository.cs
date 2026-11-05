@@ -1246,6 +1246,18 @@ public interface ISyncRepository
     Task<ExchangeQueueSummary> GetExchangeQueueSummaryAsync(DateTime asOf);
 
     /// <summary>
+    /// How many of a Connected System's Exchange changes are waiting to be delivered (#2021): queued, retrying or being
+    /// delivered. Parked and refused changes wait on a person, not on delivery, so they are not counted.
+    /// </summary>
+    Task<int> CountWaitingExchangeChangesAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Which of <paramref name="connectedSystemIds"/> do not manage Exchange recipients now, so their waiting changes are
+    /// held (#2021).
+    /// </summary>
+    Task<HashSet<int>> GetConnectedSystemIdsNotManagingExchangeRecipientsAsync(IReadOnlyCollection<int> connectedSystemIds);
+
+    /// <summary>
     /// An administrator's retry (#2021, Phase 6b): makes every retryable change the filter matches (parked, or retrying
     /// after an attempt) due at once, clearing its attempts, failure, park clock and claim, in one statement that rechecks
     /// each row is still retryable, so a change claimed since the list was read is left to its deliverer. The update fires

@@ -18,7 +18,7 @@ public class FollowUpStateCountDto
     public ActivityTargetType Kind { get; set; }
 
     /// <summary>
-    /// Where they stand. For an Exchange recipient change, one of Queued, Delivering, Retrying, Parked, Delivered,
+    /// Where they stand. For an Exchange recipient change, one of Queued, Delivering, Retrying, Held, Parked, Delivered,
     /// Withdrawn, Replaced, Refused, NotMade or Cancelled. For an Initial Password, one of Queued, Delivering, Retrying,
     /// Set, Parked, Expired or Cancelled, or Carried where a password change already waiting for the account carries it.
     /// </summary>

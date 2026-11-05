@@ -172,6 +172,33 @@ public class ExchangeQueueDatabaseTests
     }
 
     [Test]
+    public async Task SystemsNotManagingExchangeRecipients_TheirWaitingChangesReadAsHeldEverywhereAsync()
+    {
+        // The queued and retrying changes become Held, in the summary and the list alike; what waits on a person
+        // (parked, refused, not made) and what is being delivered read as before.
+        await SeedAsync();
+        await using (var turnOff = NewContext())
+            await turnOff.Database.ExecuteSqlRawAsync("UPDATE \"ConnectedSystems\" SET \"ManagesExchangeRecipients\" = false");
+
+        await using var read = NewContext();
+        var summary = await Repository(read).Sync.GetExchangeQueueSummaryAsync(AsOf);
+        var held = await Repository(read).Sync.GetPendingExchangeChangeHeadersAsync(
+            new PendingExchangeChangeFilter { State = ExchangeChangeState.Held }, 0, 50, "created", false, includeTotalCount: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(summary.HeldCount, Is.EqualTo(3));
+            Assert.That(summary.QueuedCount, Is.Zero);
+            Assert.That(summary.RetryingCount, Is.Zero);
+            Assert.That(summary.DueCount, Is.Zero);
+            Assert.That(summary.DeliveringCount, Is.EqualTo(1));
+            Assert.That(summary.WaitingOnAPersonCount, Is.EqualTo(3));
+            Assert.That(held.Results.Select(h => h.State), Is.All.EqualTo(ExchangeChangeState.Held));
+            Assert.That(held.TotalResults, Is.EqualTo(3));
+        }
+    }
+
+    [Test]
     public async Task GetExchangeQueueSummaryAsync_EmptyQueue_IsAllZeroAsync()
     {
         await using var read = NewContext();
@@ -227,6 +254,33 @@ public class ExchangeQueueDatabaseTests
             Assert.That(rows[s.Refused].FailureMessage, Is.EqualTo("A mailbox cannot be created on a contact."));
             Assert.That(rows[s.NotMade].Status, Is.EqualTo(PendingExchangeChangeStatus.Refused));
             Assert.That(rows[s.Queued].CreatedAt, Is.EqualTo(AsOf.AddHours(-3)), "a change never attempted is already due, and is not touched");
+        }
+    }
+
+    [Test]
+    public async Task RetryExchangeChangesAsync_SystemsNotManagingExchangeRecipients_LeavesHeldChangesButRetriesParkedOnesAsync()
+    {
+        // A held change waits on the switch, not on a retry: resetting it would wipe its retry clock while nothing can be
+        // attempted. A parked one still takes the retry an administrator asks for once its cause is fixed, and then
+        // waits, held, like any other.
+        var s = await SeedAsync();
+        await using (var turnOff = NewContext())
+            await turnOff.Database.ExecuteSqlRawAsync("UPDATE \"ConnectedSystems\" SET \"ManagesExchangeRecipients\" = false");
+
+        await using (var act = NewContext())
+        {
+            var retried = await Repository(act).Sync.RetryExchangeChangesAsync(new PendingExchangeChangeFilter());
+
+            Assert.That(retried.Select(r => r.Id), Is.EquivalentTo(new[] { s.Parked }));
+        }
+
+        var rows = await RowsAsync();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(rows[s.Retrying].LastAttemptedAt, Is.Not.Null, "a held change keeps its attempt history");
+            Assert.That(rows[s.Retrying].NextRetryAt, Is.Not.Null);
+            Assert.That(rows[s.RetryingWithNoIdentity].LastAttemptedAt, Is.Not.Null);
+            Assert.That(rows[s.Parked].Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
         }
     }
 
@@ -341,8 +395,8 @@ public class ExchangeQueueDatabaseTests
         await using var seed = NewContext();
 
         var connectorDefinition = new ConnectorDefinition { Name = "Panoply AD Connector", BuiltIn = true };
-        var panoply = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition };
-        var resurgam = new ConnectedSystem { Name = "Resurgam AD", ConnectorDefinition = connectorDefinition };
+        var panoply = new ConnectedSystem { Name = "Panoply AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = true };
+        var resurgam = new ConnectedSystem { Name = "Resurgam AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = true };
         var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = panoply, Selected = true };
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
         seed.AddRange(connectorDefinition, panoply, resurgam, csType, mvType);

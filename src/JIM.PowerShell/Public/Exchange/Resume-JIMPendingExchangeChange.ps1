@@ -12,8 +12,9 @@ function Resume-JIMPendingExchangeChange {
         Exchange refused or failed the changes has been dealt with, such as missing permissions granted or Exchange back
         up.
 
-        A change not yet attempted is already due and is left as it is. One being delivered is left to finish. A Refused
-        or NotMade change holds until what is declared for the account changes, and is never retried.
+        A change not yet attempted is already due and is left as it is. One being delivered is left to finish. A Held
+        change waits, with its retry clock, until its Connected System manages Exchange recipients again. A Refused or
+        NotMade change holds until what is declared for the account changes, and is never retried.
 
         Whatever it covers, this is one request: the retry is recorded as one Activity, attributed to you, and under each
         retried change's own Activity. Piped changes are collected and retried together, by their ids, whichever

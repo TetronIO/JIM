@@ -82,12 +82,16 @@ public class ExchangeChangeOutcome
     /// Describes one change from its own Activity, its queue row if it is still on the queue, and the Activities
     /// recorded under it (any order; those of other changes are ignored).
     /// </summary>
-    public static ExchangeChangeOutcome Describe(Activity changeActivity, PendingExchangeChange? row, IEnumerable<ExchangeChangeEvent> events)
+    /// <param name="changeActivity">The change's own Activity.</param>
+    /// <param name="row">Its queue row, while it is still on the queue.</param>
+    /// <param name="events">The Activities recorded under it.</param>
+    /// <param name="held">Whether its Connected System does not manage Exchange recipients now, so a waiting row is held.</param>
+    public static ExchangeChangeOutcome Describe(Activity changeActivity, PendingExchangeChange? row, IEnumerable<ExchangeChangeEvent> events, bool held = false)
     {
         ArgumentNullException.ThrowIfNull(changeActivity);
         ArgumentNullException.ThrowIfNull(events);
 
-        return row != null ? DescribeRow(changeActivity, row) : DescribeHistory(changeActivity, events);
+        return row != null ? DescribeRow(changeActivity, row, held) : DescribeHistory(changeActivity, events);
     }
 
     /// <summary>
@@ -113,7 +117,12 @@ public class ExchangeChangeOutcome
     /// the reading every surface shares, the queue list's included, so a row never reads one way in a list and another
     /// on its follow-up.
     /// </summary>
-    public static ExchangeChangeState StateOf(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt, ActivityStatus changeActivityStatus) => status switch
+    /// <param name="status">The row's status.</param>
+    /// <param name="lastAttemptedAt">When the row was last attempted, if ever.</param>
+    /// <param name="changeActivityStatus">The change's own Activity's status.</param>
+    /// <param name="held">Whether its Connected System does not manage Exchange recipients now, so a waiting change is held.</param>
+    public static ExchangeChangeState StateOf(PendingExchangeChangeStatus status, DateTime? lastAttemptedAt, ActivityStatus changeActivityStatus,
+        bool held = false) => status switch
     {
         PendingExchangeChangeStatus.Delivering => ExchangeChangeState.Delivering,
         PendingExchangeChangeStatus.Parked => ExchangeChangeState.Parked,
@@ -122,6 +131,8 @@ public class ExchangeChangeOutcome
         PendingExchangeChangeStatus.Refused => changeActivityStatus == ActivityStatus.CompleteWithWarning
             ? ExchangeChangeState.NotMade
             : ExchangeChangeState.Refused,
+        // Pending on a system not managing Exchange recipients now: waiting, unattempted, until it does again.
+        PendingExchangeChangeStatus.Pending when held => ExchangeChangeState.Held,
         // Pending: not yet attempted, or waiting out a backoff after a failure that may clear.
         _ when lastAttemptedAt != null => ExchangeChangeState.Retrying,
         _ => ExchangeChangeState.Queued
@@ -131,9 +142,9 @@ public class ExchangeChangeOutcome
     /// A change still on the queue, described from its row: the row is the authority on what JIM intends to do next,
     /// and the latest attempt's words are on it.
     /// </summary>
-    private static ExchangeChangeOutcome DescribeRow(Activity changeActivity, PendingExchangeChange row)
+    private static ExchangeChangeOutcome DescribeRow(Activity changeActivity, PendingExchangeChange row, bool held)
     {
-        var state = StateOf(row.Status, row.LastAttemptedAt, changeActivity.Status);
+        var state = StateOf(row.Status, row.LastAttemptedAt, changeActivity.Status, held);
 
         return new ExchangeChangeOutcome
         {
@@ -206,5 +217,5 @@ public class ExchangeChangeOutcome
     }
 
     private static bool IsSettledState(ExchangeChangeState state) =>
-        state is not (ExchangeChangeState.Queued or ExchangeChangeState.Delivering or ExchangeChangeState.Retrying);
+        state is not (ExchangeChangeState.Queued or ExchangeChangeState.Delivering or ExchangeChangeState.Retrying or ExchangeChangeState.Held);
 }

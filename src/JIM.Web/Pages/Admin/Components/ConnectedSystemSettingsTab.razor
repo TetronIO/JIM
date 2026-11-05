@@ -1,3 +1,4 @@
+@using JIM.Web.Models
 @using JIM.Models.Connectors
 @using JIM.Models.Core
 @using JIM.Models.Exceptions
@@ -418,6 +419,8 @@
     /// The warnings the last successful save raised: the settings saved, and these say what will not work as they stand.
     /// </summary>
     private List<ConnectorSettingValueValidationResult> _settingWarnings = [];
+    private ConnectedSystem? _loadedConnectedSystem;
+    private bool _managesExchangeAsStored;
 
     /// <summary>
     /// What this Connected System's Connector can discover, each for the setting it fills (issue #1167, #2021); empty
@@ -470,6 +473,14 @@
     protected override async Task OnParametersSetAsync()
     {
         _unavailableSettingIds = await ReadUnavailableSettingIdsAsync();
+
+        // what is stored, before an edit or a validation changes the copy on screen: a save that turns Exchange recipient
+        // management off asks first (#2021)
+        if (!ReferenceEquals(_loadedConnectedSystem, ConnectedSystem))
+        {
+            _loadedConnectedSystem = ConnectedSystem;
+            _managesExchangeAsStored = ConnectedSystem.ManagesExchangeRecipients;
+        }
 
         if (ConnectedSystem.Id <= 0)
         {
@@ -595,6 +606,13 @@
             return;
         }
 
+        // turning Exchange recipient management off holds every change waiting for delivery, so it is asked about first
+        if (ExchangeHoldConfirmation.IsNeeded(_managesExchangeAsStored, ConnectedSystem.ManagesExchangeRecipients) && !await ConfirmExchangeHoldAsync())
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
         // ask the administrator to acknowledge anything sync-affecting they are about to save, before asking why they
         // are saving it. Connector settings are the connector's instructions (where it reads from, what it filters),
         // so a change here is always sync-affecting; cancelling aborts the save.
@@ -617,12 +635,31 @@
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
+        _managesExchangeAsStored = ConnectedSystem.ManagesExchangeRecipients;
         _settingWarnings = results.Where(result => result.IsWarning).ToList();
         Snackbar.Add(_settingWarnings.Count == 0 ? "Your setting changes have been saved." : "Your setting changes have been saved, with warnings.",
             _settingWarnings.Count == 0 ? Severity.Success : Severity.Warning);
         _settingsBeingSaved = false;
 
         await OnConnectedSystemChanged.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Asks before a save turns Exchange recipient management off, saying what that holds (#2021).
+    /// </summary>
+    private async Task<bool> ConfirmExchangeHoldAsync()
+    {
+        var parameters = new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.Warnings, ExchangeHoldConfirmation.Consequences },
+            { x => x.ConfirmButtonText, ExchangeHoldConfirmation.ConfirmButtonText },
+            { x => x.ConfirmButtonColour, Color.Warning }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+
+        var dialog = await DialogService.ShowAsync<ConsequenceConfirmationDialog>(ExchangeHoldConfirmation.Title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
     }
 
     /// <summary>

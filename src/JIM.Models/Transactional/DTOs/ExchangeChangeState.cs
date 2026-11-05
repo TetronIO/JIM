@@ -61,5 +61,11 @@ public enum ExchangeChangeState
     /// The declared state would change an existing recipient's type, which this release does not make. It is
     /// reported and holds until the declared state changes.
     /// </summary>
-    NotMade = 8
+    NotMade = 8,
+
+    /// <summary>
+    /// Waiting, unattempted, because its Connected System does not manage Exchange recipients now: turning management
+    /// off holds delivery rather than failing it. Delivered once the Connected System manages them again.
+    /// </summary>
+    Held = 9
 }
