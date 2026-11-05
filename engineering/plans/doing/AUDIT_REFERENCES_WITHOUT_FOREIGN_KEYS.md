@@ -362,6 +362,17 @@ The audit share is 2,573 ms, or 79%.
 - **The larger costs are elsewhere.** `FlushPendingMvoDeletions` is 25.5 s of the 31.6 s Source synchronisation: `MvoDeletionDeleteBulk` is 13.8 s, of which about 8.3 s lies outside the `Mvo.Delete` spans, and `MvoDeletionStageRecallExports` is 9.7 s. The Target Delta Import spends 26.2 s of its 47.8 s in `ReconcilePendingExports`.
 - **The Connected System Object count's index range is mostly other rows.** Of the 30,008 change records with a null object id, 25,006 are earlier changes whose reference the deletions nulled. Phase 2 removes that dilution.
 
+#### Leaver costs outside the audit rewrites
+
+Two of the larger costs above have nothing to do with audit references. Both re-read every member of the leavers' large groups (AllStaff, Division and Location hold up to hundreds of thousands of members each), and both are fixed alongside this plan rather than by it. The scale re-run supplies the after numbers.
+
+- **Recall's existence query (about 8 s of `MvoDeletionStageRecallExports`' 9.7 s).** It matched a group's member rows by resolved id OR by lowered DN string. No index can serve that OR, so PostgreSQL read every member row of every referencing group, on every page.
+  - **Fix:** a `UNION ALL` of two arms, each an index condition: the deleted objects' ids on the `ReferenceValueId` index, and the lowered DNs on `IX_CsoAttrVal_Lower_UnresolvedRef`, whose `ReferenceValueId IS NULL` predicate the arm repeats.
+  - **Semantics:** a resolved reference is now matched by its id alone. A resolved row whose retained DN equals a deleted object's while its id points elsewhere names another object, and is no longer recalled. Unresolved references still match by DN ignoring case, with the case-exact decision left to the caller (#2051).
+- **Reconciliation's page load (26.2 s of the Target Delta Import's `ReconcilePendingExports`).** The load included each reference value's `ReferenceValue`, so a group brought every member's whole Connected System Object row with it. Reconciliation compares only `ReferenceValueId` and `UnresolvedReferenceValue`.
+  - **Fix:** a Core-weight load without that include (`GetConnectedSystemObjectsCoreByIdsNoTrackingAsync`), for reconciliation only. The shared load keeps it for its other callers.
+- **New spans** measure the rest of the step: `MvoDeletionBuildChangeRecords`, `MvoDeletionPersistChangeRecords` and `MvoChange.Persist.*` for the Deleted change records; `RecallBuildFastPathInputs`, `MvoDeletionStageRecallRpeis` and the existence query's input counts for recall; `ReconcileLoadPageCsos`, `ReconcilePageLookups` and `ReconcilePersistRpeiOutcomes` for reconciliation.
+
 ### Phase 1: Readers onto ids, behaviour-neutral ✅
 
 - **The resolver.** `ResolvedObjectReference` and the batch read. The Causality Explorer headers, `CausalityItemLoader` and the item page move onto it. Until Phase 3, it matches deletion records on the subject id or on `Deleted*Id`.

@@ -181,46 +181,56 @@ public class SyncServer : ISyncServer
         var changeTrackingEnabled = await GetMvoChangeTrackingEnabledAsync();
 
         var changes = new List<MetaverseObjectChange>();
-        if (changeTrackingEnabled)
+        using (var buildSpan = Diagnostics.Diagnostics.Sync.StartSpan("MvoDeletionBuildChangeRecords")
+            .SetTag("mvoCount", deletions.Count)
+            .SetTag("changeTrackingEnabled", changeTrackingEnabled))
         {
-            // Contributor provenance (#1519 follow-up): one cache shared across the whole batch, so a
-            // Synchronisation Rule contributing to many of these deletions costs at most one repository
-            // round trip in total rather than one per deletion.
-            var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo);
-            await syncRuleNameCache.WarmAsync(deletions
-                .SelectMany(d => d.FinalAttributeValues)
-                .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
-                .Select(av => av.ContributedBySyncRuleId!.Value));
-
-            foreach (var (metaverseObject, finalAttributeValues) in deletions)
+            if (changeTrackingEnabled)
             {
-                var attributesToCapture = finalAttributeValues;
+                // Contributor provenance (#1519 follow-up): one cache shared across the whole batch, so a
+                // Synchronisation Rule contributing to many of these deletions costs at most one repository
+                // round trip in total rather than one per deletion.
+                var syncRuleNameCache = new SyncRuleNameResolverCache(_syncRepo);
+                await syncRuleNameCache.WarmAsync(deletions
+                    .SelectMany(d => d.FinalAttributeValues)
+                    .Where(av => av.ContributedBySyncRuleId.HasValue && av.ContributedBySyncRule == null)
+                    .Select(av => av.ContributedBySyncRuleId!.Value));
 
-                var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
-
-                var change = new MetaverseObjectChange
+                foreach (var (metaverseObject, finalAttributeValues) in deletions)
                 {
-                    Id = Guid.NewGuid(),
-                    ChangeType = ObjectChangeType.Deleted,
-                    ChangeTime = DateTime.UtcNow,
-                    InitiatedByType = activity.InitiatedByType,
-                    InitiatedById = activity.InitiatedById,
-                    InitiatedByName = activity.InitiatedByName,
-                    ChangeInitiatorType = activity.InitiatedByType == ActivityInitiatorType.User
-                        ? MetaverseObjectChangeInitiatorType.User
-                        : MetaverseObjectChangeInitiatorType.NotSet,
-                    ActivityId = activity.Id,
-                    DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
-                    DeletedMetaverseObjectId = metaverseObject.Id,
-                    DeletedObjectTypeId = metaverseObject.Type?.Id,
-                    DeletedObjectDisplayName = displayName
-                };
+                    var attributesToCapture = finalAttributeValues;
 
-                foreach (var attributeValue in attributesToCapture)
-                    change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
+                    var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
-                changes.Add(change);
+                    var change = new MetaverseObjectChange
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = ObjectChangeType.Deleted,
+                        ChangeTime = DateTime.UtcNow,
+                        InitiatedByType = activity.InitiatedByType,
+                        InitiatedById = activity.InitiatedById,
+                        InitiatedByName = activity.InitiatedByName,
+                        ChangeInitiatorType = activity.InitiatedByType == ActivityInitiatorType.User
+                            ? MetaverseObjectChangeInitiatorType.User
+                            : MetaverseObjectChangeInitiatorType.NotSet,
+                        ActivityId = activity.Id,
+                        DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
+                        DeletedMetaverseObjectId = metaverseObject.Id,
+                        DeletedObjectTypeId = metaverseObject.Type?.Id,
+                        DeletedObjectDisplayName = displayName
+                    };
+
+                    foreach (var attributeValue in attributesToCapture)
+                        change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
+
+                    changes.Add(change);
+                }
             }
+
+            buildSpan.SetTag("changeCount", changes.Count);
+            buildSpan.SetTag("attributeChangeCount", changes.Sum(c => c.AttributeChanges.Count));
+            buildSpan.SetTag("valueChangeCount", changes.Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)));
+            buildSpan.SetSuccess();
         }
 
         var retired = await _syncRepo.DeleteMetaverseObjectsAsync(deletions.Select(d => d.Mvo).ToList());
@@ -229,7 +239,12 @@ public class SyncServer : ISyncServer
         // ordering. The bulk COPY path writes the parent, attribute and value rows in one
         // transaction instead of the singular path's one INSERT per row.
         if (changes.Count > 0)
+        {
+            using var persistSpan = Diagnostics.Diagnostics.Sync.StartSpan("MvoDeletionPersistChangeRecords")
+                .SetTag("changeCount", changes.Count);
             await _syncRepo.PersistPendingMvoChangesAsync(changes, []);
+            persistSpan.SetSuccess();
+        }
 
         return retired;
     }

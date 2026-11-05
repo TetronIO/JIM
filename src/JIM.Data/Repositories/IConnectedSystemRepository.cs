@@ -170,9 +170,20 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
-    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
+    /// reference value, the referenced Connected System Object (<c>ReferenceValue</c>). Loading the referenced objects
+    /// reads one row per member of a group; a caller that only compares references by id and string wants
+    /// <see cref="GetConnectedSystemObjectsCoreByIdsNoTrackingAsync"/>.
     /// </summary>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
+    /// <summary>
+    /// Core-weight load of CSOs by ID for Pending Export reconciliation (#2669): untracked, with their attribute values
+    /// and each value's attribute definition, but not the Connected System Objects a reference value names. A reference
+    /// value carries <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c>, which is all reconciliation compares;
+    /// its <c>ReferenceValue</c> navigation is left null, so a group does not bring every member's object with it.
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 

@@ -1523,94 +1523,102 @@ public class ExportEvaluationServer
         var referencingMvoByCsoId = new Dictionary<Guid, Guid>();
         var scopeResults = new Dictionary<(Guid MvoId, int RuleId), bool>();
 
-        foreach (var mvoId in fastMvoIds)
+        using (var inputsSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallBuildFastPathInputs"))
         {
-            var summary = summariesById[mvoId];
-            if (!plan.DirectFlowsByTypeThenAttribute.TryGetValue(summary.TypeId, out var flowsByAttribute))
-                continue; // no export rule flows any candidate attribute for this type
-
-            // An object whose scope cannot be decided for one rule is left out of recall altogether, as export
-            // evaluation leaves it out of every export: what it should hold anywhere is unknown until it is corrected.
-            var scopedRules = byReferencingMvo[mvoId]
-                .Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId))
-                .SelectMany(c => flowsByAttribute[c.MetaverseAttributeId])
-                .Select(flow => flow.ExportRule)
-                .Where(rule => rule.ObjectScopingCriteriaGroups.Count > 0 && targetsByMvoAndSystem.ContainsKey((mvoId, rule.ConnectedSystemId)))
-                .DistinctBy(rule => rule.Id);
-            if (!RecallScopeDecidable(summary, scopedRules, scopeResults, result))
-                continue;
-
-            foreach (var candidate in byReferencingMvo[mvoId].Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId)))
+            foreach (var mvoId in fastMvoIds)
             {
-                var flows = flowsByAttribute[candidate.MetaverseAttributeId];
+                var summary = summariesById[mvoId];
+                if (!plan.DirectFlowsByTypeThenAttribute.TryGetValue(summary.TypeId, out var flowsByAttribute))
+                    continue; // no export rule flows any candidate attribute for this type
 
-                foreach (var flow in flows)
+                // An object whose scope cannot be decided for one rule is left out of recall altogether, as export
+                // evaluation leaves it out of every export: what it should hold anywhere is unknown until it is corrected.
+                var scopedRules = byReferencingMvo[mvoId]
+                    .Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId))
+                    .SelectMany(c => flowsByAttribute[c.MetaverseAttributeId])
+                    .Select(flow => flow.ExportRule)
+                    .Where(rule => rule.ObjectScopingCriteriaGroups.Count > 0 && targetsByMvoAndSystem.ContainsKey((mvoId, rule.ConnectedSystemId)))
+                    .DistinctBy(rule => rule.Id);
+                if (!RecallScopeDecidable(summary, scopedRules, scopeResults, result))
+                    continue;
+
+                foreach (var candidate in byReferencingMvo[mvoId].Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId)))
                 {
-                    var systemId = flow.ExportRule.ConnectedSystemId;
-                    if (!targetsByMvoAndSystem.TryGetValue((mvoId, systemId), out var target))
-                        continue; // the referencing object has no (exportable) presence in this target
+                    var flows = flowsByAttribute[candidate.MetaverseAttributeId];
 
-                    // Rule scoping survives on the fast path via the lean criteria-only attribute
-                    // load; an out-of-scope object must not receive recall exports (parity with
-                    // full evaluation). Memoised per (object, rule).
-                    if (flow.ExportRule.ObjectScopingCriteriaGroups.Count > 0)
+                    foreach (var flow in flows)
                     {
-                        var scopeKey = (mvoId, flow.ExportRule.Id);
-                        if (!scopeResults.TryGetValue(scopeKey, out var inScope))
+                        var systemId = flow.ExportRule.ConnectedSystemId;
+                        if (!targetsByMvoAndSystem.TryGetValue((mvoId, systemId), out var target))
+                            continue; // the referencing object has no (exportable) presence in this target
+
+                        // Rule scoping survives on the fast path via the lean criteria-only attribute
+                        // load; an out-of-scope object must not receive recall exports (parity with
+                        // full evaluation). Memoised per (object, rule).
+                        if (flow.ExportRule.ObjectScopingCriteriaGroups.Count > 0)
                         {
-                            var scopeMvo = new MetaverseObject { Id = summary.Id };
-                            scopeMvo.AttributeValues.AddRange(summary.ScopingAttributeValues);
-                            inScope = ScopingEvaluation.IsMvoInScopeForExportRule(scopeMvo, flow.ExportRule);
-                            scopeResults[scopeKey] = inScope;
+                            var scopeKey = (mvoId, flow.ExportRule.Id);
+                            if (!scopeResults.TryGetValue(scopeKey, out var inScope))
+                            {
+                                var scopeMvo = new MetaverseObject { Id = summary.Id };
+                                scopeMvo.AttributeValues.AddRange(summary.ScopingAttributeValues);
+                                inScope = ScopingEvaluation.IsMvoInScopeForExportRule(scopeMvo, flow.ExportRule);
+                                scopeResults[scopeKey] = inScope;
+                            }
+                            if (!inScope)
+                                continue;
                         }
-                        if (!inScope)
+
+                        // The deleted object's identifiers in this system, captured before deletion.
+                        // Neither present means it was never provisioned there: nothing to remove.
+                        Guid? deletedCsoId = null;
+                        if (context.DeletedCsoIdsBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var deletedCsoIds) &&
+                            deletedCsoIds.TryGetValue(systemId, out var deletedCsoIdValue))
+                            deletedCsoId = deletedCsoIdValue;
+                        string? resolvedValue = null;
+                        if (context.ResolvedReferenceValuesBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var resolvedBySystem) &&
+                            resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
+                            resolvedValue = resolvedValueForSystem;
+                        if (deletedCsoId == null && resolvedValue == null)
                             continue;
-                    }
 
-                    // The deleted object's identifiers in this system, captured before deletion.
-                    // Neither present means it was never provisioned there: nothing to remove.
-                    Guid? deletedCsoId = null;
-                    if (context.DeletedCsoIdsBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var deletedCsoIds) &&
-                        deletedCsoIds.TryGetValue(systemId, out var deletedCsoIdValue))
-                        deletedCsoId = deletedCsoIdValue;
-                    string? resolvedValue = null;
-                    if (context.ResolvedReferenceValuesBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var resolvedBySystem) &&
-                        resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
-                        resolvedValue = resolvedValueForSystem;
-                    if (deletedCsoId == null && resolvedValue == null)
-                        continue;
-
-                    if (!csoIdsBySystem.TryGetValue(systemId, out var csoIds))
-                    {
-                        csoIds = [];
-                        csoIdsBySystem[systemId] = csoIds;
-                        attributeIdsBySystem[systemId] = [];
-                        deletedCsoToMvoBySystem[systemId] = [];
-                        referenceValueToMvoBySystem[systemId] = new ReferenceValueIndex<Guid>();
+                        if (!csoIdsBySystem.TryGetValue(systemId, out var csoIds))
+                        {
+                            csoIds = [];
+                            csoIdsBySystem[systemId] = csoIds;
+                            attributeIdsBySystem[systemId] = [];
+                            deletedCsoToMvoBySystem[systemId] = [];
+                            referenceValueToMvoBySystem[systemId] = new ReferenceValueIndex<Guid>();
+                        }
+                        csoIds.Add(target.ConnectedSystemObjectId);
+                        referencingMvoByCsoId[target.ConnectedSystemObjectId] = mvoId;
+                        attributeIdsBySystem[systemId].Add(flow.TargetAttribute.Id);
+                        var flowKey = (systemId, flow.TargetAttribute.Id);
+                        if (flowBySystemAndAttribute.TryGetValue(flowKey, out var existingFlow))
+                        {
+                            if (existingFlow.SourcePlurality != flow.SourcePlurality)
+                                Log.Warning("StageRecallFastPathAsync: Conflicting source pluralities flow into attribute {AttributeId} " +
+                                    "in system {SystemId}; keeping the first flow's {Plurality} semantics",
+                                    flow.TargetAttribute.Id, systemId, existingFlow.SourcePlurality);
+                        }
+                        else
+                        {
+                            flowBySystemAndAttribute[flowKey] = flow;
+                        }
+                        if (deletedCsoId.HasValue)
+                            deletedCsoToMvoBySystem[systemId][deletedCsoId.Value] = candidate.ReferencedMetaverseObjectId;
+                        if (resolvedValue != null)
+                            referenceValueToMvoBySystem[systemId].Register(resolvedValue,
+                                context.CaseExactReferenceValues.Contains((candidate.ReferencedMetaverseObjectId, systemId)),
+                                candidate.ReferencedMetaverseObjectId);
                     }
-                    csoIds.Add(target.ConnectedSystemObjectId);
-                    referencingMvoByCsoId[target.ConnectedSystemObjectId] = mvoId;
-                    attributeIdsBySystem[systemId].Add(flow.TargetAttribute.Id);
-                    var flowKey = (systemId, flow.TargetAttribute.Id);
-                    if (flowBySystemAndAttribute.TryGetValue(flowKey, out var existingFlow))
-                    {
-                        if (existingFlow.SourcePlurality != flow.SourcePlurality)
-                            Log.Warning("StageRecallFastPathAsync: Conflicting source pluralities flow into attribute {AttributeId} " +
-                                "in system {SystemId}; keeping the first flow's {Plurality} semantics",
-                                flow.TargetAttribute.Id, systemId, existingFlow.SourcePlurality);
-                    }
-                    else
-                    {
-                        flowBySystemAndAttribute[flowKey] = flow;
-                    }
-                    if (deletedCsoId.HasValue)
-                        deletedCsoToMvoBySystem[systemId][deletedCsoId.Value] = candidate.ReferencedMetaverseObjectId;
-                    if (resolvedValue != null)
-                        referenceValueToMvoBySystem[systemId].Register(resolvedValue,
-                            context.CaseExactReferenceValues.Contains((candidate.ReferencedMetaverseObjectId, systemId)),
-                            candidate.ReferencedMetaverseObjectId);
                 }
             }
+
+            inputsSpan.SetTag("referencingCount", fastMvoIds.Count);
+            inputsSpan.SetTag("targetSystemCount", csoIdsBySystem.Count);
+            inputsSpan.SetTag("csoCount", referencingMvoByCsoId.Count);
+            inputsSpan.SetSuccess();
         }
 
         // One existence query per target system: the rows returned are exactly the values the
@@ -1623,25 +1631,31 @@ public class ExportEvaluationServer
             List<CsoReferenceValueMatch> matches;
             using (var existenceSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallExistenceQuery"))
             {
+                var deletedCsoIdsForSystem = deletedCsoToMvoBySystem[systemId].Keys.ToList();
+                var referenceValuesForSystem = referenceValueToMvoBySystem[systemId].Values.ToList();
                 existenceSpan.SetTag("connectedSystemId", systemId);
                 existenceSpan.SetTag("csoCount", csoIds.Count);
+                existenceSpan.SetTag("deletedCsoIdCount", deletedCsoIdsForSystem.Count);
+                existenceSpan.SetTag("referenceValueCount", referenceValuesForSystem.Count);
                 matches = await SyncRepo.GetCsoReferenceValueMatchesAsync(
                     csoIds.ToList(),
                     attributeIdsBySystem[systemId].ToList(),
-                    deletedCsoToMvoBySystem[systemId].Keys.ToList(),
-                    referenceValueToMvoBySystem[systemId].Values.ToList());
+                    deletedCsoIdsForSystem,
+                    referenceValuesForSystem);
                 existenceSpan.SetTag("matchCount", matches.Count);
                 existenceSpan.SetSuccess();
             }
 
-            // A row can match both predicate arms; each target row yields at most one change.
+            // A resolved reference names its object by id, and only an unresolved one by its string (#2669): a resolved
+            // row whose retained DN happens to equal a deleted object's names some other object, and is left alone.
+            // The query returns each row once; the de-duplication keeps "one change per target row" true regardless.
             foreach (var match in matches.DistinctBy(m => m.AttributeValueId))
             {
                 Guid deletedMvoId;
                 if (match.ReferenceValueId.HasValue &&
                     deletedCsoToMvoBySystem[systemId].TryGetValue(match.ReferenceValueId.Value, out var mvoIdByReference))
                     deletedMvoId = mvoIdByReference;
-                else if (match.UnresolvedReferenceValue != null &&
+                else if (!match.ReferenceValueId.HasValue && match.UnresolvedReferenceValue != null &&
                          referenceValueToMvoBySystem[systemId].TryMatch(match.UnresolvedReferenceValue, out var mvoIdByValue))
                     deletedMvoId = mvoIdByValue;
                 else

@@ -3026,9 +3026,38 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Loads CSOs by ID with AttributeValues for reconciliation, using AsNoTracking to avoid
-    /// polluting the change tracker. Only loads AttributeValues (not Type or ReferenceValues)
-    /// since reconciliation only needs attribute data for comparison.
+    /// Core-weight load for Pending Export reconciliation (#2669): untracked, with attribute values and each value's
+    /// attribute definition, and nothing a reference value points at.
+    /// </summary>
+    /// <remarks>
+    /// Reconciliation compares a reference by <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c>, both columns
+    /// of the value row itself, so the <c>ReferenceValue</c> include that <see cref="GetConnectedSystemObjectsByIdsNoTrackingAsync"/>
+    /// carries would only read one whole Connected System Object row per group member for nothing: 26 s of a Target
+    /// Delta Import after 5,000 leavers at Scale500k25kGroups. EF Core rather than raw SQL, because reconciliation
+    /// compares through each value's attribute definition (its type, plurality and case rules), and materialising that
+    /// shared definition by hand would duplicate the entity mapping for a load that is now one row per value. Identity
+    /// resolution has every value of an attribute share one definition instance.
+    /// </remarks>
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    {
+        var idList = csoIds.ToList();
+        if (idList.Count == 0)
+            return new List<ConnectedSystemObject>();
+
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTrackingWithIdentityResolution()
+            .AsSplitQuery()
+            .Include(cso => cso.AttributeValues)
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a reference
+    /// value, the referenced Connected System Object (<c>ReferenceValue</c>). Not Type. The referenced objects cost one
+    /// row per member of a group; Pending Export reconciliation, which compares references by id and string only, reads
+    /// <see cref="GetConnectedSystemObjectsCoreByIdsNoTrackingAsync"/> instead.
     /// </summary>
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {

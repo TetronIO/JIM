@@ -158,6 +158,175 @@ public class ReferenceRecallStagingDatabaseTests
     }
 
     /// <summary>
+    /// The existence query's matching rules (#2669): a resolved reference (a <c>ReferenceValueId</c>) is matched by its
+    /// id alone, so a resolved row whose retained DN equals the deleted object's while its id points at a different
+    /// object is NOT matched; an unresolved reference is matched by its string ignoring case, whatever the casing; and
+    /// nothing outside the given Connected System Objects or attributes is returned, whichever way it would match.
+    /// </summary>
+    [Test]
+    public async Task GetCsoReferenceValueMatchesAsync_ResolvedMatchedByIdOnlyUnresolvedByValue_HonoursFiltersAsync()
+    {
+        const string deletedDn = "uid=lena.leaver,ou=People,dc=glitterband,dc=local";
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Glitterband LDAP", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "GROUP", ConnectedSystem = system, Selected = true };
+        var memberAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "member", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        var managedByAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "managedBy", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        csType.Attributes.Add(memberAttr);
+        csType.Attributes.Add(managedByAttr);
+        seed.AddRange(connectorDefinition, system, csType);
+        await seed.SaveChangesAsync();
+
+        ConnectedSystemObject NewCso() => new() { Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal };
+        var deletedMemberCso = NewCso();
+        var otherMemberCso = NewCso();
+        var groupCso = NewCso();
+        var unlistedGroupCso = NewCso();
+
+        ConnectedSystemObjectAttributeValue AddValue(ConnectedSystemObject owner, ConnectedSystemObjectTypeAttribute attribute,
+            ConnectedSystemObject? referenced, string? unresolved)
+        {
+            var value = new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = owner, Attribute = attribute,
+                ReferenceValue = referenced, UnresolvedReferenceValue = unresolved
+            };
+            owner.AttributeValues.Add(value);
+            return value;
+        }
+
+        // Matched: resolved to the deleted object (it keeps its imported DN, as every resolved reference does).
+        var resolvedToDeleted = AddValue(groupCso, memberAttr, deletedMemberCso, deletedDn);
+        // Matched: unresolved, in casings other than the one captured.
+        var unresolvedUpper = AddValue(groupCso, memberAttr, null, deletedDn.ToUpperInvariant());
+        var unresolvedMixed = AddValue(groupCso, memberAttr, null, "UID=Lena.Leaver,OU=People,DC=glitterband,DC=local");
+        // NOT matched: resolved to a different object, though its retained DN string equals the deleted object's.
+        AddValue(groupCso, memberAttr, otherMemberCso, deletedDn);
+        // NOT matched: unrelated, resolved and unresolved.
+        AddValue(groupCso, memberAttr, otherMemberCso, "uid=someone.else,ou=People,dc=glitterband,dc=local");
+        AddValue(groupCso, memberAttr, null, "uid=another.one,ou=People,dc=glitterband,dc=local");
+        // NOT matched: an attribute outside the filter, either way of matching.
+        AddValue(groupCso, managedByAttr, deletedMemberCso, deletedDn);
+        AddValue(groupCso, managedByAttr, null, deletedDn);
+        // NOT matched: a Connected System Object outside the filter, either way of matching.
+        AddValue(unlistedGroupCso, memberAttr, deletedMemberCso, deletedDn);
+        AddValue(unlistedGroupCso, memberAttr, null, deletedDn);
+
+        seed.AddRange(deletedMemberCso, otherMemberCso, groupCso, unlistedGroupCso);
+        await seed.SaveChangesAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var matches = await repository.Sync.GetCsoReferenceValueMatchesAsync(
+            [groupCso.Id],
+            [memberAttr.Id],
+            [deletedMemberCso.Id],
+            [deletedDn]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(matches.Select(m => m.AttributeValueId),
+                Is.EquivalentTo(new[] { resolvedToDeleted.Id, unresolvedUpper.Id, unresolvedMixed.Id }),
+                "Exactly the row resolved to the deleted object and the two unresolved rows naming it may match");
+            Assert.That(matches.Single(m => m.AttributeValueId == resolvedToDeleted.Id).ReferenceValueId,
+                Is.EqualTo(deletedMemberCso.Id));
+            Assert.That(matches.Where(m => m.AttributeValueId != resolvedToDeleted.Id).Select(m => m.ReferenceValueId),
+                Is.All.Null, "Rows matched by value are unresolved");
+            Assert.That(matches.Select(m => m.ConnectedSystemObjectId), Is.All.EqualTo(groupCso.Id));
+            Assert.That(matches.Select(m => m.AttributeId), Is.All.EqualTo(memberAttr.Id));
+            Assert.That(ctx.Database.GetDbConnection().State, Is.EqualTo(System.Data.ConnectionState.Closed),
+                "The existence query must return its connection to the pool");
+        }
+    }
+
+    /// <summary>
+    /// The existence query must find its rows through indexes keyed on what it is looking for, not by reading every
+    /// member of every referencing group (#2669). Deprovisioning 5,000 leavers at Scale500k25kGroups spent about 8 s
+    /// here, because the string comparison sat in an OR beside the id comparison where no index could serve it, so
+    /// PostgreSQL read each group's whole membership through the (object, attribute) index and filtered it. Each way of
+    /// matching must instead be an index condition: the resolved id on the reference index, the lowered string on the
+    /// partial functional index over unresolved references.
+    /// </summary>
+    [Test]
+    public async Task GetCsoReferenceValueMatchesAsync_LargeGroup_PlanReadsOnlyTheSoughtRowsThroughIndexesAsync()
+    {
+        const string deletedDn = "uid=lena.leaver,ou=People,dc=glitterband,dc=local";
+        var (groupCsoId, deletedMemberCsoId, memberAttributeId) = await SeedGroupWithMemberRowsAsync(deletedDn);
+
+        await using var ctx = NewContext();
+        var connection = (Npgsql.NpgsqlConnection)ctx.Database.GetDbConnection();
+        await connection.OpenAsync();
+
+        // A large group: 2,000 member objects held as resolved references (each keeping its DN, as resolution leaves
+        // it) and 20,000 still unresolved. Copied from seeded rows so every other column takes a valid value.
+        await using (var populate = new Npgsql.NpgsqlCommand("""
+            INSERT INTO "ConnectedSystemObjects"
+            SELECT (jsonb_populate_record(cso, jsonb_build_object('Id', md5('member' || n)::uuid))).*
+            FROM "ConnectedSystemObjects" AS cso, generate_series(1, 2000) AS n
+            WHERE cso."Id" = @deletedCsoId;
+
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('resolved' || n)::uuid,
+                'ReferenceValueId', md5('member' || n)::uuid,
+                'UnresolvedReferenceValue', 'uid=member' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, 2000) AS n
+            WHERE av."ConnectedSystemObjectId" = @groupCsoId AND av."ReferenceValueId" = @deletedCsoId;
+
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('unresolved' || n)::uuid,
+                'UnresolvedReferenceValue', 'uid=pending' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, 20000) AS n
+            WHERE av."ConnectedSystemObjectId" = @groupCsoId AND av."ReferenceValueId" IS NULL;
+
+            ANALYZE "ConnectedSystemObjects";
+            ANALYZE "ConnectedSystemObjectAttributeValues";
+            """, connection))
+        {
+            populate.Parameters.AddWithValue("groupCsoId", groupCsoId);
+            populate.Parameters.AddWithValue("deletedCsoId", deletedMemberCsoId);
+            await populate.ExecuteNonQueryAsync();
+        }
+
+        await using var explain = new Npgsql.NpgsqlCommand(
+            "EXPLAIN " + JIM.PostgresData.Repositories.SyncRepository.CsoReferenceValueMatchSql, connection);
+        JIM.PostgresData.Repositories.SyncRepository.AddCsoReferenceValueMatchParameters(explain,
+            [groupCsoId], [memberAttributeId], [deletedMemberCsoId], [deletedDn]);
+
+        var plan = new List<string>();
+        await using (var reader = await explain.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                plan.Add(reader.GetString(0));
+        }
+
+        var planText = string.Join("\n", plan);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Any(line => line.Contains("Seq Scan on \"ConnectedSystemObjectAttributeValues\"")), Is.False,
+                "The query scans every attribute value.\n" + planText);
+            Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("\"ReferenceValueId\" = ANY")), Is.True,
+                "The resolved id must be an index condition.\n" + planText);
+            Assert.That(plan.Where(line => line.Contains("Index Cond:")).Any(line => line.Contains("lower(")), Is.True,
+                "The lowered reference string must be an index condition.\n" + planText);
+            Assert.That(plan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("lower(")), Is.False,
+                "The reference string must not be compared row by row after the scan.\n" + planText);
+        }
+    }
+
+    /// <summary>
     /// The Summary-tier referencing-object load must project the shadow TypeId column and the
     /// display name, and return only the requested scoping-criteria attribute values.
     /// </summary>

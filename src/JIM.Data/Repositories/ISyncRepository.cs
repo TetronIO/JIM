@@ -217,9 +217,19 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
-    /// Loads CSOs by ID with AttributeValues using AsNoTracking, for reconciliation comparisons.
+    /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
+    /// reference value, the referenced Connected System Object. Pending Export reconciliation reads the lighter
+    /// <see cref="GetConnectedSystemObjectsCoreByIdsNoTrackingAsync"/> instead.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+
+    /// <summary>
+    /// Core-weight load of CSOs by ID for Pending Export reconciliation (#2669): untracked, with their attribute values
+    /// and each value's attribute definition, but not the Connected System Objects a reference value names (its
+    /// <c>ReferenceValue</c> navigation is left null; <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c> are
+    /// loaded, and are all reconciliation compares).
+    /// </summary>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
     /// Summary-tier lookup of the external ID and object type name for the given CSOs, keyed by CSO ID.
@@ -716,9 +726,10 @@ public interface ISyncRepository
     /// <summary>
     /// The reference recall existence query (#1003): returns the Connected System Object attribute
     /// value rows among <paramref name="connectedSystemObjectIds"/> x <paramref name="connectedSystemAttributeIds"/>
-    /// that reference a deleted object, matched by resolved reference
-    /// (<paramref name="deletedReferenceCsoIds"/>) or by raw reference string ignoring case
-    /// (<paramref name="referenceValues"/>, as given: the database folds both sides, #2051). A caller holding a
+    /// that reference a deleted object. A resolved reference (one with a <c>ReferenceValueId</c>) is matched by that id
+    /// alone (<paramref name="deletedReferenceCsoIds"/>), whatever DN string it retains; an unresolved one by its raw
+    /// string ignoring case (<paramref name="referenceValues"/>, as given: the database folds both sides, #2051). Each
+    /// row is returned at most once (#2669). A caller holding a
     /// case-exact value decides the exact match itself from the rows returned. Call per target Connected System so
     /// values cannot cross-match between systems. Rows not returned are values the target does not
     /// hold; staging nothing for them replaces no-net-change detection.

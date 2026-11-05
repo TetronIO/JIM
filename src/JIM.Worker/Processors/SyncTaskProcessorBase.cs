@@ -6058,71 +6058,78 @@ public abstract class SyncTaskProcessorBase
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
                     recallResult.SkippedDueToExistingDeletePendingExport);
 
-                // A referencing object whose export scope could not be decided received no recall: its error, never
-                // a silent skip.
-                foreach (var failure in recallResult.ScopingFailures)
+                // The Activity reporting of what recall staged (#2669: measured apart from the staging itself).
+                using (var rpeiSpan = Diagnostics.Sync.StartSpan("MvoDeletionStageRecallRpeis")
+                    .SetTag("scopingFailureCount", recallResult.ScopingFailures.Count)
+                    .SetTag("stagedPendingExportCount", recallResult.StagedPendingExports.Count))
                 {
-                    var failureItem = _activity.PrepareRunProfileExecutionItem();
-                    failureItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
-                    failureItem.ErrorMessage = failure.DescribeForAdministrator();
-                    failureItem.DisplayNameSnapshot = recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId);
-                    _activity.RunProfileExecutionItems.Add(failureItem);
-                    Log.Warning("FlushPendingMvoDeletionsAsync: Reference recall skipped MVO {MvoId}; its export scope could not be decided: {Message}",
-                        failure.MetaverseObjectId, LogSanitiser.Sanitise(failure.Message));
+                    // A referencing object whose export scope could not be decided received no recall: its error, never
+                    // a silent skip.
+                    foreach (var failure in recallResult.ScopingFailures)
+                    {
+                        var failureItem = _activity.PrepareRunProfileExecutionItem();
+                        failureItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+                        failureItem.ErrorMessage = failure.DescribeForAdministrator();
+                        failureItem.DisplayNameSnapshot = recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(failure.MetaverseObjectId);
+                        _activity.RunProfileExecutionItems.Add(failureItem);
+                        Log.Warning("FlushPendingMvoDeletionsAsync: Reference recall skipped MVO {MvoId}; its export scope could not be decided: {Message}",
+                            failure.MetaverseObjectId, LogSanitiser.Sanitise(failure.Message));
+                    }
+
+                    // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
+                    // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target
+                    // CSO and deferred to end of run (FlushDeferredRecallRpeisAsync): a group whose deleted
+                    // members span N pages stages N times, but the delete-then-create merge means each flush's
+                    // Pending Export already carries the prior removals, so only the final one matters. Last
+                    // write wins; emitting per page-flush inflated TotalPendingExports on large-scale runs.
+                    // Which deleted objects each referencing object lost, so the recall RPEI can say why it exists
+                    // (#1223). Built from the recall context captured before deletion, which is the only record of
+                    // the linkage: deletion nulls the reference FKs, after which nothing connects the group's
+                    // removal to the members that caused it. Restricted to objects actually deleted, because the
+                    // context was captured over deletion *candidates* and a candidate rescued by a same-page
+                    // rejoin caused nothing.
+                    var deletedMvoIdSet = deletedMvoIds.ToHashSet();
+                    var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
+
+                    // The relationship noun the chain reads back comes from the schema, so the attribute's name is
+                    // resolved here and snapshotted onto each cause. Fetched at most once per run.
+                    _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
+
+                    // Keyed on the candidate rather than on the referenced object: one deleted object referenced
+                    // through two attributes is two distinct removals, and each names its own attribute.
+                    var causesByReferencingMvoId = referenceRecallContext.Candidates
+                        .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
+                        .GroupBy(c => c.ReferencingMetaverseObjectId)
+                        .ToDictionary(
+                            g => g.Key,
+                            g => g.Select(c => (c.ReferencedMetaverseObjectId, c.MetaverseAttributeId)).Distinct()
+                                .Select(pair =>
+                                {
+                                    deletionCandidatesByMvoId.TryGetValue(pair.ReferencedMetaverseObjectId, out var deletedMvo);
+                                    mvoDeletedNodes.TryGetValue(pair.ReferencedMetaverseObjectId, out var node);
+                                    return deletedMvo != null
+                                        ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome,
+                                            _metaverseAttributeNamesById.GetValueOrDefault(pair.MetaverseAttributeId))
+                                        : null;
+                                })
+                                .Where(cause => cause != null)
+                                .Select(cause => cause!)
+                                .ToList());
+
+                    foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
+                    {
+                        var displayName = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                            ? recallResult.ReferencingObjectDisplayNames
+                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
+                            : null;
+                        var causes = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                            ? causesByReferencingMvoId.GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value) ?? []
+                            : [];
+                        StageDeferredRecallRpei(stagedPendingExport, displayName, causes);
+                    }
+
+                    rpeiSpan.SetSuccess();
                 }
-
-                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
-                // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target
-                // CSO and deferred to end of run (FlushDeferredRecallRpeisAsync): a group whose deleted
-                // members span N pages stages N times, but the delete-then-create merge means each flush's
-                // Pending Export already carries the prior removals, so only the final one matters. Last
-                // write wins; emitting per page-flush inflated TotalPendingExports on large-scale runs.
-                // Which deleted objects each referencing object lost, so the recall RPEI can say why it exists
-                // (#1223). Built from the recall context captured before deletion, which is the only record of
-                // the linkage: deletion nulls the reference FKs, after which nothing connects the group's
-                // removal to the members that caused it. Restricted to objects actually deleted, because the
-                // context was captured over deletion *candidates* and a candidate rescued by a same-page
-                // rejoin caused nothing.
-                var deletedMvoIdSet = deletedMvoIds.ToHashSet();
-                var mvoDeletedNodes = FindMvoDeletedOutcomeNodes();
-
-                // The relationship noun the chain reads back comes from the schema, so the attribute's name is
-                // resolved here and snapshotted onto each cause. Fetched at most once per run.
-                _metaverseAttributeNamesById ??= await _syncRepo.GetMetaverseAttributeNamesAsync();
-
-                // Keyed on the candidate rather than on the referenced object: one deleted object referenced
-                // through two attributes is two distinct removals, and each names its own attribute.
-                var causesByReferencingMvoId = referenceRecallContext.Candidates
-                    .Where(c => deletedMvoIdSet.Contains(c.ReferencedMetaverseObjectId))
-                    .GroupBy(c => c.ReferencingMetaverseObjectId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(c => (c.ReferencedMetaverseObjectId, c.MetaverseAttributeId)).Distinct()
-                            .Select(pair =>
-                            {
-                                deletionCandidatesByMvoId.TryGetValue(pair.ReferencedMetaverseObjectId, out var deletedMvo);
-                                mvoDeletedNodes.TryGetValue(pair.ReferencedMetaverseObjectId, out var node);
-                                return deletedMvo != null
-                                    ? BuildDeletionCause(deletedMvo, node.Rpei, node.Outcome,
-                                        _metaverseAttributeNamesById.GetValueOrDefault(pair.MetaverseAttributeId))
-                                    : null;
-                            })
-                            .Where(cause => cause != null)
-                            .Select(cause => cause!)
-                            .ToList());
-
-                foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
-                {
-                    var displayName = stagedPendingExport.SourceMetaverseObjectId.HasValue
-                        ? recallResult.ReferencingObjectDisplayNames
-                            .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
-                        : null;
-                    var causes = stagedPendingExport.SourceMetaverseObjectId.HasValue
-                        ? causesByReferencingMvoId.GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value) ?? []
-                        : [];
-                    StageDeferredRecallRpei(stagedPendingExport, displayName, causes);
-                }
-
             }
         }
 
