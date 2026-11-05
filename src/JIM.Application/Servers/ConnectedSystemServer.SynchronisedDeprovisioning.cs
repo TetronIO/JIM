@@ -408,7 +408,7 @@ public partial class ConnectedSystemServer
             // Fail closed (#2053): an object whose surviving contributor's scope cannot be decided is left exactly as it
             // was, with its Metaverse Object, rather than recalled on a guess. Checked before anything is touched.
             if (await DescribeUndecidableScopeAsync(connectedSystemObject, fallibleImportRules, fallibleExportRules, survivorScopeAnswers,
-                    Application.SyncRepo) is { } undecidable)
+                    Application.SyncRepo, exportEvaluationCache.Connections) is { } undecidable)
             {
                 HoldBack(connectedSystemObject, undecidable);
                 continue;
@@ -663,9 +663,11 @@ public partial class ConnectedSystemServer
     /// objects.
     /// </summary>
     /// <param name="syncRepository">Where survivors are read from: the run's repository, or a preview's read-only guard.</param>
+    /// <param name="connections">The page's connections, from its export evaluation cache, for connection criteria (#2021).</param>
     private async Task<string?> DescribeUndecidableScopeAsync(ConnectedSystemObject connectedSystemObject,
         List<SyncRule> fallibleImportRules, List<SyncRule> fallibleExportRules,
-        Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers, ISyncRepository syncRepository)
+        Dictionary<(Guid CsoId, int SyncRuleId), bool> survivorScopeAnswers, ISyncRepository syncRepository,
+        MetaverseObjectConnections? connections)
     {
         if (connectedSystemObject.MetaverseObjectId is not { } metaverseObjectId)
             return null;
@@ -676,7 +678,7 @@ public partial class ConnectedSystemServer
             {
                 try
                 {
-                    Application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule);
+                    Application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, connections: connections);
                 }
                 catch (ScopingCriterionFailedException scopingEx)
                 {

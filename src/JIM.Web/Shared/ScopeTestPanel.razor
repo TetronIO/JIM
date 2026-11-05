@@ -58,6 +58,20 @@
         </tbody>
     </MudSimpleTable>
 
+    @if (_connections.Count > 0)
+    {
+        @* A connection criterion (#2021) tests the identity's joins, which a sample states rather than holds *@
+        <MudText Typo="Typo.button" Class="mud-text-secondary d-block mt-4">Connections</MudText>
+        <div class="d-flex flex-column" data-testid="jim-scope-test-connections">
+            @foreach (var connection in _connections)
+            {
+                var typeId = connection.ConnectedObjectTypeId;
+                <MudCheckBox T="bool" @key="typeId" Value="_connected.Contains(typeId)" ValueChanged="@(v => SetConnected(typeId, v))" Dense="true"
+                             Label="@($"Has {connection.Description}")" data-testid="jim-scope-test-connection" />
+            }
+        </div>
+    }
+
     <RunAsOfPicker Value="_asOf" ValueChanged="SetAsOf" Class="mt-3" />
 
     <MudButton Variant="Variant.Filled" Size="Size.Small" Class="mt-3" OnClick="RunTest">Run test</MudButton>
@@ -101,6 +115,8 @@
     ];
 
     private IReadOnlyList<AttributeSampleDescriptor> _inputs = [];
+    private IReadOnlyList<ConnectionSampleDescriptor> _connections = [];
+    private readonly HashSet<int> _connected = [];
     private readonly Dictionary<string, TestInputState> _states = new(StringComparer.OrdinalIgnoreCase);
     private DateTime? _asOf;
     private bool _fromObject;
@@ -128,6 +144,7 @@
     {
         // The inputs follow the criteria as they are edited; values entered for an attribute still compared are kept.
         _inputs = ScopeTester.DescribeInputs(SyncRule);
+        _connections = ScopeTester.DescribeConnections(SyncRule);
         ClearResult();
     }
 
@@ -154,6 +171,15 @@
 
     private void SetFromObject(bool fromObject) => _fromObject = fromObject;
 
+    private void SetConnected(int connectedObjectTypeId, bool connected)
+    {
+        if (connected)
+            _connected.Add(connectedObjectTypeId);
+        else
+            _connected.Remove(connectedObjectTypeId);
+        ClearResult();
+    }
+
     /// <summary>
     /// Fills the inputs from a real object: every value it holds for each attribute the criteria compare, and "No
     /// value" for an attribute it holds none for.
@@ -165,7 +191,14 @@
         if (Exporting)
         {
             if (await jim.Metaverse.GetMetaverseObjectAsync(found.Id) is { } mvo)
+            {
                 loaded = ScopeTester.InputsFromMetaverseObject(mvo, SyncRule);
+
+                // Its own connections, for the connection criteria, which the ticks then let the administrator change.
+                _connected.Clear();
+                if (await jim.ExportEvaluation.ReadConnectionsAsync([mvo.Id], [SyncRule]) is { } connections)
+                    _connected.UnionWith(connections.JoinedObjectTypeIds(mvo.Id));
+            }
         }
         else if (await jim.ConnectedSystems.GetConnectedSystemObjectAsync(SyncRule.ConnectedSystemId, found.Id) is { } cso)
         {
@@ -193,7 +226,7 @@
             .Select(input => new AttributeSample(input.AttributeName, StateOf(input.AttributeName).TestValues))
             .ToList();
         _ranAtUtc = DateTime.UtcNow;
-        _result = ScopeTester.Test(SyncRule, inputs, _asOf ?? _ranAtUtc);
+        _result = ScopeTester.Test(SyncRule, inputs, _asOf ?? _ranAtUtc, _connected);
     }
 
     private async Task SaveAsTestCaseAsync(ConfigurationTestCase draft) =>

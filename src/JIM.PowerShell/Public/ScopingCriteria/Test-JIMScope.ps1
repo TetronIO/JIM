@@ -30,6 +30,11 @@ function Test-JIMScope {
     .PARAMETER MetaverseObjectId
         The ID of a Metaverse Object whose values to test with, for an export rule.
 
+    .PARAMETER ConnectedObjectTypeId
+        The IDs of the Connected System Object Types the tested Metaverse Object is joined to, for an export rule's
+        connection criteria. Omit it to use the joins of the object named by -MetaverseObjectId, or none; give an
+        empty list to test that object as joined to nothing.
+
     .PARAMETER AsOf
         The instant to test as of, which relative date criteria resolve against. A time without a time zone is read
         as UTC.
@@ -60,6 +65,12 @@ function Test-JIMScope {
         Lists each criterion of export Synchronisation Rule 15 with whether a real Metaverse Object meets it and what
         the object holds.
 
+    .EXAMPLE
+        Test-JIMScope -SyncRuleId 14 -MetaverseObjectId '5c1f0b7e-2a4d-4f1e-8b39-0c6d2e7a9f12' -ConnectedObjectTypeId @()
+
+        Tests whether a person would stay in an export rule's scope, scoped to people with a user account in PANOPLY AD,
+        once they had no connections at all, as after they left.
+
     .LINK
         Get-JIMScopingCriteria
         New-JIMScopingCriterion
@@ -79,6 +90,10 @@ function Test-JIMScope {
 
         [Parameter(Mandatory, ParameterSetName = 'MetaverseObject')]
         [guid]$MetaverseObjectId,
+
+        [Parameter()]
+        [AllowEmptyCollection()]
+        [int[]]$ConnectedObjectTypeId,
 
         [Parameter()]
         [datetime]$AsOf
@@ -104,6 +119,10 @@ function Test-JIMScope {
             $body.metaverseObjectId = $MetaverseObjectId
         }
 
+        if ($PSBoundParameters.ContainsKey('ConnectedObjectTypeId')) {
+            # Sent even when empty: an empty list says "joined to nothing", where leaving it out uses the object's own joins.
+            $body.connectedObjectTypeIds = @($ConnectedObjectTypeId)
+        }
         if ($PSBoundParameters.ContainsKey('AsOf')) {
             # ISO 8601 with no offset unless one was given, so the API reads a bare date or time as UTC.
             $body.asOf = if ($AsOf.Kind -eq [DateTimeKind]::Unspecified) { $AsOf.ToString('yyyy-MM-ddTHH:mm:ss') } else { $AsOf.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }

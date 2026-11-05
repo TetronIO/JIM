@@ -52,6 +52,29 @@ public static class ScopeTester
     }
 
     /// <summary>
+    /// The connections an export rule's scoping criteria test (#2021), each Object Type once, in the order the criteria
+    /// name them; empty for an import rule, whose criteria cannot test one.
+    /// </summary>
+    public static IReadOnlyList<ConnectionSampleDescriptor> DescribeConnections(SyncRule syncRule)
+    {
+        ArgumentNullException.ThrowIfNull(syncRule);
+        if (syncRule.Direction != SyncRuleDirection.Export)
+            return [];
+
+        return [.. syncRule.ObjectScopingCriteriaGroups
+            .SelectMany(ConnectionCriteria)
+            .Select(criterion => new ConnectionSampleDescriptor(
+                criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType!.Id,
+                criterion.ConnectedObjectType != null
+                    ? SyncRuleScopingCriteria.DescribeConnection(criterion.ConnectedObjectType)
+                    : $"Object Type {criterion.ConnectedObjectTypeId}"))
+            .DistinctBy(connection => connection.ConnectedObjectTypeId)];
+    }
+
+    private static IEnumerable<SyncRuleScopingCriteria> ConnectionCriteria(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria.Where(criterion => criterion.IsConnection).Concat(group.ChildGroups.SelectMany(ConnectionCriteria));
+
+    /// <summary>
     /// The values <paramref name="metaverseObject"/> holds for each attribute an export rule's scoping criteria
     /// compare. An asserted-null marker carries no value, as scoping reads it.
     /// </summary>
@@ -75,7 +98,10 @@ public static class ScopeTester
     /// <param name="syncRule">The Synchronisation Rule, with its scoping criteria and their attributes. Its criteria
     /// need not be saved, so an edit can be tried before saving it.</param>
     /// <param name="asOfUtc">The instant relative date criteria resolve against.</param>
-    public static ScopeTestResult Test(SyncRule syncRule, IReadOnlyList<AttributeSample> inputs, DateTime asOfUtc)
+    /// <param name="connectedObjectTypeIds">The Object Types the sample Metaverse Object is joined to, for an export rule's
+    /// connection criteria (#2021); none when not given, so such a criterion is always decided.</param>
+    public static ScopeTestResult Test(SyncRule syncRule, IReadOnlyList<AttributeSample> inputs, DateTime asOfUtc,
+        IReadOnlyCollection<int>? connectedObjectTypeIds = null)
     {
         ArgumentNullException.ThrowIfNull(syncRule);
         ArgumentNullException.ThrowIfNull(inputs);
@@ -113,7 +139,9 @@ public static class ScopeTester
                 held.MetaverseObject = metaverseObject;
                 return held;
             })));
-            explainAt = instant => scoping.ExplainMvoForExportRule(metaverseObject, syncRule, instant);
+            var connections = new MetaverseObjectConnections([metaverseObject.Id],
+                (connectedObjectTypeIds ?? []).Select(typeId => (metaverseObject.Id, typeId)));
+            explainAt = instant => scoping.ExplainMvoForExportRule(metaverseObject, syncRule, instant, connections);
             computedDatesOf = criterion => scoping.ComputedDates(criterion, metaverseObject, asOfUtc);
         }
         else

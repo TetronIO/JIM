@@ -316,6 +316,36 @@ public class SynchronisedDeprovisioningWorkflowTests : SynchronisedDeprovisionin
         }
     }
 
+    [Test]
+    public async Task ExecuteSynchronisedDeprovisioningAsync_ExportRuleScopedOnAConnection_DecidesTheScopeAndProceedsAsync()
+    {
+        // A connection criterion (#2021) can fail only when the object's connections are not read. The pre-flight must
+        // read them, or every object would be held back and the Connected System could never be deleted.
+        var ctx = await SetUpSoleContributorWithExportTargetAsync();
+        await RunFullSyncAsync(ctx.Hr);
+        var targetCso = SimulateTargetExportExecuted(ctx, "John Smith", HrDescription);
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Target.Id);
+        var targetType = exportRule.ConnectedSystemObjectType!;
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [new SyncRuleScopingCriteria { ConnectedObjectType = targetType, ConnectedObjectTypeId = targetType.Id, ComparisonType = SearchComparisonType.HasValue }]
+        });
+
+        var (task, activity) = await FenceSystemAndBuildTaskAsync(ctx.Hr);
+        await Jim.ConnectedSystems.ExecuteSynchronisedDeprovisioningAsync(task);
+
+        var scopingErrors = DbContext.ActivityRunProfileExecutionItems
+            .Where(rpei => rpei.ActivityId == activity.Id && rpei.ErrorType == ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(scopingErrors, Is.Empty, "the object's connections were read, so its scope was decided");
+            Assert.That(SyncRepo.ConnectedSystemObjects.Values.Any(c => c.ConnectedSystemId == ctx.Hr.Id), Is.False, "HR's object was deprovisioned");
+            Assert.That(SyncRepo.ConnectedSystemObjects.ContainsKey(targetCso.Id), Is.True);
+        }
+    }
+
     private void ScopeExportRuleOnDescription(DeprovisioningContext ctx, string pattern)
     {
         var exportRule = SyncRepo.SyncRules.Values.Single(r => r.ConnectedSystemId == ctx.Target.Id);

@@ -17,8 +17,9 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
-/// Saving a Synchronisation Rule refuses an expression scoping criterion that could never be evaluated (#2054), on the
-/// one write path the portal, the REST API and PowerShell share.
+/// Saving a Synchronisation Rule refuses an expression scoping criterion that could never be evaluated (#2054), and a
+/// connection criterion an import rule cannot hold or that names nothing (#2021), on the one write path the portal, the
+/// REST API and PowerShell share.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemServerScopingExpressionSaveTests
@@ -196,6 +197,85 @@ public class ConnectedSystemServerScopingExpressionSaveTests
     }
 
     /// <summary>A stored rule holding <paramref name="criterion"/> exactly as stored.</summary>
+    #region Connection criteria (#2021)
+
+    private readonly ConnectedSystemObjectType _panoplyUser = new()
+    {
+        Id = 31, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "PANOPLY AD" }
+    };
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ExportRuleWithAConnectionCriterion_IsSavedAsync()
+    {
+        _csRepo.Setup(r => r.GetObjectTypeAsync(_panoplyUser.Id)).ReturnsAsync(_panoplyUser);
+        var rule = ExportRuleWith(Connection(_panoplyUser.Id, SearchComparisonType.HasValue));
+
+        await BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator);
+
+        _csRepo.Verify(r => r.CreateSyncRuleAsync(rule), Times.Once);
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ImportRuleWithAConnectionCriterion_IsRefused()
+    {
+        _csRepo.Setup(r => r.GetObjectTypeAsync(_panoplyUser.Id)).ReturnsAsync(_panoplyUser);
+        var rule = ExportRuleWith(Connection(_panoplyUser.Id, SearchComparisonType.HasValue));
+        rule.Direction = SyncRuleDirection.Import;
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+
+        Assert.That(ex!.Message, Does.Contain("export rules"));
+        _csRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never);
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ConnectionCriterionWithAValueOperator_IsRefused()
+    {
+        _csRepo.Setup(r => r.GetObjectTypeAsync(_panoplyUser.Id)).ReturnsAsync(_panoplyUser);
+        var rule = ExportRuleWith(Connection(_panoplyUser.Id, SearchComparisonType.Equals));
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+
+        Assert.That(ex!.Message, Does.Contain("has, or has no"));
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ConnectionCriterionNamingNoObjectType_IsRefused()
+    {
+        var rule = ExportRuleWith(Connection(999, SearchComparisonType.HasValue));
+
+        var ex = Assert.ThrowsAsync<ArgumentException>(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator));
+
+        Assert.That(ex!.Message, Does.Contain("999"));
+    }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ConnectionCriterionAlsoNamingAnAttribute_IsRefused()
+    {
+        _csRepo.Setup(r => r.GetObjectTypeAsync(_panoplyUser.Id)).ReturnsAsync(_panoplyUser);
+        var criterion = Connection(_panoplyUser.Id, SearchComparisonType.HasValue);
+        criterion.MetaverseAttributeId = 10;
+        var rule = ExportRuleWith(criterion);
+
+        Assert.That(() => BuildApplication().ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, _initiator), Throws.ArgumentException);
+    }
+
+    private static SyncRuleScopingCriteria Connection(int objectTypeId, SearchComparisonType comparison) => new()
+    {
+        ConnectedObjectTypeId = objectTypeId, ComparisonType = comparison
+    };
+
+    private SyncRule ExportRuleWith(SyncRuleScopingCriteria criterion)
+    {
+        var rule = ImportRule("Lower(cs[\"department\"])");
+        rule.Direction = SyncRuleDirection.Export;
+        rule.Name = "GAL: PANOPLY people into RESURGAM";
+        rule.ObjectScopingCriteriaGroups[0].Criteria = [criterion];
+        return rule;
+    }
+
+    #endregion
+
     private SyncRule StoredRuleWith(SyncRuleScopingCriteria criterion)
     {
         var rule = ImportRule("Lower(cs[\"department\"])");

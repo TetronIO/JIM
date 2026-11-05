@@ -2239,6 +2239,22 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public Task<MetaverseObjectConnections> GetMetaverseObjectConnectionsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> connectedSystemObjectTypeIds)
+    {
+        if (metaverseObjectIds.Count == 0 || connectedSystemObjectTypeIds.Count == 0)
+            return Task.FromResult(new MetaverseObjectConnections([], [], connectedSystemObjectTypeIds));
+
+        var mvoIds = metaverseObjectIds.ToHashSet();
+        var typeIds = connectedSystemObjectTypeIds.ToHashSet();
+        var joined = _csos.Values
+            .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value) &&
+                          typeIds.Contains(cso.TypeId) && cso.Status != ConnectedSystemObjectStatus.Obsolete)
+            .Select(cso => (cso.MetaverseObjectId!.Value, cso.TypeId));
+        return Task.FromResult(new MetaverseObjectConnections(mvoIds, joined, typeIds));
+    }
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
         var result = new HashSet<Guid>();

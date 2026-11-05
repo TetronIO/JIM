@@ -493,6 +493,24 @@ public class MetaverseObjectConnectionExplanationsTests
 
     #region Not connected
 
+    [TestCase(ConnectedSystemObjectStatus.Normal, ScopingRuleOutcome.InScope)]
+    [TestCase(ConnectedSystemObjectStatus.Obsolete, ScopingRuleOutcome.OutOfScope)]
+    public async Task GetMetaverseObjectConnectionExplanationsAsync_ConnectionCriterion_IsDecidedFromTheJoinedObjectsAsync(
+        ConnectedSystemObjectStatus payrollStatus, ScopingRuleOutcome expected)
+    {
+        // A connection criterion (#2021) reads the joined objects the explanation already holds: an Obsolete one is not a
+        // connection, since Payroll no longer holds it.
+        var payroll = Joined(PayrollId, "Payroll", EmployeeTypeId, "employee", status: payrollStatus);
+        ExportRule("Finance App Users Export", groups: All(new SyncRuleScopingCriteria
+        {
+            Id = _nextId++, ConnectedObjectType = payroll.Type, ConnectedObjectTypeId = EmployeeTypeId, ComparisonType = SearchComparisonType.HasValue
+        }));
+
+        var entry = (await ExplainAsync())!.NotConnected!.Single();
+
+        Assert.That(entry.Scoping.Outcome, Is.EqualTo(expected));
+    }
+
     [Test]
     public async Task GetMetaverseObjectConnectionExplanationsAsync_OutOfScope_IsNotInScopeWithBulletsAndSummaryAsync()
     {

@@ -66,6 +66,9 @@ internal static class SyncRuleScopingTreeLoader
                 .ThenInclude(c => c.MetaverseAttribute)
             .Include(g => g.Criteria.OrderBy(c => c.Id))
                 .ThenInclude(c => c.ConnectedSystemAttribute)
+            .Include(g => g.Criteria.OrderBy(c => c.Id))
+                .ThenInclude(c => c.ConnectedObjectType)
+                    .ThenInclude(t => t!.ConnectedSystem)
             .Where(g => groupIds.Contains(g.Id));
         query = tracked ? query.AsTracking() : query.AsNoTracking();
 
@@ -128,6 +131,32 @@ internal static class SyncRuleScopingTreeLoader
         return criteria
             .Select(c => new ScopingCriterionOwnership(placements[c.GroupId].SyncRuleId, c.Id, c.MetaverseAttributeId))
             .ToList();
+    }
+
+    /// <summary>
+    /// The rules among <paramref name="syncRuleIds"/> holding, at any depth, a connection criterion (#2021) that names an
+    /// Object Type of <paramref name="connectedSystemId"/>.
+    /// </summary>
+    internal static async Task<HashSet<int>> GetRuleIdsWithConnectionCriteriaToAsync(
+        JimDbContext db, IReadOnlyCollection<int> syncRuleIds, int connectedSystemId)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        var placements = await GetGroupPlacementsAsync(db, syncRuleIds);
+        if (placements.Count == 0)
+            return [];
+
+        var groupIds = placements.Keys.Select(id => (int?)id).ToList();
+        var groupsHoldingOne = await db.SyncRuleScopingCriteria
+            .AsNoTracking()
+            .Where(c => groupIds.Contains(EF.Property<int?>(c, "SyncRuleScopingCriteriaGroupId")) &&
+                        c.ConnectedObjectTypeId.HasValue && c.ConnectedObjectType!.ConnectedSystemId == connectedSystemId)
+            .Select(c => EF.Property<int?>(c, "SyncRuleScopingCriteriaGroupId")!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        return groupsHoldingOne.Select(groupId => placements[groupId].SyncRuleId).ToHashSet();
     }
 
     /// <summary>

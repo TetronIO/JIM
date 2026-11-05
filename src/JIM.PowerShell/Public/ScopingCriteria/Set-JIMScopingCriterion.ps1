@@ -7,7 +7,7 @@ function Set-JIMScopingCriterion {
         Replaces a criterion in a scoping criteria group.
 
     .DESCRIPTION
-        Replaces a criterion: its attribute (or expression), comparison and value are all set from what you give, as
+        Replaces a criterion: its attribute (or expression, or connection), comparison and value are all set from what you give, as
         New-JIMScopingCriterion would set them. Its case sensitivity is kept unless -CaseSensitive is given.
 
     .PARAMETER SyncRuleId
@@ -42,6 +42,19 @@ function Set-JIMScopingCriterion {
         The type the expression's computed value is compared as, which decides the comparisons and the value parameter
         that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type
         stops that object with an error rather than deciding its scope.
+
+    .PARAMETER ConnectedObjectTypeId
+        The ID of a Connected System Object Type, for a connection criterion: it tests whether the Metaverse Object is
+        joined to an object of this type (ComparisonType HasValue) or to none (HasNoValue), and takes no value. Export
+        Synchronisation Rules only.
+
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System holding the Object Type a connection criterion tests, with
+        -ConnectedObjectTypeName, instead of -ConnectedObjectTypeId.
+
+    .PARAMETER ConnectedObjectTypeName
+        The name of the Object Type a connection criterion tests, for example user, on the Connected System named by
+        -ConnectedSystemName.
 
     .PARAMETER ComparisonType
         How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
@@ -123,6 +136,11 @@ function Set-JIMScopingCriterion {
         Updates criterion 15 to compare the Department with its spacing removed and in capitals, so ' Finance ' and
         'finance' are both in scope.
 
+    .EXAMPLE
+        Set-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15 -ConnectedSystemName 'RESURGAM AD' -ConnectedObjectTypeName 'user' -ComparisonType HasNoValue
+
+        Makes criterion 15 keep only people with no user account in RESURGAM AD.
+
     .LINK
         New-JIMScopingCriterion
         Get-JIMScopingCriteria
@@ -160,6 +178,17 @@ function Set-JIMScopingCriterion {
         [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
         [ValidateSet('Text', 'Number', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Guid')]
         [string]$CompareAs,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionId')]
+        [int]$ConnectedObjectTypeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$ConnectedSystemName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$ConnectedObjectTypeName,
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
@@ -221,6 +250,28 @@ function Set-JIMScopingCriterion {
 
         $body = @{
             comparisonType = $ComparisonType
+        }
+
+        # A connection criterion (#2021) tests whether the Metaverse Object is joined to an object of a type: it is had or
+        # not had, so it takes HasValue or HasNoValue and no value.
+        if ($PSCmdlet.ParameterSetName -in 'ByConnectionId', 'ByConnectionName') {
+            $valueParameters = 'StringValue', 'IntValue', 'LongValue', 'DecimalValue', 'DateTimeValue', 'BoolValue', 'GuidValue',
+                'ValueMode', 'RelativeCount', 'RelativeUnit', 'RelativeDirection', 'CaseSensitive'
+            if ($ComparisonType -notin 'HasValue', 'HasNoValue' -or @($valueParameters | Where-Object { $PSBoundParameters.ContainsKey($_) }).Count -gt 0) {
+                Write-Error "A connection criterion tests whether the object has a connection: use -ComparisonType HasValue or HasNoValue, with no value."
+                return
+            }
+
+            if ($PSCmdlet.ParameterSetName -eq 'ByConnectionName') {
+                try {
+                    $ConnectedObjectTypeId = Resolve-JIMConnectedObjectType -ConnectedSystemName $ConnectedSystemName -Name $ConnectedObjectTypeName
+                }
+                catch {
+                    Write-Error $_
+                    return
+                }
+            }
+            $body.connectedObjectTypeId = $ConnectedObjectTypeId
         }
 
         if ($PSCmdlet.ParameterSetName -eq 'ByMvId') {

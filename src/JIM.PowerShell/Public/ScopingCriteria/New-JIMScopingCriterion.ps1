@@ -10,7 +10,10 @@ function New-JIMScopingCriterion {
         Adds a criterion to a scoping criteria group: one attribute compared with one value. Name a Metaverse
         attribute for an export Synchronisation Rule and a Connected System attribute for an import one, and give
         the value in the parameter for the attribute's data type; HasValue and HasNoValue take no value. To compare a
-        value computed from the object instead, give -Expression and the type to compare it as in -CompareAs.
+        value computed from the object instead, give -Expression and the type to compare it as in -CompareAs. To test
+        whether the Metaverse Object is joined to an object of a Connected System Object Type, on an export
+        Synchronisation Rule, name the type with -ConnectedObjectTypeId, or -ConnectedSystemName and
+        -ConnectedObjectTypeName, and use HasValue or HasNoValue.
 
     .PARAMETER SyncRuleId
         The ID of the Synchronisation Rule.
@@ -41,6 +44,19 @@ function New-JIMScopingCriterion {
         The type the expression's computed value is compared as, which decides the comparisons and the value parameter
         that apply, as an attribute's own type does. A value the expression computes that cannot be read as this type
         stops that object with an error rather than deciding its scope.
+
+    .PARAMETER ConnectedObjectTypeId
+        The ID of a Connected System Object Type, for a connection criterion: it tests whether the Metaverse Object is
+        joined to an object of this type (ComparisonType HasValue) or to none (HasNoValue), and takes no value. Export
+        Synchronisation Rules only.
+
+    .PARAMETER ConnectedSystemName
+        The name of the Connected System holding the Object Type a connection criterion tests, with
+        -ConnectedObjectTypeName, instead of -ConnectedObjectTypeId.
+
+    .PARAMETER ConnectedObjectTypeName
+        The name of the Object Type a connection criterion tests, for example user, on the Connected System named by
+        -ConnectedSystemName.
 
     .PARAMETER ComparisonType
         How the attribute is compared with the value. The Not forms are met when the attribute holds a value and
@@ -152,6 +168,12 @@ function New-JIMScopingCriterion {
         Creates a criterion that brings people into scope 14 days before a start date held as text. The cmdlet warns
         that every Temporal Scope Reconciliation then evaluates every object of the type.
 
+    .EXAMPLE
+        New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -ConnectedSystemName 'PANOPLY AD' -ConnectedObjectTypeName 'user' -ComparisonType HasValue
+
+        Creates a connection criterion for an export Synchronisation Rule that keeps only people with a user account in
+        PANOPLY AD, as a GAL synchronisation rule sending them to another forest as contacts does.
+
     .LINK
         Get-JIMScopingCriteria
         Remove-JIMScopingCriterion
@@ -185,6 +207,17 @@ function New-JIMScopingCriterion {
         [Parameter(Mandatory, ParameterSetName = 'ByExpression')]
         [ValidateSet('Text', 'Number', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Guid')]
         [string]$CompareAs,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionId')]
+        [int]$ConnectedObjectTypeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$ConnectedSystemName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByConnectionName')]
+        [ValidateNotNullOrEmpty()]
+        [string]$ConnectedObjectTypeName,
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
@@ -246,6 +279,32 @@ function New-JIMScopingCriterion {
 
         $body = @{
             comparisonType = $ComparisonType
+        }
+
+        # A connection criterion (#2021) tests whether the Metaverse Object is joined to an object of a type: it is had or
+        # not had, so it takes HasValue or HasNoValue and no value.
+        if ($PSCmdlet.ParameterSetName -in 'ByConnectionId', 'ByConnectionName') {
+            $valueParameters = 'StringValue', 'IntValue', 'LongValue', 'DecimalValue', 'DateTimeValue', 'BoolValue', 'GuidValue',
+                'ValueMode', 'RelativeCount', 'RelativeUnit', 'RelativeDirection', 'CaseSensitive'
+            if ($ComparisonType -notin 'HasValue', 'HasNoValue' -or @($valueParameters | Where-Object { $PSBoundParameters.ContainsKey($_) }).Count -gt 0) {
+                Write-Error "A connection criterion tests whether the object has a connection: use -ComparisonType HasValue or HasNoValue, with no value."
+                return
+            }
+
+            if ($PSCmdlet.ParameterSetName -eq 'ByConnectionName') {
+                try {
+                    $ConnectedObjectTypeId = Resolve-JIMConnectedObjectType -ConnectedSystemName $ConnectedSystemName -Name $ConnectedObjectTypeName
+                }
+                catch {
+                    Write-Error $_
+                    return
+                }
+                $attrDisplay = "connection to '$ConnectedObjectTypeName' in '$ConnectedSystemName'"
+            }
+            else {
+                $attrDisplay = "connection to Object Type ID $ConnectedObjectTypeId"
+            }
+            $body.connectedObjectTypeId = $ConnectedObjectTypeId
         }
 
         # Handle Metaverse attribute (for export Synchronisation Rules)

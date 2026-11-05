@@ -206,12 +206,6 @@ public interface ISyncServer
     /// </summary>
     bool IsCsoInScopeForImportRule(ConnectedSystemObject cso, SyncRule importRule);
 
-    /// <summary>
-    /// Checks if an MVO is in scope for an export rule based on scoping criteria.
-    /// No scoping criteria means all objects of the type are in scope.
-    /// </summary>
-    bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule);
-
     #endregion
 
     #region Drift Detection

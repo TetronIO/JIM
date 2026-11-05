@@ -102,10 +102,11 @@ A synchronisation checks only the objects it visits, so an object nothing has ch
 - **A relative date crossed**<br /> [Temporal Scope Reconciliation](schedules.md#built-in-schedules) flags the objects a [relative date](#relative-dates-in-scope-filters) has moved across their boundary, on both sides, and the next synchronisation visits them.
 - **An account deleted in the target**<br /> The next import obsoletes its Connected System Object, and the next synchronisation of that Connected System disconnects it and, where the Metaverse Object is still in scope of a provisioning rule, stages the account again.
 - **A Metaverse Object written outside synchronisation**<br /> It is flagged for review; see [When a change to an export rule takes effect](deprovisioning.md#when-a-change-to-an-export-rule-takes-effect).
+- **A connection made or lost**<br /> When a synchronisation joins an object to a Metaverse Object, disconnects it, or finds it deleted from its Connected System, and an export rule's [connection criterion](#scoping-by-connection) names that object's Object Type, the Metaverse Object's export scope is evaluated again in the same run, although no attribute changed.
 
 ## :material-filter-outline: Building criteria
 
-Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all. Where the attribute's value needs reshaping first, a criterion can compare an [expression](../concepts/expressions.md) instead; see [Comparing a computed value](#comparing-a-computed-value).
+Criteria are organised into groups with AND/OR logic and support nested groups for complex conditions. Each criterion compares one attribute with a value you enter, or tests whether it holds a value at all. Where the attribute's value needs reshaping first, a criterion can compare an [expression](../concepts/expressions.md) instead; see [Comparing a computed value](#comparing-a-computed-value). On an export rule, a criterion can also test what the Metaverse Object is connected to; see [Scoping by connection](#scoping-by-connection).
 
 Each criterion is evaluated case-sensitively by default. Where a data source is inconsistent about casing (for example `Sales` versus `SALES`), you can switch an individual criterion to case-insensitive matching; see [Case Sensitivity](../concepts/case-sensitivity.md).
 
@@ -179,6 +180,20 @@ For example, to bring in people whose department starts with *Finance* however t
 
 JIM refuses an expression criterion when you save the rule if it could never work: one that does not parse, reads the other side (`mv["..."]` on an import rule), reads no attribute, names an attribute the object type does not have, or calls `Now()` or another function that returns a different value each time it runs. To scope by how long ago something happened, compare the date as a Date/Time against a [relative date](#relative-dates-in-scope-filters) instead. A criterion that stops being valid after it was saved, because an attribute it reads was renamed, removed or changed type, is not refused when the rule is next saved: the save goes ahead and warns about it, so the rule can always be disabled or corrected. Changing that criterion without fixing it is refused.
 
+## :material-link-variant: Scoping by connection
+
+An export rule's criterion can test whether the Metaverse Object is joined to an object of a given Object Type in a given Connected System, rather than comparing a value: **Has** `user` in *PANOPLY AD*, or **Has no** `user` in *RESURGAM AD*. Use it when where an identity comes from decides where it goes, without inventing an attribute to record it. Synchronising address books between two directories is the usual case: each forest's people are sent to the other as contacts, so the rule writing contacts into *RESURGAM AD* takes people with a `user` in *PANOPLY AD* and none in *RESURGAM AD*.
+
+In the Scope tab of an export rule, choose **Add Criteria**, then **Connection** beside **Compare**, and choose the **Connected System**, the **Object Type** and **Has** or **Has no**. Automation creates one with [`New-JIMScopingCriterion`](../powershell/scoping-criteria.md#new-jimscopingcriterion) `-ConnectedSystemName` and `-ConnectedObjectTypeName`, or through the REST API by giving `connectedObjectTypeId` alone, with `comparisonType` `HasValue` or `HasNoValue`.
+
+- **The Object Type decides it, not how the join was made**<br /> A `user` account counts whether it was projected, joined by an Object Matching Rule or provisioned by JIM. Keying on the Object Type is what keeps a rule's answer stable: a rule writing `contact` objects can never change whether the identity has a `user`.
+- **A deleted object is not a connection**<br /> An object its Connected System no longer holds is not counted, from the import that finds it gone. So a leaver's contact in the other directory is removed by the same synchronisation that processes their departure, per the rule's **Deprovisioning Action**.
+- **Joins move scope by themselves**<br /> A join or a disconnect changes no attribute, but the identity's export scope is evaluated again whenever one touches an Object Type a connection criterion names; see [What re-checks an object](#what-re-checks-an-object).
+- **Export rules only**<br /> A connection is the Metaverse Object's, so an import rule cannot test one, and JIM refuses it when the rule is saved.
+- **The Connected System it names cannot be deleted while it is named**<br /> Deleting the Connected System, or removing the Object Type, would silently change which identities the rule takes. JIM refuses the deletion and names the rules to change first, and the deletion preview warns about them.
+
+The Connections tab and **Test this scope** read such a criterion as a connection: "Has user in PANOPLY AD", with what the object has ("has one", "has none").
+
 ## :material-calendar-clock-outline: Relative dates in scope filters
 
 A criterion on a **date/time** attribute can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to the moment the rule runs. Relative criteria are re-evaluated whenever an object is visited, and [Temporal Scope Reconciliation](schedules.md#built-in-schedules) flags the objects whose boundary has been crossed so the next synchronisation visits them. A scope that says "terminated within the last year" therefore keeps moving with time, with no need to edit the rule.
@@ -200,12 +215,13 @@ Configure this in the Scope tab of the Synchronisation Rule editor (choose Relat
 The **Test this scope** panel at the foot of the Scope tab answers whether one object would be in scope, before anything runs. It evaluates the criteria as they stand on the form, saved or not, with the same evaluation a synchronisation uses, so a test cannot pass where a synchronisation would not.
 
 - **Values**<br /> Each attribute the criteria compare gets an editor for its type: a date for a date/time attribute, True or False for a Boolean, several values for a multi-valued attribute. An attribute left untouched, or with **No value** ticked, holds no value. **From an object** loads a real object's values instead (a Connected System Object for an import rule, a Metaverse Object for an export rule), which you can then edit to try a variation.
+- **Connections**<br /> For an export rule with a [connection criterion](#scoping-by-connection), each connection the criteria name has a tick box: tick the ones the tested object has. **From an object** ticks the object's own, which you can then change, to try a leaver who has lost one.
 - **Run as of**<br /> Relative dates resolve against the date and time you choose (UTC), or the current time when you leave it empty. Use it to check a leaver rule on the day it should let go.
 - **Result**<br /> Whether the object is in scope, each group and criterion with what the object held, and when the outcome next changes as time passes, the values staying the same. For example, a leave date of 1 November under *after* `30 days ago` reports that the object leaves scope at midnight UTC on 1 December.
 
 To keep a test and run it again after later changes, choose **Save as test case**; see [Configuration Tests](configuration-tests.md).
 
-Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint, which test the saved criteria.
+Automation gets the same test through [`Test-JIMScope`](../powershell/scoping-criteria.md#test-jimscope) (`-ConnectedObjectTypeId` for the connections) and the REST API's `POST sync-rules/{id}/scoping-criteria/test` endpoint (`connectedObjectTypeIds`), which test the saved criteria. A saved test case does not record connections, so one for a rule with a connection criterion is tested as having none.
 
 ## :material-eye-outline: Previewing a scope change
 

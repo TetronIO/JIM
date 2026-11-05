@@ -2167,6 +2167,12 @@ public interface IConnectedSystemRepository
     Task<int> GetSyncRuleCountAsync(int connectedSystemId);
 
     /// <summary>
+    /// The names of other Connected Systems' Synchronisation Rules whose scoping criteria test for a connection to one of
+    /// this Connected System's Object Types (#2021). While any exist, the Connected System cannot be deleted.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetSyncRuleNamesWithConnectionCriteriaToAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets the count of Run Profiles for a Connected System.
     /// </summary>
     Task<int> GetRunProfileCountAsync(int connectedSystemId);

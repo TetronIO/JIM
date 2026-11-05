@@ -306,7 +306,9 @@ public class SyncRuleAttributeFlowPreviewAdapter : IConfigurationChangePreviewAd
             // As inbound: an object whose scope cannot be decided is one the run fails, never put to the engine.
             if (rule.ObjectScopingCriteriaGroups.Count > 0)
             {
-                var scope = PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt));
+                // The stream carries every join, so connection criteria (#2021) need no further read.
+                var scope = PreviewScopeAnswer.Decide(() =>
+                    _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt, MetaverseObjectConnections.From(mvo)));
                 if (scope.Undecided)
                 {
                     yield return OutboundDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail, rule, mvo, null,

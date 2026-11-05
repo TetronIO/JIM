@@ -30,7 +30,8 @@ public sealed record SyncRuleScopingCriterionState(
     decimal? DecimalValue,
     DateTime? DateTimeValue,
     bool? BoolValue,
-    Guid? GuidValue)
+    Guid? GuidValue,
+    int? ConnectedObjectTypeId = null)
 {
     /// <summary>The state <paramref name="criterion"/> holds now.</summary>
     public static SyncRuleScopingCriterionState Of(SyncRuleScopingCriteria criterion)
@@ -42,7 +43,8 @@ public sealed record SyncRuleScopingCriterionState(
             criterion.ConnectedSystemAttribute?.Id ?? criterion.ConnectedSystemAttributeId,
             criterion.Expression, criterion.CompareAs, criterion.ComparisonType, criterion.CaseSensitive, criterion.ValueMode,
             criterion.RelativeCount, criterion.RelativeUnit, criterion.RelativeDirection, criterion.StringValue, criterion.IntValue,
-            criterion.LongValue, criterion.DecimalValue, criterion.DateTimeValue, criterion.BoolValue, criterion.GuidValue);
+            criterion.LongValue, criterion.DecimalValue, criterion.DateTimeValue, criterion.BoolValue, criterion.GuidValue,
+            criterion.ConnectedObjectType?.Id ?? criterion.ConnectedObjectTypeId);
     }
 
     /// <summary>True when <paramref name="criterion"/> compares exactly what is stored, against exactly the same value.</summary>

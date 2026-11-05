@@ -8125,7 +8125,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToDictionaryAsync(c => c.Id, c => new SyncRuleScopingCriterionState(
                 c.MetaverseAttributeId, c.ConnectedSystemAttributeId, c.Expression, c.CompareAs, c.ComparisonType, c.CaseSensitive,
                 c.ValueMode, c.RelativeCount, c.RelativeUnit, c.RelativeDirection, c.StringValue, c.IntValue, c.LongValue,
-                c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue));
+                c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue, c.ConnectedObjectTypeId));
     }
 
     public async Task<Dictionary<int, bool>> GetAttributeSelectionStatesAsync(int connectedSystemId)
@@ -9230,6 +9230,20 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<int> GetSyncRuleCountAsync(int connectedSystemId)
     {
         return await Repository.Database.SyncRules.CountAsync(sr => sr.ConnectedSystemId == connectedSystemId);
+    }
+
+    public async Task<IReadOnlyList<string>> GetSyncRuleNamesWithConnectionCriteriaToAsync(int connectedSystemId)
+    {
+        var db = Repository.Database;
+        // Configuration-sized: every other system's export rule, since only an export rule can hold the criterion.
+        var otherRules = await db.SyncRules
+            .AsNoTracking()
+            .Where(sr => sr.ConnectedSystemId != connectedSystemId && sr.Direction == SyncRuleDirection.Export)
+            .Select(sr => new { sr.Id, sr.Name })
+            .ToListAsync();
+
+        var holding = await SyncRuleScopingTreeLoader.GetRuleIdsWithConnectionCriteriaToAsync(db, otherRules.Select(r => r.Id).ToList(), connectedSystemId);
+        return otherRules.Where(r => holding.Contains(r.Id)).Select(r => r.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
     }
 
     public async Task<int> GetRunProfileCountAsync(int connectedSystemId)

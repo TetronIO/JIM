@@ -4,6 +4,7 @@
 using System.ComponentModel.DataAnnotations;
 using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
 
@@ -53,8 +54,23 @@ public class SyncRuleScopingCriteriaDto
     public string? CompareAs { get; set; }
 
     /// <summary>
+    /// The Connected System Object Type a connection criterion tests the Metaverse Object for: whether it is joined to an
+    /// object of this type (HasValue) or to none (HasNoValue). Null on an attribute or expression criterion.
+    /// </summary>
+    public int? ConnectedObjectTypeId { get; set; }
+
+    /// <summary>The name of the Object Type a connection criterion names; null otherwise.</summary>
+    public string? ConnectedObjectTypeName { get; set; }
+
+    /// <summary>The Connected System holding the Object Type a connection criterion names; null otherwise.</summary>
+    public int? ConnectedSystemId { get; set; }
+
+    /// <summary>The name of the Connected System holding the Object Type a connection criterion names; null otherwise.</summary>
+    public string? ConnectedSystemName { get; set; }
+
+    /// <summary>
     /// The tested attribute's data type, or an expression's Compare As type, which decides which value property holds
-    /// the value.
+    /// the value. NotSet on a connection criterion, which compares no value.
     /// </summary>
     public string AttributeDataType { get; set; } = null!;
 
@@ -135,7 +151,10 @@ public class SyncRuleScopingCriteriaDto
     /// <summary>
     /// Creates a DTO from an entity.
     /// </summary>
-    public static SyncRuleScopingCriteriaDto FromEntity(SyncRuleScopingCriteria entity)
+    /// <param name="entity">The criterion.</param>
+    /// <param name="connectedObjectType">The Object Type a connection criterion names, where the criterion carries only
+    /// its id (one just applied from a request); the criterion's own navigation is used otherwise.</param>
+    public static SyncRuleScopingCriteriaDto FromEntity(SyncRuleScopingCriteria entity, ConnectedSystemObjectType? connectedObjectType = null)
     {
         var dto = new SyncRuleScopingCriteriaDto
         {
@@ -156,7 +175,16 @@ public class SyncRuleScopingCriteriaDto
         };
 
         // Set attribute info based on which one is set
-        if (entity.IsExpression)
+        if (entity.IsConnection)
+        {
+            var type = entity.ConnectedObjectType ?? connectedObjectType;
+            dto.ConnectedObjectTypeId = entity.ConnectedObjectTypeId ?? type?.Id;
+            dto.ConnectedObjectTypeName = type?.Name;
+            dto.ConnectedSystemId = type?.ConnectedSystemId;
+            dto.ConnectedSystemName = type?.ConnectedSystem?.Name;
+            dto.AttributeDataType = nameof(JIM.Models.Core.AttributeDataType.NotSet);
+        }
+        else if (entity.IsExpression)
         {
             dto.Expression = entity.Expression;
             dto.CompareAs = entity.CompareAs?.ToString();
@@ -226,7 +254,7 @@ public class SyncRuleScopingCriteriaGroupDto
             Id = entity.Id,
             Type = entity.Type.ToString(),
             Position = entity.Position,
-            Criteria = entity.Criteria.Select(SyncRuleScopingCriteriaDto.FromEntity).ToList(),
+            Criteria = entity.Criteria.Select(criterion => SyncRuleScopingCriteriaDto.FromEntity(criterion)).ToList(),
             ChildGroups = entity.ChildGroups.Select(FromEntity).ToList()
         };
     }
@@ -291,7 +319,8 @@ public class UpdateScopingCriteriaGroupRequest : IConfigurationTestGateRequest
 /// Request DTO for creating a new scoping criterion within a group.
 /// For export Synchronisation Rules, provide MetaverseAttributeId.
 /// For import Synchronisation Rules, provide ConnectedSystemAttributeId.
-/// To compare a computed value instead, provide Expression and CompareAs and no attribute.
+/// To compare a computed value instead, provide Expression and CompareAs and no attribute. To test whether the
+/// Metaverse Object is joined to an object of a Connected System Object Type, provide ConnectedObjectTypeId alone.
 /// </summary>
 public class CreateScopingCriterionRequest : IConfigurationTestGateRequest
 {
@@ -319,6 +348,13 @@ public class CreateScopingCriterionRequest : IConfigurationTestGateRequest
     /// without it.
     /// </summary>
     public string? CompareAs { get; set; }
+
+    /// <summary>
+    /// A Connected System Object Type, for a connection criterion: whether the Metaverse Object is joined to an object
+    /// of this type (comparisonType HasValue) or to none (HasNoValue). Export Synchronisation Rules only; excludes
+    /// MetaverseAttributeId, Expression and every value property.
+    /// </summary>
+    public int? ConnectedObjectTypeId { get; set; }
 
     /// <summary>
     /// The Metaverse Attribute ID to evaluate (for export Synchronisation Rules).

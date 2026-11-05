@@ -104,9 +104,11 @@ internal static class ScopingEvaluator
         {
             childCount++;
             var criterionNode = node == null ? null : ScopingTraceBuilder.AddCriterion(node, criteria[i], childCount);
-            var outcome = criteria[i].IsExpression
-                ? EvaluateExpressionCriterion(criteria[i], source, nowUtc, criterionNode, ruleName, expressions.Value)
-                : EvaluateCriterion(criteria[i], source, nowUtc, criterionNode, ruleName);
+            var outcome = criteria[i].IsConnection
+                ? EvaluateConnectionCriterion(criteria[i], source, criterionNode, ruleName)
+                : criteria[i].IsExpression
+                    ? EvaluateExpressionCriterion(criteria[i], source, nowUtc, criterionNode, ruleName, expressions.Value)
+                    : EvaluateCriterion(criteria[i], source, nowUtc, criterionNode, ruleName);
             if (criterionNode != null)
                 criterionNode.Outcome = outcome;
 
@@ -218,6 +220,55 @@ internal static class ScopingEvaluator
         }
 
         return outcome;
+    }
+
+    /// <summary>
+    /// A connection criterion (#2021): whether the Metaverse Object is joined to a Connected System Object of the
+    /// criterion's Object Type ("has"), or to none ("has no"). Connections that were not read leave the object's scope
+    /// undecidable: synchronisation stops the object (<see cref="ScopingCriterionFailedException"/>) rather than decide
+    /// "has no" from connections nobody read, which could provision or delete on a guess.
+    /// </summary>
+    private static ScopingCriterionOutcome EvaluateConnectionCriterion<TSource>(SyncRuleScopingCriteria criterion, TSource source,
+        ScopingCriterionExplanation? node, string? ruleName)
+        where TSource : struct, IScopingValueSource
+    {
+        var typeId = criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType!.Id;
+        var description = criterion.ConnectedObjectType != null
+            ? SyncRuleScopingCriteria.DescribeConnection(criterion.ConnectedObjectType)
+            : $"Object Type {typeId}";
+        if (node != null)
+        {
+            node.ConnectedObjectTypeId = typeId;
+            node.AttributeName = description;
+        }
+
+        if (!SyncRuleScopingCriteria.IsConnectionOperator(criterion.ComparisonType))
+        {
+            const string reason = "a connection criterion can only test that the object has, or has no, connection";
+            if (node == null)
+            {
+                Log.Error("Scoping evaluation: a {Operator} connection criterion on {Connection} cannot be evaluated; the Synchronisation Rule is misconfigured",
+                    criterion.ComparisonType, LogSanitiser.Sanitise(description));
+                throw new InvalidOperationException(
+                    $"The '{criterion.ComparisonType}' scoping criterion on the connection to {description} cannot be evaluated: {reason}.");
+            }
+
+            node.FailureReason = $"The criterion is invalid: {reason}.";
+            return ScopingCriterionOutcome.Invalid;
+        }
+
+        if (source.HasConnection(typeId) is not { } has)
+        {
+            var failure = $"JIM could not read which Connected Systems the object is connected to, so whether it has a {description} is unknown.";
+            if (node == null)
+                throw new ScopingCriterionFailedException(ruleName ?? "(unnamed)", description, failure);
+
+            node.FailureReason = failure;
+            return ScopingCriterionOutcome.Invalid;
+        }
+
+        var met = criterion.ComparisonType == SearchComparisonType.HasValue ? has : !has;
+        return met ? ScopingCriterionOutcome.Met : ScopingCriterionOutcome.NotMet;
     }
 
     /// <summary>

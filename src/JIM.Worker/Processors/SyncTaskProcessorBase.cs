@@ -1521,6 +1521,18 @@ public abstract class SyncTaskProcessorBase
                     }
 
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+                    // A join or projection with nothing flowing can still stage exports when it moves a connection
+                    // criterion's scope (#2021), so the item is registered for them as the Attribute Flow path registers
+                    // its own; an item another object already registered for this Metaverse Object keeps them.
+                    if (changeResult.ChangeType is ObjectChangeType.Joined or ObjectChangeType.Projected &&
+                        connectedSystemObject.MetaverseObject is { } joinedMvo)
+                    {
+                        if (joinedMvo.Id != Guid.Empty)
+                            _mvoIdToRpei.TryAdd(joinedMvo.Id, runProfileExecutionItem);
+                        else
+                            _deferredMvoRpeiMappings.Add((joinedMvo, runProfileExecutionItem));
+                    }
                 }
             }
 
@@ -1781,6 +1793,7 @@ public abstract class SyncTaskProcessorBase
         // page-flush MVO update batch with Activity initiator attribution) and is shared with the
         // withdrawal-recall path; the core drives when it runs and consumes its verdict.
         _remainingImportSourceEvaluator ??= new RemainingImportSourceEvaluator(_syncRepo);
+        var joinedMvo = connectedSystemObject.MetaverseObject;
         var result = await ConnectedSystemObjectObsoletionService.ProcessObsoleteConnectedSystemObjectAsync(
             connectedSystemObject,
             activeSyncRules,
@@ -1839,6 +1852,8 @@ public abstract class SyncTaskProcessorBase
         // Held back (#2336): the object stays obsolete and joined, for this system's next Delta Synchronisation (#2343).
         if (result.UndecidableSurvivorScope != null && connectedSystemObject.MetaverseObject is { } heldBackMvo)
             HoldBackForRetry(connectedSystemObject, heldBackMvo);
+        else if (joinedMvo != null && result.ExecutionItems.Count > 0)
+            QueueConnectionScopeEvaluation(connectedSystemObject, joinedMvo);
 
         return result.ExecutionItems;
     }
@@ -2589,6 +2604,9 @@ public abstract class SyncTaskProcessorBase
                 {
                     MergeOrAddPendingExportEvaluation(connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes);
                 }
+
+                if (wasProjected || wasJoined)
+                    QueueConnectionScopeEvaluation(connectedSystemObject, connectedSystemObject.MetaverseObject);
             }
 
             // Queue drift detection for the page flush, AFTER Metaverse Objects are persisted.
@@ -7057,6 +7075,22 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Queues the Metaverse Object for export evaluation when it has just gained or lost a join to an Object Type that an
+    /// export rule's connection criterion names (#2021): its scope for that rule may have moved although no attribute
+    /// changed (a person leaving one forest loses their contact in the other). Merges into an evaluation already queued
+    /// for the object, so it is evaluated once. A Metaverse Object queued for immediate deletion is skipped at evaluation,
+    /// as any other is.
+    /// </summary>
+    private void QueueConnectionScopeEvaluation(ConnectedSystemObject connectedSystemObject, MetaverseObject? metaverseObject)
+    {
+        if (metaverseObject == null || _exportEvaluationCache == null ||
+            !_exportEvaluationCache.ConnectionCriteriaObjectTypeIds.Contains(connectedSystemObject.TypeId))
+            return;
+
+        MergeOrAddPendingExportEvaluation(metaverseObject, [], null);
+    }
+
+    /// <summary>
     /// Assigns values to a Metaverse Object, from a Connected System Object using a Synchronisation Rule.
     /// Merges changed attributes and removals into an existing Pending Export evaluation entry for the given MVO,
     /// or adds a new entry if none exists. This prevents silently dropping reference attribute changes when
@@ -7730,6 +7764,7 @@ public abstract class SyncTaskProcessorBase
                 {
                     ApplyPendingMetaverseObjectAttributeChanges(mvo);
                     QueueMvoForUpdate(mvo);
+                    QueueConnectionScopeEvaluation(connectedSystemObject, mvo);
                 }
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(

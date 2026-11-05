@@ -376,6 +376,38 @@ public class ConnectedSystemDeletionTests
     #region DeleteAsync Tests
 
     [Test]
+    public async Task DeleteAsync_ObjectTypeNamedByAnotherRulesConnectionCriterion_IsRefusedNamingTheRuleAsync()
+    {
+        // Deleting PANOPLY AD would otherwise drop "has a user in PANOPLY AD" from RESURGAM's GAL rule, widening or
+        // narrowing that rule's scope with no review (#2021).
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "PANOPLY AD", Status = ConnectedSystemStatus.Active };
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetSyncRuleNamesWithConnectionCriteriaToAsync(1)).ReturnsAsync(["GAL: PANOPLY people into RESURGAM"]);
+
+        var result = await _jim.ConnectedSystems.DeleteAsync(1, _initiatedBy);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Outcome, Is.EqualTo(DeletionOutcome.Failed));
+            Assert.That(result.ErrorMessage, Does.Contain("GAL: PANOPLY people into RESURGAM"));
+            Assert.That(connectedSystem.Status, Is.EqualTo(ConnectedSystemStatus.Active), "nothing is fenced");
+        }
+        _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(It.IsAny<int>(), It.IsAny<bool>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetDeletionPreviewAsync_ObjectTypeNamedByAnotherRulesConnectionCriterion_SaysTheDeletionWillBeRefusedAsync()
+    {
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "PANOPLY AD", Status = ConnectedSystemStatus.Active };
+        _mockCsRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>())).ReturnsAsync(connectedSystem);
+        _mockCsRepo.Setup(r => r.GetSyncRuleNamesWithConnectionCriteriaToAsync(1)).ReturnsAsync(["GAL: PANOPLY people into RESURGAM"]);
+
+        var preview = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
+
+        Assert.That(preview!.Warnings, Has.Some.Contains("GAL: PANOPLY people into RESURGAM"));
+    }
+
+    [Test]
     public async Task DeleteAsync_WithNonExistentId_ReturnsFailedResultAsync()
     {
         // Arrange

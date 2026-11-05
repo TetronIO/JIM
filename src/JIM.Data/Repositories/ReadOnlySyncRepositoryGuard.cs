@@ -255,6 +255,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
         => _inner.GetConnectedSystemObjectIdsWithPendingExportsAsync(connectedSystemObjectIds);
 
+    public Task<MetaverseObjectConnections> GetMetaverseObjectConnectionsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> connectedSystemObjectTypeIds)
+        => _inner.GetMetaverseObjectConnectionsAsync(metaverseObjectIds, connectedSystemObjectTypeIds);
+
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _inner.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 

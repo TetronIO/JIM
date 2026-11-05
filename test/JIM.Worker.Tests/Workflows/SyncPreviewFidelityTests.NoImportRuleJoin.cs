@@ -87,10 +87,12 @@ public partial class SyncPreviewFidelityTests
     /// <summary>
     /// HR projects Jane Smith with her Employee ID and display name; a directory holds an unjoined account for her,
     /// "Edited in AD", which its Object Type's own Object Matching Rule matches on Employee ID. Nothing in the directory
-    /// flows in. Returns the directory, its account and the type's rule.
+    /// flows in. Returns the directory, its account and the type's rule. <paramref name="configureBeforeSync"/> adds
+    /// configuration while it can still be saved, before HR's synchronisation.
     /// </summary>
     private async Task<(ConnectedSystem Target, ConnectedSystemObject TargetCso, ObjectMatchingRule MatchingRule)> ArrangeDirectoryAccountMatchedByItsTypeAsync(
-        bool simpleMode, bool importRule, bool enforcingExport = false)
+        bool simpleMode, bool importRule, bool enforcingExport = false,
+        Func<MetaverseObjectType, ConnectedSystemObjectType, Task>? configureBeforeSync = null)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         mvType.Attributes.First(a => a.Name == "DisplayName").Name = Constants.BuiltInAttributes.DisplayName;
@@ -130,6 +132,8 @@ public partial class SyncPreviewFidelityTests
             FlowToAttribute(adExport, targetType.Attributes.First(a => a.Name == "DisplayName"), mvDisplayName);
         }
         await DbContext.SaveChangesAsync();
+        if (configureBeforeSync != null)
+            await configureBeforeSync(mvType, targetType);
 
         await CreateCsoAsync(source.Id, sourceType, "Jane Smith", "EMP001");
         var targetCso = await CreateCsoAsync(target.Id, targetType, "Edited in AD", "EMP001");

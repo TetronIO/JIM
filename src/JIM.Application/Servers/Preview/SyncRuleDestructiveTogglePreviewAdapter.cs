@@ -283,6 +283,9 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         var metaverseObjectsById = (await _application.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(metaverseObjectIds))
             .ToDictionary(mvo => mvo.Id);
 
+        // The batch's connections, for a connection criterion (#2021): one read, and none when the rule has no such criterion.
+        var connections = await _application.ExportEvaluation.ReadConnectionsAsync(metaverseObjectIds, [rule]);
+
         // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
         // apply per Metaverse Object Type, so its scope exits are decided elsewhere. Null-state does not flow
         // through Where, hence the ! dereference after it.
@@ -290,7 +293,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             .Select(cso => (Cso: cso, Mvo: cso.MetaverseObjectId is { } metaverseObjectId &&
                 metaverseObjectsById.TryGetValue(metaverseObjectId, out var mvo) ? mvo : null))
             .Where(pair => pair.Mvo != null && pair.Mvo.Type?.Id == rule.MetaverseObjectTypeId)
-            .Select(pair => (pair.Cso, Mvo: pair.Mvo!, Scope: PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(pair.Mvo!, rule, asAt))))
+            .Select(pair => (pair.Cso, Mvo: pair.Mvo!, Scope: PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(pair.Mvo!, rule, asAt, connections))))
             .ToList();
 
         // A scope exit's fate also turns on a Delete already queued for the object (#1970), so the engine decides each

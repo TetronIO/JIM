@@ -33,6 +33,13 @@ public class TestScopeRequest
     public Guid? MetaverseObjectId { get; set; }
 
     /// <summary>
+    /// The Connected System Object Types the tested Metaverse Object is joined to, for an export rule's connection
+    /// criteria. Omit it to use the joins of the object named by <c>MetaverseObjectId</c>, or none when no object is
+    /// named.
+    /// </summary>
+    public List<int>? ConnectedObjectTypeIds { get; set; }
+
+    /// <summary>
     /// The instant to test as of, in UTC, which relative date criteria such as "30 days ago" resolve against. Omit it
     /// for the current time.
     /// </summary>
@@ -79,6 +86,12 @@ public class TestScopeResponse
     public List<AttributeSampleDto> Inputs { get; set; } = [];
 
     /// <summary>
+    /// The connections an export rule's criteria test, each with whether the tested object had it; empty for an
+    /// import rule or a rule with no connection criterion.
+    /// </summary>
+    public List<ConnectionSampleDto> Connections { get; set; } = [];
+
+    /// <summary>
     /// Why the values could not be used, one message per problem; null when they could.
     /// </summary>
     public IReadOnlyList<string>? InputErrors { get; set; }
@@ -98,4 +111,19 @@ public class TestScopeChangeDto
     /// The outcome from that instant.
     /// </summary>
     public ScopingRuleOutcome Outcome { get; set; }
+}
+
+/// <summary>
+/// A connection a scope test asked about, and whether the tested Metaverse Object had it.
+/// </summary>
+public class ConnectionSampleDto
+{
+    /// <summary>The Connected System Object Type the scoping criteria name.</summary>
+    public int ConnectedObjectTypeId { get; set; }
+
+    /// <summary>The type and its Connected System, for example "user in PANOPLY AD".</summary>
+    public string Description { get; set; } = string.Empty;
+
+    /// <summary>Whether the tested object was joined to an object of the type.</summary>
+    public bool Connected { get; set; }
 }

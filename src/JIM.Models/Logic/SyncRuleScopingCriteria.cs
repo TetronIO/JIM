@@ -38,6 +38,16 @@ public class SyncRuleScopingCriteria : ICriterionValues
     /// </summary>
     public AttributeDataType? CompareAs { get; set; }
 
+    /// <summary>
+    /// For a connection criterion (#2021, export rules only): the Connected System Object Type whose objects the criterion
+    /// tests the Metaverse Object for. <see cref="SearchComparisonType.HasValue"/> is met when the Metaverse Object is joined
+    /// to an object of this type, <see cref="SearchComparisonType.HasNoValue"/> when it is joined to none. The type, not how
+    /// the join was made, decides it, so an export rule's own provisioning cannot change its answer. Null for an attribute
+    /// or expression criterion.
+    /// </summary>
+    public ConnectedSystemObjectType? ConnectedObjectType { get; set; }
+    public int? ConnectedObjectTypeId { get; set; }
+
     public SearchComparisonType ComparisonType { get; set; } = SearchComparisonType.NotSet;
 
     public string? StringValue { get; set; }
@@ -96,6 +106,16 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public bool IsExpression => !string.IsNullOrWhiteSpace(Expression);
 
     /// <summary>
+    /// Whether the criterion tests which Connected System Object Types the Metaverse Object is joined to, rather than
+    /// comparing a value.
+    /// </summary>
+    public bool IsConnection => ConnectedObjectTypeId.HasValue || ConnectedObjectType != null;
+
+    /// <summary>The operators a connection criterion may use: "has" and "has no".</summary>
+    public static bool IsConnectionOperator(SearchComparisonType comparisonType) =>
+        comparisonType is SearchComparisonType.HasValue or SearchComparisonType.HasNoValue;
+
+    /// <summary>
     /// Whether Temporal Scope Reconciliation must evaluate every object of the scoped type for this criterion: it
     /// compares an expression's computed date against a relative date, so no stored value can narrow the objects whose
     /// boundary the clock has crossed.
@@ -114,13 +134,17 @@ public class SyncRuleScopingCriteria : ICriterionValues
         "date into an attribute and comparing that.";
 
     /// <summary>
-    /// Whether the criterion has exactly one left-hand side: an attribute (either side), or an expression with a type to
-    /// compare it as. An attribute criterion takes its type from the attribute, so it carries no compare-as type.
+    /// Whether the criterion has exactly one left-hand side: an attribute (either side), an expression with a type to
+    /// compare it as, or a connection with "has" or "has no". An attribute criterion takes its type from the attribute, so
+    /// it carries no compare-as type.
     /// </summary>
     public bool IsValid()
     {
         var hasAttribute = MetaverseAttributeId.HasValue || MetaverseAttribute != null ||
                            ConnectedSystemAttributeId.HasValue || ConnectedSystemAttribute != null;
+
+        if (IsConnection)
+            return !hasAttribute && !IsExpression && !CompareAs.HasValue && IsConnectionOperator(ComparisonType);
 
         return IsExpression
             ? !hasAttribute && CompareAs.HasValue
@@ -146,6 +170,8 @@ public class SyncRuleScopingCriteria : ICriterionValues
     /// </summary>
     public string? GetAttributeName()
     {
+        if (ConnectedObjectType != null)
+            return DescribeConnection(ConnectedObjectType);
         if (IsExpression)
             return Expression;
         if (MetaverseAttribute != null)
@@ -155,8 +181,26 @@ public class SyncRuleScopingCriteria : ICriterionValues
         return null;
     }
 
+    /// <summary>
+    /// What a connection criterion tests for, for display: the Object Type and its Connected System, for example
+    /// "user in PANOPLY AD".
+    /// </summary>
+    public static string DescribeConnection(ConnectedSystemObjectType connectedObjectType)
+    {
+        ArgumentNullException.ThrowIfNull(connectedObjectType);
+        return connectedObjectType.ConnectedSystem != null
+            ? $"{connectedObjectType.Name} in {connectedObjectType.ConnectedSystem.Name}"
+            : connectedObjectType.Name;
+    }
+
     public override string ToString()
     {
+        if (IsConnection)
+        {
+            var connection = ConnectedObjectType != null ? DescribeConnection(ConnectedObjectType) : $"Object Type {ConnectedObjectTypeId}";
+            return ComparisonType == SearchComparisonType.HasNoValue ? "Has no " + connection : "Has " + connection;
+        }
+
         var attributeType = GetAttributeDataType();
         if (attributeType == null)
             return "No attribute set";

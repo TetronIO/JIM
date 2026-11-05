@@ -5920,7 +5920,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
 
         var criterion = new SyncRuleScopingCriteria();
-        var (error, notFound) = ApplyScopingCriterionRequest(syncRule, criterion, request);
+        var (error, notFound, connectedObjectType) = await ApplyScopingCriterionRequestAsync(syncRule, criterion, request);
         if (error != null)
             return notFound ? NotFound(ApiErrorResponse.NotFound(error)) : BadRequest(ApiErrorResponse.BadRequest(error));
 
@@ -5934,7 +5934,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Created criterion {CriterionId} in group {GroupId}", criterion.Id, groupId);
-            return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId }, SyncRuleScopingCriteriaDto.FromEntity(criterion));
+            return CreatedAtRoute("GetScopingCriteriaGroup", new { syncRuleId, groupId }, SyncRuleScopingCriteriaDto.FromEntity(criterion, connectedObjectType));
         }
         catch (ConfigurationTestsRegressedException ex)
         {
@@ -5986,7 +5986,7 @@ public class SynchronisationController(
         if (criterion == null)
             return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found in group {groupId}."));
 
-        var (error, notFound) = ApplyScopingCriterionRequest(syncRule, criterion, request);
+        var (error, notFound, connectedObjectType) = await ApplyScopingCriterionRequestAsync(syncRule, criterion, request);
         if (error != null)
             return notFound ? NotFound(ApiErrorResponse.NotFound(error)) : BadRequest(ApiErrorResponse.BadRequest(error));
 
@@ -5998,7 +5998,7 @@ public class SynchronisationController(
             else
                 await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, configurationTestGate: request.ToConfigurationTestGateOptions());
             _logger.LogInformation("Updated criterion {CriterionId} in group {GroupId}", criterionId, groupId);
-            return Ok(SyncRuleScopingCriteriaDto.FromEntity(criterion));
+            return Ok(SyncRuleScopingCriteriaDto.FromEntity(criterion, connectedObjectType));
         }
         catch (ConfigurationTestsRegressedException ex)
         {
@@ -6015,12 +6015,54 @@ public class SynchronisationController(
     /// Resolves the attribute, validates and applies a scoping-criterion request onto <paramref name="criterion"/>
     /// (used by both create and update). The attribute is resolved from the Synchronisation Rule's already-tracked
     /// object-type graph so EF does not track a duplicate. Returns (error, notFound) where notFound distinguishes a
-    /// 404 (attribute not found) from a 400 (bad request); null error means success.
+    /// 404 (attribute or Object Type not found) from a 400 (bad request); null error means success. A connection
+    /// criterion's Object Type is returned too, so the response can name it.
     /// </summary>
-    private static (string? error, bool notFound) ApplyScopingCriterionRequest(SyncRule syncRule, SyncRuleScopingCriteria criterion, CreateScopingCriterionRequest request)
+    private async Task<(string? error, bool notFound, ConnectedSystemObjectType? connectedObjectType)> ApplyScopingCriterionRequestAsync(
+        SyncRule syncRule, SyncRuleScopingCriteria criterion, CreateScopingCriterionRequest request)
     {
         if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var comparisonType) || comparisonType == SearchComparisonType.NotSet)
-            return ($"Invalid comparison type '{request.ComparisonType}'.", false);
+            return ($"Invalid comparison type '{request.ComparisonType}'.", false, null);
+
+        if (request.ConnectedObjectTypeId is { } connectedObjectTypeId)
+        {
+            // A connection criterion (#2021): which Object Type the identity is joined to. Whether it suits the rule (export
+            // only) and its operator (Has / Has no) is validated when the rule is saved, on the path every surface shares.
+            if (request.MetaverseAttributeId.HasValue || request.ConnectedSystemAttributeId.HasValue ||
+                !string.IsNullOrWhiteSpace(request.Expression) || !string.IsNullOrWhiteSpace(request.CompareAs))
+                return ("ConnectedObjectTypeId names a connection to test, so it cannot be combined with an attribute, an Expression or CompareAs.", false, null);
+
+            var connectedObjectType = await _application.ConnectedSystems.GetObjectTypeAsync(connectedObjectTypeId);
+            if (connectedObjectType == null)
+                return ($"Connected System Object Type with ID {connectedObjectTypeId} not found.", true, null);
+
+            // Named by id: the type belongs to another Connected System's graph, which the save must not track a second copy of.
+            criterion.ConnectedObjectType = null;
+            criterion.ConnectedObjectTypeId = connectedObjectTypeId;
+            criterion.MetaverseAttribute = null;
+            criterion.MetaverseAttributeId = null;
+            criterion.ConnectedSystemAttribute = null;
+            criterion.ConnectedSystemAttributeId = null;
+            criterion.Expression = null;
+            criterion.CompareAs = null;
+            criterion.ComparisonType = comparisonType;
+            criterion.ValueMode = DateCriteriaValueMode.Absolute;
+            criterion.StringValue = null;
+            criterion.IntValue = null;
+            criterion.LongValue = null;
+            criterion.DecimalValue = null;
+            criterion.DateTimeValue = null;
+            criterion.BoolValue = null;
+            criterion.GuidValue = null;
+            criterion.RelativeCount = null;
+            criterion.RelativeUnit = null;
+            criterion.RelativeDirection = null;
+            return (null, false, connectedObjectType);
+        }
+
+        // Any other kind replaces a connection the criterion held.
+        criterion.ConnectedObjectType = null;
+        criterion.ConnectedObjectTypeId = null;
 
         AttributeDataType attributeType;
         if (!string.IsNullOrWhiteSpace(request.Expression))
@@ -6028,7 +6070,7 @@ public class SynchronisationController(
             // An expression criterion (#2054): the expression itself is validated when the rule is saved, against the
             // scoped type's schema.
             if (request.MetaverseAttributeId.HasValue || request.ConnectedSystemAttributeId.HasValue)
-                return ("Provide either an attribute or an Expression, not both.", false);
+                return ("Provide either an attribute or an Expression, not both.", false, null);
 
             // A name only: Enum.TryParse also accepts a number, which would let any integer through as a type.
             if (string.IsNullOrWhiteSpace(request.CompareAs) ||
@@ -6036,7 +6078,7 @@ public class SynchronisationController(
                 !Enum.TryParse<AttributeDataType>(request.CompareAs, true, out var compareAs) ||
                 compareAs is AttributeDataType.NotSet or AttributeDataType.Reference or AttributeDataType.Binary)
                 return ($"CompareAs must be one of Text, Number, LongNumber, Decimal, DateTime, Boolean or Guid with an Expression; " +
-                        $"'{request.CompareAs}' is not.", false);
+                        $"'{request.CompareAs}' is not.", false, null);
 
             criterion.Expression = request.Expression;
             criterion.CompareAs = compareAs;
@@ -6048,17 +6090,17 @@ public class SynchronisationController(
         }
         else if (!string.IsNullOrWhiteSpace(request.CompareAs))
         {
-            return ("CompareAs applies only to an Expression; an attribute is compared as its own type.", false);
+            return ("CompareAs applies only to an Expression; an attribute is compared as its own type.", false, null);
         }
         else if (syncRule.Direction == SyncRuleDirection.Export)
         {
             if (!request.MetaverseAttributeId.HasValue)
-                return ("MetaverseAttributeId is required for export Synchronisation Rules.", false);
+                return ("MetaverseAttributeId is required for export Synchronisation Rules.", false, null);
 
             var mvAttribute = syncRule.MetaverseObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
             if (mvAttribute == null)
-                return ($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type.", true);
+                return ($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type.", true, null);
 
             criterion.MetaverseAttribute = mvAttribute;
             criterion.ConnectedSystemAttribute = null;
@@ -6069,12 +6111,12 @@ public class SynchronisationController(
         else
         {
             if (!request.ConnectedSystemAttributeId.HasValue)
-                return ("ConnectedSystemAttributeId is required for import Synchronisation Rules.", false);
+                return ("ConnectedSystemAttributeId is required for import Synchronisation Rules.", false, null);
 
             var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
                 .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
             if (csAttribute == null)
-                return ($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type.", true);
+                return ($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type.", true, null);
 
             criterion.ConnectedSystemAttribute = csAttribute;
             criterion.MetaverseAttribute = null;
@@ -6088,7 +6130,7 @@ public class SynchronisationController(
             attributeType, request.DateTimeValue.HasValue,
             out var valueMode, out var relativeCount, out var relativeUnit, out var relativeDirection);
         if (relativeError != null)
-            return (relativeError, false);
+            return (relativeError, false, null);
 
         criterion.ComparisonType = comparisonType;
         // Omitted keeps the criterion's setting: a new criterion's default (respect case), or what an update finds
@@ -6124,7 +6166,7 @@ public class SynchronisationController(
             criterion.RelativeDirection = null;
         }
 
-        return (null, false);
+        return (null, false, null);
     }
 
     /// <summary>
@@ -7376,10 +7418,27 @@ public class SynchronisationController(
                 string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
+        // The connections a connection criterion (#2021) tests: as given, else the named object's own, else none.
+        var connectedObjectTypeIds = request.ConnectedObjectTypeIds;
+        if (connectedObjectTypeIds == null && exporting && request.MetaverseObjectId is { } objectId)
+        {
+            var connections = await _application.ExportEvaluation.ReadConnectionsAsync([objectId], [syncRule]);
+            connectedObjectTypeIds = connections == null ? [] : [.. connections.JoinedObjectTypeIds(objectId)];
+        }
+        connectedObjectTypeIds ??= [];
+
         var asOf = AsUtc(request.AsOf) ?? DateTime.UtcNow;
-        var tested = ScopeTester.Test(syncRule, inputs, asOf);
+        var tested = ScopeTester.Test(syncRule, inputs, asOf, connectedObjectTypeIds);
         var response = new TestScopeResponse
         {
+            Connections = ScopeTester.DescribeConnections(syncRule)
+                .Select(connection => new ConnectionSampleDto
+                {
+                    ConnectedObjectTypeId = connection.ConnectedObjectTypeId,
+                    Description = connection.Description,
+                    Connected = connectedObjectTypeIds.Contains(connection.ConnectedObjectTypeId)
+                })
+                .ToList(),
             IsValid = tested.Explanation != null,
             EvaluatedAt = asOf,
             Inputs = ScopeTester.DescribeInputs(syncRule)

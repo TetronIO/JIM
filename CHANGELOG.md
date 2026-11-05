@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ A Synchronisation Rule scope change's Activity now shows what the Configuration Change Preview predicted beside what the synchronisation that applied it did (Projected and Joined), when exactly one change was applied, a current preview informed the save and both numbers measure the same thing; otherwise it says only which run applied it. The same comparison is `PredictionComparison` in the REST API and `Get-JIMActivity`. (#2618)
 - ✨ An Initial Password now sits under the export item that provisioned the account, which shows where it stands as a follow-up (also in the Causality Explorer, the REST API and PowerShell), so an export no longer adds one Activity per account to the Activity list. (#2668)
 - ✨ An export run's Activity now counts where its Initial Passwords stand (delivered, retrying, parked and so on), its row on the Activity list shows them at a glance, and the REST API and `Get-JIMActivityStats` return the same counts. (#2021)
+- ✨ An export Synchronisation Rule can be scoped by connection, such as "Has user in PANOPLY AD", in the portal, the REST API and PowerShell. A join, disconnect or source deletion moves the identity's scope in the same synchronisation. (#2021)
 - ✨ Run Profiles can be disabled and enabled again, in the portal, the REST API and PowerShell; a disabled Run Profile cannot run, and the portal, `Get-JIMRunProfile` and a failed Schedule step say why. (#2740)
 
 ### Changed
