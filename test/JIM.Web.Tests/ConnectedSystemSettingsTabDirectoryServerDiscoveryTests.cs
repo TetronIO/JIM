@@ -29,14 +29,19 @@ public class ConnectedSystemSettingsTabDirectoryServerDiscoveryTests : JimCompon
     private const string StubConnectorName = "Stub Discovery Connector";
     private const string TargetSettingName = "Preferred Server";
     private const string LdapSettingName = "Preferred Domain Controller";
+    private const string SecondTargetSettingName = "Mail Server";
 
     protected override void ConfigureAdditionalServices()
     {
         var connector = new Mock<IConnector>();
         connector.Setup(c => c.Name).Returns(StubConnectorName);
         connector.As<IConnectorDirectoryServers>()
-            .Setup(c => c.DirectoryServerDiscovery)
-            .Returns(new ConnectorDirectoryServerDiscovery(TargetSettingName, "directory servers"));
+            .Setup(c => c.DirectoryServerDiscoveries)
+            .Returns(
+            [
+                new ConnectorDirectoryServerDiscovery(TargetSettingName, "directory servers"),
+                new ConnectorDirectoryServerDiscovery(SecondTargetSettingName, "mail servers")
+            ]);
         var connectorFactory = new Mock<IConnectorFactory>();
         connectorFactory
             .Setup(f => f.Create(StubConnectorName, It.IsAny<ICredentialProtection?>(), It.IsAny<ICertificateProvider?>()))
@@ -53,32 +58,40 @@ public class ConnectedSystemSettingsTabDirectoryServerDiscoveryTests : JimCompon
     }
 
     [Test]
-    public void SettingsTab_ConnectorTargetingAnotherSetting_PlacesDiscoverBesideThatSettingOnly()
+    public void SettingsTab_ConnectorTargetingOtherSettings_PlacesDiscoverBesideThoseSettingsOnly()
     {
-        var cut = Render<ConnectedSystemSettingsTab>(p => p
-            .Add(c => c.ConnectedSystem, CreateConnectedSystem())
-            .Add(c => c.SettingCategories, [ConnectedSystemSettingCategory.Connectivity]));
-
-        cut.WaitForState(() => cut.FindComponents<ConnectedSystemSettingField>().Any(f => f.Instance.ShowDirectoryServerDiscovery));
+        var cut = RenderTab();
 
         var fieldsWithDiscover = cut.FindComponents<ConnectedSystemSettingField>()
             .Where(f => f.Instance.ShowDirectoryServerDiscovery)
             .Select(f => f.Instance.SettingValue.Setting.Name)
             .ToList();
-        Assert.That(fieldsWithDiscover, Is.EqualTo(new[] { TargetSettingName }));
+        Assert.That(fieldsWithDiscover, Is.EqualTo(new[] { TargetSettingName, SecondTargetSettingName }));
     }
 
     [Test]
-    public void SettingsTab_ConnectorTargetingAnotherSetting_HandsTheConnectorsTermToTheField()
+    public void SettingsTab_ConnectorTargetingOtherSettings_HandsEachFieldItsOwnDiscoverysTerm()
+    {
+        var cut = RenderTab();
+
+        var terms = cut.FindComponents<ConnectedSystemSettingField>()
+            .Where(f => f.Instance.ShowDirectoryServerDiscovery)
+            .Select(f => (f.Instance.SettingValue.Setting.Name, f.Instance.DirectoryServerTerm));
+        Assert.That(terms, Is.EqualTo(new (string?, string?)[]
+        {
+            (TargetSettingName, "directory servers"),
+            (SecondTargetSettingName, "mail servers")
+        }));
+    }
+
+    private IRenderedComponent<ConnectedSystemSettingsTab> RenderTab()
     {
         var cut = Render<ConnectedSystemSettingsTab>(p => p
             .Add(c => c.ConnectedSystem, CreateConnectedSystem())
-            .Add(c => c.SettingCategories, [ConnectedSystemSettingCategory.Connectivity]));
+            .Add(c => c.SettingCategories, [ConnectedSystemSettingCategory.Connectivity, ConnectedSystemSettingCategory.Export]));
 
-        cut.WaitForState(() => cut.FindComponents<ConnectedSystemSettingField>().Any(f => f.Instance.ShowDirectoryServerDiscovery));
-
-        var field = cut.FindComponents<ConnectedSystemSettingField>().Single(f => f.Instance.ShowDirectoryServerDiscovery);
-        Assert.That(field.Instance.DirectoryServerTerm, Is.EqualTo("directory servers"));
+        cut.WaitForState(() => cut.FindComponents<ConnectedSystemSettingField>().Count(f => f.Instance.ShowDirectoryServerDiscovery) == 2);
+        return cut;
     }
 
     private static ConnectedSystem CreateConnectedSystem()
@@ -87,7 +100,8 @@ public class ConnectedSystemSettingsTabDirectoryServerDiscoveryTests : JimCompon
         {
             new() { Id = 1, Name = "Host", Required = true, Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity },
             new() { Id = 2, Name = LdapSettingName, Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity },
-            new() { Id = 3, Name = TargetSettingName, Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity }
+            new() { Id = 3, Name = TargetSettingName, Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Connectivity },
+            new() { Id = 4, Name = SecondTargetSettingName, Type = ConnectedSystemSettingType.String, Category = ConnectedSystemSettingCategory.Export }
         };
 
         var connectorDefinition = new ConnectorDefinition { Id = 1, Name = StubConnectorName, Settings = settings };

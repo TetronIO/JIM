@@ -34,6 +34,8 @@ COPY requirements.txt /app/
 RUN pip3 install --break-system-packages --no-cache-dir --no-deps /wheels/krb5-0.10.0-*.whl \
     && pip3 install --break-system-packages --no-cache-dir --no-deps --require-hashes -r /app/requirements.txt
 COPY winrm_server.py /app/
+# The stand-in Exchange endpoint's commands and session files (#2021).
+COPY fake-exchange/ /opt/fake-exchange/
 ENV KRB5_CONFIG=/etc/harness/krb5.conf \
     KRB5_KTNAME=FILE:/etc/harness/winrm-harness.keytab \
     PYTHONUNBUFFERED=1 \

@@ -63,6 +63,29 @@ public class ConnectorSettingFeatureFlagTests
     }
 
     [Test]
+    public void CopyConnectorSettingsToConnectorDefinition_LdapExchangeServer_IsRequiredWhileManagingExchangeAndCarriesTheFlag()
+    {
+        using var jim = Application(flagsOn: true);
+        var definition = new ConnectorDefinition { Name = ConnectorConstants.LdapConnectorName };
+
+        using var connector = new LdapConnector();
+        jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connector, definition);
+
+        var server = definition.Settings.Single(s => s.Name == LdapConnectorConstants.SETTING_EXCHANGE_SERVER);
+        var manageValue = new ConnectedSystemSettingValue { Setting = definition.Settings.Single(s => s.Name == LdapConnectorConstants.SETTING_MANAGE_EXCHANGE_RECIPIENTS) };
+        var serverValue = new ConnectedSystemSettingValue { Setting = server };
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(server.Type, Is.EqualTo(ConnectedSystemSettingType.String));
+            Assert.That(server.FeatureFlagKey, Is.EqualTo(FeatureFlagCatalogue.ExchangeRecipients.Key));
+            Assert.That(server.Category, Is.EqualTo(ConnectedSystemSettingCategory.Export), "under the Exchange heading");
+            Assert.That(ConnectorSettingValidator.IsSettingRequired([manageValue, serverValue], server), Is.False, "not while Exchange is not managed");
+            manageValue.CheckboxValue = true;
+            Assert.That(ConnectorSettingValidator.IsSettingRequired([manageValue, serverValue], server), Is.True);
+        }
+    }
+
+    [Test]
     public async Task SyncBuiltInConnectorDefinitions_SettingPersistedWithoutItsFlag_GainsItAsync()
     {
         using var connector = new LdapConnector();

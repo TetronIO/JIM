@@ -36,7 +36,8 @@
                                 .Where(sv => sv.Setting.Category == settingCategory)
                                 .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
                                 .Where(sv => !_unavailableSettingIds.Contains(sv.Setting.Id))
-                                .OrderBy(sv => sv.Setting.Id)
+                                .OrderBy(sv => sv.Setting.DisplayOrder)
+                                .ThenBy(sv => sv.Setting.Id)
                                 .ToList();
                             var headingCount = categorySettings.Count(sv => sv.Setting.Type == ConnectedSystemSettingType.Heading);
                             var headingsRendered = 0;
@@ -90,7 +91,7 @@
                                                                      ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(groupMembers[k])"
                                                                      DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                                      DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
-                                                                     DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
+                                                                     DirectoryServerTerm="@DirectoryServerTermFor(groupMembers[k])"
                                                                      ConnectedSystemId="@ConnectedSystem.Id" />
                                     }
                                 </MudPaper>
@@ -135,7 +136,7 @@
                                                              ShowDirectoryServerDiscovery="@ShowDirectoryServerDiscoveryFor(settingValue)"
                                                              DirectoryServerDiscoveryEnabled="@CanDiscoverDirectoryServers()"
                                                              DirectoryServerDiscoveryDraftSettings="DiscoveryDraftSettingValues"
-                                                             DirectoryServerTerm="@_directoryServerDiscovery?.ServerTerm"
+                                                             DirectoryServerTerm="@DirectoryServerTermFor(settingValue)"
                                                              ConnectedSystemId="@ConnectedSystem.Id" />
                                 j++;
                             }
@@ -272,6 +273,21 @@
         }
     }
 
+    @* What the last save raised that did not stop it: the settings are saved, and these say what will not work as
+       they stand. Kept until the next save, so it is still there once the administrator has read the snackbar. *@
+    @if (_settingWarnings.Count > 0)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mt-5" data-testid="jim-settings-warnings">
+            <MudText>Your settings were saved, but some of this will not work as it stands:</MudText>
+            <ul class="mt-3">
+                @foreach (var warning in _settingWarnings)
+                {
+                    <li>@(warning.SettingValue?.Setting?.Name is { } settingName ? $"{settingName}: {warning.ErrorMessage}" : warning.ErrorMessage)</li>
+                }
+            </ul>
+        </MudAlert>
+    }
+
 </MudForm>
 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsSettingsFormValid || !AreSettingGroupsSatisfied() || _catalogueDocumentHasProblems || _settingsBeingSaved)" Class="mt-5" DropShadow="false" OnClick="HandleValidSettingsSubmitAsync" data-testid="jim-settings-save">
     @if (_settingsBeingSaved)
@@ -399,11 +415,16 @@
     private MudForm? _settingsForm;
 
     /// <summary>
-    /// What this Connected System's Connector says about directory server discovery (issue #1167), or null when
-    /// it does not support it. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>: a
-    /// property of the Connector, stable for the life of the Connected System.
+    /// The warnings the last successful save raised: the settings saved, and these say what will not work as they stand.
     /// </summary>
-    private ConnectorDirectoryServerDiscovery? _directoryServerDiscovery;
+    private List<ConnectorSettingValueValidationResult> _settingWarnings = [];
+
+    /// <summary>
+    /// What this Connected System's Connector can discover, each for the setting it fills (issue #1167, #2021); empty
+    /// when it supports none. Asked once per the same reasoning as <see cref="_supportsCertificateFetch"/>: a property
+    /// of the Connector, stable for the life of the Connected System.
+    /// </summary>
+    private IReadOnlyList<ConnectorDirectoryServerDiscovery> _directoryServerDiscoveries = [];
 
     /// <summary>
     /// The setting this Connected System's Connector reads its catalogue to help write (#2570), or null when it
@@ -453,7 +474,7 @@
         if (ConnectedSystem.Id <= 0)
         {
             _supportsCertificateFetch = false;
-            _directoryServerDiscovery = null;
+            _directoryServerDiscoveries = [];
             _catalogueDeclaration = null;
             _catalogueSource = null;
             return;
@@ -461,7 +482,7 @@
 
         using var jim = JimFactory.Create();
         _supportsCertificateFetch = await jim.Certificates.SupportsServerCertificateReadAsync(ConnectedSystem.Id);
-        _directoryServerDiscovery = await jim.ConnectedSystems.GetDirectoryServerDiscoveryAsync(ConnectedSystem.Id);
+        _directoryServerDiscoveries = await jim.ConnectedSystems.GetDirectoryServerDiscoveriesAsync(ConnectedSystem.Id);
         _catalogueDeclaration = await jim.ConnectedSystems.GetCatalogueDeclarationAsync(ConnectedSystem.Id);
 
         // Kept across renders so the editor's catalogue reads are not repeated each time this tab re-renders. The
@@ -484,11 +505,18 @@
         (ConnectedSystem.ObjectTypes ?? []).Where(objectType => objectType.Selected).Select(objectType => objectType.Name);
 
     /// <summary>
-    /// Whether <paramref name="settingValue"/> is the field the Discover action targets: the one the Connector
-    /// itself names, so nothing here knows which Connector it is or what its settings are called.
+    /// Whether <paramref name="settingValue"/> is a field a Discover action targets: one the Connector itself names,
+    /// so nothing here knows which Connector it is or what its settings are called.
     /// </summary>
-    private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) =>
-        _directoryServerDiscovery != null && settingValue.Setting.Name == _directoryServerDiscovery.TargetSettingName;
+    private bool ShowDirectoryServerDiscoveryFor(ConnectedSystemSettingValue settingValue) => DiscoveryFor(settingValue) != null;
+
+    /// <summary>
+    /// What the Connector calls the servers discovered for <paramref name="settingValue"/>, e.g. "domain controllers".
+    /// </summary>
+    private string? DirectoryServerTermFor(ConnectedSystemSettingValue settingValue) => DiscoveryFor(settingValue)?.ServerTerm;
+
+    private ConnectorDirectoryServerDiscovery? DiscoveryFor(ConnectedSystemSettingValue settingValue) =>
+        _directoryServerDiscoveries.FirstOrDefault(discovery => discovery.TargetSettingName == settingValue.Setting.Name);
 
     /// <summary>
     /// Gates the Discover... action on the Connected System's required Connectivity settings currently having a
@@ -497,7 +525,7 @@
     /// </summary>
     private bool CanDiscoverDirectoryServers()
     {
-        if (_directoryServerDiscovery == null)
+        if (_directoryServerDiscoveries.Count == 0)
             return false;
 
         return ConnectedSystem.SettingValues
@@ -533,12 +561,13 @@
         using var jim = JimFactory.Create();
         _settingsBeingSaved = true;
         SettingsFormCustomErrors.Clear();
+        _settingWarnings = [];
         _serverCertificate = null;
 
         StateHasChanged();
         await Task.Delay(1);
 
-        var results = jim.ConnectedSystems.ValidateConnectedSystemSettings(ConnectedSystem);
+        var results = await jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(ConnectedSystem);
         for (var i = 0; i < results.Count; i++)
         {
             var result = results[i];
@@ -588,7 +617,9 @@
 
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
-        Snackbar.Add("Your setting changes have been saved.", Severity.Success);
+        _settingWarnings = results.Where(result => result.IsWarning).ToList();
+        Snackbar.Add(_settingWarnings.Count == 0 ? "Your setting changes have been saved." : "Your setting changes have been saved, with warnings.",
+            _settingWarnings.Count == 0 ? Severity.Success : Severity.Warning);
         _settingsBeingSaved = false;
 
         await OnConnectedSystemChanged.InvokeAsync();

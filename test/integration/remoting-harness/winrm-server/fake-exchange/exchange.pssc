@@ -1,0 +1,18 @@
+# Copyright (c) Tetron Limited. All rights reserved.
+# Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+# The stand-in Microsoft.Exchange endpoint for an account in Exchange's Organization Management role group: every
+# command the fake Exchange offers, in a restricted, no-language session as Exchange's own endpoint is.
+@{
+    SchemaVersion    = '2.0.0.0'
+    SessionType      = 'RestrictedRemoteServer'
+    ModulesToImport  = '/opt/fake-exchange/FakeExchange.psm1'
+    VisibleFunctions = @(
+        'Get-ExchangeServer'
+        'Get-Recipient', 'Get-User', 'Get-Contact', 'Get-Group'
+        'Enable-Mailbox', 'Set-Mailbox'
+        'Enable-MailUser', 'Set-MailUser'
+        'Enable-MailContact', 'Set-MailContact'
+        'Enable-DistributionGroup', 'Set-DistributionGroup'
+    )
+}

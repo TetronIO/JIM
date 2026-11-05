@@ -25,8 +25,14 @@ public class ConnectedSystemDirectoryServerDto
     public string? Site { get; set; }
 
     /// <summary>
-    /// The id of the Connected System setting this server's host name is a value for (for the LDAP Connector,
-    /// Preferred Domain Controller): the key to use when setting it with <c>Set-JIMConnectedSystem -SettingValues</c>
+    /// The server's version as the directory records it; null when the directory records none, as for a domain
+    /// controller.
+    /// </summary>
+    public string? Version { get; set; }
+
+    /// <summary>
+    /// The id of the Connected System setting this server's host name is a value for (for the LDAP Connector's
+    /// domain controllers, Preferred Domain Controller): the key to use when setting it with <c>Set-JIMConnectedSystem -SettingValues</c>
     /// or the update endpoint. Null only if the Connected System does not carry the setting its Connector names.
     /// </summary>
     public int? TargetSettingId { get; set; }
@@ -46,6 +52,7 @@ public class ConnectedSystemDirectoryServerDto
         {
             HostName = model.HostName,
             Site = model.Site,
+            Version = model.Version,
             TargetSettingId = targetSettingId,
             TargetSettingName = targetSettingName
         };

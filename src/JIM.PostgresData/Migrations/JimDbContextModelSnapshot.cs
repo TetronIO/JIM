@@ -3541,6 +3541,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SettingValuesValid")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("SettingsCheckFacts")
+                        .HasColumnType("text");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -4619,6 +4622,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
 
                     b.PrimitiveCollection<List<string>>("DropDownValues")
                         .HasColumnType("text[]");

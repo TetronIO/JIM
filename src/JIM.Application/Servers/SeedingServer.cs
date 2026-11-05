@@ -1709,8 +1709,9 @@ internal class SeedingServer
             Log.Information($"SyncConnectorDefinitionAsync: Updated declarations for '{connector.Name}'");
         }
 
-        // Sync settings - update existing and add new ones
-        foreach (var latestSetting in latestSettings)
+        // Sync settings - update existing and add new ones, each at the position the Connector declares it in, so a
+        // setting added since installation shows where the Connector puts it rather than at the end of its section
+        foreach (var (latestSetting, position) in latestSettings.Select((setting, position) => (setting, position)))
         {
             var existingSetting = existingDefinition.Settings.FirstOrDefault(s => s.Name == latestSetting.Name);
             if (existingSetting == null)
@@ -1718,6 +1719,7 @@ internal class SeedingServer
                 // Add new setting
                 existingDefinition.Settings.Add(new ConnectorDefinitionSetting
                 {
+                    DisplayOrder = position,
                     Category = latestSetting.Category,
                     DefaultCheckboxValue = latestSetting.DefaultCheckboxValue,
                     DefaultStringValue = latestSetting.DefaultStringValue,
@@ -1740,7 +1742,8 @@ internal class SeedingServer
             else
             {
                 // Update existing setting if changed
-                if (existingSetting.Category != latestSetting.Category ||
+                if (existingSetting.DisplayOrder != position ||
+                    existingSetting.Category != latestSetting.Category ||
                     existingSetting.Description != latestSetting.Description ||
                     existingSetting.Example != latestSetting.Example ||
                     existingSetting.Type != latestSetting.Type ||
@@ -1754,6 +1757,7 @@ internal class SeedingServer
                     existingSetting.DefaultStringValue != latestSetting.DefaultStringValue ||
                     existingSetting.DefaultIntValue != latestSetting.DefaultIntValue)
                 {
+                    existingSetting.DisplayOrder = position;
                     existingSetting.Category = latestSetting.Category;
                     existingSetting.Description = latestSetting.Description;
                     existingSetting.Example = latestSetting.Example;

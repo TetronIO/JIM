@@ -16,9 +16,9 @@ else if (SettingValue.Setting.Type == ConnectedSystemSettingType.Divider)
 }
 else if (SettingValue.Setting.Type == ConnectedSystemSettingType.String && ShowDirectoryServerDiscovery)
 {
-    @* The one field the Discover action (issue #1167) fills in, as named by the Connector and matched by the
-       parent, never by display text here. The field itself stays ordinary free text; only the administrator's
-       own selection in the dialog ever writes to it. *@
+    @* A field a Discover action (issue #1167) fills in, as named by the Connector and matched by the parent, never
+       by display text here. The field itself stays ordinary free text; only the administrator's own selection in
+       the dialog ever writes to it. *@
     <div class="d-flex align-start @CssClass">
         <MudTextField T="string"
                       Label="@SettingValue.Setting.Name"
@@ -209,10 +209,10 @@ else
     public EventCallback FileSelected { get; set; }
 
     /// <summary>
-    /// Whether this field is the one the Discover action (issue #1167) targets, and so should render a
-    /// Discover... action beside it. The parent decides this by matching the setting's name against the target
-    /// the Connected System's Connector names through <c>IConnectorDirectoryServers</c>; this component renders
-    /// whatever it is told without knowing why.
+    /// Whether this field is one a Discover action (issue #1167) targets, and so should render a Discover... action
+    /// beside it. The parent decides this by matching the setting's name against the targets the Connected System's
+    /// Connector names through <c>IConnectorDirectoryServers</c>; this component renders whatever it is told without
+    /// knowing why.
     /// </summary>
     [Parameter]
     public bool ShowDirectoryServerDiscovery { get; set; }
@@ -335,7 +335,8 @@ else
     /// </summary>
     private async Task OpenDirectoryServerDiscoveryDialogAsync()
     {
-        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, DirectoryServerTerm, DirectoryServerDiscoveryDraftSettings?.Invoke());
+        var selectedHostName = await DirectoryServerDiscoveryDialog.ShowAsync(DialogService, ConnectedSystemId, SettingValue.Setting.Name, DirectoryServerTerm,
+            DirectoryServerDiscoveryDraftSettings?.Invoke());
         if (string.IsNullOrEmpty(selectedHostName))
             return;
 

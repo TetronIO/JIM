@@ -11,6 +11,13 @@ public class ConnectorDefinitionSetting : ConnectorSetting
     public int Id { get; set; }
 
     /// <summary>
+    /// Where the setting comes among its Connector's settings: its position in the list the Connector declares, from 0.
+    /// The Settings tab shows settings in this order. Kept current at every start, so a setting added to a Connector
+    /// after installation shows where the Connector puts it rather than at the end of its section.
+    /// </summary>
+    public int DisplayOrder { get; set; }
+
+    /// <summary>
     /// Backwards navigation link for EF. Do not use.
     /// </summary>
     public List<ConnectedSystemSettingValue> Values { get; set; } = null!;

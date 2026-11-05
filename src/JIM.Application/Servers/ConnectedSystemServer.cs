@@ -2072,10 +2072,11 @@ public partial class ConnectedSystemServer
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
     public void CopyConnectorSettingsToConnectorDefinition(IConnectorSettings connector, ConnectorDefinition connectorDefinition)
     {
-        foreach (var connectorSetting in connector.GetSettings())
+        foreach (var (connectorSetting, position) in connector.GetSettings().Select((setting, position) => (setting, position)))
         {
             connectorDefinition.Settings.Add(new ConnectorDefinitionSetting
             {
+                DisplayOrder = position,
                 Category = connectorSetting.Category,
                 DefaultCheckboxValue = connectorSetting.DefaultCheckboxValue,
                 DefaultStringValue = connectorSetting.DefaultStringValue,
@@ -2106,7 +2107,7 @@ public partial class ConnectedSystemServer
     /// </summary>
     /// <remarks>
     /// This is what <see cref="ConnectedSystem.SettingValuesValid"/> carries, and it is deliberately narrower than
-    /// <see cref="ValidateConnectedSystemSettings"/>. That method also asks the Connector, whose own validation is a
+    /// <see cref="ValidateConnectedSystemSettingsAsync"/>. That method also asks the Connector, whose own validation is a
     /// live probe: the LDAP Connector binds to the directory, the File Connector looks for the file. Persisting the
     /// answer to a live probe as a property of the configuration means an unreachable target marks stored settings
     /// invalid, and the portal gates the Schema, Scope and Matching tabs on this flag, so saving
@@ -2114,7 +2115,7 @@ public partial class ConnectedSystemServer
     /// the Settings tab. It also put a network round trip on the path of every unrelated save.
     ///
     /// Whether the target answers is still reported, where it is actionable: the Settings tab and the settings-writing
-    /// REST endpoint both call <see cref="ValidateConnectedSystemSettings"/> and surface what it finds.
+    /// REST endpoint both call <see cref="ValidateConnectedSystemSettingsAsync"/> and surface what it finds.
     /// </remarks>
     public static bool AreSettingValuesComplete(ConnectedSystem connectedSystem)
     {
@@ -2123,7 +2124,19 @@ public partial class ConnectedSystemServer
         return ConnectorSettingValidator.Validate(connectedSystem.SettingValues).All(r => r.IsValid);
     }
 
-    public IList<ConnectorSettingValueValidationResult> ValidateConnectedSystemSettings(ConnectedSystem connectedSystem)
+    /// <summary>
+    /// Validates a Connected System's settings as they are about to be saved: the generic constraints the setting
+    /// metadata declares, the Connector's own validation, and, once nothing has refused them, the Connector's settings
+    /// check (<see cref="IConnectorSettingsCheck"/>), which may reach other systems the settings name.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System carrying the setting values.</param>
+    /// <param name="cancellationToken">Cancels the Connector's settings check.</param>
+    /// <returns>
+    /// Every finding. One that is not valid refuses the save; a valid one with a message is a warning, which saves
+    /// and tells the administrator.
+    /// </returns>
+    public async Task<IList<ConnectorSettingValueValidationResult>> ValidateConnectedSystemSettingsAsync(ConnectedSystem connectedSystem,
+        CancellationToken cancellationToken = default)
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
@@ -2147,6 +2160,18 @@ public partial class ConnectedSystemServer
             // yet is nothing selected, which is a valid answer, not a reason to skip the question.
             if (connector is IConnectorObjectTypeSelectionValidation selectionValidation)
                 results.AddRange(selectionValidation.ValidateObjectTypeSelection(connectedSystem.SettingValues, connectedSystem.ObjectTypes ?? [], Log.Logger));
+
+            // the slow check runs only once nothing above has refused the settings: a missing value or an unreachable
+            // directory would fail it for the same reason, after a wait. a warning is not a refusal, so it does not stop it.
+            if (connector is IConnectorSettingsCheck settingsCheck && results.All(result => result.IsValid))
+            {
+                var check = await settingsCheck.CheckSettingsAsync(connectedSystem.SettingValues, Log.Logger, cancellationToken);
+                results.AddRange(check.Results);
+
+                // what the check learnt about the settings now on screen replaces what an earlier check learnt; the save
+                // that follows persists it, and a refused save persists nothing
+                connectedSystem.SettingsCheckFacts = check.Facts.Count == 0 ? null : check.Facts;
+            }
         }
         finally
         {
@@ -3293,6 +3318,22 @@ public partial class ConnectedSystemServer
                             existingAttribute.DateTimeResolution = DiscoveredDateTimeResolution(schemaAttribute, existingAttribute.Type);
 
                         existingAttribute.ClassName = schemaAttribute.ClassName;
+
+                        // A tighter writability is a definition change (#2755): an export Attribute Flow validated
+                        // against a writable attribute may no longer be able to write it, and when the Connector
+                        // declared it read-only of its own accord the Connected System would still accept the write,
+                        // so nothing but this report stops the flow. A looser one breaks no mapping.
+                        if (existingAttribute.Writability != schemaAttribute.Writability &&
+                            existingAttribute.Writability.MostRestrictive(schemaAttribute.Writability) == schemaAttribute.Writability)
+                        {
+                            result.AddChangedAttribute(schemaObjectType.Name, new SchemaAttributeDefinitionChange
+                            {
+                                AttributeName = existingAttribute.Name,
+                                Aspect = SchemaAttributeChangeAspect.Writability,
+                                OldValue = existingAttribute.Writability.ToString(),
+                                NewValue = schemaAttribute.Writability.ToString()
+                            });
+                        }
                         existingAttribute.Writability = schemaAttribute.Writability;
                         existingAttribute.Required = schemaAttribute.Required;
 
@@ -4070,8 +4111,12 @@ public partial class ConnectedSystemServer
     /// "Directory Capabilities" card on the Connected System details page; JIM never interprets the persisted
     /// data itself, it is only ever replayed to the owning Connector to interpret.
     /// <para>
+    /// What the Connector's settings check learnt on the last save (<see cref="ConnectedSystem.SettingsCheckFacts"/>,
+    /// such as the Exchange version, #2021) follows the Connector's own facts.
+    /// </para>
+    /// <para>
     /// Null when the Connected System does not exist or its Connector does not implement
-    /// <see cref="IConnectorDetectedCapabilities"/> (the UI renders nothing); an empty list when the
+    /// <see cref="IConnectorDetectedCapabilities"/> and no settings check has learnt anything (the UI renders nothing); an empty list when the
     /// Connector supports detection but nothing has been detected yet (for example, before the first
     /// successful connection), which the UI renders as a single line saying so.
     /// </para>
@@ -4083,9 +4128,15 @@ public partial class ConnectedSystemServer
         if (connectedSystem == null)
             return null;
 
-        return CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
+        var detected = CreateConnector(connectedSystem) is IConnectorDetectedCapabilities capabilitiesConnector
             ? capabilitiesConnector.GetDetectedCapabilities(connectedSystem.PersistedConnectorData, Log.Logger)
             : null;
+
+        // what the settings check learnt on the last save follows what the Connector detected on the last connection
+        if (connectedSystem.SettingsCheckFacts is not { Count: > 0 } checkFacts)
+            return detected;
+
+        return [.. detected ?? [], .. checkFacts];
     }
 
     /// <summary>
@@ -4237,22 +4288,24 @@ public partial class ConnectedSystemServer
 
     #region Connected System Directory Servers
     /// <summary>
-    /// Discovers the directory servers in this Connected System's directory (for the LDAP Connector, the domain
-    /// controllers in its forest, with the Active Directory Site each belongs to), so an administrator can be shown
-    /// a choice for the setting the Connector names rather than having to already know a hostname (issue #1167).
+    /// Discovers the servers in this Connected System's directory for one setting (for the LDAP Connector, the domain
+    /// controllers in its forest for Preferred Domain Controller, or its Exchange servers for Exchange server), so an
+    /// administrator can be shown a choice rather than having to already know a hostname (issue #1167, #2021).
     /// <para>
     /// Deliberately not recorded as an Activity, for the same reason as <see cref="RunPasswordPreflightAsync"/>:
-    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the
-    /// setting it informs (<see cref="ConnectorDirectoryServerDiscovery.TargetSettingName"/>); the setting is intent,
-    /// and only the administrator's own selection in the portal, REST API caller, or PowerShell caller updates it.
+    /// it changes nothing in JIM or in the Connected System, it only reads. It also never writes to the setting it
+    /// informs; the setting is intent, and only the administrator's own selection in the portal, REST API caller, or
+    /// PowerShell caller updates it.
     /// </para>
     /// </summary>
     /// <param name="connectedSystemId">The Connected System whose directory to discover servers in.</param>
+    /// <param name="targetSettingName">The setting the servers are for, one of <see cref="GetDirectoryServerDiscoveriesAsync"/>; null for the first.</param>
     /// <param name="draftSettingValues">Connectivity settings entered on screen but not yet saved, applied over the saved ones (encrypted settings always come from the saved values). Supplied by the portal so an administrator configuring a system can discover before saving, mirroring <see cref="CertificateServer.ReadServerCertificateAsync"/>.</param>
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
-    /// <exception cref="NotSupportedException">The Connector does not support directory server discovery, or (thrown by the Connector) the connected directory is not AD-family.</exception>
+    /// <exception cref="NotSupportedException">The Connector does not discover servers for that setting (or for any), the setting is not available, or (thrown by the Connector) the connected directory cannot answer.</exception>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
+    public async Task<List<ConnectorDirectoryServer>> GetConnectedSystemDirectoryServersAsync(int connectedSystemId, string? targetSettingName = null,
+        IReadOnlyCollection<ConnectedSystemSettingValueDraft>? draftSettingValues = null)
     {
         // Loaded without change tracking, so applying the drafts below cannot reach the database.
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
@@ -4266,26 +4319,39 @@ public partial class ConnectedSystemServer
         if (connector is not IConnectorDirectoryServers directoryServersConnector)
             throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery.");
 
-        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering directory servers for Connected System {ConnectedSystemId}.", connectedSystemId);
-        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, Log.Logger);
+        var discoveries = await AvailableDiscoveriesAsync(connectedSystem, directoryServersConnector);
+        var discovery = targetSettingName == null
+            ? discoveries.FirstOrDefault()
+            : discoveries.FirstOrDefault(d => d.TargetSettingName == targetSettingName);
+        if (discovery == null)
+        {
+            throw new NotSupportedException(targetSettingName == null
+                ? $"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support directory server discovery."
+                : $"The '{connectedSystem.ConnectorDefinition.Name}' connector cannot discover servers for the setting '{targetSettingName}'.");
+        }
+
+        Log.Debug("GetConnectedSystemDirectoryServersAsync: Discovering {ServerTerm} for Connected System {ConnectedSystemId}.",
+            discovery.ServerTerm, connectedSystemId);
+        return await directoryServersConnector.GetDirectoryServersAsync(connectedSystem.SettingValues, discovery.TargetSettingName, Log.Logger);
     }
 
     /// <summary>
-    /// What this Connected System's Connector says about directory server discovery (which setting it fills, and
-    /// what the directory calls its servers), or null when it does not support discovery. The portal places the
-    /// Discover action beside the setting the Connector names, so nothing above the Connector needs to know which
-    /// Connector it is.
+    /// What this Connected System's Connector can discover, each for the setting it fills (for the LDAP Connector,
+    /// domain controllers and Exchange servers), or nothing when it does not support discovery. The portal places a
+    /// Discover action beside each setting named, so nothing above the Connector needs to know which Connector it is.
+    /// A discovery whose setting is not offered (behind a feature flag that is off, or not carried by this Connected
+    /// System) is left out.
     /// <para>
     /// A property of the Connector, not of the current settings: stable for the life of a Connected System, so it
     /// can be asked once, mirroring <see cref="JIM.Application.Servers.CertificateServer.SupportsServerCertificateReadAsync"/>.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public async Task<ConnectorDirectoryServerDiscovery?> GetDirectoryServerDiscoveryAsync(int connectedSystemId)
+    public async Task<IReadOnlyList<ConnectorDirectoryServerDiscovery>> GetDirectoryServerDiscoveriesAsync(int connectedSystemId)
     {
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
         if (connectedSystem == null)
-            return null;
+            return [];
 
         IConnector connector;
         try
@@ -4295,11 +4361,26 @@ public partial class ConnectedSystemServer
         catch (NotSupportedException)
         {
             // A Connector Definition with no built-in Connector behind it supports nothing.
-            return null;
+            return [];
         }
 
         using var connectorDisposable = connector as IDisposable;
-        return (connector as IConnectorDirectoryServers)?.DirectoryServerDiscovery;
+        return connector is IConnectorDirectoryServers directoryServers
+            ? await AvailableDiscoveriesAsync(connectedSystem, directoryServers)
+            : [];
+    }
+
+    private async Task<List<ConnectorDirectoryServerDiscovery>> AvailableDiscoveriesAsync(ConnectedSystem connectedSystem, IConnectorDirectoryServers connector)
+    {
+        var available = new List<ConnectorDirectoryServerDiscovery>();
+        foreach (var discovery in connector.DirectoryServerDiscoveries)
+        {
+            var setting = connectedSystem.SettingValues.FirstOrDefault(sv => sv.Setting.Name == discovery.TargetSettingName)?.Setting;
+            if (setting != null && await IsSettingAvailableAsync(setting))
+                available.Add(discovery);
+        }
+
+        return available;
     }
     #endregion
 
@@ -4309,7 +4390,7 @@ public partial class ConnectedSystemServer
     /// when it has none. The portal offers its catalogue-driven editor for the setting the Connector names, so
     /// nothing above the Connector needs to know which Connector it is (issue #2570).
     /// <para>
-    /// A property of the Connector, not of the current settings, mirroring <see cref="GetDirectoryServerDiscoveryAsync"/>.
+    /// A property of the Connector, not of the current settings, mirroring <see cref="GetDirectoryServerDiscoveriesAsync"/>.
     /// </para>
     /// </summary>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>

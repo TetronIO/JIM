@@ -40,13 +40,13 @@ public class ConnectedSystemSettingsValidationTests
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_FileConnectorWithoutObjectTypeSettings_ReturnsGroupError()
+    public async Task ValidateConnectedSystemSettingsAsync_FileConnectorWithoutObjectTypeSettings_ReturnsGroupErrorAsync()
     {
         // Arrange
         var connectedSystem = CreateFileConnectorConnectedSystem();
 
         // Act
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         // Assert: neither Object Type Column nor Object Type was supplied, so a group validation error is expected
         Assert.That(results.Any(r => !r.IsValid &&
@@ -56,21 +56,21 @@ public class ConnectedSystemSettingsValidationTests
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_FileConnectorWithObjectTypeSupplied_ReturnsNoErrors()
+    public async Task ValidateConnectedSystemSettingsAsync_FileConnectorWithObjectTypeSupplied_ReturnsNoErrorsAsync()
     {
         // Arrange
         var connectedSystem = CreateFileConnectorConnectedSystem();
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type").StringValue = "user";
 
         // Act
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         // Assert
         Assert.That(results.Where(r => !r.IsValid), Is.Empty);
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_FileConnectorWithBothObjectTypeSettings_ReturnsExclusiveError()
+    public async Task ValidateConnectedSystemSettingsAsync_FileConnectorWithBothObjectTypeSettings_ReturnsExclusiveErrorAsync()
     {
         // Arrange: supplying both a column and a fixed object type is mutually exclusive (#792)
         var connectedSystem = CreateFileConnectorConnectedSystem();
@@ -78,7 +78,7 @@ public class ConnectedSystemSettingsValidationTests
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type").StringValue = "user";
 
         // Act
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         // Assert
         Assert.That(results.Any(r => !r.IsValid &&
@@ -89,7 +89,7 @@ public class ConnectedSystemSettingsValidationTests
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_FileConnectorMissingRequiredMode_ReturnsRequiredError()
+    public async Task ValidateConnectedSystemSettingsAsync_FileConnectorMissingRequiredMode_ReturnsRequiredErrorAsync()
     {
         // Arrange: clear the required Mode setting; the generic validator (not the connector) now enforces required values
         var connectedSystem = CreateFileConnectorConnectedSystem();
@@ -97,7 +97,7 @@ public class ConnectedSystemSettingsValidationTests
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Mode").StringValue = null;
 
         // Act
-        var results = _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem);
+        var results = await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem);
 
         // Assert
         Assert.That(results.Any(r => !r.IsValid && r.ErrorMessage != null && r.ErrorMessage.Contains("Mode")), Is.True);

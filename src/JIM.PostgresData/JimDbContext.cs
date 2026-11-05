@@ -563,6 +563,12 @@ public class JimDbContext : DbContext
             .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // What a Connector's settings check learnt on the last save (#2021): a short list, read and written whole.
+        modelBuilder.Entity<ConnectedSystem>()
+            .Property(cs => cs.SettingsCheckFacts)
+            .HasConversion(ConnectorCapabilityJson.Converter, ConnectorCapabilityJson.Comparer)
+            .HasColumnType("text");
+
         // A Connected System has at most one Password Synchronisation configuration, declared explicitly for the
         // same reason as the policy above. Cascade: a system that no longer exists cannot receive passwords, and
         // the queued changes aimed at it cascade away with it.

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
+- 🔄 On Active Directory, the attributes only Exchange may set (`homeMDB`, `msExchRecipientTypeDetails` and five more) are discovered read-only, so no Attribute Flow can write them: written directly, they create no mailbox. They are still imported. (#2755)
+- 🔄 Discovering servers through the REST API or PowerShell can name the setting they are for (`?setting=`, `Get-JIMConnectedSystemDirectoryServer -Setting`), for a Connector that discovers servers for more than one, and each server found carries its version where the directory records one. (#2021)
 - 🔄 Saving a change to an import Synchronisation Rule, Attribute Flow or Object Matching Rule now takes effect at the Connected System's next synchronisation, Delta or Full, which processes every object of the affected Object Type, instead of waiting for a Full Synchronisation. (#2615)
 - 🔄 The indicator for changes pending a Full Synchronisation no longer counts what a synchronisation applies by itself: import rule changes, and an export rule's scope or Deprovisioning Action. (#2615)
 - 🔄 JIM upgrades from v0.16.0 or any later release straight to the latest, skipping the releases in between, and every release is tested that way before it ships. An installation of v0.15.0 or earlier is reinstalled. (#2653)
@@ -25,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A schema refresh now lists an attribute that became harder to write, and flags each Attribute Flow writing one that became read-only, so **Apply & Disable Dependents** disables it. Before, the change applied silently and the flow kept writing it. (#2755)
+- 🐛 A setting added to a Connector since JIM was installed now shows on the Settings tab where the Connector places it, rather than at the end of its section under whichever heading came last.
 - 🐛 `Resume-JIMPendingPasswordChange` and `Stop-JIMPendingPasswordChange` now act on every piped change; given changes from several Connected Systems, they acted only on the last one's system and silently skipped the rest. `-ConnectedSystemId` no longer binds from the pipeline.
 - 🐛 **Retry shown** and **Cancel shown** on the Passwords tab now act only on the changes the search box has narrowed the list to, rather than on every change matching the other filters; the REST API's and PowerShell's queue actions honour their search text the same way. (#2725)
 - 🐛 The SQL Object Types editor's name pickers keep the first key you type after clicking or tabbing into them; typing `HR` straight away no longer leaves `R`. (#2627)

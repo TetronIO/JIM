@@ -167,6 +167,64 @@ public class LdapConnectorDirectoryServerDiscoveryTests
         Assert.That(directoryServers[0].Site, Is.Null);
     }
 
+    #region MapExchangeServerEntries
+
+    /// <summary>
+    /// Exchange servers as the configuration partition holds them (#2021, D6): an msExchExchangeServer object per
+    /// server under CN=Microsoft Exchange,CN=Services, its host name in the ncacn_ip_tcp entry of networkAddress, its
+    /// version in serialNumber, and its Active Directory Site as a DN in msExchServerSite.
+    /// </summary>
+    [Test]
+    public void MapExchangeServerEntries_NormalEntries_ReturnsHostNameSiteAndVersionOrderedByHostName()
+    {
+        var entries = new List<(IReadOnlyList<string> NetworkAddresses, string? SerialNumber, string? SiteDn)>
+        {
+            (["ncacn_vns_spp:EX2", "netbios:EX2", "ncacn_ip_tcp:ex2.corp.local"], "Version 15.2 (Build 1544.4)",
+                "CN=London,CN=Sites,CN=Configuration,DC=corp,DC=local"),
+            (["NCACN_IP_TCP:ex1.corp.local"], "Version 15.1 (Build 2507.6)",
+                "CN=Default-First-Site-Name,CN=Sites,CN=Configuration,DC=corp,DC=local")
+        };
+
+        var servers = LdapConnectorUtilities.MapExchangeServerEntries(entries, Logger);
+
+        Assert.That(servers.Select(s => (s.HostName, s.Site, s.Version)), Is.EqualTo(new[]
+        {
+            ("ex1.corp.local", (string?)"Default-First-Site-Name", (string?)"Version 15.1 (Build 2507.6)"),
+            ("ex2.corp.local", "London", "Version 15.2 (Build 1544.4)")
+        }));
+    }
+
+    [Test]
+    public void MapExchangeServerEntries_NoTcpAddress_SkipsTheServer()
+    {
+        var entries = new List<(IReadOnlyList<string> NetworkAddresses, string? SerialNumber, string? SiteDn)>
+        {
+            (["netbios:EX3"], "Version 15.2 (Build 1544.4)", null)
+        };
+
+        Assert.That(LdapConnectorUtilities.MapExchangeServerEntries(entries, Logger), Is.Empty, "JIM cannot offer a server it cannot name");
+    }
+
+    [Test]
+    public void MapExchangeServerEntries_NoSiteOrVersion_ReturnsTheServerWithoutThem()
+    {
+        var entries = new List<(IReadOnlyList<string> NetworkAddresses, string? SerialNumber, string? SiteDn)>
+        {
+            (["ncacn_ip_tcp:ex1.corp.local"], null, null)
+        };
+
+        var server = LdapConnectorUtilities.MapExchangeServerEntries(entries, Logger).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(server.HostName, Is.EqualTo("ex1.corp.local"));
+            Assert.That(server.Site, Is.Null);
+            Assert.That(server.Version, Is.Null);
+        }
+    }
+
+    #endregion
+
     #region Unsupported directory message
 
     /// <summary>

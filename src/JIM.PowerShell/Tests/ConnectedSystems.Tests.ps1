@@ -196,6 +196,43 @@ Describe 'Set-JIMConnectedSystem' {
         }
     }
 
+    Context 'Setting warnings' {
+
+        It 'Writes each setting warning the save raised, naming its setting' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        id              = 1
+                        name            = 'PANOPLY'
+                        settingWarnings = @(
+                            [PSCustomObject]@{ setting = 'Exchange server'; message = 'The account cannot run Enable-Mailbox, so JIM cannot create mailboxes.' }
+                            [PSCustomObject]@{ setting = $null; message = 'Exchange is older than JIM supports.' }
+                        )
+                    }
+                }
+
+                Set-JIMConnectedSystem -Id 1 -SettingValues @{ 1 = @{ stringValue = 'ex1.panoply.local' } } -Confirm:$false `
+                    -WarningVariable settingWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $settingWarnings | Should -HaveCount 2
+                $settingWarnings[0].Message | Should -Be 'Exchange server: The account cannot run Enable-Mailbox, so JIM cannot create mailboxes.'
+                $settingWarnings[1].Message | Should -Be 'Exchange is older than JIM supports.'
+            }
+        }
+
+        It 'Writes no warning when the save raised none' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'PANOPLY'; settingWarnings = @() } }
+
+                Set-JIMConnectedSystem -Id 1 -Name 'PANOPLY' -Confirm:$false -WarningVariable settingWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $settingWarnings | Should -BeNullOrEmpty
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

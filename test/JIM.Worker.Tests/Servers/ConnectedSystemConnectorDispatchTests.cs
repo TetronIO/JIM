@@ -53,13 +53,13 @@ public class ConnectedSystemConnectorDispatchTests
     }
 
     [Test]
-    public void ValidateConnectedSystemSettings_UnknownConnectorDefinition_ThrowsNotSupportedException()
+    public void ValidateConnectedSystemSettingsAsync_UnknownConnectorDefinition_ThrowsNotSupportedException()
     {
         // Arrange
         var connectedSystem = CreateUnknownConnectorConnectedSystem();
 
         // Act & Assert
-        var exception = Assert.Throws<NotSupportedException>(() => _jim.ConnectedSystems.ValidateConnectedSystemSettings(connectedSystem));
+        var exception = Assert.ThrowsAsync<NotSupportedException>(async () => await _jim.ConnectedSystems.ValidateConnectedSystemSettingsAsync(connectedSystem));
         Assert.That(exception.Message, Does.Contain(UnknownConnectorName));
     }
 
