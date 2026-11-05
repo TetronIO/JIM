@@ -81,7 +81,7 @@ With `-PassThru`, what the refresh added, removed, renamed and moved, and the Ru
 | `AddedContainers` | `object[]` | Containers that were added (new to the hierarchy). Each has `ExternalId`, `Name`, `WasSelected` and `ItemType`. |
 | `RemovedContainers` | `object[]` | Containers that were removed from the hierarchy. Each has `ExternalId`, `Name`, `WasSelected` and `ItemType`. |
 | `RenamedContainers` | `object[]` | Containers that were renamed (ExternalId matched, Name changed). Each has `ExternalId`, `OldName`, `NewName` and `ItemType`. |
-| `MovedContainers` | `object[]` | Containers that moved to a different parent (ExternalId matched, parent changed). Each has `ExternalId`, `Name`, `OldParentExternalId` and `NewParentExternalId`. |
+| `MovedContainers` | `object[]` | Containers that moved to a different parent or partition (ExternalId matched, parent or partition changed). Each has `ExternalId`, `Name`, `OldParentExternalId`, `NewParentExternalId`, `OldPartitionExternalId` and `NewPartitionExternalId`. |
 | `Applied` | `bool` | Whether the refresh was saved. Always true on a successful response: a refresh asked to cancel when Run Profiles target a partition it would remove answers 409 instead. |
 | `AffectedRunProfiles` | `object[]` | The Run Profiles the refresh disabled because they targeted a partition it removed, each with that partition's name. Empty when the refresh removed no partition a Run Profile targets. Each has `RunProfileId`, `RunProfileName`, `PartitionName` and `Disabled`. |
 <!-- END GENERATED: Import-JIMConnectedSystemHierarchy -->
