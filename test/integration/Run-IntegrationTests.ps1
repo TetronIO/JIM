@@ -53,14 +53,15 @@
 
 .PARAMETER ExportConcurrency
     Export Concurrency setting for LDAP connectors. Controls how many LDAP operations
-    are pipelined concurrently during export. Default: 1 (sequential).
-    Higher values improve throughput but increase load on the target directory.
+    are pipelined concurrently during export. Omit it to test what customers get: the
+    LDAP Connector tunes it from the directory type on schema import (16 for OpenLDAP,
+    389 Directory Server and Active Directory; 4 for Samba AD).
     Only applies to scenarios with LDAP exports (Scenarios 001, 002, 008, 010).
 
 .PARAMETER MaxExportParallelism
-    Maximum number of parallel export batches for Connected Systems. Controls how many
-    export batches are processed concurrently. Default: 1 (sequential).
-    Higher values improve throughput for large exports.
+    Maximum number of parallel export batches for Connected Systems. Omit it to test what
+    customers get: the Connector's recommendation (2 for an LDAP directory tuned to an
+    Export Concurrency of 16, otherwise 1).
     Only applies to scenarios with LDAP exports (Scenarios 001, 002, 008, 010).
 
 .PARAMETER TimeoutSeconds
@@ -2498,13 +2499,6 @@ $script:AdLabPlan = $null
 $script:AdLabGuestBuilds = $null
 $script:UsingAdLabCheckpoints = $false
 
-# Auto-set higher export concurrency for OpenLDAP (can handle 50+ concurrent writes)
-# unless the user explicitly specified a value. Samba AD keeps the JIM default of 4.
-if ($DirectoryType -eq "OpenLDAP" -and -not $PSBoundParameters.ContainsKey('ExportConcurrency')) {
-    $ExportConcurrency = 16
-    # Mark as explicitly set so it flows through to setup scripts
-    $PSBoundParameters['ExportConcurrency'] = $ExportConcurrency
-}
 
 Write-Host "${GRAY}Configuration:${NC}"
 Write-Host "  Scenario:                ${CYAN}$Scenario${NC}"

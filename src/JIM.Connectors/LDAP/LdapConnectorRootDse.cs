@@ -204,8 +204,8 @@ internal class LdapConnectorRootDse
 
     /// <summary>
     /// The recommended export concurrency for this directory type.
-    /// AD DS and OpenLDAP handle concurrent connections well; Samba AD and unknown servers
-    /// are kept conservative due to known quirks (e.g. paged search duplicates).
+    /// AD DS, OpenLDAP and 389 Directory Server handle concurrent operations well; Samba AD and
+    /// unknown servers are kept conservative due to known quirks (e.g. paged search duplicates).
     /// </summary>
     public int RecommendedExportConcurrency => DirectoryType switch
     {
@@ -213,7 +213,7 @@ internal class LdapConnectorRootDse
         LdapDirectoryType.OpenLDAP => 16,
         LdapDirectoryType.SambaAD => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         LdapDirectoryType.Generic => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
-        LdapDirectoryType.DirectoryServer389 => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
+        LdapDirectoryType.DirectoryServer389 => 16,
         _ => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY
 
     };

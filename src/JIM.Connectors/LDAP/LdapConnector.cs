@@ -225,7 +225,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
 
             new() { Name = "Import Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingSearchTimeout, Required = false, Description = "Maximum time in seconds to wait for LDAP search results. Default is 300 (5 minutes).", DefaultIntValue = 300, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = _settingImportConcurrency, Required = false, Description = "Maximum number of parallel LDAP connections used during full imports from OpenLDAP and Generic directories. Each connection handles one container and object type combination independently, avoiding RFC 2696 paging cookie limitations. Not used for Active Directory. Default is 4. Recommended range: 2-8.", DefaultIntValue = LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingImportConcurrency, Required = false, Description = "Maximum number of parallel LDAP connections used during full imports from OpenLDAP, 389 Directory Server and Generic directories. Each connection handles one container and object type combination independently, avoiding RFC 2696 paging cookie limitations. Not used for Active Directory. Default is 4. Recommended range: 2-8.", DefaultIntValue = LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Retry Settings", Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingMaxRetries, Required = false, Description = "Maximum number of retry attempts for transient failures. Default is 3.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MAX_RETRIES, Category = ConnectedSystemSettingCategory.General, Type = ConnectedSystemSettingType.Integer },
@@ -244,7 +244,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions: Delete removes the object from the directory; Disable keeps it and sets the Disable Attribute instead. Default is Delete.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, DefaultStringValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, RequiredWhenSetting = _settingDeleteBehaviour, RequiredWhenValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
-            new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Left at the default of 4, JIM raises it to 16 on schema import when it detects Active Directory, OpenLDAP or 389 Directory Server; Samba AD and other directories stay at 4.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
 
             // Exchange (#2021): behind its feature flag until the feature ships (#2681)
@@ -1637,8 +1637,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// <summary>
     /// The Export Concurrency value at or above which the target is treated as a capable
     /// directory for batch-parallelism purposes. The auto-tune only sets 16 (well above this)
-    /// for Active Directory and OpenLDAP; Samba AD and Generic directories stay at the
-    /// default of 4.
+    /// for Active Directory, OpenLDAP and 389 Directory Server; Samba AD and Generic
+    /// directories stay at the default of 4.
     /// </summary>
     internal const int CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD = 8;
 
@@ -1654,8 +1654,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// and each instance runs its own Export Concurrency concurrent LDAP operations (see
     /// <see cref="ExportAsync"/>), so total in-flight operations = parallelism x per-instance
     /// concurrency. Recommending anything near Export Concurrency itself would square the load
-    /// (16 x 16 = 256 in-flight operations, against a setting whose own description warns that
-    /// values above 8 may overwhelm the directory), so the recommendation is a flat, mild 2:
+    /// (16 x 16 = 256 in-flight operations), so the recommendation is a flat, mild 2:
     /// with an auto-tuned concurrency of 16 that is 2 x 16 = 32 in-flight operations, a safe
     /// default.
     ///
@@ -1664,7 +1663,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     /// OpenLDAP here; OpenLDAP's mdb backend is single-writer and gains little from batch
     /// parallelism, a further reason the value is deliberately conservative. An Export
     /// Concurrency of 8 or above is used as the capable-directory signal (the auto-tune only
-    /// sets 16, for Active Directory and OpenLDAP); below that, no recommendation is made and
+    /// sets 16, for Active Directory, OpenLDAP and 389 Directory Server); below that, no recommendation is made and
     /// the resolver falls back to sequential. Issue #845 (connector-agnostic classification
     /// storage) is the future enabler of a genuinely per-directory-type recommendation.
     /// </summary>

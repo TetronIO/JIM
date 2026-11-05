@@ -30,6 +30,13 @@ public class LdapExportConcurrencyAutoTuneTests
     }
 
     [Test]
+    public void RecommendedExportConcurrency_DirectoryServer389_Returns16()
+    {
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 };
+        Assert.That(rootDse.RecommendedExportConcurrency, Is.EqualTo(16));
+    }
+
+    [Test]
     public void RecommendedExportConcurrency_SambaAD_ReturnsDefault()
     {
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.SambaAD };
@@ -63,6 +70,17 @@ public class LdapExportConcurrencyAutoTuneTests
     {
         var settings = CreateSettingsWithExportConcurrency(LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY);
         var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.OpenLDAP };
+
+        LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger);
+
+        Assert.That(GetExportConcurrencyValue(settings), Is.EqualTo(16));
+    }
+
+    [Test]
+    public void AutoTuneExportConcurrency_DirectoryServer389_DefaultValue_TunesTo16()
+    {
+        var settings = CreateSettingsWithExportConcurrency(LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY);
+        var rootDse = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 };
 
         LdapConnector.AutoTuneExportConcurrency(settings, rootDse, Logger);
 
