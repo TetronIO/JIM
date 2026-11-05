@@ -37,6 +37,7 @@ public class FollowUpStateCountDatabaseTests
 
     private string _connectionString = null!;
     private int _systemId;
+    private int _notManagingSystemId;
     private int _mvTypeId;
 
     private JimDbContext NewContext()
@@ -67,11 +68,14 @@ public class FollowUpStateCountDatabaseTests
 
         await using var seed = NewContext();
         var connectorDefinition = new ConnectorDefinition { Name = "Corporate AD Connector", BuiltIn = true, SupportsPasswordSet = true };
-        var system = new ConnectedSystem { Name = "Corporate AD", ConnectorDefinition = connectorDefinition };
+        var system = new ConnectedSystem { Name = "Corporate AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = true };
+        // Its changes wait, held, until it manages Exchange recipients again.
+        var notManaging = new ConnectedSystem { Name = "Branch AD", ConnectorDefinition = connectorDefinition, ManagesExchangeRecipients = false };
         var mvType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = false };
-        seed.AddRange(connectorDefinition, system, mvType);
+        seed.AddRange(connectorDefinition, system, notManaging, mvType);
         await seed.SaveChangesAsync();
         _systemId = system.Id;
+        _notManagingSystemId = notManaging.Id;
         _mvTypeId = mvType.Id;
     }
 
@@ -87,6 +91,15 @@ public class FollowUpStateCountDatabaseTests
             ("exchange queued", "Queued", item => ExchangeAsync(item, row: r => { })),
             ("exchange delivering", "Delivering", item => ExchangeAsync(item, row: r => r.Status = PendingExchangeChangeStatus.Delivering)),
             ("exchange retrying", "Retrying", item => ExchangeAsync(item, row: r => { r.LastAttemptedAt = At.AddMinutes(1); r.AttemptCount = 1; })),
+            ("exchange held", "Held", item => ExchangeAsync(item, row: r => r.ConnectedSystemId = _notManagingSystemId)),
+            ("exchange held after an attempt", "Held", item => ExchangeAsync(item, row: r =>
+            {
+                r.ConnectedSystemId = _notManagingSystemId; r.LastAttemptedAt = At.AddMinutes(1); r.AttemptCount = 1;
+            })),
+            ("exchange parked on a held system", "Parked", item => ExchangeAsync(item, row: r =>
+            {
+                r.ConnectedSystemId = _notManagingSystemId; r.Status = PendingExchangeChangeStatus.Parked;
+            })),
             ("exchange parked row", "Parked", item => ExchangeAsync(item, row: r => r.Status = PendingExchangeChangeStatus.Parked)),
             ("exchange refused row", "Refused", item => ExchangeAsync(item, ActivityStatus.CompleteWithError, r => r.Status = PendingExchangeChangeStatus.Refused)),
             ("exchange not made row", "NotMade", item => ExchangeAsync(item, ActivityStatus.CompleteWithWarning, r => r.Status = PendingExchangeChangeStatus.Refused)),
