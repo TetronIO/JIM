@@ -313,8 +313,8 @@ else
                                 {
                                     <tr>
                                         <td>@item.Name</td>
-                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.OldParentExternalId ?? "(root)")</td>
-                                        <td style="font-family: monospace; font-size: 0.85em;">@(item.NewParentExternalId ?? "(root)")</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@DescribeMoveEnd(item.OldParentExternalId, item.OldPartitionExternalId)</td>
+                                        <td style="font-family: monospace; font-size: 0.85em;">@DescribeMoveEnd(item.NewParentExternalId, item.NewPartitionExternalId)</td>
                                     </tr>
                                 }
                             </tbody>
@@ -769,7 +769,7 @@ else
         {
             sb.AppendLine("MOVED:");
             foreach (var item in _hierarchyRefreshResult.MovedContainers)
-                sb.AppendLine($"  [Container] {item.Name}: {item.OldParentExternalId ?? "(root)"} -> {item.NewParentExternalId ?? "(root)"}");
+                sb.AppendLine($"  [Container] {item.Name}: {DescribeMoveEnd(item.OldParentExternalId, item.OldPartitionExternalId)} -> {DescribeMoveEnd(item.NewParentExternalId, item.NewPartitionExternalId)}");
         }
 
         try
@@ -782,6 +782,13 @@ else
             Snackbar.Add("Failed to copy to clipboard. Please copy manually.", Severity.Warning);
         }
     }
+
+    /// <summary>
+    /// Where a moved Container came from or went to: its parent Container; or, at the top level of a Partition it moved
+    /// into or out of, that Partition; or "(root)", at the top level of the Partition it stayed in.
+    /// </summary>
+    private static string DescribeMoveEnd(string? parentExternalId, string? partitionExternalId) =>
+        parentExternalId ?? partitionExternalId ?? "(root)";
 
     private async Task HandleHierarchySelectionSubmitAsync()
     {

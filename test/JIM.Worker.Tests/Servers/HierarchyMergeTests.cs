@@ -263,6 +263,8 @@ public class HierarchyMergeTests
             Assert.That(result.MovedContainers[0].Name, Is.EqualTo("Sales"));
             Assert.That(result.MovedContainers[0].OldParentExternalId, Is.EqualTo("OU=Corp,DC=example,DC=local"));
             Assert.That(result.MovedContainers[0].NewParentExternalId, Is.Null);
+            Assert.That(result.MovedContainers[0].OldPartitionExternalId, Is.Null, "a move within one Partition names no Partition");
+            Assert.That(result.MovedContainers[0].NewPartitionExternalId, Is.Null);
             Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
         }
     }
@@ -284,9 +286,100 @@ public class HierarchyMergeTests
         }
     }
 
+    [Test]
+    public void MergeHierarchy_WhenATopLevelContainerMovesToTheTopOfAnotherPartition_ReHomesAndReportsTheMove()
+    {
+        // A top-level Container has no parent Container before or after such a move, so comparing parents alone
+        // missed it: the Container stayed in the Partition it had left (#2763).
+        var (connectedSystem, _, globex) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [DiscoveredAcme(), DiscoveredGlobexHoldingCorp()]);
+
+        var corp = FindByStableId(connectedSystem, CorpStableId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(corp, Is.Not.Null, "the moved Container is kept");
+            Assert.That(corp!.Partition, Is.SameAs(globex), "under its new Partition");
+            Assert.That(corp!.ParentContainer, Is.Null, "at the top level");
+            Assert.That(corp!.Selected, Is.True, "with its selection");
+            Assert.That(connectedSystem.Partitions!.Single(p => p.Name == "acme.local").Containers, Does.Not.Contain(corp), "and has left its old Partition");
+            Assert.That(globex.Containers, Does.Contain(corp));
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Corp" }), "the move is reported as one");
+            Assert.That(result.MovedContainers.Select(c => (c.OldParentExternalId, c.NewParentExternalId, c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ((string?)null, (string?)null, (string?)"DC=acme,DC=local", (string?)"DC=globex,DC=local") }),
+                "a top-level Container has no parent either side, so the report names the Partitions it moved between");
+            Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
+            Assert.That(result.AddedContainers, Is.Empty, "nor an addition");
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_WhenATopLevelContainerMovesOutOfARemovedPartition_KeepsItAndRemovesOnlyThePartition()
+    {
+        // The case in which the unnoticed move lost the Container: left in the removed Partition, it was reported as
+        // removed with it (#2763).
+        var (connectedSystem, _, globex) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [DiscoveredGlobexHoldingCorp()]);
+
+        var corp = FindByStableId(connectedSystem, CorpStableId);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.RemovedPartitions.Select(p => p.Name), Is.EqualTo(new[] { "acme.local" }), "precondition");
+            Assert.That(corp, Is.Not.Null, "the moved Container is kept");
+            Assert.That(corp!.Partition, Is.SameAs(globex), "under its new Partition");
+            Assert.That(corp!.Selected, Is.True, "with its selection");
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Corp" }));
+            Assert.That(result.RemovedContainers, Is.Empty, "the Container moved out of the removed Partition is not removed with it");
+            Assert.That(result.HasSelectedItemsRemoved, Is.False, "the Acme Partition was not selected, and Corp was not removed");
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_WhenATopLevelContainerStaysInItsPartition_ReportsNoMove()
+    {
+        // Guards the fix against over-reaching: recognising a change of Partition must not see one where there is none.
+        var (connectedSystem, acme, _) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+        var discoveredAcme = DiscoveredAcme();
+        discoveredAcme.Containers.Add(new ConnectorContainer("OU=Corp,DC=acme,DC=local", "Corp") { StableId = CorpStableId });
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [discoveredAcme, DiscoveredGlobexHoldingCorp(holdingCorp: false)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers, Is.Empty);
+            Assert.That(FindByStableId(connectedSystem, CorpStableId)!.Partition, Is.SameAs(acme));
+        }
+    }
+
     #endregion
 
     #region Moved-Container helpers
+
+    /// <summary>
+    /// Two Partitions: Acme, holding Corp (selected) at its top level, and Globex, holding nothing. Acme is not selected,
+    /// so that whether a removal is flagged as touching a selection depends only on Corp.
+    /// </summary>
+    private static (ConnectedSystem System, ConnectedSystemPartition Acme, ConnectedSystemPartition Globex) SystemWithCorpInAcmeAndAnEmptyGlobex()
+    {
+        var acme = new ConnectedSystemPartition { Id = 1, Name = "acme.local", ExternalId = "DC=acme,DC=local", Containers = [] };
+        var globex = new ConnectedSystemPartition { Id = 2, Name = "globex.local", ExternalId = "DC=globex,DC=local", Selected = true, Containers = [] };
+        acme.Containers.Add(new ConnectedSystemContainer
+        {
+            Name = "Corp", ExternalId = "OU=Corp,DC=acme,DC=local", StableId = CorpStableId, Selected = true, Partition = acme, PartitionId = acme.Id
+        });
+
+        return (new ConnectedSystem { Partitions = [acme, globex] }, acme, globex);
+    }
+
+    private static ConnectorPartition DiscoveredAcme() => new() { Id = "DC=acme,DC=local", Name = "acme.local", Containers = [] };
+
+    private static ConnectorPartition DiscoveredGlobexHoldingCorp(bool holdingCorp = true) => new()
+    {
+        Id = "DC=globex,DC=local",
+        Name = "globex.local",
+        Containers = holdingCorp ? [new ConnectorContainer("OU=Corp,DC=globex,DC=local", "Corp") { StableId = CorpStableId }] : []
+    };
 
     private const string CorpStableId = "22222222-2222-2222-2222-222222222222";
     private const string SalesStableId = "11111111-1111-1111-1111-111111111111";

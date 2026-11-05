@@ -5027,6 +5027,7 @@ public partial class ConnectedSystemServer
             .ToDictionary(p => p.ExternalId, StringComparer.OrdinalIgnoreCase);
         var existingContainerLookup = BuildContainerLookup(connectedSystem.Partitions);
         var existingContainerStableIdLookup = BuildContainerStableIdLookup(connectedSystem.Partitions);
+        var existingContainerPartitions = BuildContainerPartitionLookup(connectedSystem.Partitions);
 
         // Track which existing partitions we've matched
         var matchedPartitionIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -5071,6 +5072,7 @@ public partial class ConnectedSystemServer
                     result,
                     existingContainerLookup,
                     existingContainerStableIdLookup,
+                    existingContainerPartitions,
                     matchedContainers,
                     containersToReparent);
             }
@@ -5192,6 +5194,39 @@ public partial class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Maps each existing Container, at any depth, to the Partition it sits in, by reference, as the hierarchy stood
+    /// before the refresh.
+    /// </summary>
+    /// <remarks>
+    /// This is how a top-level Container moved to the top level of another Partition is recognised as moved, and how
+    /// any move between Partitions is reported with the Partitions it moved between (#2763). Only top-level Containers
+    /// carry a Partition of their own, so it is taken from the Partitions' collections downwards rather than from any
+    /// navigation, for the same reason <see cref="DetachContainerFromItsCurrentHome"/> searches them: the collections are
+    /// what the merge edits, and a navigation that was never loaded reads as null. Built once, before any Container is
+    /// reparented, so it answers where a Container was rather than where the merge has put it.
+    /// </remarks>
+    private static Dictionary<ConnectedSystemContainer, ConnectedSystemPartition> BuildContainerPartitionLookup(IEnumerable<ConnectedSystemPartition>? partitions)
+    {
+        var lookup = new Dictionary<ConnectedSystemContainer, ConnectedSystemPartition>(ReferenceEqualityComparer.Instance);
+        if (partitions == null) return lookup;
+
+        foreach (var partition in partitions.Where(p => p.Containers != null))
+            AddContainersToPartitionLookup(partition.Containers!, partition, lookup);
+
+        return lookup;
+    }
+
+    private static void AddContainersToPartitionLookup(IEnumerable<ConnectedSystemContainer> containers, ConnectedSystemPartition partition,
+        Dictionary<ConnectedSystemContainer, ConnectedSystemPartition> lookup)
+    {
+        foreach (var container in containers)
+        {
+            lookup.TryAdd(container, partition);
+            AddContainersToPartitionLookup(container.ChildContainers, partition, lookup);
+        }
+    }
+
+    /// <summary>
     /// Recursively flattens the container hierarchy into a lookup keyed on stable identifier, skipping containers
     /// that do not have one.
     /// </summary>
@@ -5262,6 +5297,7 @@ public partial class ConnectedSystemServer
         HierarchyRefreshResult result,
         Dictionary<string, ConnectedSystemContainer> globalLookup,
         Dictionary<string, ConnectedSystemContainer> globalStableIdLookup,
+        IReadOnlyDictionary<ConnectedSystemContainer, ConnectedSystemPartition> containerPartitions,
         HashSet<ConnectedSystemContainer> matchedContainers,
         List<(ConnectedSystemContainer Container, ConnectedSystemPartition Partition, ConnectedSystemContainer? NewParent)> containersToReparent)
     {
@@ -5294,16 +5330,25 @@ public partial class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Check for move (a different parent, or none where there was one). Compared by reference rather
-                // than by Distinguished Name: the parent's own name may be being rewritten in this same refresh.
-                if (!ReferenceEquals(existing.ParentContainer, parentContainer))
+                // Check for move: a different parent, or none where there was one, or a different Partition. A
+                // Container at the top level both before and after has no parent to compare on either side, so its
+                // Partition is the only sign it moved; comparing parents alone missed it, leaving the Container in the
+                // Partition it had left, and deleting it with that Partition when that went too (#2763). Compared by
+                // reference rather than by Distinguished Name: the parent's own name may be being rewritten in this
+                // same refresh. A move between Partitions names both, since the parents alone cannot say where a
+                // top-level Container went.
+                var previousPartition = containerPartitions.GetValueOrDefault(existing);
+                var movedToAnotherPartition = previousPartition != null && !ReferenceEquals(previousPartition, partition);
+                if (!ReferenceEquals(existing.ParentContainer, parentContainer) || movedToAnotherPartition)
                 {
                     result.MovedContainers.Add(new HierarchyMoveItem
                     {
                         ExternalId = discovered.Id,
                         Name = discovered.Name,
                         OldParentExternalId = existing.ParentContainer?.ExternalId,
-                        NewParentExternalId = parentContainer?.ExternalId
+                        NewParentExternalId = parentContainer?.ExternalId,
+                        OldPartitionExternalId = movedToAnotherPartition ? previousPartition!.ExternalId : null,
+                        NewPartitionExternalId = movedToAnotherPartition ? partition.ExternalId : null
                     });
 
                     containersToReparent.Add((existing, partition, parentContainer));
@@ -5317,6 +5362,7 @@ public partial class ConnectedSystemServer
                     result,
                     globalLookup,
                     globalStableIdLookup,
+                    containerPartitions,
                     matchedContainers,
                     containersToReparent);
             }
