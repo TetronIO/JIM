@@ -173,6 +173,11 @@ session and convergence (done), the delivery hold (done), then quiet session clo
         - a missing database is refused, and the same object is then delivered.
     - **Quiet close:** each session's open and close times are written out, so ex1's IIS log can be matched to each close.
     - **The lab run** (approval through the lab agent) runs the read-only `RequiresExchangeLab` suite, which includes the 1 MB case, then this suite, then reads ex1's IIS log for `/PowerShell` over the run.
+    - **First lab run (2026-11-05, 13:24 to 13:27Z):**
+        - **Read-only suite:** 7 of 7 passed. The 1 MB case reached Exchange whole: a 132,606-byte request, answered by Exchange's own 128k filter-size limit, not a 413.
+        - **Write suite:** stopped in setup, before any Connector session. `New-DistributionGroup -Type` is outside Recipient Management's role entry, which Exchange keeps in Security Group Creation and Membership. Without `-Type` the group is still universal.
+        - **Clean-up:** it failed too. Exchange's `Remove-*` cmdlets remove recipients only, and the fixtures were still plain objects. Clean-up now removes each fixture as whatever it is at the end, making a plain one the simplest recipient of its kind first (`LabFixtureRemoval`). Six `jimlab*` objects were left for the nightly revert.
+        - **The HTTP 500 at close:** it is the long-poll keep-alive `Ping`. When the client deletes the shell, the Ping is still waiting, and ex1 aborts it with `w:InternalError` ("The I/O operation has been aborted", FriendlyError=StreamProxy). The sequence in one shell was Ping, then Terminate, Command, Receive, Terminate, and Delete (200 each), and then the Ping ended with a 500. So quiet close means not having a Ping outstanding when the shell is deleted.
 - **Tests:**
   - the validation severity, refusal and warning paths, with the session mocked behind D4's interface;
   - principal and realm derivation for all three username forms;
