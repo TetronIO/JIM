@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    [Migration("20261104203046_AddRunProfileEnabledState")]
+    [Migration("20261105005012_AddRunProfileEnabledState")]
     partial class AddRunProfileEnabledState
     {
         /// <inheritdoc />
@@ -3544,6 +3544,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<bool>("SettingValuesValid")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("SettingsCheckFacts")
+                        .HasColumnType("text");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -4622,6 +4625,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
 
                     b.PrimitiveCollection<List<string>>("DropDownValues")
                         .HasColumnType("text[]");
