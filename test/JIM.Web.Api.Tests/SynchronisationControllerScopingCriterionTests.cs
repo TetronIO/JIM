@@ -15,6 +15,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
+using JIM.Models.Staging;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -356,6 +357,83 @@ public class SynchronisationControllerScopingCriterionTests
         });
 
         Assert.That(dto.Notice, Does.Contain("every").And.Contain("Temporal Scope Reconciliation"));
+    }
+
+    private static ConnectedSystemObjectType PanoplyUser() =>
+        new() { Id = 70, Name = "user", ConnectedSystemId = 7, ConnectedSystem = new ConnectedSystem { Id = 7, Name = "PANOPLY AD" } };
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_Connection_ReplacesTheAttributeWithTheConnectionAsync()
+    {
+        // A connection criterion (#2021) names an Object Type and tests whether the identity is joined to one.
+        var rule = BuildExportRuleWithCriterion();
+        var criterion = rule.ObjectScopingCriteriaGroups[0].Criteria[0];
+        criterion.MetaverseAttributeId = TextAttributeId;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(rule);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(70)).ReturnsAsync(PanoplyUser());
+
+        await UpdateIgnoringPersistenceAsync(new CreateScopingCriterionRequest { ConnectedObjectTypeId = 70, ComparisonType = "HasValue" });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criterion.ConnectedObjectTypeId, Is.EqualTo(70));
+            Assert.That(criterion.ConnectedObjectType, Is.Null, "the type is named by id, so the save does not track a second copy of it");
+            Assert.That(criterion.MetaverseAttribute, Is.Null);
+            Assert.That(criterion.MetaverseAttributeId, Is.Null);
+            Assert.That(criterion.StringValue, Is.Null, "a connection compares no value");
+            Assert.That(criterion.ComparisonType, Is.EqualTo(SearchComparisonType.HasValue));
+            Assert.That(criterion.IsValid(), Is.True);
+        }
+    }
+
+    [Test]
+    public async Task UpdateScopingCriterionAsync_ConnectionToAnUnknownObjectType_ReturnsNotFoundAsync()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(BuildExportRuleWithCriterion());
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(71)).ReturnsAsync((ConnectedSystemObjectType?)null);
+
+        var result = await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId,
+            new CreateScopingCriterionRequest { ConnectedObjectTypeId = 71, ComparisonType = "HasValue" });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    public async Task UpdateScopingCriterionAsync_ConnectionWithAnAttributeOrExpression_ReturnsBadRequestAsync(bool attribute, bool expression)
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(SyncRuleId)).ReturnsAsync(BuildExportRuleWithCriterion());
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(70)).ReturnsAsync(PanoplyUser());
+
+        var result = await _controller.UpdateScopingCriterionAsync(SyncRuleId, GroupId, CriterionId, new CreateScopingCriterionRequest
+        {
+            ConnectedObjectTypeId = 70, ComparisonType = "HasValue",
+            MetaverseAttributeId = attribute ? TextAttributeId : null,
+            Expression = expression ? "mv[\"Department\"]" : null, CompareAs = expression ? "Text" : null
+        });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("ConnectedObjectTypeId"));
+    }
+
+    [Test]
+    public void SyncRuleScopingCriteriaDto_FromConnectionCriterion_NamesTheObjectTypeAndItsConnectedSystem()
+    {
+        var dto = SyncRuleScopingCriteriaDto.FromEntity(new SyncRuleScopingCriteria
+        {
+            ConnectedObjectType = PanoplyUser(), ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasNoValue
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto.ConnectedObjectTypeId, Is.EqualTo(70));
+            Assert.That(dto.ConnectedObjectTypeName, Is.EqualTo("user"));
+            Assert.That(dto.ConnectedSystemId, Is.EqualTo(7));
+            Assert.That(dto.ConnectedSystemName, Is.EqualTo("PANOPLY AD"));
+            Assert.That(dto.ComparisonType, Is.EqualTo("HasNoValue"));
+            Assert.That(dto.AttributeDataType, Is.EqualTo("NotSet"), "a connection compares no value, so no value property applies");
+            Assert.That(dto.MetaverseAttributeId, Is.Null);
+        }
     }
 
     /// <summary>

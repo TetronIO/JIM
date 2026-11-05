@@ -322,6 +322,12 @@ public class ScopingCriterionExplanationDto
     /// </summary>
     public string? Expression { get; set; }
 
+    /// <summary>
+    /// The Connected System Object Type a connection criterion tests the object for; null for an attribute or expression
+    /// criterion. AttributeName then names the type and its Connected System, and Actual says whether it is connected.
+    /// </summary>
+    public int? ConnectedObjectTypeId { get; set; }
+
     /// <summary>Each attribute an expression criterion read, with the values the object held for it; empty otherwise.</summary>
     public List<ScopingExpressionInputExplanationDto> ExpressionInputs { get; set; } = [];
 
@@ -334,6 +340,7 @@ public class ScopingCriterionExplanationDto
     public static ScopingCriterionExplanationDto FromModel(ScopingCriterionExplanation model) => new()
     {
         Expression = model.Expression,
+        ConnectedObjectTypeId = model.ConnectedObjectTypeId,
         ExpressionInputs = model.ExpressionInputs.Select(ScopingExpressionInputExplanationDto.FromModel).ToList(),
         FailureReason = model.FailureReason,
         Path = model.Path,

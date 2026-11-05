@@ -59,6 +59,9 @@ internal static class ScopingExplanationSummariser
         if (criterion.Outcome == ScopingCriterionOutcome.Invalid)
             return criterion.FailureReason == null ? "cannot be evaluated" : $"cannot be evaluated. {criterion.FailureReason}";
 
+        if (criterion.ConnectedObjectTypeId.HasValue)
+            return HasConnection(criterion) ? "has one" : "has none";
+
         // An expression criterion's value is the one it computed (#2054), and saying "is" would read as an attribute's.
         var computed = criterion.Expression != null;
         if (criterion.Masked)
@@ -82,6 +85,10 @@ internal static class ScopingExplanationSummariser
         var (condition, _) = Wording(PositiveForm(criterion.ComparisonType), criterion.AttributeType);
         return $"none of {count} {(computed ? "computed " : "")}values {condition} {expected}";
     }
+
+    /// <summary>Whether the object has the connection a decided connection criterion tests for.</summary>
+    private static bool HasConnection(ScopingCriterionExplanation criterion) =>
+        (criterion.Outcome == ScopingCriterionOutcome.Met) == (criterion.ComparisonType == SearchComparisonType.HasValue);
 
     /// <summary>A group as one line of the tree, for example "All of these must be met (not met)".</summary>
     internal static string DescribeGroup(ScopingGroupExplanation group)
@@ -412,6 +419,19 @@ internal static class ScopingExplanationSummariser
 
     private static void AppendComparison(LineBuilder line, ScopingCriterionExplanation criterion, Form form, bool includeCurrent)
     {
+        // A connection (#2021) is had or not had, never valued: "Has user in PANOPLY AD", "Needs no contact in RESURGAM AD".
+        // The Object Type's name is an identifier, so it takes no article, as the criterion's own description reads.
+        if (criterion.ConnectedObjectTypeId.HasValue)
+        {
+            var wantsOne = criterion.ComparisonType == SearchComparisonType.HasValue;
+            var connectionVerb = form == Form.Requirement ? "Needs" : "Has";
+            line.Text(wantsOne ? $"{connectionVerb} " : $"{connectionVerb} no ");
+            line.Attribute(criterion.AttributeName!);
+            if (includeCurrent && criterion.Outcome is ScopingCriterionOutcome.Met or ScopingCriterionOutcome.NotMet)
+                line.Text(HasConnection(criterion) ? " (currently has one)" : " (currently has none)");
+            return;
+        }
+
         var (condition, requirement) = Wording(criterion.ComparisonType, criterion.AttributeType);
         var verb = form == Form.Requirement ? requirement : condition;
         var quote = criterion.AttributeType == AttributeDataType.Text;

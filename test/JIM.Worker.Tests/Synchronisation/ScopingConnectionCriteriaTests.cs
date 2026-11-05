@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
+using JIM.Application.Servers.Scoping;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Logic;
@@ -139,6 +140,32 @@ public class ScopingConnectionCriteriaTests
             Assert.That(criteria[1].Outcome, Is.EqualTo(ScopingCriterionOutcome.NotMet));
             Assert.That(criteria[0].ConnectedObjectTypeId, Is.EqualTo(PanoplyUser.Id));
             Assert.That(criteria[0].AttributeName, Is.EqualTo("user in PANOPLY AD"));
+        }
+    }
+
+    [Test]
+    public void ExplainMvoForExportRule_ConnectionCriteria_AreWordedAsConnectionsNotValues()
+    {
+        // "user in PANOPLY AD has a value" would read as an attribute: a connection is had, or not had, and the Object
+        // Type's name is an identifier, so it takes no article.
+        var mvo = Mvo();
+
+        var explanation = _scoping.ExplainMvoForExportRule(mvo, ExportRule(Has(PanoplyUser), HasNo(ResurgamUser), Has(ResurgamContact)),
+            connections: Connections(mvo, PanoplyUser, ResurgamUser));
+
+        var criteria = explanation.Groups.Single().Criteria;
+        var bullets = ScopingExplanationSummariser.ToComeIntoScope(explanation);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(criteria.Select(c => c.Description), Is.EqualTo(new[]
+            {
+                "Has user in PANOPLY AD", "Has no user in RESURGAM AD", "Has contact in RESURGAM AD"
+            }));
+            Assert.That(criteria.Select(c => c.ActualDescription), Is.EqualTo(new[] { "has one", "has one", "has none" }));
+            Assert.That(bullets.Select(b => b.PlainText), Is.EqualTo(new[]
+            {
+                "Needs no user in RESURGAM AD (currently has one)", "Needs contact in RESURGAM AD (currently has none)"
+            }));
         }
     }
 
