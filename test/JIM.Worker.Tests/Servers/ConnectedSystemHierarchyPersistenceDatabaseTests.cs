@@ -846,6 +846,9 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Admins" }), "the refresh reports the move");
+            Assert.That(result.MovedContainers.Select(c => (c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ((string?)"dc=yellowstone,dc=local", (string?)"dc=glitterband,dc=local") }),
+                "and the Partitions it moved between");
             Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
             Assert.That(containers.Select(c => c.Name), Is.EquivalentTo(new[] { "People", "Groups", "Admins", "Staff" }), "nothing is lost");
             Assert.That(admins?.ParentContainerId, Is.EqualTo(staff.Id), "the moved Container sits under its new parent");
@@ -868,6 +871,9 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Staff" }), "the refresh reports the move");
+            Assert.That(result.MovedContainers.Select(c => (c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ((string?)"dc=glitterband,dc=local", (string?)"dc=yellowstone,dc=local") }),
+                "and the Partitions it moved between");
             Assert.That(result.RemovedContainers.Select(c => c.Name), Does.Not.Contain("Staff"), "a move is not a removal");
             Assert.That(result.AddedContainers.Select(c => c.Name), Does.Not.Contain("Staff"), "nor an addition");
             Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(), Is.EquivalentTo(expectedPartitions));

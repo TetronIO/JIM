@@ -263,6 +263,8 @@ public class HierarchyMergeTests
             Assert.That(result.MovedContainers[0].Name, Is.EqualTo("Sales"));
             Assert.That(result.MovedContainers[0].OldParentExternalId, Is.EqualTo("OU=Corp,DC=example,DC=local"));
             Assert.That(result.MovedContainers[0].NewParentExternalId, Is.Null);
+            Assert.That(result.MovedContainers[0].OldPartitionExternalId, Is.Null, "a move within one Partition names no Partition");
+            Assert.That(result.MovedContainers[0].NewPartitionExternalId, Is.Null);
             Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
         }
     }
@@ -303,6 +305,9 @@ public class HierarchyMergeTests
             Assert.That(connectedSystem.Partitions!.Single(p => p.Name == "acme.local").Containers, Does.Not.Contain(corp), "and has left its old Partition");
             Assert.That(globex.Containers, Does.Contain(corp));
             Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Corp" }), "the move is reported as one");
+            Assert.That(result.MovedContainers.Select(c => (c.OldParentExternalId, c.NewParentExternalId, c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ((string?)null, (string?)null, (string?)"DC=acme,DC=local", (string?)"DC=globex,DC=local") }),
+                "a top-level Container has no parent either side, so the report names the Partitions it moved between");
             Assert.That(result.RemovedContainers, Is.Empty, "a move is not a removal");
             Assert.That(result.AddedContainers, Is.Empty, "nor an addition");
         }

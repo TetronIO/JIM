@@ -60,7 +60,7 @@ public class HierarchyRefreshResult
     public List<HierarchyRenameItem> RenamedContainers { get; set; } = new();
 
     /// <summary>
-    /// Containers that moved to a different parent (ExternalId matched, parent changed).
+    /// Containers that moved to a different parent or partition (ExternalId matched, parent or partition changed).
     /// </summary>
     public List<HierarchyMoveItem> MovedContainers { get; set; } = new();
 
@@ -192,7 +192,7 @@ public class HierarchyRenameItem
 }
 
 /// <summary>
-/// Represents a container that moved to a different parent.
+/// Represents a container that moved to a different parent or partition.
 /// </summary>
 public class HierarchyMoveItem
 {
@@ -215,6 +215,18 @@ public class HierarchyMoveItem
     /// The external ID of the new parent container (null if now at partition root).
     /// </summary>
     public string? NewParentExternalId { get; set; }
+
+    /// <summary>
+    /// The external ID of the partition the container was in, when the move took it to a different partition; null
+    /// when it stayed in the same partition.
+    /// </summary>
+    public string? OldPartitionExternalId { get; set; }
+
+    /// <summary>
+    /// The external ID of the partition the container is now in, when the move took it to a different partition; null
+    /// when it stayed in the same partition.
+    /// </summary>
+    public string? NewPartitionExternalId { get; set; }
 }
 
 /// <summary>

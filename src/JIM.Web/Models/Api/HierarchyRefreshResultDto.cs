@@ -76,7 +76,7 @@ public class HierarchyRefreshResultDto
     public List<HierarchyRenameItemDto> RenamedContainers { get; set; } = new();
 
     /// <summary>
-    /// Containers that moved to a different parent (ExternalId matched, parent changed).
+    /// Containers that moved to a different parent or partition (ExternalId matched, parent or partition changed).
     /// </summary>
     public List<HierarchyMoveItemDto> MovedContainers { get; set; } = new();
 
@@ -200,7 +200,7 @@ public class HierarchyRenameItemDto
 }
 
 /// <summary>
-/// Represents a container that moved to a different parent.
+/// Represents a container that moved to a different parent or partition.
 /// </summary>
 public class HierarchyMoveItemDto
 {
@@ -225,6 +225,18 @@ public class HierarchyMoveItemDto
     public string? NewParentExternalId { get; set; }
 
     /// <summary>
+    /// The external ID of the partition the container was in, when the move took it to a different partition; null
+    /// when it stayed in the same partition.
+    /// </summary>
+    public string? OldPartitionExternalId { get; set; }
+
+    /// <summary>
+    /// The external ID of the partition the container is now in, when the move took it to a different partition; null
+    /// when it stayed in the same partition.
+    /// </summary>
+    public string? NewPartitionExternalId { get; set; }
+
+    /// <summary>
     /// Creates an API DTO from the domain model.
     /// </summary>
     public static HierarchyMoveItemDto FromModel(HierarchyMoveItem item)
@@ -234,7 +246,9 @@ public class HierarchyMoveItemDto
             ExternalId = item.ExternalId,
             Name = item.Name,
             OldParentExternalId = item.OldParentExternalId,
-            NewParentExternalId = item.NewParentExternalId
+            NewParentExternalId = item.NewParentExternalId,
+            OldPartitionExternalId = item.OldPartitionExternalId,
+            NewPartitionExternalId = item.NewPartitionExternalId
         };
     }
 }
