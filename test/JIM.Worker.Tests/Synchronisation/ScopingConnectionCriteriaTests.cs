@@ -177,6 +177,54 @@ public class ScopingConnectionCriteriaTests
         }
     }
 
+    [Test]
+    public void MetaverseObjectConnections_From_ObsoleteObjectIsNotAConnection()
+    {
+        // An Obsolete object is one its Connected System no longer holds: the person has left PANOPLY, and stays joined
+        // only until synchronisation removes the object. Their contact in RESURGAM must go with it.
+        var mvo = Mvo();
+        mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            TypeId = PanoplyUser.Id, MetaverseObjectId = mvo.Id, Status = ConnectedSystemObjectStatus.Obsolete
+        });
+        mvo.ConnectedSystemObjects.Add(new ConnectedSystemObject
+        {
+            TypeId = ResurgamContact.Id, MetaverseObjectId = mvo.Id, Status = ConnectedSystemObjectStatus.PendingProvisioning
+        });
+
+        var connections = MetaverseObjectConnections.From(mvo);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(connections.Has(mvo.Id, PanoplyUser.Id), Is.False);
+            Assert.That(connections.Has(mvo.Id, ResurgamContact.Id), Is.True, "an object being provisioned is joined, so it is a connection");
+        }
+    }
+
+    [Test]
+    public void CanFailToEvaluate_ExportRuleWithConnectionCriterion_IsTrue()
+    {
+        // Callers that read connections only for some objects must catch the failure for these rules.
+        Assert.That(ScopingEvaluationServer.CanFailToEvaluate(ExportRule(Has(PanoplyUser))), Is.True);
+    }
+
+    [Test]
+    public void ConnectedObjectTypeIds_NestedGroups_NamesEveryTypeOnce()
+    {
+        var rule = ExportRule(Has(PanoplyUser), HasNo(ResurgamUser));
+        rule.ObjectScopingCriteriaGroups[0].ChildGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.Any, Criteria = [Has(PanoplyContact), HasNo(PanoplyUser)]
+        });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(ScopingEvaluationServer.ConnectedObjectTypeIds(rule),
+                Is.EquivalentTo(new[] { PanoplyUser.Id, ResurgamUser.Id, PanoplyContact.Id }));
+            Assert.That(ScopingEvaluationServer.ConnectedObjectTypeIds(ExportRule()), Is.Empty);
+        }
+    }
+
     private static MetaverseObject Mvo() => new() { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User" } };
 
     private static MetaverseObjectConnections Connections(MetaverseObject mvo, params ConnectedSystemObjectType[] joinedTypes) =>

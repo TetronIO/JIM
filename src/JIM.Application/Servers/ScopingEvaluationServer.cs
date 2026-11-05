@@ -57,11 +57,27 @@ public class ScopingEvaluationServer
     public static bool HasExpressionCriteria(SyncRule rule) =>
         rule.ObjectScopingCriteriaGroups.Any(GroupHasExpressionCriteria);
 
+    /// <summary>
+    /// The Connected System Object Types the rule's connection criteria name (#2021), at any depth; empty when it has
+    /// none. A caller evaluating the rule must read these connections for every object it asks about.
+    /// </summary>
+    public static IReadOnlySet<int> ConnectedObjectTypeIds(SyncRule rule) =>
+        rule.ObjectScopingCriteriaGroups.SelectMany(GroupConnectedObjectTypeIds).ToHashSet();
+
+    /// <summary>Whether any of the rule's criteria tests a connection (#2021).</summary>
+    public static bool HasConnectionCriteria(SyncRule rule) => ConnectedObjectTypeIds(rule).Count > 0;
+
+    private static IEnumerable<int> GroupConnectedObjectTypeIds(SyncRuleScopingCriteriaGroup group) =>
+        group.Criteria
+            .Where(criterion => criterion.IsConnection)
+            .Select(criterion => criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType!.Id)
+            .Concat(group.ChildGroups.SelectMany(GroupConnectedObjectTypeIds));
+
     private static bool GroupHasExpressionCriteria(SyncRuleScopingCriteriaGroup group) =>
         group.Criteria.Any(criterion => criterion.IsExpression) || group.ChildGroups.Any(GroupHasExpressionCriteria);
 
     private static bool GroupCanFailToEvaluate(SyncRuleScopingCriteriaGroup group) =>
-        group.Criteria.Any(criterion => criterion.IsExpression || SearchComparisonOperators.IsPattern(criterion.ComparisonType)) ||
+        group.Criteria.Any(criterion => criterion.IsExpression || criterion.IsConnection || SearchComparisonOperators.IsPattern(criterion.ComparisonType)) ||
         group.ChildGroups.Any(GroupCanFailToEvaluate);
 
     #region Export (MVO) Scoping

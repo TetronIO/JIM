@@ -1355,6 +1355,16 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithPendingExportsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Which of the given Connected System Object Types each of the given Metaverse Objects is joined to, read in one
+    /// statement for a page of objects, as connection scoping criteria need it (#2021). An Obsolete Connected System Object
+    /// is not a connection: its Connected System no longer holds it. The answer covers only the objects and types asked
+    /// about; with either list empty nothing is read.
+    /// </summary>
+    Task<MetaverseObjectConnections> GetMetaverseObjectConnectionsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> connectedSystemObjectTypeIds);
+
+    /// <summary>
     /// Gets CSO IDs that have Pending Exports for a Connected System.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>

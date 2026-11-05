@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 
@@ -26,6 +27,18 @@ public class ExportEvaluationCache
     /// Used to scope per-page CSO queries to only the relevant target systems.
     /// </summary>
     public IReadOnlyList<int> TargetSystemIds { get; }
+
+    /// <summary>
+    /// The Connected System Object Types the export rules' connection criteria name (#2021). Stable across pages; empty
+    /// when no rule has one, in which case no connections are read.
+    /// </summary>
+    public IReadOnlySet<int> ConnectionCriteriaObjectTypeIds { get; init; } = new HashSet<int>();
+
+    /// <summary>
+    /// Per-page: which of <see cref="ConnectionCriteriaObjectTypeIds"/> each of the page's Metaverse Objects is joined to,
+    /// read in one statement. Null when no rule needs it. Rebuilt each page via RefreshForPageAsync.
+    /// </summary>
+    public MetaverseObjectConnections? Connections { get; set; }
 
     /// <summary>
     /// Per-page CSO lookup, keyed by (MvoId, ConnectedSystemId).

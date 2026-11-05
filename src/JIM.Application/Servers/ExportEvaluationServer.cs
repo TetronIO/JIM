@@ -112,7 +112,8 @@ public class ExportEvaluationServer
 
         return new ExportEvaluationCache(exportRulesByMvoTypeId, emptyCsoLookup, emptyCsoAttributeValues, targetSystemIds)
         {
-            ExportRulesReadWatermark = exportRulesReadWatermark
+            ExportRulesReadWatermark = exportRulesReadWatermark,
+            ConnectionCriteriaObjectTypeIds = exportRules.SelectMany(ScopingEvaluationServer.ConnectedObjectTypeIds).ToHashSet()
         };
     }
 
@@ -128,6 +129,13 @@ public class ExportEvaluationServer
         IEnumerable<Guid> mvoIds)
     {
         var mvoIdList = mvoIds.ToList();
+
+        // Connection criteria (#2021) read which named Object Types each object is joined to: one statement per page,
+        // and none at all when no export rule has such a criterion.
+        cache.Connections = cache.ConnectionCriteriaObjectTypeIds.Count == 0
+            ? null
+            : await SyncRepo.GetMetaverseObjectConnectionsAsync(mvoIdList, [.. cache.ConnectionCriteriaObjectTypeIds]);
+
         if (mvoIdList.Count == 0 || cache.TargetSystemIds.Count == 0)
         {
             cache.CsoLookup = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>();
@@ -294,11 +302,12 @@ public class ExportEvaluationServer
         // writeback into a source system. Q3's original whole-system skip is superseded; see
         // EvaluateExportRulesWithNoNetChangeDetectionAsync for the production path.
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
+        var connections = await ReadConnectionsAsync(mvo.Id, exportRules);
 
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
-            if (!IsMvoInScopeForExportRule(mvo, exportRule))
+            if (!IsMvoInScopeForExportRule(mvo, exportRule, connections))
             {
                 Log.Debug("EvaluateExportRulesAsync: MVO {MvoId} is not in scope for export rule {RuleName}",
                     mvo.Id, exportRule.Name);
@@ -341,11 +350,12 @@ public class ExportEvaluationServer
         // source system are included (#1284): scope-out is a state assertion, and skipping the source
         // silently left objects provisioned that the administrator's scoping said to deprovision.
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
+        var connections = await ReadConnectionsAsync(mvo.Id, exportRules);
 
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
-            if (IsMvoInScopeForExportRule(mvo, exportRule))
+            if (IsMvoInScopeForExportRule(mvo, exportRule, connections))
             {
                 // Still in scope, no deprovisioning needed
                 continue;
@@ -430,7 +440,7 @@ public class ExportEvaluationServer
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
-            if (!IsMvoInScopeForExportRule(mvo, exportRule))
+            if (!IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
             {
                 Log.Debug("EvaluateExportRulesAsync: MVO {MvoId} is not in scope for export rule {RuleName}",
                     mvo.Id, exportRule.Name);
@@ -508,7 +518,7 @@ public class ExportEvaluationServer
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
-            if (!IsMvoInScopeForExportRule(mvo, exportRule))
+            if (!IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
             {
                 Log.Debug("EvaluateExportRulesWithNoNetChangeDetectionAsync: MVO {MvoId} is not in scope for export rule {RuleName}",
                     mvo.Id, exportRule.Name);
@@ -620,7 +630,7 @@ public class ExportEvaluationServer
         {
 
             // Check if MVO is in scope for this export rule
-            if (IsMvoInScopeForExportRule(mvo, exportRule))
+            if (IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
             {
                 // Still in scope, no deprovisioning needed
                 continue;
@@ -1953,7 +1963,9 @@ public class ExportEvaluationServer
                 // The fast path decides scope on a lean object holding only the scoping attributes' values by id. An
                 // expression criterion (#2054) reads its inputs by name from the whole object, so the type takes the
                 // full-evaluation fallback rather than be scoped against values the lean object does not carry.
-                if (ScopingEvaluationServer.HasExpressionCriteria(rule))
+                // A connection criterion (#2021) reads which Object Types the object is joined to, which the lean object
+                // does not carry either.
+                if (ScopingEvaluationServer.HasExpressionCriteria(rule) || ScopingEvaluationServer.HasConnectionCriteria(rule))
                 {
                     routeToFallback = true;
                     break;
@@ -2131,9 +2143,24 @@ public class ExportEvaluationServer
         return true;
     }
 
-    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule)
+    /// <summary>
+    /// Whether the Metaverse Object is in the export rule's scope. A rule with a connection criterion (#2021) needs the
+    /// object's <paramref name="connections"/>; without them it cannot be decided and throws
+    /// <see cref="ScopingCriterionFailedException"/>.
+    /// </summary>
+    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule, MetaverseObjectConnections? connections = null)
     {
-        return ScopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
+        return ScopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule, connections: connections);
+    }
+
+    /// <summary>
+    /// One object's connections to the Object Types the rules' connection criteria name, for the evaluation paths that
+    /// work an object at a time; null when no rule has a connection criterion.
+    /// </summary>
+    private async Task<MetaverseObjectConnections?> ReadConnectionsAsync(Guid metaverseObjectId, IEnumerable<SyncRule> exportRules)
+    {
+        var typeIds = exportRules.SelectMany(ScopingEvaluationServer.ConnectedObjectTypeIds).ToHashSet();
+        return typeIds.Count == 0 ? null : await SyncRepo.GetMetaverseObjectConnectionsAsync([metaverseObjectId], typeIds);
     }
 
     /// <summary>
@@ -3475,7 +3502,7 @@ public class ExportEvaluationServer
             {
                 cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var existingCso);
 
-                if (IsMvoInScopeForExportRule(mvo, exportRule))
+                if (IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
                 {
                     result.Entries.Add(await BuildStagingPreviewEntryAsync(
                         this, cache, mvo, exportRule, existingCso, changedAttributes, removedAttributes, recallSemantics: recall != null));

@@ -405,6 +405,40 @@ public partial class SyncRepository : ISyncRepository
         return HideQueued(found.ToHashSet());
     }
 
+    public async Task<MetaverseObjectConnections> GetMetaverseObjectConnectionsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> connectedSystemObjectTypeIds)
+    {
+        if (metaverseObjectIds.Count == 0 || connectedSystemObjectTypeIds.Count == 0)
+            return new MetaverseObjectConnections([], [], connectedSystemObjectTypeIds);
+
+        // Per page on the synchronisation hot path, so raw SQL over the MetaverseObjectId index: one row per joined
+        // (object, type) pair, never the objects themselves. Status 1 is Obsolete, which is not a connection.
+        const string sql = """
+            SELECT DISTINCT "MetaverseObjectId", "TypeId"
+            FROM "ConnectedSystemObjects"
+            WHERE "MetaverseObjectId" = ANY(@metaverseObjectIds)
+              AND "TypeId" = ANY(@typeIds)
+              AND "Status" <> @obsolete
+            """;
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand(sql, connection, (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction());
+        command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = metaverseObjectIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("typeIds", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = connectedSystemObjectTypeIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("obsolete", NpgsqlDbType.Integer) { Value = (int)ConnectedSystemObjectStatus.Obsolete });
+
+        var joined = new List<(Guid, int)>();
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                joined.Add((reader.GetGuid(0), reader.GetInt32(1)));
+        }
+
+        return new MetaverseObjectConnections(metaverseObjectIds, joined, connectedSystemObjectTypeIds);
+    }
+
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
         => HideQueued(await _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize));
 
