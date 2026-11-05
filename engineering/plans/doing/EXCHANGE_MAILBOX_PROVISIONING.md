@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1 to 6 complete; Phase 7, GAL synchronisation, next)
+- **Status:** Doing (Phases 1 to 6 and 7a complete; Phase 7b, GAL synchronisation's own pieces, next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -288,19 +288,42 @@ Built ahead of the spike's go, against the capability interface rather than Exch
   - **Stop provisioning recipients** removes every Exchange flow, saved with the rule as every change on the tab is. Its confirmation says existing recipients are left as they are.
 - **Tests:** bUnit tests for the panel and the tab, controller tests, and display-model tests for the new outcomes.
 
-### Phase 7: GAL synchronisation (4 days; requirements 21 to 24)
+### Phase 7: GAL synchronisation (requirements 21 to 24)
 
-- **The X500 proxy (requirement 22).** Import `legacyExchangeDN` into a new built-in Metaverse Attribute, "Legacy Exchange DN". The GAL sync rule's expression builds the `X500:` proxy from it. Check whether today's expression functions can build a multi-valued proxy list; add a function only if they cannot.
-- **The GAL loop warning (requirement 23, decision 13).** It is raised when an importing Connected System's container scope covers a container that a Synchronisation Rule provisions contacts into. It is computed in the application layer, so the portal, the REST API (a `warnings` array on the scope and Synchronisation Rule responses) and PowerShell (`Write-Warning`) all show the same text.
-- **Docs:** write `jim-ldap-connector-gal-sync.md`.
-- **Tests:** the warning's containment logic, including OneLevel and Subtree scopes and exclusions, and the X500 expression.
+Decided on 5 November 2026, after reconciling with the earlier GAL work (#944, closed as superseded; Scenario 003):
+
+- **No Contact Metaverse Object Type.** A person or group in the Metaverse is one identity, provisioned to each system in the form it needs: an account in its own forest, a contact in the others.
+- **People and groups** both reach the other forests' address books.
+- **The GAL OU stays in each forest's Connected System scope.** The LDAP Connector refuses any export outside the selected containers, so requirement 23's "leave it out of scope" would fail every contact export. Loop safety comes from rule scoping, the Remain Joined out-of-scope action and a warning instead (7b).
+- **"From PANOPLY, not from RESURGAM" is a connection criterion**, keyed on the Object Type the identity is joined to rather than on how the join was made, so a rule's own contacts can never change its answer.
+
+#### Phase 7a: the connection criterion ✅
+
+A general feature, not behind the flag.
+
+- **Model and evaluation.** A third criterion kind, Connection (**Has** / **Has no** an object of a Connected System Object Type), on export rules only. An Obsolete object is not a connection, so a leaver leaves scope on the synchronisation that obsoletes them, before the join itself is cleared.
+- **Synchronisation.** Connections are read in one raw SQL statement per page into the export evaluation cache. A projection, join, out-of-scope disconnect or obsoletion of an object of a criterion-named type queues the identity for export evaluation even when no attribute changed, and a join that flows nothing registers its execution item so the exports it causes are recorded under it. Rules with a connection criterion leave the recall fast path.
+- **Everything else that decides export scope** reads connections: scope reconciliation, the deprovisioning pre-flight, connection explanations, and the scoping, Attribute Flow, destructive-toggle and synchronisation previews (the last recording the join or disconnect it simulates).
+- **Deletion.** Deleting a Connected System, or an Object Type, that a connection criterion names is refused, naming the rules; its deletion preview warns.
+- **Surfaces.** Portal criterion editor and scope tester, REST (`connectedObjectTypeId`, tester `connectedObjectTypeIds`), PowerShell (`-ConnectedSystemName`/`-ConnectedObjectTypeName`, `Test-JIMScope -ConnectedObjectTypeId`), explanations worded as connections.
+- **Gap, filed separately ([#2787](https://github.com/TetronIO/JIM/issues/2787)):** a saved configuration test case does not record connections, so it tests as having none.
+
+#### Phase 7b: GAL sync's own pieces (behind the flag)
+
+- **Legacy Exchange DN**, a built-in Metaverse Attribute (User and Group), with a Standard Mapping from `legacyExchangeDN`.
+- **The X500 proxy (requirement 22)**, built by the export expression `Split(Join(mv["Proxy Addresses"], "|") + IIF(HasValue(mv["Legacy Exchange DN"]), "|X500:" + mv["Legacy Exchange DN"], ""), "|")`, proven by unit test with and without proxies and an empty Legacy Exchange DN.
+- **The GAL loop warning (requirement 23, decision 13, re-expressed):** raised when an import rule takes in an Object Type an export rule on the same Connected System provisions, unscoped or with Disconnect as its out-of-scope action, naming the remedy. Computed in the application layer, so the portal, REST and PowerShell show the same text.
+- **Groups:** the export rule scopes to mail-enabled groups, and a group's contact takes its primary address and proxies.
+- **PRD amendment:** requirement 21 names groups; requirement 23 and Scenario 4 drop container exclusion for rule scoping and the warning; decision 13 re-worded; a new decision records the connection criterion and "no Contact type".
 
 ### Phase 8: Integration, compliance and flag removal (5 days, plus lab time)
 
 - **Scenarios:**
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.
-  - A GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412).
+  - The GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412, built 5 November 2026) and #2774 (svc-jim may create contacts in `OU=GALSync`). It rewrites the Scenario 003 (GALSYNC) stub, which still describes an "AD to CSV" export: people and groups both ways, the `X500:` proxy, no projection back, an update, and a leaver's contact deleted. AD lab only, so it joins the AD-lab-only list in `Get-ScenarioSupportedDirectoryTypes`, and `ad-lab-rebuild.yml` gains `JIM_AD_LAB_EXCHANGE_SOURCE_VM`.
+  - Every stale "AD to CSV" reference to Scenario 003 is reconciled: `README.md`, `Invoke-IntegrationTests.ps1` and the runner's skip logic, `engineering/INTEGRATION_TESTING.md`, the compose comment and `SCHEDULE_BASED_INTEGRATION_TESTS.md`. Completed plans stay as they are.
   - Runs at Medium, so batching crosses a page boundary.
+- **GAL docs:** `jim-ldap-connector-gal-sync.md`, with the configuration Phase 7's infographic shows, written when the flag comes off.
 - **Docs and coverage** (from Phase 2): the Exchange server and Manage Exchange recipients rows on the LDAP Connector page (COV-6), the new `jim-ldap-connector-exchange.md` page (including, under troubleshooting, that Exchange logs an HTTP 500 for the client's keep-alive Receive when each session closes, and each time an idle session reaches its operation timeout, exactly as it does for Windows PowerShell's own client; Phase 2's control run), the RBAC role in `jim-ldap-connector-permissions.md` (the Recipient Management role group covers every command JIM needs), and the network requirements: the web container, not only the Worker, reaches the domain controller on 88 and Exchange on 80 or 443, since the save-time check signs in from it (D8).
 - **Compliance:** SC-8 in `engineering/COMPLIANCE_MAPPING.md` moves from planned to in place.
 - **Developer guide:** `engineering/DEVELOPER_GUIDE.md` gains the remoting library's boundary.
