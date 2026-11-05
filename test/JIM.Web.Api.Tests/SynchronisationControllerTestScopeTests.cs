@@ -36,6 +36,7 @@ namespace JIM.Web.Api.Tests;
 public class SynchronisationControllerTestScopeTests
 {
     private const int SyncRuleId = 7;
+    private const int HrUserTypeId = 70;
     private const int ConnectedSystemId = 3;
     private static readonly Guid CsoId = Guid.Parse("0c2a7a3e-1d2b-4c5e-9f60-718293a4b5c6");
     private static readonly Guid MvoId = Guid.Parse("6f9619ff-8b86-d011-b42d-00c04fc964ff");
@@ -73,7 +74,8 @@ public class SynchronisationControllerTestScopeTests
     /// days after its leave date (import), or to the Finance department of the Metaverse Object (export).
     /// </summary>
     private SynchronisationController Controller(SyncRuleDirection direction = SyncRuleDirection.Import,
-        Action<Mock<IConnectedSystemRepository>, Mock<IMetaverseRepository>>? arrange = null)
+        Action<Mock<IConnectedSystemRepository>, Mock<IMetaverseRepository>>? arrange = null,
+        JIM.InMemoryData.SyncRepository? syncRepository = null, bool connectionCriterion = false)
     {
         var rule = new SyncRule
         {
@@ -101,6 +103,18 @@ public class SynchronisationControllerTestScopeTests
                 RelativeDirection = RelativeDateDirection.Ago
             });
         }
+        if (connectionCriterion)
+        {
+            group.Criteria.Clear();
+            group.Criteria.Add(new SyncRuleScopingCriteria
+            {
+                ConnectedObjectTypeId = HrUserTypeId, ComparisonType = SearchComparisonType.HasValue,
+                ConnectedObjectType = new ConnectedSystemObjectType
+                {
+                    Id = HrUserTypeId, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "HR" }
+                }
+            });
+        }
         rule.ObjectScopingCriteriaGroups.Add(group);
 
         var connectedSystems = new Mock<IConnectedSystemRepository>();
@@ -112,7 +126,7 @@ public class SynchronisationControllerTestScopeTests
         repository.Setup(r => r.Metaverse).Returns(metaverse.Object);
 
         _application.Dispose();
-        _application = new JimApplication(repository.Object);
+        _application = new JimApplication(repository.Object, syncRepository: syncRepository ?? new JIM.InMemoryData.SyncRepository());
         return new SynchronisationController(new Mock<ILogger<SynchronisationController>>().Object, _application,
             new DynamicExpressoEvaluator(), new Mock<ICredentialProtectionService>().Object)
         {
@@ -197,6 +211,47 @@ public class SynchronisationControllerTestScopeTests
             Assert.That(loaded.Outcome, Is.EqualTo(ScopingRuleOutcome.OutOfScope));
             Assert.That(loaded.Inputs[0].ValueLines, Is.EqualTo(new[] { "Sales" }));
             Assert.That(edited.Outcome, Is.EqualTo(ScopingRuleOutcome.InScope));
+        }
+    }
+
+    [TestCase(true, ScopingRuleOutcome.InScope)]
+    [TestCase(false, ScopingRuleOutcome.OutOfScope)]
+    public async Task TestScopeAsync_ConnectionsGiven_DecideAConnectionCriterionAsync(bool joined, ScopingRuleOutcome expected)
+    {
+        var controller = Controller(SyncRuleDirection.Export, connectionCriterion: true);
+
+        var response = Ok(await controller.TestScopeAsync(SyncRuleId, new TestScopeRequest
+        {
+            ConnectedObjectTypeIds = joined ? [HrUserTypeId] : [], AsOf = AsOf
+        }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.Outcome, Is.EqualTo(expected));
+            Assert.That(response.Connections.Single().Description, Is.EqualTo("user in HR"));
+            Assert.That(response.Connections.Single().Connected, Is.EqualTo(joined));
+        }
+    }
+
+    [Test]
+    public async Task TestScopeAsync_MetaverseObjectWithNoConnectionsGiven_TestsItsOwnJoinsAsync()
+    {
+        // The object's own connections are read; given ones would replace them.
+        var mvo = new MetaverseObject { Id = MvoId, Type = _mvType };
+        var syncRepository = new JIM.InMemoryData.SyncRepository();
+        syncRepository.SeedConnectedSystemObject(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = 3, TypeId = HrUserTypeId, MetaverseObjectId = MvoId, Status = ConnectedSystemObjectStatus.Normal
+        });
+        var controller = Controller(SyncRuleDirection.Export, (_, metaverse) =>
+            metaverse.Setup(r => r.GetMetaverseObjectAsync(MvoId)).ReturnsAsync(mvo), syncRepository, connectionCriterion: true);
+
+        var response = Ok(await controller.TestScopeAsync(SyncRuleId, new TestScopeRequest { MetaverseObjectId = MvoId, AsOf = AsOf }));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(response.Outcome, Is.EqualTo(ScopingRuleOutcome.InScope));
+            Assert.That(response.Connections.Single().Connected, Is.True);
         }
     }
 

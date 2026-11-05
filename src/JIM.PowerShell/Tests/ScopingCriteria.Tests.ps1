@@ -413,6 +413,34 @@ Describe 'Set-JIMScopingCriterion -Expression' {
     }
 }
 
+Describe 'Test-JIMScope -ConnectedObjectTypeId' {
+    It 'Sends the Object Types the sample is joined to' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ isValid = $true } }
+
+            Test-JIMScope -SyncRuleId 12 -ConnectedObjectTypeId 70, 71 | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and @($Body.connectedObjectTypeIds).Count -eq 2 -and $Body.connectedObjectTypeIds[1] -eq 71
+            }
+        }
+    }
+
+    It 'Sends an empty list for a sample joined to nothing, so a named object''s own joins are not used' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ isValid = $true } }
+
+            Test-JIMScope -SyncRuleId 12 -MetaverseObjectId '0b0e1c5a-6d3a-4c7e-9a43-6a7b5d2f1e01' -ConnectedObjectTypeId @() | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Body.ContainsKey('connectedObjectTypeIds') -and @($Body.connectedObjectTypeIds).Count -eq 0
+            }
+        }
+    }
+}
+
 Describe 'Test-JIMScope' {
     It 'Posts the sample values and as-of time to the scoping criteria test endpoint' {
         InModuleScope JIM {

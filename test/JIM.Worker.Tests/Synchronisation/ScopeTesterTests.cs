@@ -389,6 +389,59 @@ public class ScopeTesterTests
 
     #endregion
 
+    #region Test: connections
+
+    [TestCase(true, ScopingRuleOutcome.InScope)]
+    [TestCase(false, ScopingRuleOutcome.OutOfScope)]
+    public void Test_ConnectionCriterion_IsDecidedByTheSampleConnections(bool joinedToHr, ScopingRuleOutcome expected)
+    {
+        // A connection criterion (#2021) tests the sample's joins, which the tester is told rather than reads.
+        var rule = ExportRule(All(new SyncRuleScopingCriteria { ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasValue }));
+
+        var result = ScopeTester.Test(rule, [], AsOf, joinedToHr ? [70] : []);
+
+        Assert.That(result.Explanation!.Outcome, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Test_ConnectionCriterionWithNoConnectionsGiven_ReadsAsJoinedToNothing()
+    {
+        // A sample has the connections it is given: none unless stated, never "unknown".
+        var rule = ExportRule(All(new SyncRuleScopingCriteria { ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasNoValue }));
+
+        var result = ScopeTester.Test(rule, [], AsOf);
+
+        Assert.That(result.Explanation!.Outcome, Is.EqualTo(ScopingRuleOutcome.InScope));
+    }
+
+    [Test]
+    public void DescribeConnections_ExportRule_ListsEachNamedObjectTypeOnceInCriteriaOrder()
+    {
+        var panoply = new ConnectedSystem { Id = 7, Name = "PANOPLY AD" };
+        var user = new ConnectedSystemObjectType { Id = 70, Name = "user", ConnectedSystemId = 7, ConnectedSystem = panoply };
+        var contact = new ConnectedSystemObjectType { Id = 71, Name = "contact", ConnectedSystemId = 7, ConnectedSystem = panoply };
+        var rule = ExportRule(All(
+            new SyncRuleScopingCriteria { ConnectedObjectType = contact, ConnectedObjectTypeId = 71, ComparisonType = SearchComparisonType.HasNoValue },
+            All(new SyncRuleScopingCriteria { ConnectedObjectType = user, ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasValue }),
+            new SyncRuleScopingCriteria { ConnectedObjectType = contact, ConnectedObjectTypeId = 71, ComparisonType = SearchComparisonType.HasValue }));
+
+        var connections = ScopeTester.DescribeConnections(rule);
+
+        Assert.That(connections, Is.EqualTo(new[]
+        {
+            new ConnectionSampleDescriptor(71, "contact in PANOPLY AD"),
+            new ConnectionSampleDescriptor(70, "user in PANOPLY AD")
+        }));
+    }
+
+    [Test]
+    public void DescribeConnections_ImportRule_ListsNone()
+    {
+        Assert.That(ScopeTester.DescribeConnections(ImportRule(All(Cs("department", SearchComparisonType.Equals, "x")))), Is.Empty);
+    }
+
+    #endregion
+
     #region Inputs from an object
 
     [Test]

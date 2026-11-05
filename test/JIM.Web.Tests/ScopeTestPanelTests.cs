@@ -93,6 +93,49 @@ public class ScopeTestPanelTests : JimComponentTestContext
     private static ScopingExplanation Explanation(IRenderedComponent<ScopeTestPanel> cut) =>
         cut.FindComponent<ScopingExplanationView>().Instance.Explanation;
 
+    /// <summary>An export rule taking only people with a user account in PANOPLY AD (#2021).</summary>
+    private static SyncRule ConnectionScopedExportRule()
+    {
+        var rule = new SyncRule
+        {
+            Id = 8, Name = "GAL: PANOPLY people into RESURGAM", Direction = SyncRuleDirection.Export, ConnectedSystemId = 9,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person" }
+        };
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedObjectTypeId = 70, ComparisonType = SearchComparisonType.HasValue,
+            ConnectedObjectType = new ConnectedSystemObjectType
+            {
+                Id = 70, Name = "user", ConnectedSystemId = 8, ConnectedSystem = new ConnectedSystem { Id = 8, Name = "PANOPLY AD" }
+            }
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+        return rule;
+    }
+
+    [TestCase(true, ScopingRuleOutcome.InScope)]
+    [TestCase(false, ScopingRuleOutcome.OutOfScope)]
+    public async Task ScopeTestPanel_ConnectionTicked_DecidesTheConnectionCriterionAsync(bool tick, ScopingRuleOutcome expected)
+    {
+        var cut = RenderPanel(ConnectionScopedExportRule());
+        var connection = cut.FindComponents<MudCheckBox<bool>>().Single(c => c.Instance.Label == "Has user in PANOPLY AD");
+
+        if (tick)
+            await cut.InvokeAsync(() => connection.Instance.ValueChanged.InvokeAsync(true));
+        await ClickRunTestAsync(cut);
+
+        Assert.That(Explanation(cut).Outcome, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void ScopeTestPanel_ImportRule_OffersNoConnections()
+    {
+        var cut = RenderPanel(ImportRule());
+
+        Assert.That(cut.FindAll("[data-testid=jim-scope-test-connections]"), Is.Empty);
+    }
+
     [Test]
     public void ScopeTestPanel_OffersAnEditorForEachComparedAttribute()
     {

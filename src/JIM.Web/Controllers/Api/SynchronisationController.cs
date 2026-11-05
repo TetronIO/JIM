@@ -7418,10 +7418,27 @@ public class SynchronisationController(
                 string.Equals(sample.AttributeName, fromObject.AttributeName, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
+        // The connections a connection criterion (#2021) tests: as given, else the named object's own, else none.
+        var connectedObjectTypeIds = request.ConnectedObjectTypeIds;
+        if (connectedObjectTypeIds == null && exporting && request.MetaverseObjectId is { } objectId)
+        {
+            var connections = await _application.ExportEvaluation.ReadConnectionsAsync([objectId], [syncRule]);
+            connectedObjectTypeIds = connections == null ? [] : [.. connections.JoinedObjectTypeIds(objectId)];
+        }
+        connectedObjectTypeIds ??= [];
+
         var asOf = AsUtc(request.AsOf) ?? DateTime.UtcNow;
-        var tested = ScopeTester.Test(syncRule, inputs, asOf);
+        var tested = ScopeTester.Test(syncRule, inputs, asOf, connectedObjectTypeIds);
         var response = new TestScopeResponse
         {
+            Connections = ScopeTester.DescribeConnections(syncRule)
+                .Select(connection => new ConnectionSampleDto
+                {
+                    ConnectedObjectTypeId = connection.ConnectedObjectTypeId,
+                    Description = connection.Description,
+                    Connected = connectedObjectTypeIds.Contains(connection.ConnectedObjectTypeId)
+                })
+                .ToList(),
             IsValid = tested.Explanation != null,
             EvaluatedAt = asOf,
             Inputs = ScopeTester.DescribeInputs(syncRule)
