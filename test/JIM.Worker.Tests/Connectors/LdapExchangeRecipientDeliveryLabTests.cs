@@ -51,7 +51,7 @@ public class LdapExchangeRecipientDeliveryLabTests
 {
     private readonly string _prefix = $"jimlab{DateTime.UtcNow:yyMMddHHmmss}";
     private readonly Dictionary<char, ExchangeRecipientTarget> _fixtures = [];
-    private readonly List<(string Command, string Identity)> _cleanup = [];
+    private readonly List<(string Identity, string Kind)> _cleanup = [];
     private Runspace? _runspace;
     private string? _mailDomain;
 
@@ -102,14 +102,35 @@ public class LdapExchangeRecipientDeliveryLabTests
         if (_runspace == null)
             return;
 
-        // Newest first; a failure is reported, not thrown, so the rest still go.
+        // Newest first, each removed as whatever it is now (LabFixtureRemoval); a failure is reported, not thrown, so the
+        // rest still go.
         for (var i = _cleanup.Count - 1; i >= 0; i--)
         {
-            var (command, identity) = _cleanup[i];
-            var (_, errors, thrown) = await RunAsync(ps => ps.AddCommand(command).AddParameter("Identity", identity)
+            var (identity, kind) = _cleanup[i];
+            var (recipient, _, _) = await RunAsync(ps => ps.AddCommand("Get-Recipient").AddParameter("Identity", identity)
+                .AddParameter("DomainController", DomainController));
+            var details = recipient.Count == 1 ? recipient[0].Properties["RecipientTypeDetails"]?.Value?.ToString() : null;
+            LabFixtureRemoval removal;
+            try
+            {
+                removal = LabFixtureRemoval.For(kind, details);
+            }
+            catch (ArgumentException ex)
+            {
+                TestContext.Out.WriteLine($"Clean-up of {identity} skipped, so the nightly revert will remove it: {ex.Message}");
+                continue;
+            }
+
+            var failure = removal.EnableFirst == null ? null : await TryRunAsync(ps =>
+            {
+                ps.AddCommand(removal.EnableFirst).AddParameter("Identity", identity).AddParameter("DomainController", DomainController);
+                if (kind != "group")
+                    ps.AddParameter("ExternalEmailAddress", $"{identity}-cleanup@partner.example");
+            });
+            failure ??= await TryRunAsync(ps => ps.AddCommand(removal.Remove).AddParameter("Identity", identity)
                 .AddParameter("Confirm", false).AddParameter("DomainController", DomainController));
-            if (errors.Count > 0 || thrown != null)
-                TestContext.Out.WriteLine($"Clean-up {command} {identity} failed, so the nightly revert will remove it: {thrown?.Message ?? errors[0].ToString()}");
+            if (failure != null)
+                TestContext.Out.WriteLine($"Clean-up of {identity} failed, so the nightly revert will remove it: {failure}");
         }
 
         _runspace.Dispose();
@@ -275,7 +296,7 @@ public class LdapExchangeRecipientDeliveryLabTests
         // A shared mailbox needs no password; disabling it leaves the plain user an LDAP export would.
         await RunCleanAsync(ps => ps.AddCommand("New-Mailbox").AddParameter("Shared", true).AddParameter("Name", Name(letter))
             .AddParameter("Alias", Name(letter)).AddParameter("DomainController", DomainController));
-        _cleanup.Add((letter switch { 'c' => "Remove-MailUser", _ => "Remove-Mailbox" }, Name(letter)));
+        _cleanup.Add((Name(letter), "user"));
         await RunCleanAsync(ps => ps.AddCommand("Disable-Mailbox").AddParameter("Identity", Name(letter)).AddParameter("Confirm", false)
             .AddParameter("DomainController", DomainController));
         await AddFixtureAsync(letter, "Get-User", "user");
@@ -285,7 +306,7 @@ public class LdapExchangeRecipientDeliveryLabTests
     {
         await RunCleanAsync(ps => ps.AddCommand("New-MailContact").AddParameter("Name", Name(letter)).AddParameter("Alias", Name(letter))
             .AddParameter("ExternalEmailAddress", $"{Name(letter)}-fixture@partner.example").AddParameter("DomainController", DomainController));
-        _cleanup.Add(("Remove-MailContact", Name(letter)));
+        _cleanup.Add((Name(letter), "contact"));
         await RunCleanAsync(ps => ps.AddCommand("Disable-MailContact").AddParameter("Identity", Name(letter)).AddParameter("Confirm", false)
             .AddParameter("DomainController", DomainController));
         await AddFixtureAsync(letter, "Get-Contact", "contact");
@@ -293,9 +314,11 @@ public class LdapExchangeRecipientDeliveryLabTests
 
     private async Task NewGroupAsync(char letter)
     {
+        // No -Type: Recipient Management's entry for New-DistributionGroup leaves it out (Exchange keeps it in Security
+        // Group Creation and Membership), and without it the group is a universal distribution group, as wanted.
         await RunCleanAsync(ps => ps.AddCommand("New-DistributionGroup").AddParameter("Name", Name(letter)).AddParameter("Alias", Name(letter))
-            .AddParameter("Type", "Distribution").AddParameter("DomainController", DomainController));
-        _cleanup.Add(("Remove-DistributionGroup", Name(letter)));
+            .AddParameter("DomainController", DomainController));
+        _cleanup.Add((Name(letter), "group"));
         await RunCleanAsync(ps => ps.AddCommand("Disable-DistributionGroup").AddParameter("Identity", Name(letter)).AddParameter("Confirm", false)
             .AddParameter("DomainController", DomainController));
         await AddFixtureAsync(letter, "Get-Group", "group");
@@ -343,6 +366,13 @@ public class LdapExchangeRecipientDeliveryLabTests
         Assert.That(thrown == null && errors.Count == 0 && output.Count == 1,
             $"{command} {identity} did not return exactly one object: {thrown?.Message} {string.Join(" | ", errors)}");
         return output[0];
+    }
+
+    /// <summary>Runs a command, returning what went wrong, or null when nothing did.</summary>
+    private async Task<string?> TryRunAsync(Action<PowerShell> build)
+    {
+        var (_, errors, thrown) = await RunAsync(build);
+        return thrown?.Message ?? (errors.Count > 0 ? errors[0].ToString() : null);
     }
 
     private async Task RunCleanAsync(Action<PowerShell> build)
