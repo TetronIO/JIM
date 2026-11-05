@@ -207,15 +207,6 @@ public interface IMetaverseRepository
     public Task<MetaverseObjectHeader?> GetMetaverseObjectHeaderAsync(Guid id);
 
     /// <summary>
-    /// Retrieves Metaverse Objects by id with what names them and nothing else (#2100): their type and only their
-    /// naming attribute values (<see cref="JIM.Models.Core.ObjectNaming.MetaverseNameAttributes"/>), so naming a Group
-    /// never loads its members as <see cref="GetMetaverseObjectHeaderAsync"/> would.
-    /// </summary>
-    /// <param name="metaverseObjectIds">The objects to read.</param>
-    /// <returns>The objects found, untracked; an id that no longer exists is absent.</returns>
-    public Task<List<MetaverseObject>> GetMetaverseObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
-
-    /// <summary>
     /// The Metaverse Object Type plural name of each given Metaverse Object that still exists, keyed by its id (#2052):
     /// what tells whether it exists, and what a link to it needs. An id that no longer exists is absent.
     /// </summary>
@@ -746,12 +737,13 @@ public interface IMetaverseRepository
     Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId);
 
     /// <summary>
-    /// As <see cref="GetDeletedMvoChangeAsync"/>, for several deleted objects in one read (#2100): each object's latest
-    /// deletion record, with the deleted object's type.
+    /// Resolves Metaverse Objects that history records name by id (#2669): each live object, else its latest deletion
+    /// record, else nothing but the id. Read in one statement, without materialising any object.
     /// </summary>
-    /// <param name="deletedMetaverseObjectIds">The ids the objects had before deletion.</param>
-    /// <returns>One record per id that has one; ids with none are absent.</returns>
-    Task<List<MetaverseObjectChange>> GetDeletedMvoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedMetaverseObjectIds);
+    /// <param name="metaverseObjectIds">The ids the history records hold.</param>
+    /// <returns>An entry for every id given; one with neither an object nor a deletion record is
+    /// <see cref="ObjectReferenceState.NotHeld"/>.</returns>
+    Task<Dictionary<Guid, ResolvedObjectReference>> GetMetaverseObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
     /// Quantifies the Metaverse attribute values a Synchronisation Rule currently contributes (#1537):

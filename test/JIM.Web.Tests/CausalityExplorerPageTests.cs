@@ -12,6 +12,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Staging;
 using JIM.TestSupport;
 using JIM.Web.Causality;
@@ -77,17 +78,11 @@ public class CausalityExplorerPageTests : JimComponentTestContext
             .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.ToDictionary(id => id, id => Entry(id, "Full Synchronisation")));
 
         _connectedSystemRepository
-            .Setup(r => r.GetConnectedSystemObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Select(Account).ToList());
-        _connectedSystemRepository
-            .Setup(r => r.GetDeletedCsoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync([]);
+            .Setup(r => r.GetConnectedSystemObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Distinct().ToDictionary(id => id, id => ObjectReferenceStubs.Live(Account(id))));
         metaverseRepository
-            .Setup(r => r.GetMetaverseObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync([]);
-        metaverseRepository
-            .Setup(r => r.GetDeletedMvoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync([]);
+            .Setup(r => r.GetMetaverseObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Distinct().ToDictionary(id => id, ResolvedObjectReference.NotHeld));
 
         var repository = new Mock<IRepository>();
         repository.Setup(r => r.Activity).Returns(_activityRepository.Object);

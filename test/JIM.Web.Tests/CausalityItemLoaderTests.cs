@@ -4,6 +4,7 @@
 using System;
 using JIM.Models.Activities;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Staging.DTOs;
 using JIM.Web.Causality;
 using NUnit.Framework;
@@ -153,6 +154,83 @@ public class CausalityItemLoaderTests
             Assert.That(context.CsoConnectedSystemId, Is.Null);
             Assert.That(context.CsoObjectTypeName, Is.Null);
         }
+    }
+
+    [Test]
+    public void BuildContext_LiveRecord_DescribesTheRecordFromTheObject()
+    {
+        // The item's record is resolved from the id the item holds (#2669), not loaded through the item.
+        var csoId = Guid.NewGuid();
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem
+            {
+                ConnectedSystemObjectId = csoId, DisplayNameSnapshot = "Tina (then)", ExternalIdSnapshot = "E0", ObjectTypeSnapshot = "person"
+            },
+            Record = new ResolvedObjectReference
+            {
+                Id = csoId, State = ObjectReferenceState.Live, Label = "Tina Adams", DisplayName = "Tina Adams", ExternalId = "E1001",
+                ObjectTypeName = "user", ConnectedSystemId = 2
+            }
+        };
+
+        var context = CausalityItemLoader.BuildContext(data);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(context.CsoId, Is.EqualTo(csoId));
+            Assert.That(context.CsoDisplayName, Is.EqualTo("Tina Adams"));
+            Assert.That(context.CsoExternalId, Is.EqualTo("E1001"));
+            Assert.That(context.CsoObjectTypeName, Is.EqualTo("user"));
+        }
+    }
+
+    [TestCase(ObjectReferenceState.Deleted)]
+    [TestCase(ObjectReferenceState.NotHeld)]
+    public void BuildContext_RecordNoLongerThereThoughTheItemKeepsItsId_DescribesItFromTheItemsSnapshots(ObjectReferenceState state)
+    {
+        // The item keeps its record's id after the record goes (#2669); whether the record is there is the resolver's
+        // answer, and once it is not, the item's snapshots describe it, as they did when the id was cleared.
+        var csoId = Guid.NewGuid();
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem
+            {
+                ConnectedSystemObjectId = csoId, DisplayNameSnapshot = "Mia Young", ExternalIdSnapshot = "E1003", ObjectTypeSnapshot = "person"
+            },
+            Record = new ResolvedObjectReference { Id = csoId, State = state, Label = "Mia Young (deleted)", ExternalId = "E9999" }
+        };
+
+        var context = CausalityItemLoader.BuildContext(data);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(data.LiveRecord, Is.Null);
+            Assert.That(context.CsoDisplayName, Is.EqualTo("Mia Young"));
+            Assert.That(context.CsoExternalId, Is.EqualTo("E1003"));
+            Assert.That(context.CsoObjectTypeName, Is.EqualTo("person"));
+        }
+    }
+
+    [Test]
+    public void BuildContext_ExportScopeReviewItemWhoseRecordIsGone_NamesTheMetaverseObject()
+    {
+        // An item recording a Metaverse Object reads as being about it once its record is not there, whether the record's
+        // id was cleared or kept (#2669).
+        var metaverseObjectId = Guid.NewGuid();
+        var csoId = Guid.NewGuid();
+        var data = new CausalityItemData
+        {
+            Item = new ActivityRunProfileExecutionItem
+            {
+                ConnectedSystemObjectId = csoId, MetaverseObjectId = metaverseObjectId, DisplayNameSnapshot = "Carol Ng"
+            },
+            Record = new ResolvedObjectReference { Id = csoId, State = ObjectReferenceState.Deleted }
+        };
+
+        var context = CausalityItemLoader.BuildContext(data);
+
+        Assert.That(context.SubjectMetaverseObjectId, Is.EqualTo(metaverseObjectId));
     }
 
     /// <summary>

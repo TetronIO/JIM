@@ -121,4 +121,35 @@ public static class PostgresTestDatabase
         await using var command = new NpgsqlCommand(sql, connection) { CommandTimeout = DatabaseCreateDropTimeoutSeconds };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// Runs a statement with the database's referential actions and checks suspended, for its own transaction only: a
+    /// row deleted this way leaves every row that names it naming an id with nothing behind it, and a row updated this
+    /// way may name an object that does not exist. That is how a test seeds a history record whose object has gone
+    /// without the record being rewritten (#2669), which the foreign keys on history tables otherwise prevent.
+    /// </summary>
+    /// <remarks>
+    /// Done with <c>SET LOCAL session_replication_role = replica</c>, which stops the triggers that enforce foreign
+    /// keys from firing; it needs a superuser, which the test databases' user is. Scoped to the transaction, so the
+    /// pooled connection that runs the next statement enforces every constraint as normal. The statement text must be
+    /// the caller's own constant: only values go in <paramref name="parameters"/>.
+    /// </remarks>
+    public static async Task ExecuteWithReferentialChecksSuspendedAsync(
+        string connectionString, string sql, IReadOnlyDictionary<string, object> parameters, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var suspend = new NpgsqlCommand("SET LOCAL session_replication_role = replica", connection, transaction))
+            await suspend.ExecuteNonQueryAsync(cancellationToken);
+
+        await using (var command = new NpgsqlCommand(sql, connection, transaction))
+        {
+            foreach (var (name, value) in parameters)
+                command.Parameters.AddWithValue(name, value);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+    }
 }

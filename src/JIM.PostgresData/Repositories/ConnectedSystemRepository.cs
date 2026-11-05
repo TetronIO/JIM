@@ -2483,7 +2483,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         {
             changeCount = await Repository.Database.ConnectedSystemObjectChanges
                 .AsNoTracking()
-                .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == id)
+                .Where(c => c.ConnectedSystemObjectId == id)
                 .CountAsync();
         }
 
@@ -6637,27 +6637,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
-    {
-        if (connectedSystemObjectIds.Count == 0)
-            return [];
-
-        // The values that identify an object and the ones that name it, exactly as the by-Metaverse-Object read above,
-        // so a Group is named without its members.
-        var ids = connectedSystemObjectIds.Distinct().ToList();
-        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLowerInvariant()).ToList();
-        return await Repository.Database.ConnectedSystemObjects
-            .AsNoTracking()
-            .Include(cso => cso.Type)
-            .Include(cso => cso.ConnectedSystem)
-            .Include(cso => cso.AttributeValues.Where(av =>
-                    av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId || nameAttributes.Contains(av.Attribute.Name.ToLower())))
-                .ThenInclude(av => av.Attribute)
-            .Where(cso => ids.Contains(cso.Id))
-            .ToListAsync();
-    }
-
-    /// <inheritdoc />
     public async Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         if (connectedSystemObjectIds.Count == 0)
@@ -7594,7 +7573,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// known attributes via correlated subqueries rather than materialising the reference target's attribute graph
     /// (the source of a ~3 s eager-load cost).
     /// </summary>
-    private static readonly Expression<Func<ConnectedSystemObjectChange, CsoChangeHistoryDto>> CsoChangeHistoryProjection =
+    private Expression<Func<ConnectedSystemObjectChange, CsoChangeHistoryDto>> CsoChangeHistoryProjection => BuildCsoChangeHistoryProjection(Repository.Database);
+
+    private static Expression<Func<ConnectedSystemObjectChange, CsoChangeHistoryDto>> BuildCsoChangeHistoryProjection(JimDbContext database) =>
         c => new CsoChangeHistoryDto
         {
             Id = c.Id,
@@ -7634,45 +7615,48 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                             ByteValueLength = vc.ByteValueLength,
                             GuidValue = vc.GuidValue,
                             BoolValue = vc.BoolValue,
-                            ReferenceValue = vc.ReferenceValue == null
-                                ? null
-                                : new CsoChangeReferenceDto
+                            // Looked up by the id the value holds, not through a navigation: the id is kept after the
+                            // object goes (#2669), and a reference to an object that is not there reads as none here.
+                            ReferenceValue = database.ConnectedSystemObjects
+                                .Where(referenced => referenced.Id == vc.ReferenceValueId)
+                                .Select(referenced => new CsoChangeReferenceDto
                                 {
-                                    Id = vc.ReferenceValue.Id,
-                                    ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
-                                    TypeName = vc.ReferenceValue.Type.Name,
+                                    Id = referenced.Id,
+                                    ConnectedSystemId = referenced.ConnectedSystemId,
+                                    TypeName = referenced.Type.Name,
                                     // Best-effort label, mirroring ConnectedSystemObject.NameOrId: the
                                     // ordered name candidates, then external id, then secondary external id.
                                     DisplayName =
-                                        vc.ReferenceValue.AttributeValues
+                                        referenced.AttributeValues
                                             .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate1 && av.StringValue != null)
                                             .Select(av => av.StringValue)
                                             .FirstOrDefault()
-                                        ?? vc.ReferenceValue.AttributeValues
+                                        ?? referenced.AttributeValues
                                             .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate2 && av.StringValue != null)
                                             .Select(av => av.StringValue)
                                             .FirstOrDefault()
-                                        ?? vc.ReferenceValue.AttributeValues
+                                        ?? referenced.AttributeValues
                                             .Where(av => av.Attribute.Name.ToLower() == CsoChangeReferenceNameCandidate3 && av.StringValue != null)
                                             .Select(av => av.StringValue)
                                             .FirstOrDefault()
-                                        ?? vc.ReferenceValue.AttributeValues
-                                            .Where(av => av.AttributeId == vc.ReferenceValue.ExternalIdAttributeId && av.StringValue != null)
+                                        ?? referenced.AttributeValues
+                                            .Where(av => av.AttributeId == referenced.ExternalIdAttributeId && av.StringValue != null)
                                             .Select(av => av.StringValue)
                                             .FirstOrDefault()
-                                        ?? (vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
-                                            ? vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
+                                        ?? (referenced.SecondaryExternalIdAttributeId.HasValue
+                                            ? referenced.AttributeValues
+                                                .Where(av => av.AttributeId == referenced.SecondaryExternalIdAttributeId && av.StringValue != null)
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             : null),
-                                    SecondaryId = vc.ReferenceValue.SecondaryExternalIdAttributeId.HasValue
-                                        ? vc.ReferenceValue.AttributeValues
-                                            .Where(av => av.AttributeId == vc.ReferenceValue.SecondaryExternalIdAttributeId && av.StringValue != null)
+                                    SecondaryId = referenced.SecondaryExternalIdAttributeId.HasValue
+                                        ? referenced.AttributeValues
+                                            .Where(av => av.AttributeId == referenced.SecondaryExternalIdAttributeId && av.StringValue != null)
                                             .Select(av => av.StringValue)
                                             .FirstOrDefault()
                                         : null
-                                },
+                                })
+                                .FirstOrDefault(),
                             IsPendingExportStub = vc.IsPendingExportStub,
                             SyncRuleId = vc.SyncRuleId,
                             SyncRuleName = vc.SyncRuleName
@@ -7696,7 +7680,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         var baseQuery = Repository.Database.ConnectedSystemObjectChanges
             .AsNoTracking()
-            .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId);
+            .Where(c => c.ConnectedSystemObjectId == connectedSystemObjectId);
 
         var totalCount = await baseQuery.CountAsync();
         if (totalCount == 0)
@@ -7808,8 +7792,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int count,
         bool includeTotalCount)
     {
+        // A deletion record whose object no longer exists. "No longer exists" is asked of the object table, never of the
+        // record's id, which stays set once deletions stop clearing it (#2669); a Deleted change whose object still
+        // exists is an export's deprovisioning, awaiting its confirming import.
         var query = Repository.Database.ConnectedSystemObjectChanges
-            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.ConnectedSystemObject == null);
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted &&
+                        !Repository.Database.ConnectedSystemObjects.Any(o => o.Id == c.ConnectedSystemObjectId));
 
         // Apply filters
         if (connectedSystemId.HasValue)
@@ -7859,38 +7847,19 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedConnectedSystemObjectIds)
-    {
-        if (deletedConnectedSystemObjectIds.Count == 0)
-            return [];
-
-        // An object has one Deleted record in practice; the latest is taken per id, as the single-object read takes it,
-        // so the two never name a deleted object differently.
-        var ids = deletedConnectedSystemObjectIds.Distinct().ToList();
-        var records = await Repository.Database.ConnectedSystemObjectChanges
-            .AsNoTracking()
-            .Where(c => c.ChangeType == ObjectChangeType.Deleted
-                        && c.DeletedConnectedSystemObjectId != null
-                        && ids.Contains(c.DeletedConnectedSystemObjectId.Value))
-            .Include(c => c.DeletedObjectType)
-            .ToListAsync();
-
-        return records
-            .GroupBy(c => c.DeletedConnectedSystemObjectId)
-            .Select(g => g.OrderByDescending(c => c.ChangeTime).First())
-            .ToList();
-    }
-
-    /// <inheritdoc />
     public async Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId)
     {
         // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
         // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
         // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        // Matched on the subject id or the deleted-object id until the second is retired (#2669).
         return await Repository.Database.ConnectedSystemObjectChanges
             .Where(c => c.ChangeType == ObjectChangeType.Deleted
-                        && c.DeletedConnectedSystemObjectId == deletedConnectedSystemObjectId)
+                        && (c.DeletedConnectedSystemObjectId == deletedConnectedSystemObjectId
+                            || c.ConnectedSystemObjectId == deletedConnectedSystemObjectId)
+                        && !Repository.Database.ConnectedSystemObjects.Any(o => o.Id == deletedConnectedSystemObjectId))
             .OrderByDescending(c => c.ChangeTime)
+            .ThenByDescending(c => c.Id)
             .Include(c => c.DeletedObjectType)
             .FirstOrDefaultAsync();
     }
@@ -7898,31 +7867,49 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <inheritdoc />
     public async Task<List<CsoChangeHistoryDto>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
     {
-        // First, get the deletion change to find the ConnectedSystemId and External ID
         var targetChange = await Repository.Database.ConnectedSystemObjectChanges
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
             return [];
 
-        // Use the DeletedObjectExternalId string field (populated on deletion changes)
-        var externalIdValue = targetChange.DeletedObjectExternalId;
-        if (string.IsNullOrEmpty(externalIdValue))
-            return await Repository.Database.ConnectedSystemObjectChanges
+        // The deleted object's history is read by its id (#2669): the deletion record's subject id, or the deleted-object
+        // id, which carries it until that column is retired. Two objects that held one external ID at different times
+        // are therefore never merged.
+        var changeIds = new HashSet<Guid> { changeId };
+        if ((targetChange.ConnectedSystemObjectId ?? targetChange.DeletedConnectedSystemObjectId) is { } objectId)
+        {
+            changeIds.UnionWith(await Repository.Database.ConnectedSystemObjectChanges
                 .AsNoTracking()
-                .Where(c => c.Id == changeId)
-                .Select(CsoChangeHistoryProjection)
-                .ToListAsync();
+                .Where(c => c.ConnectedSystemObjectId == objectId || c.DeletedConnectedSystemObjectId == objectId)
+                .Select(c => c.Id)
+                .ToListAsync());
+        }
 
-        // Get all changes for that CSO based on External ID string match
-        // This includes: the deletion change (has DeletedObjectExternalId) and
-        // earlier changes (have DeletedObjectExternalId populated since we now store it on all changes)
+        // Changes recorded before ids were kept lost theirs when the object was deleted, and only the external ID kept on
+        // them links them to it. That is the only reader they have, so it stays, for rows holding no id at all: a row
+        // that names an object by id is that object's, whatever external ID it kept.
+        var externalId = targetChange.DeletedObjectExternalId;
+        if (!string.IsNullOrEmpty(externalId))
+        {
+            var connectedSystemId = targetChange.ConnectedSystemId;
+            changeIds.UnionWith(await Repository.Database.ConnectedSystemObjectChanges
+                .AsNoTracking()
+                .Where(c => c.ConnectedSystemId == connectedSystemId &&
+                            c.DeletedObjectExternalId == externalId &&
+                            c.ConnectedSystemObjectId == null &&
+                            c.DeletedConnectedSystemObjectId == null)
+                .Select(c => c.Id)
+                .ToListAsync());
+        }
+
         // Projected as change history projects a live object's changes, so each attribute brings its first values and
         // its total rather than every value of a large group (#2498).
+        var ids = changeIds.ToList();
         return await Repository.Database.ConnectedSystemObjectChanges
             .AsNoTracking()
-            .Where(c => c.ConnectedSystemId == targetChange.ConnectedSystemId &&
-                        c.DeletedObjectExternalId == externalIdValue)
+            .Where(c => ids.Contains(c.Id))
             .OrderByDescending(c => c.ChangeTime)
             .Select(CsoChangeHistoryProjection)
             .ToListAsync();

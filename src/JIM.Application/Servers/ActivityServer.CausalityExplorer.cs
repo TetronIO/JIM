@@ -3,6 +3,7 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Enums;
 using JIM.Models.Transactional;
 
 namespace JIM.Application.Servers;
@@ -127,7 +128,7 @@ public partial class ActivityServer
 
     /// <summary>
     /// What is known of each object (#2100): the object itself while it exists, or its deletion record once it does
-    /// not. One read per kind of object, and deletion records only for the objects no longer found.
+    /// not, resolved as every history reader resolves an object it names by id (#2669). One read per kind of object.
     /// </summary>
     /// <param name="subjects">The objects to describe.</param>
     /// <returns>The header per object; an object neither live nor recorded as deleted is absent.</returns>
@@ -255,86 +256,53 @@ public partial class ActivityServer
     private static List<Guid> IdsOfKind(IEnumerable<CausalTimelineSubject> subjects, CausalTimelineSubjectKind kind) =>
         subjects.Where(subject => subject.Kind == kind).Select(subject => subject.Id).Distinct().ToList();
 
+    /// <summary>
+    /// Headers for Connected System Objects, from the one batch read every history reader resolves objects by (#2669):
+    /// the live object, else its deletion record. An object with neither has no header.
+    /// </summary>
     private async Task<List<CausalObjectHeader>> ReadConnectedSystemObjectHeadersAsync(List<Guid> ids)
     {
         if (ids.Count == 0)
             return [];
 
-        var live = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectsCoreByIdsAsync(ids);
-        var headers = live
-            .Select(cso => new CausalObjectHeader
+        var references = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync(ids);
+        return references.Values
+            .Where(reference => reference.State != ObjectReferenceState.NotHeld)
+            .Select(reference => new CausalObjectHeader
             {
-                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.ConnectedSystemObject, cso.Id),
-                DisplayName = cso.Name,
-                ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName(),
-                ObjectTypeName = cso.Type.Name,
-                ConnectedSystemId = cso.ConnectedSystemId,
-                ConnectedSystemName = cso.ConnectedSystem.Name
+                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.ConnectedSystemObject, reference.Id),
+                IsDeleted = reference.State == ObjectReferenceState.Deleted,
+                DeletedAt = reference.DeletedAt,
+                DisplayName = reference.DisplayName,
+                ExternalId = reference.ExternalId,
+                ObjectTypeName = reference.ObjectTypeName,
+                ConnectedSystemId = reference.ConnectedSystemId,
+                ConnectedSystemName = reference.ConnectedSystemName
             })
             .ToList();
-
-        var missing = ids.Except(live.Select(cso => cso.Id)).ToList();
-        if (missing.Count == 0)
-            return headers;
-
-        var deletionRecords = await Application.Repository.ConnectedSystems.GetDeletedCsoChangesByObjectIdsAsync(missing);
-        if (deletionRecords.Count == 0)
-            return headers;
-
-        // A deletion record keeps its Connected System's id but not its name; the names are few, and read once.
-        var connectedSystemNames = await Application.Repository.ConnectedSystems.GetConnectedSystemNamesAsync();
-        headers.AddRange(missing.Join(deletionRecords,
-            id => (Guid?)id,
-            record => record.DeletedConnectedSystemObjectId,
-            (id, record) => new CausalObjectHeader
-            {
-                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.ConnectedSystemObject, id),
-                IsDeleted = true,
-                DeletedAt = record.ChangeTime,
-                DisplayName = record.DeletedObjectDisplayName,
-                ExternalId = record.DeletedObjectExternalId,
-                ObjectTypeName = record.DeletedObjectType?.Name,
-                ConnectedSystemId = record.ConnectedSystemId,
-                ConnectedSystemName = connectedSystemNames.GetValueOrDefault(record.ConnectedSystemId)
-            }));
-
-        return headers;
     }
 
+    /// <summary>
+    /// Headers for Metaverse Objects, from the one batch read every history reader resolves objects by (#2669): the
+    /// live object, else its deletion record. An object with neither has no header.
+    /// </summary>
     private async Task<List<CausalObjectHeader>> ReadMetaverseObjectHeadersAsync(List<Guid> ids)
     {
         if (ids.Count == 0)
             return [];
 
-        var live = await Application.Repository.Metaverse.GetMetaverseObjectsCoreByIdsAsync(ids);
-        var headers = live
-            .Select(mvo => new CausalObjectHeader
+        var references = await Application.Repository.Metaverse.GetMetaverseObjectReferenceSummariesAsync(ids);
+        return references.Values
+            .Where(reference => reference.State != ObjectReferenceState.NotHeld)
+            .Select(reference => new CausalObjectHeader
             {
-                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, mvo.Id),
-                DisplayName = mvo.Name,
-                ObjectTypeName = mvo.Type.Name,
-                ObjectTypePluralName = mvo.Type.PluralName
+                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, reference.Id),
+                IsDeleted = reference.State == ObjectReferenceState.Deleted,
+                DeletedAt = reference.DeletedAt,
+                DisplayName = reference.DisplayName,
+                ObjectTypeName = reference.ObjectTypeName,
+                ObjectTypePluralName = reference.ObjectTypePluralName
             })
             .ToList();
-
-        var missing = ids.Except(live.Select(mvo => mvo.Id)).ToList();
-        if (missing.Count == 0)
-            return headers;
-
-        var deletionRecords = await Application.Repository.Metaverse.GetDeletedMvoChangesByObjectIdsAsync(missing);
-        headers.AddRange(missing.Join(deletionRecords,
-            id => (Guid?)id,
-            record => record.DeletedMetaverseObjectId,
-            (id, record) => new CausalObjectHeader
-            {
-                Subject = new CausalTimelineSubject(CausalTimelineSubjectKind.MetaverseObject, id),
-                IsDeleted = true,
-                DeletedAt = record.ChangeTime,
-                DisplayName = record.DeletedObjectDisplayName,
-                ObjectTypeName = record.DeletedObjectType?.Name,
-                ObjectTypePluralName = record.DeletedObjectType?.PluralName
-            }));
-
-        return headers;
     }
 }

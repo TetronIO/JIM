@@ -3,6 +3,7 @@
 
 using System.Text.Json.Serialization;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Transactional;
 
 namespace JIM.Models.Activities.DTOs;
@@ -122,6 +123,14 @@ public class CausalConsequenceCohort
     /// </remarks>
     [JsonIgnore]
     public ActivityRunProfileExecutionItem? Representative { get; set; }
+
+    /// <summary>
+    /// The Connected System Object <see cref="Representative"/> names, resolved from the id the item holds (#2669):
+    /// whether it is still there to link to is the resolver's answer, since the id outlives the object. Null where the
+    /// representative names no Connected System Object.
+    /// </summary>
+    [JsonIgnore]
+    public ResolvedObjectReference? RepresentativeRecord { get; set; }
 
     /// <summary>
     /// Where this cohort's branch ends, for a cohort that ends one: a confirmation, or outstanding work. Null where

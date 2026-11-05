@@ -45,6 +45,13 @@ public class ConnectedSystemObjectChangeAttributeValue
     public ConnectedSystemObject? ReferenceValue { get; set; }
 
     /// <summary>
+    /// The id of the Connected System Object a reference value names. Readers resolve it when they read it (live object,
+    /// then its deletion record, then <see cref="StringValue"/>), and never treat a null or unmatched id as proof of
+    /// anything about the object (#2669).
+    /// </summary>
+    public Guid? ReferenceValueId { get; set; }
+
+    /// <summary>
     /// When true, the <see cref="ReferenceValue"/> points to a stub CSO that has not yet been
     /// exported to the target Connected System (status PendingProvisioning). The UI should render
     /// this differently from a fully resolved reference — e.g. no clickable link, with a
@@ -139,8 +146,8 @@ public class ConnectedSystemObjectChangeAttributeValue
         if (BoolValue.HasValue)
             return BoolValue.Value.ToString();
 
-        if (ReferenceValue != null)
-            return ReferenceValue.Id.ToString();
+        if ((ReferenceValue?.Id ?? ReferenceValueId) is { } referenceId)
+            return referenceId.ToString();
 
         return string.Empty;
     }

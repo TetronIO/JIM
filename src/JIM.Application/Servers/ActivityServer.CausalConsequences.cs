@@ -195,8 +195,21 @@ public partial class ActivityServer
             return;
 
         var items = await Application.Repository.Activity.GetCausalConsequenceRepresentativesAsync(representativeIds.Values.Distinct().ToList());
+
+        // Each representative's Connected System Object, by the id the item holds (#2669), in one read: the portal links
+        // the object only while it is there.
+        var recordIds = items.Values.Select(item => item.ConnectedSystemObjectId).OfType<Guid>().Distinct().ToList();
+        var records = recordIds.Count > 0
+            ? await Application.Repository.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync(recordIds)
+            : [];
+
         foreach (var (cohort, itemId) in representativeIds)
+        {
             cohort.Representative = items.GetValueOrDefault(itemId);
+            cohort.RepresentativeRecord = cohort.Representative?.ConnectedSystemObjectId is { } recordId
+                ? records.GetValueOrDefault(recordId)
+                : null;
+        }
     }
 
     /// <summary>

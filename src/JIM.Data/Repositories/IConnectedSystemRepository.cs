@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Staging;
@@ -676,16 +677,6 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds);
 
     /// <summary>
-    /// Retrieves Connected System Objects by id with what names and identifies them and nothing else (#2100): their
-    /// type, their Connected System, and only their external ID and naming attribute values, so naming a Group never
-    /// loads its members. As <see cref="GetConnectedSystemObjectsCoreByMetaverseObjectIdsAsync"/>, keyed on the
-    /// objects themselves.
-    /// </summary>
-    /// <param name="connectedSystemObjectIds">The objects to read.</param>
-    /// <returns>The objects found, untracked; an id that no longer exists is absent.</returns>
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
-
-    /// <summary>
     /// Which of the given Connected System Object ids still exist (#2052).
     /// </summary>
     public Task<HashSet<Guid>> GetExistingConnectedSystemObjectIdsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
@@ -991,6 +982,21 @@ public interface IConnectedSystemRepository
     Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
 
     /// <summary>
+    /// Resolves Connected System Objects that history records name by id (#2669): each live object, else its latest
+    /// deletion record, else nothing but the id. Read in one statement, without materialising any object.
+    /// </summary>
+    /// <param name="connectedSystemObjectIds">The ids the history records hold.</param>
+    /// <returns>An entry for every id given; one with neither an object nor a deletion record is
+    /// <see cref="ObjectReferenceState.NotHeld"/>.</returns>
+    Task<Dictionary<Guid, ResolvedObjectReference>> GetConnectedSystemObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
+    /// The Metaverse Object Type of the Metaverse Object a Connected System Object is joined to; null when the object
+    /// does not exist or is not joined.
+    /// </summary>
+    Task<int?> GetJoinedMetaverseObjectTypeIdAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
     /// Used for the deleted objects browser.
     /// </summary>
@@ -1050,14 +1056,6 @@ public interface IConnectedSystemRepository
     /// <param name="deletedConnectedSystemObjectId">The id the Connected System Object had before deletion.</param>
     /// <returns>The Deleted change record, or null when there is none for that id.</returns>
     Task<ConnectedSystemObjectChange?> GetDeletedCsoChangeAsync(Guid deletedConnectedSystemObjectId);
-
-    /// <summary>
-    /// As <see cref="GetDeletedCsoChangeAsync"/>, for several deleted objects in one read (#2100): each object's latest
-    /// deletion record, with the deleted object's type.
-    /// </summary>
-    /// <param name="deletedConnectedSystemObjectIds">The ids the objects had before deletion.</param>
-    /// <returns>One record per id that has one; ids with none are absent.</returns>
-    Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedConnectedSystemObjectIds);
 
     #region Synchronisation Rule Mappings
     /// <summary>

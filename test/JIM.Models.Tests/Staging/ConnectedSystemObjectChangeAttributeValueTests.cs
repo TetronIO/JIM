@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -22,6 +23,16 @@ public class ConnectedSystemObjectChangeAttributeValueTests
         Assert.That(value.DecimalValue, Is.EqualTo(123.45m));
         Assert.That(value.ConnectedSystemObjectChangeAttribute, Is.SameAs(attributeChange));
         Assert.That(value.ValueChangeType, Is.EqualTo(ValueChangeType.Add));
+    }
+
+    [Test]
+    public void ToString_ReferenceHeldOnlyByItsId_ReadsAsTheId()
+    {
+        // A reference keeps its id after the object goes (#2669); without the object loaded, the id is what it reads as.
+        var referenceId = Guid.NewGuid();
+        var value = new ConnectedSystemObjectChangeAttributeValue { ReferenceValueId = referenceId };
+
+        Assert.That(value.ToString(), Is.EqualTo(referenceId.ToString()));
     }
 
     [Test]

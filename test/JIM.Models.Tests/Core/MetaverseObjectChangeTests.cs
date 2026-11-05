@@ -243,4 +243,14 @@ public class MetaverseObjectChangeTests
 
         Assert.That(resolverCalled, Is.False);
     }
+
+    [Test]
+    public void ValueToString_ReferenceHeldOnlyByItsId_ReadsAsTheId()
+    {
+        // A reference keeps its id after the object goes (#2669); without the object loaded, the id is what it reads as.
+        var referenceId = Guid.NewGuid();
+        var value = new MetaverseObjectChangeAttributeValue { ReferenceValueId = referenceId };
+
+        Assert.That(value.ToString(), Is.EqualTo(referenceId.ToString()));
+    }
 }

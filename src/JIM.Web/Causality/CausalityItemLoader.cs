@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
@@ -61,7 +62,7 @@ public static class CausalityItemLoader
 
         var activity = await jim.Activities.GetActivityAsync(item.ActivityId);
 
-        var connectedSystemId = item.GetConnectedSystemId() ?? activity?.ConnectedSystemId;
+        var connectedSystemId = item.GetConnectedSystemId(detail.Record) ?? activity?.ConnectedSystemId;
         var recordConnectedSystem = connectedSystemId is { } recordConnectedSystemId
             ? await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(recordConnectedSystemId)
             : null;
@@ -97,7 +98,7 @@ public static class CausalityItemLoader
             Activity = activity,
             RecordConnectedSystem = recordConnectedSystem,
             RunConnectedSystem = runConnectedSystem,
-            ExternalIdAttributeValue = item.GetExternalIdAttributeValue(),
+            Record = detail.Record,
             // Parse the decision-time deletion policy snapshot (#119); null for legacy records (which fall
             // back to current-configuration rendering) and for items with no deletion rule evaluation.
             DeletionPolicySnapshot = MvoDeletionPolicySnapshot.FromJson(item.DeletionPolicySnapshotJson),
@@ -107,7 +108,7 @@ public static class CausalityItemLoader
             ChangeValues = changeValues,
             IdentityHeader = identityHeader,
             DeletedIdentityId = deletedIdentityId,
-            MetaverseObjectType = await ResolveMetaverseObjectTypeAsync(jim, item),
+            MetaverseObjectType = await ResolveMetaverseObjectTypeAsync(jim, item, detail),
             Links = links ?? CausalityPageLinks.Instance,
             FollowUps = (await jim.Activities.GetExecutionItemFollowUpsAsync(item.Id))
                 .Select(JIM.Web.Models.ExecutionItemFollowUpDisplay.From)
@@ -129,9 +130,10 @@ public static class CausalityItemLoader
         // An item that records a Metaverse Object (an export scope review, #1971) has no record of its own: its name
         // snapshot is the Metaverse Object's, and the record system resolved for it is merely the run's. Passed as a
         // record, the panel drew an object that took no part in the run (#1982), so the Metaverse Object is passed as
-        // the subject instead.
+        // the subject instead. Whether the record is there is the resolver's answer, never a null id (#2669).
         var item = data.Item;
-        if (item is { ConnectedSystemObject: null, MetaverseObjectId: { } subjectId })
+        var liveRecord = data.LiveRecord;
+        if (liveRecord == null && item.MetaverseObjectId is { } subjectId)
         {
             return new CausalityPageContext(
                 ConnectedSystemId: data.RunConnectedSystem?.Id,
@@ -161,9 +163,9 @@ public static class CausalityItemLoader
             CsoId: item.ConnectedSystemObjectId,
             CsoConnectedSystemId: data.RecordConnectedSystem?.Id,
             CsoConnectedSystemName: data.RecordConnectedSystem?.Name,
-            CsoDisplayName: item.ConnectedSystemObject?.NameOrId ?? item.DisplayNameSnapshot,
-            CsoExternalId: data.ExternalIdAttributeValue?.ToStringNoName() ?? item.ExternalIdSnapshot,
-            CsoObjectTypeName: item.ConnectedSystemObject?.Type?.Name ?? item.ObjectTypeSnapshot,
+            CsoDisplayName: liveRecord?.Label ?? item.DisplayNameSnapshot,
+            CsoExternalId: liveRecord?.ExternalId ?? item.ExternalIdSnapshot,
+            CsoObjectTypeName: liveRecord?.ObjectTypeName ?? item.ObjectTypeSnapshot,
             MvoTypeName: data.MetaverseObjectType?.Name ?? data.IdentityHeader?.TypeName,
             MvoTypePluralName: data.MetaverseObjectType?.PluralName ?? data.IdentityHeader?.TypePluralName,
             DeletedMetaverseObjectId: data.DeletedIdentityId,
@@ -208,22 +210,23 @@ public static class CausalityItemLoader
     /// <summary>
     /// Resolves the Metaverse Object Type for headings and deletion rule display.
     /// </summary>
-    private static async Task<MetaverseObjectType?> ResolveMetaverseObjectTypeAsync(JimApplication jim, ActivityRunProfileExecutionItem item)
+    private static async Task<MetaverseObjectType?> ResolveMetaverseObjectTypeAsync(
+        JimApplication jim, ActivityRunProfileExecutionItem item, ExecutionItemDetail detail)
     {
         // Try to get the MVO type from the CSO's linked MetaverseObject, or from Synchronisation Rules
         int? mvoTypeId = null;
         int? csoTypeId = null;
 
         // First try: get from the CSO's linked MetaverseObject (if CSO still exists and is joined)
-        if (item.ConnectedSystemObject?.MetaverseObject?.Type is { } joinedType)
+        if (detail.RecordJoinedMetaverseObjectTypeId is { } joinedTypeId)
         {
-            mvoTypeId = joinedType.Id;
+            mvoTypeId = joinedTypeId;
         }
 
         // Second try: get CSO type ID from live CSO or from DeletedObjectType snapshot
-        if (item.ConnectedSystemObject is { TypeId: > 0 } liveCso)
+        if (detail.Record is { IsLive: true, ObjectTypeId: > 0 } liveCso)
         {
-            csoTypeId = liveCso.TypeId;
+            csoTypeId = liveCso.ObjectTypeId;
         }
         else if (item.ConnectedSystemObjectChange?.DeletedObjectType is { Id: > 0 } deletedObjectType)
         {

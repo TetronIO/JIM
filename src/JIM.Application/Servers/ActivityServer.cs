@@ -6,6 +6,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Exceptions;
 using JIM.Models.Scheduling;
 using JIM.Models.Security;
@@ -842,7 +843,25 @@ public partial class ActivityServer
         if (item.MetaverseObjectChange is { } metaverseObjectChange)
             summaries.AddRange(await Application.Metaverse.GetMvoChangeValueSummariesAsync([metaverseObjectChange.Id]));
 
-        return new ExecutionItemDetail { Item = item, ChangeValueSummaries = summaries.ToDictionary(s => s.ChangeId) };
+        // The item's Connected System Object, by the id it holds rather than its navigation: the id is history and
+        // outlives the object (#2669), so whether the object is still there is the resolver's answer, not a null.
+        ResolvedObjectReference? record = null;
+        int? joinedMetaverseObjectTypeId = null;
+        if (item.ConnectedSystemObjectId is { } connectedSystemObjectId)
+        {
+            var references = await Application.Repository.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync([connectedSystemObjectId]);
+            record = references.GetValueOrDefault(connectedSystemObjectId) ?? ResolvedObjectReference.NotHeld(connectedSystemObjectId);
+            if (record.IsLive)
+                joinedMetaverseObjectTypeId = await Application.Repository.ConnectedSystems.GetJoinedMetaverseObjectTypeIdAsync(connectedSystemObjectId);
+        }
+
+        return new ExecutionItemDetail
+        {
+            Item = item,
+            Record = record,
+            RecordJoinedMetaverseObjectTypeId = joinedMetaverseObjectTypeId,
+            ChangeValueSummaries = summaries.ToDictionary(s => s.ChangeId)
+        };
     }
 
     /// <summary>
@@ -1264,10 +1283,10 @@ public partial class ActivityServer
     }
 
     /// <summary>
-    /// Finds the import that last changed the item's record: by the record's id while it exists, and by the
-    /// external ID snapshotted on the item once the record's deletion has nulled the id on every item that
-    /// processed it (#1495). The degraded key is bounded exactly as the id is (latest at or before the
-    /// synchronisation, within the Activity's Connected System) and reaches the same import, which matters
+    /// Finds the import that last changed the item's record: by the record's id wherever the item holds it, which is
+    /// whether or not the record still exists (#2669), and by the external ID snapshotted on the item where a deletion
+    /// recorded before ids were kept nulled it (#1495). The degraded key is bounded exactly as the id is (latest at or
+    /// before the synchronisation, within the Activity's Connected System) and reaches the same import, which matters
     /// most on precisely these chains: a deletion cascade is where the timeline used to go dark.
     /// </summary>
     private async Task<CausalSourceImportEvent?> FindSourceImportEventAsync(CausalChainItemSummary summary)
@@ -1285,9 +1304,11 @@ public partial class ActivityServer
 
     /// <summary>
     /// Whether the record's timeline behind a synchronisation-side item is known to be lost rather than
-    /// complete: the item was fed by an import by definition, but its record's deletion nulled the id the
-    /// timeline is walked on. Only meaningful once hop-building has already failed; where the snapshot
-    /// fallback reached the import, the member resolved and this is never asked.
+    /// complete: the item was fed by an import by definition, but holds no id to walk the timeline on, which
+    /// only a deletion recorded before ids were kept leaves (#2669). This asks whether the id was lost, not
+    /// whether the record still exists: an item naming a deleted record by id walks its timeline as any other
+    /// does. Only meaningful once hop-building has already failed; where the snapshot fallback reached the
+    /// import, the member resolved and this is never asked.
     /// </summary>
     private static bool IsTimelineSevered(CausalChainItemSummary summary) =>
         SourceImportHopItemTypes.Contains(summary.ObjectChangeType) && !summary.ConnectedSystemObjectId.HasValue;

@@ -33,6 +33,7 @@ internal static class ChangeValueRowsSql
         string AttributeChangeForeignKey,
         string AttributesTable,
         Func<string, string> ReferenceName,
+        Func<string, string> DeletedReferenceName,
         bool ReferenceNameReadsNameParameters,
         string? PendingExportStubColumn,
         string SyncRuleIdColumn,
@@ -45,6 +46,7 @@ internal static class ChangeValueRowsSql
         AttributeChangeForeignKey: "ConnectedSystemObjectChangeAttributeId",
         AttributesTable: "ConnectedSystemAttributes",
         ReferenceName: ConnectedSystemObjectNameSql,
+        DeletedReferenceName: ObjectReferenceSql.ConnectedSystemObjectDeletionLabelSql,
         ReferenceNameReadsNameParameters: true,
         PendingExportStubColumn: "IsPendingExportStub",
         SyncRuleIdColumn: "SyncRuleId",
@@ -56,7 +58,8 @@ internal static class ChangeValueRowsSql
         ValuesTable: "MetaverseObjectChangeAttributeValues",
         AttributeChangeForeignKey: "MetaverseObjectChangeAttributeId",
         AttributesTable: "MetaverseAttributes",
-        ReferenceName: id => $"""(SELECT ref_mvo."CachedDisplayName" FROM "MetaverseObjects" ref_mvo WHERE ref_mvo."Id" = {id})""",
+        ReferenceName: ObjectReferenceSql.MetaverseObjectLiveLabelSql,
+        DeletedReferenceName: ObjectReferenceSql.MetaverseObjectDeletionLabelSql,
         ReferenceNameReadsNameParameters: false,
         PendingExportStubColumn: null,
         SyncRuleIdColumn: "ContributedBySyncRuleId",
@@ -114,16 +117,19 @@ internal static class ChangeValueRowsSql
             : $"""AND NOT (b.is_stub AND b.string_value <> '')""";
         var stubColumn = side.PendingExportStubColumn == null ? "false" : $"""v."{side.PendingExportStubColumn}" """;
 
-        // Text the value reads as, for search and value ordering: a reference's name (a Pending Export stub's resolved
-        // identifier where it has one), else the first value present. Only built when asked for, since naming every
-        // referenced object of a large change is the expensive part of the read.
+        // Text the value reads as, for search and value ordering, by the one resolution order (#2669): a reference's live
+        // name, else the name its deletion record kept (a Pending Export stub reads as the identifier it was given
+        // instead), else the value's own text, such as the distinguished name an import kept, else the referenced id.
+        // The id comes last so a reference that can be named is never matched by a search for hexadecimal. COALESCE is
+        // lazy, so the deletion record is looked up only for a reference with no live name. Only built when asked for,
+        // since naming every referenced object of a large change is the expensive part of the read.
         var valueText = needsValueText
             ? $"""
                 , COALESCE(
                     CASE WHEN b.reference_id IS NOT NULL {stubCondition}
-                         THEN COALESCE({side.ReferenceName("b.reference_id")}, b.reference_id::text) END,
-                    b.string_value, b.date_time_value::text, b.int_value::text, b.long_value::text, b.decimal_value::text,
-                    b.guid_value::text, b.bool_value::text, '') AS value_text
+                         THEN COALESCE(NULLIF({side.ReferenceName("b.reference_id")}, ''), {side.DeletedReferenceName("b.reference_id")}) END,
+                    NULLIF(b.string_value, ''), b.date_time_value::text, b.int_value::text, b.long_value::text, b.decimal_value::text,
+                    b.guid_value::text, b.bool_value::text, b.reference_id::text, '') AS value_text
                 """
             : string.Empty;
 

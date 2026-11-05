@@ -240,7 +240,8 @@ public class CausalityLineageConsequenceViewTests : JimComponentTestContext
             Members = Enumerable.Range(0, 50)
                 .Select(i => new CausalConsequenceMember { RunProfileExecutionItemId = Guid.NewGuid(), DisplayName = $"Group {i:000}", Occurred = T0 })
                 .ToList(),
-            Representative = removals.Representative
+            Representative = removals.Representative,
+            RepresentativeRecord = removals.RepresentativeRecord
         };
         return large;
     }

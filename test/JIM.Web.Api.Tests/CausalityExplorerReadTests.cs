@@ -128,26 +128,13 @@ public class CausalityExplorerReadTests
             .ReturnsAsync((Guid id) => _pendingExportsById.GetValueOrDefault(id));
 
         _mockConnectedSystemRepository
-            .Setup(r => r.GetConnectedSystemObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Where(_liveCsosById.ContainsKey).Select(id => _liveCsosById[id]).ToList());
-
-        _mockConnectedSystemRepository
-            .Setup(r => r.GetDeletedCsoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) =>
-                ids.Where(_deletedCsoRecordsById.ContainsKey).Select(id => _deletedCsoRecordsById[id]).ToList());
-
-        _mockConnectedSystemRepository
-            .Setup(r => r.GetConnectedSystemNamesAsync())
-            .ReturnsAsync(new Dictionary<int, string> { [3] = "Yellowstone APAC" });
+            .Setup(r => r.GetConnectedSystemObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ObjectReferenceStubs.ResolveConnectedSystemObjects(
+                ids, _liveCsosById, _deletedCsoRecordsById, new Dictionary<int, string> { [3] = "Yellowstone APAC" }));
 
         _mockMetaverseRepository
-            .Setup(r => r.GetMetaverseObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Where(_liveMvosById.ContainsKey).Select(id => _liveMvosById[id]).ToList());
-
-        _mockMetaverseRepository
-            .Setup(r => r.GetDeletedMvoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) =>
-                ids.Where(_deletedMvoRecordsById.ContainsKey).Select(id => _deletedMvoRecordsById[id]).ToList());
+            .Setup(r => r.GetMetaverseObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ObjectReferenceStubs.ResolveMetaverseObjects(ids, _liveMvosById, _deletedMvoRecordsById));
 
         _application = new JimApplication(_mockRepository.Object);
     }
@@ -623,11 +610,11 @@ public class CausalityExplorerReadTests
     }
 
     /// <summary>
-    /// Deletion records are read only for the objects that no longer exist, and the Connected System names only where
-    /// a deleted object needs one: a trail of live objects costs one read per kind.
+    /// Every object a trail names is resolved by one batch read per kind (#2669), live and deleted alike, and the read
+    /// carries the Connected System's name, so nothing else is read for it.
     /// </summary>
     [Test]
-    public async Task GetCausalObjectHeaders_MixedLiveAndDeleted_ReadsDeletionRecordsOnlyForTheMissingAsync()
+    public async Task GetCausalObjectHeaders_MixedLiveAndDeleted_ReadsEachKindOnceAsync()
     {
         var live = SeedLiveCso();
         var deletedId = Guid.NewGuid();
@@ -640,9 +627,9 @@ public class CausalityExplorerReadTests
 
         await _application.Activities.GetCausalObjectHeadersAsync(subjects);
 
-        _mockConnectedSystemRepository.Verify(r => r.GetDeletedCsoChangesByObjectIdsAsync(
-            It.Is<IReadOnlyCollection<Guid>>(ids => ids.SequenceEqual(new[] { deletedId }))), Times.Once);
-        _mockMetaverseRepository.Verify(r => r.GetDeletedMvoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Never);
+        _mockConnectedSystemRepository.Verify(r => r.GetConnectedSystemObjectReferenceSummariesAsync(
+            It.Is<IReadOnlyCollection<Guid>>(ids => ids.ToHashSet().SetEquals(new[] { live.Id, deletedId }))), Times.Once);
+        _mockMetaverseRepository.Verify(r => r.GetMetaverseObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()), Times.Once);
         _mockConnectedSystemRepository.Verify(r => r.GetConnectedSystemNamesAsync(), Times.Never);
     }
 

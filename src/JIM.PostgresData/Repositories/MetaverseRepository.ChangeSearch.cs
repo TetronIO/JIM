@@ -73,13 +73,18 @@ public partial class MetaverseRepository
 
     /// <summary>
     /// The filtered set of changes, before ordering and windowing. Changes to an object since deleted carry no live
-    /// object, so their type and name come from the object's deletion record, matched on the preserved id.
+    /// object, so their type and name come from the object's deletion record, matched on the object's id.
     /// </summary>
+    /// <remarks>
+    /// Whether a change's object is live is asked of the object table, never of the change's id, which stays set once
+    /// deletions stop clearing it (#2669). The object's id is the change's subject id, or the deleted-object id a
+    /// deletion re-keys it to until that column is retired; a deletion record names it by either.
+    /// </remarks>
     private IQueryable<MetaverseObjectChange> BuildChangeSearch(MetaverseObjectChangeSearchQuery query)
     {
         var changes = Repository.Database.MetaverseObjectChanges.AsNoTracking();
-        var deletions = Repository.Database.MetaverseObjectChanges
-            .Where(d => d.ChangeType == ObjectChangeType.Deleted && d.DeletedMetaverseObjectId != null);
+        var objects = Repository.Database.MetaverseObjects;
+        var deletions = Repository.Database.MetaverseObjectChanges.Where(d => d.ChangeType == ObjectChangeType.Deleted);
 
         if (query.FromDate.HasValue)
         {
@@ -97,19 +102,22 @@ public partial class MetaverseRepository
         {
             var typeId = query.ObjectTypeId.Value;
             changes = changes.Where(c =>
-                (c.MetaverseObject != null && c.MetaverseObject.Type.Id == typeId) ||
-                (c.MetaverseObject == null && deletions.Any(d =>
-                    d.DeletedMetaverseObjectId == c.DeletedMetaverseObjectId && d.DeletedObjectTypeId == typeId)));
+                objects.Any(m => m.Id == c.MetaverseObjectId && m.Type.Id == typeId) ||
+                (!objects.Any(m => m.Id == c.MetaverseObjectId) && deletions.Any(d =>
+                    (d.MetaverseObjectId == (c.MetaverseObjectId ?? c.DeletedMetaverseObjectId) ||
+                     d.DeletedMetaverseObjectId == (c.MetaverseObjectId ?? c.DeletedMetaverseObjectId)) &&
+                    d.DeletedObjectTypeId == typeId)));
         }
 
         if (!string.IsNullOrWhiteSpace(query.DisplayNameSearch))
         {
             var pattern = LikePattern.Contains(query.DisplayNameSearch.Trim());
             changes = changes.Where(c =>
-                (c.MetaverseObject != null && c.MetaverseObject.CachedDisplayName != null &&
-                 EF.Functions.ILike(c.MetaverseObject.CachedDisplayName, pattern)) ||
-                (c.MetaverseObject == null && deletions.Any(d =>
-                    d.DeletedMetaverseObjectId == c.DeletedMetaverseObjectId &&
+                objects.Any(m => m.Id == c.MetaverseObjectId && m.CachedDisplayName != null &&
+                                 EF.Functions.ILike(m.CachedDisplayName, pattern)) ||
+                (!objects.Any(m => m.Id == c.MetaverseObjectId) && deletions.Any(d =>
+                    (d.MetaverseObjectId == (c.MetaverseObjectId ?? c.DeletedMetaverseObjectId) ||
+                     d.DeletedMetaverseObjectId == (c.MetaverseObjectId ?? c.DeletedMetaverseObjectId)) &&
                     d.DeletedObjectDisplayName != null &&
                     EF.Functions.ILike(d.DeletedObjectDisplayName, pattern))));
         }
@@ -132,7 +140,7 @@ public partial class MetaverseRepository
     /// removed, or either) matching the condition's value when it has one. Under <see cref="AttributeConditionMatchMode.All"/>
     /// the conditions are joined on the one change, so all of them were met by one object in one Activity.
     /// </summary>
-    private static Expression<Func<MetaverseObjectChange, bool>> ConditionPredicate(ResolvedAttributeChangeCondition condition)
+    private Expression<Func<MetaverseObjectChange, bool>> ConditionPredicate(ResolvedAttributeChangeCondition condition)
     {
         var attributeId = condition.AttributeId;
         var valuePredicate = ValuePredicate(condition);
@@ -141,7 +149,7 @@ public partial class MetaverseRepository
             ac.ValueChanges.AsQueryable().Any(valuePredicate));
     }
 
-    private static Expression<Func<MetaverseObjectChangeAttributeValue, bool>> ValuePredicate(ResolvedAttributeChangeCondition condition)
+    private Expression<Func<MetaverseObjectChangeAttributeValue, bool>> ValuePredicate(ResolvedAttributeChangeCondition condition)
     {
         Expression<Func<MetaverseObjectChangeAttributeValue, bool>> predicate = condition.Operator switch
         {
@@ -157,7 +165,7 @@ public partial class MetaverseRepository
         return PredicateComposition.And(predicate, ValueMatchPredicate(condition.AttributeType, match));
     }
 
-    private static Expression<Func<MetaverseObjectChangeAttributeValue, bool>> ValueMatchPredicate(AttributeDataType attributeType, AttributeChangeValueMatch match)
+    private Expression<Func<MetaverseObjectChangeAttributeValue, bool>> ValueMatchPredicate(AttributeDataType attributeType, AttributeChangeValueMatch match)
     {
         switch (attributeType)
         {
@@ -166,9 +174,11 @@ public partial class MetaverseRepository
                 return v => v.StringValue != null && EF.Functions.ILike(v.StringValue, textPattern);
 
             case AttributeDataType.Reference when match.Text != null:
+                // The referenced object is found by the id the value holds, which is kept after the object goes (#2669).
                 var referencePattern = LikePattern.Wildcard(match.Text);
-                return v => v.ReferenceValue != null && v.ReferenceValue.CachedDisplayName != null &&
-                            EF.Functions.ILike(v.ReferenceValue.CachedDisplayName, referencePattern);
+                var objects = Repository.Database.MetaverseObjects;
+                return v => objects.Any(m => m.Id == v.ReferenceValueId && m.CachedDisplayName != null &&
+                                             EF.Functions.ILike(m.CachedDisplayName, referencePattern));
 
             case AttributeDataType.Number when match.IntValue.HasValue:
                 var intValue = match.IntValue.Value;
@@ -205,64 +215,31 @@ public partial class MetaverseRepository
     private sealed record ChangeSearchIdentity(Guid? MetaverseObjectId, bool Deleted, DateTime? DeletedAt, string? DisplayName, int? TypeId, string? TypeName, string? TypePluralName);
 
     /// <summary>
-    /// Names the object behind each change in the window: the live object where it still exists, else the identity
-    /// its deletion record preserved, with when it was deleted.
+    /// Names the object behind each change in the window: the live object where it still exists, else the identity its
+    /// deletion record preserved, with when it was deleted. Resolved by the one batch read every history reader uses
+    /// (#2669), on the change's subject id or the deleted-object id a deletion re-keys it to.
     /// </summary>
     private async Task<Dictionary<Guid, ChangeSearchIdentity>> LoadChangeSearchIdentitiesAsync(List<Guid> changeIds)
     {
         var rows = await Repository.Database.MetaverseObjectChanges
             .AsNoTracking()
             .Where(c => changeIds.Contains(c.Id))
-            .Select(c => new
-            {
-                c.Id,
-                LiveId = c.MetaverseObject != null ? c.MetaverseObject.Id : (Guid?)null,
-                LiveName = c.MetaverseObject != null ? c.MetaverseObject.CachedDisplayName : null,
-                LiveTypeId = c.MetaverseObject != null ? c.MetaverseObject.Type.Id : (int?)null,
-                LiveTypeName = c.MetaverseObject != null ? c.MetaverseObject.Type.Name : null,
-                LiveTypePluralName = c.MetaverseObject != null ? c.MetaverseObject.Type.PluralName : null,
-                c.DeletedMetaverseObjectId
-            })
+            .Select(c => new { c.Id, ObjectId = c.MetaverseObjectId ?? c.DeletedMetaverseObjectId })
             .ToListAsync();
 
-        var deletedIds = rows
-            .Where(r => r.LiveId == null && r.DeletedMetaverseObjectId.HasValue)
-            .Select(r => r.DeletedMetaverseObjectId!.Value)
-            .Distinct()
-            .ToList();
-
-        var deletionRecords = deletedIds.Count == 0
-            ? []
-            : await Repository.Database.MetaverseObjectChanges
-                .AsNoTracking()
-                .Where(d => d.ChangeType == ObjectChangeType.Deleted && d.DeletedMetaverseObjectId != null &&
-                            deletedIds.Contains(d.DeletedMetaverseObjectId.Value))
-                .Select(d => new
-                {
-                    ObjectId = d.DeletedMetaverseObjectId!.Value,
-                    d.ChangeTime,
-                    d.DeletedObjectDisplayName,
-                    d.DeletedObjectTypeId,
-                    TypeName = d.DeletedObjectType != null ? d.DeletedObjectType.Name : null,
-                    TypePluralName = d.DeletedObjectType != null ? d.DeletedObjectType.PluralName : null
-                })
-                .ToListAsync();
-
-        // An object has one deletion record in practice; the latest wins if that ever stops holding.
-        var deletionByObject = deletionRecords
-            .GroupBy(d => d.ObjectId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(d => d.ChangeTime).First());
+        var references = await GetMetaverseObjectReferenceSummariesAsync(
+            rows.Where(r => r.ObjectId.HasValue).Select(r => r.ObjectId!.Value).Distinct().ToList());
 
         return rows.ToDictionary(r => r.Id, r =>
         {
-            if (r.LiveId.HasValue)
-                return new ChangeSearchIdentity(r.LiveId, false, null, r.LiveName, r.LiveTypeId, r.LiveTypeName, r.LiveTypePluralName);
+            var reference = r.ObjectId is { } objectId ? references.GetValueOrDefault(objectId) : null;
+            if (reference is { IsLive: true })
+                return new ChangeSearchIdentity(reference.Id, false, null, reference.DisplayName, reference.ObjectTypeId,
+                    reference.ObjectTypeName, reference.ObjectTypePluralName);
 
-            var deletion = r.DeletedMetaverseObjectId.HasValue && deletionByObject.TryGetValue(r.DeletedMetaverseObjectId.Value, out var found)
-                ? found
-                : null;
-            return new ChangeSearchIdentity(r.DeletedMetaverseObjectId, true, deletion?.ChangeTime, deletion?.DeletedObjectDisplayName,
-                deletion?.DeletedObjectTypeId, deletion?.TypeName, deletion?.TypePluralName);
+            // Not live: named from its deletion record where one is held, and still reported as deleted where none is.
+            return new ChangeSearchIdentity(r.ObjectId, true, reference?.DeletedAt, reference?.DisplayName, reference?.ObjectTypeId,
+                reference?.ObjectTypeName, reference?.ObjectTypePluralName);
         });
     }
 

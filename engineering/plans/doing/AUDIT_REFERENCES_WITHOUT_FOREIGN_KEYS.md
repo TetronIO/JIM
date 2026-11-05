@@ -1,11 +1,11 @@
 # Deleting an Object Leaves Its Audit History Untouched
 
-- **Status:** Doing (Phase 0 underway: spans and fixture in; the scale baseline is outstanding)
+- **Status:** Doing (Phase 1 complete; Phase 0's scale baseline is outstanding)
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Related:**
   - [#2670](https://github.com/TetronIO/JIM/issues/2670), the `DeletedObjectExternalIdAttributeValueId` check, removed separately.
   - [Connected System Object Pages Off EF Core](../done/SYNC_CSO_PAGE_RAW_READER.md), closed at Phase 0. It found that the leaver step's larger cost is database-side deletion.
-- **Last Updated:** 2026-11-01
+- **Last Updated:** 2026-11-05
 
 ## Overview
 
@@ -344,7 +344,7 @@ The audit share is 2,573 ms, or 79%.
   - **Metaverse Object bulk statements, with history:** 278 ms, of which the three audit UPDATEs are 165 ms, or 59% (79% at scale). The `DELETE` also rises from 59 to 88 ms, from the audit tables' `NO ACTION` checks. Counting that, the share is 70%.
 - **The singular deleter is dominated by per-call cost, not audit rows.** It spends 13.5 ms an object without history: the save, 4.8 ms, and the tracked join fix-up's change detection, 2.5 ms. It also writes each join twice, by the raw UPDATE and again by the save of the tracked Connected System Object.
 
-### Phase 1: Readers onto ids, behaviour-neutral
+### Phase 1: Readers onto ids, behaviour-neutral ✅
 
 - **The resolver.** `ResolvedObjectReference` and the batch read. The Causality Explorer headers, `CausalityItemLoader` and the item page move onto it. Until Phase 3, it matches deletion records on the subject id or on `Deleted*Id`.
 - **The window SQL.**
@@ -360,6 +360,44 @@ The audit share is 2,573 ms, or 79%.
   - Every existing reader fixture passes unchanged: `DeletedCsoChangeRangeDatabaseTests`, `DeletedMvoChangeRangeDatabaseTests`, `DeletedMvoChangeHistoryDatabaseTests`, `CausalTimelineReadDatabaseTests` and `ChangeValueRowsDatabaseTests`.
   - New `RequiresPostgres` cases run on a `NoTracking` context, as JIM.Web does.
   - An agreement test holds the SQL and C# resolvers to one answer.
+
+**Phase 1 done (5 November 2026).** Every reader of the five references now reads by id, and no constraint, migration or writer changed.
+
+- **The resolver.**
+  - `ResolvedObjectReference` and `ObjectReferenceState` (JIM.Models) carry the live object or its deletion record.
+  - The batch reads are `GetConnectedSystemObjectReferenceSummariesAsync` and `GetMetaverseObjectReferenceSummariesAsync`, one raw SQL statement each (`ObjectReferenceSql`).
+  - Deletion records are matched on the subject id or on `Deleted*Id`, and only for an object that is not live: an export's deprovisioning records a `Deleted` change while its object still exists.
+  - The Causality Explorer headers, `CausalityItemLoader`, the item page (through `ExecutionItemDetail.Record`) and the Lineage consequences (through `CausalConsequenceCohort.RepresentativeRecord`) read it.
+- **The window SQL.**
+  - Value text resolves live name, then deletion record name, then `StringValue`, then the id. It shares its label fragments with the batch read.
+  - `CsoChangeValueRow` and `MvoChangeValueRow` gain `ValueReference` and `PreviousValueReference`. The published DTOs are unchanged until Phase 4.
+- **The "is it live?" readers.** Each now asks the object table, by an existence test or an explicit join:
+  - both Deleted Objects lists and both by-id deletion record reads;
+  - the Object Changes search, whose identities now come from the batch read;
+  - both history projections (correlated subqueries);
+  - the causal timeline's deletion lookups, on either key.
+- **Live history predicates** compare ids: history pages, detail counts, Created By and Last Updated By, and attribute provenance.
+- **Deleted history.** A deleted Connected System Object's history is read by id. The external-ID fallback reads only rows holding neither id, so two objects that shared an external ID are no longer merged.
+- **Tests.**
+  - The named reader fixtures pass. One assertion in `ChangeValueRowsDatabaseTests` was narrowed: its plan check matched every `"ConnectedSystemObjectId" =` probe, and the deletion record lookup probes a column of that name on the change table. It now checks only probes of the values table, as it meant to.
+  - New `RequiresPostgres` fixtures, `ObjectReferenceResolutionDatabaseTests` (with the agreement test) and `AuditReferenceReadersDatabaseTests`, run on a `NoTracking` context.
+  - Dangling ids are seeded by `PostgresTestDatabase.ExecuteWithReferentialChecksSuspendedAsync`, which deletes the object under `SET LOCAL session_replication_role = replica`.
+
+**Drift found while building Phase 1.**
+
+- **The readers the plan names all still existed in the shape described.** #2690, #2700 and #2670 changed writers and the fix-up, not these readers.
+- **The compiler inventory found readers the plan does not list.** Each navigation was marked obsolete and the solution built. All of these moved:
+  - the Activity item list (filter, search, sort and projection) and its object type and outcome counts;
+  - the item detail read's `Include` of the item's object;
+  - the Lineage consequences' object links;
+  - the attribute provenance reads;
+  - the Object Changes search's reference value condition;
+  - both change value models' `ToString`.
+- **`ActivityRunProfileExecutionItem.ConnectedSystemObject` does not become a compile error in Phase 2.** It stays mapped as a working reference, so an EF query still reading it there fails at runtime. Phase 1 moved every query that read it, so none should remain.
+- **EF Core 10 did not rewrite these navigation null tests as key tests.** Both Deleted Objects lists and both history projections translated through the LEFT JOIN, so a dangling id already read as deleted or absent. The rewrite was still needed, because Phase 2 removes the navigations; their tests stay as guards.
+- **Four reads lost their last caller and were removed:** `GetConnectedSystemObjectsCoreByIdsAsync`, `GetMetaverseObjectsCoreByIdsAsync`, `GetDeletedCsoChangesByObjectIdsAsync` and `GetDeletedMvoChangesByObjectIdsAsync`.
+- **The two shadow keys became CLR properties now rather than in Phase 2:** `MetaverseObjectChange.MetaverseObjectId` and `ConnectedSystemObjectChangeAttributeValue.ReferenceValueId`. `dotnet ef migrations has-pending-model-changes` reports no change.
+- **Left for Phase 2:** code holding the navigations as in-memory working references. That is the synchronisation engine, `ActivityStatCounterCalculator`, `CausalityModelBuilder`'s entity-based rows for previews and hand-built items, `JIM.InMemoryData`, and every writer.
 
 ### Phase 2: Drop the constraints, stop nulling
 

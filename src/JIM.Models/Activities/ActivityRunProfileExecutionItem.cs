@@ -196,37 +196,12 @@ public class ActivityRunProfileExecutionItem
     public List<ActivityRunProfileExecutionItemMatchCandidate> MatchCandidates { get; set; } = [];
 
     /// <summary>
-    /// The External ID value of the item's Connected System Object, while the object exists; null once it has been
-    /// deleted, because its values are deleted with it (<see cref="ExternalIdSnapshot"/> keeps the text).
-    /// </summary>
-    public ConnectedSystemObjectAttributeValue? GetExternalIdAttributeValue()
-    {
-        // One should exist for updates and deletes, but isn't guaranteed for creates if the Connected System is
-        // responsible for generating it and a confirming import hasn't been completed.
-        return ConnectedSystemObject?.ExternalIdAttributeValue;
-    }
-
-    /// <summary>
-    /// Gets the external ID as a string, using the snapshot as fallback if the CSO has been deleted.
-    /// This ensures historical RPEIs remain useful even after CSO deletion.
-    /// </summary>
-    public string? GetExternalIdString()
-    {
-        // First try to get from the live CSO
-        var attrValue = GetExternalIdAttributeValue();
-        if (attrValue?.StringValue != null)
-            return attrValue.StringValue;
-
-        // Fall back to snapshot (preserved when CSO was deleted)
-        return ExternalIdSnapshot;
-    }
-
-    /// <summary>
     /// Which Connected System this item's record belongs to, surviving the record's own deletion
     /// where that can be answered honestly.
     /// </summary>
     /// <remarks>
-    /// The record itself is the authority while it exists. Once it is deleted, the item-level change
+    /// The record itself is the authority while it exists, asked of the object table rather than of the item's id, which
+    /// outlives the object. Once it is deleted, the item-level change
     /// snapshot is the only other row carrying a system id, and it is only the record's own on
     /// record-side items (imports, export executions, drift corrections and Pending Export
     /// surfacing). A synchronisation-side item's change row describes a record the run created
@@ -234,9 +209,11 @@ public class ActivityRunProfileExecutionItem
     /// item's source record with its provisioning target's system, and every consumer links by this
     /// id, so the honest degraded answer is no system rather than the wrong one (#1495).
     /// </remarks>
-    public int? GetConnectedSystemId()
+    /// <param name="record">The item's Connected System Object, resolved from the id the item holds (#2669); null
+    /// when the item names none.</param>
+    public int? GetConnectedSystemId(History.ResolvedObjectReference? record)
     {
-        if (ConnectedSystemObject?.ConnectedSystemId is { } liveSystemId)
+        if (record is { IsLive: true, ConnectedSystemId: { } liveSystemId })
             return liveSystemId;
 
         return ObjectChangeType switch

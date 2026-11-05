@@ -99,20 +99,14 @@ public class CausalityExplorerApiTests
             .Setup(r => r.GetPendingExportCoreAsync(It.IsAny<Guid>()))
             .ReturnsAsync((Guid id) => _pendingExportsById.GetValueOrDefault(id));
         _connectedSystemRepository
-            .Setup(r => r.GetConnectedSystemObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Where(_liveCsosById.ContainsKey).Select(id => _liveCsosById[id]).ToList());
-        _connectedSystemRepository
-            .Setup(r => r.GetDeletedCsoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync([]);
+            .Setup(r => r.GetConnectedSystemObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ObjectReferenceStubs.ResolveConnectedSystemObjects(ids, _liveCsosById));
         _connectedSystemRepository
             .Setup(r => r.GetConnectedSystemNamesAsync())
             .ReturnsAsync(new Dictionary<int, string> { [3] = "Yellowstone APAC" });
         _metaverseRepository
-            .Setup(r => r.GetMetaverseObjectsCoreByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ids.Where(_liveMvosById.ContainsKey).Select(id => _liveMvosById[id]).ToList());
-        _metaverseRepository
-            .Setup(r => r.GetDeletedMvoChangesByObjectIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
-            .ReturnsAsync([]);
+            .Setup(r => r.GetMetaverseObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> ids) => ObjectReferenceStubs.ResolveMetaverseObjects(ids, _liveMvosById));
 
         _application = new JimApplication(_repository.Object);
         _synchronisation = new SynchronisationController(new Mock<ILogger<SynchronisationController>>().Object, _application,
