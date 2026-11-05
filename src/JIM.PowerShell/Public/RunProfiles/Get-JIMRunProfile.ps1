@@ -50,6 +50,12 @@ function Get-JIMRunProfile {
         remove them before a scheduled run fails.
 
     .EXAMPLE
+        Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { -not $_.Enabled } | Select-Object Name, DisabledReason, DisabledPartitionName
+
+        Lists the disabled Run Profiles and why each is disabled: by an administrator, or because a hierarchy refresh
+        removed the partition it targeted, which it names.
+
+    .EXAMPLE
         Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object allowObjectTypeChanges
 
         Lists the Full Import Run Profiles that carry out Object Type changes rather than refusing them, so an

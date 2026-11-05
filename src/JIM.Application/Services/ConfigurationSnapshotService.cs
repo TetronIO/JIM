@@ -651,6 +651,15 @@ public class ConfigurationSnapshotService
             Add(children, "maxDeletes", Render(runProfile.MaxDeletes), "Max deletes");
             Add(children, "maxDetectedDeletions", Render(runProfile.MaxDetectedDeletions), "Max detected deletions");
             Add(children, "maxDetectedDeletionsPercent", Render(runProfile.MaxDetectedDeletionsPercent), "Max detected deletions (% of Connector Space)");
+            // A disabled Run Profile cannot run, whoever disabled it (#2740). Recorded by presence, as the Full Import
+            // switches are, so an enabled Run Profile records nothing and the first save after an upgrade reports no
+            // change nobody made; the reason sits beside the state it explains.
+            if (!runProfile.Enabled)
+            {
+                Add(children, "enabled", Render(false), "Enabled");
+                AddEnum(children, "disabledReason", runProfile.DisabledReason, "Disabled reason");
+                Add(children, "disabledPartitionName", runProfile.DisabledPartitionName, "Removed partition");
+            }
             items.Add(ConfigurationSnapshotNode.ObjectNode("runProfile", children, "Run Profile", runProfile.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("runProfiles", items, "Run Profiles");

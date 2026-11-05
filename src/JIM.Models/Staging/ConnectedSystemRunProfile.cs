@@ -69,6 +69,28 @@ public class ConnectedSystemRunProfile : IAuditable
     public ConnectedSystemRunType RunType { get; set; }
 
     /// <summary>
+    /// Whether this Run Profile can run. A disabled Run Profile is refused wherever a run can start: the portal, the
+    /// REST API, PowerShell and Schedule steps. Defaults to true, and every Run Profile that existed before the
+    /// enabled state did is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Why this Run Profile is disabled. Null while it is enabled. Recorded by JIM, never taken from a caller: an
+    /// update that disables a Run Profile records Manual, and a hierarchy refresh that removes the Partition it targets
+    /// records PartitionRemoved.
+    /// </summary>
+    /// <remarks>#2740.</remarks>
+    public ConnectedSystemRunProfileDisabledReason? DisabledReason { get; set; }
+
+    /// <summary>
+    /// The name of the Partition a hierarchy refresh removed, for a Run Profile it disabled for that reason. Kept
+    /// because the Partition itself is gone, and the administrator re-enabling the Run Profile needs to know what it
+    /// used to read. Null otherwise.
+    /// </summary>
+    public string? DisabledPartitionName { get; set; }
+
+    /// <summary>
     /// How many items to process in one go via the Connector.
     /// </summary>
     public int PageSize { get; set; } = 100;

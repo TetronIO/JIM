@@ -349,6 +349,38 @@ public enum ConnectedSystemRunType
 }
 
 /// <summary>
+/// Why a Run Profile is disabled.
+/// </summary>
+public enum ConnectedSystemRunProfileDisabledReason
+{
+    /// <summary>
+    /// An administrator disabled it, in the portal, through the REST API or with PowerShell.
+    /// </summary>
+    Manual = 1,
+    /// <summary>
+    /// A hierarchy refresh removed the Partition it targeted, because the Connected System no longer has it. Enabling it
+    /// again needs a Partition, or an explicit choice of all selected Partitions, so that it never starts reading more
+    /// than it did without the administrator choosing that.
+    /// </summary>
+    PartitionRemoved = 2
+}
+
+/// <summary>
+/// What a hierarchy refresh does when it would remove a Partition that Run Profiles target.
+/// </summary>
+public enum RemovedPartitionRunProfileAction
+{
+    /// <summary>
+    /// Apply the refresh, and disable each Run Profile that targets a removed Partition, recording the Partition's name.
+    /// </summary>
+    Disable = 0,
+    /// <summary>
+    /// Apply nothing from the refresh when any Run Profile targets a Partition it would remove.
+    /// </summary>
+    Cancel = 1
+}
+
+/// <summary>
 /// Classifies the type of export error for structured error reporting.
 /// </summary>
 public enum ConnectedSystemExportErrorType

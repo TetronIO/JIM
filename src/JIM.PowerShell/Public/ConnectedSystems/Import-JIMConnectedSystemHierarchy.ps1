@@ -16,17 +16,28 @@ function Import-JIMConnectedSystemHierarchy {
         partition or container the Connected System no longer reports is removed, and the result's
         HasSelectedItemsRemoved says so.
 
+        Removing a partition that Run Profiles target would leave them reading every selected partition, so the
+        refresh disables them instead, recording the partition's name, and warns about each one. Enable each again
+        with Set-JIMRunProfile -Enabled $true, choosing its partition. With -RunProfileAction Cancel, such a refresh
+        applies nothing and reports an error naming the Run Profiles.
+
     .PARAMETER Id
         The ID of the Connected System to import the hierarchy of.
 
     .PARAMETER InputObject
         A Connected System from Get-JIMConnectedSystem, through the pipeline.
 
+    .PARAMETER RunProfileAction
+        What to do when the refresh would remove a partition that Run Profiles target: Disable applies the refresh and
+        disables them, and Cancel applies nothing from the refresh. A refresh that removes no such partition is applied
+        either way.
+
     .PARAMETER PassThru
         Returns what the refresh changed.
 
     .OUTPUTS
-        With -PassThru, what the refresh added, removed, renamed and moved; otherwise nothing.
+        With -PassThru, what the refresh added, removed, renamed and moved, and the Run Profiles it disabled;
+        otherwise nothing.
 
     .EXAMPLE
         Import-JIMConnectedSystemHierarchy -Id 1
@@ -42,6 +53,12 @@ function Import-JIMConnectedSystemHierarchy {
         Get-JIMConnectedSystem -Id 1 | Import-JIMConnectedSystemHierarchy -PassThru
 
         Imports hierarchy for a Connected System from the pipeline.
+
+    .EXAMPLE
+        Import-JIMConnectedSystemHierarchy -Id 1 -RunProfileAction Cancel
+
+        Refreshes the hierarchy only if no Run Profile targets a partition the refresh would remove. Otherwise nothing
+        is changed, and the error names each Run Profile and its partition.
 
     .EXAMPLE
         $system = New-JIMConnectedSystem -Name "AD" -ConnectorDefinitionId 1 -PassThru
@@ -66,6 +83,9 @@ function Import-JIMConnectedSystemHierarchy {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
+        [ValidateSet('Disable', 'Cancel')]
+        [string]$RunProfileAction = 'Disable',
+
         [switch]$PassThru
     )
 
@@ -82,10 +102,18 @@ function Import-JIMConnectedSystemHierarchy {
             Write-Verbose "Importing hierarchy for Connected System: $systemId"
 
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-hierarchy" -Method 'POST'
+                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId/import-hierarchy" -Method 'POST' `
+                    -Body @{ runProfileAction = $RunProfileAction }
 
-                $partitionCount = if ($result.partitions) { $result.partitions.Count } else { 0 }
-                Write-Verbose "Hierarchy imported for Connected System: $systemId ($partitionCount partitions)"
+                Write-Verbose "Hierarchy imported for Connected System: $systemId ($($result.totalPartitions) partitions)"
+
+                # A Run Profile disabled because its partition was removed stops running, Schedules included, so say
+                # so whether or not the caller asked for the result.
+                foreach ($runProfile in @($result.affectedRunProfiles) | Where-Object { $_.disabled }) {
+                    Write-Warning ("Disabled Run Profile '$($runProfile.runProfileName)': the refresh removed partition " +
+                        "'$($runProfile.partitionName)', which it targeted. Enable it again with Set-JIMRunProfile -Enabled `$true " +
+                        "and -PartitionId or -AllSelectedPartitions.")
+                }
 
                 if ($PassThru) {
                     $result

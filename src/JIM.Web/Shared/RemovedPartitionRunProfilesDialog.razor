@@ -1,0 +1,79 @@
+@using JIM.Models.Staging.DTOs
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The choice a hierarchy refresh asks for when it would remove a partition that Run Profiles target (#2740). The   *@
+@* refresh has saved nothing by the time this opens: disabling the Run Profiles applies it, and Cancel leaves both   *@
+@* the hierarchy and the Run Profiles exactly as they were.                                                         *@
+
+<MudDialog>
+    <DialogContent>
+        <MudText Class="mb-4">
+            The Connected System no longer has @(PartitionCount == 1 ? "a partition" : "partitions") that @RunProfileCountText
+            @(RunProfiles.Count == 1 ? "targets" : "target"). Removing @(PartitionCount == 1 ? "it" : "them") would leave
+            @(RunProfiles.Count == 1 ? "that Run Profile" : "those Run Profiles") reading every selected partition, so
+            nothing from this refresh has been saved yet.
+        </MudText>
+
+        <MudSimpleTable Dense="true" Outlined="true" Class="mb-4" data-testid="jim-removed-partition-run-profiles">
+            <thead>
+                <tr>
+                    <th>Run Profile</th>
+                    <th>Partition removed</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var runProfile in RunProfiles)
+                {
+                    <tr @key="runProfile.RunProfileId">
+                        <td>@runProfile.RunProfileName</td>
+                        <td><span class="jim-code-inline">@runProfile.PartitionName</span></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            Disable Run Profiles applies the refresh and disables each one, keeping its other settings. Enable it again on
+            the Run Profiles tab, choosing the partition it reads. Cancel applies nothing from this refresh.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" data-testid="jim-removed-partition-run-profiles-cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false" OnClick="Disable"
+                   data-testid="jim-removed-partition-run-profiles-disable">Disable Run Profiles</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// The Run Profiles that target a partition the refresh would remove, each with that partition's name.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<HierarchyRefreshRunProfileItem> RunProfiles { get; set; } = [];
+
+    private string RunProfileCountText => RunProfiles.Count == 1 ? "1 Run Profile" : $"{RunProfiles.Count} Run Profiles";
+
+    /// <summary>How many distinct partitions the listed Run Profiles target, which the explanation names as "it" or "them".</summary>
+    private int PartitionCount => RunProfiles.Select(runProfile => runProfile.PartitionName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Disable() => MudDialog.Close(DialogResult.Ok(true));
+
+    /// <summary>
+    /// Asks whether to apply the refresh by disabling these Run Profiles. True to disable them; false to apply nothing.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, IReadOnlyList<HierarchyRefreshRunProfileItem> runProfiles)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var parameters = new DialogParameters<RemovedPartitionRunProfilesDialog> { { dialog => dialog.RunProfiles, runProfiles } };
+        var dialog = await dialogService.ShowAsync<RemovedPartitionRunProfilesDialog>("Run Profiles target a removed partition", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

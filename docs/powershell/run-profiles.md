@@ -63,6 +63,9 @@ Each Run Profile on the Connected System, or each one whose name matches `-Name`
 | `ConnectedSystemId` | `int` | The Connected System this Run Profile belongs to. |
 | `RunType` | `string` | The type of synchronisation operation (FullImport, DeltaImport, FullSynchronisation, DeltaSynchronisation, Export). One of `NotSet`, `FullImport`, `DeltaImport`, `FullSynchronisation`, `DeltaSynchronisation` or `Export`. |
 | `PageSize` | `int` | How many items to process in one batch. |
+| `Enabled` | `bool` | Whether this Run Profile can run. A disabled Run Profile is refused wherever a run can start: the portal, the REST API, PowerShell and Schedule steps, where the step fails with the reason. |
+| `DisabledReason` | `string` | Why this Run Profile is disabled: `Manual` when an administrator disabled it, or `PartitionRemoved` when a hierarchy refresh removed the partition it targeted. Empty while it is enabled. One of `Manual` or `PartitionRemoved`. |
+| `DisabledPartitionName` | `string` | For a Run Profile a hierarchy refresh disabled, the name of the partition it removed, which is what the Run Profile used to read. Empty otherwise. |
 | `PartitionName` | `string` | The partition name if this Run Profile targets a specific partition. |
 | `TargetsDeselectedPartition` | `bool` | True when this Run Profile targets a partition that is no longer selected on the Connected System, which makes the Run Profile inoperable: a deselected partition is not managed by JIM, so executing this Run Profile is refused rather than reading scope the administrator has withdrawn. |
 | `FilePath` | `string` | The file a Full Import or Delta Import reads, for a file-based Connector; empty when it reads the Connected System's File Path. |
@@ -89,6 +92,10 @@ Get-JIMRunProfile -ConnectedSystemName "HR System" -Name "Delta*"
 
 ```powershell title="Pipeline from Get-JIMConnectedSystem"
 Get-JIMConnectedSystem -Name "Active Directory" | Get-JIMRunProfile
+```
+
+```powershell title="List disabled Run Profiles and why"
+Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { -not $_.Enabled } | Select-Object Name, DisabledReason, DisabledPartitionName
 ```
 
 ---
@@ -199,13 +206,13 @@ Modifies an existing Run Profile. Only the settings you give change.
 
 ```powershell
 # ById (default)
-Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-AllSelectedPartitions] [-Enabled <bool>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-AllSelectedPartitions] [-Enabled <bool>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-AllSelectedPartitions] [-Enabled <bool>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-AllowObjectTypeChanges <bool>] [-MaxCreates <int>] [-MaxUpdates <int>] [-MaxDeletes <int>] [-MaxDetectedDeletions <int>] [-MaxDetectedDeletionsPercent <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -219,6 +226,8 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `Name` | `string` | No |  | The new name. |
 | `PageSize` | `int` | No |  | How many items to process in one batch. From 1 to 10,000. |
 | `PartitionId` | `int` | No |  | The partition the Run Profile targets, for a Connector with partitions. |
+| `AllSelectedPartitions` | `switch` | No |  | Has the Run Profile read every partition selected on the Connected System, clearing the partition it targets. Cannot be combined with `-PartitionId`. |
+| `Enabled` | `bool` | No |  | Whether the Run Profile can run: `$false` disables it, and `$true` enables it again. A disabled Run Profile is refused wherever a run can start, Schedule steps included. Enabling one that a hierarchy refresh disabled, because it removed the partition the Run Profile targeted, also needs `-PartitionId` or `-AllSelectedPartitions`. |
 | `FilePath` | `string` | No |  | The file a Full Import reads, for a file-based Connector. Set it to an empty string to read the file the Connected System's File Path setting names. |
 | `VerifyImportContentHashes` | `bool` | No |  | Whether Verification Mode is enabled: `$true` to enable it, `$false` to disable it. Only a Full Import Run Profile accepts `$true`. |
 | `AllowObjectTypeChanges` | `bool` | No |  | Whether this Full Import carries out an Object Type change rather than refusing it: `$true` to allow it, `$false` to go back to refusing it. Only a Full Import Run Profile accepts `$true`. |
@@ -252,6 +261,18 @@ Get-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import" | Set-JIMRunProfile -
 
 ```powershell title="Change partition assignment"
 Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -PartitionId 5
+```
+
+```powershell title="Disable a Run Profile"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $false
+```
+
+```powershell title="Enable a Run Profile a hierarchy refresh disabled, choosing its partition"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $true -PartitionId 5
+```
+
+```powershell title="Enable it to read every selected partition instead"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -Enabled $true -AllSelectedPartitions
 ```
 
 ```powershell title="Update a file-based connector's Run Profile"

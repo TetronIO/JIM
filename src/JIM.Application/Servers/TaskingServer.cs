@@ -105,6 +105,16 @@ namespace JIM.Application.Servers
 
             if (workerTask is SynchronisationWorkerTask synchronisationWorkerTask)
             {
+                // A disabled Run Profile cannot run (#2740). Refused here, where every run is queued (the portal, the REST
+                // API, PowerShell and Schedule steps alike), and first, since why it is disabled is the reason worth
+                // giving: a Run Profile a removed partition disabled would otherwise pass the partition checks below.
+                var disabledRunProfileRefusal = await GetDisabledRunProfileRefusalAsync(synchronisationWorkerTask);
+                if (disabledRunProfileRefusal != null)
+                {
+                    Log.Warning("CreateWorkerTaskAsync: Blocking execution - {Message}", disabledRunProfileRefusal);
+                    return WorkerTaskCreationResult.Failed(disabledRunProfileRefusal);
+                }
+
                 // Validate partition selections for connectors that support partitions
                 var validationResult = await ValidatePartitionSelectionsAsync(synchronisationWorkerTask);
                 if (validationResult.HasError)
@@ -453,6 +463,17 @@ namespace JIM.Application.Servers
             TargetType = ActivityTargetType.HistoryRetentionCleanup,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
+
+        /// <summary>
+        /// Why a run of the task's Run Profile is refused because the Run Profile is disabled; null when it is enabled, or
+        /// when there is no such Run Profile (left for the checks that follow to report).
+        /// </summary>
+        private async Task<string?> GetDisabledRunProfileRefusalAsync(SynchronisationWorkerTask synchronisationWorkerTask)
+        {
+            var runProfiles = await Application.ConnectedSystems.GetConnectedSystemRunProfilesAsync(synchronisationWorkerTask.ConnectedSystemId);
+            var runProfile = runProfiles?.SingleOrDefault(rp => rp.Id == synchronisationWorkerTask.ConnectedSystemRunProfileId);
+            return runProfile is { Enabled: false } ? RunProfileEnablement.DescribeRunRefusal(runProfile) : null;
+        }
 
         /// <summary>
         /// Validates that a Connected System has the required partition/container selections, and that the Run Profile

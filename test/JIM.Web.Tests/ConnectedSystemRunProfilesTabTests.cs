@@ -282,6 +282,140 @@ public class ConnectedSystemRunProfilesTabTests : JimComponentTestContext
         Assert.That(marked, Has.Count.EqualTo(1), "only the Run Profile that allows Object Type changes is marked");
     }
 
+    // ─── Enabled state (#2740) ───
+
+    private const string DisabledChipMarker = "jim-run-profile-disabled";
+    private const string EnabledSwitchMarker = "jim-run-profile-enabled";
+    private const string ScopeChoiceMarker = "jim-run-profile-scope-choice";
+
+    [Test]
+    public void Grid_DisabledRunProfile_IsMarkedDisabled()
+    {
+        var disabled = new ConnectedSystemRunProfile
+        {
+            Id = 13, Name = "Full Import (Glitterband)", RunType = ConnectedSystemRunType.FullImport, ConnectedSystemId = 9,
+            Enabled = false, DisabledReason = ConnectedSystemRunProfileDisabledReason.Manual
+        };
+
+        var cut = Render<ConnectedSystemRunProfilesTab>(p => p.Add(x => x.ConnectedSystem, DirectorySystem(FullImport(allowObjectTypeChanges: false), disabled)));
+        cut.WaitForAssertion(() => Assert.That(cut.FindAll($"[data-testid='{EditButtonMarker}']"), Has.Count.EqualTo(2)));
+
+        var marked = cut.FindComponents<MudChip<string>>().Where(c => HasMarker(c.Instance.UserAttributes, DisabledChipMarker)).ToList();
+        Assert.That(marked, Has.Count.EqualTo(1), "only the disabled Run Profile is marked");
+    }
+
+    [Test]
+    public async Task EditDialog_EnabledSwitchedOff_SavesItDisabledAsync()
+    {
+        var runProfile = FullImport(allowObjectTypeChanges: false);
+        var provider = await OpenEditDialogAsync(DirectorySystem(runProfile));
+
+        SetEnabled(provider, false);
+        Submit(provider, EditSubmitMarker);
+
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp =>
+            rp.Id == runProfile.Id && !rp.Enabled && rp.DisabledReason == ConnectedSystemRunProfileDisabledReason.Manual)), Times.Once);
+    }
+
+    [Test]
+    public async Task EditDialog_EnablingOneARemovedPartitionDisabled_AsksWhatItReadsAsync()
+    {
+        var provider = await OpenEditDialogAsync(PartitionedSystem(RemovedPartitionsRunProfile()));
+        Assert.That(FindByMarker(provider, ScopeChoiceMarker), Is.Null, "nothing to choose while it stays disabled");
+
+        SetEnabled(provider, true);
+
+        provider.WaitForAssertion(() => Assert.That(FindScopeChoice(provider), Is.Not.Null));
+        Assert.That(FindScopeChoice(provider)!.Instance.Required, Is.True,
+            "enabling it must say what it reads: an empty Partition would quietly read every selected partition");
+    }
+
+    [Test]
+    public async Task EditDialog_EnablingOneARemovedPartitionDisabledForAllSelectedPartitions_SavesItEnabledAsync()
+    {
+        var runProfile = RemovedPartitionsRunProfile();
+        StoreAsDisabledByARemovedPartition(runProfile.Id);
+        var provider = await OpenEditDialogAsync(PartitionedSystem(runProfile));
+        SetEnabled(provider, true);
+        provider.WaitForAssertion(() => Assert.That(FindScopeChoice(provider), Is.Not.Null));
+
+        ChooseScope(provider, "all");
+        Submit(provider, EditSubmitMarker);
+
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp =>
+            rp.Id == runProfile.Id && rp.Enabled && rp.Partition == null && rp.DisabledReason == null)), Times.Once);
+    }
+
+    [Test]
+    public async Task EditDialog_EnablingOneARemovedPartitionDisabledForAPartition_SavesItTargetingThatPartitionAsync()
+    {
+        var runProfile = RemovedPartitionsRunProfile();
+        StoreAsDisabledByARemovedPartition(runProfile.Id);
+        var provider = await OpenEditDialogAsync(PartitionedSystem(runProfile));
+        SetEnabled(provider, true);
+        provider.WaitForAssertion(() => Assert.That(FindScopeChoice(provider), Is.Not.Null));
+
+        ChooseScope(provider, "21");
+        Submit(provider, EditSubmitMarker);
+
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.Is<ConnectedSystemRunProfile>(rp =>
+            rp.Id == runProfile.Id && rp.Enabled && rp.Partition != null && rp.Partition.Id == 21)), Times.Once);
+    }
+
+    [Test]
+    public async Task EditDialog_EnablingOneARemovedPartitionDisabledWithNoScope_SavesNothingAsync()
+    {
+        // The form gates the button on the choice; this proves the server refuses even if something gets past it.
+        var runProfile = RemovedPartitionsRunProfile();
+        StoreAsDisabledByARemovedPartition(runProfile.Id);
+        var provider = await OpenEditDialogAsync(PartitionedSystem(runProfile));
+        SetEnabled(provider, true);
+        provider.WaitForAssertion(() => Assert.That(FindScopeChoice(provider), Is.Not.Null));
+
+        Submit(provider, EditSubmitMarker);
+
+        _mockConnectedSystemRepo.Verify(r => r.UpdateConnectedSystemRunProfileAsync(It.IsAny<ConnectedSystemRunProfile>()), Times.Never);
+    }
+
+    private static ConnectedSystemRunProfile RemovedPartitionsRunProfile() => new()
+    {
+        Id = 14, Name = "Full Import (Glitterband)", RunType = ConnectedSystemRunType.FullImport, ConnectedSystemId = 9,
+        Enabled = false, DisabledReason = ConnectedSystemRunProfileDisabledReason.PartitionRemoved, DisabledPartitionName = "dc=glitterband,dc=local"
+    };
+
+    private void StoreAsDisabledByARemovedPartition(int runProfileId) =>
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemRunProfileEnabledStateAsync(runProfileId))
+            .ReturnsAsync(new JIM.Models.Staging.DTOs.ConnectedSystemRunProfileEnabledState(
+                false, ConnectedSystemRunProfileDisabledReason.PartitionRemoved, "dc=glitterband,dc=local"));
+
+    /// <summary>A directory with two selected partitions, one of which a Run Profile can be pointed at.</summary>
+    private static ConnectedSystem PartitionedSystem(params ConnectedSystemRunProfile[] runProfiles)
+    {
+        var system = DirectorySystem(runProfiles);
+        system.ConnectorDefinition.SupportsPartitions = true;
+        system.Partitions =
+        [
+            new ConnectedSystemPartition { Id = 21, Name = "dc=yellowstone,dc=local", ExternalId = "dc=yellowstone,dc=local", Selected = true },
+            new ConnectedSystemPartition { Id = 22, Name = "dc=panoply,dc=local", ExternalId = "dc=panoply,dc=local", Selected = true }
+        ];
+        return system;
+    }
+
+    private static void SetEnabled(IRenderedComponent<MudDialogProvider> provider, bool value)
+    {
+        var enabledSwitch = provider.FindComponents<MudSwitch<bool>>().Single(c => HasMarker(c.Instance.UserAttributes, EnabledSwitchMarker));
+        provider.InvokeAsync(() => enabledSwitch.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
+    }
+
+    private static IRenderedComponent<MudSelect<string>>? FindScopeChoice(IRenderedComponent<MudDialogProvider> provider) =>
+        provider.FindComponents<MudSelect<string>>().SingleOrDefault(c => HasMarker(c.Instance.UserAttributes, ScopeChoiceMarker));
+
+    private static void ChooseScope(IRenderedComponent<MudDialogProvider> provider, string choice)
+    {
+        var select = FindScopeChoice(provider)!;
+        provider.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(choice)).GetAwaiter().GetResult();
+    }
+
     // ─── Helpers ───
 
     private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<ConnectedSystemRunProfilesTab> Tab)> OpenCreateDialogAsync(ConnectedSystem system)

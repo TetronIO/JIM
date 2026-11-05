@@ -4297,6 +4297,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("CreatedByType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("DisabledPartitionName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DisabledReason")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("FilePath")
                         .HasColumnType("text");
 

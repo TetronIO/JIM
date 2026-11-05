@@ -776,9 +776,41 @@ public class ConfigurationSnapshotServiceTests
         string[] unsetKeys =
         [
             "allowObjectTypeChanges", "verifyImportContentHashes", "maxCreates", "maxUpdates", "maxDeletes",
-            "maxDetectedDeletions", "maxDetectedDeletionsPercent"
+            "maxDetectedDeletions", "maxDetectedDeletionsPercent", "enabled", "disabledReason", "disabledPartitionName"
         ];
         Assert.That(runProfile.Children!.Select(c => c.Key).Intersect(unsetKeys), Is.Empty);
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_DisabledRunProfile_RecordsTheStateAndWhy()
+    {
+        // Disabling a Run Profile stops it running, whoever did it (#2740): an administrator, or a hierarchy refresh that
+        // removed the Partition it targeted. Either has to show in the change history, with the reason. An enabled Run
+        // Profile records nothing, as the test above asserts, so the first save after an upgrade reports no change.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3, Name = "AD", ConnectorDefinitionId = 4,
+            RunProfiles =
+            [
+                new ConnectedSystemRunProfile
+                {
+                    Id = 52, Name = "Full Import (Glitterband)", RunType = ConnectedSystemRunType.FullImport,
+                    Enabled = false,
+                    DisabledReason = ConnectedSystemRunProfileDisabledReason.PartitionRemoved,
+                    DisabledPartitionName = "dc=glitterband,dc=local"
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var runProfile = Child(snapshot.Root, "runProfiles")!.Children!.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Child(runProfile, "enabled")?.Value, Is.EqualTo("false"));
+            Assert.That(Child(runProfile, "disabledReason")?.Value, Is.EqualTo("PartitionRemoved"));
+            Assert.That(Child(runProfile, "disabledPartitionName")?.Value, Is.EqualTo("dc=glitterband,dc=local"));
+        }
     }
 
     [Test]

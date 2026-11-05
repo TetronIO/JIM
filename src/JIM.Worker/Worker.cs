@@ -376,6 +376,13 @@ public class Worker : BackgroundService
                                             var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
                                             if (runProfile != null)
                                             {
+                                                // A Run Profile disabled since this task was queued does not run (#2740): a
+                                                // Schedule queues every step when it starts, so the queue's own refusal cannot
+                                                // catch it. Refused before any step is declared; the task still completes below,
+                                                // so a Schedule moves on under its failure rules.
+                                                if (await RefuseIfRunProfileDisabledAsync(taskJim, newWorkerTask.Activity, runProfile))
+                                                    break;
+
                                                 // Record the steps this run can perform before it starts, so the
                                                 // Activity shows the whole journey rather than only the step it has
                                                 // reached (#454). Owned here because every run type needs it declared
@@ -1606,6 +1613,23 @@ public class Worker : BackgroundService
     /// </summary>
     internal static List<TaskTask> GetDefunctTaskEntries(IEnumerable<TaskTask> currentTasks) =>
         currentTasks.Where(entry => entry.Task.IsCompleted).ToList();
+
+    /// <summary>
+    /// Refuses a run of a Run Profile that is disabled (#2740), failing the run's Activity with the reason, the same one
+    /// the queue gives. Returns true when the run was refused; false when the Run Profile is enabled and the run goes
+    /// ahead.
+    /// </summary>
+    internal static async Task<bool> RefuseIfRunProfileDisabledAsync(JimApplication taskJim, Activity activity, ConnectedSystemRunProfile runProfile)
+    {
+        if (runProfile.Enabled)
+            return false;
+
+        var refusal = RunProfileEnablement.DescribeRunRefusal(runProfile);
+        Log.Warning("RefuseIfRunProfileDisabledAsync: Run Profile {RunProfileId} is disabled ({DisabledReason}); its run is refused.",
+            runProfile.Id, runProfile.DisabledReason);
+        await taskJim.Activities.FailActivityWithErrorAsync(activity, refusal);
+        return true;
+    }
 
     /// <summary>
     /// Loads the Connected System a synchronisation task runs against, having first read the ids of the configuration

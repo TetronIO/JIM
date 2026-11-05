@@ -87,7 +87,7 @@ A step fails when its Activity ends **Failed With Error**, **Complete With Error
 
 JIM decides what a failed step does at the moment it fails, using that step's setting or, when it follows the Schedule, the Schedule's. A change you save while a Schedule is running therefore applies to the next step that fails.
 
-The setting also covers a step that JIM cannot queue when the Schedule starts, for example because its Connected System is being deleted, or its Run Profile targets a partition that is no longer selected. JIM queues every step before any of them runs, so:
+The setting also covers a step that JIM cannot queue when the Schedule starts, for example because its Connected System is being deleted, its Run Profile is [disabled](run-profiles.md#disable-a-run-profile), or its Run Profile targets a partition that is no longer selected. A step whose Run Profile is disabled after the Schedule started fails when its turn comes, with the same reason. JIM queues every step before any of them runs, so:
 
 - **If that step stops the Schedule**, the Schedule does not start at all. No step runs, the execution is marked **Failed** with a message naming the step and why it could not be queued, and the steps already queued show as **Cancelled** with the reason "Not run: the Schedule could not start."
 - **If that step lets the Schedule continue**, it is recorded as **Failed** with the reason ("Could not be queued: ...") and the rest of the Schedule runs without it. The execution then ends **Complete With Error**.

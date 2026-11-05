@@ -31,6 +31,15 @@ function Set-JIMRunProfile {
     .PARAMETER PartitionId
         The partition the Run Profile targets, for a Connector with partitions.
 
+    .PARAMETER AllSelectedPartitions
+        Has the Run Profile read every partition selected on the Connected System, clearing the partition it targets.
+        Cannot be combined with -PartitionId.
+
+    .PARAMETER Enabled
+        Whether the Run Profile can run: $false disables it, and $true enables it again. A disabled Run Profile is
+        refused wherever a run can start, Schedule steps included. Enabling one that a hierarchy refresh disabled,
+        because it removed the partition the Run Profile targeted, also needs -PartitionId or -AllSelectedPartitions.
+
     .PARAMETER FilePath
         The file a Full Import reads, for a file-based Connector. Set it to an empty string to read the file the Connected System's
         File Path setting names.
@@ -92,6 +101,23 @@ function Set-JIMRunProfile {
         Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { $_.name -eq "Full Import" } | Set-JIMRunProfile -PageSize 1000
 
         Updates a Run Profile found by pipeline.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $false
+
+        Disables Run Profile 4, so it cannot run until it is enabled again. A Schedule step that runs it fails, saying
+        why.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $true -PartitionId 2
+
+        Enables Run Profile 4 again after a hierarchy refresh disabled it by removing its partition, pointing it at
+        partition 2.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 4 -Enabled $true -AllSelectedPartitions
+
+        Enables Run Profile 4 again, reading every selected partition rather than the one that was removed.
 
     .EXAMPLE
         Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $true
@@ -173,6 +199,12 @@ function Set-JIMRunProfile {
         [int]$PartitionId,
 
         [Parameter()]
+        [switch]$AllSelectedPartitions,
+
+        [Parameter()]
+        [bool]$Enabled,
+
+        [Parameter()]
         [string]$FilePath,
 
         [Parameter()]
@@ -220,6 +252,11 @@ function Set-JIMRunProfile {
             return
         }
 
+        if ($PSBoundParameters.ContainsKey('PartitionId') -and $AllSelectedPartitions) {
+            Write-Error "Use -PartitionId or -AllSelectedPartitions, not both: a Run Profile reads one partition, or every selected partition."
+            return
+        }
+
         # Run Profile Safeguards: validated here (not via ValidateRange, which misbehaves with
         # $null) so a negative value fails fast rather than reaching the API as a 400.
         foreach ($safeguard in @('MaxCreates', 'MaxUpdates', 'MaxDeletes', 'MaxDetectedDeletions')) {
@@ -252,6 +289,16 @@ function Set-JIMRunProfile {
 
         if ($PSBoundParameters.ContainsKey('PartitionId')) {
             $body.partitionId = $PartitionId
+        }
+
+        if ($AllSelectedPartitions) {
+            $body.allSelectedPartitions = $true
+        }
+
+        # As for -VerifyImportContentHashes below: -Enabled $false is sent (disables it); an unbound parameter is
+        # omitted, which the API reads as "leave unchanged".
+        if ($PSBoundParameters.ContainsKey('Enabled')) {
+            $body.enabled = $Enabled
         }
 
         if ($PSBoundParameters.ContainsKey('FilePath')) {

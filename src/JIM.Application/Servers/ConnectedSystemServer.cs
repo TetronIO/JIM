@@ -4505,29 +4505,38 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Retrieves the hierarchy (Partitions and Containers) from a Connected System, merges it into the one JIM holds,
     /// preserving selections, and saves the result: Partitions and Containers the Connected System no longer holds are
-    /// removed. Recorded as an Import Hierarchy Activity attributed to <paramref name="initiatedBy"/>.
+    /// removed. Run Profiles that target a removed Partition are disabled, or nothing is saved, as
+    /// <paramref name="runProfileAction"/> says. Recorded as an Import Hierarchy Activity attributed to
+    /// <paramref name="initiatedBy"/>.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to refresh.</param>
     /// <param name="initiatedBy">The user who asked for the refresh.</param>
+    /// <param name="runProfileAction">What to do when the refresh would remove a Partition that Run Profiles target
+    /// (#2740): disable them (the default), or apply nothing from the refresh.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
     /// <exception cref="NotSupportedException">The Connected System's Connector cannot retrieve a hierarchy.</exception>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, MetaverseObject? initiatedBy) =>
-        ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy, initiatedByApiKey: null);
+    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, MetaverseObject? initiatedBy,
+        RemovedPartitionRunProfileAction runProfileAction = RemovedPartitionRunProfileAction.Disable) =>
+        ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy, initiatedByApiKey: null, runProfileAction);
 
     /// <summary>
-    /// As <see cref="ImportConnectedSystemHierarchyAsync(int, MetaverseObject?)"/>, attributed to an API key.
+    /// As <see cref="ImportConnectedSystemHierarchyAsync(int, MetaverseObject?, RemovedPartitionRunProfileAction)"/>,
+    /// attributed to an API key.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to refresh.</param>
     /// <param name="initiatedByApiKey">The API key that initiated this operation.</param>
+    /// <param name="runProfileAction">What to do when the refresh would remove a Partition that Run Profiles target
+    /// (#2740): disable them (the default), or apply nothing from the refresh.</param>
     /// <returns>A result object describing what changed during the hierarchy refresh.</returns>
     /// <exception cref="ArgumentException">No Connected System exists with <paramref name="connectedSystemId"/>.</exception>
     /// <exception cref="NotSupportedException">The Connected System's Connector cannot retrieve a hierarchy.</exception>
-    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, ApiKey initiatedByApiKey)
+    public Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyAsync(int connectedSystemId, ApiKey initiatedByApiKey,
+        RemovedPartitionRunProfileAction runProfileAction = RemovedPartitionRunProfileAction.Disable)
     {
         ArgumentNullException.ThrowIfNull(initiatedByApiKey);
-        return ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy: null, initiatedByApiKey);
+        return ImportConnectedSystemHierarchyCoreAsync(connectedSystemId, initiatedBy: null, initiatedByApiKey, runProfileAction);
     }
 
     /// <summary>
@@ -4543,7 +4552,8 @@ public partial class ConnectedSystemServer
     /// what was still reachable from it, so every removed Partition and Container survived while the refresh reported
     /// it removed. Taking an id leaves no way to hand over such a graph.
     /// </remarks>
-    private async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyCoreAsync(int connectedSystemId, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey)
+    private async Task<HierarchyRefreshResult> ImportConnectedSystemHierarchyCoreAsync(int connectedSystemId, MetaverseObject? initiatedBy, ApiKey? initiatedByApiKey,
+        RemovedPartitionRunProfileAction runProfileAction)
     {
         var connectedSystem = await GetConnectedSystemAsync(connectedSystemId, withChangeTracking: true)
             ?? throw new ArgumentException($"No Connected System found with id {connectedSystemId}.", nameof(connectedSystemId));
@@ -4581,14 +4591,58 @@ public partial class ConnectedSystemServer
             removedPartitions.ExceptWith(keptPartitions);
             removedContainers.ExceptWith(keptContainers);
 
+            // A Run Profile that targets a removed Partition would have its Partition cleared on save, by the tracker's
+            // cascade, and so silently go on to read every selected Partition (#2740). Found here, after the merge and
+            // before anything is saved, so the administrator's choice decides what happens to it.
+            var affectedRunProfiles = FindRunProfilesTargeting(connectedSystem, removedPartitions);
+            if (affectedRunProfiles.Count > 0 && runProfileAction == RemovedPartitionRunProfileAction.Cancel)
+            {
+                // Nothing from the refresh is saved. The merge is held only in tracked memory on this context, and the
+                // Activity's own save below would write it, so it is discarded first; the Activity write survives the
+                // cleared tracker, as the failure path relies on too.
+                Application.Repository.ClearChangeTracker();
+                result.Applied = false;
+                result.AffectedRunProfiles = affectedRunProfiles.Select(a => a.Item).ToList();
+                activity.WarningMessage = JoinWarnings(activity.WarningMessage, RunProfileEnablement.DescribeCancelledRefresh(result.AffectedRunProfiles));
+                Log.Information("Hierarchy refresh for {ConnectedSystem} applied nothing: it would remove a Partition {Count} Run Profile(s) target",
+                    connectedSystem.Name, affectedRunProfiles.Count);
+                await Application.Activities.CompleteActivityWithWarningAsync(activity);
+                return result;
+            }
+
+            foreach (var (runProfile, item) in affectedRunProfiles)
+            {
+                runProfile.Enabled = false;
+                runProfile.DisabledReason = ConnectedSystemRunProfileDisabledReason.PartitionRemoved;
+                runProfile.DisabledPartitionName = item.PartitionName;
+                runProfile.Partition = null;
+                if (initiatedByApiKey != null)
+                    AuditHelper.SetUpdated(runProfile, initiatedByApiKey);
+                else
+                    AuditHelper.SetUpdated(runProfile, initiatedBy);
+                item.Disabled = true;
+                Log.Warning("Hierarchy refresh for {ConnectedSystem} disabled Run Profile {RunProfileId}: it targeted a Partition the refresh removed",
+                    connectedSystem.Name, runProfile.Id);
+            }
+            result.AffectedRunProfiles = affectedRunProfiles.Select(a => a.Item).ToList();
+
             await PersistConnectedSystemHierarchyUpdateAsync(connectedSystem, removedPartitions, removedContainers, initiatedBy, initiatedByApiKey);
 
-            // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
-            // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+            // A hierarchy import changes the system's configuration (partitions and containers, and any Run Profile it
+            // disabled); capture it onto the ImportHierarchy activity so the change is versioned in the system's
+            // history. Reloaded, as ids are assigned on save.
             await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
-            // finish the activity
-            await Application.Activities.CompleteActivityAsync(activity);
+            // finish the activity: disabling a Run Profile stops it running, so it is something to notice
+            if (result.AffectedRunProfiles.Count > 0)
+            {
+                activity.WarningMessage = JoinWarnings(activity.WarningMessage, RunProfileEnablement.DescribeRunProfilesDisabledByRefresh(result.AffectedRunProfiles));
+                await Application.Activities.CompleteActivityWithWarningAsync(activity);
+            }
+            else
+            {
+                await Application.Activities.CompleteActivityAsync(activity);
+            }
 
             return result;
         }
@@ -4605,6 +4659,30 @@ public partial class ConnectedSystemServer
             throw;
         }
     }
+
+    /// <summary>
+    /// The Run Profiles that target one of <paramref name="removedPartitions"/>, each with the item the refresh result
+    /// reports it as, ordered by name. Compared by reference on the tracked graph the refresh merged into, where each Run
+    /// Profile's Partition is the very instance the Connected System holds.
+    /// </summary>
+    private static List<(ConnectedSystemRunProfile RunProfile, HierarchyRefreshRunProfileItem Item)> FindRunProfilesTargeting(
+        ConnectedSystem connectedSystem, IReadOnlySet<ConnectedSystemPartition> removedPartitions)
+    {
+        if (removedPartitions.Count == 0 || connectedSystem.RunProfiles is not { Count: > 0 } runProfiles)
+            return [];
+
+        return runProfiles
+            .Where(rp => rp.Partition != null && removedPartitions.Contains(rp.Partition))
+            .OrderBy(rp => rp.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(rp => (rp, new HierarchyRefreshRunProfileItem { RunProfileId = rp.Id, RunProfileName = rp.Name, PartitionName = rp.Partition!.Name }))
+            .ToList();
+    }
+
+    /// <summary>
+    /// An Activity's warning with another appended, so that neither replaces the other.
+    /// </summary>
+    private static string JoinWarnings(string? existing, string addition) =>
+        string.IsNullOrWhiteSpace(existing) ? addition : $"{existing} {addition}";
 
     /// <summary>
     /// Every Partition and Container in a Connected System's hierarchy, as it stands. Compared by reference: a
@@ -9383,7 +9461,8 @@ public partial class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, MetaverseObject? initiatedBy,
+        bool allSelectedPartitions = false)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -9396,6 +9475,8 @@ public partial class ConnectedSystemServer
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
         if (safeguardsError != null)
             throw new ArgumentException(safeguardsError);
+
+        await ApplyRunProfileEnabledStateChangeAsync(connectedSystemRunProfile, allSelectedPartitions);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -9420,7 +9501,8 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Updates a Connected System Run Profile (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey)
+    public async Task UpdateConnectedSystemRunProfileAsync(ConnectedSystemRunProfile connectedSystemRunProfile, ApiKey initiatedByApiKey,
+        bool allSelectedPartitions = false)
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
@@ -9433,6 +9515,8 @@ public partial class ConnectedSystemServer
         var safeguardsError = RunProfileSafeguardsValidator.Validate(connectedSystemRunProfile);
         if (safeguardsError != null)
             throw new ArgumentException(safeguardsError);
+
+        await ApplyRunProfileEnabledStateChangeAsync(connectedSystemRunProfile, allSelectedPartitions);
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -9451,6 +9535,21 @@ public partial class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
         await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Applies an update's enabled state against the state that is stored (#2740), throwing when the update is refused:
+    /// enabling a Run Profile that a removed partition disabled without saying what it reads. Read as a projection, so the
+    /// judgement is never made against a tracked copy the caller already edited.
+    /// </summary>
+    /// <exception cref="ArgumentException">The update would enable a Run Profile a removed partition disabled with no
+    /// Partition and without <paramref name="allSelectedPartitions"/>.</exception>
+    private async Task ApplyRunProfileEnabledStateChangeAsync(ConnectedSystemRunProfile connectedSystemRunProfile, bool allSelectedPartitions)
+    {
+        var stored = await Application.Repository.ConnectedSystems.GetConnectedSystemRunProfileEnabledStateAsync(connectedSystemRunProfile.Id);
+        var refusal = RunProfileEnablement.ApplyEnabledStateChange(stored, connectedSystemRunProfile, allSelectedPartitions);
+        if (refusal != null)
+            throw new ArgumentException(refusal);
     }
 
     public async Task<List<ConnectedSystemRunProfile>> GetConnectedSystemRunProfilesAsync(ConnectedSystem connectedSystem)

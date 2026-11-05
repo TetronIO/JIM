@@ -234,7 +234,9 @@
                                         {
                                             @foreach (var rp in _runProfiles)
                                             {
-                                                <MudSelectItem Value="@rp.Id">@rp.Name</MudSelectItem>
+                                                @* A disabled Run Profile can be chosen, so a Schedule can be set up before
+                                                   it is enabled, but says so: the step fails until it is (#2740). *@
+                                                <MudSelectItem Value="@rp.Id">@rp.Name@(rp.Enabled ? "" : " (disabled)")</MudSelectItem>
                                             }
                                         }
                                     </MudSelect>
@@ -354,6 +356,13 @@
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                         <MudText Typo="Typo.body2" Style="flex: 1;">
                                                             <span class="jim-text-emphasis">@connectedSystemName</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfileName</span>
+                                                            @if (GetStepRunProfile(step) is { Enabled: false } disabledStepRunProfile)
+                                                            {
+                                                                <MudTooltip Arrow="true" Placement="Placement.Top">
+                                                                    <TooltipContent><TooltipText Text="@($"This Run Profile is disabled, so this step fails when the Schedule runs. {disabledStepRunProfile.DescribeWhyDisabled()}")" /></TooltipContent>
+                                                                    <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Disabled</MudChip></ChildContent>
+                                                                </MudTooltip>
+                                                            }
                                                         </MudText>
                                                         @FailureBehaviourIndicator(step)
                                                     </MudStack>
@@ -412,6 +421,13 @@
                                                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                                 <MudText Typo="Typo.body2" Style="flex: 1;">
                                                                     <span class="jim-text-emphasis">@connectedSystem</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfile</span>
+                                                                    @if (GetStepRunProfile(step) is { Enabled: false } disabledParallelStepRunProfile)
+                                                                    {
+                                                                        <MudTooltip Arrow="true" Placement="Placement.Top">
+                                                                            <TooltipContent><TooltipText Text="@($"This Run Profile is disabled, so this step fails when the Schedule runs. {disabledParallelStepRunProfile.DescribeWhyDisabled()}")" /></TooltipContent>
+                                                                            <ChildContent><MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ms-2">Disabled</MudChip></ChildContent>
+                                                                        </MudTooltip>
+                                                                    }
                                                                 </MudText>
                                                                 @FailureBehaviourIndicator(step)
                                                                 @if (!_schedule.BuiltIn)
@@ -1379,6 +1395,20 @@
     /// For RunProfile steps: looks up CS and RP names from FKs (live).
     /// For other step types: uses the stored Name field.
     /// </summary>
+    /// <summary>
+    /// The Run Profile a Run Profile step runs, from the cache the step names are read from; null for any other step, or
+    /// one whose Run Profile is not loaded.
+    /// </summary>
+    private ConnectedSystemRunProfile? GetStepRunProfile(ScheduleStep step)
+    {
+        if (step.StepType != ScheduleStepType.RunProfile || step.ConnectedSystemId is not { } connectedSystemId || step.RunProfileId is not { } runProfileId)
+            return null;
+
+        return _runProfilesCache.TryGetValue(connectedSystemId, out var profiles)
+            ? profiles.FirstOrDefault(p => p.Id == runProfileId)
+            : null;
+    }
+
     private (string Primary, string Secondary) GetStepDisplayTexts(ScheduleStep step)
     {
         if (step.StepType == ScheduleStepType.RunProfile && step.ConnectedSystemId.HasValue && step.RunProfileId.HasValue)

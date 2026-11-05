@@ -21,13 +21,14 @@ public static class AwaitingSynchronisationRunProfile
     /// The Run Profile to preselect: the Connected System's Delta Synchronisation, or failing that its Full
     /// Synchronisation. Null when it has neither, and so nothing that applies the changes can be queued from here. Where
     /// there are several of one type, the earliest created is chosen, so the choice does not change as others are added.
+    /// A disabled Run Profile is never chosen, because it cannot run (#2740).
     /// </summary>
     public static ConnectedSystemRunProfile? Preferred(IEnumerable<ConnectedSystemRunProfile>? runProfiles)
     {
         if (runProfiles == null)
             return null;
 
-        var candidates = runProfiles.OrderBy(runProfile => runProfile.Id).ToList();
+        var candidates = runProfiles.Where(runProfile => runProfile.Enabled).OrderBy(runProfile => runProfile.Id).ToList();
         return candidates.FirstOrDefault(runProfile => runProfile.RunType == ConnectedSystemRunType.DeltaSynchronisation)
                ?? candidates.FirstOrDefault(runProfile => runProfile.RunType == ConnectedSystemRunType.FullSynchronisation);
     }

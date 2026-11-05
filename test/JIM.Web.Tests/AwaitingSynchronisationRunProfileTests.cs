@@ -36,6 +36,28 @@ public class AwaitingSynchronisationRunProfileTests
     }
 
     [Test]
+    public void Preferred_DisabledDeltaSynchronisation_FallsBackToAnEnabledRunProfile()
+    {
+        // A disabled Run Profile cannot run (#2740), so "Run now" must not preselect one it would refuse to queue.
+        var full = Profile(1, ConnectedSystemRunType.FullSynchronisation);
+        var disabledDelta = Profile(2, ConnectedSystemRunType.DeltaSynchronisation);
+        disabledDelta.Enabled = false;
+
+        var chosen = AwaitingSynchronisationRunProfile.Preferred([full, disabledDelta]);
+
+        Assert.That(chosen, Is.SameAs(full));
+    }
+
+    [Test]
+    public void Preferred_EverySynchronisationDisabled_ChoosesNothing()
+    {
+        var disabledFull = Profile(1, ConnectedSystemRunType.FullSynchronisation);
+        disabledFull.Enabled = false;
+
+        Assert.That(AwaitingSynchronisationRunProfile.Preferred([disabledFull]), Is.Null);
+    }
+
+    [Test]
     public void Preferred_NeitherSynchronisation_ChoosesNothing()
     {
         var chosen = AwaitingSynchronisationRunProfile.Preferred(

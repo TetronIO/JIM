@@ -99,9 +99,25 @@ public class UpdateRunProfileRequest
     public int? PageSize { get; set; }
 
     /// <summary>
-    /// Updated partition ID if the connector supports partitions.
+    /// Updated partition ID if the connector supports partitions. Cannot be combined with
+    /// <c>allSelectedPartitions</c>.
     /// </summary>
     public int? PartitionId { get; set; }
+
+    /// <summary>
+    /// When true, the Run Profile reads every partition selected on the Connected System, and the partition it targets
+    /// is cleared. Cannot be combined with <c>partitionId</c>. Omitted or false leaves the partition as it is.
+    /// </summary>
+    public bool AllSelectedPartitions { get; set; }
+
+    /// <summary>
+    /// Enables (true) or disables (false) the Run Profile. Omitted leaves it unchanged. A disabled Run Profile is
+    /// refused wherever a run can start. Enabling one that a hierarchy refresh disabled, because it removed the
+    /// partition the Run Profile targeted, needs <c>partitionId</c> or <c>allSelectedPartitions</c> as well, so that
+    /// it never starts reading more than it did without that being chosen; without either the request is refused with
+    /// a 400.
+    /// </summary>
+    public bool? Enabled { get; set; }
 
     /// <summary>
     /// The file a Full Import or Delta Import reads, for a file-based Connector. Refused on any other Run Type.

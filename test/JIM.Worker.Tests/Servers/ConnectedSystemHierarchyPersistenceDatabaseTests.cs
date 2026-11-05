@@ -776,11 +776,169 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
     }
 
     /// <summary>
+    /// A refresh that removes a Partition a Run Profile targets disables that Run Profile, records why, and clears its
+    /// Partition, rather than leaving it to read every selected Partition (#2740).
+    /// </summary>
+    /// <remarks>
+    /// The issue's reproduction. The refresh loads the Connected System change-tracked, Run Profiles included, so deleting
+    /// the Partition cleared each targeting Run Profile's Partition on the client (the foreign key is ClientSetNull) and
+    /// saved it: a Full Import scoped to one Partition became one whose deletion detection covers the whole Connected
+    /// System, and nothing recorded it. A Run Profile targeting a kept Partition, and one targeting none, are untouched.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_PartitionARunProfileTargetsIsRemoved_DisablesTheRunProfileAndClearsItsPartitionAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        var (glitterbandImportId, yellowstoneImportId, unscopedSyncId) = await SeedRunProfilesAsync(systemId);
+
+        // The directory no longer has Glitterband.
+        var connector = new StubPartitionsConnector([YellowstoneAsDiscovered(includeGroups: true)]);
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector);
+
+        await using var verify = NewContext();
+        var runProfiles = await verify.ConnectedSystemRunProfiles.ToDictionaryAsync(rp => rp.Id);
+        var partitionIds = await verify.ConnectedSystemRunProfiles
+            .Select(rp => new { rp.Id, PartitionId = EF.Property<int?>(rp, "PartitionId") })
+            .ToDictionaryAsync(rp => rp.Id, rp => rp.PartitionId);
+        var yellowstoneId = await verify.ConnectedSystemPartitions.Where(p => p.ExternalId == "dc=yellowstone,dc=local").Select(p => p.Id).SingleAsync();
+        var activity = await verify.Activities.SingleAsync(a => a.TargetOperationType == ActivityTargetOperationType.ImportHierarchy);
+        var glitterbandImport = runProfiles[glitterbandImportId];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(glitterbandImport.Enabled, Is.False, "a Run Profile whose Partition was removed must not go on to read every selected Partition");
+            Assert.That(glitterbandImport.DisabledReason, Is.EqualTo(ConnectedSystemRunProfileDisabledReason.PartitionRemoved));
+            Assert.That(glitterbandImport.DisabledPartitionName, Is.EqualTo("dc=glitterband,dc=local"), "it records what it used to read");
+            Assert.That(partitionIds[glitterbandImportId], Is.Null, "the Partition is gone, so the Run Profile no longer targets it");
+            Assert.That(runProfiles[yellowstoneImportId].Enabled, Is.True, "a Run Profile targeting a kept Partition is untouched");
+            Assert.That(partitionIds[yellowstoneImportId], Is.EqualTo(yellowstoneId));
+            Assert.That(runProfiles[unscopedSyncId].Enabled, Is.True, "so is one targeting no Partition");
+
+            Assert.That(result.Applied, Is.True);
+            Assert.That(result.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.RunProfileName, rp.PartitionName, rp.Disabled)),
+                Is.EqualTo(new[] { (glitterbandImportId, "Full Import (Glitterband)", "dc=glitterband,dc=local", true) }));
+
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning), "disabling a Run Profile is something to notice");
+            Assert.That(activity.WarningMessage, Does.Contain("Full Import (Glitterband)").And.Contain("dc=glitterband,dc=local"),
+                "the Activity names each Run Profile it disabled, and the Partition");
+        }
+    }
+
+    /// <summary>
+    /// A refresh asked to cancel when it would remove a Partition a Run Profile targets saves nothing at all, and says so
+    /// on its Activity (#2740).
+    /// </summary>
+    /// <remarks>
+    /// The merge is held in tracked memory on the same context that records the Activity, so completing the Activity
+    /// would save the merge with it unless the refresh discards it first. The portal relies on this: it refreshes with
+    /// Cancel first, and asks the administrator before refreshing again with Disable.
+    /// </remarks>
+    [Test]
+    public async Task RefreshHierarchy_Cancel_PartitionARunProfileTargetsIsRemoved_AppliesNothingAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        var (glitterbandImportId, _, _) = await SeedRunProfilesAsync(systemId);
+        var glitterbandId = await PartitionIdAsync("dc=glitterband,dc=local");
+
+        // The directory no longer has Glitterband, and Yellowstone has lost Groups and gained Contractors.
+        var yellowstone = YellowstoneAsDiscovered(includeGroups: false);
+        yellowstone.Containers.Add(new ConnectorContainer("ou=Contractors,dc=yellowstone,dc=local", "Contractors"));
+        var connector = new StubPartitionsConnector([yellowstone]);
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector, RemovedPartitionRunProfileAction.Cancel);
+
+        await using var verify = NewContext();
+        var glitterbandImport = await verify.ConnectedSystemRunProfiles.SingleAsync(rp => rp.Id == glitterbandImportId);
+        var glitterbandImportPartitionId = await verify.ConnectedSystemRunProfiles.Where(rp => rp.Id == glitterbandImportId)
+            .Select(rp => EF.Property<int?>(rp, "PartitionId")).SingleAsync();
+        var activity = await verify.Activities.SingleAsync(a => a.TargetOperationType == ActivityTargetOperationType.ImportHierarchy);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(),
+                Is.EquivalentTo(new[] { "dc=yellowstone,dc=local", "dc=glitterband,dc=local" }), "no Partition is removed");
+            Assert.That(await verify.ConnectedSystemContainers.Select(c => c.Name).ToListAsync(),
+                Is.EquivalentTo(new[] { "People", "Groups", "Admins", "Staff" }), "nor any Container removed or added");
+            Assert.That(glitterbandImport.Enabled, Is.True, "the Run Profile is left as it was");
+            Assert.That(glitterbandImportPartitionId, Is.EqualTo(glitterbandId), "still targeting its Partition");
+
+            Assert.That(result.Applied, Is.False);
+            Assert.That(result.AffectedRunProfiles.Select(rp => (rp.RunProfileId, rp.PartitionName, rp.Disabled)),
+                Is.EqualTo(new[] { (glitterbandImportId, "dc=glitterband,dc=local", false) }));
+
+            Assert.That(activity.Status, Is.EqualTo(ActivityStatus.CompleteWithWarning),
+                "the refresh finished; it was the administrator's choice to apply nothing");
+            Assert.That(activity.WarningMessage, Does.Contain("Nothing from this refresh was saved")
+                .And.Contain("Full Import (Glitterband)").And.Contain("dc=glitterband,dc=local"));
+        }
+    }
+
+    /// <summary>
+    /// Cancel only cancels a refresh that would affect a Run Profile; one that would not applies as it always has.
+    /// </summary>
+    [Test]
+    public async Task RefreshHierarchy_Cancel_NoRunProfileTargetsARemovedPartition_AppliesTheRefreshAsync()
+    {
+        var (systemId, initiatorId) = await SeedTwoPartitionDirectoryAsync();
+        await using (var seed = NewContext())
+        {
+            seed.ConnectedSystemRunProfiles.Add(new ConnectedSystemRunProfile
+            {
+                Name = "Full Synchronisation", ConnectedSystemId = systemId, RunType = ConnectedSystemRunType.FullSynchronisation
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var connector = new StubPartitionsConnector([YellowstoneAsDiscovered(includeGroups: true)]);
+        var result = await RefreshAsThePortalDoesAsync(systemId, initiatorId, connector, RemovedPartitionRunProfileAction.Cancel);
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.Applied, Is.True);
+            Assert.That(result.AffectedRunProfiles, Is.Empty);
+            Assert.That(await verify.ConnectedSystemPartitions.Select(p => p.ExternalId).ToListAsync(), Is.EqualTo(new[] { "dc=yellowstone,dc=local" }));
+            Assert.That(await verify.ConnectedSystemRunProfiles.Select(rp => rp.Enabled).SingleAsync(), Is.True);
+        }
+    }
+
+    /// <summary>
+    /// Seeds three Run Profiles on the two-Partition directory: a Full Import scoped to Glitterband, one scoped to
+    /// Yellowstone, and a Full Synchronisation scoped to neither.
+    /// </summary>
+    private async Task<(int GlitterbandImportId, int YellowstoneImportId, int UnscopedSyncId)> SeedRunProfilesAsync(int systemId)
+    {
+        await using var seed = NewContext();
+        var partitions = await seed.ConnectedSystemPartitions.AsTracking().ToDictionaryAsync(p => p.ExternalId);
+        var glitterbandImport = new ConnectedSystemRunProfile
+        {
+            Name = "Full Import (Glitterband)", ConnectedSystemId = systemId, RunType = ConnectedSystemRunType.FullImport,
+            Partition = partitions["dc=glitterband,dc=local"]
+        };
+        var yellowstoneImport = new ConnectedSystemRunProfile
+        {
+            Name = "Full Import (Yellowstone)", ConnectedSystemId = systemId, RunType = ConnectedSystemRunType.FullImport,
+            Partition = partitions["dc=yellowstone,dc=local"]
+        };
+        var unscopedSync = new ConnectedSystemRunProfile
+        {
+            Name = "Full Synchronisation", ConnectedSystemId = systemId, RunType = ConnectedSystemRunType.FullSynchronisation
+        };
+        seed.ConnectedSystemRunProfiles.AddRange(glitterbandImport, yellowstoneImport, unscopedSync);
+        await seed.SaveChangesAsync();
+        return (glitterbandImport.Id, yellowstoneImport.Id, unscopedSync.Id);
+    }
+
+    private async Task<int> PartitionIdAsync(string externalId)
+    {
+        await using var ctx = NewContext();
+        return await ctx.ConnectedSystemPartitions.Where(p => p.ExternalId == externalId).Select(p => p.Id).SingleAsync();
+    }
+
+    /// <summary>
     /// Runs a refresh the way the portal's Scope tab does: the Connected System page loads its Connected System on one
     /// context and lets it go, and the tab refreshes on another, naming the page's Connected System by its id. Both
     /// contexts are configured as JIM.Web runs them.
     /// </summary>
-    private async Task<HierarchyRefreshResult> RefreshAsThePortalDoesAsync(int systemId, Guid initiatorId, StubPartitionsConnector connector)
+    private async Task<HierarchyRefreshResult> RefreshAsThePortalDoesAsync(int systemId, Guid initiatorId, StubPartitionsConnector connector,
+        RemovedPartitionRunProfileAction runProfileAction = RemovedPartitionRunProfileAction.Disable)
     {
         ConnectedSystem pageConnectedSystem;
         await using (var pageContext = NewContext())
@@ -792,7 +950,7 @@ public class ConnectedSystemHierarchyPersistenceDatabaseTests
         await using var tabContext = NewContext();
         var tab = new JimApplication(new PostgresDataRepository(tabContext), connectorFactory: new StubConnectorFactory(connector));
         var initiator = await tabContext.MetaverseObjects.SingleAsync(o => o.Id == initiatorId);
-        return await tab.ConnectedSystems.ImportConnectedSystemHierarchyAsync(pageConnectedSystem.Id, initiator);
+        return await tab.ConnectedSystems.ImportConnectedSystemHierarchyAsync(pageConnectedSystem.Id, initiator, runProfileAction);
     }
 
     /// <summary>
