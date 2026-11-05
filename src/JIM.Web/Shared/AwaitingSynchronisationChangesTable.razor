@@ -5,45 +5,104 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The saved configuration changes behind a Connected System Object Type that a synchronisation processes in full
-   (#2615): what was saved, linked to the configuration change Activity that holds the detail, when, and by whom. Shared
-   by the Connected System page's notices and the Activity page's sections, which list the same changes. A short table
-   by design: it always sits inside another panel, so it carries no density toggle of its own. *@
+   (#2615), one row per thing changed: the Synchronisation Rule (or the Object Type's Object Matching Rule), what was
+   done to it, when it was last changed, and by whom. Saving a rule repeatedly records a change per save, so a row per
+   change buried the few rules that changed under repeated lines; each row expands to list its changes, linked to the
+   configuration change Activities that hold the detail. Shared by the Connected System page's notices and the Activity
+   page's sections, which list the same changes. A short table by design: it always sits inside another panel, so it
+   carries no density toggle of its own. *@
 <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="@Class" data-testid="jim-awaiting-synchronisation-changes">
     <thead>
         <tr>
-            <th>Reason</th>
-            <th>Saved</th>
+            <th style="width: 40px;"></th>
+            <th>Changed</th>
+            <th>What was done</th>
+            <th>Last made</th>
             <th>By</th>
         </tr>
     </thead>
     <tbody>
-        @foreach (var change in Changes)
+        @foreach (var group in _groups)
         {
-            <tr @key="change.Id">
-                <td>
-                    @if (change.ConfigurationChangeActivityId is { } changeActivityId)
+            var key = GroupKey(group);
+            var expanded = _expanded.Contains(key);
+            <tr @key="key" data-testid="jim-change-group-row">
+                <td class="pr-0">
+                    @if (group.Changes.Count > 1)
                     {
-                        <MudLink Href="@($"/activity/{changeActivityId}")">@change.Reason</MudLink>
+                        <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                       OnClick="@(() => Toggle(key))"
+                                       aria-label="@(expanded ? "Hide the changes" : $"Show the {group.Changes.Count:N0} changes")"
+                                       aria-expanded="@(expanded ? "true" : "false")"
+                                       data-testid="jim-change-group-expand" />
+                    }
+                </td>
+                <td>
+                    @if (group.SyncRuleId is { } syncRuleId)
+                    {
+                        <ObjectChip Kind="ObjectChipKind.SynchronisationRule" Name="@group.Subject" Href="@($"/admin/sync-rules/{syncRuleId}")" Class="ma-0" />
                     }
                     else
                     {
-                        @change.Reason
+                        @group.Subject
                     }
                 </td>
-                <td>@change.RequestedAt.ToLocalTime().ToFriendlyDate()</td>
                 <td>
-                    <InitiatorChip InitiatedByType="@(change.InitiatedByType ?? ActivityInitiatorType.NotSet)"
-                                   InitiatedById="@change.InitiatedById"
-                                   InitiatedByName="@change.InitiatedByName" />
+                    @if (group.Changes is [{ ConfigurationChangeActivityId: { } onlyActivityId }])
+                    {
+                        <MudLink Href="@($"/activity/{onlyActivityId}")">@ChangeText(group.Changes[0])</MudLink>
+                    }
+                    else
+                    {
+                        @group.Summary
+                    }
+                </td>
+                <td style="white-space: nowrap;">@group.LastMadeAt.ToLocalTime().ToFriendlyDate()</td>
+                <td>
+                    <div class="d-flex flex-wrap gap-1">
+                        @foreach (var initiator in group.Initiators)
+                        {
+                            <InitiatorChip InitiatedByType="@(initiator.InitiatedByType ?? ActivityInitiatorType.NotSet)"
+                                           InitiatedById="@initiator.InitiatedById"
+                                           InitiatedByName="@initiator.InitiatedByName" />
+                        }
+                    </div>
                 </td>
             </tr>
+
+            @if (expanded)
+            {
+                @foreach (var change in group.Changes)
+                {
+                    <tr @key="change.Id" data-testid="jim-change-group-change">
+                        <td></td>
+                        <td></td>
+                        <td>
+                            @if (change.ConfigurationChangeActivityId is { } changeActivityId)
+                            {
+                                <MudLink Href="@($"/activity/{changeActivityId}")">@ChangeText(change)</MudLink>
+                            }
+                            else
+                            {
+                                @ChangeText(change)
+                            }
+                        </td>
+                        <td class="mud-text-secondary" style="white-space: nowrap;">@change.RequestedAt.ToLocalTime().ToFriendlyDate()</td>
+                        <td>
+                            <InitiatorChip InitiatedByType="@(change.InitiatedByType ?? ActivityInitiatorType.NotSet)"
+                                           InitiatedById="@change.InitiatedById"
+                                           InitiatedByName="@change.InitiatedByName" />
+                        </td>
+                    </tr>
+                }
+            }
         }
     </tbody>
 </MudSimpleTable>
 
 @code {
     /// <summary>
-    /// The changes to list, in the order to show them.
+    /// The changes to list. Collapsed into one row per thing changed, in the order each first appears.
     /// </summary>
     [Parameter, EditorRequired]
     public IReadOnlyList<ConfigurationChangeSynchronisationSummary> Changes { get; set; } = [];
@@ -53,4 +112,26 @@
     /// </summary>
     [Parameter]
     public string? Class { get; set; }
+
+    private IReadOnlyList<ConfigurationChangeGroup> _groups = [];
+    private readonly HashSet<string> _expanded = [];
+
+    protected override void OnParametersSet() => _groups = ConfigurationChangeGroup.Group(Changes);
+
+    // Stable across re-renders (a polled page re-supplies the list), so an expanded row stays expanded.
+    private static string GroupKey(ConfigurationChangeGroup group) =>
+        group.SyncRuleId is { } syncRuleId ? $"rule:{syncRuleId}" : $"subject:{group.Subject}";
+
+    private void Toggle(string key)
+    {
+        if (!_expanded.Remove(key))
+            _expanded.Add(key);
+    }
+
+    // A change's own action, capitalised to stand alone; the whole reason where it names none.
+    private static string ChangeText(ConfigurationChangeSynchronisationSummary change)
+    {
+        var action = ConfigurationChangeGroup.ActionOf(change);
+        return action.Length == 0 ? change.Reason : char.ToUpperInvariant(action[0]) + action[1..];
+    }
 }

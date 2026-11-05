@@ -22,6 +22,9 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
     private const string Section = "[data-testid='jim-processed-in-full-section']";
     private const string Applied = "[data-testid='jim-processed-in-full-applied']";
     private const string NotApplied = "[data-testid='jim-processed-in-full-not-applied']";
+    private const string GroupRow = "[data-testid='jim-change-group-row']";
+    private const string GroupExpand = "[data-testid='jim-change-group-expand']";
+    private const string GroupChange = "[data-testid='jim-change-group-change']";
     private const string Line = "[data-testid='jim-change-application-line']";
     private const string LineApplied = "[data-testid='jim-change-application-applied']";
     private const string LineAwaiting = "[data-testid='jim-change-application-awaiting']";
@@ -108,11 +111,56 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
     }
 
     [Test]
-    public void ProcessedInFull_ListsTheChangesBehindEachType()
+    public void ProcessedInFull_SeveralChangesToOneRule_CollapsedIntoOneRow()
     {
         var cut = RenderRun(ActivityStatus.Complete, Group("user", applied: true, changes: 3));
 
-        Assert.That(cut.FindAll($"{Section} tbody tr"), Has.Count.EqualTo(3));
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(cut.FindAll($"{Section} {GroupRow}"), Has.Count.EqualTo(1));
+            Assert.That(cut.FindAll($"{Section} {GroupChange}"), Is.Empty, "the individual changes stay folded until asked for");
+        }
+    }
+
+    [Test]
+    public void ProcessedInFull_ExpandingARow_ListsEachChangeLinkedToItsActivity()
+    {
+        var cut = RenderRun(ActivityStatus.Complete, Group("user", applied: true, changes: 3));
+
+        cut.Find($"{Section} {GroupExpand}").Click();
+
+        var changes = cut.FindAll($"{Section} {GroupChange}");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(changes, Has.Count.EqualTo(3));
+            Assert.That(changes.Select(change => change.QuerySelector("a")?.GetAttribute("href")), Has.All.StartWith("/activity/"));
+        }
+    }
+
+    [Test]
+    public void ProcessedInFull_OneChangeToARule_NothingToExpand()
+    {
+        var cut = RenderRun(ActivityStatus.Complete, Group("user", applied: true, changes: 1));
+
+        Assert.That(cut.FindAll($"{Section} {GroupExpand}"), Is.Empty);
+    }
+
+    [Test]
+    public void ProcessedInFull_RunStillGoing_DescribesTheChangesInThePresentTense()
+    {
+        var cut = RenderRun(ActivityStatus.InProgress, ConnectedSystemRunType.FullSynchronisation, Group("user", applied: false));
+
+        Assert.That(cut.Find(Section).TextContent, Does.Contain("also covers"));
+    }
+
+    [TestCase(ActivityStatus.Complete)]
+    [TestCase(ActivityStatus.FailedWithError)]
+    [TestCase(ActivityStatus.Cancelled)]
+    public void ProcessedInFull_RunFinished_DescribesTheChangesInThePastTense(ActivityStatus status)
+    {
+        var cut = RenderRun(status, ConnectedSystemRunType.FullSynchronisation, Group("user", applied: status == ActivityStatus.Complete));
+
+        Assert.That(cut.Find(Section).TextContent, Does.Contain("also covered"));
     }
 
     // ─── A configuration change Activity ───
@@ -227,10 +275,14 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
     }
 
     private IRenderedComponent<ActivityProcessedInFullSections> RenderRun(ActivityStatus status, params ActivityObjectTypeSynchronisation[] groups) =>
+        RenderRun(status, ConnectedSystemRunType.DeltaSynchronisation, groups);
+
+    private IRenderedComponent<ActivityProcessedInFullSections> RenderRun(
+        ActivityStatus status, ConnectedSystemRunType runType, params ActivityObjectTypeSynchronisation[] groups) =>
         Render<ActivityProcessedInFullSections>(p => p
             .Add(c => c.Groups, groups)
             .Add(c => c.RunStatus, status)
-            .Add(c => c.RunType, ConnectedSystemRunType.DeltaSynchronisation));
+            .Add(c => c.RunType, runType));
 
     private IRenderedComponent<ActivityConfigurationChangeApplication> RenderChange(params ActivityObjectTypeSynchronisation[] groups) =>
         Render<ActivityConfigurationChangeApplication>(p => p.Add(c => c.Groups, groups));
@@ -251,8 +303,10 @@ public class ActivityConfigurationChangeSynchronisationDisplayTests : JimCompone
             ConnectedSystemId = 3,
             ConnectedSystemName = "HR Import",
             ObjectTypeName = objectTypeName,
-            Reason = $"Change {i}",
-            RequestedAt = DateTime.UtcNow.AddHours(-1),
+            Reason = $"Import {objectTypeName}: Attribute Flow changed (Sync-affecting)",
+            SyncRuleId = 1,
+            ConfigurationChangeActivityId = Guid.NewGuid(),
+            RequestedAt = DateTime.UtcNow.AddHours(-1).AddMinutes(i),
             ClaimedByActivityId = applied ? appliedBy : null,
             AppliedAt = applied ? DateTime.UtcNow.AddMinutes(-5) : null,
             InitiatedByType = ActivityInitiatorType.System,
