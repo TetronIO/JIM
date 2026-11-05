@@ -274,7 +274,13 @@ Describe 'Register-JIMIdentityProvider -Provider Keycloak against Keycloak' -Ski
         $management = Get-Client 'realm-management'
         $realmAdmin = Invoke-Admin -Path "/$($script:Realm)/clients/$($management.id)/roles/realm-admin"
         Invoke-Admin -Method Post -Path "/$($script:Realm)/users/$($serviceUser.id)/role-mappings/clients/$($management.id)" -Body @($realmAdmin)
-        $secret = (Invoke-Admin -Path "/$($script:Realm)/clients/$($registrar.id)/client-secret").value
+        # As the Keycloak guide tells a customer to: from 26.8.2, the admin API accepts a token only with the audience
+        # the kc-admin-api client scope adds. Earlier versions have no such scope and need nothing.
+        $adminApiScope = @(Invoke-Admin -Path "/$($script:Realm)/client-scopes") | Where-Object name -ceq 'kc-admin-api'
+        if ($adminApiScope) {
+            Invoke-Admin -Method Put -Path "/$($script:Realm)/clients/$($registrar.id)/default-client-scopes/$($adminApiScope.id)"
+        }
+        $secret =(Invoke-Admin -Path "/$($script:Realm)/clients/$($registrar.id)/client-secret").value
         $serviceCredential = [pscredential]::new('jim-registrar', (ConvertTo-SecureString $secret -AsPlainText -Force))
 
         $result = Register-JIMIdentityProvider -Provider Keycloak -Url $script:JimUrl -Authority $script:Authority `

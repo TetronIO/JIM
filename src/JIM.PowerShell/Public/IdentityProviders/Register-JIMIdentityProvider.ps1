@@ -60,7 +60,8 @@ function Register-JIMIdentityProvider {
 
     .PARAMETER ClientCredential
         The client ID and secret of a Keycloak client whose service account administers JIM's realm, for running this
-        unattended. The client is in the realm -AdminRealm names.
+        unattended. The client is in the realm -AdminRealm names. On Keycloak 26.8.2 or later, the client also needs the
+        kc-admin-api client scope as a default scope.
 
     .PARAMETER AdminRealm
         The Keycloak realm -Credential or -ClientCredential signs in to.

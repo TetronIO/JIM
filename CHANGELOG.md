@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 A hierarchy refresh that removes a partition a Run Profile targets no longer silently widens that Run Profile to every selected partition: you choose to disable those Run Profiles, or cancel the refresh. (#2740)
 - 🐛 A hierarchy refresh keeps a Container moved to another partition, even a new one, or beneath a new Container, with its selection and scope, and reports the move, naming both partitions; it no longer vanishes or returns unselected. (#2763, #2769)
 - 🐛 A deleted Connected System Object's history no longer includes the deletion of another object that once held the same external ID. (#2669)
+- 🐛 `Register-JIMIdentityProvider` run as a Keycloak service account now says what Keycloak 26.8.2 and later need, the `kc-admin-api` client scope on that client, instead of failing with a bare 401; the Keycloak guide covers the step. (#2785)
 
 ### Security
 

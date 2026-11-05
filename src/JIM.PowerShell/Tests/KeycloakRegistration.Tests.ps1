@@ -599,4 +599,40 @@ Describe 'Invoke-JIMKeycloakAdminApi' {
             Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter { $Headers.Authorization -eq 'Bearer fresh' }
         }
     }
+
+    It 'Names the kc-admin-api client scope when Keycloak does not accept a service account''s token' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod {
+                throw [Microsoft.PowerShell.Commands.HttpResponseException]::new(
+                    'Response status code does not indicate success: 401 (Unauthorized).',
+                    [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Unauthorized))
+            }
+            $connection = @{
+                ServerUrl = 'https://sso.example.com'; Realm = 'jim'; AdminRealm = 'jim'
+                ClientCredential = [pscredential]::new('jim-registrar', (ConvertTo-SecureString 'secret' -AsPlainText -Force))
+                Token = [PSCustomObject]@{ AccessToken = 'token'; ExpiresAt = [datetime]::UtcNow.AddMinutes(5) }
+            }
+
+            { Invoke-JIMKeycloakAdminApi -Connection $connection -Path '/clients' } |
+                Should -Throw -ExpectedMessage "*kc-admin-api*'jim-registrar'*"
+        }
+    }
+
+    It 'Names admin-cli when Keycloak does not accept an administrator''s token' {
+        InModuleScope JIM {
+            Mock Invoke-RestMethod {
+                throw [Microsoft.PowerShell.Commands.HttpResponseException]::new(
+                    'Response status code does not indicate success: 401 (Unauthorized).',
+                    [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Unauthorized))
+            }
+            $connection = @{
+                ServerUrl = 'https://sso.example.com'; Realm = 'jim'; AdminRealm = 'master'
+                Credential = [pscredential]::new('admin', (ConvertTo-SecureString 'secret' -AsPlainText -Force))
+                Token = [PSCustomObject]@{ AccessToken = 'token'; ExpiresAt = [datetime]::UtcNow.AddMinutes(5) }
+            }
+
+            { Invoke-JIMKeycloakAdminApi -Connection $connection -Path '/clients' } |
+                Should -Throw -ExpectedMessage "*kc-admin-api*'admin-cli'*'master'*"
+        }
+    }
 }
