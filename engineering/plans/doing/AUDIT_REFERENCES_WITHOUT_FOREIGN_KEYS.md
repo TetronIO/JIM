@@ -1,6 +1,6 @@
 # Deleting an Object Leaves Its Audit History Untouched
 
-- **Status:** Doing (Phase 1 complete; Phase 0's scale baseline is outstanding)
+- **Status:** Doing (Phases 0 and 1 complete; the scale baseline puts Phase 2's saving at about 8 s, not 34 to 40 s)
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Related:**
   - [#2670](https://github.com/TetronIO/JIM/issues/2670), the `DeletedObjectExternalIdAttributeValueId` check, removed separately.
@@ -308,7 +308,7 @@ The audit share is 2,573 ms, or 79%.
 
 ## Implementation Phases
 
-### Phase 0: Baseline and spans
+### Phase 0: Baseline and spans ✅
 
 - **Spans.** Add per-statement `ActivitySource` spans to both Metaverse Object deleters (`Mvo.Delete.*`), mirroring `Cso.Delete.*`, so before and after are measured the same way.
 - **Fixture.** Extend `LeaverCohortCostDatabaseTests` to report, beside each deletion path's time, how many audit rows it updated and deleted, and add the two Metaverse Object paths.
@@ -343,6 +343,24 @@ The audit share is 2,573 ms, or 79%.
   - **Connected System Object `DELETE`:** the `Cso.Delete.Delete` span rises from 165 to 226 ms without history to 318 to 438 ms with it, an audit share of about 47% (68% at scale). The #2670 check is in both columns.
   - **Metaverse Object bulk statements, with history:** 278 ms, of which the three audit UPDATEs are 165 ms, or 59% (79% at scale). The `DELETE` also rises from 59 to 88 ms, from the audit tables' `NO ACTION` checks. Counting that, the share is 70%.
 - **The singular deleter is dominated by per-call cost, not audit rows.** It spends 13.5 ms an object without history: the save, 4.8 ms, and the tracked join fix-up's change detection, 2.5 ms. It also writes each join twice, by the raw UPDATE and again by the save of the tracked Connected System Object.
+
+**Measured (scale baseline).** Scenario 8, Scale500k25kGroups, OpenLDAP, `main` at 352e9753a, the runner's Scale500k database profile, 5 November 2026 (full results on [#2669](https://github.com/TetronIO/JIM/issues/2669)). The leaver cohort of 5,000:
+
+| Measure | Value |
+|---|---|
+| Source Delta Synchronisation (Metaverse Object deletion) | 31.6 s |
+| Target Delta Synchronisation (Connected System Object deletion) | 31.0 s |
+| `Mvo.Delete`, 10 calls of 500 | 5,470 ms: change values UPDATE 3,759, re-key 1,059, `DELETE` 408, the rest 242 |
+| `Cso.Delete`, 10 calls of 500 | 5,280 ms, of which `DELETE` (with its foreign-key actions) 5,103 |
+| WAL over the step | 3,925 MB (Metaverse Object deletion sync 2,013 MB) |
+| Change-value `ReferenceValueId` indexes | 284 MB (Connected System Object), 97 MB (Metaverse Object) |
+| `FixupCrossBatchChangeRecordReferenceIdsAsync` | 72,562 rows in 2,425 ms, on the Target Export |
+| Deleted Objects counts | 13.4 ms (Connected System Object), 1.5 ms (Metaverse Object) |
+| Scenario 7 clear at Large | 1.33 s deleting history, 0.73 s keeping it |
+
+- **The audit rewrites are now about 8 s of the step, not 34 to 40 s.** The Metaverse Object audit statements are 4.8 s. At the 68% share the 1 November `EXPLAIN` measured, the Connected System Object `DELETE`'s foreign-key actions are about 3.5 s. The other leaver-step fixes merged since 1 November took most of the 56.6 s the Success Criteria were written against, so those criteria are restated against this baseline before Phase 2.
+- **The larger costs are elsewhere.** `FlushPendingMvoDeletions` is 25.5 s of the 31.6 s Source synchronisation: `MvoDeletionDeleteBulk` is 13.8 s, of which about 8.3 s lies outside the `Mvo.Delete` spans, and `MvoDeletionStageRecallExports` is 9.7 s. The Target Delta Import spends 26.2 s of its 47.8 s in `ReconcilePendingExports`.
+- **The Connected System Object count's index range is mostly other rows.** Of the 30,008 change records with a null object id, 25,006 are earlier changes whose reference the deletions nulled. Phase 2 removes that dilution.
 
 ### Phase 1: Readers onto ids, behaviour-neutral ✅
 
