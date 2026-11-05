@@ -163,6 +163,16 @@ session and convergence (done), the delivery hold (done), then quiet session clo
 - **Detected facts:** the Exchange version, and the derived principal, realm and KDC.
 - **Docs and coverage:** moved to Phase 8. COV-6 forbids a settings row for a setting behind an In Development flag, and a page about a feature customers cannot turn on would mislead them; they are written when the flag comes off.
 - **Quiet session close** (from Phase 1): find what sends the Pings ex1's front end logged as HTTP 500 when the spike's sessions closed (the library sends none of its own), and close without them, proven by ex1's logs in this phase's lab run.
+- **The lab write suite** (`LdapExchangeRecipientDeliveryLabTests`, category `RequiresExchangeLabWrites`, gated on `JIM_LAB_ALLOW_WRITES=true`): the harness suite's twin against ex1, through the Connector's own sign-in, reads and commands.
+    - **Fixtures:** created through Exchange and then disabled, leaving plain directory objects, as the spike's provisioning suite did. That needs only svc-jim's Recipient Management role. svc-jim's directory delegation covers users and groups but not contacts, which a real deployment exporting mail contacts would need ([#2774](https://github.com/TetronIO/JIM/issues/2774)).
+    - **Cases:**
+        - each recipient type is enabled, and a re-run changes nothing;
+        - an alias and primary address are set in a second session, and the Email Address Policy does not put its own address back;
+        - a type change is refused;
+        - a missing object is ObjectNotFound;
+        - a missing database is refused, and the same object is then delivered.
+    - **Quiet close:** each session's open and close times are written out, so ex1's IIS log can be matched to each close.
+    - **The lab run** (approval through the lab agent) runs the read-only `RequiresExchangeLab` suite, which includes the 1 MB case, then this suite, then reads ex1's IIS log for `/PowerShell` over the run.
 - **Tests:**
   - the validation severity, refusal and warning paths, with the session mocked behind D4's interface;
   - principal and realm derivation for all three username forms;
