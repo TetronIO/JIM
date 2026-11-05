@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using NUnit.Framework;
@@ -131,13 +132,15 @@ public partial class SyncPreviewFidelityTests
     /// <summary>
     /// HR projects John Smith and provisions his Active Directory account, which has since been exported and confirmed.
     /// John has then been deleted in HR, and HR's import has marked his object obsolete. Active Directory imports too
-    /// when <paramref name="adImports"/>, joining on employee ID, so it remains an import source after HR leaves.
+    /// when <paramref name="adImports"/>, joining on employee ID, so it remains an import source after HR leaves. With
+    /// <paramref name="scopeExportToPeopleInHr"/>, the export rule takes only people with an HR account (#2021).
     /// </summary>
     private async Task<ObsoleteContext> SetUpObsoleteSourceObjectAsync(MetaverseObjectDeletionRule deletionRule, bool adImports,
-        TimeSpan? gracePeriod = null)
+        TimeSpan? gracePeriod = null, bool scopeExportToPeopleInHr = false, bool recallOnObsoletion = true)
     {
         var source = await CreateConnectedSystemAsync("HR Source");
         var sourceType = await CreateCsoTypeAsync(source.Id, "User");
+        sourceType.RemoveContributedAttributesOnObsoletion = recallOnObsoletion;
         var target = await CreateConnectedSystemAsync("AD Target");
         var targetType = await CreateCsoTypeAsync(target.Id, "user");
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync("Person", deletionRule, gracePeriod ?? TimeSpan.Zero,
@@ -171,6 +174,14 @@ public partial class SyncPreviewFidelityTests
         var targetEmployeeId = targetType.Attributes.First(a => a.Name == "EmployeeId");
         FlowToAttribute(adExport, targetDisplayName, mvDisplayName);
         FlowToAttribute(adExport, targetEmployeeId, mvEmployeeId);
+        if (scopeExportToPeopleInHr)
+        {
+            adExport.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+            {
+                Type = SearchGroupType.All,
+                Criteria = [new SyncRuleScopingCriteria { ConnectedObjectType = sourceType, ConnectedObjectTypeId = sourceType.Id, ComparisonType = SearchComparisonType.HasValue }]
+            });
+        }
         await DbContext.SaveChangesAsync();
 
         var sourceObject = await CreateCsoAsync(source.Id, sourceType, "John Smith", "EMP001");

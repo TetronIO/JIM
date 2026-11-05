@@ -350,9 +350,6 @@ public class SyncServer : ISyncServer
     public bool IsCsoInScopeForImportRule(ConnectedSystemObject cso, SyncRule importRule)
         => _scoping.IsCsoInScopeForImportRule(cso, importRule);
 
-    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule)
-        => _scoping.IsMvoInScopeForExportRule(mvo, exportRule);
-
     #endregion
 
     #region Drift Detection

@@ -109,10 +109,12 @@ public partial class MetaverseServer
             ? (await Application.Repository.ConnectedSystems.GetObjectMatchingRulesAsync(joiningRuleIds)).ToDictionary(r => r.Id)
             : new Dictionary<int, ObjectMatchingRule>();
 
+        // Connection criteria (#2021) read the joined objects already loaded above, so they cost no further read.
+        var connections = MetaverseObjectConnections.FromJoined(metaverseObjectId, joinedObjects);
         var scoping = Application.ScopingEvaluation;
         var exportExplanations = exportRulesToEvaluate
             .DistinctBy(r => r.Id)
-            .ToDictionary(r => r.Id, r => scoping.ExplainMvoForExportRule(metaverseObject, r, evaluatedAt));
+            .ToDictionary(r => r.Id, r => scoping.ExplainMvoForExportRule(metaverseObject, r, evaluatedAt, connections));
 
         var result = new MetaverseObjectConnectionExplanations
         {

@@ -44,6 +44,25 @@ public sealed class MetaverseObjectConnections
         return _joined.Contains((metaverseObjectId, connectedSystemObjectTypeId));
     }
 
+    /// <summary>The Object Types the Metaverse Object is joined to, among those read; empty when its connections were not read.</summary>
+    public IReadOnlySet<int> JoinedObjectTypeIds(Guid metaverseObjectId) =>
+        _joined.Where(join => join.MetaverseObjectId == metaverseObjectId).Select(join => join.ConnectedSystemObjectTypeId).ToHashSet();
+
+    /// <summary>
+    /// A copy in which the Metaverse Object's connections are exactly <paramref name="joinedObjectTypeIds"/>, read as
+    /// for the other objects; the others are unchanged. For a preview that has made or broken a join in memory, which
+    /// the read cannot see.
+    /// </summary>
+    public MetaverseObjectConnections WithObject(Guid metaverseObjectId, IEnumerable<int> joinedObjectTypeIds)
+    {
+        ArgumentNullException.ThrowIfNull(joinedObjectTypeIds);
+        return new MetaverseObjectConnections(
+            _read.Append(metaverseObjectId),
+            _joined.Where(join => join.MetaverseObjectId != metaverseObjectId)
+                .Concat(joinedObjectTypeIds.Select(typeId => (metaverseObjectId, typeId))),
+            _readObjectTypeIds);
+    }
+
     /// <summary>
     /// The connections of one Metaverse Object loaded with every Connected System Object joined to it. Only the caller
     /// knows that the collection is complete (synchronisation loads only the current page's objects), so this is for
@@ -54,9 +73,19 @@ public sealed class MetaverseObjectConnections
     public static MetaverseObjectConnections From(MetaverseObject metaverseObject)
     {
         ArgumentNullException.ThrowIfNull(metaverseObject);
-        var id = metaverseObject.Id;
-        return new MetaverseObjectConnections([id], metaverseObject.ConnectedSystemObjects
-            .Where(cso => cso.MetaverseObjectId == id && cso.Status != ConnectedSystemObjectStatus.Obsolete)
-            .Select(cso => (id, cso.TypeId)));
+        return FromJoined(metaverseObject.Id, metaverseObject.ConnectedSystemObjects);
+    }
+
+    /// <summary>
+    /// The connections of one Metaverse Object, from every Connected System Object joined to it; as
+    /// <see cref="From(MetaverseObject)"/>, for a caller that loaded the joined objects on their own. Objects whose
+    /// reference names another Metaverse Object, or none, are ignored.
+    /// </summary>
+    public static MetaverseObjectConnections FromJoined(Guid metaverseObjectId, IEnumerable<ConnectedSystemObject> joinedObjects)
+    {
+        ArgumentNullException.ThrowIfNull(joinedObjects);
+        return new MetaverseObjectConnections([metaverseObjectId], joinedObjects
+            .Where(cso => cso.MetaverseObjectId == metaverseObjectId && cso.Status != ConnectedSystemObjectStatus.Obsolete)
+            .Select(cso => (metaverseObjectId, cso.TypeId)));
     }
 }

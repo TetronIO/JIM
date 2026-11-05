@@ -162,10 +162,11 @@ public class ScopeReconciliationServer
     private async Task<int> ReconcileOutboundAsync(SyncRule rule, IReadOnlyCollection<Guid> candidateIds, DateTime nowUtc, ScopeReconciliationResult result)
     {
         var mvos = await Application.Repository.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(candidateIds);
+        var connections = await Application.ExportEvaluation.ReadConnectionsAsync(candidateIds, [rule]);
         var flagged = new List<Guid>();
 
         var decided = mvos
-            .Select(mvo => (Mvo: mvo, InScope: Decide(() => ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, nowUtc), rule, mvo.Id, result)))
+            .Select(mvo => (Mvo: mvo, InScope: Decide(() => ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, nowUtc, connections), rule, mvo.Id, result)))
             .Where(answer => answer.InScope.HasValue);
         foreach (var (mvo, inScope) in decided)
         {

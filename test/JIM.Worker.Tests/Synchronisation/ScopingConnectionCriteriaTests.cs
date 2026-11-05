@@ -225,6 +225,27 @@ public class ScopingConnectionCriteriaTests
         }
     }
 
+    [Test]
+    public void MetaverseObjectConnections_WithObject_ReplacesOneObjectsJoinsAndKeepsTheRest()
+    {
+        var ada = Guid.NewGuid();
+        var ben = Guid.NewGuid();
+        var read = new MetaverseObjectConnections([ada, ben], [(ada, PanoplyUser.Id), (ben, PanoplyUser.Id)], [PanoplyUser.Id, ResurgamUser.Id]);
+        var cat = Guid.Empty;
+
+        var previewed = read.WithObject(ada, [ResurgamUser.Id]).WithObject(cat, [PanoplyUser.Id]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(previewed.JoinedObjectTypeIds(ada), Is.EquivalentTo(new[] { ResurgamUser.Id }));
+            Assert.That(previewed.Has(ben, PanoplyUser.Id), Is.True, "another object's joins are untouched");
+            Assert.That(previewed.Has(cat, PanoplyUser.Id), Is.True, "a projection not yet saved is answered for");
+            Assert.That(previewed.Has(cat, ResurgamUser.Id), Is.False);
+            Assert.That(previewed.Has(ada, PanoplyContact.Id), Is.Null, "a type the read never covered stays unknown");
+            Assert.That(read.Has(ada, PanoplyUser.Id), Is.True, "the original is not changed");
+        }
+    }
+
     private static MetaverseObject Mvo() => new() { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 1, Name = "User" } };
 
     private static MetaverseObjectConnections Connections(MetaverseObject mvo, params ConnectedSystemObjectType[] joinedTypes) =>

@@ -379,6 +379,30 @@ public class SyncRuleScopingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowedToPeopleWithAnHrAccount_DecidesFromEachIdentitysJoinsAsync()
+    {
+        // A connection criterion (#2021) reads the joins the stream already carries: the identity joined to an HR account
+        // stays, the one without leaves, and neither is reported as a failure.
+        const int hrUserTypeId = 77;
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Disconnect;
+        var staying = GivenMvoWithTargetObject("Sales");
+        staying.ConnectedSystemObjects.Add(new ConnectedSystemObject { Id = Guid.CreateVersion7(), ConnectedSystemId = 99, TypeId = hrUserTypeId, MetaverseObjectId = staying.Id });
+        var leaving = GivenMvoWithTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(new SyncRuleScopingProposal([new SyncRuleScopingCriteriaGroupProposal(SearchGroupType.All,
+            [new SyncRuleScopingCriterionProposal(null, null, SearchComparisonType.HasValue, ConnectedObjectTypeId: hrUserTypeId)], [])]));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(deltas.Where(d => d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject)
+                .Select(d => d.MetaverseObjectId), Is.EqualTo(new Guid?[] { leaving.Id }));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ExportNarrowingWithDisconnectAction_ReportsADisconnectionAsync()
     {
         GivenExportRule();

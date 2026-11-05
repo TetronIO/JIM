@@ -387,8 +387,10 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             var targetObject = mvo.ConnectedSystemObjects
                 .FirstOrDefault(cso => cso.ConnectedSystemId == rule.ConnectedSystemId);
 
-            var now = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt));
-            var proposed = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, standIn, asAt));
+            // The stream carries every join, so connection criteria (#2021) need no further read.
+            var connections = MetaverseObjectConnections.From(mvo);
+            var now = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, asAt, connections));
+            var proposed = Decide(() => _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, standIn, asAt, connections));
             if (proposed.Failure != null)
             {
                 if (now.Failure == null)

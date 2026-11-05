@@ -1521,6 +1521,18 @@ public abstract class SyncTaskProcessorBase
                     }
 
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+                    // A join or projection with nothing flowing can still stage exports when it moves a connection
+                    // criterion's scope (#2021), so the item is registered for them as the Attribute Flow path registers
+                    // its own; an item another object already registered for this Metaverse Object keeps them.
+                    if (changeResult.ChangeType is ObjectChangeType.Joined or ObjectChangeType.Projected &&
+                        connectedSystemObject.MetaverseObject is { } joinedMvo)
+                    {
+                        if (joinedMvo.Id != Guid.Empty)
+                            _mvoIdToRpei.TryAdd(joinedMvo.Id, runProfileExecutionItem);
+                        else
+                            _deferredMvoRpeiMappings.Add((joinedMvo, runProfileExecutionItem));
+                    }
                 }
             }
 

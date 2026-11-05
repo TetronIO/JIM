@@ -412,6 +412,28 @@ public class SyncRuleAttributeFlowPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ExportRuleScopedOnAConnection_DecidesFromTheJoinsTheStreamCarriesAsync()
+    {
+        // A connection criterion (#2021) on the rule: each identity's joins decide its scope, so none would fail.
+        GivenExportRule();
+        GivenMvoWithJoinedTargetObject(email: "ada@corp.local", alternateEmail: "ada.lovelace@corp.local", targetStoredEmail: "ada@corp.local");
+        var targetTypeId = _mvos[^1].ConnectedSystemObjects.Single().TypeId;
+        _rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [new SyncRuleScopingCriteria { ConnectedObjectTypeId = targetTypeId, ComparisonType = SearchComparisonType.HasValue }]
+        });
+
+        var deltas = await EvaluateAsync(ExportProposalWritingMailFrom(MvAlternateEmailAttributeId));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(deltas.SingleOrDefault(d => d.AttributeName == "mail")?.NewValue, Is.EqualTo("ada.lovelace@corp.local"));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ProposedExpressionFailsForOneObject_ReportsItRatherThanNoChangeAsync()
     {
         // The motivating case: an Expression that fails on a fraction of the population. Reported as no change,

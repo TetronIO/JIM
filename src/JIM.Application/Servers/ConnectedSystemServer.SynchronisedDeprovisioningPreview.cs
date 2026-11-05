@@ -201,7 +201,7 @@ public partial class ConnectedSystemServer
             // The run's own pre-flight (#2336), on the untouched original and through the guard: an object it holds back is
             // errored and left as it was, so nothing else is proposed for it.
             if (await DescribeUndecidableScopeAsync(original, pass.FallibleImportRules, pass.FallibleExportRules, survivorScopeAnswers,
-                    pass.Guard) is { } undecidableBeforehand)
+                    pass.Guard, pass.ExportEvaluationCache.Connections) is { } undecidableBeforehand)
             {
                 progress.HeldBack.Add(original.Id);
                 if (mvo != null && objectName != null)

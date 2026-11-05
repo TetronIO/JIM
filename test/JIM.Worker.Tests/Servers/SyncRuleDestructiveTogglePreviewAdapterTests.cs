@@ -41,6 +41,7 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     private const int CsoDeptAttributeId = 101;
     private const int MvoDeptAttributeId = 201;
 
+    private JIM.InMemoryData.SyncRepository _syncRepo = null!;
     private Mock<IRepository> _repo = null!;
     private Mock<IConnectedSystemRepository> _connectedSystemRepo = null!;
     private Mock<IMetaverseRepository> _metaverseRepo = null!;
@@ -118,7 +119,8 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
         _connectedSystemRepo.Setup(r => r.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(It.IsAny<IEnumerable<Guid>>()))
             .ReturnsAsync((IEnumerable<Guid> ids) => _pendingExports.Where(pe => ids.Contains(pe.Key)).ToDictionary(pe => pe.Key, pe => pe.Value));
 
-        _jim = new JimApplication(_repo.Object);
+        _syncRepo = new JIM.InMemoryData.SyncRepository();
+        _jim = new JimApplication(_repo.Object, syncRepository: _syncRepo);
     }
 
     [TearDown]
@@ -444,6 +446,38 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
                 "healthy object never was");
             Assert.That(deltas.All(d => d.OldValue!.Contains("Disconnect") && d.NewValue!.Contains("Remain joined")),
                 Is.True);
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_OutboundRuleScopedOnAConnection_DecidesEachScopeFromTheIdentitysJoinsAsync()
+    {
+        // A connection criterion (#2021): the identity with an HR account stays managed; the one without is already out
+        // of scope, so Delete applies to it at the next synchronisation. Neither is undecidable.
+        const int hrUserTypeId = 77;
+        GivenExportRule();
+        _rule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [new SyncRuleScopingCriteria { ConnectedObjectTypeId = hrUserTypeId, ComparisonType = SearchComparisonType.HasValue }]
+        });
+        var leaving = GivenJoinedCso("Engineering");
+        var managed = GivenJoinedCso("Sales");
+        _syncRepo.SeedConnectedSystemObject(new ConnectedSystemObject
+        {
+            Id = Guid.CreateVersion7(), ConnectedSystemId = 99, TypeId = hrUserTypeId, MetaverseObjectId = managed.MetaverseObjectId,
+            Status = ConnectedSystemObjectStatus.Normal
+        });
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType), Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail));
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == leaving.Id).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+            Assert.That(deltas.Single(d => d.ConnectedSystemObjectId == managed.Id).TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldChangeDeprovisionAction));
         }
     }
 

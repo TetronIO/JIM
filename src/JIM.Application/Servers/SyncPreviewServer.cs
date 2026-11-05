@@ -807,8 +807,9 @@ public class SyncPreviewServer
         {
             // In simple mode the run joins an unjoined object through its type's own Object Matching Rules even when no
             // import rule applies (SyncTaskProcessorBase.AttemptJoinAsync's fallback; #2176): a target directory's
-            // existing accounts join this way. Nothing flows in and no export evaluation is queued, but the run checks the
-            // newly joined object for drift, as for any object it leaves joined.
+            // existing accounts join this way. Nothing flows in, and no export evaluation is queued unless the join moves a
+            // connection criterion's scope (#2021), but the run checks the newly joined object for drift, as for any
+            // object it leaves joined.
             if (!cso.MetaverseObjectId.HasValue && context.MatchingMode == ObjectMatchingRuleMode.ConnectedSystem)
             {
                 var typeJoin = await ProbeForJoinAsync(cso, [], objectTypes, context.MatchingMode, guardedRepository, result);
@@ -827,6 +828,23 @@ public class SyncPreviewServer
                     };
                     CopyWouldJoinMatch(joinedRoot, inbound);
                     result.OutcomeTree.Add(joinedRoot);
+
+                    // Nothing flows in, but a join to an Object Type a connection criterion names can move an export
+                    // rule's scope (#2021), and the run evaluates the object's exports for it, recording them under the
+                    // Joined outcome. The join is made only in memory here, so it is recorded in the cache's connections.
+                    if (asTheRunWould)
+                    {
+                        if (refreshCacheForWorkingMvo)
+                            await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [typeMatchedMvo.Id]);
+                        if (await previewServer.RecordPreviewedJoinAsync(context.Cache, typeMatchedMvo.Id, cso.TypeId, joined: true))
+                        {
+                            var outboundForJoin = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync(
+                                [CloneForPreview(typeMatchedMvo)], context.Cache, synchronisationChanges: ([], null));
+                            ComposeOutbound(result, outboundForJoin);
+                            BuildOutboundOutcomeNodes(joinedRoot.Children, outboundForJoin, context.SystemNames);
+                        }
+                    }
+
                     if (asTheRunWould)
                         AddDriftCorrectionRoot(result, await ProposeDriftCorrectionsAsync(result, cso, CloneForPreview(typeMatchedMvo), context));
                     return result;
@@ -1131,13 +1149,20 @@ public class SyncPreviewServer
         // drains in the same synchronisation.
         if (refreshCacheForWorkingMvo && workingMvo.Id != Guid.Empty)
             await previewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+
+        // A join or projection to an Object Type a connection criterion names (#2021) can move an export rule's scope
+        // with nothing flowing, and the run evaluates the object's exports for it. The join is made only in memory here,
+        // so it is recorded in the cache's connections.
+        var joinMovesConnectionScope = (inbound.WouldProject || inbound.WouldJoinMetaverseObjectId.HasValue) &&
+            await previewServer.RecordPreviewedJoinAsync(context.Cache, workingMvo.Id, cso.TypeId, joined: true);
+
         OutboundPreviewResult outbound;
         if (!asTheRunWould)
             outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache);
         else if (changedAttributes.Count > 0)
             outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
                 synchronisationChanges: (changedAttributes, removedAttributes));
-        else if (flaggedForScopeReview)
+        else if (flaggedForScopeReview || joinMovesConnectionScope)
             outbound = await previewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
                 synchronisationChanges: ([], null));
         else
@@ -2076,9 +2101,22 @@ public class SyncPreviewServer
                 _syncEngine.ApplyPendingAttributeChanges(workingMvo);
                 if (refreshCacheForWorkingMvo)
                     await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+                await context.PreviewServer.RecordPreviewedJoinAsync(context.Cache, workingMvo.Id, cso.TypeId, joined: false);
                 ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
                     synchronisationChanges: (changedAttributes, removedAttributes)));
             }
+        }
+
+        // Nothing recalled, but the broken join can take the Metaverse Object out of a connection criterion's scope
+        // (#2021), and the run evaluates its exports for it. The join is broken only in memory here, so it is recorded in
+        // the cache's connections; a Metaverse Object deleted now is deprovisioned below instead.
+        if (!skipRecallForImmediateDeletion && attributeChangeCount == 0 && context.Cache.ConnectionCriteriaObjectTypeIds.Contains(cso.TypeId))
+        {
+            if (refreshCacheForWorkingMvo)
+                await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+            if (await context.PreviewServer.RecordPreviewedJoinAsync(context.Cache, workingMvo.Id, cso.TypeId, joined: false))
+                ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                    synchronisationChanges: ([], null)));
         }
 
         // The DisconnectedOutOfScope root: same shape as the real run's (#1085 attribution, #1086 identity
@@ -2247,6 +2285,18 @@ public class SyncPreviewServer
                 await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [exportEvaluation.Mvo.Id]);
             ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([exportEvaluation.Mvo], context.Cache,
                 synchronisationChanges: (exportEvaluation.ChangedAttributes, exportEvaluation.RemovedAttributes)));
+        }
+        else if (workingMvo != null && teardown.ExecutionItems.Count > 0 &&
+                 context.Cache.ConnectionCriteriaObjectTypeIds.Contains(cso.TypeId) &&
+                 teardown.MvoDeletionDecision?.Fate != MvoDeletionFate.DeletedImmediately)
+        {
+            // Nothing recalled, but the departing object's connection going (#2021) can take the Metaverse Object out of
+            // an export rule's scope, and the run evaluates its exports for it; a Metaverse Object deleted now is
+            // deprovisioned below instead. An Obsolete object is not a connection, so the read already leaves it out.
+            if (refreshCacheForWorkingMvo)
+                await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
+            ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
+                synchronisationChanges: ([], null)));
         }
 
         // The re-provisioning the run's export scope review makes (#2318), where a provisioning export rule targets the

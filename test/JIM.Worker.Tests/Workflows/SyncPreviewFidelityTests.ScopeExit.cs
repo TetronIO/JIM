@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using NUnit.Framework;
@@ -52,12 +53,15 @@ public partial class SyncPreviewFidelityTests
     /// HR projects John Smith with his display name and employee ID, and Active Directory, which imports too, joins
     /// its account to him on employee ID and is sent his display name. John then leaves the scope of HR's import
     /// rule. Active Directory keeps the Metaverse Object alive and is still an import source, so the display name
-    /// HR contributed is recalled rather than kept.
+    /// HR contributed is recalled rather than kept (unless <paramref name="recall"/> is off). With
+    /// <paramref name="scopeExportToPeopleInHr"/>, Active Directory's export rule takes only people with an HR account
+    /// (#2021) and deletes the accounts of those who leave it.
     /// </summary>
-    private async Task<ScopeExitContext> SetUpScopeExitWithRecallAsync()
+    private async Task<ScopeExitContext> SetUpScopeExitWithRecallAsync(bool scopeExportToPeopleInHr = false, bool recall = true)
     {
         var source = await CreateConnectedSystemAsync("HR Source");
         var sourceType = await CreateCsoTypeAsync(source.Id, "User");
+        sourceType.RemoveContributedAttributesOnObsoletion = recall;
         var target = await CreateConnectedSystemAsync("AD Target");
         var targetType = await CreateCsoTypeAsync(target.Id, "user");
         var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
@@ -81,8 +85,17 @@ public partial class SyncPreviewFidelityTests
             TargetMetaverseAttribute = mvEmployeeId, TargetMetaverseAttributeId = mvEmployeeId.Id,
             Sources = [new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = adEmployeeId, ConnectedSystemAttributeId = adEmployeeId.Id }]
         });
-        var adExport = await CreateExportSyncRuleAsync(target.Id, targetType, mvType, "AD Export", enableProvisioning: false);
+        var adExport = await CreateExportSyncRuleAsync(target.Id, targetType, mvType, "AD Export", enableProvisioning: false,
+            deprovisionAction: scopeExportToPeopleInHr ? OutboundDeprovisionAction.Delete : OutboundDeprovisionAction.Disconnect);
         FlowToAttribute(adExport, targetType.Attributes.First(a => a.Name == "DisplayName"), mvDisplayName);
+        if (scopeExportToPeopleInHr)
+        {
+            adExport.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+            {
+                Type = SearchGroupType.All,
+                Criteria = [new SyncRuleScopingCriteria { ConnectedObjectType = sourceType, ConnectedObjectTypeId = sourceType.Id, ComparisonType = SearchComparisonType.HasValue }]
+            });
+        }
         await DbContext.SaveChangesAsync();
 
         var sourceObject = await CreateCsoAsync(source.Id, sourceType, "John Smith", "EMP001");

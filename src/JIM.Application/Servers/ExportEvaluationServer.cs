@@ -2154,14 +2154,43 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
-    /// One object's connections to the Object Types the rules' connection criteria name, for the evaluation paths that
-    /// work an object at a time; null when no rule has a connection criterion.
+    /// The Metaverse Objects' connections to the Object Types the export rules' connection criteria name (#2021), read in
+    /// one statement; null, with nothing read, when no rule has a connection criterion. For callers that decide export
+    /// scope outside synchronisation's page loop, which reads them into its cache.
     /// </summary>
-    private async Task<MetaverseObjectConnections?> ReadConnectionsAsync(Guid metaverseObjectId, IEnumerable<SyncRule> exportRules)
+    public async Task<MetaverseObjectConnections?> ReadConnectionsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IEnumerable<SyncRule> exportRules)
     {
         var typeIds = exportRules.SelectMany(ScopingEvaluationServer.ConnectedObjectTypeIds).ToHashSet();
-        return typeIds.Count == 0 ? null : await SyncRepo.GetMetaverseObjectConnectionsAsync([metaverseObjectId], typeIds);
+        return typeIds.Count == 0 ? null : await SyncRepo.GetMetaverseObjectConnectionsAsync(metaverseObjectIds, typeIds);
     }
+
+    /// <summary>
+    /// Records in the cache a join a preview has made or broken in memory (#2021), which the database read behind the
+    /// cache's connections cannot see: the Metaverse Object's connections are read afresh (none for a projection not yet
+    /// saved) and the join applied. Nothing is done when no export rule has a connection criterion, or the object's type
+    /// is not one a criterion names. Returns whether the object's connections changed, so the caller can evaluate its
+    /// exports as the run does.
+    /// </summary>
+    internal async Task<bool> RecordPreviewedJoinAsync(ExportEvaluationCache cache, Guid metaverseObjectId, int connectedSystemObjectTypeId, bool joined)
+    {
+        if (!cache.ConnectionCriteriaObjectTypeIds.Contains(connectedSystemObjectTypeId))
+            return false;
+
+        var typeIds = cache.ConnectionCriteriaObjectTypeIds;
+        var current = metaverseObjectId == Guid.Empty
+            ? new HashSet<int>()
+            : (await SyncRepo.GetMetaverseObjectConnectionsAsync([metaverseObjectId], [.. typeIds])).JoinedObjectTypeIds(metaverseObjectId).ToHashSet();
+        if (joined)
+            current.Add(connectedSystemObjectTypeId);
+        else
+            current.Remove(connectedSystemObjectTypeId);
+
+        cache.Connections = (cache.Connections ?? new MetaverseObjectConnections([], [], typeIds)).WithObject(metaverseObjectId, current);
+        return true;
+    }
+
+    private Task<MetaverseObjectConnections?> ReadConnectionsAsync(Guid metaverseObjectId, IEnumerable<SyncRule> exportRules) =>
+        ReadConnectionsAsync([metaverseObjectId], exportRules);
 
     /// <summary>
     /// Records which Synchronisation Rule's provisioning decision produced an export, for a Create only.
