@@ -35,7 +35,7 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 
-    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings, not about the system being reachable: one down for maintenance keeps those tabs. Saving has the Connector test the settings: a problem stops the save, and what will not work as they stand saves with a warning, which the REST API and `Set-JIMConnectedSystem` return too.
+    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector Space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.

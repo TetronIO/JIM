@@ -148,6 +148,37 @@ Describe 'Get-JIMActivity awaiting synchronisation' {
     It 'Documents ConfigurationChangeSynchronisations' {
         ((Get-Help Get-JIMActivity -Full).returnValues | Out-String) | Should -Match 'ConfigurationChangeSynchronisations'
     }
+
+    It 'Returns the predicted counts beside what the applying synchronisation did, when the API supplies them' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi {
+                [PSCustomObject]@{
+                    id                                  = [guid]'11111111-1111-1111-1111-111111111111'
+                    configurationChangeSynchronisations = @(
+                        [PSCustomObject]@{
+                            objectTypeName       = 'user'
+                            isApplied            = $true
+                            predictionComparison = [PSCustomObject]@{
+                                previewActivityId = [guid]'33333333-3333-3333-3333-333333333333'
+                                lines             = @([PSCustomObject]@{ outcome = 'Projected'; predicted = 40; actual = 38 })
+                            }
+                        }
+                    )
+                }
+            }
+
+            $comparison = (Get-JIMActivity -Id '11111111-1111-1111-1111-111111111111').configurationChangeSynchronisations[0].predictionComparison
+
+            $comparison.lines[0].outcome | Should -Be 'Projected'
+            $comparison.lines[0].predicted | Should -Be 40
+            $comparison.lines[0].actual | Should -Be 38
+        }
+    }
+
+    It 'Documents PredictionComparison' {
+        ((Get-Help Get-JIMActivity -Full).returnValues | Out-String) | Should -Match 'PredictionComparison'
+    }
 }
 
 Describe 'Get-JIMMetaverseObjectType awaiting export review' {

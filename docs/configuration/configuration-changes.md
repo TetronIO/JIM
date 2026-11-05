@@ -71,7 +71,7 @@ steps:
 2. **Save**<br /> The confirmation states when the change takes effect. For an import change it reads: "At the next synchronisation of {System}, Delta or Full. That run processes every {Type} object, not only the changed ones: {count} objects, about {N} minutes at the speed of its last Full Synchronisation. Other Object Types are processed as usual. Until then the Connected System's page lists it as awaiting synchronisation, with a button to run that synchronisation straight away." The estimate is left out until the Connected System has had a Full Synchronisation. REST and PowerShell callers get the same facts: the response to saving a Synchronisation Rule, an Attribute Flow or an Object Matching Rule, or to changing an Attribute Priority order, lists the Connected System, the Object Type, the object count and the estimated duration under `AwaitingSynchronisation`, and the cmdlets that make those changes warn of the same.
 3. **Awaiting synchronisation**<br /> The change shows on the Connected System, with **Run now**; see [Changes awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation).
 4. **The synchronisation**<br /> The run processes every object of the affected Object Type, and only the changed objects of the others, then marks the change applied. Every Metaverse Object those objects join or project is processed too, so export evaluation runs on them as usual.
-5. **The Activities**<br /> The synchronisation's Activity lists the changes behind each Object Type it processed in full, and each change's own Activity says **Applied by** that run.
+5. **The Activities**<br /> The synchronisation's Activity lists the changes behind each Object Type it processed in full, and each change's own Activity says **Applied by** that run. Where a scope preview informed the save, it also shows what the preview predicted beside what the run did; see [Predicted and actual](#predicted-and-actual).
 
 What waits for which synchronisation depends on what you changed:
 
@@ -141,6 +141,17 @@ Four things are worth knowing before you act on a preview:
 In the portal, previewing leaves the change unsaved: read the result, then save (or not). If you save, the confirmation opens with the same sentence, alongside the properties changing, and the change's [Activity](activities.md) records which preview informed it. Edit the settings after previewing and the preview is marked stale and contributes nothing to the confirmation, because it now describes a different change. On a Synchronisation Rule, each preview's button appears only once you have edited what it answers for, since a preview of unedited settings can only report that nothing changes. Any preview panel you have finished with can be closed, which forgets the preview so the confirmation no longer cites it, while a preview still running finishes as an Activity.
 
 Automation gets the same evaluation. Start a preview with [`New-JIMConfigurationChangePreview`](../powershell/previews.md), or `POST` to the surface's own preview endpoint in the [REST API](../../api/reference/), then pass the preview's Activity id back on the change itself so the audit records the link.
+
+### Predicted and actual
+
+When a scope preview informed your save, the change's Activity shows what the preview predicted beside what the synchronisation that applied the change did, for example **Projected: predicted 40, actual 38**. It is shown only when both numbers measure the same thing, and otherwise the Activity says only **Applied by**:
+
+- **One change**<br /> The synchronisation applied exactly one change to the Object Type. Several changes saved before a run were each previewed against different rules, and the run has one set of counts.
+- **A current preview**<br /> The preview was complete, was of the rule you saved, and nothing had overtaken it when you saved.
+- **A comparable outcome**<br /> Only **Projected** and **Joined** from a scope preview. Other previews describe differences from today's configuration that no run counts.
+- **The processed Object Type**<br /> The actual count includes objects of that type that changed for other reasons since the preview, so it can exceed the prediction without the preview being wrong.
+
+The comparison is `PredictionComparison` on each entry of an Activity's `ConfigurationChangeSynchronisations`, in the REST API and `Get-JIMActivity -Id`.
 
 ## :material-page-layout-header-footer: Where the confirmation appears
 

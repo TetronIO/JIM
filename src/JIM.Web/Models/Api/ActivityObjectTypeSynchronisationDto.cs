@@ -63,6 +63,15 @@ public class ActivityObjectTypeSynchronisationDto
     public List<AwaitingSynchronisationChangeDto> Changes { get; set; } = new();
 
     /// <summary>
+    /// What the preview that informed the save predicted, beside what the synchronisation that applied the change did.
+    /// Null unless all of these hold: a synchronisation has applied the change; it applied exactly one change to the type;
+    /// a preview that was current, complete and of the saved Synchronisation Rule informed the save; and the preview counts
+    /// an outcome the run records in the same way. Today that is the scoping preview's Projected and Joined. Null for a
+    /// synchronisation run, which processed whatever changed.
+    /// </summary>
+    public ActivityPredictionComparisonDto? PredictionComparison { get; set; }
+
+    /// <summary>
     /// Creates a DTO from the application-layer group.
     /// </summary>
     public static ActivityObjectTypeSynchronisationDto FromGroup(ActivityObjectTypeSynchronisation group)
@@ -77,7 +86,8 @@ public class ActivityObjectTypeSynchronisationDto
             IsApplied = group.IsApplied,
             AppliedAt = group.AppliedAt,
             AppliedByActivityId = group.AppliedByActivityId,
-            Changes = group.Changes.Select(AwaitingSynchronisationChangeDto.FromSummary).ToList()
+            Changes = group.Changes.Select(AwaitingSynchronisationChangeDto.FromSummary).ToList(),
+            PredictionComparison = group.PredictionComparison == null ? null : ActivityPredictionComparisonDto.FromComparison(group.PredictionComparison)
         };
     }
 }
