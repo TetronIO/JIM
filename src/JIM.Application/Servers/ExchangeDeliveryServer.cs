@@ -568,7 +568,7 @@ public class ExchangeDeliveryServer
         if (repeats && !parked)
             return;
 
-        var error = $"Exchange recipient not set ({Describe(kind)}): {message ?? "Exchange gave no reason"}. " +
+        var error = $"Exchange recipient not set ({Describe(kind)}): {Sentence(message ?? "Exchange gave no reason")} " +
                     (parked ? "JIM has stopped trying; retry it once the cause is fixed." : "JIM will try again.");
         await RecordOutcomeAsync(connectedSystem, change, error, error);
     }
@@ -611,6 +611,16 @@ public class ExchangeDeliveryServer
         ExchangeChangeFailureKind.Unreachable => "Exchange was unreachable or timed out",
         _ => kind.ToString()
     };
+
+    /// <summary>
+    /// A reason ended as a sentence, so JIM's own words follow it cleanly: Exchange's messages end in a full stop, and a
+    /// second one would read as a typo.
+    /// </summary>
+    private static string Sentence(string words)
+    {
+        var trimmed = words.Trim();
+        return trimmed.Length == 0 || trimmed[^1] is '.' or '!' or '?' ? trimmed : $"{trimmed}.";
+    }
 
     private static string DescribeProblem(ExchangeDeliveryRunResult result)
     {

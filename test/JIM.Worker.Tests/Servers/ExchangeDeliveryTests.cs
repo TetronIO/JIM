@@ -173,6 +173,24 @@ public class ExchangeDeliveryTests
         }
     }
 
+    [TestCase("Access denied.")]
+    [TestCase("Access denied")]
+    public async Task DeliverDueAsync_FailureReason_IsEndedOnceBeforeJimsOwnWordsAsync(string reason)
+    {
+        // Exchange's own messages end in a full stop; one that does not gets one, and none gets two.
+        await QueueMailboxAsync(out _, out _);
+        _connector.Answer = _ => ExchangeConvergeResult.Failure(ExchangeChangeFailureKind.Refused, reason);
+
+        await _server.DeliverDueAsync(ConnectedSystemId, ClaimedBy, AsOf, CancellationToken.None);
+
+        var message = _activities.Single().ErrorMessage;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("Access denied. JIM has stopped trying"));
+            Assert.That(message, Does.Not.Contain(".."));
+        }
+    }
+
     [Test]
     public async Task DeliverDueAsync_TheSameFailureAgain_UpdatesTheChangeWithoutAnotherActivityAsync()
     {
