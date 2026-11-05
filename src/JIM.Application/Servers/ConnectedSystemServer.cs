@@ -4167,7 +4167,7 @@ public partial class ConnectedSystemServer
             return null;
 
         var connector = CreateConnector(connectedSystem);
-        var describer = connector as IConnectorImportWatermarkDescription;
+        var describer = connector as IConnectorImportWatermark;
         var partitionDescriber = hasPartitionWatermarks ? connector as IConnectorPartitionWatermarks : null;
         if (describer == null && partitionDescriber == null)
             return null;
@@ -7319,13 +7319,14 @@ public partial class ConnectedSystemServer
     /// <summary>
     /// Causes all the Connected System Objects and their dependencies to be deleted for a Connected System.
     /// This includes: Pending Exports, CSO attribute values, change history, and disconnects CSOs from MVOs.
+    /// It also removes every Delta Import starting point (#2715, #2724): each Partition's watermark, and the watermark the
+    /// Connector keeps in the persisted connector data, so the next Delta Import reads every object.
     /// Once performed, an admin must then re-synchronise all connectors to re-calculate any metaverse and Connected System Object changes.
     /// </summary>
     /// <remarks>
     /// Only intended to be called by JIM.Service, i.e. this action should always be queued.
-    /// That's why this method is lightweight and doesn't create its own activity.
-    /// Uses the shared DeleteAllConnectedSystemObjectsAndDependenciesAsync method with deleteChangeHistory=true
-    /// to remove all CSO-related data including change history (since objects will be re-imported).
+    /// That's why this method is lightweight and doesn't create its own activity; the result describes what the clear
+    /// removed for the caller to record on it.
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to clear.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the cleared CSOs. Default: true (recommended for re-import scenarios).</param>
@@ -7350,12 +7351,22 @@ public partial class ConnectedSystemServer
             throw new InvalidOperationException($"Connected System {connectedSystemId} is being deleted and cannot be cleared.");
         }
 
-        // Use the shared method that handles all CSO dependencies properly. Records a post-clear
-        // reconciliation join record (#1605) for every object joined at the moment of the clear; the
-        // Connected System deletion path passes false, since a system about to cease to exist has nothing
-        // for a later sweep to reconcile against.
-        var result = await Application.Repository.ConnectedSystems.DeleteAllConnectedSystemObjectsAndDependenciesAsync(
-            connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: true);
+        // An empty Connector Space has nothing to read changes against, so no Delta Import starting point may survive
+        // the clear (#2724): the next Delta Import must read every object, as it does for a Connected System that has
+        // never been imported. Worked out before anything is removed, so a Connector that cannot say what its persisted
+        // data holds fails the clear rather than leaving its watermark behind.
+        var persistedConnectorDataAfterClear = RemoveImportWatermark(connectedSystem);
+
+        // Removes every Connected System Object and its dependencies, records a post-clear reconciliation join record
+        // (#1605) for every object joined at the moment of the clear, removes every Partition's Delta Import watermark
+        // (#2715), and leaves the persisted connector data without its watermark, all in one transaction.
+        var result = await Application.Repository.ConnectedSystems.ClearConnectorSpaceAsync(
+            connectedSystemId, deleteChangeHistory, persistedConnectorDataAfterClear);
+        result.ImportWatermarkRemoved = connectedSystem.PersistedConnectorData != persistedConnectorDataAfterClear;
+
+        // Keep the instance in step with the database: on the Worker's tracking context it is the tracked one, and a later
+        // save must not mistake the old value for the current one.
+        connectedSystem.PersistedConnectorData = persistedConnectorDataAfterClear;
 
         // Arm the stranded-value sweep (#1549) with this clear's UTC time: the clear just hard-deleted every
         // Connected System Object of this system without obsoletion, so any Metaverse attribute value it
@@ -7365,10 +7376,29 @@ public partial class ConnectedSystemServer
         // half-rebuilt Connector Space for a genuine departure.
         await Application.Repository.ConnectedSystems.SetStrandedValueSweepArmedAtAsync(connectedSystemId, DateTime.UtcNow);
 
-        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs, recorded {JoinRecords} for post-clear reconciliation",
-            connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved, result.JoinRecordsWritten);
+        Log.Information("ClearConnectedSystemObjectsAsync: Completed for Connected System {Id}. Removed {PendingExports} Pending Exports, {Csos} CSOs and " +
+            "{PartitionWatermarks} Partition Delta Import watermark(s) (Connected System Delta Import watermark removed: {ImportWatermarkRemoved}); recorded {JoinRecords} for post-clear reconciliation",
+            connectedSystemId, result.PendingExportsRemoved, result.ConnectedSystemObjectsRemoved, result.PartitionWatermarksRemoved,
+            result.ImportWatermarkRemoved, result.JoinRecordsWritten);
 
         return result;
+    }
+
+    /// <summary>
+    /// The Connected System's persisted connector data without its Delta Import watermark (#2724), as its Connector says:
+    /// only the Connector knows which part of the data is the watermark. A Connector that keeps no watermark there
+    /// (<see cref="IConnectorImportWatermark"/> not implemented) has nothing removed: the LDAP Connector keeps its
+    /// watermarks per Partition, and its persisted data is its record of the directory, the pinned domain controller
+    /// included, which the next run needs.
+    /// </summary>
+    private string? RemoveImportWatermark(ConnectedSystem connectedSystem)
+    {
+        if (connectedSystem.PersistedConnectorData is not { } persistedConnectorData)
+            return null;
+
+        return CreateConnector(connectedSystem) is IConnectorImportWatermark watermarkConnector
+            ? watermarkConnector.RemoveImportWatermark(persistedConnectorData, Log.Logger)
+            : persistedConnectorData;
     }
 
     /// <summary>
