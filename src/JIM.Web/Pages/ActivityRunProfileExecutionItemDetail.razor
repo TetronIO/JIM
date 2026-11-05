@@ -5,6 +5,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Models.Enums;
+@using JIM.Models.History
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Sync
@@ -19,7 +20,7 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-<PageTitle>Item Details: @(_externalIdAttributeValue?.ToStringNoName() ??
+<PageTitle>Item Details: @(_liveRecord?.ExternalId ??
         _activityRunProfileExecutionItem?.Id.ToString())</PageTitle>
 
     @if (_activityRunProfileExecutionItem != null)
@@ -130,25 +131,26 @@
                 @* Connected System Object / External ID - label changes based on context *@
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">@GetObjectFieldLabel()</MudText><br />
-                    @if (_activityRunProfileExecutionItem.ConnectedSystemObject != null)
+                    @if (_liveRecord is { ConnectedSystemId: { } liveRecordSystemId } liveRecord)
                     {
+                        @* The item's record while it exists, resolved from the id the item holds (#2669). *@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="flex-wrap">
                             @if (GetCsoChipName() != null)
                             {
                                 <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
-                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name"
+                                            TypeName="@liveRecord.ObjectTypeName"
                                             Name="@GetCsoChipName()"
                                             Tooltip="@GetCsoChipTooltip()"
-                                            Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))" />
+                                            Href="@(Utilities.GetConnectedSystemObjectHref(liveRecordSystemId, liveRecord.Id))" />
                             }
                             else
                             {
                                 @* No display name or external ID to identify the record by yet, so the chip carries
                                    the type alone and the link stands beside it rather than wrapping it. *@
                                 <ObjectChip Kind="ObjectChipKind.ConnectedSystemObject"
-                                            TypeName="@_activityRunProfileExecutionItem.ConnectedSystemObject.Type.Name" />
+                                            TypeName="@liveRecord.ObjectTypeName" />
                                 <MudLink
-                                    Href="@(Utilities.GetConnectedSystemObjectHref(_activityRunProfileExecutionItem.ConnectedSystemObject))">
+                                    Href="@(Utilities.GetConnectedSystemObjectHref(liveRecordSystemId, liveRecord.Id))">
                                     View Object
                                 </MudLink>
                             }
@@ -363,7 +365,7 @@
             <AttributeValuesNotImportedSection Errors="@attributeValueErrors"
                                                SourceLocation="@_activityRunProfileExecutionItem.SourceLocation"
                                                ConnectedSystemId="@_connectedSystemHeader?.Id"
-                                               ObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                                               ObjectTypeName="@(_liveRecord?.ObjectTypeName ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                                                Class="mb-5" />
         }
 
@@ -380,7 +382,7 @@
                                          RunCount="@_activityRunProfileExecutionItem.UnresolvedReferenceCount"
                                          ItemErrorType="@_activityRunProfileExecutionItem.ErrorType"
                                          RecordedMessage="@_activityRunProfileExecutionItem.ErrorMessage"
-                                         ObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
+                                         ObjectTypeName="@(_liveRecord?.ObjectTypeName ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
                                          Class="mb-5" />
         }
 
@@ -519,7 +521,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private ConnectedSystemHeader? _runConnectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _fromOperations;
-    private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
+    // The item's Connected System Object while it exists, resolved from the id the item holds (#2669); null once it
+    // has gone, when the item's own snapshots describe it.
+    private ResolvedObjectReference? _liveRecord;
     private PendingExport? _pendingExport;
     private MetaverseObjectType? _metaverseObjectType;
 
@@ -631,7 +635,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         _followUps = _causality.FollowUps.ToList();
         _connectedSystemHeader = _causality.RecordConnectedSystem;
         _runConnectedSystemHeader = _causality.RunConnectedSystem;
-        _externalIdAttributeValue = _causality.ExternalIdAttributeValue;
+        _liveRecord = _causality.LiveRecord;
         _deletionPolicySnapshot = _causality.DeletionPolicySnapshot;
         _identityHeader = _causality.IdentityHeader;
         _metaverseObjectType = _causality.MetaverseObjectType;
@@ -822,7 +826,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// </summary>
     private string GetObjectTypeName()
     {
-        var name = _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+        var name = _liveRecord?.ObjectTypeName
                    ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot;
 
         if (string.IsNullOrEmpty(name))
@@ -853,17 +857,16 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// the external id where it has none, never both. Null when the record carries neither yet (a provisioned
     /// object before its first export), in which case the call site shows the type alone.
     /// </summary>
-    private string? GetCsoChipName() => ObjectDescription.ChipName(
-        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name, _externalIdAttributeValue?.ToStringNoName());
+    private string? GetCsoChipName() => ObjectDescription.ChipName(_liveRecord?.DisplayName, _liveRecord?.ExternalId);
 
     /// <summary>
     /// The chip's tooltip: the external id, where distinct from the name the chip shows, and the record's own
     /// Connected System, which the chip text leaves out.
     /// </summary>
     private string GetCsoChipTooltip() => ObjectDescription.ForConnectedSystemObjectChipTooltip(
-        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type.Name,
-        _activityRunProfileExecutionItem?.ConnectedSystemObject?.Name,
-        _externalIdAttributeValue?.ToStringNoName(),
+        _liveRecord?.ObjectTypeName,
+        _liveRecord?.DisplayName,
+        _liveRecord?.ExternalId,
         _connectedSystemHeader?.Name);
 
     /// <summary>
@@ -882,7 +885,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private string GetObjectFieldLabel()
     {
         // If CSO exists, show "Connected System Object"
-        if (_activityRunProfileExecutionItem?.ConnectedSystemObject != null)
+        if (_liveRecord != null)
             return "Connected System Object";
 
         // An export scope review item records a Metaverse Object, not a CSO
@@ -937,7 +940,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// </summary>
     private string GetUnresolvedReferenceStatusDescription()
     {
-        var typeName = _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+        var typeName = _liveRecord?.ObjectTypeName
                        ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot
                        ?? "object";
         var imported = _activityRunProfileExecutionItem?.ObjectChangeType switch

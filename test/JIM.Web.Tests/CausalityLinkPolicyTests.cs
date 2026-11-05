@@ -2,10 +2,12 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Web.Causality;
 using NUnit.Framework;
 using static JIM.Web.Tests.CausalityConsequenceTestData;
@@ -210,6 +212,34 @@ public class CausalityLinkPolicyTests
         {
             Assert.That(account.Consequences[1].ActivityItemHref, Does.StartWith("test:item:"));
             Assert.That(account.Href, Is.EqualTo($"test:cso:{Glitterband}:{AccountCsoId}"));
+        }
+    }
+
+    /// <summary>
+    /// A later run's item keeps the id of the object it acted on after that object is deleted (#2669), so whether the
+    /// object can be linked is the resolver's answer, not the id's presence: a deleted object is named, not linked.
+    /// </summary>
+    [Test]
+    public void LineageBuild_ConsequenceNamingAnObjectSinceDeleted_NamesItWithoutLinkingIt()
+    {
+        var cascade = CompleteCascade();
+        var pending = new Stack<CausalConsequenceCohort>(cascade.Cohorts);
+        while (pending.Count > 0)
+        {
+            var cohort = pending.Pop();
+            if (cohort.RepresentativeRecord is { Id: var recordId } && recordId == AccountCsoId)
+                cohort.RepresentativeRecord = new ResolvedObjectReference { Id = recordId, State = ObjectReferenceState.Deleted };
+            foreach (var consequence in cohort.Consequences)
+                pending.Push(consequence);
+        }
+
+        var lineage = BuildImportLineage(cascade, links: TestCausalityLinks.Instance);
+
+        var account = lineage.Columns[2].Objects[0];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(account.Href, Is.Null, "a deleted object has no page to link to");
+            Assert.That(account.Consequences[1].ActivityItemHref, Does.StartWith("test:item:"), "the item itself is still there");
         }
     }
 

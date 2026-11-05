@@ -21,6 +21,13 @@ public class MetaverseObjectChange
     public MetaverseObject? MetaverseObject { get; set; }
 
     /// <summary>
+    /// The id of the Metaverse Object this change relates to. Readers decide whether that object is live by looking it
+    /// up, never by testing this id for null (#2669): until a deletion stops re-keying change records, a deleted
+    /// object's records hold its id in <see cref="DeletedMetaverseObjectId"/> instead.
+    /// </summary>
+    public Guid? MetaverseObjectId { get; set; }
+
+    /// <summary>
     /// When was this change made?
     /// </summary>
     public DateTime ChangeTime { get; set; }

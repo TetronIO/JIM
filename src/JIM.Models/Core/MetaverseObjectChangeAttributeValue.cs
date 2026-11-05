@@ -108,8 +108,8 @@ public class MetaverseObjectChangeAttributeValue
         if (BoolValue.HasValue)
             return BoolValue.Value.ToString();
 
-        if (ReferenceValue != null)
-            return ReferenceValue.Id.ToString();
+        if ((ReferenceValue?.Id ?? ReferenceValueId) is { } referenceId)
+            return referenceId.ToString();
 
         return string.Empty;
     }

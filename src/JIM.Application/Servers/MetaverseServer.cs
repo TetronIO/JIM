@@ -1298,6 +1298,16 @@ public partial class MetaverseServer
     }
 
     /// <summary>
+    /// Resolves Metaverse Objects that history records name by id (#2669): each live object, else its latest deletion
+    /// record, else nothing but the id. Every id given has an entry.
+    /// </summary>
+    public async Task<Dictionary<Guid, ResolvedObjectReference>> GetMetaverseObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        ArgumentNullException.ThrowIfNull(metaverseObjectIds);
+        return await Application.Repository.Metaverse.GetMetaverseObjectReferenceSummariesAsync(metaverseObjectIds);
+    }
+
+    /// <summary>
     /// One window of the values recorded by the given Metaverse Object changes (#2498), with the contributing Connected
     /// System resolved and Generated Values named as object change history names them. A change to a large group carries
     /// one value change per member, so the change-history shape caps each attribute's values and this reads the rest.

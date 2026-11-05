@@ -412,7 +412,8 @@ public static partial class CausalityLineageModelBuilder
             if (name == null)
                 return;
 
-            var href = representative.ConnectedSystemObjectId is { } csoId && target.SystemId is { } systemId
+            // Linked only while the object is there: the item keeps its id after the object goes (#2669).
+            var href = LiveRecordId(cohort) is { } csoId && target.SystemId is { } systemId
                 ? links.ConnectedSystemObjectHref(systemId, csoId)
                 : null;
 
@@ -431,6 +432,13 @@ public static partial class CausalityLineageModelBuilder
             target.ConsequenceHead = new ColumnHead(name, IsRoleHead: false, href, representative.ObjectTypeSnapshot);
             target.IsHeadFromItem = true;
         }
+
+        /// <summary>
+        /// The id of the representative's Connected System Object while it is there; null once it has gone, so nothing
+        /// links to it. Asked of the resolver, never of the item's id, which outlives the object (#2669).
+        /// </summary>
+        private static Guid? LiveRecordId(CausalConsequenceCohort cohort) =>
+            cohort.RepresentativeRecord is { IsLive: true } record ? record.Id : null;
 
         private ColumnState ObjectFor(Scope scope, int? systemId, string? systemName, bool isSourceSide)
         {
@@ -463,7 +471,7 @@ public static partial class CausalityLineageModelBuilder
                 ConnectedSystemId: systemId,
                 ConnectedSystemName: systemName,
                 RunProfileName: representative.Activity?.TargetName,
-                CsoId: representative.ConnectedSystemObjectId,
+                CsoId: LiveRecordId(cohort),
                 CsoConnectedSystemId: systemId,
                 CsoConnectedSystemName: systemName,
                 CsoDisplayName: representative.DisplayNameSnapshot,

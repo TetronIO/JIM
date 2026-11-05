@@ -23,11 +23,12 @@ namespace JIM.PostgresData.Repositories;
 public partial class ActivityRepository
 {
     /// <summary>
-    /// The items about a Connected System Object, as the CTE <c>ids</c>. While the object exists its items carry its
-    /// id. Its deletion nulls that id on every one of them and leaves it only on the deletion record, which names the
-    /// item that deleted it and keeps the external ID and system that find the rest: items in that system, carrying
-    /// that external ID, whose own id was nulled (so not a live record that reuses the external ID), and no later than
-    /// the deletion (so not a record created after it and since deleted in turn).
+    /// The items about a Connected System Object, as the CTE <c>ids</c>. Its items carry its id, live or deleted. A
+    /// deletion has so far nulled that id on every one of them and left it only on the deletion record (#2669), which
+    /// names the item that deleted it and keeps the external ID and system that find the rest: items in that system,
+    /// carrying that external ID, whose own id is null (so not a record that names another object, live or not), and no
+    /// later than the deletion (so not a record created after it and since deleted in turn). The deletion record names
+    /// the object by its subject id or by the deleted-object id, until the second is retired, so both are read.
     /// </summary>
     private const string ConnectedSystemObjectTimelineIdsSql = """
         WITH deletion AS (
@@ -35,6 +36,13 @@ public partial class ActivityRepository
                    c."ChangeTime" AS deleted_at, c."ActivityRunProfileExecutionItemId" AS item_id
             FROM "ConnectedSystemObjectChanges" c
             WHERE c."DeletedConnectedSystemObjectId" = @subject_id AND c."ChangeType" = @deleted_change_type
+
+            UNION
+
+            SELECT c."ConnectedSystemId", c."DeletedObjectExternalId", c."ChangeTime", c."ActivityRunProfileExecutionItemId"
+            FROM "ConnectedSystemObjectChanges" c
+            WHERE c."ConnectedSystemObjectId" = @subject_id AND c."ChangeType" = @deleted_change_type
+              AND NOT EXISTS (SELECT 1 FROM "ConnectedSystemObjects" live WHERE live."Id" = @subject_id)
         ),
         ids AS (
             SELECT r."Id" AS id
@@ -57,10 +65,11 @@ public partial class ActivityRepository
         """;
 
     /// <summary>
-    /// The items about a Metaverse Object, as the CTE <c>ids</c>: those its change records name, under its own id while
-    /// it exists and under the id its deletion re-keys them to after; the one that deleted it, which its deletion record
-    /// names (#2460); those of the Connected System Objects joined to it; those that record it directly (an export scope
-    /// review); and the one that scheduled its deletion, which a disconnection can leave with no change record of its own.
+    /// The items about a Metaverse Object, as the CTE <c>ids</c>: those its change records name, under its own id, and
+    /// under the deleted-object id its deletion re-keys them to until deletions stop rewriting history (#2669); the one
+    /// that deleted it, which its deletion record names (#2460) under either id; those of the Connected System Objects
+    /// joined to it; those that record it directly (an export scope review); and the one that scheduled its deletion,
+    /// which a disconnection can leave with no change record of its own.
     /// </summary>
     private const string MetaverseObjectTimelineIdsSql = """
         WITH ids AS (
@@ -79,6 +88,12 @@ public partial class ActivityRepository
             SELECT c."DeletedByRunProfileExecutionItemId"
             FROM "MetaverseObjectChanges" c
             WHERE c."DeletedMetaverseObjectId" = @subject_id AND c."DeletedByRunProfileExecutionItemId" IS NOT NULL
+
+            UNION
+
+            SELECT c."DeletedByRunProfileExecutionItemId"
+            FROM "MetaverseObjectChanges" c
+            WHERE c."MetaverseObjectId" = @subject_id AND c."DeletedByRunProfileExecutionItemId" IS NOT NULL
 
             UNION
 

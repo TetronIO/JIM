@@ -217,9 +217,12 @@ public class ExecutionItemChangesReadDatabaseTests
         var outcome = read.SyncOutcomes.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(read.ConnectedSystemObject!.NameOrId, Is.EqualTo("John Smith"));
-            Assert.That(read.ConnectedSystemObject!.ExternalIdAttributeValue?.StringValue, Is.EqualTo("jsmith@example.com"));
-            Assert.That(read.ConnectedSystemObject!.AttributeValues, Has.Count.EqualTo(2), "what names and identifies it, never its group memberships");
+            // The object is resolved from the id the item holds (#2669), named without reading its values at all, so
+            // never its group memberships; it is not loaded through the item.
+            Assert.That(read.ConnectedSystemObject, Is.Null);
+            Assert.That(detail!.Record?.State, Is.EqualTo(ObjectReferenceState.Live));
+            Assert.That(detail!.Record?.Label, Is.EqualTo("John Smith"));
+            Assert.That(detail!.Record?.ExternalId, Is.EqualTo("jsmith@example.com"));
             Assert.That(read.ConnectedSystemObjectChange!.AttributeChanges, Is.Empty, "a change's values are read a window at a time");
             Assert.That(read.MetaverseObjectChange!.AttributeChanges, Is.Empty);
             Assert.That(outcome.ConnectedSystemObjectChange?.Id, Is.EqualTo(staged.Id), "the outcome's staged change is there to name its record");

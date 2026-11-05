@@ -1573,12 +1573,18 @@ public partial class ActivityRepository : IActivityRepository
         // collection and then projected in memory, so a page that landed on a few large group CSOs
         // pulled tens of thousands of attribute-value rows into memory just to render 100 grid rows
         // (the 100% CPU seen on large activities). Instead, resolve the live display name / external
-        // id / type via correlated subqueries in the SQL projection below. Filters and sorts still
-        // reference the CSO navigations; EF Core translates those to SQL without an Include.
+        // id / type via correlated subqueries in the SQL projection below.
         // AsNoTracking because this is a read-only projection.
-        var query = Repository.Database.ActivityRunProfileExecutionItems
-            .AsNoTracking()
-            .Where(a => a.ActivityId == activityId);
+        //
+        // The item's Connected System Object is joined explicitly, on the id the item holds, rather than through the
+        // item's navigation (#2669): the id is history and outlives the object, so "is it still there" is the join
+        // finding a row, and an item whose object has gone falls back to its snapshots. A LEFT JOIN, the same SQL the
+        // navigation produced.
+        var query =
+            from item in Repository.Database.ActivityRunProfileExecutionItems.AsNoTracking().Where(a => a.ActivityId == activityId)
+            join liveObject in Repository.Database.ConnectedSystemObjects on item.ConnectedSystemObjectId equals (Guid?)liveObject.Id into liveObjects
+            from cso in liveObjects.DefaultIfEmpty()
+            select new { Item = item, Cso = cso };
 
         // Apply object type filter if specified (falls back to ObjectTypeSnapshot when CSO/Type is null)
         if (objectTypeFilter != null)
@@ -1587,11 +1593,11 @@ public partial class ActivityRepository : IActivityRepository
             if (objectTypes.Count > 0)
             {
                 query = query.Where(a =>
-                    (a.ConnectedSystemObject != null &&
-                     a.ConnectedSystemObject.Type != null &&
-                     objectTypes.Contains(a.ConnectedSystemObject.Type.Name)) ||
-                    (a.ObjectTypeSnapshot != null &&
-                     objectTypes.Contains(a.ObjectTypeSnapshot)));
+                    (a.Cso != null &&
+                     a.Cso.Type != null &&
+                     objectTypes.Contains(a.Cso.Type.Name)) ||
+                    (a.Item.ObjectTypeSnapshot != null &&
+                     objectTypes.Contains(a.Item.ObjectTypeSnapshot)));
             }
         }
 
@@ -1602,8 +1608,8 @@ public partial class ActivityRepository : IActivityRepository
             if (errorTypes.Count > 0)
             {
                 query = query.Where(a =>
-                    a.ErrorType != null &&
-                    errorTypes.Contains(a.ErrorType.Value));
+                    a.Item.ErrorType != null &&
+                    errorTypes.Contains(a.Item.ErrorType.Value));
             }
         }
 
@@ -1623,38 +1629,38 @@ public partial class ActivityRepository : IActivityRepository
             if (outcomeTokens.Count > 0)
             {
                 query = query.Where(a =>
-                    (a.OutcomeSummary != null && outcomeTokens.Any(token => a.OutcomeSummary.Contains(token))) ||
-                    (includeRetainedJoins && a.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin));
+                    (a.Item.OutcomeSummary != null && outcomeTokens.Any(token => a.Item.OutcomeSummary.Contains(token))) ||
+                    (includeRetainedJoins && a.Item.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin));
             }
         }
 
         // Apply search filter - search on display name and external ID (case-insensitive).
         // Object type is excluded from search as it has a dedicated filter control.
-        // Falls back to snapshot fields when CSO navigation is null.
+        // Falls back to snapshot fields when the item's Connected System Object is gone.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = LikePattern.Contains(searchQuery);
-            query = query.Where(item =>
+            query = query.Where(a =>
                 // Search the name candidates (live CSO attributes)
-                (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.AttributeValues.Any(av =>
+                (a.Cso != null &&
+                 a.Cso.AttributeValues.Any(av =>
                     allNameAttributeIds.Contains(av.AttributeId) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern))) ||
                 // Search display name (snapshot fallback)
-                (item.DisplayNameSnapshot != null &&
-                 EF.Functions.ILike(item.DisplayNameSnapshot, searchPattern)) ||
+                (a.Item.DisplayNameSnapshot != null &&
+                 EF.Functions.ILike(a.Item.DisplayNameSnapshot, searchPattern)) ||
                 // Search external ID (live CSO attribute), rendered by the same shared definition the
                 // projection below uses so a non-Text anchor is matchable as it is displayed (#1286)
-                (item.ConnectedSystemObject != null &&
-                 item.ConnectedSystemObject.AttributeValues
-                    .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                (a.Cso != null &&
+                 a.Cso.AttributeValues
+                    .Where(av => av.AttributeId == a.Cso.ExternalIdAttributeId)
                     .AsQueryable()
                     .Select(ExternalIdValueText.FromAttributeValue)
                     .Any(externalIdText => EF.Functions.ILike(externalIdText!, searchPattern))) ||
                 // Search external ID (snapshot fallback)
-                (item.ExternalIdSnapshot != null &&
-                 EF.Functions.ILike(item.ExternalIdSnapshot, searchPattern)));
+                (a.Item.ExternalIdSnapshot != null &&
+                 EF.Functions.ILike(a.Item.ExternalIdSnapshot, searchPattern)));
         }
 
         // Apply sorting
@@ -1663,48 +1669,48 @@ public partial class ActivityRepository : IActivityRepository
             // Sorts on the rendered external id, so the sort key matches what the External Id column
             // shows for every anchor type rather than only for a Text one (#1286).
             "externalid" => sortDescending
-                ? query.OrderByDescending(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                ? query.OrderByDescending(a => a.Cso != null
+                    ? a.Cso.AttributeValues
+                        .Where(av => av.AttributeId == a.Cso.ExternalIdAttributeId)
                         .AsQueryable()
                         .Select(ExternalIdValueText.FromAttributeValue)
-                        .FirstOrDefault() ?? item.ExternalIdSnapshot
-                    : item.ExternalIdSnapshot)
-                : query.OrderBy(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues
-                        .Where(av => av.AttributeId == item.ConnectedSystemObject.ExternalIdAttributeId)
+                        .FirstOrDefault() ?? a.Item.ExternalIdSnapshot
+                    : a.Item.ExternalIdSnapshot)
+                : query.OrderBy(a => a.Cso != null
+                    ? a.Cso.AttributeValues
+                        .Where(av => av.AttributeId == a.Cso.ExternalIdAttributeId)
                         .AsQueryable()
                         .Select(ExternalIdValueText.FromAttributeValue)
-                        .FirstOrDefault() ?? item.ExternalIdSnapshot
-                    : item.ExternalIdSnapshot),
+                        .FirstOrDefault() ?? a.Item.ExternalIdSnapshot
+                    : a.Item.ExternalIdSnapshot),
             // Sorts on the resolved live name, coalescing the naming tiers in preference order so the
             // sort key matches what the Display Name column renders, then the snapshot for deleted CSOs.
             "displayname" or "name" => sortDescending
-                ? query.OrderByDescending(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.DisplayNameSnapshot
-                    : item.DisplayNameSnapshot)
-                : query.OrderBy(item => item.ConnectedSystemObject != null
-                    ? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.ConnectedSystemObject.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                      ?? item.DisplayNameSnapshot
-                    : item.DisplayNameSnapshot),
+                ? query.OrderByDescending(a => a.Cso != null
+                    ? a.Cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Item.DisplayNameSnapshot
+                    : a.Item.DisplayNameSnapshot)
+                : query.OrderBy(a => a.Cso != null
+                    ? a.Cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                      ?? a.Item.DisplayNameSnapshot
+                    : a.Item.DisplayNameSnapshot),
             "type" or "objecttype" => sortDescending
-                ? query.OrderByDescending(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
-                    ? item.ConnectedSystemObject.Type.Name
-                    : item.ObjectTypeSnapshot)
-                : query.OrderBy(item => item.ConnectedSystemObject != null && item.ConnectedSystemObject.Type != null
-                    ? item.ConnectedSystemObject.Type.Name
-                    : item.ObjectTypeSnapshot),
+                ? query.OrderByDescending(a => a.Cso != null && a.Cso.Type != null
+                    ? a.Cso.Type.Name
+                    : a.Item.ObjectTypeSnapshot)
+                : query.OrderBy(a => a.Cso != null && a.Cso.Type != null
+                    ? a.Cso.Type.Name
+                    : a.Item.ObjectTypeSnapshot),
             "errortype" => sortDescending
-                ? query.OrderByDescending(item => item.ErrorType)
-                : query.OrderBy(item => item.ErrorType),
+                ? query.OrderByDescending(a => a.Item.ErrorType)
+                : query.OrderBy(a => a.Item.ErrorType),
             _ => sortDescending
-                ? query.OrderByDescending(item => item.Id)
-                : query.OrderBy(item => item.Id)
+                ? query.OrderByDescending(a => a.Item.Id)
+                : query.OrderBy(a => a.Item.Id)
         };
 
         // Deterministic tie-break: Skip/Take windows are only stable under a total order, and every named sort
@@ -1712,7 +1718,7 @@ public partial class ActivityRepository : IActivityRepository
         // item the same null error type). Without it, PostgreSQL may order tied rows differently per window,
         // repeating some items and skipping others as the reader scrolls. The default sort is already by id, so
         // the tie-break is a no-op there rather than a second key that could disagree with the first.
-        query = ordered.ThenBy(item => item.Id);
+        query = ordered.ThenBy(a => a.Item.Id);
 
         // Count query. It scans every matching item rather than a window of them, so it is the expensive half
         // of this method at scale and is skipped entirely when the caller already holds the total. Sorting
@@ -1729,28 +1735,28 @@ public partial class ActivityRepository : IActivityRepository
         // projected rows.
         var projected = await query
             .Skip(offset).Take(count)
-            .Select(i => new
+            .Select(a => new
             {
-                i.Id,
-                i.ErrorType,
-                i.ObjectChangeType,
-                i.OutcomeSummary,
-                i.DisplayNameSnapshot,
-                i.ExternalIdSnapshot,
-                i.ObjectTypeSnapshot,
-                i.MetaverseObjectId,
+                a.Item.Id,
+                a.Item.ErrorType,
+                a.Item.ObjectChangeType,
+                a.Item.OutcomeSummary,
+                a.Item.DisplayNameSnapshot,
+                a.Item.ExternalIdSnapshot,
+                a.Item.ObjectTypeSnapshot,
+                a.Item.MetaverseObjectId,
                 DisplayNameLive =
-                    i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
-                    ?? i.ConnectedSystemObject!.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
-                TypeLive = i.ConnectedSystemObject!.Type!.Name,
+                    a.Cso!.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? a.Cso!.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? a.Cso!.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
+                TypeLive = a.Cso!.Type!.Name,
                 // External id rendered by ExternalIdValueText, the shared definition the Connector Space
                 // list uses too. Keep the projection single-column: selecting an anonymous type of the raw
                 // columns here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
                 // ROW_NUMBER() window over the WHOLE AttributeValues table instead of a correlated
                 // subquery, which is catastrophic at scale.
-                ExtIdText = i.ConnectedSystemObject!.AttributeValues
-                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                ExtIdText = a.Cso!.AttributeValues
+                    .Where(av => av.AttributeId == a.Cso!.ExternalIdAttributeId)
                     .AsQueryable()
                     .Select(ExternalIdValueText.FromAttributeValue)
                     .FirstOrDefault()
@@ -1807,8 +1813,9 @@ public partial class ActivityRepository : IActivityRepository
         var rows = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
             .Where(o => o.ActivityRunProfileExecutionItem.ActivityId == activityId
                         && outcomes.Contains(o.OutcomeType)
-                        && o.ActivityRunProfileExecutionItem.ConnectedSystemObject != null
-                        && o.ActivityRunProfileExecutionItem.ConnectedSystemObject.TypeId == connectedSystemObjectTypeId)
+                        // The item's object, found by the id it holds rather than its navigation (#2669).
+                        && Repository.Database.ConnectedSystemObjects.Any(cso =>
+                            cso.Id == o.ActivityRunProfileExecutionItem.ConnectedSystemObjectId && cso.TypeId == connectedSystemObjectTypeId))
             .Select(o => new { o.OutcomeType, o.ActivityRunProfileExecutionItemId })
             .Distinct()
             .GroupBy(o => o.OutcomeType)
@@ -2012,13 +2019,14 @@ public partial class ActivityRepository : IActivityRepository
             }
         }
 
-        // Object type counts with names. Falls back to ObjectTypeSnapshot when the CSO/Type
-        // navigation is null (e.g. export RPEIs where the CSO was deleted, or the snapshot was
-        // populated but FK not retained).
-        var objectTypeCounts = await rpeiQuery
-            .Select(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null
-                ? q.ConnectedSystemObject.Type.Name
-                : q.ObjectTypeSnapshot)
+        // Object type counts with names. Falls back to ObjectTypeSnapshot when the item's Connected System Object is
+        // gone (e.g. export RPEIs where the CSO was deleted). The object is joined explicitly on the id the item holds,
+        // which is history and outlives the object (#2669), rather than through the item's navigation.
+        var objectTypeCounts = await (
+                from item in rpeiQuery
+                join liveObject in Repository.Database.ConnectedSystemObjects on item.ConnectedSystemObjectId equals (Guid?)liveObject.Id into liveObjects
+                from cso in liveObjects.DefaultIfEmpty()
+                select cso != null && cso.Type != null ? cso.Type.Name : item.ObjectTypeSnapshot)
             .Where(name => name != null)
             .GroupBy(name => name!)
             .Select(g => new { TypeName = g.Key, Count = g.Count() })
@@ -2461,24 +2469,13 @@ public partial class ActivityRepository : IActivityRepository
     /// <inheritdoc />
     public async Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemDetailAsync(Guid id)
     {
-        // Every collection here is bounded by the item, never by the objects it touched (#2498). The Connected System
-        // Object's values are filtered to the ones that name and identify it (the naming tiers, its external ids), as
-        // the Metaverse Object detail load filters its connectors' values: an unfiltered load read every member of a
-        // large group. Change records come without their attribute changes; their values are summarised and read a
-        // window at a time.
-        var nameAttributes = ObjectNaming.ConnectedSystemNameAttributes.Select(name => name.ToLower()).ToList();
+        // Every collection here is bounded by the item, never by the objects it touched (#2498). Change records come
+        // without their attribute changes; their values are summarised and read a window at a time. The item's Connected
+        // System Object is not loaded through the item: the id the item holds is history and outlives the object
+        // (#2669), so callers resolve it by id.
         return await Repository.Database.ActivityRunProfileExecutionItems
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(q => q.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(q => q.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues.Where(av =>
-                    nameAttributes.Contains(av.Attribute.Name.ToLower()) || av.Attribute.IsExternalId || av.Attribute.IsSecondaryExternalId))
-                    .ThenInclude(av => av.Attribute)
-            .Include(q => q.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.MetaverseObject)
-                    .ThenInclude(mvo => mvo!.Type)
             // For deletions, the preserved object type supports the deletion rule display.
             .Include(q => q.ConnectedSystemObjectChange)
                 .ThenInclude(c => c!.DeletedObjectType)

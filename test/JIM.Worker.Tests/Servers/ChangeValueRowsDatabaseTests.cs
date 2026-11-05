@@ -232,7 +232,17 @@ public class ChangeValueRowsDatabaseTests
         }
 
         var planText = string.Join("\n", plan);
-        var objectProbes = plan.Where(line => line.Contains("Index Cond:") && line.Contains("\"ConnectedSystemObjectId\" =")).ToList();
+        // The probes of the values table only: a reference with no live name is looked up among the deletion records
+        // too (#2669), whose table has a column of the same name.
+        var objectProbes = new List<string>();
+        var scanningValues = false;
+        foreach (var line in plan)
+        {
+            if (line.Contains("Scan"))
+                scanningValues = line.Contains("on \"ConnectedSystemObjectAttributeValues\"");
+            else if (scanningValues && line.Contains("Index Cond:") && line.Contains("\"ConnectedSystemObjectId\" ="))
+                objectProbes.Add(line);
+        }
         var valueReads = plan.Count(line => line.Contains("on \"ConnectedSystemObjectAttributeValues\""));
         using (Assert.EnterMultipleScope())
         {

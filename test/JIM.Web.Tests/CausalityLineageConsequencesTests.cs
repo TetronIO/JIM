@@ -424,7 +424,8 @@ public class CausalityLineageConsequencesTests
             LastOccurred = cohort.LastOccurred,
             Members = cohort.Members,
             Ending = cohort.Ending,
-            Representative = cohort.Representative
+            Representative = cohort.Representative,
+            RepresentativeRecord = cohort.RepresentativeRecord
         };
         recast.Consequences.AddRange(cohort.Consequences);
         return recast;

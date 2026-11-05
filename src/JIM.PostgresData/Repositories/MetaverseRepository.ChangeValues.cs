@@ -5,6 +5,7 @@ using System.Data.Common;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using NpgsqlTypes;
@@ -32,6 +33,8 @@ public partial class MetaverseRepository
                 return new RangeResultSet<MvoChangeValueRow> { Results = [], TotalResults = total };
 
             var details = await ReadMvoChangeValueDetailsAsync(connection, ChangeValueRowsSql.DetailIds(window));
+            var references = await ObjectReferenceSql.ReadMetaverseObjectReferencesAsync(connection,
+                details.Values.Select(d => d.ReferenceId).OfType<Guid>().Distinct().ToList());
             rows = window
                 .Where(row => details.ContainsKey(row.ValueId))
                 .Select(row =>
@@ -48,7 +51,11 @@ public partial class MetaverseRepository
                         AttributePlurality = detail.AttributePlurality,
                         Operation = row.Operation,
                         Value = detail.Value,
-                        PreviousValue = row.PreviousValueId is { } previous && details.TryGetValue(previous, out var replaced) ? replaced.Value : null
+                        PreviousValue = row.PreviousValueId is { } previous && details.TryGetValue(previous, out var replaced) ? replaced.Value : null,
+                        ValueReference = ReferenceOf(detail.ReferenceId, references),
+                        PreviousValueReference = row.PreviousValueId is { } previousId && details.TryGetValue(previousId, out var previousDetail)
+                            ? ReferenceOf(previousDetail.ReferenceId, references)
+                            : null
                     };
                 })
                 .ToList();
@@ -77,13 +84,26 @@ public partial class MetaverseRepository
         return await ChangeValueRowsSql.ReadSummariesAsync(connection, ChangeValueRowsSql.MetaverseObject, changeIds);
     }
 
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, ResolvedObjectReference>> GetMetaverseObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        using var span = ActivitySource.StartActivity("Mvo.ResolveReferences");
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ObjectReferenceSql.ReadMetaverseObjectReferencesAsync(connection, metaverseObjectIds);
+    }
+
     private sealed record MvoChangeValueDetail(
         Guid? MetaverseObjectId, string AttributeName, int? AttributeId, AttributeDataType AttributeType, AttributePlurality AttributePlurality,
-        MvoValueChangeDto Value);
+        MvoValueChangeDto Value, Guid? ReferenceId);
+
+    private static ResolvedObjectReference? ReferenceOf(Guid? referenceId, Dictionary<Guid, ResolvedObjectReference> references) =>
+        referenceId is { } id ? references.GetValueOrDefault(id) : null;
 
     /// <summary>
     /// Reads the given value changes in full, naming each referenced Metaverse Object from its cached display name as the
-    /// change-history projection does. Only ever called for one window's rows.
+    /// change-history projection does, and keeping the id each reference holds whether or not its object is still there,
+    /// for the caller to resolve (#2669). Only ever called for one window's rows.
     /// </summary>
     private static async Task<Dictionary<Guid, MvoChangeValueDetail>> ReadMvoChangeValueDetailsAsync(DbConnection connection, Guid[] valueIds)
     {
@@ -94,7 +114,7 @@ public partial class MetaverseRepository
                    v."ValueChangeType", v."StringValue", v."DateTimeValue", v."IntValue", v."LongValue", v."DecimalValue",
                    v."ByteValueLength", v."GuidValue", v."BoolValue",
                    v."ContributedBySyncRuleId", v."ContributedBySyncRuleName", v."ContributedByKind", v."ContributedByClaimType",
-                   r."Id", r."CachedDisplayName", rt."Name", rt."PluralName"
+                   r."Id", r."CachedDisplayName", rt."Name", rt."PluralName", v."ReferenceValueId"
             FROM "MetaverseObjectChangeAttributeValues" v
             JOIN "MetaverseObjectChangeAttributes" ac ON ac."Id" = v."MetaverseObjectChangeAttributeId"
             JOIN "MetaverseObjectChanges" c ON c."Id" = ac."MetaverseObjectChangeId"
@@ -141,7 +161,8 @@ public partial class MetaverseRepository
                 reader.IsDBNull(3) ? null : reader.GetInt32(3),
                 (AttributeDataType)reader.GetInt32(4),
                 (AttributePlurality)reader.GetInt32(5),
-                value);
+                value,
+                reader.IsDBNull(23) ? null : reader.GetGuid(23));
         }
 
         return details;

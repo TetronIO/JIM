@@ -12,6 +12,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -10342,6 +10343,16 @@ public partial class ConnectedSystemServer
     public async Task<Dictionary<Guid, string>> GetConnectedSystemObjectNamesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
         return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectNamesAsync(connectedSystemObjectIds);
+    }
+
+    /// <summary>
+    /// Resolves Connected System Objects that history records name by id (#2669): each live object, else its latest
+    /// deletion record, else nothing but the id. Every id given has an entry.
+    /// </summary>
+    public async Task<Dictionary<Guid, ResolvedObjectReference>> GetConnectedSystemObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        ArgumentNullException.ThrowIfNull(connectedSystemObjectIds);
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync(connectedSystemObjectIds);
     }
 
     /// <summary>

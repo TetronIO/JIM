@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
+using JIM.Models.History;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Sync;
@@ -37,7 +38,16 @@ public sealed class CausalityItemData
     /// </summary>
     public ConnectedSystemHeader? RunConnectedSystem { get; init; }
 
-    public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue { get; init; }
+    /// <summary>
+    /// The item's Connected System Object, resolved from the id the item holds (#2669): the live object, its deletion
+    /// record, or nothing but the id. Null when the item names no Connected System Object.
+    /// </summary>
+    public ResolvedObjectReference? Record { get; init; }
+
+    /// <summary>
+    /// <see cref="Record"/> while the object exists; null once it has gone, when the item's own snapshots describe it.
+    /// </summary>
+    public ResolvedObjectReference? LiveRecord => Record is { IsLive: true } live ? live : null;
 
     /// <summary>
     /// The decision-time deletion policy recorded on the item (#119), where one was captured.

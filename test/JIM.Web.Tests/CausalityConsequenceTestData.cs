@@ -7,6 +7,7 @@ using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Web.Causality;
@@ -227,7 +228,11 @@ public static class CausalityConsequenceTestData
             DueAt = dueAt,
             Members = members,
             Ending = ending,
-            Representative = representative
+            Representative = representative,
+            // As the server resolves it: the object the representative names is still there unless a test says not.
+            RepresentativeRecord = representative?.ConnectedSystemObjectId is { } recordId
+                ? new ResolvedObjectReference { Id = recordId, State = ObjectReferenceState.Live }
+                : null
         };
     }
 }

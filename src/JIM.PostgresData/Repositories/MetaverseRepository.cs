@@ -1782,7 +1782,7 @@ public partial class MetaverseRepository : IMetaverseRepository
     {
         var changeQuery = Repository.Database.Set<MetaverseObjectChange>()
             .AsNoTracking()
-            .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == metaverseObjectId);
+            .Where(c => c.MetaverseObjectId == metaverseObjectId);
         return await LoadChangeInitiatorsAsync(changeQuery);
     }
 
@@ -1844,7 +1844,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         {
             var changeQuery = Repository.Database.Set<MetaverseObjectChange>()
                 .AsNoTracking()
-                .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == id);
+                .Where(c => c.MetaverseObjectId == id);
 
             changeCount = await changeQuery.CountAsync();
             if (changeCount > 0)
@@ -1944,7 +1944,9 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <see cref="MetaverseObject.CachedDisplayName"/>. The contributing Connected System is resolved afterwards by
     /// <see cref="ResolveChangeValueContributingSystemsAsync"/>.
     /// </summary>
-    private static readonly Expression<Func<MetaverseObjectChange, MvoChangeHistoryDto>> MvoChangeHistoryProjection =
+    private Expression<Func<MetaverseObjectChange, MvoChangeHistoryDto>> MvoChangeHistoryProjection => BuildMvoChangeHistoryProjection(Repository.Database);
+
+    private static Expression<Func<MetaverseObjectChange, MvoChangeHistoryDto>> BuildMvoChangeHistoryProjection(JimDbContext database) =>
         c => new MvoChangeHistoryDto
         {
             Id = c.Id,
@@ -1997,15 +1999,18 @@ public partial class MetaverseRepository : IMetaverseRepository
                             ByteValueLength = vc.ByteValueLength,
                             GuidValue = vc.GuidValue,
                             BoolValue = vc.BoolValue,
-                            ReferenceValue = vc.ReferenceValue == null
-                                ? null
-                                : new MvoChangeReferenceDto
+                            // Looked up by the id the value holds, not through a navigation: the id is kept after the
+                            // object goes (#2669), and a reference to an object that is not there reads as none here.
+                            ReferenceValue = database.MetaverseObjects
+                                .Where(referenced => referenced.Id == vc.ReferenceValueId)
+                                .Select(referenced => new MvoChangeReferenceDto
                                 {
-                                    Id = vc.ReferenceValue.Id,
-                                    DisplayName = vc.ReferenceValue.CachedDisplayName,
-                                    TypeName = vc.ReferenceValue.Type.Name,
-                                    TypePluralName = vc.ReferenceValue.Type.PluralName
-                                },
+                                    Id = referenced.Id,
+                                    DisplayName = referenced.CachedDisplayName,
+                                    TypeName = referenced.Type.Name,
+                                    TypePluralName = referenced.Type.PluralName
+                                })
+                                .FirstOrDefault(),
                             ContributedBySyncRuleId = vc.ContributedBySyncRuleId,
                             ContributedBySyncRuleName = vc.ContributedBySyncRuleName,
                             ContributedByKind = vc.ContributedByKind,
@@ -2031,7 +2036,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         // dominated by the page projection rather than the aggregate.
         var baseQuery = Repository.Database.Set<MetaverseObjectChange>()
             .AsNoTracking()
-            .Where(c => c.MetaverseObject != null && c.MetaverseObject.Id == metaverseObjectId);
+            .Where(c => c.MetaverseObjectId == metaverseObjectId);
 
         var totalCount = await baseQuery.CountAsync();
         if (totalCount == 0)
@@ -2182,24 +2187,6 @@ public partial class MetaverseRepository : IMetaverseRepository
                 CachedDisplayName = mo.CachedDisplayName
             })
             .SingleOrDefaultAsync();
-    }
-
-    /// <inheritdoc />
-    public async Task<List<MetaverseObject>> GetMetaverseObjectsCoreByIdsAsync(IReadOnlyCollection<Guid> metaverseObjectIds)
-    {
-        if (metaverseObjectIds.Count == 0)
-            return [];
-
-        // Only the values ObjectNaming names a Metaverse Object from: a Group's members are never loaded to name it.
-        var ids = metaverseObjectIds.Distinct().ToList();
-        var nameAttributes = ObjectNaming.MetaverseNameAttributes.ToList();
-        return await Repository.Database.MetaverseObjects
-            .AsNoTracking()
-            .Include(mo => mo.Type)
-            .Include(mo => mo.AttributeValues.Where(av => nameAttributes.Contains(av.Attribute.Name)))
-                .ThenInclude(av => av.Attribute)
-            .Where(mo => ids.Contains(mo.Id))
-            .ToListAsync();
     }
 
     #region value provenance (#399)
@@ -2423,8 +2410,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             .Where(vc =>
                 vc.ValueChangeType == ValueChangeType.Add &&
                 EF.Property<int?>(vc.MetaverseObjectChangeAttribute, "AttributeId") == attributeId &&
-                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject != null &&
-                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject.Id == metaverseObjectId)
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == metaverseObjectId)
             .OrderByDescending(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime)
             .Select(vc => new ProvenanceChange
             {
@@ -2480,8 +2466,7 @@ public partial class MetaverseRepository : IMetaverseRepository
             .AsNoTracking()
             .Where(vc =>
                 EF.Property<int?>(vc.MetaverseObjectChangeAttribute, "AttributeId") == attributeId &&
-                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject != null &&
-                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject.Id == metaverseObjectId)
+                vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == metaverseObjectId)
             .OrderByDescending(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.ChangeTime)
             .ThenByDescending(vc => vc.Id)
             .Take(rawCap)
@@ -2498,7 +2483,11 @@ public partial class MetaverseRepository : IMetaverseRepository
                 vc.BoolValue,
                 vc.ByteValueLength,
                 vc.ReferenceValueId,
-                ReferenceDisplayName = vc.ReferenceValue != null ? vc.ReferenceValue.CachedDisplayName : null,
+                // By the id the value holds, which is kept after the referenced object goes (#2669).
+                ReferenceDisplayName = Repository.Database.MetaverseObjects
+                    .Where(referenced => referenced.Id == vc.ReferenceValueId)
+                    .Select(referenced => referenced.CachedDisplayName)
+                    .FirstOrDefault(),
                 vc.ContributedBySyncRuleId,
                 vc.ContributedBySyncRuleName,
                 vc.ContributedByKind,
@@ -4425,8 +4414,11 @@ public partial class MetaverseRepository : IMetaverseRepository
         int count,
         bool includeTotalCount)
     {
+        // A deletion record whose object no longer exists, asked of the object table rather than the record's id, which
+        // stays set once deletions stop clearing it (#2669).
         var query = Repository.Database.MetaverseObjectChanges
-            .Where(c => c.ChangeType == ObjectChangeType.Deleted && c.MetaverseObject == null);
+            .Where(c => c.ChangeType == ObjectChangeType.Deleted &&
+                        !Repository.Database.MetaverseObjects.Any(m => m.Id == c.MetaverseObjectId));
 
         // Apply filters
         if (objectTypeId.HasValue)
@@ -4474,38 +4466,18 @@ public partial class MetaverseRepository : IMetaverseRepository
     }
 
     /// <inheritdoc />
-    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangesByObjectIdsAsync(IReadOnlyCollection<Guid> deletedMetaverseObjectIds)
-    {
-        if (deletedMetaverseObjectIds.Count == 0)
-            return [];
-
-        // A deleted object's earlier changes carry the same deleted id once its deletion re-keys them, so the Deleted
-        // record is picked out by type, and the latest taken per id as the single-object read takes it.
-        var ids = deletedMetaverseObjectIds.Distinct().ToList();
-        var records = await Repository.Database.MetaverseObjectChanges
-            .AsNoTracking()
-            .Where(c => c.ChangeType == ObjectChangeType.Deleted
-                        && c.DeletedMetaverseObjectId != null
-                        && ids.Contains(c.DeletedMetaverseObjectId.Value))
-            .Include(c => c.DeletedObjectType)
-            .ToListAsync();
-
-        return records
-            .GroupBy(c => c.DeletedMetaverseObjectId)
-            .Select(g => g.OrderByDescending(c => c.ChangeTime).First())
-            .ToList();
-    }
-
-    /// <inheritdoc />
     public async Task<MetaverseObjectChange?> GetDeletedMvoChangeAsync(Guid deletedMetaverseObjectId)
     {
         // Ordered rather than a bare FirstOrDefault: an object has one Deleted record in practice, but a
         // deterministic pick beats an arbitrary one if that ever stops holding, and the deep link must not
         // open a different record on refresh. DeletedObjectType is included because the dialog names it.
+        // Matched on the subject id or the deleted-object id until the second is retired (#2669).
         return await Repository.Database.MetaverseObjectChanges
             .Where(c => c.ChangeType == ObjectChangeType.Deleted
-                        && c.DeletedMetaverseObjectId == deletedMetaverseObjectId)
+                        && (c.DeletedMetaverseObjectId == deletedMetaverseObjectId || c.MetaverseObjectId == deletedMetaverseObjectId)
+                        && !Repository.Database.MetaverseObjects.Any(m => m.Id == deletedMetaverseObjectId))
             .OrderByDescending(c => c.ChangeTime)
+            .ThenByDescending(c => c.Id)
             .Include(c => c.DeletedObjectType)
             .FirstOrDefaultAsync();
     }
@@ -4625,55 +4597,34 @@ public partial class MetaverseRepository : IMetaverseRepository
     /// <inheritdoc />
     public async Task<List<MvoChangeHistoryDto>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
     {
-        // First, get the Delete change record
         var targetChange = await Repository.Database.MetaverseObjectChanges
-            .OrderBy(c => c.Id)
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == changeId);
 
         if (targetChange == null)
             return [];
 
-        // Resolve the original MVO ID from the deletion change record.
-        // DeletedMetaverseObjectId is explicitly set via raw SQL on prior change records,
-        // and via SetDeletedMetaverseObjectIdAsync on the deletion record itself.
-        // As a fallback, EF Core may auto-set MetaverseObjectId via relationship fixup.
-        var mvoId = targetChange.DeletedMetaverseObjectId
-            ?? (targetChange.MetaverseObject != null ? targetChange.MetaverseObject.Id : (Guid?)null);
-
-        // Also check the shadow FK property directly (EF Core stores it even without navigation loaded)
-        if (!mvoId.HasValue || mvoId.Value == Guid.Empty)
-        {
-            var shadowFk = Repository.Database.Entry(targetChange).Property<Guid?>("MetaverseObjectId").CurrentValue;
-            if (shadowFk.HasValue && shadowFk.Value != Guid.Empty)
-                mvoId = shadowFk;
-        }
-
-        // If we have the MVO ID, find ALL change records using DeletedMetaverseObjectId
-        // (set on prior records by raw SQL) OR MetaverseObjectId (set on deletion record by EF Core).
-        // Both branches load each reference value's Type: the Deleted Objects page builds the reference's
-        // /t/{plural}/v/{id} link and its type chip from it (#2146).
-        if (mvoId.HasValue && mvoId.Value != Guid.Empty)
-        {
-            // Projected as change history projects a live object's changes, so each attribute brings its first values
-            // and its total rather than every value of a large group (#2498).
-            var history = await Repository.Database.MetaverseObjectChanges
+        // The deleted object's history is read by its id (#2669): the deletion record's subject id, or the deleted-object
+        // id, which carries it until that column is retired. A deletion re-keys the object's earlier records onto the
+        // deleted-object id today and will leave them on the subject id once it stops rewriting history, so both are
+        // matched. Projected as change history projects a live object's changes, so each attribute brings its first
+        // values and its total rather than every value of a large group (#2498).
+        var objectId = targetChange.MetaverseObjectId ?? targetChange.DeletedMetaverseObjectId;
+        var history = objectId is { } id
+            ? await Repository.Database.MetaverseObjectChanges
                 .AsNoTracking()
-                .Where(c => c.DeletedMetaverseObjectId == mvoId || c.Id == changeId)
+                .Where(c => c.MetaverseObjectId == id || c.DeletedMetaverseObjectId == id || c.Id == changeId)
                 .OrderByDescending(c => c.ChangeTime)
                 .Select(MvoChangeHistoryProjection)
+                .ToListAsync()
+            : await Repository.Database.MetaverseObjectChanges
+                .AsNoTracking()
+                .Where(c => c.Id == changeId)
+                .Select(MvoChangeHistoryProjection)
                 .ToListAsync();
-            await ResolveChangeValueContributingSystemsAsync(history);
-            return history;
-        }
 
-        // Fallback: return only the Delete change
-        var deletionOnly = await Repository.Database.MetaverseObjectChanges
-            .AsNoTracking()
-            .Where(c => c.Id == changeId)
-            .Select(MvoChangeHistoryProjection)
-            .ToListAsync();
-        await ResolveChangeValueContributingSystemsAsync(deletionOnly);
-        return deletionOnly;
+        await ResolveChangeValueContributingSystemsAsync(history);
+        return history;
     }
 
     public async Task<PagedResultSet<MetaverseObjectAttributeValue>> GetAttributeValuesPagedAsync(

@@ -4,6 +4,7 @@
 using System.Data.Common;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Staging.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,8 @@ public partial class ConnectedSystemRepository
             return new RangeResultSet<CsoChangeValueRow> { Results = [], TotalResults = total };
 
         var details = await ReadCsoChangeValueDetailsAsync(connection, ChangeValueRowsSql.DetailIds(window));
+        var references = await ObjectReferenceSql.ReadConnectedSystemObjectReferencesAsync(connection,
+            details.Values.Select(d => d.ReferenceId).OfType<Guid>().Distinct().ToList());
         var rows = window
             .Where(row => details.ContainsKey(row.ValueId))
             .Select(row =>
@@ -43,7 +46,11 @@ public partial class ConnectedSystemRepository
                     AttributePlurality = detail.AttributePlurality,
                     Operation = row.Operation,
                     Value = detail.Value,
-                    PreviousValue = row.PreviousValueId is { } previous && details.TryGetValue(previous, out var replaced) ? replaced.Value : null
+                    PreviousValue = row.PreviousValueId is { } previous && details.TryGetValue(previous, out var replaced) ? replaced.Value : null,
+                    ValueReference = ReferenceOf(detail.ReferenceId, references),
+                    PreviousValueReference = row.PreviousValueId is { } previousId && details.TryGetValue(previousId, out var previousDetail)
+                        ? ReferenceOf(previousDetail.ReferenceId, references)
+                        : null
                 };
             })
             .ToList();
@@ -96,10 +103,34 @@ public partial class ConnectedSystemRepository
         return names;
     }
 
-    private sealed record CsoChangeValueDetail(string AttributeName, AttributeDataType AttributeType, AttributePlurality AttributePlurality, CsoValueChangeDto Value);
+    /// <inheritdoc />
+    public async Task<Dictionary<Guid, ResolvedObjectReference>> GetConnectedSystemObjectReferenceSummariesAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        using var span = ActivitySource.StartActivity("Cso.ResolveReferences");
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        return await ObjectReferenceSql.ReadConnectedSystemObjectReferencesAsync(connection, connectedSystemObjectIds);
+    }
+
+    /// <inheritdoc />
+    public async Task<int?> GetJoinedMetaverseObjectTypeIdAsync(Guid connectedSystemObjectId)
+    {
+        return await Repository.Database.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => cso.Id == connectedSystemObjectId && cso.MetaverseObject != null)
+            .Select(cso => (int?)cso.MetaverseObject!.Type.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    private sealed record CsoChangeValueDetail(
+        string AttributeName, AttributeDataType AttributeType, AttributePlurality AttributePlurality, CsoValueChangeDto Value, Guid? ReferenceId);
+
+    private static ResolvedObjectReference? ReferenceOf(Guid? referenceId, Dictionary<Guid, ResolvedObjectReference> references) =>
+        referenceId is { } id ? references.GetValueOrDefault(id) : null;
 
     /// <summary>
-    /// Reads the given value changes in full, naming each referenced object as the change-history projection names it.
+    /// Reads the given value changes in full, naming each referenced object as the change-history projection names it, and
+    /// keeping the id each reference holds whether or not its object is still there, for the caller to resolve (#2669).
     /// Only ever called for one window's rows.
     /// </summary>
     private static async Task<Dictionary<Guid, CsoChangeValueDetail>> ReadCsoChangeValueDetailsAsync(DbConnection connection, Guid[] valueIds)
@@ -112,7 +143,8 @@ public partial class ConnectedSystemRepository
                    r."Id", r."ConnectedSystemId", rt."Name", {ChangeValueRowsSql.ConnectedSystemObjectNameSql("r.\"Id\"")},
                    (SELECT sav."StringValue" FROM "ConnectedSystemObjectAttributeValues" sav
                     WHERE sav."ConnectedSystemObjectId" = r."Id" AND sav."AttributeId" = r."SecondaryExternalIdAttributeId"
-                      AND sav."StringValue" IS NOT NULL LIMIT 1)
+                      AND sav."StringValue" IS NOT NULL LIMIT 1),
+                   v."ReferenceValueId"
             FROM "ConnectedSystemObjectChangeAttributeValues" v
             JOIN "ConnectedSystemObjectChangeAttributes" ac ON ac."Id" = v."ConnectedSystemObjectChangeAttributeId"
             LEFT JOIN "ConnectedSystemAttributes" a ON a."Id" = ac."AttributeId"
@@ -154,7 +186,8 @@ public partial class ConnectedSystemRepository
                     }
             };
             details[reader.GetGuid(0)] = new CsoChangeValueDetail(
-                reader.GetString(1), (AttributeDataType)reader.GetInt32(2), (AttributePlurality)reader.GetInt32(3), value);
+                reader.GetString(1), (AttributeDataType)reader.GetInt32(2), (AttributePlurality)reader.GetInt32(3), value,
+                reader.IsDBNull(21) ? null : reader.GetGuid(21));
         }
 
         return details;

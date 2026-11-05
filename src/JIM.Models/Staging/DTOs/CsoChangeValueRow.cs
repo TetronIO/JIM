@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.History;
 
 namespace JIM.Models.Staging.DTOs;
 
@@ -30,4 +31,13 @@ public class CsoChangeValueRow
 
     /// <summary>For a Set row, the value it replaced; otherwise null.</summary>
     public CsoValueChangeDto? PreviousValue { get; set; }
+
+    /// <summary>
+    /// What is held of the object <see cref="Value"/> references (#2669): the live object, its deletion record, or
+    /// nothing but the id. Null when the value is not a reference.
+    /// </summary>
+    public ResolvedObjectReference? ValueReference { get; set; }
+
+    /// <summary>As <see cref="ValueReference"/>, for <see cref="PreviousValue"/>.</summary>
+    public ResolvedObjectReference? PreviousValueReference { get; set; }
 }
