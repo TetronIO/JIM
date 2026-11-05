@@ -28,7 +28,7 @@ flowchart LR
     IConnector --> IPassword[IConnectorPasswordManagement<br/>OpenPasswordConnection<br/>SetPasswordAsync<br/>ClosePasswordConnection<br/>IConnectorPasswordPolicyDiscovery]
     IConnector --> IDiscovery[Discovery and advice<br/>IConnectorDirectoryServers<br/>IConnectorObjectClassUsage<br/>IConnectorContainerObjectCounts<br/>IConnectorDetectedCapabilities<br/>IConnectorObjectTypeSelectionValidation<br/>IConnectorRecommendedExportParallelism<br/>IConnectorSecureEndpoint<br/>IConnectorCatalogue: tables, views<br/>and columns, SQL, #2570]
     IConnector --> IProbe[IConnectorUniquenessProbe<br/>Is a generated value in use<br/>in the target? #242]
-    IConnector --> IWatermark[IConnectorImportWatermarkDescription<br/>Describes the range an import read<br/>in the Connector's own terms]
+    IConnector --> IWatermark[IConnectorImportWatermark<br/>Describes the range an import read<br/>and removes the watermark on a clear]
     IConnector --> IStore[IConnectorScimResourceStoreAware<br/>SetScimResourceStore: the SCIM<br/>Service Provider's store, #124]
 ```
 
@@ -203,7 +203,7 @@ flowchart TD
 
 - **Service injection before open**<br /> Certificate and credential providers are injected before `OpenImportConnection`/`OpenExportConnection` is called. This allows connectors to decrypt passwords and load certificates during connection setup.
 
-- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page, ensuring the connector sees a consistent view across pages. The new watermark from the first page is only saved once the run has staged everything the pages returned (#1868); a run that fails or is cancelled first keeps the watermark it started with, so the next run re-reads those changes instead of skipping them. A Delta Import whose detected deletions a Run Profile limit withheld keeps it too (#2089), so the next Delta Import reports them again. The Activity records the watermark the run started from and the one it reached (`ImportWatermarkFrom`, `ImportWatermarkTo`), which a connector implementing `IConnectorImportWatermarkDescription` describes in its own terms ("After 8, up to 15 (change sequence)").
+- **Watermark consistency**<br /> During paginated delta imports, the *original* persisted connector data is passed to every page, ensuring the connector sees a consistent view across pages. The new watermark from the first page is only saved once the run has staged everything the pages returned (#1868); a run that fails or is cancelled first keeps the watermark it started with, so the next run re-reads those changes instead of skipping them. A Delta Import whose detected deletions a Run Profile limit withheld keeps it too (#2089), so the next Delta Import reports them again. The Activity records the watermark the run started from and the one it reached (`ImportWatermarkFrom`, `ImportWatermarkTo`), which a connector implementing `IConnectorImportWatermark` describes in its own terms ("After 8, up to 15 (change sequence)").
 
 - **Parallel connector isolation (#1820)**<br /> Each parallel export worker gets its own connector instance created via factory (worker 0 uses the main one), opened on its first batch and kept for every batch it runs rather than opened and closed per batch. No connection is ever shared between concurrent batches, which is critical for connectors like LDAP that maintain stateful connections. A connector whose batch fails is discarded, and the worker opens a fresh one for its next batch.
 

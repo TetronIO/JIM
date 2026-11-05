@@ -262,7 +262,7 @@ Approve-JIMConnectedSystemServerCertificate -ConnectedSystemId 42 `
 The Base URL is probably pointing at a resource endpoint rather than the root of the service. It should be the path that `/ServiceProviderConfig` hangs off.
 
 **Delta Imports read everything every time**<br />
-Check the Activity for a warning. Either the provider does not advertise filtering (set Change Detection to Last Modified Filter if you know it supports it anyway), or the provider rejected the filter, or the provider is Keycloak (whose last-modified dates cannot be filtered on safely; set Change Detection to Full Scan), or no watermark had been recorded yet, in which case the next Delta Import will be incremental.
+Check the Activity for a warning. Either the provider does not advertise filtering (set Change Detection to Last Modified Filter if you know it supports it anyway), or the provider rejected the filter, or the provider is Keycloak (whose last-modified dates cannot be filtered on safely; set Change Detection to Full Scan), or no watermark had been recorded yet (the first Delta Import, or the first after clearing the Connector Space), in which case the next Delta Import will be incremental.
 
 **An import fails with "returned an empty page ... while its totalResults says"**<br />
 The provider counted resources it then did not return. JIM stops rather than finish a read of every resource that would treat the missing ones as deleted. Check that the credential can read every resource of the type, and whether the provider counts resources it hides.

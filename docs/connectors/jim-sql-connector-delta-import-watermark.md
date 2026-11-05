@@ -161,7 +161,7 @@ Schedule the Delta Import at the cadence the application warrants, and a Full Im
 Every related table of a selected Object Type needs one. Add the column to the table (a default value is enough for a table whose rows are only ever inserted) and name it in the configuration.
 
 **A Delta Import read every row**<br />
-Either no watermark existed yet (the first run, or the first after changing the mode; expected, and reported as a warning on the Activity) or a related table had no watermark recorded yet, in which case JIM reads every parent that has any related rows for that one run rather than risk missing a change. The next run is incremental.
+Either no watermark existed yet (the first run, or the first after changing the mode or clearing the Connector Space; expected, and reported as a warning on the Activity) or a related table had no watermark recorded yet, in which case JIM reads every parent that has any related rows for that one run rather than risk missing a change. The next run is incremental.
 
 **A change to a phone number or a membership was not picked up**<br />
 The related table's watermark did not move. Check the default fills the column on insert, the trigger updates it on update, and, for a removal, that the table records it somewhere a watermark can see; a hard delete is invisible until the next Full Import.
