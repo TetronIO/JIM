@@ -4753,6 +4753,85 @@ html[lang] .jim-kv-table td:first-child {
     background-color: currentColor !important;
 }
 
+/* ─── Tables and Object Chips inside alerts (#2779) ─── */
+
+/* A table or an Object Chip placed in a coloured alert keeps the neutral styling it has on a page, so it reads as
+   a white card and grey pills pasted onto the alert rather than as part of the message. Inside a Text or Outlined
+   alert of a semantic severity, both take the alert's own tone instead: the same --jim-chip-text-* blend as the
+   alert's text (see "Alert text" near the top of this file), so they follow every theme the way that text does.
+
+   The tone is declared once per severity and every rule below reads it, so a new rule here serves all four. The
+   same table and chips outside an alert (the Activity page's sections, say) are untouched. */
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info) {
+    --jim-alert-tone: var(--jim-chip-text-info);
+}
+
+html[lang] :is(.mud-alert-text-success, .mud-alert-outlined-success) {
+    --jim-alert-tone: var(--jim-chip-text-success);
+}
+
+html[lang] :is(.mud-alert-text-warning, .mud-alert-outlined-warning) {
+    --jim-alert-tone: var(--jim-chip-text-warning);
+}
+
+html[lang] :is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) {
+    --jim-alert-tone: var(--jim-chip-text-error);
+}
+
+/* The table goes transparent, its text and header take the alert's colour, and its dividers are drawn in that
+   colour rather than the page's grey lines. The cell rules match the specificity of the nested-table rules
+   ("Nested containers"), which would otherwise paint every cell the paper surface. The table's rounded corner is
+   squared off: with no surface of its own it has no visible edge to round, and its clipped corners would cut the
+   ends off the first and last dividers. The site-wide container radius on .mud-table is !important, so this has
+   to be as well. */
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-table.mud-simple-table {
+    border-radius: 0 !important;
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table,
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table thead tr,
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table tbody td {
+    background-color: transparent;
+    color: inherit;
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table table * tr > th {
+    color: inherit;
+    border-top: 1px solid color-mix(in srgb, var(--jim-alert-tone) 28%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--jim-alert-tone) 28%, transparent);
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table table * tr > td {
+    border-bottom: 1px solid color-mix(in srgb, var(--jim-alert-tone) 16%, transparent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .mud-simple-table.mud-table-hover tbody tr:hover > td {
+        background-image: none;
+        background-color: color-mix(in srgb, var(--jim-alert-tone) 8%, transparent);
+    }
+}
+
+/* The chip's pill and name take the alert's tone, strengthening on hover as the page chip does. The glyph keeps its
+   kind colour, because that colour is how a kind is recognised everywhere on the site. */
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .jim-object-chip {
+    background: color-mix(in srgb, var(--jim-alert-tone) 11%, transparent);
+    color: var(--jim-alert-tone);
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .jim-chip-link:hover .jim-object-chip {
+    background: color-mix(in srgb, var(--jim-alert-tone) 20%, transparent);
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .jim-object-chip-type {
+    color: color-mix(in srgb, var(--jim-alert-tone) 72%, transparent);
+}
+
+html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-success, .mud-alert-outlined-success, .mud-alert-text-warning, .mud-alert-outlined-warning, .mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) .jim-object-chip.deleted {
+    background: transparent;
+    outline-color: color-mix(in srgb, var(--jim-alert-tone) 40%, transparent);
+}
+
 /* ─── Run phase step shared styling (#454) ───
    Used by the phase stepper on the Activity detail page, and by the readout beneath it: a step's
    duration, and the steps shown inside the one running. */
