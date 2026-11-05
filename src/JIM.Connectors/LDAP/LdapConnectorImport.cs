@@ -247,7 +247,7 @@ internal class LdapConnectorImport : ILdapDeltaImportHost
             if (combos.Count == 0)
                 return result;
 
-            _logger.Debug("GetFullImportObjects: OpenLDAP/Generic directory detected. Processing {ComboCount} container+objectType combos with concurrency {Concurrency}",
+            _logger.Debug("GetFullImportObjects: connection-scoped paging directory (OpenLDAP, 389 Directory Server or Generic) detected. Processing {ComboCount} container+objectType combos with concurrency {Concurrency}",
                 combos.Count, _connectionFactory != null ? _importConcurrency : 1);
 
             if (_connectionFactory != null && _importConcurrency > 1)

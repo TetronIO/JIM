@@ -315,6 +315,8 @@ public class LdapDirectoryTypeTests
     [Test]
     public void ComputedProperties_DirectoryServer389_MatchGeneric()
     {
+        // Export concurrency is the deliberate exception: 389 Directory Server is tuned like OpenLDAP
+        // (LdapExportConcurrencyAutoTuneTests), where an unidentified directory stays conservative.
         var directoryServer = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.DirectoryServer389 };
         var generic = new LdapConnectorRootDse { DirectoryType = LdapDirectoryType.Generic };
 
@@ -325,7 +327,6 @@ public class LdapDirectoryTypeTests
             Assert.That(directoryServer.IsActiveDirectoryFamily, Is.EqualTo(generic.IsActiveDirectoryFamily));
             Assert.That(directoryServer.DeltaSourceKind, Is.EqualTo(generic.DeltaSourceKind));
             Assert.That(directoryServer.EnforcesSamSingleValuedRules, Is.EqualTo(generic.EnforcesSamSingleValuedRules));
-            Assert.That(directoryServer.RecommendedExportConcurrency, Is.EqualTo(generic.RecommendedExportConcurrency));
             Assert.That(directoryServer.SupportsPaging, Is.EqualTo(generic.SupportsPaging));
             Assert.That(directoryServer.SupportsPaging, Is.True);
         }

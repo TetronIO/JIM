@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Exports to 389 Directory Server are faster: on schema import JIM now raises the LDAP Connector's Export Concurrency to 16 and sends two batches at once, as it already did for Active Directory and OpenLDAP, rather than 4 operations and one batch at a time. A value you have set yourself is kept.
 - ⚡ Synchronising into a system with large groups is faster: reading each page's Metaverse Objects no longer grows with the square of a group's membership, which cost 154 seconds for one page in a 750,000-person directory. Synchronisation and deletion previews speed up too. (#2598)
 - ⚡ Synchronising a group whose members are themselves large groups is faster: recording each export's change now reads only the names of the objects it references, not their members, which cost 14.8 seconds for one group in a 750,000-person directory. (#2598)
 - ⚡ Large groups load far faster during synchronisation: loading a group's members or pending membership changes no longer grows with the square of its size, taking one page with a 500,000-member group from over a minute to seconds. (#2598)

@@ -190,6 +190,39 @@ function Set-DirsrvRetroChangelog {
     }
 }
 
+function Get-DirsrvPasswordStorageScheme {
+    <#
+    .SYNOPSIS
+        The global password policy's storage scheme (PBKDF2-SHA512 in the base image).
+    #>
+    param([string]$ContainerName)
+
+    $policy = docker exec $ContainerName dsconf localhost pwpolicy get 2>&1
+    $line = @($policy | Where-Object { $_ -match '^passwordstoragescheme:\s*(\S+)' }) | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0 -or -not $line) {
+        docker rm -f $ContainerName | Out-Null
+        throw "dsconf could not read the password storage scheme in $ContainerName"
+    }
+    return ($line -replace '^passwordstoragescheme:\s*', '').Trim()
+}
+
+function Set-DirsrvPasswordStorageScheme {
+    <#
+    .SYNOPSIS
+        Set the global password policy's storage scheme; takes effect at once, no restart.
+    #>
+    param(
+        [string]$ContainerName,
+        [string]$Scheme
+    )
+
+    docker exec $ContainerName dsconf localhost pwpolicy set "--pwdscheme=$Scheme" 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+    if ($LASTEXITCODE -ne 0) {
+        docker rm -f $ContainerName | Out-Null
+        throw "dsconf could not set the password storage scheme to $Scheme in $ContainerName"
+    }
+}
+
 # ============================================================================
 # Snapshot build
 # ============================================================================
@@ -245,9 +278,22 @@ function Build-DirsrvSnapshot {
     Set-DirsrvRetroChangelog -ContainerName $ContainerName -State disable
     Restart-DirsrvInstance -ContainerName $ContainerName
 
+    # Populate with passwords stored as SSHA512 rather than the base image's PBKDF2-SHA512. Every
+    # test user carries a userPassword, and PBKDF2's deliberately slow hashing roughly trebles the
+    # cost of each add (measured at about 33 ms against 15 ms per user), several minutes on a Large
+    # snapshot. The users' passwords verify the same under either scheme, and 389 upgrades a stored
+    # hash to the configured scheme when the user next binds. The scheme is restored before the
+    # commit, so the committed instance hashes new passwords exactly as the base image does.
+    $passwordStorageScheme = Get-DirsrvPasswordStorageScheme -ContainerName $ContainerName
+    Write-Host "  Storing populated passwords as SSHA512 (the image's $passwordStorageScheme is restored before the commit)..." -ForegroundColor Gray
+    Set-DirsrvPasswordStorageScheme -ContainerName $ContainerName -Scheme SSHA512
+
     # Run the populate action
     Write-Host "  Populating test data..." -ForegroundColor Gray
     & $PopulateAction
+
+    Write-Host "  Restoring the password storage scheme ($passwordStorageScheme)..." -ForegroundColor Gray
+    Set-DirsrvPasswordStorageScheme -ContainerName $ContainerName -Scheme $passwordStorageScheme
 
     Write-Host "  Re-enabling the Retro Changelog plug-in (restart)..." -ForegroundColor Gray
     Set-DirsrvRetroChangelog -ContainerName $ContainerName -State enable

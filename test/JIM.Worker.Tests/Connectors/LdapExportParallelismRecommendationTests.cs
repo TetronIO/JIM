@@ -15,7 +15,7 @@ namespace JIM.Worker.Tests.Connectors;
 /// connector instance runs its own Export Concurrency concurrent operations, so total in-flight
 /// LDAP operations = parallelism x per-instance concurrency. The connector therefore recommends
 /// a parallelism of 2 only when the Connected System's Export Concurrency signals a capable
-/// directory (>= 8; the auto-tune only sets 16 for Active Directory and OpenLDAP), and no
+/// directory (>= 8; the auto-tune only sets 16 for Active Directory, OpenLDAP and 389 Directory Server), and no
 /// recommendation otherwise (the resolver falls back to sequential).
 /// </summary>
 [TestFixture]
@@ -43,6 +43,10 @@ public class LdapExportParallelismRecommendationTests
         => AssertRecommendationAfterAutoTune(LdapDirectoryType.OpenLDAP, ExpectedCapableDirectoryRecommendation);
 
     [Test]
+    public void GetRecommendedExportParallelism_DirectoryServer389AfterAutoTune_Returns2()
+        => AssertRecommendationAfterAutoTune(LdapDirectoryType.DirectoryServer389, ExpectedCapableDirectoryRecommendation);
+
+    [Test]
     public void GetRecommendedExportParallelism_SambaADAfterAutoTune_ReturnsNull()
         => AssertRecommendationAfterAutoTune(LdapDirectoryType.SambaAD, null);
 
@@ -53,8 +57,8 @@ public class LdapExportParallelismRecommendationTests
     /// <summary>
     /// Simulates a Connected System whose schema import has already auto-tuned Export
     /// Concurrency for the given directory type, then asserts the parallelism recommendation:
-    /// 2 for capable directories (auto-tuned Export Concurrency of 16: Active Directory and
-    /// OpenLDAP), null for the rest (auto-tune leaves them at the default of 4).
+    /// 2 for capable directories (auto-tuned Export Concurrency of 16: Active Directory,
+    /// OpenLDAP and 389 Directory Server), null for the rest (auto-tune leaves them at the default of 4).
     /// </summary>
     private static void AssertRecommendationAfterAutoTune(LdapDirectoryType directoryType, int? expected)
     {
