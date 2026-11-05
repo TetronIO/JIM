@@ -173,6 +173,24 @@ public class ExchangeDeliveryTests
         }
     }
 
+    [TestCase("Access denied.")]
+    [TestCase("Access denied")]
+    public async Task DeliverDueAsync_FailureReason_IsEndedOnceBeforeJimsOwnWordsAsync(string reason)
+    {
+        // Exchange's own messages end in a full stop; one that does not gets one, and none gets two.
+        await QueueMailboxAsync(out _, out _);
+        _connector.Answer = _ => ExchangeConvergeResult.Failure(ExchangeChangeFailureKind.Refused, reason);
+
+        await _server.DeliverDueAsync(ConnectedSystemId, ClaimedBy, AsOf, CancellationToken.None);
+
+        var message = _activities.Single().ErrorMessage;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(message, Does.Contain("Access denied. JIM has stopped trying"));
+            Assert.That(message, Does.Not.Contain(".."));
+        }
+    }
+
     [Test]
     public async Task DeliverDueAsync_TheSameFailureAgain_UpdatesTheChangeWithoutAnotherActivityAsync()
     {
@@ -293,6 +311,29 @@ public class ExchangeDeliveryTests
         {
             Assert.That(result.CouldNotDeliver, Is.True);
             Assert.That(result.ReleasedCount, Is.EqualTo(1));
+            Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
+            Assert.That(stored.AttemptCount, Is.Zero, "nothing was tried");
+            Assert.That(_activities, Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task DeliverDueAsync_ConnectedSystemNotManagingExchangeRecipients_GivesTheChangesBackUnattemptedWithoutSigningInAsync()
+    {
+        // Manage Exchange recipients turned off: what is queued waits for it to be turned back on, rather than failing,
+        // and Exchange is not asked anything.
+        var change = await QueueMailboxAsync(out _, out _);
+        _connector.Managing = false;
+
+        var result = await _server.DeliverDueAsync(ConnectedSystemId, ClaimedBy, AsOf, CancellationToken.None);
+
+        var stored = _syncRepository.PendingExchangeChanges[change.Id];
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.NotManagingExchangeRecipients, Is.True);
+            Assert.That(result.CouldNotDeliver, Is.True);
+            Assert.That(result.ReleasedCount, Is.EqualTo(1));
+            Assert.That(_connector.Opened, Is.Zero);
             Assert.That(stored.Status, Is.EqualTo(PendingExchangeChangeStatus.Pending));
             Assert.That(stored.AttemptCount, Is.Zero, "nothing was tried");
             Assert.That(_activities, Is.Empty);
@@ -473,8 +514,11 @@ public class ExchangeDeliveryTests
         public int Opened { get; private set; }
         public int Closed { get; private set; }
         public ExchangeSessionException? OpenFailure { get; set; }
+        public bool Managing { get; set; } = true;
         public Func<ExchangeRecipientTarget, ExchangeConvergeResult> Answer { get; set; } = _ => ExchangeConvergeResult.Success(changedAnything: true);
         public List<(ExchangeRecipientTarget Target, ExchangeDeclaredState Declared)> Converged { get; } = [];
+
+        public bool IsManagingExchangeRecipients(IList<ConnectedSystemSettingValue> settings) => Managing;
 
         public Task OpenExchangeSessionAsync(IList<ConnectedSystemSettingValue> settings, CancellationToken cancellationToken)
         {

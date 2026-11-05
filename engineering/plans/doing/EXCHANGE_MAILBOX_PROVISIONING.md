@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete, Phase 5 against a stand-in for Exchange; Phase 2's settings check done (2a), the Connector's session next (2b))
+- **Status:** Doing (Phases 1, 3, 4, 5 and 6 complete; Phase 2's settings check (2a) and the Connector's delivery (2b) done against the stand-in, the delivery hold and the lab run next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -153,8 +153,8 @@ Each phase is one pull request, built test-first. Docs and a changelog entry go 
 In two pull requests. **2a (done):** the settings, D5's warnings on every surface, D6's discovery per setting, the
 save-time check (`IConnectorSettingsCheck`, a new capability the server runs once the quick validation has refused
 nothing) with its facts, and the stand-in Exchange endpoint in the harness, a restricted no-language session whose
-commands an RBAC-limited account cannot see, against which the whole check runs in CI. **2b (next):** the Connector's
-session and convergence, quiet session close, and the lab run.
+commands an RBAC-limited account cannot see, against which the whole check runs in CI. **2b:** the Connector's
+session and convergence (done), then the delivery hold, quiet session close and the lab run.
 
 - **Settings:** add Exchange server (text, with the Discover action from D6) under the Exchange heading, shown only while Manage Exchange recipients is ticked (`RequiredWhenSetting`). The heading and the checkbox, and their refusal on a directory that is not Active Directory, came with Phase 3.
 - **Refusals on save:**
@@ -168,7 +168,23 @@ session and convergence, quiet session close, and the lab run.
   - principal and realm derivation for all three username forms;
   - discovery parsing of `msExchExchangeServer`;
   - a harness test of the save-time check against the stand-in.
-- **The LDAP Connector implements `IConnectorExchangeRecipients`** (moved from Phase 5, which built the lane against the interface): the session over the remoting library, `ConvergeAsync`'s read-then-converge, and the classification of the library's `RemoteFailure` into the five failure kinds from the spike's failure catalogue, with its table test. Also a harness test in which the stand-in server is preloaded with fake `Enable-Mailbox` / `Get-Recipient`, so CI exercises the lane end to end without Exchange.
+- **The LDAP Connector implements `IConnectorExchangeRecipients`** (2b, moved from Phase 5, which built the lane against the interface):
+  - **Session.** One per lane, signed in with the same derived Kerberos sign-in as the save check (now one method). A sign-in the settings cannot give (no Exchange server, no account, an account the directory cannot find) is Refused, so its changes park for a person; credentials the directory refuses are AuthenticationFailed; an unreachable directory or Exchange retries.
+  - **Converge** (`LdapExchangeConvergePlanner`, pure and table-tested). It reads first: Get-User, Get-Contact or Get-Group by object GUID (else DN), which finds the object whether or not it is a recipient yet, then Get-Recipient for alias and addresses. Every call names the domain controller the export used (requirement 8). None to a type runs the matching Enable-* (the mailbox kind as a switch, the database only when declared), then reads again and sets whatever still differs. The same type runs one Set-* with only what differs; a declared primary address turns `EmailAddressPolicyEnabled` off, or the policy puts its own back. An empty declared value is never compared or set: Exchange decides. A type change, or a recipient JIM does not manage, is refused. An enable someone else raced is read again and converged.
+  - **Classification** (`LdapExchangeFailureClassifier`), from the remoting library's `RemoteFailure`:
+
+    | Failure | Kind |
+    |---|---|
+    | Connection, timeout, protocol fault, untrusted certificate | Unreachable |
+    | Authentication | AuthenticationFailed |
+    | A command or parameter the account cannot see (RBAC hides rather than refuses) | InsufficientPermissions, naming the Recipient Management role group |
+    | `ManagementObjectNotFoundException` naming the declared database | Refused (requirement 20: a missing database will not appear by retrying) |
+    | Any other `ManagementObjectNotFoundException` | ObjectNotFound (usually replication) |
+    | `ADServerUnavailableException`, `ADTransientException` | Unreachable |
+    | Any other command failure | Refused, in Exchange's own words |
+
+  - **Manage Exchange recipients off.** `IsManagingExchangeRecipients` lets the lane give such a system's changes back unattempted instead of failing them. The proper hold (a typed column the due query reads, a Held state on every surface, a save warning, and a portal confirmation before switching off; decided 2026-11-05) is the next pull request.
+  - **Harness.** The stand-in Exchange keeps its recipients in a file every shell shares, so the Connector's harness tests enable, update, re-run (nothing changes) and fail (not found, hidden command, missing database, type change, wrong password, unreachable) against it end to end. A runtime check on the sandbox stack delivered a queued change through the real lane: one Kerberos login, four commands, and the change's Activity history read refused, retried, set.
 
 ### Phase 3: The flag, the Exchange setting and connector-defined attributes (4 days; requirements 1 in part, 4, 6, 25) ✅
 
