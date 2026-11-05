@@ -5087,7 +5087,7 @@ public partial class ConnectedSystemServer
                     ExternalId = discovered.Id,
                     Selected = false,
                     ConnectedSystem = connectedSystem,
-                    Containers = discovered.Containers.Select(BuildConnectedSystemContainerTree).ToHashSet()
+                    Containers = new HashSet<ConnectedSystemContainer>()
                 };
                 connectedSystem.Partitions.Add(newPartition);
 
@@ -5101,17 +5101,21 @@ public partial class ConnectedSystemServer
                     ItemType = HierarchyItemType.Partition
                 });
 
-                // Record every container in the new partition as matched, for the same reason a new container
-                // under an existing partition is (see MatchContainersRecursive): the removal pass below walks
-                // every partition, this one included, and deletes anything it does not find in matchedContainers.
-                // A container the directory has just reported is matched by definition. Without this, the first
-                // retrieval on a Connected System discovered the whole hierarchy, reported it as added, and then
-                // threw it away before the save, so nothing appeared until the button was pressed again (#1369).
-                foreach (var newContainer in newPartition.Containers)
-                    MarkContainerTreeMatched(newContainer, matchedContainers);
-
-                // Count all new containers within the new partition
-                CountAddedContainersRecursive(newPartition.Containers, result.AddedContainers);
+                // A new partition's containers are matched exactly as an existing partition's are, rather than built
+                // fresh from what the directory reported. One JIM already holds, moved in from elsewhere, is that
+                // container: built fresh, it was deleted from its old home and came back as an unselected copy, taking
+                // its objects out of import scope (#2769). Everything else is new, and is added and marked matched
+                // there, which is what keeps the removal pass below from discarding it (#1369).
+                MatchContainersRecursive(
+                    newPartition,
+                    parentContainer: null,
+                    discovered.Containers,
+                    result,
+                    existingContainerLookup,
+                    existingContainerStableIdLookup,
+                    existingContainerPartitions,
+                    matchedContainers,
+                    containersToReparent);
             }
         }
 
@@ -5119,6 +5123,21 @@ public partial class ConnectedSystemServer
         // its old home after everything that might claim it has had its say.
         foreach (var (container, partition, newParent) in containersToReparent)
             ReparentContainer(container, connectedSystem, partition, newParent);
+
+        // A container cannot be in scope while its partition is not, so one that carries a selection into a partition
+        // that is not selected (a partition this refresh discovered always arrives unselected) selects that partition,
+        // as selecting the container on the Scope tab would have. Otherwise the selection the move kept would mean
+        // nothing, and its objects would still fall out of import scope (#2769).
+        foreach (var partition in containersToReparent
+                     .Where(m => !m.Partition.Selected &&
+                                 !ReferenceEquals(existingContainerPartitions.GetValueOrDefault(m.Container), m.Partition) &&
+                                 HoldsASelection(m.Container))
+                     .Select(m => m.Partition))
+        {
+            partition.Selected = true;
+            Log.Information("MergeHierarchy: Selected Partition {Partition}, as a selected Container moved into it.",
+                LogSanitiser.Sanitise(partition.ExternalId));
+        }
 
         // Only now remove what the directory no longer holds. Running this last is what keeps a moved container:
         // by this point it sits under its new parent, so the pass walking its old parent no longer sees it.
@@ -5303,6 +5322,7 @@ public partial class ConnectedSystemServer
     {
         foreach (var discovered in discoveredContainers)
         {
+            ConnectedSystemContainer home;
             if (TryResolveExistingContainer(discovered, globalLookup, globalStableIdLookup, out var existing))
             {
                 matchedContainers.Add(existing);
@@ -5330,16 +5350,17 @@ public partial class ConnectedSystemServer
                     existing.Name = discovered.Name;
                 }
 
-                // Check for move: a different parent, or none where there was one, or a different Partition. A
-                // Container at the top level both before and after has no parent to compare on either side, so its
+                // Check for move: a different parent, or none where there was one, or, at the top level both before
+                // and after, a different Partition. Such a Container has no parent to compare on either side, so its
                 // Partition is the only sign it moved; comparing parents alone missed it, leaving the Container in the
-                // Partition it had left, and deleting it with that Partition when that went too (#2763). Compared by
-                // reference rather than by Distinguished Name: the parent's own name may be being rewritten in this
-                // same refresh. A move between Partitions names both, since the parents alone cannot say where a
-                // top-level Container went.
+                // Partition it had left, and deleting it with that Partition when that went too (#2763). A nested
+                // Container whose parent is unchanged has not moved of its own accord, even when its parent took it to
+                // another Partition. Compared by reference rather than by Distinguished Name: the parent's own name
+                // may be being rewritten in this same refresh. A move between Partitions names both, since the parents
+                // alone cannot say where a top-level Container went.
                 var previousPartition = containerPartitions.GetValueOrDefault(existing);
                 var movedToAnotherPartition = previousPartition != null && !ReferenceEquals(previousPartition, partition);
-                if (!ReferenceEquals(existing.ParentContainer, parentContainer) || movedToAnotherPartition)
+                if (!ReferenceEquals(existing.ParentContainer, parentContainer) || (parentContainer == null && movedToAnotherPartition))
                 {
                     result.MovedContainers.Add(new HierarchyMoveItem
                     {
@@ -5354,22 +5375,14 @@ public partial class ConnectedSystemServer
                     containersToReparent.Add((existing, partition, parentContainer));
                 }
 
-                // Recurse into children
-                MatchContainersRecursive(
-                    partition,
-                    existing,
-                    discovered.ChildContainers,
-                    result,
-                    globalLookup,
-                    globalStableIdLookup,
-                    containerPartitions,
-                    matchedContainers,
-                    containersToReparent);
+                home = existing;
             }
             else
             {
-                // NEW container: build it and put it where the directory says it belongs.
-                var newContainer = BuildConnectedSystemContainerTree(discovered);
+                // NEW container: build it alone and put it where the directory says it belongs. Its children are
+                // matched below like any others, rather than built with it: one JIM already holds, moved beneath this
+                // new container, is that container, and built fresh it came back as an unselected copy (#2769).
+                var newContainer = BuildConnectedSystemContainer(discovered);
                 if (parentContainer != null)
                 {
                     parentContainer.AddChildContainer(newContainer);
@@ -5381,11 +5394,11 @@ public partial class ConnectedSystemServer
                     partition.Containers.Add(newContainer);
                 }
 
-                // Record it and its whole subtree as matched, or the removal pass deletes it again in this same
-                // refresh: "not matched" is how that pass recognises a container that has left the directory. A
-                // container created since the last refresh was once reported as added and then silently dropped, so
-                // it never appeared on the Scope tab to be selected.
-                MarkContainerTreeMatched(newContainer, matchedContainers);
+                // Record it as matched, or the removal pass deletes it again in this same refresh: "not matched" is how
+                // that pass recognises a container that has left the directory. A container created since the last
+                // refresh was once reported as added and then silently dropped, so it never appeared on the Scope tab
+                // to be selected.
+                matchedContainers.Add(newContainer);
 
                 result.AddedContainers.Add(new HierarchyChangeItem
                 {
@@ -5394,22 +5407,28 @@ public partial class ConnectedSystemServer
                     ItemType = HierarchyItemType.Container
                 });
 
-                // Count all child containers as added too
-                CountAddedContainersRecursive(newContainer.ChildContainers, result.AddedContainers);
+                home = newContainer;
             }
+
+            // Recurse into children, beneath the container they now sit under, whether JIM already held it or not.
+            MatchContainersRecursive(
+                partition,
+                home,
+                discovered.ChildContainers,
+                result,
+                globalLookup,
+                globalStableIdLookup,
+                containerPartitions,
+                matchedContainers,
+                containersToReparent);
         }
     }
 
     /// <summary>
-    /// Marks a container and everything beneath it as present in the directory.
+    /// Whether a container, or any container beneath it, is selected.
     /// </summary>
-    private static void MarkContainerTreeMatched(ConnectedSystemContainer container, HashSet<ConnectedSystemContainer> matchedContainers)
-    {
-        matchedContainers.Add(container);
-
-        foreach (var childContainer in container.ChildContainers)
-            MarkContainerTreeMatched(childContainer, matchedContainers);
-    }
+    private static bool HoldsASelection(ConnectedSystemContainer container) =>
+        container.Selected || container.ChildContainers.Any(HoldsASelection);
 
     /// <summary>
     /// Moves a stored container to the parent the directory now reports for it, preserving everything the container
@@ -5430,10 +5449,12 @@ public partial class ConnectedSystemServer
     {
         DetachContainerFromItsCurrentHome(container, connectedSystem);
 
+        // A new home this same refresh discovered has no id yet; its foreign key is left for the save to take from the
+        // navigation, as it does for any new row, rather than set to an id of 0 that names no row (#2769).
         if (newParent != null)
         {
             newParent.AddChildContainer(container);
-            container.ParentContainerId = newParent.Id;
+            container.ParentContainerId = newParent.Id == 0 ? null : newParent.Id;
             container.Partition = null;
             container.PartitionId = null;
         }
@@ -5442,7 +5463,7 @@ public partial class ConnectedSystemServer
             container.ParentContainer = null;
             container.ParentContainerId = null;
             container.Partition = partition;
-            container.PartitionId = partition.Id;
+            container.PartitionId = partition.Id == 0 ? null : partition.Id;
             partition.Containers ??= [];
             partition.Containers.Add(container);
         }
@@ -5507,26 +5528,6 @@ public partial class ConnectedSystemServer
                 CollectRemovedContainerRecursive(container, result);
                 containers.Remove(container);
             }
-        }
-    }
-
-    /// <summary>
-    /// Counts all containers in a hierarchy and adds them to the added containers list.
-    /// </summary>
-    private static void CountAddedContainersRecursive(IEnumerable<ConnectedSystemContainer>? containers, List<HierarchyChangeItem> addedContainers)
-    {
-        if (containers == null) return;
-
-        foreach (var container in containers)
-        {
-            addedContainers.Add(new HierarchyChangeItem
-            {
-                ExternalId = container.ExternalId,
-                Name = container.Name,
-                ItemType = HierarchyItemType.Container
-            });
-
-            CountAddedContainersRecursive(container.ChildContainers, addedContainers);
         }
     }
 
@@ -5737,22 +5738,17 @@ public partial class ConnectedSystemServer
     }
     #endregion
 
-    private static ConnectedSystemContainer BuildConnectedSystemContainerTree(ConnectorContainer connectorContainer)
+    /// <summary>
+    /// A new container for one the directory reported, without its children: those are matched in their own right.
+    /// </summary>
+    private static ConnectedSystemContainer BuildConnectedSystemContainer(ConnectorContainer connectorContainer) => new()
     {
-        var connectedSystemContainer = new ConnectedSystemContainer
-        {
-            ExternalId = connectorContainer.Id,
-            StableId = connectorContainer.StableId,
-            Name = connectorContainer.Name,
-            Description = connectorContainer.Description,
-            Hidden = connectorContainer.Hidden
-        };
-
-        foreach (var childContainer in connectorContainer.ChildContainers)
-            connectedSystemContainer.AddChildContainer(BuildConnectedSystemContainerTree(childContainer));
-
-        return connectedSystemContainer;
-    }
+        ExternalId = connectorContainer.Id,
+        StableId = connectorContainer.StableId,
+        Name = connectorContainer.Name,
+        Description = connectorContainer.Description,
+        Hidden = connectorContainer.Hidden
+    };
     #endregion
 
     #region Connected System Object Types

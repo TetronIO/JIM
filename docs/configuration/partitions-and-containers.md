@@ -175,7 +175,7 @@ See [Configuration changes](configuration-changes.md#previewing-a-change-before-
 
 ## :material-swap-horizontal: Renames and moves in the source system
 
-JIM identifies partitions and containers by the system's own immutable identifier where one exists (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP), not by their Distinguished Name. Renaming an organisational unit, or moving one to a different parent or to another partition JIM already holds, therefore keeps your selection intact: the next hierarchy refresh reports it as a rename or a move rather than as one container disappearing and another appearing. A move between partitions names both partitions.
+JIM identifies partitions and containers by the system's own immutable identifier where one exists (`objectGUID` on Active Directory, `entryUUID` on OpenLDAP), not by their Distinguished Name. Renaming an organisational unit, or moving one to a different parent or partition, therefore keeps your selection intact, even when it moves into a partition or beneath a container that the same refresh discovers: the next hierarchy refresh reports it as a rename or a move rather than as one container disappearing and another appearing. A move between partitions names both partitions. A container is only in scope while its partition is selected, so a selected container that moves into a partition that is not selected selects that partition.
 
 Containers selected before this behaviour shipped record their identifier at their next hierarchy refresh, and continue to be matched on Distinguished Name until then. Refresh the hierarchy once after upgrading to pick it up.
 

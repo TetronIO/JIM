@@ -352,6 +352,110 @@ public class HierarchyMergeTests
         }
     }
 
+    [Test]
+    public void MergeHierarchy_WhenAContainerMovesToAnotherPartition_ItsChildrenFollowWithoutBeingReportedAsMoved()
+    {
+        // A child that keeps its parent has not moved of its own accord, though its Partition has changed with its
+        // parent's; reporting it would list a whole subtree for one move.
+        var (connectedSystem, _, _) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+        var corp = FindByStableId(connectedSystem, CorpStableId)!;
+        corp.AddChildContainer(new ConnectedSystemContainer { Name = "Sales", ExternalId = "OU=Sales,OU=Corp,DC=acme,DC=local", StableId = SalesStableId });
+        var discoveredGlobex = DiscoveredGlobexHoldingCorp();
+        discoveredGlobex.Containers.Single().ChildContainers.Add(new ConnectorContainer("OU=Sales,OU=Corp,DC=globex,DC=local", "Sales") { StableId = SalesStableId });
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [DiscoveredAcme(), discoveredGlobex]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.MovedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Corp" }));
+            Assert.That(corp.ChildContainers.Select(c => c.StableId), Is.EqualTo(new[] { SalesStableId }), "Sales is still beneath Corp");
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_WhenAContainerMovesIntoANewPartition_KeepsItSelectedAndSelectsThePartition()
+    {
+        // A new Partition's Containers were built fresh and never matched, so Corp was removed with its selection and
+        // came back as a new, unselected copy (#2769).
+        var (connectedSystem, _, _) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+        var corp = FindByStableId(connectedSystem, CorpStableId)!;
+        var discoveredInitech = new ConnectorPartition
+        {
+            Id = "DC=initech,DC=local", Name = "initech.local",
+            Containers = [new ConnectorContainer("OU=Corp,DC=initech,DC=local", "Corp") { StableId = CorpStableId }]
+        };
+
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [DiscoveredAcme(), DiscoveredGlobexHoldingCorp(holdingCorp: false), discoveredInitech]);
+
+        var initech = connectedSystem.Partitions!.Single(p => p.ExternalId == "DC=initech,DC=local");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(initech.Containers, Is.EquivalentTo(new[] { corp }), "the new Partition holds the Container JIM already had, not a copy");
+            Assert.That(FlattenContainers(connectedSystem).Count(c => c.StableId == CorpStableId), Is.EqualTo(1), "and there is only one of it");
+            Assert.That(corp.Partition, Is.SameAs(initech));
+            Assert.That(corp.Selected, Is.True, "it keeps its selection");
+            Assert.That(initech.Selected, Is.True, "and its new Partition is selected, without which the selection would mean nothing");
+            Assert.That(result.MovedContainers.Select(c => (c.Name, c.OldPartitionExternalId, c.NewPartitionExternalId)),
+                Is.EqualTo(new[] { ("Corp", (string?)"DC=acme,DC=local", (string?)"DC=initech,DC=local") }));
+            Assert.That(result.AddedContainers, Is.Empty, "a move is not an addition");
+            Assert.That(result.RemovedContainers, Is.Empty, "nor a removal");
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_WhenAContainerMovesBeneathANewContainer_KeepsItAndAddsOnlyTheNewOne()
+    {
+        // A new Container's subtree was built fresh and never matched, so Sales was removed from beneath Corp and came
+        // back beneath Regions as a new, unselected copy (#2769).
+        var connectedSystem = SystemWithCorpAndSales(salesSelected: true);
+        var sales = FindByStableId(connectedSystem, SalesStableId)!;
+        var regions = new ConnectorContainer("OU=Regions,OU=Corp,DC=example,DC=local", "Regions");
+        regions.ChildContainers.Add(DiscoveredSales("OU=Sales,OU=Regions,OU=Corp,DC=example,DC=local"));
+        var corp = DiscoveredCorp();
+        corp.ChildContainers.Add(regions);
+
+        var result = MergeWith(connectedSystem, corp);
+
+        var newRegions = FlattenContainers(connectedSystem).Single(c => c.Name == "Regions");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(newRegions.ChildContainers, Is.EquivalentTo(new[] { sales }), "the Container JIM already had sits beneath the new one");
+            Assert.That(FlattenContainers(connectedSystem).Count(c => c.StableId == SalesStableId), Is.EqualTo(1), "and there is only one of it");
+            Assert.That(sales.Selected, Is.True, "it keeps its selection");
+            Assert.That(newRegions.Selected, Is.False, "the new Container, matching nothing, arrives unselected");
+            Assert.That(result.AddedContainers.Select(c => c.Name), Is.EqualTo(new[] { "Regions" }), "only the new Container is added");
+            Assert.That(result.MovedContainers.Select(c => (c.Name, c.OldParentExternalId, c.NewParentExternalId)),
+                Is.EqualTo(new[] { ("Sales", (string?)"OU=Corp,DC=example,DC=local", (string?)"OU=Regions,OU=Corp,DC=example,DC=local") }));
+            Assert.That(result.RemovedContainers, Is.Empty);
+        }
+    }
+
+    [Test]
+    public void MergeHierarchy_NewPartitionHoldingOnlyNewContainers_AddsThemAllUnselected()
+    {
+        // Guards matching inside new subtrees against over-reaching: what matches nothing JIM holds is still added, as
+        // before, and unselected.
+        var (connectedSystem, _, _) = SystemWithCorpInAcmeAndAnEmptyGlobex();
+        var hq = new ConnectorContainer("OU=HQ,DC=initech,DC=local", "HQ");
+        hq.ChildContainers.Add(new ConnectorContainer("OU=Finance,OU=HQ,DC=initech,DC=local", "Finance"));
+        var discoveredInitech = new ConnectorPartition { Id = "DC=initech,DC=local", Name = "initech.local", Containers = [hq] };
+
+        var acme = DiscoveredAcme();
+        acme.Containers.Add(new ConnectorContainer("OU=Corp,DC=acme,DC=local", "Corp") { StableId = CorpStableId });
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, [acme, DiscoveredGlobexHoldingCorp(holdingCorp: false), discoveredInitech]);
+
+        var initech = connectedSystem.Partitions!.Single(p => p.ExternalId == "DC=initech,DC=local");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.AddedContainers.Select(c => c.Name), Is.EquivalentTo(new[] { "HQ", "Finance" }));
+            Assert.That(result.MovedContainers, Is.Empty);
+            Assert.That(initech.Containers!.Select(c => c.Name), Is.EqualTo(new[] { "HQ" }));
+            Assert.That(initech.Containers!.Single().ChildContainers.Select(c => c.Name), Is.EqualTo(new[] { "Finance" }));
+            Assert.That(initech.Containers!.Single().ChildContainers.Concat(initech.Containers!).Any(c => c.Selected), Is.False, "nothing new is selected");
+            Assert.That(initech.Selected, Is.False, "nor is the new Partition, with nothing selected in it");
+        }
+    }
+
     #endregion
 
     #region Moved-Container helpers
