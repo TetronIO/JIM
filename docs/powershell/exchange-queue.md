@@ -102,7 +102,7 @@ One object per queued change, or with `-Summary` one object of counts.
 | `FirstFailedAt` | `datetime` | When the current run of failures began. JIM parks a change whose failures have gone on for 24 hours. |
 | `NextRetryAt` | `datetime` | When the next attempt falls due, or empty for a change due now or no longer attempted. |
 | `Due` | `bool` | Whether the Exchange delivery lane would attempt the change now. |
-| `CanRetry` | `bool` | Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due, one being delivered is getting its attempt, and a refused one waits on its declared state changing. |
+| `CanRetry` | `bool` | Whether it can be retried: it is parked, or retrying after an attempt. A change not yet attempted is already due, one being delivered is getting its attempt, a refused one waits on its declared state changing, and a held one waits on its Connected System managing Exchange recipients again. |
 
 **With `-Summary`**:
 
@@ -139,7 +139,8 @@ Get-JIMPendingExchangeChange -State Parked -All | Group-Object FailureKind | Sel
 
 Makes matching changes that are parked, or retrying after an attempt, due at once, with their attempts and 24-hour park
 clock reset; the Exchange delivery lane attempts them within seconds. A change not yet attempted is already due, one being
-delivered is left to finish, and a Refused or NotMade change holds until what is declared for the account changes.
+delivered is left to finish, a Held change waits for its Connected System to manage Exchange recipients again, and a
+Refused or NotMade change holds until what is declared for the account changes.
 
 <!-- BEGIN GENERATED: Resume-JIMPendingExchangeChange -->
 ### Syntax
