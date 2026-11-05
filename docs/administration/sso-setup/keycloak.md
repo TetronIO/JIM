@@ -151,7 +151,7 @@ Run `Register-JIMIdentityProvider` again, with the same `-Url` and `-Authority`,
 
 If JIM's address changes, run it with the new address. It replaces the portal's redirect URIs; the client IDs and the secret stay as they are. If people reach JIM at more than one address, give each to `-Url`.
 
-To check the registration on a schedule, run it as a Keycloak client's service account with `-ClientCredential`, giving the account the `realm-admin` role of JIM's realm's `realm-management` client. See [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
+To check the registration on a schedule, run it as a Keycloak client's service account with `-ClientCredential`, giving the account the `realm-admin` role of JIM's realm's `realm-management` client. On Keycloak 26.8.2 or later, also add the `kc-admin-api` client scope to that client as a **Default** scope: Keycloak's admin API accepts only tokens that carry it. See [Register-JIMIdentityProvider](../../powershell/identity-providers.md#register-jimidentityprovider).
 
 ## :material-history: Realms set up from an earlier version of this guide
 
@@ -161,6 +161,7 @@ Earlier versions of this guide created `jim-api` with **Type: Optional**, and of
 
 - **Sign-in is unavailable / JIM does not trust the certificate**: Keycloak's HTTPS certificate comes from a certificate authority JIM does not trust, usually your own. Trust it for sign-in; see [Trust Your Identity Provider's Certificate](trusting-your-identity-provider.md).
 - **`Register-JIMIdentityProvider` says Keycloak refused a request**: the account cannot administer the realm. Give it the `realm-admin` role of the realm's `realm-management` client, or use a master realm administrator.
+- **`Register-JIMIdentityProvider` says Keycloak did not accept the sign-in for its admin API**: the token lacks the admin API's audience, which Keycloak 26.8.2 and later require. Add the `kc-admin-api` client scope, as a **Default** scope, to the client the message names.
 - **Realm name**: Ensure the realm name in `JIM_SSO_AUTHORITY` matches exactly (case-sensitive).
 - **`Invalid parameter: redirect_uri`, or tokens without `sub`, `name` or `email`**: the registration has drifted. Run `Register-JIMIdentityProvider` with `-WhatIf` to see what, then without it to repair it.
 

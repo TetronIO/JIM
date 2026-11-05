@@ -140,6 +140,14 @@ function Invoke-JIMKeycloakAdminApi {
     }
     catch {
         $status = [int]$_.Exception.Response.StatusCode
+        # Keycloak 26.8.2 and later accept a token on the admin API only when its audience names the admin API, which
+        # the kc-admin-api client scope adds. admin-cli has it by default; a client made for a service account does not,
+        # so the API answers 401 although the token carries realm-admin. Requesting the scope is no way round it: earlier
+        # versions have no such scope and refuse the token request with invalid_scope.
+        if ($status -eq 401) {
+            $client = if ($Connection.ClientCredential) { $Connection.ClientCredential.UserName } else { 'admin-cli' }
+            throw "Keycloak did not accept the sign-in for its admin API. Keycloak 26.8.2 and later accept only tokens meant for the admin API: add the kc-admin-api client scope to the client '$client' in the realm '$($Connection.AdminRealm)', as a default scope."
+        }
         if ($status -eq 403) {
             throw "Keycloak refused $Method $Path in the realm '$($Connection.Realm)'. The account needs the realm-admin role of that realm's realm-management client, or the master realm's admin role."
         }
