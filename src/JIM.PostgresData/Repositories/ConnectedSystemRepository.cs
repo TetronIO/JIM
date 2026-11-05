@@ -9245,6 +9245,20 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.SyncRules.CountAsync(sr => sr.ConnectedSystemId == connectedSystemId);
     }
 
+    public async Task<IReadOnlyList<string>> GetSyncRuleNamesWithConnectionCriteriaToAsync(int connectedSystemId)
+    {
+        var db = Repository.Database;
+        // Configuration-sized: every other system's export rule, since only an export rule can hold the criterion.
+        var otherRules = await db.SyncRules
+            .AsNoTracking()
+            .Where(sr => sr.ConnectedSystemId != connectedSystemId && sr.Direction == SyncRuleDirection.Export)
+            .Select(sr => new { sr.Id, sr.Name })
+            .ToListAsync();
+
+        var holding = await SyncRuleScopingTreeLoader.GetRuleIdsWithConnectionCriteriaToAsync(db, otherRules.Select(r => r.Id).ToList(), connectedSystemId);
+        return otherRules.Where(r => holding.Contains(r.Id)).Select(r => r.Name).OrderBy(name => name, StringComparer.Ordinal).ToList();
+    }
+
     public async Task<int> GetRunProfileCountAsync(int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemRunProfiles.CountAsync(rp => rp.ConnectedSystemId == connectedSystemId);

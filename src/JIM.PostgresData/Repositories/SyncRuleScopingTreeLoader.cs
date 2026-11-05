@@ -134,6 +134,32 @@ internal static class SyncRuleScopingTreeLoader
     }
 
     /// <summary>
+    /// The rules among <paramref name="syncRuleIds"/> holding, at any depth, a connection criterion (#2021) that names an
+    /// Object Type of <paramref name="connectedSystemId"/>.
+    /// </summary>
+    internal static async Task<HashSet<int>> GetRuleIdsWithConnectionCriteriaToAsync(
+        JimDbContext db, IReadOnlyCollection<int> syncRuleIds, int connectedSystemId)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        var placements = await GetGroupPlacementsAsync(db, syncRuleIds);
+        if (placements.Count == 0)
+            return [];
+
+        var groupIds = placements.Keys.Select(id => (int?)id).ToList();
+        var groupsHoldingOne = await db.SyncRuleScopingCriteria
+            .AsNoTracking()
+            .Where(c => groupIds.Contains(EF.Property<int?>(c, "SyncRuleScopingCriteriaGroupId")) &&
+                        c.ConnectedObjectTypeId.HasValue && c.ConnectedObjectType!.ConnectedSystemId == connectedSystemId)
+            .Select(c => EF.Property<int?>(c, "SyncRuleScopingCriteriaGroupId")!.Value)
+            .Distinct()
+            .ToListAsync();
+
+        return groupsHoldingOne.Select(groupId => placements[groupId].SyncRuleId).ToHashSet();
+    }
+
+    /// <summary>
     /// Walks the group tree of each rule from its top-level groups down, recording every group's owning rule, parent
     /// and depth. Ids and foreign keys only; no group entities are materialised.
     /// </summary>
