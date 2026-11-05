@@ -81,7 +81,7 @@ public class HierarchyRefreshResultDto
     public List<HierarchyMoveItemDto> MovedContainers { get; set; } = new();
 
     /// <summary>
-    /// Partitions the refresh selected because a selected container moved into them. A container is only in scope while
+    /// Partitions the refresh selected because a selected Container moved into them. A Container is only in scope while
     /// its partition is selected, so without this the moved container's selection would mean nothing. Empty when the
     /// refresh selected no partition.
     /// </summary>
@@ -208,7 +208,7 @@ public class HierarchyRenameItemDto
 }
 
 /// <summary>
-/// A partition the refresh selected because a selected container moved into it.
+/// A partition the refresh selected because a selected Container moved into it.
 /// </summary>
 public class HierarchyPartitionSelectionItemDto
 {
@@ -224,7 +224,7 @@ public class HierarchyPartitionSelectionItemDto
 
     /// <summary>
     /// The external IDs of the containers whose move into the partition caused it to be selected: each is selected, or
-    /// holds a selected container.
+    /// holds a selected Container.
     /// </summary>
     public List<string> ContainerExternalIds { get; set; } = new();
 

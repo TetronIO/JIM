@@ -174,7 +174,7 @@ else
                             Partitions selected
                         </MudText>
                         <MudText Class="mb-2">
-                            A selected container moved into each of these partitions, and a container is only in scope while its partition is selected.
+                            A selected Container moved into each of these partitions. A Container is only imported while its partition is selected, so JIM selected the partition to keep it in scope.
                         </MudText>
                         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Class="mb-4" Style="background: transparent;">
                             <thead>
@@ -710,7 +710,7 @@ else
                 else if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
                 {
                     // A refresh that widened what JIM imports says why, not only that it did.
-                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}. A selected container moved into each partition selected.", Severity.Info);
+                    Snackbar.Add($"Hierarchy refreshed: {_hierarchyRefreshResult.GetSummary()}, to keep in scope the selected Containers that moved into them.", Severity.Info);
                 }
                 else if (_hierarchyRefreshResult.HasChanges)
                 {
@@ -782,7 +782,7 @@ else
 
         if (_hierarchyRefreshResult.PartitionsSelectedForMovedContainers.Count > 0)
         {
-            sb.AppendLine("PARTITIONS SELECTED (a selected container moved into each):");
+            sb.AppendLine("PARTITIONS SELECTED (a selected Container moved into each):");
             foreach (var item in _hierarchyRefreshResult.PartitionsSelectedForMovedContainers)
                 sb.AppendLine($"  [Partition] {item.Name} ({item.ExternalId}): {string.Join(", ", item.ContainerExternalIds)}");
             sb.AppendLine();
