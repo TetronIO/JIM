@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 Refreshing a Connected System's hierarchy now removes the partitions and Containers it no longer holds, with the Containers beneath them, where it reported them removed but kept them; the **Scope** tab's Refresh now asks before discarding unsaved selections. (#2743)
 - 🐛 A hierarchy refresh that removes a partition a Run Profile targets no longer silently widens that Run Profile to every selected partition: you choose to disable those Run Profiles, or cancel the refresh. (#2740)
 - 🐛 A hierarchy refresh keeps a Container moved to another partition, even a new one, or beneath a new Container, with its selection and scope, and reports the move, naming both partitions; it no longer vanishes or returns unselected. (#2763, #2769)
+- 🐛 A deleted Connected System Object's history no longer includes the deletion of another object that once held the same external ID. (#2669)
 
 ### Security
 
