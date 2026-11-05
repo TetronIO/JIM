@@ -103,6 +103,14 @@ internal static class SyncRuleScopingProposalMaterialiser
             RelativeDirection = proposal.RelativeDirection
         };
 
+        // A connection criterion (#2021) is evaluated by its Object Type's id against the connections read for the
+        // object, so there is no entity to attach; an explanation names the type by id until it is loaded.
+        if (proposal.ConnectedObjectTypeId is { } connectedObjectTypeId)
+        {
+            criterion.ConnectedObjectTypeId = connectedObjectTypeId;
+            return criterion;
+        }
+
         // An expression criterion reads the object by attribute name when it is evaluated, so there is no attribute
         // entity to attach (#2054).
         if (proposal.IsExpression)

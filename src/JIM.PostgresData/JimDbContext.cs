@@ -1675,6 +1675,15 @@ public class JimDbContext : DbContext
             .HasForeignKey("SyncRuleScopingCriteriaGroupId")
             .OnDelete(DeleteBehavior.Cascade);
 
+        // A connection criterion (#2021) names an Object Type of any Connected System, usually another system's than its
+        // rule's own. Restrict, not cascade: silently dropping the criterion when that system is deleted would widen or
+        // narrow the rule's scope with no review, so the deletion is refused while a criterion names one of its types.
+        modelBuilder.Entity<SyncRuleScopingCriteria>()
+            .HasOne(c => c.ConnectedObjectType)
+            .WithMany()
+            .HasForeignKey(c => c.ConnectedObjectTypeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // A Connector Definition owns the settings it declares.
         modelBuilder.Entity<ConnectorDefinition>()
             .HasMany(cd => cd.Settings)

@@ -389,6 +389,8 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             AddReference(children, "metaverseAttributeId", criterion.MetaverseAttributeId, criterion.MetaverseAttribute?.Name, "Metaverse Attribute");
             AddReference(children, "connectedSystemAttributeId", criterion.ConnectedSystemAttributeId, criterion.ConnectedSystemAttribute?.Name, "Connected System Attribute");
+            AddReference(children, "connectedObjectTypeId", criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType?.Id,
+                criterion.ConnectedObjectType != null ? SyncRuleScopingCriteria.DescribeConnection(criterion.ConnectedObjectType) : null, "Connected to");
             Add(children, "expression", criterion.Expression, "Expression");
             AddEnum(children, "compareAs", criterion.CompareAs, "Compare as");
             AddEnum(children, "comparisonType", criterion.ComparisonType, "Comparison");

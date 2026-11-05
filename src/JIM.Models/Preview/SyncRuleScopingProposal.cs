@@ -131,6 +131,7 @@ public record SyncRuleScopingCriteriaGroupProposal(
 /// <param name="RelativeDirection">The direction of the offset from now, when <paramref name="ValueMode"/> is Relative.</param>
 /// <param name="Expression">The expression whose computed value the criterion compares, in place of an attribute.</param>
 /// <param name="CompareAs">The type an expression's computed value is compared as; null for an attribute criterion.</param>
+/// <param name="ConnectedObjectTypeId">The Connected System Object Type a connection criterion tests for; null otherwise.</param>
 public record SyncRuleScopingCriterionProposal(
     int? MetaverseAttributeId,
     int? ConnectedSystemAttributeId,
@@ -148,7 +149,8 @@ public record SyncRuleScopingCriterionProposal(
     RelativeDateUnit? RelativeUnit = null,
     RelativeDateDirection? RelativeDirection = null,
     string? Expression = null,
-    AttributeDataType? CompareAs = null)
+    AttributeDataType? CompareAs = null,
+    int? ConnectedObjectTypeId = null)
 {
     /// <summary>
     /// Whether the criterion compares an expression's computed value rather than an attribute.
@@ -183,7 +185,8 @@ public record SyncRuleScopingCriterionProposal(
             criterion.RelativeUnit,
             criterion.RelativeDirection,
             criterion.Expression,
-            criterion.CompareAs);
+            criterion.CompareAs,
+            criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType?.Id);
     }
 
     internal string CanonicalKey()
@@ -196,7 +199,7 @@ public record SyncRuleScopingCriterionProposal(
         key.Append(CultureInfo.InvariantCulture, $";b={BoolValue};g={GuidValue};cse={CaseSensitive}");
         key.Append(CultureInfo.InvariantCulture, $";vm={ValueMode};rc={RelativeCount};ru={RelativeUnit};rd={RelativeDirection}");
         // Length-prefixed, so no expression text can run into the fields around it and collide with another key.
-        key.Append(CultureInfo.InvariantCulture, $";ca={CompareAs};ex={Expression?.Length}:{Expression}");
+        key.Append(CultureInfo.InvariantCulture, $";ca={CompareAs};co={ConnectedObjectTypeId};ex={Expression?.Length}:{Expression}");
         return key.ToString();
     }
 }

@@ -2201,6 +2201,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ComparisonType")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ConnectedObjectTypeId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ConnectedSystemAttributeId")
                         .HasColumnType("integer");
 
@@ -2244,6 +2247,8 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConnectedObjectTypeId");
 
                     b.HasIndex("ConnectedSystemAttributeId");
 
@@ -6246,6 +6251,11 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleScopingCriteria", b =>
                 {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "ConnectedObjectType")
+                        .WithMany()
+                        .HasForeignKey("ConnectedObjectTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectTypeAttribute", "ConnectedSystemAttribute")
                         .WithMany()
                         .HasForeignKey("ConnectedSystemAttributeId");
@@ -6258,6 +6268,8 @@ namespace JIM.PostgresData.Migrations
                         .WithMany("Criteria")
                         .HasForeignKey("SyncRuleScopingCriteriaGroupId")
                         .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("ConnectedObjectType");
 
                     b.Navigation("ConnectedSystemAttribute");
 

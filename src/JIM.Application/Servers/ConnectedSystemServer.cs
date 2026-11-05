@@ -9756,6 +9756,11 @@ public partial class ConnectedSystemServer
                 criteria.ConnectedSystemAttributeId = criteria.ConnectedSystemAttribute.Id;
                 criteria.ConnectedSystemAttribute = null;
             }
+            if (criteria.ConnectedObjectType != null)
+            {
+                criteria.ConnectedObjectTypeId = criteria.ConnectedObjectType.Id;
+                criteria.ConnectedObjectType = null;
+            }
         }
         foreach (var child in group.ChildGroups)
             DetachScopingGroupReferences(child);
@@ -9803,6 +9808,9 @@ public partial class ConnectedSystemServer
                     problems.Add((attributeName, reason));
             }
 
+            if (criterion.IsConnection && await DescribeConnectionProblemAsync(syncRule, criterion) is { } connectionProblem)
+                problems.Add(connectionProblem);
+
             if (criterion.IsExpression)
             {
                 scopedSchema ??= await LoadScopedSchemaAsync(syncRule);
@@ -9830,6 +9838,35 @@ public partial class ConnectedSystemServer
                     syncRule.Id, LogSanitiser.Sanitise(warning));
             }
         }
+    }
+
+    /// <summary>
+    /// What is wrong with a connection criterion (#2021), with the connection it names as the subject; null when it can
+    /// be saved. It belongs on an export rule only (an import rule's scope reads a Connected System Object, which has no
+    /// connections of its own), tests "has" or "has no", names nothing else, and names an Object Type that exists.
+    /// </summary>
+    private async Task<(string Subject, string Reason)?> DescribeConnectionProblemAsync(SyncRule syncRule, SyncRuleScopingCriteria criterion)
+    {
+        var typeId = criterion.ConnectedObjectTypeId ?? criterion.ConnectedObjectType!.Id;
+        var connectedObjectType = criterion.ConnectedObjectType ?? await Application.Repository.ConnectedSystems.GetObjectTypeAsync(typeId);
+        var subject = connectedObjectType != null
+            ? $"connection to {SyncRuleScopingCriteria.DescribeConnection(connectedObjectType)}"
+            : $"connection to Object Type {typeId}";
+
+        if (syncRule.Direction != SyncRuleDirection.Export)
+            return (subject, "connection criteria are for export rules only, since an import rule's scope reads a Connected System Object, which has no connections of its own");
+
+        if (criterion.MetaverseAttributeId.HasValue || criterion.MetaverseAttribute != null ||
+            criterion.ConnectedSystemAttributeId.HasValue || criterion.ConnectedSystemAttribute != null ||
+            criterion.IsExpression || criterion.CompareAs.HasValue)
+            return (subject, "a connection criterion tests a connection, so it names no attribute or expression as well");
+
+        if (!SyncRuleScopingCriteria.IsConnectionOperator(criterion.ComparisonType))
+            return (subject, "a connection criterion can only test that the object has, or has no, connection to an object of the type");
+
+        return connectedObjectType == null
+            ? (subject, $"no Connected System Object Type with ID {typeId} exists")
+            : null;
     }
 
     /// <summary>

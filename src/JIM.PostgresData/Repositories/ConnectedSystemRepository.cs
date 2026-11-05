@@ -8138,7 +8138,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToDictionaryAsync(c => c.Id, c => new SyncRuleScopingCriterionState(
                 c.MetaverseAttributeId, c.ConnectedSystemAttributeId, c.Expression, c.CompareAs, c.ComparisonType, c.CaseSensitive,
                 c.ValueMode, c.RelativeCount, c.RelativeUnit, c.RelativeDirection, c.StringValue, c.IntValue, c.LongValue,
-                c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue));
+                c.DecimalValue, c.DateTimeValue, c.BoolValue, c.GuidValue, c.ConnectedObjectTypeId));
     }
 
     public async Task<Dictionary<int, bool>> GetAttributeSelectionStatesAsync(int connectedSystemId)

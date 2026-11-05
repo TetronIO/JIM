@@ -66,6 +66,9 @@ internal static class SyncRuleScopingTreeLoader
                 .ThenInclude(c => c.MetaverseAttribute)
             .Include(g => g.Criteria.OrderBy(c => c.Id))
                 .ThenInclude(c => c.ConnectedSystemAttribute)
+            .Include(g => g.Criteria.OrderBy(c => c.Id))
+                .ThenInclude(c => c.ConnectedObjectType)
+                    .ThenInclude(t => t!.ConnectedSystem)
             .Where(g => groupIds.Contains(g.Id));
         query = tracked ? query.AsTracking() : query.AsNoTracking();
 
