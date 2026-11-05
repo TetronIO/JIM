@@ -35,7 +35,7 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 - **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 
-    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings, not about the system being reachable: one down for maintenance keeps those tabs. Saving has the Connector test the settings: a problem stops the save, and what will not work as they stand saves with a warning, which the REST API and `Set-JIMConnectedSystem` return too.
+    The Schema, Scope and Matching tabs stay unavailable until the required settings are filled in, because none of them can do anything useful without them. That gate is about the settings themselves, not about the external system being reachable: saving the Settings tab also tests the connection and tells you what it found, but a system that is down for maintenance does not take those tabs away, and you can keep working on the configuration while it is.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector Space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -106,19 +106,6 @@ The Connected System's next synchronisation, Delta or Full, processes every obje
 - **Export follows on its own**<br /> Every Metaverse Object the Object Type joins or projects is processed too, so export evaluation runs on them as usual.
 
 The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
-
-### Predicted and actual
-
-When you read a [Configuration Change Preview](configuration-changes.md#previewing-a-change-before-you-make-it) before saving a Synchronisation Rule's scope, the change's Activity shows what the preview predicted beside what the synchronisation that applied the change did, so you can see whether the preview told the truth. For example: **Projected: predicted 40, actual 38**.
-
-JIM shows the comparison only when both numbers measure the same thing, and otherwise shows only **Applied by**:
-
-- **One change**<br /> The synchronisation applied exactly one change to the Object Type. When several were saved before a run, each preview was made against a different version of the rules, and the run has one set of counts.
-- **A current preview**<br /> A preview informed the save, was complete, was of the rule you saved, and had not been overtaken by a run or another change before you saved.
-- **A comparable outcome**<br /> The preview counts the outcome the way a run records it. Today that is **Projected** and **Joined** for a scope preview. Other previews, such as Object Matching or Attribute Flow, describe differences from today's configuration that no run counts, so they are not compared.
-- **The processed Object Type**<br /> The actual count is for objects of that type only. It includes objects that changed for other reasons since the preview, so it can be higher than the prediction without the preview having been wrong.
-
-The same comparison is `PredictionComparison` on each entry of an Activity's `ConfigurationChangeSynchronisations`, in the REST API and in `Get-JIMActivity -Id`.
 
 ### Changes pending a Full Synchronisation
 

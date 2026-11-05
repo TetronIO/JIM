@@ -73,7 +73,7 @@ When an Export activity withholds anything, it completes as **Complete with warn
 
 ### Run Profile Safeguards (import deletion limits)
 
-Every Full Import activity that ran deletion detection, and every Delta Import activity that completed, carries a `detectedDeletionsWithheld` counter. It is `0` when the Run Profile has no deletion limit, or the run's deletions did not exceed either limit. Otherwise it is how many Connected System Objects the run left exactly as they were instead of marking them as deleted: for a Full Import, the objects deletion detection no longer found; for a Delta Import, the objects the Connected System reported as deleted, plus any deletion detection no longer found when it read every object. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
+Every Full Import activity that ran deletion detection, and every Delta Import activity that completed, carries a `detectedDeletionsWithheld` counter. It is `0` when the Run Profile has no deletion limit, or the run's deletions did not exceed either limit. Otherwise it is how many Connected System Objects the run left exactly as they were instead of marking them as deleted: for a Full Import, the objects deletion detection no longer found; for a Delta Import, the objects the Connected System reported as deleted. It is `null` on every other activity, including a Full Import that imported zero objects and so skipped deletion detection entirely. See [Run Profiles > Safeguards](run-profiles.md#safeguards) for setting the limits.
 
 When a run withholds its deletions, it completes as **Complete with warning**, and its warning message names the limit, how many objects were involved and what share of the Connected System that is. A Delta Import's warning reads, for example:
 
@@ -82,8 +82,6 @@ When a run withholds its deletions, it completes as **Complete with warning**, a
 When a Full Import activity's deletion detection is refused, it completes as **Complete with warning**, and its warning message names the limit that tripped, for example:
 
 > Deletion detection found 4,120 objects (41% of 10,000) no longer in the Connected System, above this Run Profile's limit of 10%; none were marked as deleted. Check the Connected System's scope and the connector's filters, or raise the limit, then run the Full Import again.
-
-A Delta Import that read every object gives the same warning, ending "Each Delta Import will read every object and check again until this is resolved" instead.
 
 A refused detection also means the run does not count as a successful Full Import for the post-clear reconciliation gate; see [Run Profiles > Safeguards > Full Import](run-profiles.md#full-import).
 
@@ -101,9 +99,7 @@ The activity's detail page shows the batch like a Run Profile execution: summary
 
 ## :material-family-tree: Parent and child activities
 
-Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System.
-
-An Activity can instead follow up one object's [execution item](activity-execution-items.md#follow-up): the Activity recording an account's Initial Password sits under the export item that provisioned the account, which lists it under **Follow-up**. A child of either kind is left off the main Activity list, so an export that provisions a thousand accounts adds one entry rather than a thousand. The REST API returns each Activity's `parentActivityId` and `parentRunProfileExecutionItemId`, lists an Activity's children, and filters the list with `hasChildActivities`.
+Some Activities group others beneath them. The **System Initialisation** Activity groups the built-in objects JIM creates for itself as it starts, such as Roles and Schedules, one child Activity each; and a password change's Activity groups the Activities recording its delivery to each Connected System. The REST API returns each Activity's `parentActivityId`, lists an Activity's children, and filters the list with `hasChildActivities`.
 
 A Schedule's steps are not grouped this way: each step's Activity carries its [Schedule context](#schedule-context) instead, and the [Schedule Execution view](schedules.md#the-schedule-execution-view) links each step to its Activity.
 
@@ -141,7 +137,7 @@ A few properties of this model:
 - **Versioned snapshots, not diffs**<br /> Each change stores the full post-change state and a per-object version number, so any two versions can be compared and the change rendered as a structured diff.
 - **Secrets are redacted**<br /> Sensitive values (for example encrypted Connected System settings, encrypted Service Setting values, or a Schedule step's SQL connection string) are never stored. A changed secret is recorded as changed, using a keyed hash that proves it differs without revealing it; its value is never written to, or shown from, the history. Trusted Certificate history likewise stores only metadata, never the certificate material itself. API Key history stores metadata and Role assignments only; the key secret never appears in the history in any form, not even as a hash.
 - **Carried with the Activity**<br /> Because the snapshot lives on the Activity, retrieving the full Activity record also retrieves its change payload; no separate call is needed.
-- **Says when it took effect**<br /> A change to an import Synchronisation Rule or an Object Matching Rule shows on its Activity either **Applied by** the synchronisation that applied it, or **Awaiting the next synchronisation** of its Connected System. That synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind each Object Type it processed in full and whether it applied them. Where a preview informed the save, the line can also show what the preview predicted beside what the synchronisation did; see [Predicted and actual](connected-systems.md#predicted-and-actual). `Get-JIMActivity -Id` returns both as `ConfigurationChangeSynchronisations`; see [Changes awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation).
+- **Says when it took effect**<br /> A change to an import Synchronisation Rule or an Object Matching Rule shows on its Activity either **Applied by** the synchronisation that applied it, or **Awaiting the next synchronisation** of its Connected System. That synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind each Object Type it processed in full and whether it applied them. `Get-JIMActivity -Id` returns both as `ConfigurationChangeSynchronisations`; see [Changes awaiting synchronisation](connected-systems.md#changes-awaiting-synchronisation).
 - **Retained on its own schedule**<br /> Configuration Change History is kept for the `History.ConfigurationChangeRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings) (default ~10 years), independently of, and typically much longer than, the general history retention period. The routine history cleanup never touches it; only its own retention period removes it.
 
 !!! note "Coverage"
