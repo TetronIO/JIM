@@ -70,8 +70,13 @@ public partial class SyncRepository
         // One outer transaction for both the new-parent inserts and the append-only
         // attribute/value writes. Halves the per-flush BEGIN/COMMIT overhead when the
         // cross-page phase produces both, and makes the pair atomic: either the new page
-        // of changes AND its cross-page appends land together, or neither does.
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // of changes AND its cross-page appends land together, or neither does. A caller already
+        // inside a transaction keeps it and this joins it, as the other bulk writers do (Npgsql does
+        // not nest transactions): a deletion writes its Deleted records in its own transaction (#2669).
+        await using var transaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
+        persistSpan?.SetTag("joinedCallerTransaction", transaction == null);
 
         if (newChanges.Count > 0)
         {
@@ -107,8 +112,11 @@ public partial class SyncRepository
             await BulkInsertMvoChangeAttributeValuesRawAsync(allValueChanges);
         }
 
-        using (MvoActivitySource.StartActivity("MvoChange.Persist.Commit"))
-            await transaction.CommitAsync();
+        if (transaction != null)
+        {
+            using (MvoActivitySource.StartActivity("MvoChange.Persist.Commit"))
+                await transaction.CommitAsync();
+        }
         _context.Database.SetCommandTimeout(previousTimeout);
 
         Log.Debug("PersistPendingMvoChangesAsync: Persisted {NewCount} new MVO changes and appended children to {AppendCount} existing; {AttrCount} attribute changes, {ValueCount} value changes",

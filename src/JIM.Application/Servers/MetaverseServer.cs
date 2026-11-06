@@ -1823,6 +1823,11 @@ public partial class MetaverseServer
             // The deletion change record always has null MetaverseObjectId since the MVO no longer
             // exists — GetDeletedMvoChangeHistoryAsync finds related changes via DeletedObjectDisplayName
             // and DeletedObjectTypeId instead.
+            // The deletion and its record in one transaction (#2669), so a failure between the two cannot leave the
+            // object gone with no record of its going. The transaction is begun on the synchronisation repository,
+            // which works on the same database context as the Metaverse repository (both are the one
+            // PostgresDataRepository's), so the writes below join it.
+            await using var transaction = await Application.SyncRepo.BeginTransactionAsync();
             await Application.Repository.Metaverse.DeleteMetaverseObjectAsync(metaverseObject);
 
             // Insert the change record via raw SQL, bypassing EF Core's change tracker.
@@ -1830,6 +1835,8 @@ public partial class MetaverseServer
             // ALL tracked entities, including CSOs with stale FK references to the just-deleted MVO,
             // causing FK constraint violations.
             await Application.Repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+            if (transaction != null)
+                await transaction.CommitAsync();
             return;
         }
 
