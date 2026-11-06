@@ -135,8 +135,8 @@ public partial class SyncRepository
         {
             await writer.StartRowAsync();
             await writer.WriteAsync(c.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
-            // MetaverseObjectId is a shadow FK — use the navigation property to get the ID
-            if (c.MetaverseObject?.Id is { } mvoId && mvoId != Guid.Empty)
+            // The object's id, a plain id with no foreign key (#2669); deletion records carry it too.
+            if (c.MetaverseObjectId is { } mvoId && mvoId != Guid.Empty)
                 await writer.WriteAsync(mvoId, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
@@ -281,10 +281,8 @@ public partial class SyncRepository
                 await writer.WriteAsync(v.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
             else
                 await writer.WriteNullAsync();
-            // Write the ReferenceValueId FK. Prefer the scalar property (set directly when
-            // only the target MVO id is known); fall back to the navigation's Id when the
-            // full entity is attached.
-            var refId = v.ReferenceValueId ?? v.ReferenceValue?.Id;
+            // The referenced object's id, a plain id with no foreign key (#2669).
+            var refId = v.ReferenceValueId;
             if (refId.HasValue && refId.Value != Guid.Empty)
                 await writer.WriteAsync(refId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else

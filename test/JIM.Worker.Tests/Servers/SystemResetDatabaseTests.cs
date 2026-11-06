@@ -313,6 +313,74 @@ public class SystemResetDatabaseTests
     }
 
     /// <summary>
+    /// History names the objects it is about by plain id, with no foreign key (#2669), so a truncate of the object tables no
+    /// longer reaches it by cascade: the reset must empty every audit table itself, on both paths, including the history
+    /// of an administrator the default path preserves.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ResetSystemAsync_HistoryNamingObjects_LeavesEveryAuditTableEmptyAsync(bool includeAdministrators)
+    {
+        var (adminId, userId) = await SeedAsync();
+        await SeedHistoryNamingAsync(adminId, userId);
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            await repository.System.ResetSystemAsync(includeAdministrators);
+        }
+
+        await using var verify = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(await verify.Activities.CountAsync(), Is.Zero, "Activities are emptied");
+            Assert.That(await verify.ActivityRunProfileExecutionItems.CountAsync(), Is.Zero, "Run Profile Execution Items are emptied");
+            Assert.That(await verify.ConnectedSystemObjectChanges.CountAsync(), Is.Zero, "Connected System Object change records are emptied");
+            Assert.That(await verify.ConnectedSystemObjectChangeAttributeValues.CountAsync(), Is.Zero, "and their values");
+            Assert.That(await verify.MetaverseObjectChanges.CountAsync(), Is.Zero, "Metaverse Object change records are emptied");
+            Assert.That(await verify.MetaverseObjectChangeAttributeValues.CountAsync(), Is.Zero, "and their values");
+        }
+    }
+
+    /// <summary>
+    /// History of every kind naming both seeded people and a Connected System Object: an Activity, an execution item, a
+    /// change record of each kind and a reference value in each. Plain SQL, so it does not depend on how the model maps it.
+    /// </summary>
+    private async Task SeedHistoryNamingAsync(Guid adminId, Guid userId)
+    {
+        await using var ctx = NewContext();
+        var systemId = await ctx.ConnectedSystems.Select(cs => cs.Id).SingleAsync();
+        var activity = new Activity
+        {
+            TargetName = "Earlier run", TargetType = ActivityTargetType.MetaverseObject, InitiatedByType = ActivityInitiatorType.System,
+            Created = DateTime.UtcNow, MetaverseObjectId = adminId
+        };
+        ctx.Activities.Add(activity);
+        await ctx.SaveChangesAsync();
+
+        var (csoId, csoChangeId, csoChangeAttributeId) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var (adminChangeId, userChangeId, userChangeAttributeId) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        await ctx.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO "ActivityRunProfileExecutionItems" ("Id", "ActivityId", "ObjectChangeType", "ConnectedSystemObjectId", "MetaverseObjectId")
+            VALUES (gen_random_uuid(), {0}, 1, {1}, {2});
+            INSERT INTO "ConnectedSystemObjectChanges" ("Id", "ConnectedSystemId", "ChangeTime", "ChangeType", "InitiatedByType", "ConnectedSystemObjectId")
+            VALUES ({3}, {4}, now(), 1, 0, {1});
+            INSERT INTO "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeName", "AttributeType")
+            VALUES ({5}, {3}, 'manager', 5);
+            INSERT INTO "ConnectedSystemObjectChangeAttributeValues" ("Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType", "IsPendingExportStub", "ReferenceValueId")
+            VALUES (gen_random_uuid(), {5}, 1, false, {1});
+            INSERT INTO "MetaverseObjectChanges" ("Id", "MetaverseObjectId", "ChangeTime", "InitiatedByType", "ChangeInitiatorType", "ChangeType")
+            VALUES ({6}, {2}, now(), 0, 0, 1), ({7}, {8}, now(), 0, 0, 1);
+            INSERT INTO "MetaverseObjectChangeAttributes" ("Id", "MetaverseObjectChangeId", "AttributeName", "AttributeType")
+            VALUES ({9}, {7}, 'Manager', 5);
+            INSERT INTO "MetaverseObjectChangeAttributeValues" ("Id", "MetaverseObjectChangeAttributeId", "ValueChangeType", "ReferenceValueId")
+            VALUES (gen_random_uuid(), {9}, 1, {2});
+            """,
+            activity.Id, csoId, adminId, csoChangeId, systemId, csoChangeAttributeId, adminChangeId, userChangeId, userId, userChangeAttributeId);
+    }
+
+    /// <summary>
     /// The infrastructure API key is the recovery key, so the reset must keep it, with its Administrator role, in both
     /// modes (#2389). A scoped key's foreign key to Connected Systems means the truncate cascades into the whole API key
     /// table (TRUNCATE CASCADE empties a referencing table whole), which once took the infrastructure key with it.
@@ -387,7 +455,7 @@ public class SystemResetDatabaseTests
 
             ctx.MetaverseObjectChanges.Add(new MetaverseObjectChange
             {
-                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
                 ChangeTime = DateTime.UtcNow,
                 ChangeType = ObjectChangeType.Created,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System

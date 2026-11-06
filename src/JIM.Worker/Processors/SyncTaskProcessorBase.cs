@@ -6784,7 +6784,7 @@ public abstract class SyncTaskProcessorBase
             var change = new MetaverseObjectChange
             {
                 Id = existingMvoChangeId ?? Guid.Empty,
-                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id, // persisted above, so the id is real
                 ChangeType = changeType,
                 ChangeTime = DateTime.UtcNow,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
@@ -7271,7 +7271,7 @@ public abstract class SyncTaskProcessorBase
                     foreach (var valueChange in attrChange.ValueChanges)
                     {
                         // Only process string values that look like MVO GUIDs and aren't already resolved
-                        if (valueChange.IsPendingExportStub || valueChange.ReferenceValue != null)
+                        if (valueChange.IsPendingExportStub || valueChange.ReferenceValueId != null)
                             continue;
 
                         if (!string.IsNullOrEmpty(valueChange.StringValue)

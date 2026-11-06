@@ -179,8 +179,8 @@ public class CausalTimelineReadDatabaseTests
     [Test]
     public async Task GetCausalTimelinePageAsync_DeletedConnectedSystemObject_ListsTheItemsItsDeletionLeftByExternalIdAsync()
     {
-        // Deleting a Connected System Object nulls its id on every item that processed it, and only its deletion record
-        // keeps the id. That record names the deleting item and keeps the external ID and system, which find the rest:
+        // Deleting a Connected System Object nulled its id on every item that processed it before #2669, and only its
+        // deletion record kept the id. That record names the deleting item and keeps the external ID and system, which find the rest:
         // within that system, with the id nulled, and no later than the deletion. Each bound excludes a real neighbour.
         var hr = await SeedConnectedSystemAsync("Yellowstone APAC");
         var other = await SeedConnectedSystemAsync("Glitterband EMEA");
@@ -910,9 +910,15 @@ public class CausalTimelineReadDatabaseTests
         return cso.Id;
     }
 
+    /// <summary>
+    /// Deletes a Connected System Object as releases before #2669 did, clearing its id from every item that processed it:
+    /// the timeline still has to find those items, by the external ID they recorded. Deletion keeps the ids since.
+    /// </summary>
     private async Task DeleteCsoAsync(Guid csoId)
     {
         await using var ctx = NewContext();
+        await ctx.ActivityRunProfileExecutionItems.Where(i => i.ConnectedSystemObjectId == csoId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(i => i.ConnectedSystemObjectId, (Guid?)null));
         await ctx.ConnectedSystemObjects.Where(c => c.Id == csoId).ExecuteDeleteAsync();
     }
 

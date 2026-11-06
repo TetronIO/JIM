@@ -372,6 +372,16 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
         }
 
         var dto = ActivityRunProfileExecutionItemDetailDto.FromEntity(item);
+
+        // The item keeps its object's id after the object is deleted (#2669); the field names the object only while it
+        // still exists, as it always has.
+        if (dto.ConnectedSystemObjectId is { } connectedSystemObjectId)
+        {
+            var references = await _application.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync([connectedSystemObjectId]);
+            if (references.GetValueOrDefault(connectedSystemObjectId) is not { IsLive: true })
+                dto.ConnectedSystemObjectId = null;
+        }
+
         if (ActivityRunProfileExecutionItemMatchCandidate.AreRecordedFor(item.ErrorType))
         {
             dto.MatchCandidates = (await _application.Activities.GetMatchCandidatesAsync(id))

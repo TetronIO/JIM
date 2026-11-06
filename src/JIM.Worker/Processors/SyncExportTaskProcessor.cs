@@ -399,24 +399,17 @@ public class SyncExportTaskProcessor
                 PendingExportId = stillQueued ? exportItem.PendingExportId : null
             };
 
-            // Link to the Connected System Object if available.
-            // Set the scalar FK alongside the navigation: RPEIs are persisted via raw SQL / COPY
-            // (BulkInsertRpeisOnConnectionAsync), which does not trigger EF's automatic FK fix-up from the
-            // navigation. Without the explicit assignment the column is inserted as NULL, breaking
-            // the audit-trail link from the Activity into the CSO detail page (#683).
-            //
-            // ConnectedSystemObjectRemoved (an unconfirmed-provisioning Delete): the export server has
-            // already removed the CSO row as part of processing this item, so the navigation and FK must
-            // stay null here or the RPEI insert fails against a row that no longer exists. The display
-            // snapshot is still taken from the in-memory CSO graph the item carries, so the item keeps its
-            // name and external id.
+            // Link to the Connected System Object if available. The id is what is persisted (#683); the object is the
+            // item's working reference. An unconfirmed-provisioning Delete (ConnectedSystemObjectRemoved) whose object the
+            // export server has already removed keeps the id too: an item names its object by plain id, with no foreign
+            // key, so it keeps naming the object once it is gone (#2669); only a removed object is not the item's working
+            // reference, as nothing later in the run may act on it. The display snapshot is taken from the in-memory
+            // object the item carries, so the item keeps its name and external id.
             if (exportItem.ConnectedSystemObject != null)
             {
                 if (!exportItem.ConnectedSystemObjectRemoved)
-                {
                     executionItem.ConnectedSystemObject = exportItem.ConnectedSystemObject;
-                    executionItem.ConnectedSystemObjectId = exportItem.ConnectedSystemObject.Id;
-                }
+                executionItem.ConnectedSystemObjectId = exportItem.ConnectedSystemObject.Id;
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 

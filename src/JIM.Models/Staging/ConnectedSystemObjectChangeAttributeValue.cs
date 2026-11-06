@@ -42,17 +42,15 @@ public class ConnectedSystemObjectChangeAttributeValue
 
     public bool? BoolValue { get; set; }
 
-    public ConnectedSystemObject? ReferenceValue { get; set; }
-
     /// <summary>
-    /// The id of the Connected System Object a reference value names. Readers resolve it when they read it (live object,
-    /// then its deletion record, then <see cref="StringValue"/>), and never treat a null or unmatched id as proof of
-    /// anything about the object (#2669).
+    /// The id of the Connected System Object a reference value names: a plain id, with no foreign key, so deleting the
+    /// object never rewrites the value. Readers resolve it when they read it (live object, then its deletion record, then
+    /// <see cref="StringValue"/>), and never treat a null or unmatched id as proof of anything about the object (#2669).
     /// </summary>
     public Guid? ReferenceValueId { get; set; }
 
     /// <summary>
-    /// When true, the <see cref="ReferenceValue"/> points to a stub CSO that has not yet been
+    /// When true, the <see cref="ReferenceValueId"/> names a stub CSO that has not yet been
     /// exported to the target Connected System (status PendingProvisioning). The UI should render
     /// this differently from a fully resolved reference — e.g. no clickable link, with a
     /// "Pending Export" visual indicator.
@@ -146,7 +144,7 @@ public class ConnectedSystemObjectChangeAttributeValue
         if (BoolValue.HasValue)
             return BoolValue.Value.ToString();
 
-        if ((ReferenceValue?.Id ?? ReferenceValueId) is { } referenceId)
+        if (ReferenceValueId is { } referenceId)
             return referenceId.ToString();
 
         return string.Empty;
@@ -221,7 +219,7 @@ public class ConnectedSystemObjectChangeAttributeValue
 
     public ConnectedSystemObjectChangeAttributeValue(ConnectedSystemObjectChangeAttribute connectedSystemObjectChangeAttribute, ValueChangeType valueChangeType, ConnectedSystemObject referenceValue)
     {
-        ReferenceValue = referenceValue;
+        ReferenceValueId = referenceValue.Id;
         ConnectedSystemObjectChangeAttribute = connectedSystemObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

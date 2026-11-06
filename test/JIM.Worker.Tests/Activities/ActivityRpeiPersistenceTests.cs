@@ -100,8 +100,7 @@ public class ActivityRpeiPersistenceTests
     /// <summary>
     /// A Connected System Object change snapshot carried on an outcome references a pre-existing attribute
     /// definition. Persisting the items must store the snapshot hierarchy without re-inserting (duplicating)
-    /// the attribute definition, and must sever the navigation to the pre-existing Connected System Object,
-    /// keeping only its scalar foreign key.
+    /// the attribute definition. The snapshot names its Connected System Object by id alone (#2669).
     /// </summary>
     [Test]
     public async Task AddRunProfileExecutionItems_OutcomeWithChangeSnapshot_DoesNotReinsertExistingEntitiesAsync()
@@ -125,7 +124,7 @@ public class ActivityRpeiPersistenceTests
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = 5,
-            ConnectedSystemObject = new ConnectedSystemObject { Id = csoId, ConnectedSystemId = 5, TypeId = csoType.Id },
+            ConnectedSystemObjectId = csoId,
             ChangeType = ObjectChangeType.PendingExport,
             ChangeTime = DateTime.UtcNow,
             InitiatedByType = ActivityInitiatorType.System,
@@ -160,9 +159,7 @@ public class ActivityRpeiPersistenceTests
         // Assert: the snapshot hierarchy persisted.
         var persistedChange = await DbContext.ConnectedSystemObjectChanges.SingleAsync();
         Assert.That(persistedChange.ConnectedSystemObjectId, Is.EqualTo(csoId),
-            "The snapshot must keep the Connected System Object's scalar foreign key");
-        Assert.That(persistedChange.ConnectedSystemObject, Is.Null,
-            "The navigation to the pre-existing Connected System Object must be severed, not re-inserted");
+            "The snapshot must keep the Connected System Object's id");
         var persistedAttributeChange = await DbContext.ConnectedSystemObjectChangeAttributes.SingleAsync();
         Assert.That(persistedAttributeChange.AttributeName, Is.EqualTo("member"));
         Assert.That(DbContext.Entry(persistedAttributeChange).Property("AttributeId").CurrentValue,
@@ -210,7 +207,7 @@ public class ActivityRpeiPersistenceTests
         memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.dn,ou=People,dc=glitterband,dc=local"));
         memberChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(memberChange, ValueChangeType.Remove, "uid=by.id,ou=People,dc=glitterband,dc=local")
         {
-            ReferenceValue = new ConnectedSystemObject { Id = referencedObject.Id }
+            ReferenceValueId = referencedObject.Id
         });
         var descriptionChange = new ConnectedSystemObjectChangeAttribute
         {

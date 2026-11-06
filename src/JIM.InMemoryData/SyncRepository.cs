@@ -741,8 +741,7 @@ public class SyncRepository : ISyncRepository
         JoinMatchValue = cso.JoinMatchValue,
         ScopeReviewPending = cso.ScopeReviewPending,
         LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
-        DerivedInputChangePending = cso.DerivedInputChangePending,
-        Changes = cso.Changes
+        DerivedInputChangePending = cso.DerivedInputChangePending
     };
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
@@ -1470,7 +1469,7 @@ public class SyncRepository : ISyncRepository
             if (caseExactSecondaryKeys.TryGetValue(valueChange.StringValue!, out var targetCso) ||
                 secondaryIdLookup.TryGetValue(IdentifierKey.For(valueChange.StringValue!, caseExact: false), out targetCso))
             {
-                valueChange.ReferenceValue = targetCso;
+                valueChange.ReferenceValueId = targetCso.Id;
                 valueChange.IsUnresolvedReference = false;
                 resolved++;
             }
@@ -2613,9 +2612,9 @@ public class SyncRepository : ISyncRepository
         {
             foreach (var valueChange in attributeChange.ValueChanges)
             {
-                var referenceIdWritten = valueChange.ReferenceValue is { } referenced
-                                         && referenced.Id != Guid.Empty
-                                         && _csos.ContainsKey(referenced.Id);
+                var referenceIdWritten = valueChange.ReferenceValueId is { } referencedId
+                                         && referencedId != Guid.Empty
+                                         && _csos.ContainsKey(referencedId);
                 valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten);
             }
         }
@@ -2985,12 +2984,8 @@ public class SyncRepository : ISyncRepository
                 }
             }
 
+            // Stored by itself, naming its object by id (#2669): a change record is not reachable from the object.
             _mvoChanges[change.Id] = change;
-
-            // Mirror EF Core behaviour: add to the MVO's navigation property so in-memory
-            // tests can query mvo.Changes the same way production code would after a reload.
-            if (change.MetaverseObject != null && !change.MetaverseObject.Changes.Contains(change))
-                change.MetaverseObject.Changes.Add(change);
         }
 
         foreach (var append in attributeAppendsToExistingChanges)

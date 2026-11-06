@@ -403,7 +403,7 @@ public class ActivityRunProfileExecutionItemHeaderRangeDatabaseTests
             {
                 Id = Guid.NewGuid(),
                 ActivityId = activity.Id,
-                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
                 ObjectChangeType = objectChangeTypes?[i] ?? ObjectChangeType.Updated,
                 OutcomeSummary = outcomeSummaries?[i]
             });

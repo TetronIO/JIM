@@ -203,6 +203,8 @@ public class ConnectedSystemDeletionDatabaseTests
         public Guid UnresolvedMvavId { get; init; }
         public Guid MvoChangeId { get; init; }
         public Guid CsoChangeId { get; init; }
+        public Guid CsoId { get; init; }
+        public Guid ExecutionItemId { get; init; }
         public Guid ActivityId { get; init; }
     }
 
@@ -262,6 +264,7 @@ public class ConnectedSystemDeletionDatabaseTests
 
         var cso = new ConnectedSystemObject
         {
+            Id = Guid.NewGuid(),
             Type = csType,
             ConnectedSystem = system,
             Partition = partition,
@@ -271,7 +274,7 @@ public class ConnectedSystemDeletionDatabaseTests
         var csoAttrValue = new ConnectedSystemObjectAttributeValue { Attribute = csAttr, StringValue = "jdoe", ConnectedSystemObject = cso };
         cso.AttributeValues.Add(csoAttrValue);
 
-        var mvo = new MetaverseObject { Type = mvType };
+        var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvType };
         var contributedMvav = new MetaverseObjectAttributeValue { Attribute = mvTextAttr, StringValue = "jdoe", MetaverseObject = mvo, ContributedBySystem = system };
         var unresolvedMvav = new MetaverseObjectAttributeValue { Attribute = mvRefAttr, MetaverseObject = mvo, UnresolvedReferenceValue = cso };
         mvo.AttributeValues.Add(contributedMvav);
@@ -279,7 +282,7 @@ public class ConnectedSystemDeletionDatabaseTests
 
         var mvoChange = new MetaverseObjectChange
         {
-            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,
             ChangeType = ObjectChangeType.Updated,
@@ -293,7 +296,7 @@ public class ConnectedSystemDeletionDatabaseTests
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             DeletedObjectType = csType,
-            ConnectedSystemObject = cso
+            ConnectedSystemObjectId = cso.Id
         };
         var csoChangeAttr = new ConnectedSystemObjectChangeAttribute
         {
@@ -307,7 +310,7 @@ public class ConnectedSystemDeletionDatabaseTests
             ConnectedSystemObjectChangeAttribute = csoChangeAttr,
             ValueChangeType = ValueChangeType.Add,
             StringValue = "jdoe",
-            ReferenceValue = cso
+            ReferenceValueId = cso.Id
         });
         csoChange.AttributeChanges.Add(csoChangeAttr);
 
@@ -330,6 +333,14 @@ public class ConnectedSystemDeletionDatabaseTests
         seed.Add(activity);
         await seed.SaveChangesAsync();
 
+        // An execution item of an earlier run that processed the CSO.
+        var executionItem = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(), ActivityId = activity.Id, ObjectChangeType = ObjectChangeType.Updated, ConnectedSystemObjectId = cso.Id
+        };
+        seed.Add(executionItem);
+        await seed.SaveChangesAsync();
+
         return new FullGraphIds
         {
             SystemId = system.Id,
@@ -337,6 +348,8 @@ public class ConnectedSystemDeletionDatabaseTests
             UnresolvedMvavId = unresolvedMvav.Id,
             MvoChangeId = mvoChange.Id,
             CsoChangeId = csoChange.Id,
+            CsoId = cso.Id,
+            ExecutionItemId = executionItem.Id,
             ActivityId = activity.Id
         };
     }
@@ -382,7 +395,7 @@ public class ConnectedSystemDeletionDatabaseTests
     }
 
     [Test]
-    public async Task DeleteConnectedSystemAsync_FullGraph_PreserveChangeHistory_RetainsChangesWithNulledFksAsync()
+    public async Task DeleteConnectedSystemAsync_FullGraph_PreserveChangeHistory_RetainsChangesKeepingTheirObjectIdsAsync()
     {
         var ids = await SeedFullGraphAsync();
 
@@ -411,18 +424,23 @@ public class ConnectedSystemDeletionDatabaseTests
             .SingleAsync();
         Assert.That(deletedObjectTypeId, Is.Null, "Retained change should null its deleted-object-type FK.");
 
+        // History names its object by plain id (#2669): the retained change and the value naming the deleted CSO keep it,
+        // as the change keeps its Connected System's id.
         var csoChange = await verify.ConnectedSystemObjectChanges.SingleAsync(c => c.Id == ids.CsoChangeId);
-        Assert.That(csoChange.ConnectedSystemObjectId, Is.Null, "Retained change should null its CSO FK (SetNull cascade).");
+        Assert.That(csoChange.ConnectedSystemObjectId, Is.EqualTo(ids.CsoId), "Retained change should keep the deleted CSO's id.");
 
         var changeAttributeFk = await verify.ConnectedSystemObjectChangeAttributes
             .Select(a => EF.Property<int?>(a, "AttributeId"))
             .SingleAsync();
         Assert.That(changeAttributeFk, Is.Null, "Retained change attribute should null its attribute FK (SetNull cascade).");
 
-        var changeValueReferenceFk = await verify.ConnectedSystemObjectChangeAttributeValues
-            .Select(v => EF.Property<Guid?>(v, "ReferenceValueId"))
+        var changeValueReference = await verify.ConnectedSystemObjectChangeAttributeValues
+            .Select(v => v.ReferenceValueId)
             .SingleAsync();
-        Assert.That(changeValueReferenceFk, Is.Null, "Retained change value should null its CSO reference FK (SetNull cascade).");
+        Assert.That(changeValueReference, Is.EqualTo(ids.CsoId), "Retained change value should keep the deleted CSO's id.");
+
+        var executionItem = await verify.ActivityRunProfileExecutionItems.SingleAsync(i => i.Id == ids.ExecutionItemId);
+        Assert.That(executionItem.ConnectedSystemObjectId, Is.EqualTo(ids.CsoId), "Retained execution item should keep the deleted CSO's id.");
 
         // Same audit-preservation behaviour as the delete-history path.
         var activity = await verify.Activities.SingleAsync(a => a.Id == ids.ActivityId);

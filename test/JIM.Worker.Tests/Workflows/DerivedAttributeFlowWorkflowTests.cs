@@ -50,7 +50,7 @@ public class DerivedAttributeFlowWorkflowTests : WorkflowTestBase
         var activity = await RunFullSyncAsync(ctx.Hr);
 
         var mvo = SyncRepo.MetaverseObjects.Values.Single();
-        var changes = SyncRepo.MetaverseObjectChanges.Values.Where(c => c.MetaverseObject == mvo).ToList();
+        var changes = SyncRepo.MetaverseObjectChanges.Values.Where(c => c.MetaverseObjectId == mvo.Id).ToList();
         var directoryExports = SyncRepo.PendingExports.Values.Where(pe => pe.ConnectedSystemId == ctx.Directory!.Id).ToList();
         using (Assert.EnterMultipleScope())
         {

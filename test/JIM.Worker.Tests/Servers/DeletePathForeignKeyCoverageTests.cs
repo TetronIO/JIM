@@ -186,9 +186,9 @@ public class DeletePathForeignKeyCoverageTests
 
     /// <summary>
     /// <c>SyncRepository.DeleteMetaverseObjectsAsync</c> and <c>MetaverseRepository.DeleteMetaverseObjectAsync</c>:
-    /// sever the references to the objects that history and other objects keep, then remove the objects and let
-    /// their own rows (attribute values, generated value assignments, revision-pending records and the rest) go by
-    /// cascade.
+    /// sever the references to the objects that other objects keep, then remove the objects and let their own rows
+    /// (attribute values, generated value assignments, revision-pending records and the rest) go by cascade. History
+    /// names the objects by plain id, with no foreign key, so it has nothing to sever (#2669).
     /// </summary>
     private static readonly DeleteSurface MetaverseObjectDeletion = new(
         Name: "deleting Metaverse Objects (SyncRepository.DeleteMetaverseObjectsAsync, MetaverseRepository.DeleteMetaverseObjectAsync)",
@@ -199,13 +199,9 @@ public class DeletePathForeignKeyCoverageTests
         {
             ["FK_ConnectedSystemObjects_MetaverseObjects_MetaverseObjectId"] =
                 "Joined Connected System Objects are kept and disconnected; both deleters null MetaverseObjectId first.",
-            ["FK_MetaverseObjectChanges_MetaverseObjects_MetaverseObjectId"] =
-                "Change history is kept; both deleters stamp DeletedMetaverseObjectId and null MetaverseObjectId first.",
             ["FK_MetaverseObjectAttributeValues_MetaverseObjects_ReferenceVa~"] =
                 "Other objects' references to the deleted objects are deleted or nulled by " +
-                "MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync.",
-            ["FK_MetaverseObjectChangeAttributeValues_MetaverseObjects_Refer~"] =
-                "Change history reference values are kept; both deleters null ReferenceValueId first."
+                "MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync."
         });
 
     /// <summary>

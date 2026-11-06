@@ -567,7 +567,7 @@ public class ChangeValueRowsDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = subject,
+            MetaverseObjectId = subject.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule

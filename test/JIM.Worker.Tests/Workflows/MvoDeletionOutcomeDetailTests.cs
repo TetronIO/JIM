@@ -488,6 +488,7 @@ public class MvoDeletionOutcomeDetailTests : WorkflowTestBase
         var deletingItem = SyncRepo.Rpeis.Values.Single(r => r.ActivityId == fullSync2Activity.Id && r.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope);
         var deletedChange = SyncRepo.MetaverseObjectChanges.Values.Single(c => c.ChangeType == ObjectChangeType.Deleted && c.DeletedMetaverseObjectId == mvoId);
         Assert.That(deletedChange.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItem.Id));
+        Assert.That(deletedChange.MetaverseObjectId, Is.EqualTo(mvoId), "the record names the object by its subject id (#2669)");
     }
 
     [TestCase(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard)]
@@ -522,6 +523,7 @@ public class MvoDeletionOutcomeDetailTests : WorkflowTestBase
         var deletingItem = SyncRepo.Rpeis.Values.Single(r => r.ActivityId == deltaSyncActivity.Id && r.ObjectChangeType == ObjectChangeType.Disconnected);
         var deletedChange = SyncRepo.MetaverseObjectChanges.Values.Single(c => c.ChangeType == ObjectChangeType.Deleted && c.DeletedMetaverseObjectId == mvoId);
         Assert.That(deletedChange.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItem.Id));
+        Assert.That(deletedChange.MetaverseObjectId, Is.EqualTo(mvoId), "the record names the object by its subject id (#2669)");
     }
 
     #endregion

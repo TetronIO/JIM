@@ -40,12 +40,10 @@ public class MetaverseObjectChangeAttributeValue
 
     public bool? BoolValue { get; set; }
 
-    public MetaverseObject? ReferenceValue { get; set; }
-
     /// <summary>
-    /// Foreign key for <see cref="ReferenceValue"/>. Exposed as a scalar so reference change
-    /// records can be written when only the target MVO id is known (navigation not loaded),
-    /// and so the navigation can be materialised later via <c>.Include(x =&gt; x.ReferenceValue)</c>.
+    /// The id of the Metaverse Object a reference value names: a plain id, with no foreign key, so deleting the object
+    /// never rewrites the value (#2669). Readers resolve it when they read it (live object, then its deletion record), and
+    /// never treat an unmatched id as proof of anything about the object.
     /// </summary>
     public Guid? ReferenceValueId { get; set; }
 
@@ -108,7 +106,7 @@ public class MetaverseObjectChangeAttributeValue
         if (BoolValue.HasValue)
             return BoolValue.Value.ToString();
 
-        if ((ReferenceValue?.Id ?? ReferenceValueId) is { } referenceId)
+        if (ReferenceValueId is { } referenceId)
             return referenceId.ToString();
 
         return string.Empty;
@@ -183,7 +181,7 @@ public class MetaverseObjectChangeAttributeValue
 
     public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, MetaverseObject referenceValue)
     {
-        ReferenceValue = referenceValue;
+        ReferenceValueId = referenceValue.Id;
         MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

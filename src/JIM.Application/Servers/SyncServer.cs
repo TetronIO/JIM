@@ -135,6 +135,9 @@ public class SyncServer : ISyncServer
                     : MetaverseObjectChangeInitiatorType.NotSet,
                 ActivityId = activity.Id,
                 DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
+                // The subject id, as every record of the object carries it (#2669), and the redundant deletion column
+                // until it is retired.
+                MetaverseObjectId = mvoId,
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName
@@ -215,6 +218,8 @@ public class SyncServer : ISyncServer
                             : MetaverseObjectChangeInitiatorType.NotSet,
                         ActivityId = activity.Id,
                         DeletedByRunProfileExecutionItemId = metaverseObject.DeletingRunProfileExecutionItemId,
+                        // The subject id, as every record of the object carries it (#2669).
+                        MetaverseObjectId = metaverseObject.Id,
                         DeletedMetaverseObjectId = metaverseObject.Id,
                         DeletedObjectTypeId = metaverseObject.Type?.Id,
                         DeletedObjectDisplayName = displayName

@@ -41,12 +41,17 @@ public partial class ActivityRepository : IActivityRepository
         foreach (var item in items.Where(i => i.Id == Guid.Empty))
             item.Id = Guid.NewGuid();
 
+        // The item's object is an unmapped working reference (#2669), so the id is what is written: the one set, else the
+        // working reference's.
+        foreach (var item in items.Where(i => i.ConnectedSystemObjectId == null && i.ConnectedSystemObject is { Id: var id } && id != Guid.Empty))
+            item.ConnectedSystemObjectId = item.ConnectedSystemObject!.Id;
+
         // AddRange traverses each item's navigation graph and marks every untracked entity it reaches as Added.
-        // Connected System Object change snapshots carried on the sync outcomes reference pre-existing entities
-        // (the CSO the change belongs to, attribute definitions), which must not be re-inserted. Sever those
-        // navigations first, preserving their scalar/shadow foreign keys so the persisted rows keep the links.
+        // Connected System Object change snapshots carried on the sync outcomes reference pre-existing attribute
+        // definitions, which must not be re-inserted. Sever those navigations first, preserving their shadow foreign keys
+        // so the persisted rows keep the links. A change names its object, and a value its referenced object, by plain id
+        // (#2669), so there is nothing to sever there.
         var severedAttributeIds = new List<(ConnectedSystemObjectChangeAttribute AttributeChange, int AttributeId)>();
-        var severedReferenceValueIds = new List<(ConnectedSystemObjectChangeAttributeValue ValueChange, Guid ReferenceCsoId)>();
         var changeSnapshots = items
             .SelectMany(i => i.SyncOutcomes.Select(o => o.ConnectedSystemObjectChange))
             .Concat(items.Select(i => i.ConnectedSystemObjectChange))
@@ -63,17 +68,11 @@ public partial class ActivityRepository : IActivityRepository
         var existingReferencedObjectIds = await GetExistingConnectedSystemObjectIdsAsync(changeSnapshots
             .SelectMany(c => c.AttributeChanges)
             .SelectMany(ac => ac.ValueChanges)
-            .Where(vc => vc.ReferenceValue != null)
-            .Select(vc => vc.ReferenceValue!.Id));
+            .Where(vc => vc.ReferenceValueId.HasValue)
+            .Select(vc => vc.ReferenceValueId!.Value));
 
         foreach (var change in changeSnapshots)
         {
-            if (change.ConnectedSystemObject != null)
-            {
-                change.ConnectedSystemObjectId ??= change.ConnectedSystemObject.Id;
-                change.ConnectedSystemObject = null;
-            }
-
             foreach (var attributeChange in change.AttributeChanges)
             {
                 if (attributeChange.Attribute != null)
@@ -87,16 +86,12 @@ public partial class ActivityRepository : IActivityRepository
                 // objects by DN where an earlier export resolved them, and otherwise by display text, which is never
                 // marked (#2700). A reference written with its object's id is never marked; one whose object has no row
                 // is written without the id, and marked.
-                foreach (var valueChange in attributeChange.ValueChanges)
-                    valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType,
-                        referenceIdWritten: valueChange.ReferenceValue is { } referenced && existingReferencedObjectIds.Contains(referenced.Id));
+                foreach (var valueChange in attributeChange.ValueChanges.Where(vc =>
+                             vc.ReferenceValueId is { } referencedId && !existingReferencedObjectIds.Contains(referencedId)))
+                    valueChange.ReferenceValueId = null;
 
-                foreach (var valueChange in attributeChange.ValueChanges.Where(vc => vc.ReferenceValue != null))
-                {
-                    if (existingReferencedObjectIds.Contains(valueChange.ReferenceValue!.Id))
-                        severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue.Id));
-                    valueChange.ReferenceValue = null;
-                }
+                foreach (var valueChange in attributeChange.ValueChanges)
+                    valueChange.SetUnresolvedReferenceMark(attributeChange.AttributeType, referenceIdWritten: valueChange.ReferenceValueId.HasValue);
             }
         }
 
@@ -105,8 +100,6 @@ public partial class ActivityRepository : IActivityRepository
         // Re-apply the severed foreign keys via their shadow properties now the entities are tracked.
         foreach (var (attributeChange, attributeId) in severedAttributeIds)
             Repository.Database.Entry(attributeChange).Property("AttributeId").CurrentValue = attributeId;
-        foreach (var (valueChange, referenceCsoId) in severedReferenceValueIds)
-            Repository.Database.Entry(valueChange).Property("ReferenceValueId").CurrentValue = referenceCsoId;
 
         await Repository.Database.SaveChangesAsync();
 

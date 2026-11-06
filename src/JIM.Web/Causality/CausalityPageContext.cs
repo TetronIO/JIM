@@ -93,6 +93,13 @@ public sealed record CausalityPageContext(
     /// since deleted, and where the policy cannot address it (on the item page, where the type's plural name the route
     /// is keyed on is not known).
     /// </summary>
+    /// <summary>
+    /// Of the Connected System Objects this item's queued exports and deprovisions name, those JIM still holds. A change
+    /// record keeps its object's id after the object is deleted (#2669), so a name absent from this set is not linked.
+    /// Null where nothing was looked up (a speculative Sync Preview, a context built by hand), and then every one is.
+    /// </summary>
+    public IReadOnlySet<Guid>? HeldConnectedSystemObjectIds { get; init; }
+
     public string? SubjectMetaverseObjectHref =>
         SubjectMetaverseObjectId is { } id && id != DeletedMetaverseObjectId
             ? Links.MetaverseObjectHref(id, MvoTypePluralName)

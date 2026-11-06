@@ -8738,8 +8738,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 5. Handle ConnectedSystemObjectChanges before deleting the CSOs below: remove them (delete-history path), or
-        //    keep them and clear their reference to the CSOs (preserve-history path).
+        // 5. On the delete-history path, remove the ConnectedSystemObjectChanges. On the preserve-history path they are
+        //    kept as they are: they name their objects by plain id, with no foreign key, so the delete below leaves them
+        //    naming objects that are gone, as history should (#2669).
         if (deleteChangeHistory)
         {
             // Delete change attribute values first (child records)
@@ -8765,15 +8766,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 @"DELETE FROM ""ConnectedSystemObjectChanges"" WHERE ""ConnectedSystemId"" = {0}",
                 connectedSystemId);
         }
-        else
-        {
-            // Preserve the audit trail: null the change rows' reference to the CSOs deleted below.
-            await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""ConnectedSystemObjectChanges""
-                  SET ""ConnectedSystemObjectId"" = NULL
-                  WHERE ""ConnectedSystemId"" = {0}",
-                connectedSystemId);
-        }
 
         // 6. Delete CSO attribute values
         await Repository.Database.Database.ExecuteSqlRawAsync(
@@ -8781,11 +8773,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
               WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
             connectedSystemId);
 
-        // 7. Null CSO FK on ActivityRunProfileExecutionItems
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""ActivityRunProfileExecutionItems"" SET ""ConnectedSystemObjectId"" = NULL
-              WHERE ""ConnectedSystemObjectId"" IN (SELECT ""Id"" FROM ""ConnectedSystemObjects"" WHERE ""ConnectedSystemId"" = {0})",
-            connectedSystemId);
+        // 7. (Run Profile Execution Items keep the ids of the CSOs deleted below as history; nothing to clear, #2669.)
 
         // 7b. Null the staged unresolved reference held by metaverse attribute values that point at a CSO in this
         //     system. This FK does not cascade, so it would otherwise block the CSO delete below. The metaverse
@@ -8934,8 +8922,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Select(rp => rp.Id)
             .ToListAsync();
 
-        // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference and, on the preserve-history
-        //    path, the change records' reference to the CSOs).
+        // 1. Delete all CSOs and their dependencies (also nulls the unresolved-reference; on the preserve-history path the
+        //    change records and execution items keep the deleted CSOs' ids as history, #2669).
         await DeleteAllConnectedSystemObjectsAndDependenciesAsync(connectedSystemId, deleteChangeHistory, recordJoinsForReconciliation: false);
 
         // 2. Sever audit and history foreign keys that reference rows deleted below. These rows are retained for

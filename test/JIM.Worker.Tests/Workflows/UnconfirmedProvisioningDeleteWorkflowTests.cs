@@ -76,13 +76,13 @@ public class UnconfirmedProvisioningDeleteWorkflowTests : WorkflowTestBase
                 "The Pending Export must be removed alongside the CSO");
         }
 
-        // Assert - PersistBatchRpeisAsync still recorded an RPEI, snapshotted for display but with no
-        // dangling foreign key to the row it just deleted.
+        // Assert - PersistBatchRpeisAsync still recorded an RPEI, snapshotted for display, naming the object it removed
+        // by id as history (#2669), but not holding it as a working reference.
         var rpei = activity.RunProfileExecutionItems.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(rpei.ConnectedSystemObjectId, Is.Null,
-                "The RPEI must not FK to a Connected System Object row that no longer exists");
+            Assert.That(rpei.ConnectedSystemObjectId, Is.EqualTo(cso.Id),
+                "The RPEI keeps the id of the Connected System Object it removed");
             Assert.That(rpei.ConnectedSystemObject, Is.Null);
             Assert.That(rpei.DisplayNameSnapshot, Is.EqualTo(hasName ? "Cancelled Provisioning User" : cso.Id.ToString()),
                 "The item must keep its name or internal Connected System Object id even after removal");
