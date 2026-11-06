@@ -750,10 +750,13 @@ html[lang] .jim-activity-table.mud-simple-table {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
 }
 
-/* The header row's layout (<ScheduleExecutionHeaderRow />). Every part is a 2rem line box centred on one line, the
-   step rail's markers included, and the rail's step names hang below that line. The title takes the width of the first
-   two columns (ActivityTableColumns: State 150px plus Connected System 15%, less this cell's padding and the gap), so the
-   rail starts where the Run Profile column's text does; a long name clips, with the full name on hover. */
+/* The header row's layout (<ScheduleExecutionHeaderRow />): a title cell over the first two columns and a rail cell
+   from Run Profile onwards. Every part is a 2rem line box, the step rail's markers included, and both cells hang from
+   the top, so the title, the markers and the buttons share one centre line while the step names hang below it. */
+.jim-activity-table tr.jim-activity-group-row td {
+    vertical-align: top;
+}
+
 .jim-schedule-group {
     display: flex;
     align-items: flex-start;
@@ -761,7 +764,6 @@ html[lang] .jim-activity-table.mud-simple-table {
 }
 
 .jim-schedule-group-title {
-    flex: 0 0 calc(15% + 125px);
     min-width: 0;
     height: 2rem;
     display: flex;
@@ -3069,6 +3071,30 @@ html[lang] [data-jim-compact] .mud-chip.jim-compact-chip .mud-chip-icon {
    squeezed to nothing before the list ever overflowed, so Trigger and Outcome would never collapse. */
 .mud-table-root .mud-table-cell.jim-fill-column.jim-schedule-name-column {
     min-width: 14rem;
+}
+
+/* A virtualised grid laid out like the Activity tab's Queued and In Progress tables: fixed column widths (from each
+   column's HeaderStyle, ActivityTableColumns) with the remaining width going to the column that has none. In an
+   automatic layout a wide Outcomes cell made the browser grow the whole table to honour the percentage columns
+   (1,023px of other columns at 56% of the table is 1,827px), so one busy run pushed the table past its container even
+   with every chip compacted. Cells that can hold more than their column carry jim-compact-fit-cell: they clip, and
+   jimCompactFit reads their overflow as the signal to compact. */
+.jim-activity-fixed-grid .mud-table-root {
+    table-layout: fixed;
+    min-width: 1100px;
+}
+
+.mud-table-root .mud-table-cell.jim-compact-fit-cell {
+    overflow: hidden;
+}
+
+/* At stage 2 an initiator is only its tag, so its column gives the rest of its width to Outcomes, which is what was
+   still crowded. The Activity tab's three tables all carry the class, so their columns stay lined up; !important beats
+   the column's inline width from ActivityTableColumns. */
+[data-jim-compact="2"] col.jim-initiated-by-column,
+[data-jim-compact="2"] th.jim-initiated-by-column {
+    /* No narrower: "INITIATED BY" and its padding need about 112px, and any less wraps the header onto two lines. */
+    width: 8rem !important;
 }
 
 /* With its name gone the chip's own pill would only frame the tag, so the tag stands alone. */

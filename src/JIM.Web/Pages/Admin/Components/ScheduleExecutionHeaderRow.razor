@@ -6,16 +6,18 @@
 @* The row heading a Schedule Execution's tasks in the Activity tab's Queued and In progress tables (#2549): the
    Schedule's name, where it has got to, its step rail, and the two actions that act on the whole execution. *@
 <tr class="jim-activity-group-row">
-    <td colspan="8">
-        @* One line, read left to right: the title sits over the table's first two columns so every Schedule's rail
-           starts at the same place (Run Profile), the rail runs on to the actions, and the title, the rail's markers
-           and the buttons share one centre line, with only the step names hanging below it. *@
+    @* Two cells, so the table itself lines the row up with the columns below: the title over the first two, and the
+       rail starting where the Run Profile column's text does, running on to the actions. The title, the rail's
+       markers and the buttons share one centre line; only the step names hang below it. *@
+    <td colspan="2">
+        <div class="jim-schedule-group-title">
+            <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
+            <span class="jim-schedule-group-name" title="@(ScheduleName ?? "Schedule")">@(ScheduleName ?? "Schedule")</span>
+            <span class="jim-schedule-group-summary">@Summary</span>
+        </div>
+    </td>
+    <td colspan="6">
         <div class="jim-schedule-group">
-            <div class="jim-schedule-group-title">
-                <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
-                <span class="jim-schedule-group-name" title="@(ScheduleName ?? "Schedule")">@(ScheduleName ?? "Schedule")</span>
-                <span class="jim-schedule-group-summary">@Summary</span>
-            </div>
             <ScheduleStepRail Progress="@Progress" />
             @if (ScheduleExecutionId is { } executionId)
             {

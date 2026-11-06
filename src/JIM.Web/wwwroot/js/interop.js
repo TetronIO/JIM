@@ -649,7 +649,16 @@ window.jimCompactFit = {
         // still fitted.
         var maxLevel = 2;
         var entry = { element: element, frame: null, level: 0, enteredAt: [] };
-        var crowded = function () { return element.scrollWidth > element.clientWidth + 1; };
+        // Crowded when the table overflows its container, or, in a fixed-layout table (which keeps to its container
+        // and clips instead), when a cell marked jim-compact-fit-cell holds more than its column's width.
+        var crowded = function () {
+            if (element.scrollWidth > element.clientWidth + 1) return true;
+            var cells = element.querySelectorAll('.jim-compact-fit-cell');
+            for (var i = 0; i < cells.length; i++) {
+                if (cells[i].scrollWidth > cells[i].clientWidth + 1) return true;
+            }
+            return false;
+        };
         // A page can group several tables into one compact state (data-jim-compact-scope on an ancestor): the
         // Operations page's Queued and In Progress tables are fixed-layout, which clip rather than overflow, so they
         // follow the Completed grid's decision rather than making their own.
