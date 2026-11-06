@@ -159,14 +159,11 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
         rule.AttributeFlowRules.Add(mapping);
     }
 
-    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab)> RenderCardsAsync(SyncRule rule)
+    private async Task<(IRenderedComponent<MudDialogProvider> Provider, IRenderedComponent<SyncRuleAttributeFlowTab> Tab)> RenderTabAsync(SyncRule rule)
     {
         var provider = Render<MudDialogProvider>();
         Render<MudPopoverProvider>();
         var tab = Render<SyncRuleAttributeFlowTab>(p => p.Add(c => c.SyncRule, rule));
-        // The card view draws every flow; the table is a virtualised grid that draws rows from the browser's
-        // measurements, which bUnit does not have.
-        await tab.FindComponents<MudIconButton>().Single(b => b.Instance.Icon == Icons.Material.Filled.GridView).Find("button").ClickAsync();
         tab.WaitForState(() => tab.FindAll("button[aria-label='edit']").Count == rule.AttributeFlowRules.Count);
         return (provider, tab);
     }
@@ -182,9 +179,9 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     // ─── A: the Derived chip ───
 
     [Test]
-    public async Task Cards_DerivedFlows_WearTheDerivedChipWithTheirStepAsync()
+    public async Task Grid_DerivedFlows_WearTheDerivedChipWithTheirStepAsync()
     {
-        var (_, tab) = await RenderCardsAsync(BuildRule());
+        var (_, tab) = await RenderTabAsync(BuildRule());
 
         tab.WaitForState(() => tab.FindComponents<DerivedFlowChip>().Count == 2);
         Assert.That(
@@ -198,7 +195,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     [Test]
     public async Task EditDialog_ImportRule_OffersBothAccessorGroupsAsync()
     {
-        var (provider, tab) = await RenderCardsAsync(BuildRule());
+        var (provider, tab) = await RenderTabAsync(BuildRule());
         await OpenEditAsync(tab, 1);
 
         provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
@@ -216,7 +213,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task EditDialog_ExportRule_OffersOnlyTheMetaverseGroupAsync()
     {
         // An export expression is evaluated against the Metaverse Object alone (cs[...] resolves to nothing there).
-        var (provider, tab) = await RenderCardsAsync(BuildExportRule());
+        var (provider, tab) = await RenderTabAsync(BuildExportRule());
         await OpenEditAsync(tab, 0);
 
         provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
@@ -233,7 +230,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task EditDialog_ChoosingAnAttribute_InsertsItsAccessorIntoTheExpressionAsync()
     {
         var rule = BuildRule();
-        var (provider, tab) = await RenderCardsAsync(rule);
+        var (provider, tab) = await RenderTabAsync(rule);
         await OpenEditAsync(tab, 0);
         provider.WaitForState(() => provider.HasComponent<InsertAttributeMenu>());
 
@@ -250,7 +247,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     [Test]
     public async Task EditDialog_DerivedFlow_ShowsThePanelFromTheAnalysisAsync()
     {
-        var (provider, tab) = await RenderCardsAsync(BuildRule());
+        var (provider, tab) = await RenderTabAsync(BuildRule());
         await OpenEditAsync(tab, 1);
 
         // The analysis is debounced, so it is waited for as state rather than asserted on until it holds: NUnit records
@@ -267,7 +264,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     [Test]
     public async Task EditDialog_ExpressionThatClosesALoop_ShowsTheLoopAndDisablesUpdateAsync()
     {
-        var (provider, tab) = await RenderCardsAsync(BuildRule());
+        var (provider, tab) = await RenderTabAsync(BuildRule());
         await OpenEditAsync(tab, 0);
         provider.WaitForState(() => provider.FindComponents<MudButton>().Any(b => b.Find("button").TextContent.Contains("Update Attribute Flow")));
         Assert.That(UpdateButton(provider).Instance.Disabled, Is.False);
@@ -285,7 +282,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task Remove_FlowDerivedFlowsRead_ShowsTheDependantsAndCancelKeepsItAsync()
     {
         var rule = BuildRule();
-        var (provider, tab) = await RenderCardsAsync(rule);
+        var (provider, tab) = await RenderTabAsync(rule);
 
         // The delete handler waits for the dialog's answer, so its click completes only once the dialog is cancelled below
         var removing = PressAsync(tab, "delete", 0);
@@ -302,7 +299,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task Remove_FlowDerivedFlowsRead_ConfirmRemovesItAsync()
     {
         var rule = BuildRule();
-        var (provider, tab) = await RenderCardsAsync(rule);
+        var (provider, tab) = await RenderTabAsync(rule);
 
         // The delete handler waits for the dialog's answer, so its click completes only once the removal is confirmed
         var removing = PressAsync(tab, "delete", 0);
@@ -316,7 +313,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     [Test]
     public async Task Remove_FlowNothingReads_ShowsTheOrdinaryConfirmationAsync()
     {
-        var (provider, tab) = await RenderCardsAsync(BuildRule());
+        var (provider, tab) = await RenderTabAsync(BuildRule());
 
         // User Principal Name: no derived flow reads it. Not awaited: the delete handler waits for an answer to the
         // confirmation, which this test leaves open; the WaitForState below is what waits for the render.
@@ -330,7 +327,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task Update_DisablingAFlowDerivedFlowsRead_AsksBeforeApplyingTheEditAsync()
     {
         var rule = BuildRule();
-        var (provider, tab) = await RenderCardsAsync(rule);
+        var (provider, tab) = await RenderTabAsync(rule);
         await OpenEditAsync(tab, 0);
         provider.WaitForState(() => provider.FindComponents<MudButton>().Any(b => b.Find("button").TextContent.Contains("Update Attribute Flow")));
         Assert.That(UpdateButton(provider).Instance.Disabled, Is.False);
@@ -394,7 +391,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     {
         var rule = BuildRule();
         rule.AttributeFlowRules[0].Generation = new SyncRuleMappingGeneration { Id = 90, TokenKind = GeneratedValueTokenKind.OnlyIfTaken };
-        var (provider, tab) = await RenderCardsAsync(rule);
+        var (provider, tab) = await RenderTabAsync(rule);
 
         // Email reads the generated Account Name.
         await OpenEditAsync(tab, 1);
@@ -414,7 +411,7 @@ public class SyncRuleAttributeFlowTabDerivedFlowTests : JimComponentTestContext
     public async Task EditDialog_FlowBuiltFromNoGeneratedValue_ShowsNoBlockAsync()
     {
         // Nothing in the rule is generated, so Email is an ordinary derived flow.
-        var (provider, tab) = await RenderCardsAsync(BuildRule());
+        var (provider, tab) = await RenderTabAsync(BuildRule());
         await OpenEditAsync(tab, 1);
 
         provider.WaitForState(() => provider.HasComponent<DerivedFlowPanel>()
