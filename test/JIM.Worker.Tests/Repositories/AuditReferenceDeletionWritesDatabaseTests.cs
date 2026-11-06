@@ -77,7 +77,7 @@ public class AuditReferenceDeletionWritesDatabaseTests
     }
 
     private sealed record Seeded(
-        int SystemId, Guid LeaverCsoId, Guid SurvivorCsoId, Guid LeaverMvoId, Guid SurvivorMvoId, int SystemChangeRecordCount);
+        int SystemId, Guid LeaverCsoId, Guid SurvivorCsoId, Guid LeaverMvoId, Guid SurvivorMvoId);
 
     private string _connectionString = null!;
 
@@ -132,12 +132,9 @@ public class AuditReferenceDeletionWritesDatabaseTests
         await transaction.RollbackAsync();
         var writes = after.ToDictionary(a => a.Key, a => (Updated: a.Value.Updated - before[a.Key].Updated, Deleted: a.Value.Deleted - before[a.Key].Deleted));
 
-        // Deleting a Connected System clears its Object Types from the change records it keeps (step 2d), one write per
-        // record of the system: a reference to configuration, which is outside this guard's concern. Nothing else may
-        // touch an audit row.
+        // Deleting a Connected System clears its Object Types from the change records it keeps (step 2d), but only from
+        // the deletion records that name one; the seeded history names none, so nothing at all may touch an audit row.
         var expected = AuditTables.ToDictionary(t => t, _ => (Updated: 0L, Deleted: 0L));
-        if (entryPoint == DeletionEntryPoint.ConnectedSystemDeletionKeepingHistory)
-            expected["ConnectedSystemObjectChanges"] = (seeded.SystemChangeRecordCount, 0L);
 
         Assert.That(writes, Is.EquivalentTo(expected),
             $"{entryPoint} wrote to history naming the deleted objects (table: updated, deleted): " +
@@ -333,6 +330,6 @@ public class AuditReferenceDeletionWritesDatabaseTests
         Add("reference", (int)AttributeDataType.Reference, NpgsqlDbType.Integer);
         await command.ExecuteNonQueryAsync();
 
-        return new Seeded(systemId, leaverCso, survivorCso, leaverMvo, survivorMvo, SystemChangeRecordCount: 2);
+        return new Seeded(systemId, leaverCso, survivorCso, leaverMvo, survivorMvo);
     }
 }

@@ -8950,9 +8950,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         // 2d. On the preserve-history path, retained ConnectedSystemObjectChanges reference the object types deleted
         //     in step 13; null that FK first. (On the delete-history path those change rows have already been removed.)
+        //     Only deletion records carry it, so only they are written: the rest of the system's history is left alone.
         if (!deleteChangeHistory)
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL WHERE ""ConnectedSystemId"" = {0}",
+                @"UPDATE ""ConnectedSystemObjectChanges"" SET ""DeletedObjectTypeId"" = NULL
+                  WHERE ""ConnectedSystemId"" = {0} AND ""DeletedObjectTypeId"" IS NOT NULL",
                 connectedSystemId);
 
         // 3. Delete Containers. Both ownership paths are covered: a Container belongs to this system either through
