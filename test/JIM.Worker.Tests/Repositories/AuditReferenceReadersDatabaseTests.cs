@@ -166,6 +166,42 @@ public class AuditReferenceReadersDatabaseTests
         Assert.That(items, Has.Count.EqualTo(2));
     }
 
+    /// <summary>
+    /// A change a synchronisation made names the Connected System Object it synchronised, through its execution item, which
+    /// keeps the object's id once the object is deleted (#2669). The history names the object only while it is still there,
+    /// so nothing links to an object that has gone; the external id the item recorded stays.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task GetMvoChangeHistoryAsync_ChangeMadeBySynchronisingARecord_NamesTheRecordOnlyWhileItIsThereAsync(bool recordDeleted)
+    {
+        var mvoSchema = await _seed.SeedMvoSchemaAsync();
+        var person = await _seed.CreateMvoAsync(mvoSchema, "Tina Adams");
+        var csoSchema = await _seed.SeedCsoSchemaAsync();
+        var record = await _seed.CreateCsoAsync(csoSchema, "Tina Adams", "E1001");
+        var activity = await SeedActivityAsync(csoSchema.ConnectedSystemId, T0);
+        var item = await SeedItemAsync(activity, ObjectChangeType.Updated, "Tina Adams", csoId: record, externalId: "E1001");
+        await using (var ctx = NewContext())
+        {
+            ctx.Add(new MetaverseObjectChange
+            {
+                Id = Guid.NewGuid(), MetaverseObjectId = person, ActivityRunProfileExecutionItemId = item, ChangeTime = T0,
+                ChangeType = ObjectChangeType.AttributeFlow
+            });
+            await ctx.SaveChangesAsync();
+        }
+        if (recordDeleted)
+            await _seed.DeleteCsoLeavingHistoryAsync(record);
+
+        var (items, _) = await NewJim().Metaverse.GetMvoChangeHistoryAsync(person, 1, 10);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(items.Single().CsoId, Is.EqualTo(recordDeleted ? null : record), "the record is named only while it is there");
+            Assert.That(items.Single().CsoExternalId, Is.EqualTo("E1001"), "the external id the item recorded stays");
+        }
+    }
+
     // ─── A deleted object's history ───
 
     [Test]

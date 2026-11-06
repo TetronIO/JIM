@@ -18,6 +18,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.History;
 using JIM.Models.Preview;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
@@ -1340,6 +1341,39 @@ public class ActivitiesControllerTests
 
     #region GetActivityExecutionItemAsync tests
 
+    /// <summary>
+    /// An item keeps its Connected System Object's id after the object is deleted (#2669), while the published field says
+    /// it names the object "when it still exists": until the field's contract changes, a deleted object reads as none.
+    /// </summary>
+    [Test]
+    public async Task GetActivityExecutionItemAsync_ObjectSinceDeleted_ReturnsNoConnectedSystemObjectIdAsync()
+    {
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.Deleted,
+            ConnectedSystemObjectId = Guid.NewGuid(),
+            ExternalIdSnapshot = "EMP900083"
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, ResolvedObjectReference>
+            {
+                [item.ConnectedSystemObjectId.Value] = new() { Id = item.ConnectedSystemObjectId.Value, State = ObjectReferenceState.Deleted }
+            });
+
+        var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
+        var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;
+
+        Assert.That(dto, Is.Not.Null);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(dto!.ConnectedSystemObjectId, Is.Null, "a deleted object is not named as one that still exists");
+            Assert.That(dto!.ExternalIdSnapshot, Is.EqualTo("EMP900083"), "the item still says what it was about");
+        }
+    }
+
     [Test]
     public async Task GetActivityExecutionItemAsync_WithExistingItem_ReturnsErrorMessageStackTraceAndSnapshotAsync()
     {
@@ -1360,6 +1394,11 @@ public class ActivitiesControllerTests
             OutcomeSummary = "Projected:1"
         };
         _mockActivityRepo.Setup(r => r.GetActivityRunProfileExecutionItemCoreAsync(item.Id)).ReturnsAsync(item);
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemObjectReferenceSummariesAsync(It.IsAny<IReadOnlyCollection<Guid>>()))
+            .ReturnsAsync(new Dictionary<Guid, ResolvedObjectReference>
+            {
+                [item.ConnectedSystemObjectId.Value] = new() { Id = item.ConnectedSystemObjectId.Value, State = ObjectReferenceState.Live }
+            });
 
         var result = await _controller.GetActivityExecutionItemAsync(item.Id) as OkObjectResult;
         var dto = result?.Value as ActivityRunProfileExecutionItemDetailDto;

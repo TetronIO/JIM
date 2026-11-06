@@ -156,7 +156,9 @@ internal sealed class SystemRepository : ISystemRepository
     // ExampleDataTemplateAttributes is listed so no template attribute can still reference a custom Metaverse
     // Attribute when the mixed deletes remove it; the built-in template's attributes are restored by the seeding
     // pipeline the reset re-runs afterwards.
-    private const string TruncateAllCustomerDataSql = @"
+    // Internal so AuditReferenceCatalogueTests can hold every audit table to it: audit rows name objects by plain ids
+    // (#2669), so no foreign key into ConnectedSystemObjects or MetaverseObjects empties them; only this list does.
+    internal const string TruncateAllCustomerDataSql = @"
         TRUNCATE TABLE
             ""WorkerTasks"",
             ""DeferredReferences"",

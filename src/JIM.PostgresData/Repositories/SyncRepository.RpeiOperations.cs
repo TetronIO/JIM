@@ -330,8 +330,11 @@ public partial class SyncRepository
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
         // Use an EF transaction for atomicity — COPY binary imports on the underlying
-        // NpgsqlConnection participate in the active transaction automatically.
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        // NpgsqlConnection participate in the active transaction automatically. A caller already inside a transaction
+        // keeps it and this joins it, as the other bulk writers do (Npgsql does not nest transactions).
+        await using var transaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
 
         // Step 1: INSERT parent ConnectedSystemObjectChange rows
         await BulkInsertCsoChangesRawAsync(changes);
@@ -353,7 +356,8 @@ public partial class SyncRepository
         if (allValueChanges.Count > 0)
             await BulkInsertCsoChangeAttributeValuesRawAsync(allValueChanges);
 
-        await transaction.CommitAsync();
+        if (transaction != null)
+            await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
     }
 
@@ -678,12 +682,13 @@ public partial class SyncRepository
 
         // An import pre-generates every new object's id before writing them in batches, so a reference can point at
         // an object a later batch has yet to write (a manager, a nested group): its id is known, its row is not. Its
-        // foreign key would fail the whole write with 23503 (#2492, found by Scenario 032), so only references to
+        // foreign key used to fail the whole write with 23503 (#2492, found by Scenario 032). The key is gone (#2669),
+        // but writing every known id is still to come, so only references to
         // rows that exist are written; the rest keep their DN in StringValue, are marked IsUnresolvedReference (#2690),
         // and FixupCrossBatchChangeRecordReferenceIdsAsync resolves them once every batch has been written. Must run
         // before the COPY below opens, since the connection cannot run another command while it is open.
         var writtenReferenceIds = await GetExistingConnectedSystemObjectIdsAsync(npgsqlConn, valueChanges
-            .Select(vc => vc.Value.ReferenceValue?.Id)
+            .Select(vc => vc.Value.ReferenceValueId)
             .Where(id => id.HasValue && id.Value != Guid.Empty)
             .Select(id => id!.Value));
 
@@ -703,7 +708,7 @@ public partial class SyncRepository
             // written as null. A Reference value holding a DN whose id is not written, whether its object is in a
             // later batch or named no object at all (an import reference that matched nothing yet), is marked for
             // FixupCrossBatchChangeRecordReferenceIdsAsync to resolve; nothing else is.
-            Guid? writtenReferenceId = v.ReferenceValue?.Id is { } refId && writtenReferenceIds.Contains(refId) ? refId : null;
+            Guid? writtenReferenceId = v.ReferenceValueId is { } refId && writtenReferenceIds.Contains(refId) ? refId : null;
             v.SetUnresolvedReferenceMark(attrChange.AttributeType, referenceIdWritten: writtenReferenceId.HasValue);
 
             await writer.StartRowAsync();
@@ -1051,8 +1056,9 @@ public partial class SyncRepository
                 await writer.WriteAsync((int)rpei.NoChangeReason.Value, NpgsqlTypes.NpgsqlDbType.Integer);
             else
                 await writer.WriteNullAsync();
-            if (rpei.ConnectedSystemObjectId.HasValue)
-                await writer.WriteAsync(rpei.ConnectedSystemObjectId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            // The id set, else the unmapped working reference's (#2669).
+            if ((rpei.ConnectedSystemObjectId ?? rpei.ConnectedSystemObject?.Id) is { } csoId && csoId != Guid.Empty)
+                await writer.WriteAsync(csoId, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
             if (rpei.ExternalIdSnapshot is not null)

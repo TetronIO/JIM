@@ -34,11 +34,6 @@ public class ConnectedSystemObject
     public int? PartitionId { get; set; }
 
     /// <summary>
-    /// Backlink for Entity Framework navigation. Do not use.
-    /// </summary>
-    public List<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; } = new();
-
-    /// <summary>
     /// The attribute that uniquely identifies this object in the Connected System.
     /// It should be immutable (not change for the lifetime of the object).
     /// The Connected System may author it and be made available to JIM after import, or you may specify it at
@@ -256,10 +251,6 @@ public class ConnectedSystemObject
     /// </summary>
     public DateTime? LastScopeEvaluatedAt { get; set; }
 
-    /// <summary>
-    /// A list of the changes made to this Connected System Object.
-    /// </summary>
-    public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;
 
     /// <summary>
     /// Only for use by JIM.Service to determine what attribute values need adding and change-tracking.

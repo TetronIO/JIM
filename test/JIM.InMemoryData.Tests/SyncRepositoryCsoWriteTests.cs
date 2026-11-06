@@ -324,7 +324,7 @@ public class SyncRepositoryCsoWriteTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(resolved, Is.EqualTo(1));
-            Assert.That(value.ReferenceValue, Is.SameAs(manager));
+            Assert.That(value.ReferenceValueId, Is.EqualTo(manager.Id));
             Assert.That(value.IsUnresolvedReference, Is.False);
         }
     }
@@ -342,7 +342,7 @@ public class SyncRepositoryCsoWriteTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(resolved, Is.Zero);
-            Assert.That(value.ReferenceValue, Is.Null);
+            Assert.That(value.ReferenceValueId, Is.Null);
             Assert.That(value.IsUnresolvedReference, Is.True);
         }
     }
@@ -364,7 +364,7 @@ public class SyncRepositoryCsoWriteTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(resolved, Is.Zero);
-            Assert.That(value.ReferenceValue, Is.Null);
+            Assert.That(value.ReferenceValueId, Is.Null);
         }
     }
 
@@ -404,7 +404,7 @@ public class SyncRepositoryCsoWriteTests
     private static ConnectedSystemObjectChangeAttributeValue AddValue(
         ConnectedSystemObjectChangeAttribute attributeChange, string stringValue, ConnectedSystemObject? referenceValue = null)
     {
-        var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, stringValue) { ReferenceValue = referenceValue };
+        var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, stringValue) { ReferenceValueId = referenceValue?.Id };
         attributeChange.ValueChanges.Add(value);
         return value;
     }

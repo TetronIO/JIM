@@ -123,7 +123,8 @@ public class DeletedMvoChangeHistoryDatabaseTests
         };
         await using (var seed = NewContext())
         {
-            seed.AddRange(update, deletion);
+            // The change value names the manager by id alone (#2669), so the manager is saved in its own right.
+            seed.AddRange(manager, update, deletion);
             await seed.SaveChangesAsync();
         }
 
@@ -168,7 +169,7 @@ public class DeletedMvoChangeHistoryDatabaseTests
         AddManagerChange(deletion, manager, ValueChangeType.Remove);
         await using (var seed = NewContext())
         {
-            seed.Add(deletion);
+            seed.AddRange(manager, deletion);
             await seed.SaveChangesAsync();
         }
 

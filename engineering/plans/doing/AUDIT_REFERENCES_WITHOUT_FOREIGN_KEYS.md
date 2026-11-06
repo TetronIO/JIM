@@ -1,11 +1,11 @@
 # Deleting an Object Leaves Its Audit History Untouched
 
-- **Status:** Doing (Phases 0 and 1 complete; the scale baseline puts Phase 2's saving at about 8 s, not 34 to 40 s)
+- **Status:** Doing (Phases 0 to 2 complete; the scale baseline puts Phase 2's saving at about 8 s, not 34 to 40 s)
 - **Issue:** [#2669](https://github.com/TetronIO/JIM/issues/2669)
 - **Related:**
   - [#2670](https://github.com/TetronIO/JIM/issues/2670), the `DeletedObjectExternalIdAttributeValueId` check, removed separately.
   - [Connected System Object Pages Off EF Core](../done/SYNC_CSO_PAGE_RAW_READER.md), closed at Phase 0. It found that the leaver step's larger cost is database-side deletion.
-- **Last Updated:** 2026-11-05
+- **Last Updated:** 2026-11-06
 
 ## Overview
 
@@ -428,7 +428,7 @@ Two of the larger costs above have nothing to do with audit references. Both re-
 - **The two shadow keys became CLR properties now rather than in Phase 2:** `MetaverseObjectChange.MetaverseObjectId` and `ConnectedSystemObjectChangeAttributeValue.ReferenceValueId`. `dotnet ef migrations has-pending-model-changes` reports no change.
 - **Left for Phase 2:** code holding the navigations as in-memory working references. That is the synchronisation engine, `ActivityStatCounterCalculator`, `CausalityModelBuilder`'s entity-based rows for previews and hand-built items, `JIM.InMemoryData`, and every writer.
 
-### Phase 2: Drop the constraints, stop nulling
+### Phase 2: Drop the constraints, stop nulling ✅
 
 - **Guards first.** Write the two guard tests (solution item 7) and see them fail against Phase 1's code for the right reasons before changing anything else.
 - **Model and migration** (`AuditReferencesWithoutForeignKeys`):
@@ -457,6 +457,41 @@ Two of the larger costs above have nothing to do with audit references. Both re-
   - src/CLAUDE.md gains the rule that object references from audit tables are plain ids.
   - "Adding a table that hangs off a Connected System" option 2 is updated.
   - The Developer Guide's change history section is updated.
+
+**Phase 2 done (6 November 2026).** The five audit references are plain ids, and no deletion path writes an audit row.
+
+- **Guards, seen failing first.**
+  - `AuditReferenceCatalogueTests` (catalogue): no constraint on the five references or on `Activities.MetaverseObjectId`; the three subject indexes present under their names; the exact set of foreign keys into the two object tables, each with its reason; every audit table reached by the factory reset's truncate. Against Phase 1's code the constraint and foreign-key-set cases failed, naming the five keys.
+  - `AuditReferenceDeletionWritesDatabaseTests` (behavioural): eight entry points (the four Connected System Object deletions, a Connector Space clear and a Connected System deletion keeping history, both Metaverse Object deleters), each in a transaction the test holds, reading `pg_stat_xact_user_tables`. Against Phase 1's code every case failed, with the rewrites per table.
+- **Model and migration.**
+  - `AuditReferencesWithoutForeignKeys` (20261106114359), scaffolded by the EF tooling: drops the five constraints and the two change-value `ReferenceValueId` indexes. The subject indexes are declared in `JimDbContext` under their existing names, so the scaffold kept them. The backfill runs after the drops; `Down` clears dangling ids before restoring the keys.
+  - Navigations removed: the Connected System Object change's object, both change values' `ReferenceValue`, the Metaverse Object change's object, and `ConnectedSystemObject.Changes` and `.ActivityRunProfileExecutionItems`. `ActivityRunProfileExecutionItem.ConnectedSystemObject` and `MetaverseObject.Changes` are `[NotMapped]`.
+  - `has-pending-model-changes` reports none.
+- **Writers.**
+  - Deletion records set the subject id: Connected System Objects in `NewDeletionChangeRecord`, Metaverse Objects in the three places one is built (`SyncServer`'s singular and bulk deletions, and `MetaverseServer`'s, for the portal and housekeeping). `DeletedMetaverseObjectId` and `DeletedConnectedSystemObjectId` are still written beside it.
+  - Gone: the three audit statements and their spans in each Metaverse Object deleter (`Mvo.Delete.ClearActivities`, `.RekeyChangeRecords`, `.ClearChangeValueReferences`; every other `Mvo.Delete.*` and `MvoDeletion*` span is untouched); the Connected System deletion's step 5 preserve-history branch and step 7; the item-id nulling in `LinkDeleteChangeRecords` and Synchronised Deprovisioning's step 7; the three tracker cases in `ConnectedSystemObjectDeletionSql`; the sever-and-reattach of the change's object and the value's reference in `CreateActivityRunProfileExecutionItemsAsync`.
+  - Item writers write `ConnectedSystemObjectId ?? ConnectedSystemObject?.Id` (the COPY writer and the EF writer).
+  - `JIM.InMemoryData` follows: no `Changes` mirror on the object, references by id.
+- **Tests.**
+  - `DeletePathForeignKeyCoverageTests` lost the Metaverse Object surface's two severed entries.
+  - Tracker regression: `ConnectedSystemObjectBatchDeletionDatabaseTests`' round trip now asserts the tracked item, change record and change value keep the id, unchanged, and a later save writes nothing, on both entry points and both detection settings.
+  - Migration data: `AuditReferencesWithoutForeignKeysMigrationDatabaseTests`, red before the backfill.
+  - `ConnectedSystemDeletionDatabaseTests` (history kept): the change, its value and an execution item keep the deleted object's id. `SystemResetDatabaseTests`: every audit table empty on both reset paths.
+  - Writer round trips: deletion records and dangling reference ids on both Metaverse Object change writers; `CsoChangeSubjectPersistenceDatabaseTests` for both Connected System Object change writers; an item with only its working reference set, on both item writers; the portal's carried change records on create and update. Most were seen failing by reverting the line they pin; the rest write rows the foreign keys refused.
+
+**Drift and departures found building Phase 2.**
+
+- **Two enablers the plan did not list.** `PersistCsoChangesAsync` now joins an ambient transaction, as the other bulk writers do, so the behavioural guard can hold the quiet deletion in one (the option Phase 0 named). `SystemRepository.TruncateAllCustomerDataSql` is `internal`, for the catalogue guard.
+- **`pg_stat_xact_user_tables` is not per transaction on a pooled backend.** It carries earlier transactions' counts until the backend flushes them, so the guard reads it at the transaction's start and end and takes the difference.
+- **The Connected System deletion still updates change records, once each.** Step 2d nulls `DeletedObjectTypeId` on every change record of the system, a configuration reference outside this plan, and with no `IS NOT NULL` filter. The guard expects exactly that many updates. Narrowing step 2d to the rows holding a type would make it zero for most records.
+- **The carrier needed a writer.** `MetaverseObject.Changes` was saved by EF walking the relationship; unmapped, the repository adds carried records itself (`AddCarriedChangeRecords`, on create and on update, the latter only records not yet saved), and the Example Data bulk path sets each record's id after the objects are written.
+- **Two writers read only the navigation.** The bulk Metaverse Object change writer wrote `MetaverseObjectId` from the navigation alone, so a record with only the scalar was written without it; it reads the scalar now. The direct writer did the same.
+- **More item sites than the plan's five.** Besides `LinkDeleteChangeRecords` and Synchronised Deprovisioning's step 7: the export processor left an unconfirmed-provisioning Delete's item and change record without the id of the object it had removed; both keep it now. The import's withdrawal of an Object Type change still clears its item's id, deliberately: the replacement it named is never created.
+- **`BuildFromPendingExport` sets the snapshot's object id** from the Pending Export's object, else its id; every caller already backfilled it from the Pending Export.
+- **Surfaces held at today's behaviour until Phase 4** (each with a test on state): the REST item detail's `ConnectedSystemObjectId`, null when the object has gone; the Metaverse Object change history's `CsoId` (REST and the portal timeline's link), named only while the object is there; the Causality panel's record (`CsoId` only for a live record) and a queued export's or deprovision's record link, made only to objects still held (`HeldConnectedSystemObjectIds`). The item page also falls back to a Pending Export's own id when its object's finds none.
+- **Not held back, for Phase 4 to decide:** `ActivityDto.MetaverseObjectId` (REST, `Get-JIMActivity`) now keeps a deleted Metaverse Object's id, as its `ConnectedSystemObjectId` always has.
+- **Hand-built and synthetic causality rows** read a reference as the identifier the value carries (a Pending Export snapshot's DN) or its id; rows read for display were already named by the window reads.
+- **Observation:** `ConnectedSystemObjectDeletionSql`'s tracker pass has no case for `PendingExchangeChanges.ConnectedSystemObjectId`, which the database sets null.
 
 ### Phase 3: One id column per subject
 
@@ -491,7 +526,7 @@ These changes land together, in one PR, for surface parity.
   - Update the output shapes in the help of `Get-JIMConnectedSystemObjectChangeHistory`, `Get-JIMMetaverseObjectChangeHistory`, `Get-JIMConnectedSystemObjectChangeValue`, `Get-JIMMetaverseObjectChangeValue`, `Search-JIMMetaverseObjectChange` and `Get-JIMActivityExecutionItem`.
   - Add Pester tests, and regenerate the reference.
 - **Docs:** `docs/configuration/deleted-objects.md`, the causality and activities pages, and `docs/powershell/history.md`.
-- **Changelog:** a ⚡ entry for faster deletion, and a 🔄 entry for history naming deleted objects.
+- **Changelog:** a 🔄 entry for history naming deleted objects. The ⚡ entry for faster deletion landed with Phase 2.
 - **Tests:**
   - JIM.Web.Tests on state, never presentation: a deleted reference has the Deleted state and no `href`.
   - Controller tests.

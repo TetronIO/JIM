@@ -83,7 +83,7 @@ public class ChangeHistoryRetentionDatabaseTests
             seed.Add(new MetaverseObjectChange
             {
                 Id = changeId,
-                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
                 ChangeTime = cutoff.AddMinutes(5),
                 ChangeType = ObjectChangeType.AttributeFlow,
                 ActivityRunProfileExecutionItemId = rpei.Id

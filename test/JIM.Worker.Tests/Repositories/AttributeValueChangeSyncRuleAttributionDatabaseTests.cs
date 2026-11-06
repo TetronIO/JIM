@@ -117,7 +117,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -148,7 +148,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         await using var verify = NewContext();
         var persisted = await verify.MetaverseObjectChangeAttributeValues
             .AsNoTracking()
-            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject!.Id == mvoId);
+            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == mvoId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -179,7 +179,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -216,7 +216,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         await using var verify = NewContext();
         var persisted = await verify.MetaverseObjectChangeAttributeValues
             .AsNoTracking()
-            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject!.Id == mvoId);
+            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == mvoId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -253,7 +253,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -283,7 +283,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         await using var verify = NewContext();
         var persisted = await verify.MetaverseObjectChangeAttributeValues
             .AsNoTracking()
-            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObject!.Id == mvoId);
+            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == mvoId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -407,9 +407,9 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
         };
         change.AttributeChanges.Add(attributeChange);
         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(
-            attributeChange, ValueChangeType.Add, "uid=later,ou=People,dc=example,dc=local") { ReferenceValue = unwrittenManager });
+            attributeChange, ValueChangeType.Add, "uid=later,ou=People,dc=example,dc=local") { ReferenceValueId = unwrittenManager.Id });
         attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(
-            attributeChange, ValueChangeType.Add, "uid=earlier,ou=People,dc=example,dc=local") { ReferenceValue = writtenManager });
+            attributeChange, ValueChangeType.Add, "uid=earlier,ou=People,dc=example,dc=local") { ReferenceValueId = writtenManager.Id });
 
         var rpei = new ActivityRunProfileExecutionItem
         {
@@ -525,7 +525,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -588,7 +588,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -651,7 +651,7 @@ public class AttributeValueChangeSyncRuleAttributionDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = new MetaverseObject { Id = mvoId },
+            MetaverseObjectId = mvoId,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule

@@ -7212,6 +7212,9 @@ public partial class ConnectedSystemServer
             DeletedObjectType = cso.Type,
             DeletedObjectExternalId = externalId,
             DeletedObjectDisplayName = cso.Name,
+            // The subject id, as every record of the object carries it (#2669), and the redundant deletion column until
+            // it is retired.
+            ConnectedSystemObjectId = cso.Id,
             DeletedConnectedSystemObjectId = cso.Id,
             InitiatedByType = activity?.InitiatedByType ?? ActivityInitiatorType.NotSet,
             InitiatedById = activity?.InitiatedById,
@@ -7256,21 +7259,13 @@ public partial class ConnectedSystemServer
                 {
                     // Same synchronisation integrity boundary as LinkUpdateChangeRecords (#1386): one
                     // object's failed deletion change record must not abandon the rest of the batch.
-                    // The FK-nulling loop below still runs for this RPEI; the CSOs are about to be
-                    // deleted, and a live FK would violate the constraint at persistence.
                     RecordChangeRecordFailureOnRpei(cso, executionItem, ex, nameof(LinkDeleteChangeRecords));
                 }
             }
         }
 
-        // Null out the CSO FK on all RPEIs. The CSOs are about to be deleted from the database,
-        // so when BulkInsertRpeisAsync runs later, the FK must be null to avoid FK constraint violations.
-        // The ExternalIdSnapshot (set earlier by SnapshotCsoDisplayFields) preserves the CSO identity for display.
-        for (int i = 0; i < rpeis.Count; i++)
-        {
-            rpeis[i].ConnectedSystemObject = null;
-            rpeis[i].ConnectedSystemObjectId = null;
-        }
+        // The items keep the ids of the objects they delete: an item is history, naming its object by plain id with no
+        // foreign key, so it is written after the object has gone (#2669).
     }
 
     /// <summary>
@@ -7297,7 +7292,6 @@ public partial class ConnectedSystemServer
         {
             ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
             ConnectedSystemObjectId = connectedSystemObject.Id,
-            ConnectedSystemObject = connectedSystemObject,
             ChangeType = ObjectChangeType.Added,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,
@@ -7377,7 +7371,6 @@ public partial class ConnectedSystemServer
             {
                 ConnectedSystemId = connectedSystemObject.ConnectedSystemId,
                 ConnectedSystemObjectId = connectedSystemObject.Id,
-                ConnectedSystemObject = connectedSystemObject,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
                 ActivityRunProfileExecutionItem = activityRunProfileExecutionItem,

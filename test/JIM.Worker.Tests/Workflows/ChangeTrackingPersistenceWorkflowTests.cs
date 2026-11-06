@@ -86,7 +86,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
 
         // Assert: MVO change records were persisted (not lost by ClearChangeTracker)
-        var changes = mvo.Changes.OrderBy(c => c.ChangeTime).ToList();
+        var changes = ChangesOf(mvo.Id).OrderBy(c => c.ChangeTime).ToList();
         Assert.That(changes, Has.Count.GreaterThanOrEqualTo(1),
             "MVO should have at least one change record after Full Sync projection");
 
@@ -145,7 +145,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         hrCso = await ReloadEntityAsync(hrCso);
         var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
 
-        var projectedChange = mvo.Changes.First(c =>
+        var projectedChange = ChangesOf(mvo.Id).First(c =>
             c.ChangeType == ObjectChangeType.Projected || c.ChangeType == ObjectChangeType.Joined);
         var displayNameValueChange = projectedChange.AttributeChanges
             .Single(ac => ac.Attribute?.Name == "DisplayName")
@@ -198,7 +198,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
 
         hrCso = await ReloadEntityAsync(hrCso);
         var mvoId = hrCso.MetaverseObjectId!.Value;
-        var changeCountAfterFullSync = SyncRepo.MetaverseObjects[mvoId].Changes.Count;
+        var changeCountAfterFullSync = ChangesOf(mvoId).Count;
 
         // Modify the CSO's display name to trigger a delta sync change
         var displayNameValue = hrCso.AttributeValues.First(av => av.AttributeId == hrDisplayNameAttr.Id);
@@ -215,10 +215,10 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
 
         // Assert: new MVO change records were persisted
         var mvo = SyncRepo.MetaverseObjects[mvoId];
-        Assert.That(mvo.Changes.Count, Is.GreaterThan(changeCountAfterFullSync),
+        Assert.That(ChangesOf(mvo.Id).Count, Is.GreaterThan(changeCountAfterFullSync),
             "Delta Sync should produce additional MVO change records for the attribute update");
 
-        var latestChange = mvo.Changes.OrderByDescending(c => c.ChangeTime).First();
+        var latestChange = ChangesOf(mvo.Id).OrderByDescending(c => c.ChangeTime).First();
         var displayNameAttrChange = latestChange.AttributeChanges
             .FirstOrDefault(ac => ac.Attribute?.Name == "DisplayName");
         Assert.That(displayNameAttrChange, Is.Not.Null,
@@ -269,7 +269,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
         // Assert
         hrCso = await ReloadEntityAsync(hrCso);
         var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
-        var projectedChange = mvo.Changes.Single(c => c.ChangeType == ObjectChangeType.Projected);
+        var projectedChange = ChangesOf(mvo.Id).Single(c => c.ChangeType == ObjectChangeType.Projected);
 
         using (Assert.EnterMultipleScope())
         {
@@ -376,7 +376,7 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
             "HR's CSO should have joined the Directory-projected MVO by EmployeeId");
 
         var mvo = SyncRepo.MetaverseObjects[hrCso.MetaverseObjectId!.Value];
-        var joinedChange = mvo.Changes.Single(c => c.ChangeType == ObjectChangeType.Joined);
+        var joinedChange = ChangesOf(mvo.Id).Single(c => c.ChangeType == ObjectChangeType.Joined);
 
         using (Assert.EnterMultipleScope())
         {
@@ -568,16 +568,17 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
             changeInitiatorType: MetaverseObjectChangeInitiatorType.System);
 
         // Assert: change records were persisted (not silently dropped)
-        var reloaded = await DbContext.MetaverseObjects
-            .Include(m => m.Changes)
-            .ThenInclude(c => c.AttributeChanges)
+        // A change record names its object by id (#2669); it is not reached from the object.
+        var reloaded = await DbContext.MetaverseObjectChanges
+            .Include(c => c.AttributeChanges)
             .ThenInclude(ac => ac.ValueChanges)
-            .SingleAsync(m => m.Id == mvo.Id);
+            .Where(c => c.MetaverseObjectId == mvo.Id)
+            .ToListAsync();
 
-        Assert.That(reloaded.Changes, Has.Count.EqualTo(1),
+        Assert.That(reloaded, Has.Count.EqualTo(1),
             "MVO should have one 'Created' change record persisted in the database");
 
-        var change = reloaded.Changes[0];
+        var change = reloaded[0];
         Assert.That(change.ChangeType, Is.EqualTo(ObjectChangeType.Created));
         Assert.That(change.ChangeInitiatorType, Is.EqualTo(MetaverseObjectChangeInitiatorType.System));
         Assert.That(change.AttributeChanges, Has.Count.EqualTo(2),
@@ -780,4 +781,11 @@ public class ChangeTrackingPersistenceWorkflowTests : WorkflowTestBase
     }
 
     #endregion
+
+    /// <summary>
+    /// The change records stored for a Metaverse Object, found by the id they name it by (#2669): a change record is not
+    /// reachable from its object.
+    /// </summary>
+    private List<MetaverseObjectChange> ChangesOf(Guid metaverseObjectId) =>
+        SyncRepo.MetaverseObjectChanges.Values.Where(c => c.MetaverseObjectId == metaverseObjectId).ToList();
 }

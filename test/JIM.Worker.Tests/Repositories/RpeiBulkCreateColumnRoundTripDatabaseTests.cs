@@ -82,6 +82,9 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
     {
         var activityId = await SeedActivityAsync();
         var pendingExportId = Guid.NewGuid();
+        // An item names its object by plain id, with no foreign key (#2669), so any id round trips, including one whose
+        // object has gone.
+        var connectedSystemObjectId = Guid.NewGuid();
         var snapshotJson = """{"deletionRule":"WhenAuthoritativeSourceDisconnected"}""";
 
         var rpei = new ActivityRunProfileExecutionItem
@@ -90,7 +93,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             ActivityId = activityId,
             ObjectChangeType = ObjectChangeType.Updated,
             NoChangeReason = NoChangeReason.MvoNoAttributeChanges,
-            ConnectedSystemObjectId = null,
+            ConnectedSystemObjectId = connectedSystemObjectId,
             ExternalIdSnapshot = "cn=Jo Bloggs,ou=People,dc=corp",
             DisplayNameSnapshot = "Jo Bloggs",
             ObjectTypeSnapshot = "user",
@@ -158,7 +161,7 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedRpei.ActivityId, Is.EqualTo(activityId));
             Assert.That(storedRpei.ObjectChangeType, Is.EqualTo(ObjectChangeType.Updated));
             Assert.That(storedRpei.NoChangeReason, Is.EqualTo(NoChangeReason.MvoNoAttributeChanges));
-            Assert.That(storedRpei.ConnectedSystemObjectId, Is.Null);
+            Assert.That(storedRpei.ConnectedSystemObjectId, Is.EqualTo(connectedSystemObjectId));
             Assert.That(storedRpei.ExternalIdSnapshot, Is.EqualTo("cn=Jo Bloggs,ou=People,dc=corp"));
             Assert.That(storedRpei.DisplayNameSnapshot, Is.EqualTo("Jo Bloggs"));
             Assert.That(storedRpei.ObjectTypeSnapshot, Is.EqualTo("user"));
@@ -216,6 +219,43 @@ public class RpeiBulkCreateColumnRoundTripDatabaseTests
             Assert.That(storedChild.ObjectMatchingRuleId, Is.Null);
             Assert.That(storedChild.ObjectMatchingRuleDescriptionSnapshot, Is.Null);
             Assert.That(storedChild.MatchedValue, Is.Null);
+        }
+    }
+
+    /// <summary>
+    /// The synchronisation engine sets an item's object as an unmapped working reference (#2669), often without the id:
+    /// both ways items are written persist the object's id from it. The object need not exist, since items are written
+    /// after a deletion and keep the id as history.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ItemWithOnlyItsWorkingReferenceSet_PersistsTheObjectsIdAsync(bool bulkPath)
+    {
+        var activityId = await SeedActivityAsync();
+        var objectId = Guid.NewGuid();
+        var item = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ActivityId = activityId,
+            ObjectChangeType = ObjectChangeType.Deleted,
+            ConnectedSystemObject = new ConnectedSystemObject { Id = objectId }
+        };
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            if (bulkPath)
+                await repository.Sync.BulkInsertRpeisAsync([item]);
+            else
+                await repository.Activity.CreateActivityRunProfileExecutionItemsAsync([item]);
+        }
+
+        await using var readContext = NewContext();
+        var stored = await readContext.ActivityRunProfileExecutionItems.AsNoTracking().SingleAsync(r => r.Id == item.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(stored.ConnectedSystemObjectId, Is.EqualTo(objectId), "the item names its object");
+            Assert.That(await readContext.ConnectedSystemObjects.CountAsync(), Is.Zero, "and the working reference is never inserted");
         }
     }
 

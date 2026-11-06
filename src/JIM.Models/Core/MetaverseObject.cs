@@ -155,6 +155,16 @@ public class MetaverseObject
     /// </summary>
     public uint xmin { get; set; }
 
+    /// <summary>
+    /// Change records made to this object by the portal, carried here until they are saved: never loaded, and not a
+    /// relationship. A change record names its object by <see cref="MetaverseObjectChange.MetaverseObjectId"/> alone,
+    /// which whoever adds one here sets; the object's history is read by that id.
+    /// </summary>
+    /// <remarks>
+    /// Unmapped since #2669, as an execution item's causal edge buffer is: change records are history, and keep the id of
+    /// an object after it is deleted, so they have no foreign key or navigation to it.
+    /// </remarks>
+    [NotMapped]
     public List<MetaverseObjectChange> Changes { get; set; } = new();
 
     /// <summary>

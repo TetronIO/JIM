@@ -39,13 +39,22 @@ public class ActivityRunProfileExecutionItem
     public NoChangeReason? NoChangeReason { get; set; }
 
     /// <summary>
-    /// If this was an import operation, what CSO does this sync operation item relate to?
-    /// Note: If the change was a delete, then there will be no CSO to reference.
+    /// The Connected System Object this item is about, while a run is working on it: a working reference for the
+    /// synchronisation engine, never loaded or saved. <see cref="ConnectedSystemObjectId"/> is what is persisted, and
+    /// every writer of items writes <c>ConnectedSystemObjectId ?? ConnectedSystemObject?.Id</c>.
     /// </summary>
+    /// <remarks>
+    /// Unmapped since #2669, as <see cref="CausalEdges"/> is: an item is history, and names its object by id without a
+    /// foreign key, so deleting the object never rewrites the item. A mapped navigation would make EF Core walk the
+    /// object's graph on <c>DbSet.Add</c> and keep a relationship the database no longer has.
+    /// </remarks>
+    [NotMapped]
     public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
-    /// Foreign key for the ConnectedSystemObject navigation property.
+    /// The id of the Connected System Object this item is about. Kept as history once the object is deleted, so it may
+    /// name an object that no longer exists: readers resolve it (live object, then the object's deletion record, then this
+    /// item's own snapshots) and never treat it as proof the object is live.
     /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
 

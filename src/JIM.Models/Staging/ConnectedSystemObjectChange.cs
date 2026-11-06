@@ -27,11 +27,12 @@ public class ConnectedSystemObjectChange
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// What Connected System Object does this change relate to?
-    /// Will be null if the CSO has since been deleted.
+    /// The id of the Connected System Object this change relates to, deletion records included. Written once and never
+    /// rewritten (#2669): once the object is deleted it names an object that no longer exists, so readers decide whether
+    /// the object is live by looking it up, never from this id. Null only on records whose id an earlier release cleared
+    /// when the object was deleted.
     /// </summary>
     public Guid? ConnectedSystemObjectId { get; set; }
-    public ConnectedSystemObject? ConnectedSystemObject { get; set; }
 
     /// <summary>
     /// When was this change made?
@@ -88,11 +89,10 @@ public class ConnectedSystemObjectChange
     public string? DeletedObjectDisplayName { get; set; }
 
     /// <summary>
-    /// If the object was deleted, the id it had before deletion. <see cref="ConnectedSystemObjectId"/> is a
-    /// foreign key and is nulled when the Connected System Object goes, taking with it the only way to reach
-    /// this record from anything that holds a reference to the deleted object (a causality view naming the
-    /// record a run deleted). This is a plain column, not a foreign key, so it survives; it is the Connected
-    /// System Object counterpart of <see cref="JIM.Models.Core.MetaverseObjectChange.DeletedMetaverseObjectId"/>.
+    /// If the object was deleted, the id it had before deletion. Redundant since #2669, which keeps
+    /// <see cref="ConnectedSystemObjectId"/> on every record, the deletion record included; it is still written, and read
+    /// beside the subject id, until it is retired. It is the Connected System Object counterpart of
+    /// <see cref="JIM.Models.Core.MetaverseObjectChange.DeletedMetaverseObjectId"/>.
     /// </summary>
     public Guid? DeletedConnectedSystemObjectId { get; set; }
 }

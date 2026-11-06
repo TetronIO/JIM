@@ -137,7 +137,7 @@ public class MetaverseObjectChangeSearchDatabaseTests
         MetaverseObjectChange Change(MetaverseObject? mvo) => new()
         {
             Id = Guid.NewGuid(),
-            MetaverseObject = mvo,
+            MetaverseObjectId = mvo?.Id,
             ChangeType = ObjectChangeType.AttributeFlow,
             ChangeTime = BaseTime.AddMinutes(++minute)
         };

@@ -268,16 +268,20 @@ public class JimDbContext : DbContext
             .WithOne(av => av.ConnectedSystemObject)
             .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemAttributeValue objects when the CSO is deleted.
 
-        modelBuilder.Entity<ConnectedSystemObject>()
-            .HasMany(cso => cso.ActivityRunProfileExecutionItems)
-            .WithOne(i => i.ConnectedSystemObject)
-            .HasForeignKey(i => i.ConnectedSystemObjectId)
-            .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
-        
-        modelBuilder.Entity<ConnectedSystemObject>()
-            .HasMany(cso => cso.Changes)
-            .WithOne(c => c.ConnectedSystemObject)
-            .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
+        // History names the object it is about by a plain id (#2669): no relationship, so no foreign key, and deleting the
+        // object never rewrites the rows. Readers resolve the id (live object, then the object's deletion record, then
+        // the row's own snapshot). The indexes are declared under the names the foreign keys' convention indexes had: an
+        // object's history, its timeline and its deletion record are all found through them. AuditReferenceCatalogueTests
+        // holds the schema to this. Change values' references declare no index, as nothing reads them by the object.
+        modelBuilder.Entity<ActivityRunProfileExecutionItem>()
+            .HasIndex(i => i.ConnectedSystemObjectId)
+            .HasDatabaseName("IX_ActivityRunProfileExecutionItems_ConnectedSystemObjectId");
+        modelBuilder.Entity<ConnectedSystemObjectChange>()
+            .HasIndex(c => c.ConnectedSystemObjectId)
+            .HasDatabaseName("IX_ConnectedSystemObjectChanges_ConnectedSystemObjectId");
+        modelBuilder.Entity<MetaverseObjectChange>()
+            .HasIndex(c => c.MetaverseObjectId)
+            .HasDatabaseName("IX_MetaverseObjectChanges_MetaverseObjectId");
 
         // Activity stat counters (#1078): composite natural key so the incremental upsert has a
         // conflict target, cascading away with the owning Activity.
@@ -305,8 +309,8 @@ public class JimDbContext : DbContext
             entity.HasIndex(p => new { p.ActivityId, p.Key }).IsUnique();
         });
 
-        // The causal walk's degraded timeline key (#1495): after a record's deletion nulls
-        // ConnectedSystemObjectId on the items that processed it, the source-import hop is found by the
+        // The causal walk's degraded timeline key (#1495): for items whose ConnectedSystemObjectId an earlier release
+        // cleared when their object was deleted (deletion keeps it since #2669), the source-import hop is found by the
         // external ID snapshot within the Activity's Connected System instead, and that lookup must not
         // scan a table this large.
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()
@@ -407,13 +411,6 @@ public class JimDbContext : DbContext
         // the attribute metadata even after the definition is removed.
         modelBuilder.Entity<ConnectedSystemObjectChangeAttribute>()
             .HasOne(ca => ca.Attribute)
-            .WithMany()
-            .OnDelete(DeleteBehavior.SetNull);
-
-        // When a CSO is deleted, set the ReferenceValueId to null in any change attribute values that reference it.
-        // This prevents FK violations when deleting CSOs that are referenced in historical change records.
-        modelBuilder.Entity<ConnectedSystemObjectChangeAttributeValue>()
-            .HasOne(cav => cav.ReferenceValue)
             .WithMany()
             .OnDelete(DeleteBehavior.SetNull);
 
@@ -625,10 +622,6 @@ public class JimDbContext : DbContext
             entity.ToTable(t => t.HasCheckConstraint("CK_ApiKeys_ScopeNamesItsConnectedSystem",
                 $"(\"Scope\" = {(int)ApiKeyScope.None}) = (\"ScopeConnectedSystemId\" IS NULL)"));
         });
-
-        modelBuilder.Entity<MetaverseObject>()
-            .HasMany(mvo => mvo.Changes)
-            .WithOne(mvoc => mvoc.MetaverseObject);
 
         // The Synchronisation Rule a change or an Activity names is history, not ownership (#1990). SetNull on rule
         // deletion so the history outlives the rule: the change keeps its SyncRuleName snapshot and the Activity its

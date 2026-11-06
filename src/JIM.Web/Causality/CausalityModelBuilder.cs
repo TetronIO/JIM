@@ -782,7 +782,9 @@ public static class CausalityModelBuilder
                     // resolved one (see CausalityPageContext.ConnectedSystemObjectNames), else by its id; the
                     // label is always bare (never "type: id"), so ObjectTypeName from the same "csId|csoTypeName"
                     // channel can be set unconditionally, letting the chip and the Lineage head add the type.
-                    if (outcome.ConnectedSystemObjectChange?.ConnectedSystemObjectId is { } targetCsoId && targetCsoId != Guid.Empty)
+                    // An object the page found gone is not linked (#2669): the change keeps its id after it is deleted.
+                    if (outcome.ConnectedSystemObjectChange?.ConnectedSystemObjectId is { } targetCsoId && targetCsoId != Guid.Empty
+                        && context.HeldConnectedSystemObjectIds?.Contains(targetCsoId) != false)
                     {
                         var targetLabel = context.ConnectedSystemObjectNames?.TryGetValue(targetCsoId, out var currentTargetName) == true
                             ? currentTargetName
@@ -1111,26 +1113,14 @@ public static class CausalityModelBuilder
         return rows;
     }
 
-    private static string? GetCsoValueText(ConnectedSystemObjectChangeAttributeValue valueChange)
-    {
-        if (valueChange.ReferenceValue == null)
-            return valueChange.ToString();
+    /// <summary>
+    /// A hand-built value's text. A change value names a referenced object by id alone (#2669), so a reference reads as
+    /// the identifier it carries (a Pending Export snapshot's DN) or else the id; values read for display are named by
+    /// the window reads instead, which resolve the id.
+    /// </summary>
+    private static string GetCsoValueText(ConnectedSystemObjectChangeAttributeValue valueChange) => valueChange.ToString();
 
-        // Pending Export stubs carry the resolved identifier (e.g. the DN) in StringValue, which is
-        // the value the operator recognises; the stub CSO has no post-export display attributes yet
-        if (valueChange.IsPendingExportStub && !string.IsNullOrEmpty(valueChange.StringValue))
-            return valueChange.StringValue;
-
-        return valueChange.ReferenceValue.NameOrId ?? valueChange.ReferenceValue.Id.ToString();
-    }
-
-    private static string? GetMvoValueText(MetaverseObjectChangeAttributeValue valueChange)
-    {
-        if (valueChange.ReferenceValue == null)
-            return valueChange.ToString();
-
-        return valueChange.ReferenceValue.NameOrId ?? valueChange.ReferenceValue.Id.ToString();
-    }
+    private static string GetMvoValueText(MetaverseObjectChangeAttributeValue valueChange) => valueChange.ToString();
 
     /// <summary>
     /// A flattened attribute value change, unified across CSO and MVO change records.

@@ -436,8 +436,8 @@ public class ChangeRecordUnresolvedReferenceDatabaseTests
 
         await using (var ctx = NewContext())
             await new PostgresDataRepository(ctx).Sync.DeleteConnectedSystemObjectsByIdsAsync([formerManagerId]);
-        Assert.That((await ReadValueAsync(valueId)).ReferenceValueId, Is.Null,
-            "precondition: deleting the referenced object clears the change record's id, leaving its DN");
+        Assert.That((await ReadValueAsync(valueId)).ReferenceValueId, Is.EqualTo(formerManagerId),
+            "precondition: deleting the referenced object leaves the change record naming it by id (#2669), beside its DN");
         await AddPersonAsync(seed, ManagerDn);
 
         await FixupAsync(seed);
@@ -445,7 +445,7 @@ public class ChangeRecordUnresolvedReferenceDatabaseTests
         var stored = await ReadValueAsync(valueId);
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(stored.ReferenceValueId, Is.Null,
+            Assert.That(stored.ReferenceValueId, Is.EqualTo(formerManagerId),
                 "the history refers to the deleted manager and must not be re-pointed at a later object reusing the DN");
             Assert.That(stored.StringValue, Is.EqualTo(ManagerDn), "the DN the value was recorded with is kept");
             Assert.That(stored.IsUnresolvedReference, Is.False, "a reference once resolved is never read as unresolved again");
@@ -605,7 +605,7 @@ public class ChangeRecordUnresolvedReferenceDatabaseTests
         change.AttributeChanges.Add(attributeChange);
         var value = new ConnectedSystemObjectChangeAttributeValue(attributeChange, ValueChangeType.Add, stringValue);
         if (referencedObjectId.HasValue)
-            value.ReferenceValue = new ConnectedSystemObject { Id = referencedObjectId.Value };
+            value.ReferenceValueId = referencedObjectId.Value;
         attributeChange.ValueChanges.Add(value);
         return (change, value);
     }

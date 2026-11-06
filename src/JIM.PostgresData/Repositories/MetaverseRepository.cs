@@ -1960,7 +1960,12 @@ public partial class MetaverseRepository : IMetaverseRepository
             SyncRuleName = c.SyncRuleName,
             ActivityRunProfileExecutionItemId = c.ActivityRunProfileExecutionItemId,
             ActivityId = c.ActivityId,
-            CsoId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId : null,
+            // The item keeps its object's id after the object is deleted (#2669); the history names the object only while
+            // it is there, so nothing links to one that has gone. Its external id below is the item's own record.
+            CsoId = c.ActivityRunProfileExecutionItem != null
+                    && database.ConnectedSystemObjects.Any(cso => cso.Id == c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId)
+                ? c.ActivityRunProfileExecutionItem.ConnectedSystemObjectId
+                : null,
             CsoExternalId = c.ActivityRunProfileExecutionItem != null ? c.ActivityRunProfileExecutionItem.ExternalIdSnapshot : null,
             ConnectedSystemId = c.ActivityRunProfileExecutionItem != null && c.ActivityRunProfileExecutionItem.Activity != null
                 ? c.ActivityRunProfileExecutionItem.Activity.ConnectedSystemId
@@ -2594,7 +2599,36 @@ public partial class MetaverseRepository : IMetaverseRepository
     public async Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         Repository.Database.Update(metaverseObject);
+        AddCarriedChangeRecords(metaverseObject, newOnly: true);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Marks the change records the portal carries on <see cref="MetaverseObject.Changes"/> for insertion, naming the
+    /// object by its id. The carrier is not a relationship (#2669), so neither <c>Update</c> nor <c>Add</c> reaches the
+    /// records; they are added here, each with its attribute changes and values.
+    /// </summary>
+    /// <param name="metaverseObject">The object whose carried records to add; its id is set by now.</param>
+    /// <param name="newOnly">Add only records not yet saved (no id yet), so an object updated twice does not insert the
+    /// first update's record again.</param>
+    private void AddCarriedChangeRecords(MetaverseObject metaverseObject, bool newOnly)
+    {
+        foreach (var change in metaverseObject.Changes.Where(c => !newOnly || c.Id == Guid.Empty))
+        {
+            change.MetaverseObjectId = metaverseObject.Id;
+            foreach (var attribute in change.AttributeChanges
+                         .Select(attributeChange => attributeChange.Attribute)
+                         .Where(attribute => attribute != null && Repository.Database.Entry(attribute).State == EntityState.Detached))
+                Repository.Database.MetaverseAttributes.Attach(attribute!);
+
+            Repository.Database.Entry(change).State = EntityState.Added;
+            foreach (var attributeChange in change.AttributeChanges)
+            {
+                Repository.Database.Entry(attributeChange).State = EntityState.Added;
+                foreach (var valueChange in attributeChange.ValueChanges)
+                    Repository.Database.Entry(valueChange).State = EntityState.Added;
+            }
+        }
     }
 
     public async Task CreateMetaverseObjectAsync(MetaverseObject metaverseObject)
@@ -2610,34 +2644,14 @@ public partial class MetaverseRepository : IMetaverseRepository
                 Repository.Database.MetaverseAttributes.Attach(av.Attribute);
         }
 
-        // Attach existing MetaverseAttribute entities referenced by change records so EF
-        // recognises them as existing (same pattern as attribute values above).
-        foreach (var change in metaverseObject.Changes)
-        {
-            foreach (var ac in change.AttributeChanges)
-            {
-                if (ac.Attribute != null && Repository.Database.Entry(ac.Attribute).State == EntityState.Detached)
-                    Repository.Database.MetaverseAttributes.Attach(ac.Attribute);
-            }
-        }
-
         // Use Entry().State instead of Add() to avoid graph traversal that would
         // override the Unchanged state of attached entities (Type, Attributes) to Added.
         Repository.Database.Entry(metaverseObject).State = EntityState.Added;
         foreach (var av in metaverseObject.AttributeValues)
             Repository.Database.Entry(av).State = EntityState.Added;
 
-        // Mark change history records as Added so they are persisted alongside the MVO.
-        foreach (var change in metaverseObject.Changes)
-        {
-            Repository.Database.Entry(change).State = EntityState.Added;
-            foreach (var ac in change.AttributeChanges)
-            {
-                Repository.Database.Entry(ac).State = EntityState.Added;
-                foreach (var vc in ac.ValueChanges)
-                    Repository.Database.Entry(vc).State = EntityState.Added;
-            }
-        }
+        // The change history records persist alongside the MVO, naming it by the id it was given just above.
+        AddCarriedChangeRecords(metaverseObject, newOnly: false);
 
         await Repository.Database.SaveChangesAsync();
     }
@@ -3583,27 +3597,9 @@ public partial class MetaverseRepository : IMetaverseRepository
             retireSpan?.SetTag("retiredCount", retirements.Count);
         }
 
-        // Null out the FK references in related tables to preserve audit history before deletion.
-
-        // Null out FK reference in Activities to preserve audit history
-        using (var clearSpan = ActivitySource.StartActivity("Mvo.Delete.ClearActivities"))
-        {
-            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-                metaverseObject.Id);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
-        }
-
-        // Stamp DeletedMetaverseObjectId on all prior change records for this MVO so that
-        // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
-        // Then null the FK to allow the MVO to be deleted without constraint violations.
-        using (var rekeySpan = ActivitySource.StartActivity("Mvo.Delete.RekeyChangeRecords"))
-        {
-            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = {0}, ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = {0}",
-                metaverseObject.Id);
-            rekeySpan?.SetTag("rowsAffected", rowsAffected);
-        }
+        // History naming the object (Activities, change records and the reference values in other objects' change
+        // records) is left as it is: it names the object by plain id, with no foreign key, and keeps the id once it is
+        // gone (#2669).
 
         // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
         // to this MVO. Without this, SaveChangesAsync may try to flush tracked CSO modifications
@@ -3641,23 +3637,13 @@ public partial class MetaverseRepository : IMetaverseRepository
         // deleted, payload-carrying rows have their reference nulled, and tracked instances are
         // surgically detached (#1019). Without the null-out half, deleting an MVO that is referenced
         // (e.g. as a Manager) would violate the FK constraint on
-        // MetaverseObjectAttributeValues.ReferenceValueId.
+        // MetaverseObjectAttributeValues.ReferenceValueId. Live data only: a change record's value naming this object
+        // ("Manager was set to Alice") keeps the id (#2669).
         using (var cleanSpan = ActivitySource.StartActivity("Mvo.Delete.CleanReferenceRows"))
         {
             var (rowsDeleted, rowsCleared) = await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(Repository.Database, [metaverseObject.Id]);
             cleanSpan?.SetTag("rowsDeleted", rowsDeleted);
             cleanSpan?.SetTag("rowsCleared", rowsCleared);
-        }
-
-        // Null out reference values in change tracking attribute records that point to this MVO.
-        // Change history records may reference this MVO (e.g., "Manager was set to Alice")
-        // and must be preserved with a null reference rather than blocking deletion.
-        using (var clearSpan = ActivitySource.StartActivity("Mvo.Delete.ClearChangeValueReferences"))
-        {
-            var rowsAffected = await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
-                metaverseObject.Id);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
         }
 
         using (var deleteStatementSpan = ActivitySource.StartActivity("Mvo.Delete.Delete"))
@@ -4288,7 +4274,7 @@ public partial class MetaverseRepository : IMetaverseRepository
         await Repository.Database.Database.ExecuteSqlRawAsync(
             insertChangeSql,
             changeId,
-            BulkSqlHelpers.NullableParam(change.MetaverseObject?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.MetaverseObjectId is { } metaverseObjectId && metaverseObjectId != Guid.Empty ? metaverseObjectId : null, NpgsqlTypes.NpgsqlDbType.Uuid),
             BulkSqlHelpers.NullableParam(change.ActivityRunProfileExecutionItem?.Id ?? change.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid),
             change.ChangeTime,
             (int)change.ChangeType,
@@ -4321,8 +4307,7 @@ public partial class MetaverseRepository : IMetaverseRepository
                 valueChange.Id = valueChangeId;
 
                 // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues
-                // exactly. The reference FK prefers the scalar (set when the referenced MVO is not in the
-                // change tracker, the normal shape during MVO deletion) over the navigation.
+                // exactly. The reference is a plain id (#2669).
                 await Repository.Database.Database.ExecuteSqlRawAsync(
                     insertValueSql,
                     valueChangeId,
@@ -4336,7 +4321,7 @@ public partial class MetaverseRepository : IMetaverseRepository
                     BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRule?.Id ?? valueChange.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.ContributedBySyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
                     BulkSqlHelpers.NullableParam(valueChange.ContributedByKind.HasValue ? (int?)valueChange.ContributedByKind.Value : null, NpgsqlTypes.NpgsqlDbType.Integer),

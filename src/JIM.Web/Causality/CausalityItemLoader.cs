@@ -82,6 +82,7 @@ public static class CausalityItemLoader
 
         var livePendingExportIds = await LoadLivePendingExportIdsAsync(jim, item);
         var provisionedConnectedSystemObjectNames = await LoadProvisionedConnectedSystemObjectNamesAsync(jim, item);
+        var heldConnectedSystemObjectIds = await LoadHeldQueuedChangeObjectIdsAsync(jim, item);
 
         // Only items with outcomes render the causality panel, and the chain renders inside it, so an item
         // without outcomes has nowhere to show a chain and the walk is not worth paying for.
@@ -104,6 +105,7 @@ public static class CausalityItemLoader
             DeletionPolicySnapshot = MvoDeletionPolicySnapshot.FromJson(item.DeletionPolicySnapshotJson),
             LivePendingExportIds = livePendingExportIds,
             ProvisionedConnectedSystemObjectNames = provisionedConnectedSystemObjectNames,
+            HeldConnectedSystemObjectIds = heldConnectedSystemObjectIds,
             Chain = chain,
             ChangeValues = changeValues,
             IdentityHeader = identityHeader,
@@ -152,7 +154,8 @@ public static class CausalityItemLoader
                 SubjectMetaverseObjectId: subjectId,
                 SubjectMetaverseObjectName: data.IdentityHeader?.NameOrId ?? item.DisplayNameSnapshot)
             {
-                Links = data.Links
+                Links = data.Links,
+                HeldConnectedSystemObjectIds = data.HeldConnectedSystemObjectIds
             };
         }
 
@@ -160,7 +163,9 @@ public static class CausalityItemLoader
             ConnectedSystemId: data.RunConnectedSystem?.Id,
             ConnectedSystemName: data.RunConnectedSystem?.Name,
             RunProfileName: data.Activity?.TargetName,
-            CsoId: item.ConnectedSystemObjectId,
+            // Only a record that is there is named by id, so nothing links to one that has gone: the item keeps the id
+            // after the record is deleted (#2669), and its snapshots describe it below.
+            CsoId: liveRecord?.Id,
             CsoConnectedSystemId: data.RecordConnectedSystem?.Id,
             CsoConnectedSystemName: data.RecordConnectedSystem?.Name,
             CsoDisplayName: liveRecord?.Label ?? item.DisplayNameSnapshot,
@@ -171,7 +176,8 @@ public static class CausalityItemLoader
             DeletedMetaverseObjectId: data.DeletedIdentityId,
             ConnectedSystemObjectNames: data.ProvisionedConnectedSystemObjectNames)
         {
-            Links = data.Links
+            Links = data.Links,
+            HeldConnectedSystemObjectIds = data.HeldConnectedSystemObjectIds
         };
     }
 
@@ -328,6 +334,28 @@ public static class CausalityItemLoader
 
         var live = await jim.ConnectedSystems.GetExistingPendingExportIdsAsync(pendingExportIds);
         return live.ToHashSet();
+    }
+
+    /// <summary>
+    /// Which of the Connected System Objects this item's queued exports and deprovisions name JIM still holds. Their change
+    /// records keep the objects' ids after the objects are deleted (#2669), and a deprovision usually ends in exactly that,
+    /// so the panel links only those still held. One query, bounded by the item's outcomes; null where none names one.
+    /// </summary>
+    private static async Task<IReadOnlySet<Guid>?> LoadHeldQueuedChangeObjectIdsAsync(JimApplication jim, ActivityRunProfileExecutionItem item)
+    {
+        var ids = item.SyncOutcomes
+            .Where(o => o.OutcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeprovisionQueued)
+            .Select(o => o.ConnectedSystemObjectChange?.ConnectedSystemObjectId)
+            .OfType<Guid>()
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+            return null;
+
+        var references = await jim.ConnectedSystems.GetConnectedSystemObjectReferenceSummariesAsync(ids);
+        return references.Values.Where(r => r.IsLive).Select(r => r.Id).ToHashSet();
     }
 
     /// <summary>

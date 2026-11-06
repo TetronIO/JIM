@@ -563,7 +563,7 @@ public class ExportChangeHistoryBuilderTests
         var valueChange = change.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
         Assert.That(valueChange.IsPendingExportStub, Is.True);
-        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.ReferenceValueId, Is.Null);
     }
 
     [Test]
@@ -585,7 +585,7 @@ public class ExportChangeHistoryBuilderTests
         // Assert — falls back to the existing behaviour (raw string)
         var valueChange = change.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo(mvoGuid.ToString()));
-        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.ReferenceValueId, Is.Null);
         Assert.That(valueChange.IsPendingExportStub, Is.False);
     }
 
@@ -606,7 +606,7 @@ public class ExportChangeHistoryBuilderTests
         // Assert — same as existing behaviour
         var valueChange = change.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo(mvoGuid.ToString()));
-        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.ReferenceValueId, Is.Null);
     }
 
     [Test]
@@ -626,7 +626,7 @@ public class ExportChangeHistoryBuilderTests
         // Assert — non-GUID values cannot be looked up, stored as string
         var valueChange = change.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo("CN=Manager,OU=Users,DC=test,DC=local"));
-        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.ReferenceValueId, Is.Null);
     }
 
     [Test]
@@ -653,7 +653,7 @@ public class ExportChangeHistoryBuilderTests
 
         var resolved = valueChanges.First(vc => vc.IsPendingExportStub);
         Assert.That(resolved.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
-        Assert.That(resolved.ReferenceValue, Is.Null);
+        Assert.That(resolved.ReferenceValueId, Is.Null);
 
         var unresolved = valueChanges.First(vc => !vc.IsPendingExportStub);
         Assert.That(unresolved.StringValue, Is.EqualTo(mvoGuid2.ToString()));
@@ -682,7 +682,7 @@ public class ExportChangeHistoryBuilderTests
         var valueChange = result.AttributeChanges.First().ValueChanges.First();
         Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
         Assert.That(valueChange.IsPendingExportStub, Is.True);
-        Assert.That(valueChange.ReferenceValue, Is.Null);
+        Assert.That(valueChange.ReferenceValueId, Is.Null);
     }
 
     /// <summary>
@@ -709,7 +709,7 @@ public class ExportChangeHistoryBuilderTests
         var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(valueChange.ReferenceValue?.Id, Is.EqualTo(memberCsoId), "the object the reference resolved to");
+            Assert.That(valueChange.ReferenceValueId, Is.EqualTo(memberCsoId), "the object the reference resolved to");
             Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"), "the DN the history shows");
             Assert.That(valueChange.IsPendingExportStub, Is.True);
             Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.False, "a DN is the object's identifier, not display text");
@@ -733,7 +733,7 @@ public class ExportChangeHistoryBuilderTests
         var valueChange = change.AttributeChanges.Single().ValueChanges.Single();
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(valueChange.ReferenceValue, Is.Null);
+            Assert.That(valueChange.ReferenceValueId, Is.Null);
             Assert.That(valueChange.StringValue, Is.EqualTo("CN=User1,OU=Users,DC=test,DC=local"));
             Assert.That(valueChange.IsPendingExportStub, Is.True);
             Assert.That(valueChange.NamesReferencedObjectByDisplayText, Is.False);

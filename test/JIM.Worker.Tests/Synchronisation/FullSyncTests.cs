@@ -2459,6 +2459,8 @@ public class FullSyncTests
                 "Expected the Deleted change record to carry the MVO's final attribute values.");
             Assert.That(deletedChange.ActivityId, Is.EqualTo(activity.Id),
                 "Expected the Deleted change record to name the synchronisation that deleted the MVO (#2460).");
+            Assert.That(deletedChange.MetaverseObjectId, Is.EqualTo(mvo.Id),
+                "Expected the Deleted change record to name the MVO by its subject id, as every record of it does (#2669).");
         }
     }
 

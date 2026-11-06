@@ -86,8 +86,8 @@ public class MvoDeletionSpanDatabaseTests
             Assert.That(delete.GetTagItem("mvoCount"), Is.EqualTo(2), "the parent span counts the objects");
             Assert.That(children.Select(s => s.DisplayName).Distinct(), Is.EquivalentTo(new[]
             {
-                "Mvo.Delete.RetireGeneratedValues", "Mvo.Delete.ClearActivities", "Mvo.Delete.RekeyChangeRecords",
-                "Mvo.Delete.DetachJoins", "Mvo.Delete.CleanReferenceRows", "Mvo.Delete.ClearChangeValueReferences",
+                // History naming the objects is no longer rewritten (#2669), so there is no statement, and no span, for it.
+                "Mvo.Delete.RetireGeneratedValues", "Mvo.Delete.DetachJoins", "Mvo.Delete.CleanReferenceRows",
                 "Mvo.Delete.Delete", "Mvo.Delete.UpdateTracker", "Mvo.Delete.Commit"
             }), "one child per statement, the tracker work and the commit");
             Assert.That(children.Single(s => s.DisplayName == "Mvo.Delete.Delete").GetTagItem("rowsAffected"), Is.EqualTo(2),
@@ -113,8 +113,8 @@ public class MvoDeletionSpanDatabaseTests
             Assert.That(delete.GetTagItem("mvoCount"), Is.EqualTo(1), "the parent span counts the object");
             Assert.That(children.Select(s => s.DisplayName).Distinct(), Is.EquivalentTo(new[]
             {
-                "Mvo.Delete.RetireGeneratedValues", "Mvo.Delete.ClearActivities", "Mvo.Delete.RekeyChangeRecords",
-                "Mvo.Delete.DetachJoins", "Mvo.Delete.CleanReferenceRows", "Mvo.Delete.ClearChangeValueReferences",
+                // History naming the objects is no longer rewritten (#2669), so there is no statement, and no span, for it.
+                "Mvo.Delete.RetireGeneratedValues", "Mvo.Delete.DetachJoins", "Mvo.Delete.CleanReferenceRows",
                 "Mvo.Delete.Delete", "Mvo.Delete.UpdateTracker", "Mvo.Delete.Commit"
             }), "one child per statement, the tracker work and the commit");
         }

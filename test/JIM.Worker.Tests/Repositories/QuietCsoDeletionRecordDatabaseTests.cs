@@ -139,7 +139,7 @@ public class QuietCsoDeletionRecordDatabaseTests
             Assert.That(record!.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
             Assert.That(record!.ConnectedSystemId, Is.EqualTo(system.Id));
             Assert.That(record!.ActivityRunProfileExecutionItemId, Is.Null);
-            Assert.That(record!.ConnectedSystemObjectId, Is.Null);
+            Assert.That(record!.ConnectedSystemObjectId, Is.EqualTo(csoId), "the deletion record names its object by its subject id (#2669)");
             Assert.That(record!.DeletedObjectExternalId, Is.EqualTo("tina.adams399"));
             Assert.That(record!.DeletedObjectDisplayName, Is.EqualTo("Tina Adams"));
             Assert.That(record!.DeletedObjectType?.Id, Is.EqualTo(csType.Id));

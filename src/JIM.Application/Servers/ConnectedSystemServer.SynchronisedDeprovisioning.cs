@@ -537,8 +537,8 @@ public partial class ConnectedSystemServer
 
         // Step 2: delete the batch's Connected System Objects (quiet deletions and per-object ones alike).
         // Deliberately WITHOUT per-object Connected System Object change records: the whole system's change
-        // history is about to be deleted or FK-severed by the run's final deletion, so freshly minted Delete
-        // change rows would be orphaned moments later; the per-object story lives on the execution items.
+        // history is about to be deleted, or kept naming objects that are gone, by the run's final deletion, so freshly
+        // minted Delete change rows would add nothing; the per-object story lives on the execution items.
         var allCsoDeletions = quietCsoDeletions.Concat(csoDeletions.Select(d => d.Cso)).ToList();
         if (allCsoDeletions.Count > 0)
             await Application.SyncRepo.DeleteConnectedSystemObjectsAsync(allCsoDeletions);
@@ -605,14 +605,9 @@ public partial class ConnectedSystemServer
         // mark on it matches nothing); mark the hosting systems of the changed derived inputs in one bulk update.
         await derivedInputMarks.FlushAsync(Application.SyncRepo);
 
-        // Step 7: persist the per-object results. The deleted objects' rows are gone, so the items must
-        // reference them by snapshot only (the core snapshotted the display fields eagerly, and the
-        // CsoDeleted outcome carries the deleted id durably); a foreign key to a deleted row would fail.
-        foreach (var executionItem in executionItems)
-        {
-            executionItem.ConnectedSystemObject = null;
-            executionItem.ConnectedSystemObjectId = null;
-        }
+        // Step 7: persist the per-object results. The deleted objects' rows are gone, and the items keep their ids as
+        // history (#2669): an item names its object by plain id, with no foreign key, beside the display fields the core
+        // snapshotted eagerly.
         await Application.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
 
         activity.ObjectsProcessed += batch.Count;

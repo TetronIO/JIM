@@ -425,7 +425,8 @@ public class AttributeRecallExpressionWorkflowTests : WorkflowTestBase
 
         // Verify MVO change tracking records were created for the recalled attributes.
         // This enables the RPEI detail page to show the attribute change table for recall scenarios.
-        var mvoChanges = mvo.Changes
+        var mvoChanges = SyncRepo.MetaverseObjectChanges.Values
+            .Where(c => c.MetaverseObjectId == mvo.Id)
             .OrderByDescending(c => c.ChangeTime)
             .ToList();
 

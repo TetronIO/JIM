@@ -87,7 +87,7 @@ public class GeneratedValueCollisionRemediationDatabaseTests
         var pending = await check.GeneratedValueRevisionsPending.SingleAsync();
         var change = await check.MetaverseObjectChanges
             .Include(c => c.AttributeChanges).ThenInclude(a => a.ValueChanges)
-            .SingleAsync(c => c.MetaverseObject!.Id == estate.MvoId);
+            .SingleAsync(c => c.MetaverseObjectId == estate.MvoId);
 
         using (Assert.EnterMultipleScope())
         {
@@ -566,7 +566,7 @@ public class GeneratedValueCollisionRemediationDatabaseTests
             var mvo = new MetaverseObject { Id = estate.MvoId };
             change = new MetaverseObjectChange
             {
-                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
                 InitiatedByType = ActivityInitiatorType.System,
