@@ -5272,10 +5272,14 @@ html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-s
    One marker per step group, joined by legs, with the step names underneath. The unit here is honest
    in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
    no comparably-sized alternative to divide the Schedule into. */
+/* The rail takes the header row's free width, up to a cap that grows with its steps: a fixed cap left a five-step
+   rail squeezed into a third of a wide table with its names truncated, while no cap would stretch a two-step
+   rail's one leg across the page. The labels share the width as (steps - 1) shares (half a share at each end,
+   see below), so the cap allows each share about 14rem, enough for a typical "System - Run Profile" name. */
 .jim-schedule-rail-block {
     flex: 1 1 auto;
     min-width: 12rem;
-    max-width: 26rem;
+    max-width: max(16rem, calc((var(--jim-schedule-steps, 4) - 1) * 14rem));
 }
 
 .jim-schedule-rail {

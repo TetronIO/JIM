@@ -78,15 +78,8 @@
                 <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (!string.IsNullOrEmpty(activity.TargetContext))
-                {
-                    @activity.TargetContext
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* One line, capped: a long name clips with its full text on hover rather than wrapping the row. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@context.Item.TargetContext" /></div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Run Profile" Sortable="false" HeaderStyle="@ActivityTableColumns.RunProfile">
@@ -94,15 +87,8 @@
                 <VirtualisedSortHeader Title="Run Profile" Name="target" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (!string.IsNullOrEmpty(activity.TargetName))
-                {
-                    @activity.TargetName
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* One line, capped: a long name clips with its full text on hover rather than wrapping the row. *@
+                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@context.Item.TargetName" /></div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Outcomes" Sortable="false" HeaderStyle="@ActivityTableColumns.Detail">

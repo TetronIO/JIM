@@ -12,18 +12,21 @@
             <MudText Typo="Typo.body1"><b>@(ScheduleName ?? "Schedule")</b></MudText>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">@Summary</MudText>
             <ScheduleStepRail Progress="@Progress" />
-            <MudSpacer />
+            @* Pushed right by its own margin rather than a MudSpacer: a spacer would claim half the free width from the
+               step rail, which is what should grow into it. *@
             @if (ScheduleExecutionId is { } executionId)
             {
-                <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
-                            Arrow="true" Placement="Placement.Top">
-                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
-                               Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
-                </MudTooltip>
-                <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                                   aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
-                </MudTooltip>
+                <div class="d-flex align-center gap-3 ml-auto">
+                    <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
+                                Arrow="true" Placement="Placement.Top">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
+                                   Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
+                    </MudTooltip>
+                    <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                       aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
+                    </MudTooltip>
+                </div>
             }
         </div>
     </td>

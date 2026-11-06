@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A Schedule's description on the Operations page's Schedules tab no longer wraps over many lines in a narrow window; it follows the name on one line, with the full text on hover.
+- 🐛 A long Connected System or Run Profile name no longer wraps a row of the Operations page's Completed list over several lines; it stays on one line, with the full name on hover. A Schedule's step rail in the Queued and In Progress lists now uses the width available, so its step names are no longer cut short in a wide window.
 - 🐛 An import Synchronisation Rule scoped away from objects an export rule provisioned no longer disconnects them, which made JIM provision them again on every run. Leaving an import rule's scope now withdraws only the values that rule brought in. (#2021)
 - 🐛 `New-JIMSyncRule` now writes the warnings the save raises, such as an Attribute Flow expression that reads an attribute the Object Type does not have, as `Set-JIMSyncRule` already did.
 - 🐛 A synchronisation's completion message and processed count now report the objects it processed, instead of the handful its final export review looked at (a million-object run read "1 objects ... avg 0 obj/s"). (#2790)
