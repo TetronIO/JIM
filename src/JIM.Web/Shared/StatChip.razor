@@ -1,0 +1,42 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* One count in an Activity's Outcomes: an icon, a colour and the figure. The figure sits in its own element so a crowded
+   list (VirtualisedDataGrid's CompactWhenCrowded) can hide it and keep the icon, which is why the tooltip always
+   carries the exact figure as well as what it counts. *@
+<MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
+    <MudChip T="string" Color="@Color" Variant="@Variant" Icon="@Icon" Class="jim-stat-chip">
+        <span class="jim-stat-chip-count">@Count.ToString("N0")</span>
+    </MudChip>
+</MudTooltip>
+
+@code {
+    /// <summary>
+    /// What the figure counts ("Metaverse Objects projected"), which leads the tooltip.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = null!;
+
+    /// <summary>
+    /// The figure. Zero stands for "nothing happened", so its tooltip is the label alone.
+    /// </summary>
+    [Parameter]
+    public int Count { get; set; }
+
+    /// <summary>
+    /// The icon naming the kind of outcome; it is all a crowded list shows.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = null!;
+
+    [Parameter]
+    public Color Color { get; set; } = Color.Default;
+
+    /// <summary>
+    /// Text by default; Filled for the one chip that must stand out (errors).
+    /// </summary>
+    [Parameter]
+    public Variant Variant { get; set; } = Variant.Text;
+
+    private string TooltipText => Count == 0 ? Label : $"{Label}: {Count:N0}";
+}
