@@ -518,5 +518,23 @@ public class ReferenceRecallStagingDatabaseTests
         Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove));
         Assert.That(change.StringValue, Is.EqualTo(memberDn),
             "The removal must carry the pre-resolved member DN captured before deletion");
+
+        // The authority check that runs before every export (#1885) must find the removal authorised: it is attributed
+        // to the export rule whose enabled Attribute Flow targets the member attribute, on a joined group. Neither its
+        // candidate query nor its decision may count it, or every leaver's group removals would be read back, or
+        // withdrawn, at the start of the export (#2669).
+        await using var authorityContext = NewContext();
+        var authorityRepository = new PostgresDataRepository(authorityContext);
+        using var authorityJim = new JimApplication(authorityRepository, syncRepository: authorityRepository.Sync);
+        var candidates = await authorityRepository.Sync.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(systemId, []);
+        var withdrawal = await authorityJim.ExportExecution.WithdrawQueuedChangesWithoutAuthorityAsync(systemId);
+        await using var afterWithdrawal = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(candidates, Is.Empty, "a recall-staged removal is not a candidate for withdrawal");
+            Assert.That(withdrawal, Is.EqualTo((0, 0)), "nothing is withdrawn");
+            Assert.That(await afterWithdrawal.PendingExportAttributeValueChanges.AnyAsync(c => c.Id == change.Id), Is.True,
+                "the removal is still queued");
+        }
     }
 }

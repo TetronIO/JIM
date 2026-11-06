@@ -392,33 +392,62 @@ public class ExportExecutionServer
     public async Task<(int ChangesWithdrawn, int PendingExportsDeleted)> WithdrawQueuedChangesWithoutAuthorityAsync(
         int connectedSystemId, string? connectedSystemName = null)
     {
-        var syncRules = await SyncRepo.GetSyncRulesAsync(connectedSystemId, includeDisabled: true);
+        // Spanned step by step (#2669): it runs before every export, and an unexplained 23 s pause at the start of a
+        // 5,000-leaver export fell in its window with nothing to say where.
+        using var withdrawSpan = Diagnostics.Diagnostics.Sync.StartSpan("WithdrawQueuedChanges")
+            .SetTag("connectedSystemId", connectedSystemId);
+
+        List<SyncRule> syncRules;
+        using (var loadSpan = Diagnostics.Diagnostics.Sync.StartSpan("WithdrawQueuedChanges.LoadSyncRules"))
+        {
+            syncRules = await SyncRepo.GetSyncRulesAsync(connectedSystemId, includeDisabled: true);
+            loadSpan.SetTag("syncRuleCount", syncRules.Count).SetSuccess();
+        }
         var classMembershipAttributeIds = ClassMembershipAttributeIds(syncRules);
 
-        var candidates = await SyncRepo.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
-        if (candidates.Count == 0)
-            return (0, 0);
-
-        var syncRulesById = syncRules.ToDictionary(r => r.Id);
-        var withdrawnChangeIds = new List<Guid>();
-        foreach (var pendingExport in candidates)
+        List<PendingExport> candidates;
+        int candidateChangeCount;
+        using (var findSpan = Diagnostics.Diagnostics.Sync.StartSpan("WithdrawQueuedChanges.FindCandidates"))
         {
-            var isJoined = pendingExport.ConnectedSystemObject == null || pendingExport.ConnectedSystemObject.MetaverseObjectId != null;
-            var withdrawn = _syncEngine.SelectQueuedChangesWithoutAuthority(pendingExport, isJoined, syncRulesById, classMembershipAttributeIds);
-            if (withdrawn.Count == 0)
-                continue;
+            candidates = await SyncRepo.GetUpdatePendingExportsWithQueuedChangesPossiblyWithoutAuthorityAsync(connectedSystemId, classMembershipAttributeIds);
+            candidateChangeCount = candidates.Sum(pe => pe.AttributeValueChanges.Count);
+            findSpan.SetTag("candidatePendingExportCount", candidates.Count).SetTag("candidateChangeCount", candidateChangeCount).SetSuccess();
+        }
+        withdrawSpan.SetTag("candidatePendingExportCount", candidates.Count).SetTag("candidateChangeCount", candidateChangeCount);
 
-            withdrawnChangeIds.AddRange(withdrawn.Select(c => c.Id));
-            Log.Information("WithdrawQueuedChangesWithoutAuthorityAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} " +
-                "(Connected System Object {CsoId}): {Reason}",
-                withdrawn.Count, pendingExport.Id, pendingExport.ConnectedSystemObjectId,
-                isJoined ? "no enabled Synchronisation Rule or Attribute Flow authorises them any more" : "the account is no longer joined");
+        var withdrawnChangeIds = new List<Guid>();
+        using (var selectSpan = Diagnostics.Diagnostics.Sync.StartSpan("WithdrawQueuedChanges.Select"))
+        {
+            var syncRulesById = syncRules.ToDictionary(r => r.Id);
+            foreach (var pendingExport in candidates)
+            {
+                var isJoined = pendingExport.ConnectedSystemObject == null || pendingExport.ConnectedSystemObject.MetaverseObjectId != null;
+                var withdrawn = _syncEngine.SelectQueuedChangesWithoutAuthority(pendingExport, isJoined, syncRulesById, classMembershipAttributeIds);
+                if (withdrawn.Count == 0)
+                    continue;
+
+                withdrawnChangeIds.AddRange(withdrawn.Select(c => c.Id));
+                Log.Information("WithdrawQueuedChangesWithoutAuthorityAsync: Withdrew {Count} queued change(s) from Pending Export {PendingExportId} " +
+                    "(Connected System Object {CsoId}): {Reason}",
+                    withdrawn.Count, pendingExport.Id, pendingExport.ConnectedSystemObjectId,
+                    isJoined ? "no enabled Synchronisation Rule or Attribute Flow authorises them any more" : "the account is no longer joined");
+            }
+            selectSpan.SetTag("withdrawnChangeCount", withdrawnChangeIds.Count).SetSuccess();
         }
 
         if (withdrawnChangeIds.Count == 0)
+        {
+            withdrawSpan.SetTag("changesWithdrawn", 0).SetTag("pendingExportsDeleted", 0).SetSuccess();
             return (0, 0);
+        }
 
-        var (changesWithdrawn, pendingExportsDeleted) = await SyncRepo.WithdrawPendingExportAttributeChangesAsync(withdrawnChangeIds);
+        int changesWithdrawn, pendingExportsDeleted;
+        using (var writeSpan = Diagnostics.Diagnostics.Sync.StartSpan("WithdrawQueuedChanges.Withdraw"))
+        {
+            (changesWithdrawn, pendingExportsDeleted) = await SyncRepo.WithdrawPendingExportAttributeChangesAsync(withdrawnChangeIds);
+            writeSpan.SetTag("changesWithdrawn", changesWithdrawn).SetTag("pendingExportsDeleted", pendingExportsDeleted).SetSuccess();
+        }
+        withdrawSpan.SetTag("changesWithdrawn", changesWithdrawn).SetTag("pendingExportsDeleted", pendingExportsDeleted).SetSuccess();
 
         // Synchronisation Integrity: summary statistics for the batch operation.
         Log.Information("WithdrawQueuedChangesWithoutAuthorityAsync: {SystemName}: withdrew {ChangeCount} queued change(s) no longer authorised " +
