@@ -316,7 +316,7 @@ public class LeaverCohortCostDatabaseTests
         {
             using (Assert.EnterMultipleScope())
             {
-                Assert.That(executionItems.Select(i => i.ConnectedSystemObjectId), Is.All.Null, $"{path}: no execution item still names a deleted object");
+                Assert.That(executionItems.Select(i => i.ConnectedSystemObjectId), Is.EqualTo(leaverIds.Select(id => (Guid?)id)), $"{path}: every execution item keeps the id of the object it deleted (#2669)");
                 Assert.That(executionItems.Select(i => i.ConnectedSystemObjectChange), Is.All.Not.Null, $"{path}: every execution item carries its deletion record");
             }
         }

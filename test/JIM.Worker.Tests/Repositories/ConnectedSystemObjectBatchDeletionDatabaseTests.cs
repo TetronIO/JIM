@@ -220,12 +220,13 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             Assert.That(tracked.MetaverseValue.UnresolvedReferenceValue, Is.Null);
             Assert.That(tracked.PendingExport.ConnectedSystemObjectId, Is.Null, "the Pending Export's reference is cleared, as the database cleared it");
             Assert.That(tracked.PendingExport.ConnectedSystemObject, Is.Null);
-            Assert.That(tracked.ExecutionItem.ConnectedSystemObjectId, Is.Null, "the execution item's reference is cleared");
-            Assert.That(tracked.ExecutionItem.ConnectedSystemObject, Is.Null);
-            Assert.That(tracked.Change.ConnectedSystemObjectId, Is.Null, "the change record's reference is cleared");
-            Assert.That(tracked.Change.ConnectedSystemObject, Is.Null);
-            Assert.That(ctx.Entry(tracked.ChangeValue).Property("ReferenceValueId").CurrentValue, Is.Null, "the change value's reference is cleared");
-            Assert.That(tracked.ChangeValue.ReferenceValue, Is.Null);
+            // History names the object by plain id (#2669): the database leaves it, so the tracker does too.
+            Assert.That(tracked.ExecutionItem.ConnectedSystemObjectId, Is.EqualTo(seeded.DeletedId), "the execution item keeps the deleted object's id");
+            Assert.That(tracked.Change.ConnectedSystemObjectId, Is.EqualTo(seeded.DeletedId), "the change record keeps it");
+            Assert.That(tracked.ChangeValue.ReferenceValueId, Is.EqualTo(seeded.DeletedId), "the change value keeps it");
+            Assert.That(ctx.Entry(tracked.ExecutionItem).State, Is.EqualTo(EntityState.Unchanged), "and none of the three is marked for a write");
+            Assert.That(ctx.Entry(tracked.Change).State, Is.EqualTo(EntityState.Unchanged));
+            Assert.That(ctx.Entry(tracked.ChangeValue).State, Is.EqualTo(EntityState.Unchanged));
             Assert.That(tracked.PasswordChange.ConnectedSystemObjectId, Is.Null, "the Pending Password Change's account is cleared");
             Assert.That(tracked.PasswordChange.ProvisionedConnectedSystemObjectId, Is.Null, "and the account it owes a first password");
         }
@@ -269,14 +270,11 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             var pendingExport = await verify.PendingExports.SingleAsync(p => p.Id == seeded.PendingExportId);
             Assert.That(pendingExport.ConnectedSystemObjectId, Is.Null, "the Pending Export stays, its reference set to null");
             var executionItem = await verify.ActivityRunProfileExecutionItems.SingleAsync(i => i.Id == seeded.ExecutionItemId);
-            Assert.That(executionItem.ConnectedSystemObjectId, Is.Null, "the execution item stays, its reference set to null");
+            Assert.That(executionItem.ConnectedSystemObjectId, Is.EqualTo(id), "the execution item stays, still naming the object (#2669)");
             var change = await verify.ConnectedSystemObjectChanges.SingleAsync(c => c.Id == seeded.ChangeId);
-            Assert.That(change.ConnectedSystemObjectId, Is.Null, "the change record stays, its reference set to null");
-            Assert.That(await verify.ConnectedSystemObjectChangeAttributeValues
-                    .Where(v => v.Id == seeded.ChangeValueId)
-                    .Select(v => EF.Property<Guid?>(v, "ReferenceValueId"))
-                    .SingleAsync(),
-                Is.Null, "the change value stays, its reference set to null");
+            Assert.That(change.ConnectedSystemObjectId, Is.EqualTo(id), "the change record stays, still naming the object");
+            var changeValue = await verify.ConnectedSystemObjectChangeAttributeValues.SingleAsync(v => v.Id == seeded.ChangeValueId);
+            Assert.That(changeValue.ReferenceValueId, Is.EqualTo(id), "the change value stays, still naming the object");
             var passwordChange = await verify.PendingPasswordChanges.SingleAsync(p => p.Id == seeded.PasswordChangeId);
             Assert.That(passwordChange.ConnectedSystemObjectId, Is.Null, "the Pending Password Change stays, its account set to null");
             Assert.That(passwordChange.ProvisionedConnectedSystemObjectId, Is.Null, "and the account it owes a first password");
@@ -332,7 +330,6 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
         {
             Assert.That(tracked.ReferencingValue.ReferenceValue, Is.SameAs(deleted), "fix-up joined the referencing value to the tracked object");
             Assert.That(tracked.PendingExport.ConnectedSystemObject, Is.SameAs(deleted), "and the Pending Export");
-            Assert.That(tracked.ChangeValue.ReferenceValue, Is.SameAs(deleted), "and the change value");
             Assert.That(connectedSystem.Objects.Any(o => ReferenceEquals(o, deleted)), Is.True,
                 "fix-up added the object to the tracked Connected System's Objects, as on the Worker's context");
             Assert.That(joinedMetaverseObject.ConnectedSystemObjects.Any(o => ReferenceEquals(o, deleted)), Is.True,
@@ -404,8 +401,11 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
         {
             Assert.That(await verify.ConnectedSystemObjects.CountAsync(c => deletedIds.Contains(c.Id)), Is.Zero, "the objects are deleted");
             Assert.That(persistedItems, Has.Count.EqualTo(objectIds.Count), "one execution item each");
-            Assert.That(persistedItems.Select(i => i.ConnectedSystemObjectId), Is.All.Null, "none names a deleted object");
+            Assert.That(persistedItems.Select(i => i.ConnectedSystemObjectId), Is.EquivalentTo(objectIds.Select(id => (Guid?)id)),
+                "each item keeps the id of the object it deleted, as history (#2669)");
             Assert.That(records, Has.Count.EqualTo(objectIds.Count), "one deletion record each");
+            Assert.That(records.Select(r => r.ConnectedSystemObjectId), Is.EquivalentTo(objectIds.Select(id => (Guid?)id)),
+                "each deletion record names its object by its subject id");
             Assert.That(records.Select(r => r.ChangeType).Distinct(), Is.EqualTo(new[] { ObjectChangeType.Deleted }));
             Assert.That(records.Select(r => r.ActivityRunProfileExecutionItemId), Is.EquivalentTo(persistedItems.Select(i => (Guid?)i.Id)),
                 "each record belongs to its execution item");
@@ -599,16 +599,16 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             Status = PendingExportStatus.Pending, CreatedAt = DateTime.UtcNow
         };
         var activity = new JimActivity { TargetName = "Earlier run", InitiatedByType = ActivityInitiatorType.System };
-        var executionItem = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), Activity = activity, ConnectedSystemObject = deleted, ObjectChangeType = ObjectChangeType.Updated };
+        var executionItem = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), Activity = activity, ConnectedSystemObjectId = deleted.Id, ObjectChangeType = ObjectChangeType.Updated };
         var change = new ConnectedSystemObjectChange
         {
-            Id = Guid.NewGuid(), ConnectedSystemId = schema.SystemId, ConnectedSystemObject = deleted, ChangeTime = DateTime.UtcNow,
+            Id = Guid.NewGuid(), ConnectedSystemId = schema.SystemId, ConnectedSystemObjectId = deleted.Id, ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated, InitiatedByType = ActivityInitiatorType.System
         };
         // A membership change recorded on the other object, naming the departed account as a member.
         var referencingChange = new ConnectedSystemObjectChange
         {
-            Id = Guid.NewGuid(), ConnectedSystemId = schema.SystemId, ConnectedSystemObject = referencing, ChangeTime = DateTime.UtcNow,
+            Id = Guid.NewGuid(), ConnectedSystemId = schema.SystemId, ConnectedSystemObjectId = referencing.Id, ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated, InitiatedByType = ActivityInitiatorType.System
         };
         var memberChange = new ConnectedSystemObjectChangeAttribute
@@ -617,7 +617,7 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
         };
         var changeValue = new ConnectedSystemObjectChangeAttributeValue
         {
-            Id = Guid.NewGuid(), ConnectedSystemObjectChangeAttribute = memberChange, ValueChangeType = ValueChangeType.Add, ReferenceValue = deleted
+            Id = Guid.NewGuid(), ConnectedSystemObjectChangeAttribute = memberChange, ValueChangeType = ValueChangeType.Add, ReferenceValueId = deleted.Id
         };
         memberChange.ValueChanges.Add(changeValue);
         referencingChange.AttributeChanges.Add(memberChange);

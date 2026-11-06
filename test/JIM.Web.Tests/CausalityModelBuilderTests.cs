@@ -758,6 +758,24 @@ public class CausalityModelBuilderTests
         Assert.That(recordLink.ObjectTypeName, Is.Null);
     }
 
+    /// <summary>
+    /// A queued export's or deprovision's change record keeps its object's id after the object is deleted (#2669): an
+    /// object the page found JIM no longer holds is not linked, as it was not while deletion cleared the id.
+    /// </summary>
+    [Test]
+    public void Build_QueuedExportForAnObjectSinceDeleted_AddsNoRecordLink()
+    {
+        var item = CausalityTestData.NewJoinerItem();
+        var export = item.SyncOutcomes.First(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        export.ConnectedSystemObjectChange!.ConnectedSystemObjectId = Guid.NewGuid();
+        var context = CausalityTestData.NewJoinerContext() with { HeldConnectedSystemObjectIds = new HashSet<Guid>() };
+
+        var model = CausalityModelBuilder.Build(item, context);
+
+        var exportEvent = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+        Assert.That(exportEvent.Links.Any(l => l.Kind == CausalityEntityKind.Record), Is.False);
+    }
+
     [Test]
     public void Build_QueuedExportWhoseChangeNamesNoObject_AddsNoRecordLink()
     {

@@ -81,7 +81,7 @@ public partial class MetaverseServer
         {
             change = new MetaverseObjectChange
             {
-                MetaverseObject = metaverseObject,
+                MetaverseObjectId = metaverseObject.Id,
                 ChangeType = ObjectChangeType.Updated,
                 ChangeTime = DateTime.UtcNow,
                 InitiatedByType = ActivityInitiatorType.System,

@@ -15,15 +15,10 @@ public class MetaverseObjectChange
     public Guid Id { get; set; }
 
     /// <summary>
-    /// What Metaverse Object does this change relate to?
-    /// Will be null if the operation was DELETE.
-    /// </summary>
-    public MetaverseObject? MetaverseObject { get; set; }
-
-    /// <summary>
-    /// The id of the Metaverse Object this change relates to. Readers decide whether that object is live by looking it
-    /// up, never by testing this id for null (#2669): until a deletion stops re-keying change records, a deleted
-    /// object's records hold its id in <see cref="DeletedMetaverseObjectId"/> instead.
+    /// The id of the Metaverse Object this change relates to, deletion records included. Written once and never rewritten
+    /// (#2669): once the object is deleted it names an object that no longer exists, so readers decide whether the object
+    /// is live by looking it up, never from this id. Records an earlier release re-keyed on deletion had it restored from
+    /// <see cref="DeletedMetaverseObjectId"/> by the migration that stopped the re-keying.
     /// </summary>
     public Guid? MetaverseObjectId { get; set; }
 
@@ -116,9 +111,9 @@ public class MetaverseObjectChange
     // -----------------------------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The original MetaverseObject ID, preserved on ALL change records (including prior changes)
-    /// when an MVO is deleted. This enables GetDeletedMvoChangeHistoryAsync to correlate the
-    /// deletion record with earlier changes after the MetaverseObject FK has been nulled.
+    /// For a deletion record, the deleted object's id. Redundant since #2669, which keeps <see cref="MetaverseObjectId"/>
+    /// on every record, the deletion record included; it is still written, and read beside the subject id, until it is
+    /// retired. Earlier releases also stamped it on an object's prior records when the object was deleted.
     /// </summary>
     public Guid? DeletedMetaverseObjectId { get; set; }
 

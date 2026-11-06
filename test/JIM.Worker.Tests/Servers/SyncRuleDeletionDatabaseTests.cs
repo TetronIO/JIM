@@ -184,7 +184,7 @@ public class SyncRuleDeletionDatabaseTests
         history.MetaverseObjects.Add(person);
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = person,
+            MetaverseObjectId = person.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Projected,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule,

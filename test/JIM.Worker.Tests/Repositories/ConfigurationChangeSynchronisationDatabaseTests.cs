@@ -681,7 +681,7 @@ public class ConfigurationChangeSynchronisationDatabaseTests
                         Status = ConnectedSystemObjectStatus.Normal, JoinType = ConnectedSystemObjectJoinType.NotJoined
                     };
                     ctx.ConnectedSystemObjects.Add(cso);
-                    var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = runId, ConnectedSystemObject = cso };
+                    var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid(), ActivityId = runId, ConnectedSystemObjectId = cso.Id };
                     foreach (var outcome in outcomesPerObject[i])
                         item.SyncOutcomes.Add(new ActivityRunProfileExecutionItemSyncOutcome { Id = Guid.NewGuid(), OutcomeType = outcome });
                     ctx.ActivityRunProfileExecutionItems.Add(item);

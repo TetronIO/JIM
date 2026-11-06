@@ -71,7 +71,7 @@ public class MvoChangeValuePersistenceDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             InitiatedByType = ActivityInitiatorType.System
@@ -127,7 +127,7 @@ public class MvoChangeValuePersistenceDatabaseTests
 
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = bulkPath ? mvo : null,
+            MetaverseObjectId = mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = bulkPath ? ObjectChangeType.Created : ObjectChangeType.Deleted,
             InitiatedByType = ActivityInitiatorType.System
@@ -203,7 +203,7 @@ public class MvoChangeValuePersistenceDatabaseTests
         // write path must not depend on it being loaded.
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Projected,
             InitiatedByType = ActivityInitiatorType.System,
@@ -308,7 +308,7 @@ public class MvoChangeValuePersistenceDatabaseTests
         var deletingItemId = Guid.NewGuid();
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.AttributeFlow,
             InitiatedByType = ActivityInitiatorType.System,
@@ -357,6 +357,136 @@ public class MvoChangeValuePersistenceDatabaseTests
             Assert.That(persisted.DeletedByRunProfileExecutionItemId, Is.EqualTo(deletingItemId));
         }
     }
+
+    /// <summary>
+    /// History names objects by plain id (#2669): a deletion record keeps its object's id as its subject, and a reference
+    /// value keeps the id of an object that has gone, on both raw write paths. Neither object exists when the record is
+    /// written, which the foreign keys once refused.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task ChangeHistoryWritePaths_DeletionRecordOfAnObjectThatHasGone_PersistsItsSubjectAndReferenceIdsAsync(bool bulkPath)
+    {
+        await using var seedContext = NewContext();
+        var managerAttr = new MetaverseAttribute { Name = $"manager-{Guid.NewGuid():N}", Type = AttributeDataType.Reference };
+        seedContext.MetaverseAttributes.Add(managerAttr);
+        await seedContext.SaveChangesAsync();
+
+        var deletedId = Guid.NewGuid();
+        var deletedManagerId = Guid.NewGuid();
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObjectId = deletedId,
+            DeletedMetaverseObjectId = deletedId,
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System,
+            DeletedObjectDisplayName = "Jo Bloggs"
+        };
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = managerAttr, AttributeId = managerAttr.Id, ReferenceValueId = deletedManagerId },
+            ValueChangeType.Remove);
+
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            if (bulkPath)
+                await new SyncRepository(repository).PersistPendingMvoChangesAsync([change], []);
+            else
+                await repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChanges.AsNoTracking().SingleAsync(c => c.Id == change.Id);
+        var value = await readContext.MetaverseObjectChangeAttributeValues.AsNoTracking()
+            .SingleAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.Id == change.Id);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persisted.MetaverseObjectId, Is.EqualTo(deletedId), "the deletion record names its object by its subject id");
+            Assert.That(persisted.DeletedMetaverseObjectId, Is.EqualTo(deletedId));
+            Assert.That(value.ReferenceValueId, Is.EqualTo(deletedManagerId), "the reference value keeps the id of an object that has gone");
+        }
+    }
+
+    /// <summary>
+    /// The portal carries a change record on <see cref="MetaverseObject.Changes"/> until it is saved; the carrier is not a
+    /// relationship (#2669), so the repository adds the record itself, naming the object by the id it has by then. A new
+    /// object has no id when its record is made. On a context that does not track, as the portal's.
+    /// </summary>
+    [Test]
+    public async Task CreateMetaverseObjectAsync_CarriedChangeRecord_IsSavedNamingTheNewObjectAsync()
+    {
+        int typeId;
+        int nameAttrId;
+        await using (var seedContext = NewContext())
+        {
+            var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+            var seededAttr = new MetaverseAttribute { Name = $"displayName-{Guid.NewGuid():N}", Type = AttributeDataType.Text };
+            seedContext.AddRange(mvoType, seededAttr);
+            await seedContext.SaveChangesAsync();
+            (typeId, nameAttrId) = (mvoType.Id, seededAttr.Id);
+        }
+
+        await using var writeContext = NewNoTrackingContext();
+        var type = await writeContext.MetaverseObjectTypes.SingleAsync(t => t.Id == typeId);
+        var nameAttr = await writeContext.MetaverseAttributes.SingleAsync(a => a.Id == nameAttrId);
+        var mvo = new MetaverseObject { Type = type, Created = DateTime.UtcNow };
+        var value = new MetaverseObjectAttributeValue { MetaverseObject = mvo, Attribute = nameAttr, AttributeId = nameAttr.Id, StringValue = "Jo Bloggs" };
+        mvo.AttributeValues.Add(value);
+        var change = new MetaverseObjectChange
+        {
+            MetaverseObjectId = mvo.Id, ChangeTime = DateTime.UtcNow, ChangeType = ObjectChangeType.Created, InitiatedByType = ActivityInitiatorType.User
+        };
+        change.AddAttributeValueChange(value, ValueChangeType.Add);
+        mvo.Changes.Add(change);
+
+        await new PostgresDataRepository(writeContext).Metaverse.CreateMetaverseObjectAsync(mvo);
+
+        await using var readContext = NewContext();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(mvo.Id, Is.Not.EqualTo(Guid.Empty), "the object was given an id");
+            Assert.That(await readContext.MetaverseObjectChanges.CountAsync(c => c.MetaverseObjectId == mvo.Id), Is.EqualTo(1),
+                "the carried record is saved, naming the object");
+            Assert.That(await readContext.MetaverseObjectChangeAttributeValues
+                    .CountAsync(v => v.MetaverseObjectChangeAttribute.MetaverseObjectChange.MetaverseObjectId == mvo.Id),
+                Is.EqualTo(1), "with its value");
+        }
+    }
+
+    /// <summary>
+    /// The update path adds the records the portal carries that are not saved yet, and only those: an object updated
+    /// twice through the same instance does not insert its first record again.
+    /// </summary>
+    [Test]
+    public async Task UpdateMetaverseObjectAsync_CarriedChangeRecords_SavesEachOnceAsync()
+    {
+        var (mvo, _) = await SeedObjectAndActivityAsync();
+        MetaverseObjectChange NewChange() => new()
+        {
+            MetaverseObjectId = mvo.Id, ChangeTime = DateTime.UtcNow, ChangeType = ObjectChangeType.Updated, InitiatedByType = ActivityInitiatorType.User
+        };
+
+        await using var loadContext = NewNoTrackingContext();
+        var detached = await loadContext.MetaverseObjects.SingleAsync(m => m.Id == mvo.Id);
+        detached.Changes.Add(NewChange());
+        await using (var writeContext = NewNoTrackingContext())
+            await new PostgresDataRepository(writeContext).Metaverse.UpdateMetaverseObjectAsync(detached);
+
+        detached.Changes.Add(NewChange());
+        await using (var writeContext = NewNoTrackingContext())
+            await new PostgresDataRepository(writeContext).Metaverse.UpdateMetaverseObjectAsync(detached);
+
+        await using var readContext = NewContext();
+        Assert.That(await readContext.MetaverseObjectChanges.CountAsync(c => c.MetaverseObjectId == mvo.Id), Is.EqualTo(2),
+            "each carried record is saved once");
+    }
+
+    private JimDbContext NewNoTrackingContext() => new(new DbContextOptionsBuilder<JimDbContext>()
+        .UseNpgsql(_connectionString)
+        .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+        .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+        .Options);
 
     private async Task<(MetaverseObject Mvo, Guid ActivityId)> SeedObjectAndActivityAsync()
     {

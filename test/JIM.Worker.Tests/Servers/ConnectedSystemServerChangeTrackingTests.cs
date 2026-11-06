@@ -164,8 +164,8 @@ public class ConnectedSystemServerChangeTrackingTests
         Assert.That(valueChange.StringValue, Is.EqualTo(memberDn),
             "Member change history should record the DN string via UnresolvedReferenceValue, " +
             "not null (which would display as '(identifier not recorded)' in the UI)");
-        Assert.That(valueChange.ReferenceValue, Is.Null,
-            "ReferenceValue should be null since the CSO has Guid.Empty Id (not yet persisted)");
+        Assert.That(valueChange.ReferenceValueId, Is.Null,
+            "ReferenceValueId should be null since the CSO has Guid.Empty Id (not yet persisted)");
     }
 
     /// <summary>
@@ -245,7 +245,7 @@ public class ConnectedSystemServerChangeTrackingTests
             "Should have exactly one member value change");
 
         var valueChange = memberAttributeChange.ValueChanges.Single();
-        Assert.That(valueChange.ReferenceValue, Is.EqualTo(userCso),
+        Assert.That(valueChange.ReferenceValueId, Is.EqualTo(userCso.Id),
             "Member change history should record the CSO reference when the CSO is already persisted");
         Assert.That(valueChange.StringValue, Is.EqualTo(memberDn),
             "StringValue should preserve the DN as a fallback for when the FK cannot be written during bulk persistence");

@@ -37,21 +37,13 @@ public static class ExportChangeHistoryBuilder
             _ => ObjectChangeType.Exported
         };
 
-        // Set the scalar FK alongside the navigation: ConnectedSystemObjectChange rows are persisted
-        // via the raw COPY path (BulkInsertCsoChangesRawAsync), which reads ConnectedSystemObjectId
-        // directly and does not trigger EF's automatic FK fix-up from the navigation. Without the
-        // explicit assignment the column is inserted as NULL, breaking Causality Tree rendering for
-        // export change history (#683).
-        //
-        // ConnectedSystemObjectRemoved (an unconfirmed-provisioning Delete): the export server has
-        // already removed the CSO row, so the navigation and FK must stay null or the insert fails
-        // against a row that no longer exists. DeletedObjectExternalId still reads from the in-memory
-        // CSO graph the item carries, which is unaffected by the row's removal.
+        // The object's id, which the raw COPY path writes (#683). Kept even for an unconfirmed-provisioning Delete whose
+        // object the export server has already removed (ConnectedSystemObjectRemoved): a change record names its object
+        // by plain id, with no foreign key, so it keeps naming the object once it is gone (#2669).
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = connectedSystemId,
-            ConnectedSystemObject = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject,
-            ConnectedSystemObjectId = exportItem.ConnectedSystemObjectRemoved ? null : exportItem.ConnectedSystemObject?.Id,
+            ConnectedSystemObjectId = exportItem.ConnectedSystemObject is { Id: var objectId } && objectId != Guid.Empty ? objectId : null,
             ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             ActivityRunProfileExecutionItem = executionItem,
@@ -83,7 +75,11 @@ public static class ExportChangeHistoryBuilder
         var change = new ConnectedSystemObjectChange
         {
             ConnectedSystemId = pendingExport.ConnectedSystemId,
-            ConnectedSystemObject = pendingExport.ConnectedSystemObject,
+            // The object's id: the loaded object's where it has one, else the Pending Export's own (a deletion cascade or
+            // a recall stages a Pending Export with the id alone).
+            ConnectedSystemObjectId = pendingExport.ConnectedSystemObject is { Id: var objectId } && objectId != Guid.Empty
+                ? objectId
+                : pendingExport.ConnectedSystemObjectId,
             ChangeType = ObjectChangeType.PendingExport,
             ChangeTime = DateTime.UtcNow,
             InitiatedByType = initiatedByType,
@@ -281,15 +277,13 @@ public static class ExportChangeHistoryBuilder
                 // identifier (e.g. DN) stored in StringValue during reference resolution. Mark as Pending Export stub so
                 // the UI renders a clock icon (awaiting confirmation) rather than the broken-link "unresolved" icon.
                 // Resolution also stamped the object it resolved to (ResolvedReferenceCsoId), so the value carries that
-                // object by its id alone, as change capture carries a reference whose navigation is not loaded: the writer
-                // records the id where the object's row exists, and only otherwise leaves the DN for the change record
-                // reference fix-up to resolve (#2700). The stamp is a soft pointer, which is why the writers check the row.
+                // object's id: the writer records the id where the object's row exists, and only otherwise leaves the DN
+                // for the change record reference fix-up to resolve (#2700). The stamp is a soft pointer, which is why the
+                // writers check the row.
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.StringValue)
                     {
-                        ReferenceValue = peChange.ResolvedReferenceCsoId is { } resolvedCsoId
-                            ? new ConnectedSystemObject { Id = resolvedCsoId }
-                            : null,
+                        ReferenceValueId = peChange.ResolvedReferenceCsoId,
                         IsPendingExportStub = true,
                         SyncRuleId = syncRuleId,
                         SyncRuleName = syncRuleName

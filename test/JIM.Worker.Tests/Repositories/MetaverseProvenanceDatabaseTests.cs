@@ -562,7 +562,7 @@ public class MetaverseProvenanceDatabaseTests
 
         var firstChange = new MetaverseObjectChange
         {
-            MetaverseObject = AttachMvoStub(ctx, mvoId),
+            MetaverseObjectId = mvoId,
             ChangeTime = firstChangeTime,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -579,7 +579,7 @@ public class MetaverseProvenanceDatabaseTests
 
         var secondChange = new MetaverseObjectChange
         {
-            MetaverseObject = AttachMvoStub(ctx, mvoId),
+            MetaverseObjectId = mvoId,
             ChangeTime = secondChangeTime,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -666,7 +666,7 @@ public class MetaverseProvenanceDatabaseTests
             ctx.Attach(mvAttribute);
             var change = new MetaverseObjectChange
             {
-                MetaverseObject = AttachMvoStub(ctx, mvoId),
+                MetaverseObjectId = mvoId,
                 ChangeTime = DateTime.UtcNow,
                 ChangeType = ObjectChangeType.Created,
                 ChangeInitiatorType = MetaverseObjectChangeInitiatorType.System

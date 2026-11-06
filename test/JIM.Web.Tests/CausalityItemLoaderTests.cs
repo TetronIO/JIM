@@ -206,6 +206,7 @@ public class CausalityItemLoaderTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(data.LiveRecord, Is.Null);
+            Assert.That(context.CsoId, Is.Null, "no record is named as one that is there, so nothing links to it");
             Assert.That(context.CsoDisplayName, Is.EqualTo("Mia Young"));
             Assert.That(context.CsoExternalId, Is.EqualTo("E1003"));
             Assert.That(context.CsoObjectTypeName, Is.EqualTo("person"));

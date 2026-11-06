@@ -687,7 +687,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             if (_activityRunProfileExecutionItem.ConnectedSystemObjectId.HasValue)
                 _pendingExport = await jim.ConnectedSystems.GetPendingExportForObjectAsync(
                     _activityRunProfileExecutionItem.ConnectedSystemObjectId.Value);
-            else if (_activityRunProfileExecutionItem.PendingExportId.HasValue)
+            // By its own id where the object's finds none: the item keeps its object's id after the object is deleted
+            // (#2669), and a Pending Export outlives its object.
+            if (_pendingExport == null && _activityRunProfileExecutionItem.PendingExportId.HasValue)
                 _pendingExport = await jim.ConnectedSystems.GetPendingExportAsync(
                     _activityRunProfileExecutionItem.PendingExportId.Value);
         }

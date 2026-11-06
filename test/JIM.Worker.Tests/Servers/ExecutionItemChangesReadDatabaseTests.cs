@@ -96,8 +96,10 @@ public class ExecutionItemChangesReadDatabaseTests
         var seeded = await SeedAsync();
         var item = NewItem(seeded.ActivityId, ObjectChangeType.Deleted);
         var change = CsoChange(seeded, ObjectChangeType.Deleted, "jsmith@example.com");
-        change.ConnectedSystemObject = null;
-        change.DeletedConnectedSystemObjectId = Guid.NewGuid();
+        // As a deletion record names its object since #2669: by an id with no object behind it any more.
+        var deletedObjectId = Guid.NewGuid();
+        change.ConnectedSystemObjectId = deletedObjectId;
+        change.DeletedConnectedSystemObjectId = deletedObjectId;
         item.ConnectedSystemObjectChange = change;
         await SaveAsync(seeded, item);
 
@@ -197,7 +199,7 @@ public class ExecutionItemChangesReadDatabaseTests
     {
         var seeded = await SeedAsync();
         var item = NewItem(seeded.ActivityId, ObjectChangeType.Updated);
-        item.ConnectedSystemObject = seeded.Cso;
+        item.ConnectedSystemObjectId = seeded.Cso.Id;
         item.MetaverseObjectId = seeded.MvoId;
         item.MetaverseObjectChange = MvoChange(seeded, Enumerable.Range(0, 25).Select(i => $"Department {i:D2}").ToArray());
         item.ConnectedSystemObjectChange = CsoChange(seeded, ObjectChangeType.Updated, Enumerable.Range(0, 25).Select(i => $"user{i:D2}@example.com").ToArray());
@@ -267,7 +269,7 @@ public class ExecutionItemChangesReadDatabaseTests
     {
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = seeded.Mvo,
+            MetaverseObjectId = seeded.Mvo.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = ObjectChangeType.Updated,
             ChangeInitiatorType = MetaverseObjectChangeInitiatorType.SynchronisationRule
@@ -291,7 +293,7 @@ public class ExecutionItemChangesReadDatabaseTests
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = seeded.SystemId,
-            ConnectedSystemObject = seeded.Cso,
+            ConnectedSystemObjectId = seeded.Cso.Id,
             ChangeTime = DateTime.UtcNow,
             ChangeType = type,
             InitiatedByType = ActivityInitiatorType.System

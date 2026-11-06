@@ -65,7 +65,7 @@ public class MetaverseObjectChangeInitiatorsDatabaseTests
         {
             seed.Add(new MetaverseObjectChange
             {
-                Id = Guid.NewGuid(), MetaverseObject = mvo, ChangeTime = changeTime, ChangeType = ObjectChangeType.Updated,
+                Id = Guid.NewGuid(), MetaverseObjectId = mvo.Id, ChangeTime = changeTime, ChangeType = ObjectChangeType.Updated,
                 InitiatedByType = initiatorType, InitiatedById = Guid.NewGuid(), InitiatedByName = name
             });
         }

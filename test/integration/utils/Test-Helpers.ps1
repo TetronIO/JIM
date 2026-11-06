@@ -3442,8 +3442,8 @@ function Assert-ExportRpeisHaveCsoLink {
         via psql in the jim.database container.
 
         Scope: only checks Exported (11) and Deprovisioned (12) RPEIs. Other ObjectChangeType
-        values legitimately have NULL ConnectedSystemObjectId in some flows (e.g. CSO already
-        deleted via ON DELETE SET NULL on a historical activity).
+        values legitimately have NULL ConnectedSystemObjectId in some flows (e.g. an item recorded
+        before #2669, whose id deleting its CSO cleared; items keep the id since).
 
     .PARAMETER ActivityId
         The Activity ID (GUID) of a just-completed export Activity.

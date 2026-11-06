@@ -361,7 +361,12 @@ public class ExampleDataRepository : IExampleDataRepository
             // Phase 2: COPY the change-history records, if any. Example data generation either
             // attaches a single Created change per MVO (when MVO change tracking is enabled) or
             // none at all (when disabled), so we just collect whatever the server layer set.
-            var changeRecords = batch.SelectMany(mvo => mvo.Changes).ToList();
+            // Each names its object by id (#2669), which the bulk create has just assigned.
+            var changeRecords = batch.SelectMany(mvo => mvo.Changes.Select(change =>
+            {
+                change.MetaverseObjectId = mvo.Id;
+                return change;
+            })).ToList();
             if (changeRecords.Count > 0)
                 await syncRepo.PersistPendingMvoChangesAsync(changeRecords, []);
 

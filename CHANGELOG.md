@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Importing or synchronising a large group whose membership changes wholesale is faster: removing the members it lost no longer grows with the square of the group's size, which took 24 seconds when importing a 50,000-member group that lost all of them. (#2664)
 - ⚡ Deleting many departed accounts in one synchronisation is faster: each page removes them in a few statements rather than one per value, and a database check that ran for every value is gone, saving about a fifth of the time at 500,000 people. (#2669, #2670)
 - ⚡ Deprovisioning many leavers at once no longer re-reads every member of their large groups when removing them from those groups and when confirming the removals on the next import. (#2669)
+- ⚡ Deleting people and accounts, and clearing a Connector Space or deleting a Connected System while keeping its history, no longer rewrites the change history and Activities that name them, which was most of the database work of a leaver cohort's deletions. (#2669)
 - ⚡ Large multi-valued Text and Binary attributes import and synchronise faster: comparing their values no longer grows with the square of the attribute's size, which took 26 seconds for a 50,000-value Text attribute with one value changed. (#2666)
 - ⚡ Importing LDAP entries with many Binary values is faster: checking them for duplicates no longer grows with the square of their number when they share their first and last bytes, as Security Identifiers do, which took 13 seconds for 50,000 values. (#2672)
 - ⚡ Exports and imports into large Connected Systems no longer re-read all their change history to resolve references (about 20 seconds a run at 500,000 objects), and history naming a deleted object is no longer re-pointed at a later object reusing its DN. (#2690)
@@ -87,6 +88,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ OpenLDAP imports take their next watermark from what the accesslog gained since the last one: reading the whole log took 7 to 10 seconds per import at 500,000 objects, grew with the log, and on a size-limited directory could stop short of the latest change. (#2704)
 - ⚡ An import that creates objects no longer spends seconds linking up the few references it could not resolve as it wrote them: a Delta Import creating one group in a 500,000-object Connected System spent 8.8 seconds on 3 of them. (#2706)
 - ⚡ An OpenLDAP Delta Import is no longer slowed by heavy writes to other suffixes on the same server, which cost it 12 seconds at 500,000 objects after an initial export to another suffix: it now looks for where to start among the selected partitions' changes first. (#2712)
+
+### Removed
+
+- 🗑️ The Card view of a Synchronisation Rule's Attribute Flows is gone; the table is the only view, and the saved view preference is no longer used.
 
 
 ## [0.17.0] - 2026-10-29

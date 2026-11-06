@@ -1565,7 +1565,8 @@ public partial class MetaverseServer
         // Create MVO change object
         var change = new MetaverseObjectChange
         {
-            MetaverseObject = metaverseObject,
+            // The carrier's persister sets the id again once the object has one: a new object has none yet (#2669).
+            MetaverseObjectId = metaverseObject.Id,
             ChangeType = changeType,
             ChangeTime = DateTime.UtcNow,
             InitiatedByType = initiatedByType,
@@ -1776,12 +1777,8 @@ public partial class MetaverseServer
             // attributes were already recalled (sync processor path), derive it from the snapshot.
             var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
-            // Create a deletion change record.
-            // IMPORTANT: Do NOT set the MetaverseObject navigation property! Setting it causes EF Core
-            // to track and attempt to process the MVO entity during SaveChangesAsync, which triggers
-            // FK constraint violations when other MVOs in the batch are pending deletion.
-            // The MetaverseObjectId FK is always nulled for deletion records anyway —
-            // GetDeletedMvoChangeHistoryAsync uses DeletedObjectDisplayName/DeletedObjectTypeId instead.
+            // Create a deletion change record, naming the object by its subject id as every record of it does: a plain
+            // id with no foreign key, so it stays once the object is gone (#2669).
             var change = new MetaverseObjectChange
             {
                 ChangeType = ObjectChangeType.Deleted,
@@ -1792,7 +1789,8 @@ public partial class MetaverseServer
                 ChangeInitiatorType = initiatedByType == ActivityInitiatorType.User
                     ? MetaverseObjectChangeInitiatorType.User
                     : MetaverseObjectChangeInitiatorType.NotSet,
-                // Preserve object identity for the deleted objects browser
+                MetaverseObjectId = mvoId,
+                // The redundant deletion column, until it is retired
                 DeletedMetaverseObjectId = mvoId,
                 DeletedObjectTypeId = metaverseObject.Type?.Id,
                 DeletedObjectDisplayName = displayName,

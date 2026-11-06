@@ -35,11 +35,11 @@ namespace JIM.PostgresData.Repositories;
 /// <item><c>ConnectedSystemObjectAttributeValues.ReferenceValueId</c> and
 /// <c>MetaverseObjectAttributeValues.UnresolvedReferenceValueId</c>: no action, so cleared by an UPDATE before the
 /// delete. Tracked values are cleared to match.</item>
-/// <item><c>PendingExports.ConnectedSystemObjectId</c>, <c>ActivityRunProfileExecutionItems.ConnectedSystemObjectId</c>,
-/// <c>ConnectedSystemObjectChanges.ConnectedSystemObjectId</c>, <c>ConnectedSystemObjectChangeAttributeValues.ReferenceValueId</c>,
-/// <c>PendingPasswordChanges.ConnectedSystemObjectId</c> and <c>.ProvisionedConnectedSystemObjectId</c>: set null by the
+/// <item><c>PendingExports.ConnectedSystemObjectId</c>, <c>PendingPasswordChanges.ConnectedSystemObjectId</c> and <c>.ProvisionedConnectedSystemObjectId</c>: set null by the
 /// database. Tracked rows are cleared to match.</item>
 /// </list>
+/// History is not among them (#2669): change records, change values and Run Profile Execution Items name the object by a
+/// plain id, with no foreign key, so the delete leaves them as they are and the tracker has nothing to match.
 /// Clearing sets a foreign key's current and original value to null and its navigation to null, so the tracker holds
 /// what the database holds and a later save writes nothing, whether or not it detects changes first. A row that was
 /// already modified keeps its other pending changes and writes the null with them.
@@ -61,9 +61,8 @@ internal static class ConnectedSystemObjectDeletionSql
 {
     private static readonly ActivitySource ActivitySource = new("JIM.PostgresData.ConnectedSystem");
 
-    // The shadow foreign keys the tracker holds for these, which have no CLR property.
+    // The shadow foreign key the tracker holds for this, which has no CLR property.
     private const string AttributeValueOwnerKey = "ConnectedSystemObjectId";
-    private const string ChangeValueReferenceKey = "ReferenceValueId";
 
     /// <summary>
     /// Deletes the given Connected System Objects, their values and what cascades with them, in one transaction (the
@@ -348,21 +347,6 @@ internal static class ConnectedSystemObjectDeletionSql
             case PendingExport pendingExport when References(pendingExport.ConnectedSystemObjectId, ids):
                 ClearForeignKey(entry, nameof(PendingExport.ConnectedSystemObjectId));
                 pendingExport.ConnectedSystemObject = null;
-                return 1;
-
-            case ActivityRunProfileExecutionItem executionItem when References(executionItem.ConnectedSystemObjectId, ids):
-                ClearForeignKey(entry, nameof(ActivityRunProfileExecutionItem.ConnectedSystemObjectId));
-                executionItem.ConnectedSystemObject = null;
-                return 1;
-
-            case ConnectedSystemObjectChange change when References(change.ConnectedSystemObjectId, ids):
-                ClearForeignKey(entry, nameof(ConnectedSystemObjectChange.ConnectedSystemObjectId));
-                change.ConnectedSystemObject = null;
-                return 1;
-
-            case ConnectedSystemObjectChangeAttributeValue changeValue when References(entry.Property(ChangeValueReferenceKey).CurrentValue as Guid?, ids):
-                ClearForeignKey(entry, ChangeValueReferenceKey);
-                changeValue.ReferenceValue = null;
                 return 1;
 
             case PendingPasswordChange passwordChange:

@@ -405,6 +405,7 @@ public class MetaverseServerChangeTrackingTests
         // Assert - change record was created with final attribute values as removals
         Assert.That(capturedChange, Is.Not.Null);
         Assert.That(capturedChange!.ChangeType, Is.EqualTo(ObjectChangeType.Deleted));
+        Assert.That(capturedChange.MetaverseObjectId, Is.EqualTo(mvo.Id), "the record names the object by its subject id (#2669)");
         Assert.That(capturedChange.DeletedObjectDisplayName, Is.Null);
         Assert.That(capturedChange.DeletedObjectTypeId, Is.EqualTo(_userType.Id));
         Assert.That(capturedChange.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
@@ -685,7 +686,7 @@ public class MetaverseServerChangeTrackingTests
         var attrChange = change.AttributeChanges.Single();
         Assert.That(attrChange.AttributeName, Is.EqualTo("Manager"));
         var valueChange = attrChange.ValueChanges.Single();
-        Assert.That(valueChange.ReferenceValue, Is.EqualTo(referencedMvo));
+        Assert.That(valueChange.ReferenceValueId, Is.EqualTo(referencedMvo.Id));
     }
 
     [Test]

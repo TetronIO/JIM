@@ -314,7 +314,7 @@ public class StageToExecuteContractTests : WorkflowTestBase
                 "confirmation such an object can ever get");
             Assert.That(PendingExportsFor(targetCso.Id), Is.Empty);
             var rpei = deleteActivity.RunProfileExecutionItems.Single();
-            Assert.That(rpei.ConnectedSystemObjectId, Is.Null, "the RPEI must not FK to the row it just deleted");
+            Assert.That(rpei.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id), "the RPEI keeps the id of the row it just deleted, as history (#2669)");
             Assert.That(rpei.DisplayNameSnapshot, Is.EqualTo("Unconfirmed User"), "the item must keep its display name snapshot");
         }
 

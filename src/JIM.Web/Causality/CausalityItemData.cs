@@ -66,6 +66,12 @@ public sealed class CausalityItemData
     public IReadOnlyDictionary<Guid, string>? ProvisionedConnectedSystemObjectNames { get; init; }
 
     /// <summary>
+    /// Of the Connected System Objects this item's queued exports and deprovisions name, those JIM still holds; see
+    /// <see cref="CausalityPageContext.HeldConnectedSystemObjectIds"/>.
+    /// </summary>
+    public IReadOnlySet<Guid>? HeldConnectedSystemObjectIds { get; init; }
+
+    /// <summary>
     /// The upward causal walk (#1223), where the item recorded anything to explain.
     /// </summary>
     public CausalChain? Chain { get; init; }

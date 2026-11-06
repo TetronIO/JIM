@@ -907,25 +907,9 @@ public partial class SyncRepository
             retireSpan?.SetTag("retiredCount", retirements.Count);
         }
 
-        // Null out FK reference in Activities to preserve audit history
-        using (var clearSpan = MvoActivitySource.StartActivity("Mvo.Delete.ClearActivities"))
-        {
-            var rowsAffected = await _context.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
-                mvoIds);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
-        }
-
-        // Stamp DeletedMetaverseObjectId on all prior change records for these MVOs so that
-        // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
-        // Then null the FK to allow the MVOs to be deleted without constraint violations.
-        using (var rekeySpan = MvoActivitySource.StartActivity("Mvo.Delete.RekeyChangeRecords"))
-        {
-            var rowsAffected = await _context.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = ""MetaverseObjectId"", ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
-                mvoIds);
-            rekeySpan?.SetTag("rowsAffected", rowsAffected);
-        }
+        // History naming the objects (Activities, change records and the reference values in other objects' change
+        // records) is left as it is: it names them by plain id, with no foreign key, and keeps the id once they are gone
+        // (#2669).
 
         // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
         // to these MVOs, and fix up tracked instances to match the database state so a later
@@ -959,20 +943,13 @@ public partial class SyncRepository
 
         // Reference attribute values on other MVOs that point at the deleted MVOs (e.g. Manager or
         // member references): valueless rows are deleted, payload-carrying rows are nulled, and
-        // tracked instances are surgically detached (#1019). Reference values in change tracking
-        // records are nulled (audit rows carry their own payload and must be preserved).
+        // tracked instances are surgically detached (#1019). Live data only: reference values in change records
+        // keep the id (#2669).
         using (var cleanSpan = MvoActivitySource.StartActivity("Mvo.Delete.CleanReferenceRows"))
         {
             var (rowsDeleted, rowsCleared) = await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(_context, mvoIds);
             cleanSpan?.SetTag("rowsDeleted", rowsDeleted);
             cleanSpan?.SetTag("rowsCleared", rowsCleared);
-        }
-        using (var clearSpan = MvoActivitySource.StartActivity("Mvo.Delete.ClearChangeValueReferences"))
-        {
-            var rowsAffected = await _context.Database.ExecuteSqlRawAsync(
-                @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
-                mvoIds);
-            clearSpan?.SetTag("rowsAffected", rowsAffected);
         }
 
         using (var sqlSpan = MvoActivitySource.StartActivity("Mvo.Delete.Delete"))

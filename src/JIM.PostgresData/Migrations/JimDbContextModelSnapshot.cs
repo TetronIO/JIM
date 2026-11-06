@@ -496,7 +496,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ActivityId");
 
-                    b.HasIndex("ConnectedSystemObjectId");
+                    b.HasIndex("ConnectedSystemObjectId")
+                        .HasDatabaseName("IX_ActivityRunProfileExecutionItems_ConnectedSystemObjectId");
 
                     b.HasIndex("ExternalIdSnapshot");
 
@@ -1044,7 +1045,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("DeletedObjectTypeId");
 
-                    b.HasIndex("MetaverseObjectId");
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_MetaverseObjectChanges_MetaverseObjectId");
 
                     b.HasIndex("SyncRuleId");
 
@@ -1135,8 +1137,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ContributedBySyncRuleId");
 
                     b.HasIndex("MetaverseObjectChangeAttributeId");
-
-                    b.HasIndex("ReferenceValueId");
 
                     b.ToTable("MetaverseObjectChangeAttributeValues");
                 });
@@ -3859,7 +3859,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ActivityRunProfileExecutionItemId")
                         .IsUnique();
 
-                    b.HasIndex("ConnectedSystemObjectId");
+                    b.HasIndex("ConnectedSystemObjectId")
+                        .HasDatabaseName("IX_ConnectedSystemObjectChanges_ConnectedSystemObjectId");
 
                     b.HasIndex("DeletedConnectedSystemObjectId")
                         .HasDatabaseName("IX_ConnectedSystemObjectChanges_DeletedConnectedSystemObjectId")
@@ -3952,8 +3953,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemObjectChangeAttributeId");
-
-                    b.HasIndex("ReferenceValueId");
 
                     b.HasIndex(new[] { "ConnectedSystemObjectChangeAttributeId" }, "IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
                         .HasDatabaseName("IX_ConnectedSystemObjectChangeAttributeValues_Unresolved")
@@ -5707,14 +5706,7 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
-                        .WithMany("ActivityRunProfileExecutionItems")
-                        .HasForeignKey("ConnectedSystemObjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Activity");
-
-                    b.Navigation("ConnectedSystemObject");
                 });
 
             modelBuilder.Entity("JIM.Models.Activities.ActivityRunProfileExecutionItemMatchCandidate", b =>
@@ -5860,10 +5852,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("DeletedObjectTypeId");
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "MetaverseObject")
-                        .WithMany("Changes")
-                        .HasForeignKey("MetaverseObjectId");
-
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
                         .WithMany()
                         .HasForeignKey("SyncRuleId")
@@ -5872,8 +5860,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ActivityRunProfileExecutionItem");
 
                     b.Navigation("DeletedObjectType");
-
-                    b.Navigation("MetaverseObject");
 
                     b.Navigation("SyncRule");
                 });
@@ -5909,15 +5895,9 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Core.MetaverseObject", "ReferenceValue")
-                        .WithMany()
-                        .HasForeignKey("ReferenceValueId");
-
                     b.Navigation("ContributedBySyncRule");
 
                     b.Navigation("MetaverseObjectChangeAttribute");
-
-                    b.Navigation("ReferenceValue");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.ServiceSettings", b =>
@@ -6686,18 +6666,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("JIM.Models.Staging.ConnectedSystemObjectChange", "ActivityRunProfileExecutionItemId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ConnectedSystemObject")
-                        .WithMany("Changes")
-                        .HasForeignKey("ConnectedSystemObjectId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("JIM.Models.Staging.ConnectedSystemObjectType", "DeletedObjectType")
                         .WithMany()
                         .HasForeignKey("DeletedObjectTypeId");
 
                     b.Navigation("ActivityRunProfileExecutionItem");
-
-                    b.Navigation("ConnectedSystemObject");
 
                     b.Navigation("DeletedObjectType");
                 });
@@ -6728,15 +6701,7 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Staging.ConnectedSystemObject", "ReferenceValue")
-                        .WithMany()
-                        .HasForeignKey("ReferenceValueId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("FK_ConnectedSystemObjectChangeAttributeValues_ConnectedSystem~1");
-
                     b.Navigation("ConnectedSystemObjectChangeAttribute");
-
-                    b.Navigation("ReferenceValue");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectType", b =>
@@ -7239,8 +7204,6 @@ namespace JIM.PostgresData.Migrations
                 {
                     b.Navigation("AttributeValues");
 
-                    b.Navigation("Changes");
-
                     b.Navigation("ConnectedSystemObjects");
                 });
 
@@ -7391,11 +7354,7 @@ namespace JIM.PostgresData.Migrations
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObject", b =>
                 {
-                    b.Navigation("ActivityRunProfileExecutionItems");
-
                     b.Navigation("AttributeValues");
-
-                    b.Navigation("Changes");
                 });
 
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemObjectChange", b =>
