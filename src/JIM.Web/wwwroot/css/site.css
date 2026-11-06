@@ -2990,6 +2990,33 @@ html[lang] .jim-schema-change-table td {
     vertical-align: middle;
 }
 
+/* ─── Compact when crowded (VirtualisedDataGrid's CompactWhenCrowded) ─── */
+
+/* jimCompactFit sets data-jim-compact on a table's scroll container the moment its full-size contents would overflow.
+   Outcome chips then show their icon alone and initiator chips their tag alone; both tooltips carry the detail
+   (<StatChip /> always puts the exact figure in its tooltip; <InitiatorChip /> names the kind). The html[lang]
+   qualifier and !important are needed to beat .mud-chip.jim-stat-chip's padding and MudBlazor's icon margins. */
+[data-jim-compact] .jim-stat-chip-count,
+[data-jim-compact] .jim-follow-up-chips-label,
+[data-jim-compact] .jim-initiator-chip .jim-object-chip-type,
+[data-jim-compact] .jim-initiator-chip .jim-object-chip-name {
+    display: none;
+}
+
+html[lang] [data-jim-compact] .mud-chip.jim-stat-chip {
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+}
+
+html[lang] [data-jim-compact] .mud-chip.jim-stat-chip .mud-chip-icon {
+    margin: 0 !important;
+}
+
+html[lang] [data-jim-compact] .jim-initiator-chip .jim-object-chip {
+    gap: 0;
+    padding-right: 3px;
+}
+
 /* Activity detail slide-out panel (Operations History) */
 .jim-activity-panel {
     position: fixed;

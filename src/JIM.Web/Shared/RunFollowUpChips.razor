@@ -16,19 +16,19 @@
             @if (settled > 0)
             {
                 <MudTooltip Text="@Describe(line, s => !s.IsRunning && !s.IsStuck)" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@settled.ToString("N0")</MudChip>
+                    <MudChip T="string" Color="Color.Success" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip"><span class="jim-stat-chip-count">@settled.ToString("N0")</span></MudChip>
                 </MudTooltip>
             }
             @if (line.RunningCount > 0)
             {
                 <MudTooltip Text="@Describe(line, s => s.IsRunning)" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@line.RunningCount.ToString("N0")</MudChip>
+                    <MudChip T="string" Color="Color.Warning" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip"><span class="jim-stat-chip-count">@line.RunningCount.ToString("N0")</span></MudChip>
                 </MudTooltip>
             }
             @if (line.StuckCount > 0)
             {
                 <MudTooltip Text="@Describe(line, s => s.IsStuck)" Arrow="true" Placement="Placement.Top">
-                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip">@line.StuckCount.ToString("N0")</MudChip>
+                    <MudChip T="string" Color="Color.Error" Variant="Variant.Text" Icon="@icon" Class="jim-stat-chip"><span class="jim-stat-chip-count">@line.StuckCount.ToString("N0")</span></MudChip>
                 </MudTooltip>
             }
         }
