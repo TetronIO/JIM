@@ -52,6 +52,7 @@ public static class AttributeCategories
         { Constants.BuiltInAttributes.OtherIpPhones, "Contact" },
         { Constants.BuiltInAttributes.OtherPagers, "Contact" },
         { Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, "Contact" },
+        { Constants.BuiltInAttributes.LegacyExchangeDn, "Contact" },
         { Constants.BuiltInAttributes.MailNickname, "Contact" },
         { Constants.BuiltInAttributes.ProxyAddresses, "Contact" },
         { Constants.BuiltInAttributes.WebPage, "Contact" },

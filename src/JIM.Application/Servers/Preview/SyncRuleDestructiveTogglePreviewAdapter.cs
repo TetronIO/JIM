@@ -430,6 +430,10 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             if (currentAction == proposedAction)
                 continue;
 
+            // A join an export rule made is kept whatever the action (#2021), so switching it moves no join.
+            if (SyncEngine.IsJoinMadeByExportRule(cso))
+                continue;
+
             if (proposedAction == InboundOutOfScopeAction.Disconnect)
             {
                 if (cso.MetaverseObjectId is { } metaverseObjectId)

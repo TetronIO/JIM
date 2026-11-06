@@ -324,7 +324,8 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         // The action is the engine's, read from the rule that governs the path rather than assumed to be this
         // rule's own; with several import rules over one type they need not be the same rule.
         var action = _syncEngine.DetermineOutOfScopeAction(cso, proposedSiblings);
-        if (action != InboundOutOfScopeAction.Disconnect)
+        // A join an export rule made is kept whatever the action (#2021): only the import rule's values can go.
+        if (action != InboundOutOfScopeAction.Disconnect || SyncEngine.IsJoinMadeByExportRule(cso))
         {
             // The join survives and Attribute Flow stops, which is a real consequence and a materially different
             // one: nothing is recalled from the Metaverse and no identity becomes deletable.

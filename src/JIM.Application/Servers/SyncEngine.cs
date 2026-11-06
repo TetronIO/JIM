@@ -267,6 +267,17 @@ public partial class SyncEngine : ISyncEngine
             addCount, removeCount, mvo.Id);
     }
 
+    /// <summary>
+    /// Whether an export rule made the Connected System Object's join, by provisioning it or by matching it on export,
+    /// rather than an import rule projecting or matching it (#2021). Synchronisation Rules are isolated: such a join is
+    /// the export rule's, so only the export rule's own scope ends it, and an import rule's out-of-scope action decides
+    /// only what happens to the values the import rule brought in. A row joined before the join method was recorded still
+    /// carries its join type, so a provisioned one is recognised either way.
+    /// </summary>
+    public static bool IsJoinMadeByExportRule(ConnectedSystemObject connectedSystemObject) =>
+        connectedSystemObject.JoinType == ConnectedSystemObjectJoinType.Provisioned
+        || connectedSystemObject.JoinMethod is ConnectedSystemObjectJoinMethod.Provisioning or ConnectedSystemObjectJoinMethod.ExportMatching;
+
     /// <inheritdoc />
     public InboundOutOfScopeAction DetermineOutOfScopeAction(
         ConnectedSystemObject cso,

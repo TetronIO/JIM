@@ -87,6 +87,24 @@ public class BuiltInMetaverseSchemaTests
     }
 
     [Test]
+    public void Attributes_LegacyExchangeDn_IsATextValueOfUsersAndGroupsMappedToLegacyExchangeDN()
+    {
+        // GAL synchronisation (#2021) builds a contact's X500 proxy address from the source recipient's Legacy Exchange DN,
+        // which Exchange sets and the LDAP Connector reads as read-only, so the mapping is import only in practice.
+        var definition = BuiltInMetaverseSchema.Attributes.SingleOrDefault(a => a.Name == Constants.BuiltInAttributes.LegacyExchangeDn);
+        Assert.That(definition, Is.Not.Null);
+        var found = definition!;
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(found.Name, Is.EqualTo("Legacy Exchange DN"));
+            Assert.That(found.Type, Is.EqualTo(AttributeDataType.Text));
+            Assert.That(found.Plurality, Is.EqualTo(AttributePlurality.SingleValued));
+            Assert.That(found.ObjectTypeNames, Is.EquivalentTo(new[] { Constants.BuiltInObjectTypes.User, Constants.BuiltInObjectTypes.Group }));
+            Assert.That(found.StandardMappings.Any(m => m.Standard == AttributeStandard.Ldap && m.CounterpartName == "legacyExchangeDN"), Is.True);
+        }
+    }
+
+    [Test]
     public void Attributes_ScimActive_MapsToAccountEnabled()
     {
         var definition = BuiltInMetaverseSchema.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.AccountEnabled);

@@ -1059,7 +1059,7 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     /// Maps the real synchronisation's recorded outcome roots for the run through the shared
     /// <see cref="SyncOutcomeNode.FromSyncOutcome"/> mapping, in root ordinal order.
     /// </summary>
-    private static List<SyncOutcomeNode> MapRealOutcomeTree(Activity activity)
+    internal static List<SyncOutcomeNode> MapRealOutcomeTree(Activity activity)
     {
         return activity.RunProfileExecutionItems
             .SelectMany(rpei => rpei.SyncOutcomes)
@@ -1075,7 +1075,7 @@ public partial class SyncPreviewFidelityTests : WorkflowTestBase
     /// so a preview's Export queued node is proven to carry the same staged kind (#1561 follow-up) the real
     /// synchronisation would record, not just the same outcome type and count.
     /// </summary>
-    private static string DescribeTree(IEnumerable<SyncOutcomeNode> nodes, int depth = 0)
+    internal static string DescribeTree(IEnumerable<SyncOutcomeNode> nodes, int depth = 0)
     {
         var lines = new List<string>();
         foreach (var node in nodes)

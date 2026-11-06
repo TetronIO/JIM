@@ -345,6 +345,22 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_InboundTightenedOverAProvisionedObject_ReportsNoDisconnectionAsync()
+    {
+        // Synchronisation Rules are isolated (#2021): an export rule made this join, so the import rule's Out-of-Scope
+        // Action never ends it, and switching that action to Disconnect cannot disconnect it.
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Engineering").RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, null, DateTime.UtcNow);
+
+        var proposal = UnchangedProposal() with { InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect };
+
+        var deltas = await EvaluateAsync(proposal);
+
+        Assert.That(deltas.Select(d => d.TransitionType),
+            Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_InboundTightened_OutOfScopeJoinedObjectsDisconnectAndMayDieAsync()
     {
         GivenRuleScopedToSales(_rule);
