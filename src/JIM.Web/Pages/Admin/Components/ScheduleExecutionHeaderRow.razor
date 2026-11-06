@@ -7,16 +7,19 @@
    Schedule's name, where it has got to, its step rail, and the two actions that act on the whole execution. *@
 <tr class="jim-activity-group-row">
     <td colspan="8">
-        <div class="d-flex align-center flex-wrap gap-3">
-            <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
-            <MudText Typo="Typo.body1"><b>@(ScheduleName ?? "Schedule")</b></MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Summary</MudText>
+        @* One line, read left to right: the title sits over the table's first two columns so every Schedule's rail
+           starts at the same place (Run Profile), the rail runs on to the actions, and the title, the rail's markers
+           and the buttons share one centre line, with only the step names hanging below it. *@
+        <div class="jim-schedule-group">
+            <div class="jim-schedule-group-title">
+                <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
+                <span class="jim-schedule-group-name" title="@(ScheduleName ?? "Schedule")">@(ScheduleName ?? "Schedule")</span>
+                <span class="jim-schedule-group-summary">@Summary</span>
+            </div>
             <ScheduleStepRail Progress="@Progress" />
-            @* Pushed right by its own margin rather than a MudSpacer: a spacer would claim half the free width from the
-               step rail, which is what should grow into it. *@
             @if (ScheduleExecutionId is { } executionId)
             {
-                <div class="d-flex align-center gap-3 ml-auto">
+                <div class="jim-schedule-group-actions">
                     <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
                                 Arrow="true" Placement="Placement.Top">
                         <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"

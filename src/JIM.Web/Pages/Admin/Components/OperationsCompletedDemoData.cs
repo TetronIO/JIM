@@ -47,7 +47,7 @@ public static class OperationsCompletedDemoData
                 a => a.TotalAdded = 31_200),
             Run("HR System", "Full Sync", ConnectedSystemRunType.FullSynchronisation, ActivityStatus.Complete, Ago(), 0.1, SystemInitiated()),
             ConnectedSystemOperation(LongSystemName, ActivityTargetOperationType.Clear, ActivityStatus.Complete, Ago(), 2, Person(),
-                a => a.TotalDeleted = 10_000),
+                a => { a.ClearedConnectedSystemObjectCount = 10_000; a.ClearedPendingExportCount = 214; a.ClearedJoinRecordCount = 9_412; }),
             ConnectedSystemOperation("Retired Payroll", ActivityTargetOperationType.Delete, ActivityStatus.Complete, Ago(), 6, ApiKey()),
         ];
     }
@@ -60,9 +60,10 @@ public static class OperationsCompletedDemoData
             TargetType = ActivityTargetType.ConnectedSystemRunProfile,
             TargetOperationType = ActivityTargetOperationType.Execute,
             TargetName = runProfile,
+            TargetContext = system,
             ConnectedSystemRunType = runType
         };
-        return Finish(activity, system, status, executed, seconds, initiator, outcomes);
+        return Finish(activity, status, executed, seconds, initiator, outcomes);
     }
 
     private static Activity ConnectedSystemOperation(string system, ActivityTargetOperationType operation, ActivityStatus status, DateTime executed,
@@ -74,14 +75,13 @@ public static class OperationsCompletedDemoData
             TargetOperationType = operation,
             TargetName = system
         };
-        return Finish(activity, system, status, executed, seconds, initiator, outcomes);
+        return Finish(activity, status, executed, seconds, initiator, outcomes);
     }
 
-    private static Activity Finish(Activity activity, string system, ActivityStatus status, DateTime executed, double seconds,
+    private static Activity Finish(Activity activity, ActivityStatus status, DateTime executed, double seconds,
         Action<Activity> initiator, Action<Activity>? outcomes)
     {
         activity.Id = Guid.NewGuid();
-        activity.TargetContext = system;
         activity.Status = status;
         activity.Created = executed;
         activity.Executed = executed;

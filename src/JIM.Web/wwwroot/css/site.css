@@ -750,6 +750,53 @@ html[lang] .jim-activity-table.mud-simple-table {
     background-color: color-mix(in srgb, var(--mud-palette-text-primary) 4%, transparent);
 }
 
+/* The header row's layout (<ScheduleExecutionHeaderRow />). Every part is a 2rem line box centred on one line, the
+   step rail's markers included, and the rail's step names hang below that line. The title takes the width of the first
+   two columns (ActivityTableColumns: State 150px plus Connected System 15%, less this cell's padding and the gap), so the
+   rail starts where the Run Profile column's text does; a long name clips, with the full name on hover. */
+.jim-schedule-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.jim-schedule-group-title {
+    flex: 0 0 calc(15% + 125px);
+    min-width: 0;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.jim-schedule-group-name {
+    min-width: 0;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jim-schedule-group-summary {
+    flex-shrink: 0;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-schedule-group .jim-schedule-rail {
+    height: 2rem;
+}
+
+.jim-schedule-group-actions {
+    flex-shrink: 0;
+    height: 2rem;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
 /* "Show N more" sits at the top of Queued, where the rows it hides would be. */
 .jim-activity-more-row td {
     padding-top: 2px;
@@ -2992,16 +3039,18 @@ html[lang] .jim-schema-change-table td {
 
 /* ─── Compact when crowded (VirtualisedDataGrid's CompactWhenCrowded) ─── */
 
-/* jimCompactFit sets data-jim-compact on a table's scroll container the moment its full-size contents would overflow.
-   Outcome chips then show their icon alone and initiator chips their tag alone; both tooltips carry the detail
+/* jimCompactFit sets data-jim-compact on a table's scroll container the moment its full-size contents would overflow,
+   in two stages. Stage 1 (any value) shows outcome chips by their icon alone; stage 2 (data-jim-compact="2"), reached
+   only if the table still overflows, also cuts initiator chips to their tag. Every tooltip carries the detail
    (<StatChip /> always puts the exact figure in its tooltip; <InitiatorChip /> names the kind). Any other chip
-   takes part by carrying jim-compact-chip, its text in a jim-compact-hide span, and a tooltip with that text. The html[lang]
-   qualifier and !important are needed to beat .mud-chip.jim-stat-chip's padding and MudBlazor's icon margins. */
+   takes part in stage 1 by carrying jim-compact-chip, its text in a jim-compact-hide span, and a tooltip with that text.
+   The html[lang] qualifier and !important are needed to beat .mud-chip.jim-stat-chip's padding and MudBlazor's icon
+   margins. */
 [data-jim-compact] .jim-stat-chip-count,
 [data-jim-compact] .jim-compact-hide,
 [data-jim-compact] .jim-follow-up-chips-label,
-[data-jim-compact] .jim-initiator-chip .jim-object-chip-type,
-[data-jim-compact] .jim-initiator-chip .jim-object-chip-name {
+[data-jim-compact="2"] .jim-initiator-chip .jim-object-chip-type,
+[data-jim-compact="2"] .jim-initiator-chip .jim-object-chip-name {
     display: none;
 }
 
@@ -3023,7 +3072,7 @@ html[lang] [data-jim-compact] .mud-chip.jim-compact-chip .mud-chip-icon {
 }
 
 /* With its name gone the chip's own pill would only frame the tag, so the tag stands alone. */
-html[lang] [data-jim-compact] .jim-initiator-chip .jim-object-chip {
+html[lang] [data-jim-compact="2"] .jim-initiator-chip .jim-object-chip {
     gap: 0;
     padding: 0;
     background: transparent;
@@ -5272,14 +5321,12 @@ html[lang] :is(.mud-alert-text-info, .mud-alert-outlined-info, .mud-alert-text-s
    One marker per step group, joined by legs, with the step names underneath. The unit here is honest
    in a way the per-task rail's is not: one segment is one whole Run Profile execution, and there is
    no comparably-sized alternative to divide the Schedule into. */
-/* The rail takes the header row's free width, up to a cap that grows with its steps: a fixed cap left a five-step
-   rail squeezed into a third of a wide table with its names truncated, while no cap would stretch a two-step
-   rail's one leg across the page. The labels share the width as (steps - 1) shares (half a share at each end,
-   see below), so the cap allows each share about 14rem, enough for a typical "System - Run Profile" name. */
+/* The rail fills the header row from the Run Profile column to the actions, so every Schedule's rail spans the same
+   stretch of the table whatever its name or step count, and the step names get the room to be read. */
 .jim-schedule-rail-block {
     flex: 1 1 auto;
     min-width: 12rem;
-    max-width: max(16rem, calc((var(--jim-schedule-steps, 4) - 1) * 14rem));
+    margin-right: 1.5rem;
 }
 
 .jim-schedule-rail {

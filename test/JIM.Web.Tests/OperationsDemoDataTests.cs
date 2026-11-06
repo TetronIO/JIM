@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Operations;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
+using JIM.Web.Models;
 using JIM.Web.Pages.Admin.Components;
 using NUnit.Framework;
 
@@ -91,10 +92,26 @@ public class OperationsDemoDataTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(activities.Any(a => !HasOutcome(a)), Is.True, "a run with no changes");
-            Assert.That(activities.Any(a => (a.TargetContext?.Length ?? 0) >= 40), Is.True, "a long Connected System name");
+            Assert.That(activities.Any(a => (CompletedActivityCells.ConnectedSystem(a)?.Length ?? 0) >= 40), Is.True, "a long Connected System name");
             Assert.That(activities.Select(a => a.Id).Distinct().Count(), Is.EqualTo(activities.Count), "ids are unique");
             Assert.That(activities.All(a => a.TargetType is ActivityTargetType.ConnectedSystemRunProfile or ActivityTargetType.ConnectedSystem),
                 Is.True, "the Completed list only shows Worker Tasks");
+        }
+    }
+
+    [Test]
+    public void CompletedDemo_AClear_IsRecordedAsTheWorkerRecordsOne()
+    {
+        // The worker names a cleared Connected System as the Activity's target and records what it removed in the
+        // Cleared counts, never in the run counters; a demo row shaped any other way would show a layout no real
+        // clear produces.
+        var clear = OperationsCompletedDemoData.Build(Now).Single(a => a.TargetOperationType == ActivityTargetOperationType.Clear);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(clear.TargetContext, Is.Null);
+            Assert.That(CompletedActivityCells.ClearOutcomes(clear), Has.Count.EqualTo(3), "every Cleared count");
+            Assert.That(clear.TotalDeleted, Is.Zero);
         }
     }
 

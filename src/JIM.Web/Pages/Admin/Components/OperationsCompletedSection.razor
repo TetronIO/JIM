@@ -79,7 +79,7 @@
             </HeaderTemplate>
             <CellTemplate>
                 @* One line, capped: a long name clips with its full text on hover rather than wrapping the row. *@
-                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@context.Item.TargetContext" /></div>
+                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@CompletedActivityCells.ConnectedSystem(context.Item)" /></div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Run Profile" Sortable="false" HeaderStyle="@ActivityTableColumns.RunProfile">
@@ -88,7 +88,7 @@
             </HeaderTemplate>
             <CellTemplate>
                 @* One line, capped: a long name clips with its full text on hover rather than wrapping the row. *@
-                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@context.Item.TargetName" /></div>
+                <div class="jim-column-cap" style="--jim-column-cap: 16rem;"><OneLineText Text="@CompletedActivityCells.Operation(context.Item)" /></div>
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Outcomes" Sortable="false" HeaderStyle="@ActivityTableColumns.Detail">
@@ -101,7 +101,18 @@
                     {
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                             @{ var runType = GetEffectiveRunType(activity.ConnectedSystemRunType, activity.TargetName); }
-                            @if (runType == "Import")
+                            @* A clear first: it has no run type, and the run type falls back to guessing from the target's name,
+                               which for a clear is the Connected System's ("HR Sync Feed" would read as a synchronisation). *@
+                            @if (CompletedActivityCells.ClearOutcomes(activity) is { Count: > 0 } clearOutcomes)
+                            {
+                                @foreach (var outcome in clearOutcomes)
+                                {
+                                    <StatChip Label="@outcome.Label" Count="@outcome.Count"
+                                              Color="@(outcome.IsRemoval ? Color.Error : Color.Info)"
+                                              Icon="@(outcome.IsRemoval ? Helpers.GetOperationIcon(ObjectChangeType.Deleted) : Icons.Material.Filled.Link)" />
+                                }
+                            }
+                            else if (runType == "Import")
                             {
                                 @if (activity.TotalAdded > 0)
                                 {
@@ -831,8 +842,8 @@
         Func<Activity, object?> key = request.SortBy switch
         {
             "status" => a => a.Status,
-            "connectedsystem" => a => a.TargetContext,
-            "target" => a => a.TargetName,
+            "connectedsystem" => a => CompletedActivityCells.ConnectedSystem(a),
+            "target" => a => CompletedActivityCells.Operation(a),
             "initiatedby" => a => a.ScheduledByScheduleName ?? a.InitiatedByName,
             "executiontime" => a => a.ExecutionTime,
             _ => a => a.Created
@@ -936,7 +947,8 @@
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0
             || activity.TotalPendingExports > 0
-            || activity.TotalErrors > 0;
+            || activity.TotalErrors > 0
+            || CompletedActivityCells.ClearOutcomes(activity).Count > 0;
     }
 
     private static string GetEffectiveRunType(ConnectedSystemRunType? runType, string? targetName)
