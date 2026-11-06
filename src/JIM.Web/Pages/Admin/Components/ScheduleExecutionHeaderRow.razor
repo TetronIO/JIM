@@ -6,24 +6,32 @@
 @* The row heading a Schedule Execution's tasks in the Activity tab's Queued and In progress tables (#2549): the
    Schedule's name, where it has got to, its step rail, and the two actions that act on the whole execution. *@
 <tr class="jim-activity-group-row">
-    <td colspan="8">
-        <div class="d-flex align-center flex-wrap gap-3">
+    @* Two cells, so the table itself lines the row up with the columns below: the title over the first two, and the
+       rail starting where the Run Profile column's text does, running on to the actions. The title, the rail's
+       markers and the buttons share one centre line; only the step names hang below it. *@
+    <td colspan="2">
+        <div class="jim-schedule-group-title">
             <MudIcon Icon="@Icons.Material.Filled.EventRepeat" Class="mud-text-secondary" />
-            <MudText Typo="Typo.body1"><b>@(ScheduleName ?? "Schedule")</b></MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Summary</MudText>
+            <span class="jim-schedule-group-name" title="@(ScheduleName ?? "Schedule")">@(ScheduleName ?? "Schedule")</span>
+            <span class="jim-schedule-group-summary">@Summary</span>
+        </div>
+    </td>
+    <td colspan="6">
+        <div class="jim-schedule-group">
             <ScheduleStepRail Progress="@Progress" />
-            <MudSpacer />
             @if (ScheduleExecutionId is { } executionId)
             {
-                <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
-                            Arrow="true" Placement="Placement.Top">
-                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
-                               Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
-                </MudTooltip>
-                <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
-                                   aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
-                </MudTooltip>
+                <div class="jim-schedule-group-actions">
+                    <MudTooltip Text="Open this Schedule Execution: per-step durations, errors and the Activity each step produced"
+                                Arrow="true" Placement="Placement.Top">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew"
+                                   Href="@($"/admin/operations/schedule-executions/{executionId}")">View execution</MudButton>
+                    </MudTooltip>
+                    <MudTooltip Text="Cancel Schedule" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Filled.Cancel" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                                       aria-label="Cancel Schedule" OnClick="() => OnCancel.InvokeAsync(executionId)" />
+                    </MudTooltip>
+                </div>
             }
         </div>
     </td>

@@ -45,7 +45,7 @@
         <div class="jim-schedule-labels">
             @foreach (var step in Progress.Steps)
             {
-                <span data-testid="jim-schedule-step-label">@step.Name</span>
+                <span data-testid="jim-schedule-step-label" title="@step.Name">@step.Name</span>
             }
         </div>
     </div>

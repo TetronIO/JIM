@@ -6,6 +6,8 @@
 @implements IDisposable
 @inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService PreferenceService
+@inject NavigationManager NavigationManager
+@inject IWebHostEnvironment Environment
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -17,6 +19,13 @@
     </PageInfo>
 </MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+
+@if (_demoMode)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2 mb-2" data-testid="operations-demo-mode">
+        Demo mode: every section below shows sample data, and actions that would change anything are switched off.
+    </MudAlert>
+}
 
 @* Whether the services doing all of the below are alive, before any of it. The first read completes before the
    first render (it is awaited in OnInitializedAsync), so the strip is never absent and the tabs never jump. Whether
@@ -30,6 +39,8 @@
 
 @* TabPanelsClass is pa-0 rather than pt-5 because the Schedules tab opens straight onto a virtualised grid, which
    supplies its own top margin; stacking both double-counts the gap. Each tab's own first block carries it. *@
+@* Demo mode reaches every tab through one cascade, so no section reads the query string itself. *@
+<CascadingValue Value="_demoMode" Name="OperationsDemoMode" IsFixed="true">
 <NavigableMudTabs TabPanelsClass="pa-0" Class="mt-6">
     @* Queued, running and finished work on one tab, in time order (#2549); it replaced the Queue and History tabs. *@
     <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.DynamicFeed">
@@ -62,6 +73,7 @@
         <OperationsGeneratedValuesTab OnChanged="RefreshAndRenderAsync" />
     </MudTabPanel>
 </NavigableMudTabs>
+</CascadingValue>
 
 @code {
     private readonly List<BreadcrumbItem> _breadcrumbs =
@@ -126,10 +138,20 @@
     private Timer? _pollTimer;
     private bool _disposed;
 
+    /// <summary>
+    /// Demo mode: in Development, <c>?d=true</c> fills every section with sample data (the <c>Operations*DemoData</c>
+    /// classes) so the page can be judged fully populated without a worker, and switches off actions that would
+    /// change anything. Read once here and cascaded to the tabs as <c>OperationsDemoMode</c>.
+    /// </summary>
+    private bool _demoMode;
+
     protected override async Task OnInitializedAsync()
     {
         // Started before the health read so the browser round trip runs alongside it rather than after it.
         var healthCollapsed = PreferenceService.GetServiceHealthCollapsedAsync();
+        _demoMode = Environment.IsDevelopment()
+            && string.Equals(System.Web.HttpUtility.ParseQueryString(new Uri(NavigationManager.Uri).Query)["d"], "true",
+                StringComparison.OrdinalIgnoreCase);
         using (var jim = JimFactory.Create())
             _exchangeEnabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
         await RefreshAsync();
@@ -144,6 +166,16 @@
 
     private async Task RefreshAsync()
     {
+        if (_demoMode)
+        {
+            var now = DateTime.UtcNow;
+            _report = OperationsHealthDemoData.Build(now);
+            _nextSchedule = OperationsSchedulesDemoData.NextDue(now);
+            _passwordAttentionCount = 3;
+            _generatedValueAttentionCount = 2;
+            return;
+        }
+
         using var jim = JimFactory.Create();
         _report = await jim.SystemHealth.GetServiceHealthAsync(DateTime.UtcNow);
         _nextSchedule = await jim.Scheduler.GetNextDueScheduleAsync();

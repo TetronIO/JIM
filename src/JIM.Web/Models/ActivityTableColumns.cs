@@ -14,7 +14,7 @@ namespace JIM.Web.Models;
 /// </remarks>
 public static class ActivityTableColumns
 {
-    public const string State = "width: 150px;";
+    public const string State = "width: 200px;";
     public const string ConnectedSystem = "width: 15%;";
     public const string RunProfile = "width: 14%;";
     public const string Detail = "";

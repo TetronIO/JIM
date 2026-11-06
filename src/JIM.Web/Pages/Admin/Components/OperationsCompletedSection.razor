@@ -35,7 +35,7 @@
                      SearchPlaceholder="Search target or initiator"
                      ToolBarAboveGrid="true"
                      Collapsed="@(!Expanded)"
-                     GridClass="mt-0">
+                     GridClass="mt-0 jim-activity-fixed-grid">
     <ToolBarLeading>
         <MudTooltip Text="@(Expanded ? "Collapse Completed" : "Expand Completed")" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
@@ -78,15 +78,8 @@
                 <VirtualisedSortHeader Title="Connected System" Name="connectedsystem" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (!string.IsNullOrEmpty(activity.TargetContext))
-                {
-                    @activity.TargetContext
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* One line: a long name clips at the column's fixed width, with its full text on hover. *@
+                <OneLineText Text="@CompletedActivityCells.ConnectedSystem(context.Item)" />
             </CellTemplate>
         </TemplateColumn>
         <TemplateColumn T="Activity" Title="Run Profile" Sortable="false" HeaderStyle="@ActivityTableColumns.RunProfile">
@@ -94,18 +87,11 @@
                 <VirtualisedSortHeader Title="Run Profile" Name="target" />
             </HeaderTemplate>
             <CellTemplate>
-                @{ var activity = context.Item; }
-                @if (!string.IsNullOrEmpty(activity.TargetName))
-                {
-                    @activity.TargetName
-                }
-                else
-                {
-                    <EmptyValue />
-                }
+                @* One line: a long name clips at the column's fixed width, with its full text on hover. *@
+                <OneLineText Text="@CompletedActivityCells.Operation(context.Item)" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false" HeaderStyle="@ActivityTableColumns.Detail">
+        <TemplateColumn T="Activity" Title="Outcomes" Sortable="false" HeaderStyle="@ActivityTableColumns.Detail" CellClass="jim-compact-fit-cell">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Outcomes</MudText>
             </HeaderTemplate>
@@ -115,7 +101,18 @@
                     {
                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                             @{ var runType = GetEffectiveRunType(activity.ConnectedSystemRunType, activity.TargetName); }
-                            @if (runType == "Import")
+                            @* A clear first: it has no run type, and the run type falls back to guessing from the target's name,
+                               which for a clear is the Connected System's ("HR Sync Feed" would read as a synchronisation). *@
+                            @if (CompletedActivityCells.ClearOutcomes(activity) is { Count: > 0 } clearOutcomes)
+                            {
+                                @foreach (var outcome in clearOutcomes)
+                                {
+                                    <StatChip Label="@outcome.Label" Count="@outcome.Count"
+                                              Color="@(outcome.IsRemoval ? Color.Error : Color.Info)"
+                                              Icon="@(outcome.IsRemoval ? Helpers.GetOperationIcon(ObjectChangeType.Deleted) : Icons.Material.Filled.Link)" />
+                                }
+                            }
+                            else if (runType == "Import")
                             {
                                 @if (activity.TotalAdded > 0)
                                 {
@@ -196,7 +193,7 @@
                     }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false" HeaderStyle="@ActivityTableColumns.InitiatedBy">
+        <TemplateColumn T="Activity" Title="Initiated By" Sortable="false" HeaderStyle="@ActivityTableColumns.InitiatedBy" HeaderClass="jim-initiated-by-column" CellClass="jim-compact-fit-cell">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Initiated By" Name="initiatedby" />
             </HeaderTemplate>
@@ -638,6 +635,14 @@
     ];
 
     private VirtualisedDataGrid<Activity>? _grid;
+
+    /// <summary>
+    /// The Operations page's demo mode, cascaded from the page: the list shows <see cref="OperationsCompletedDemoData"/>.
+    /// </summary>
+    [CascadingParameter(Name = "OperationsDemoMode")]
+    public bool DemoMode { get; set; }
+
+    private List<Activity>? _demoActivities;
     private bool _panelOpen;
     private Activity? _selectedActivity;
 
@@ -690,6 +695,10 @@
     {
         // The grid loads its own first window as soon as it is in the DOM.
         _appliedFilters = Filters;
+
+        // Demo mode's rows are fixed sample data: nothing changes, so nothing to listen for or poll.
+        if (DemoMode)
+            return;
 
         // Event-driven refresh (issue #307): a Worker Task deletion means a run finished (so history
         // changes) and Activity progress updates drive the in-progress rows; both trigger an immediate
@@ -786,6 +795,9 @@
     /// </summary>
     private async Task<VirtualisedWindow<Activity>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
+        if (DemoMode)
+            return LoadDemoWindow(request);
+
         using var jim = JimFactory.Create();
         var result = await jim.Activities.GetActivitiesRangeAsync(
             request.StartIndex,
@@ -810,6 +822,34 @@
             _lastDataFingerprint = BuildFingerprint(result.Results.Take(FingerprintWindowSize));
 
         return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
+    }
+
+    /// <summary>
+    /// Demo mode's window: the sample Activities, searched and sorted in memory as the database read would.
+    /// </summary>
+    private VirtualisedWindow<Activity> LoadDemoWindow(VirtualisedWindowRequest request)
+    {
+        _demoActivities ??= OperationsCompletedDemoData.Build(DateTime.UtcNow);
+        IEnumerable<Activity> rows = _demoActivities;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(a => new[] { a.TargetName, a.TargetContext, a.InitiatedByName, a.ScheduledByScheduleName }
+                .Any(v => v?.Contains(search, StringComparison.OrdinalIgnoreCase) == true));
+        }
+
+        Func<Activity, object?> key = request.SortBy switch
+        {
+            "status" => a => a.Status,
+            "connectedsystem" => a => CompletedActivityCells.ConnectedSystem(a),
+            "target" => a => CompletedActivityCells.Operation(a),
+            "initiatedby" => a => a.ScheduledByScheduleName ?? a.InitiatedByName,
+            "executiontime" => a => a.ExecutionTime,
+            _ => a => a.Created
+        };
+        rows = request.SortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
+        return rows.ToWindow(request);
     }
 
     private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
@@ -907,7 +947,8 @@
             || activity.TotalDeprovisioned > 0
             || activity.TotalCreated > 0
             || activity.TotalPendingExports > 0
-            || activity.TotalErrors > 0;
+            || activity.TotalErrors > 0
+            || CompletedActivityCells.ClearOutcomes(activity).Count > 0;
     }
 
     private static string GetEffectiveRunType(ConnectedSystemRunType? runType, string? targetName)
