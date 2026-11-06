@@ -3012,9 +3012,11 @@ html[lang] [data-jim-compact] .mud-chip.jim-stat-chip .mud-chip-icon {
     margin: 0 !important;
 }
 
+/* With its name gone the chip's own pill would only frame the tag, so the tag stands alone. */
 html[lang] [data-jim-compact] .jim-initiator-chip .jim-object-chip {
     gap: 0;
-    padding-right: 3px;
+    padding: 0;
+    background: transparent;
 }
 
 /* Activity detail slide-out panel (Operations History) */
