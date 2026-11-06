@@ -317,4 +317,39 @@ public readonly struct MetaverseObjectChangeResult
         SyncRuleId = scopingSyncRule?.Id,
         SyncRuleName = scopingSyncRule?.Name
     };
+
+    /// <summary>
+    /// Creates a result for a CSO an export rule joined (provisioned, or matched on export) that left every import
+    /// Synchronisation Rule's scope under a Disconnect action (#2021). The join is the export rule's, so it is kept; the
+    /// import rule's own values were withdrawn, as a disconnection withdraws them.
+    /// </summary>
+    /// <param name="scopingSyncRule">The import rule whose scope the CSO left.</param>
+    /// <param name="attributeFlowCount">The Metaverse Object attribute changes the recall made.</param>
+    /// <param name="recalledAttributeValues">The withdrawn values.</param>
+    /// <param name="recalledAttributeAdditions">Values re-elected from a surviving contributor in their place.</param>
+    /// <param name="mvo">The Metaverse Object the values were withdrawn from.</param>
+    /// <param name="preservedNoSourceAttributeCount">Values kept as last known state because no import source remains.</param>
+    /// <param name="generatedValueOutcomes">Generated values a re-elected survivor's flows resolved.</param>
+    public static MetaverseObjectChangeResult OutOfScopeRetainJoinWithRecall(
+        SyncRule? scopingSyncRule,
+        int attributeFlowCount,
+        List<MetaverseObjectAttributeValue>? recalledAttributeValues,
+        List<MetaverseObjectAttributeValue>? recalledAttributeAdditions,
+        MetaverseObject mvo,
+        int preservedNoSourceAttributeCount,
+        List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)>? generatedValueOutcomes) => new()
+    {
+        HasChanges = true,
+        ChangeType = ObjectChangeType.OutOfScopeRetainJoin,
+        SyncRuleId = scopingSyncRule?.Id,
+        SyncRuleName = scopingSyncRule?.Name,
+        AttributeFlowCount = attributeFlowCount > 0 ? attributeFlowCount : null,
+        RecalledAttributeValues = recalledAttributeValues,
+        RecalledAttributeAdditions = recalledAttributeAdditions,
+        DisconnectedMvo = recalledAttributeValues != null ? mvo : null,
+        DisconnectedMvoId = mvo.Id,
+        DisconnectedMvoDisplayName = mvo.NameOrId,
+        PreservedNoSourceAttributeCount = preservedNoSourceAttributeCount,
+        GeneratedValueOutcomes = generatedValueOutcomes
+    };
 }

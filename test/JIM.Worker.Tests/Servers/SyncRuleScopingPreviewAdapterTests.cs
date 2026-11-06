@@ -212,6 +212,25 @@ public class SyncRuleScopingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_NarrowingAProvisionedObjectOutOfScope_ReportsTheScopeExitWithoutADisconnectionAsync()
+    {
+        // Synchronisation Rules are isolated (#2021): an export rule made this join, so leaving the import rule's scope
+        // keeps it, whatever the import rule's Out-of-Scope Action, and no identity becomes deletable.
+        GivenRuleScopedToSales(_rule);
+        GivenJoinedCso("Sales").RecordJoin(ConnectedSystemObjectJoinMethod.Provisioning, null, DateTime.UtcNow);
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_NarrowingWithRemainJoined_ReportsTheScopeExitWithoutADisconnectionAsync()
     {
         // The object stops receiving Attribute Flow but keeps its join, which is a real consequence and a

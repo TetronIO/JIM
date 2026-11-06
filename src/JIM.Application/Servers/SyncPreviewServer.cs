@@ -895,10 +895,15 @@ public class SyncPreviewServer
         if (inScopeRules.Count == 0 && importRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
             var outOfScopeAction = _syncEngine.DetermineOutOfScopeAction(cso, importRules);
+            // A join an export rule made stays (#2021): the action decides only what happens to the import rules' values.
+            var joinKeptForExportRule = cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect
+                && SyncEngine.IsJoinMadeByExportRule(cso);
             result.Warnings.Add(new SyncPreviewMessage
             {
                 Code = SyncPreviewMessageCode.OutOfScope,
-                Detail = $"The object is out of scope of every import Synchronisation Rule with Scoping Criteria; a synchronisation would apply the out-of-scope action '{outOfScopeAction}'.",
+                Detail = joinKeptForExportRule
+                    ? "The object is out of scope of every import Synchronisation Rule with Scoping Criteria. An export Synchronisation Rule made its join, so a synchronisation keeps the join and withdraws only the values the import rules brought in."
+                    : $"The object is out of scope of every import Synchronisation Rule with Scoping Criteria; a synchronisation would apply the out-of-scope action '{outOfScopeAction}'.",
                 ConnectedSystemId = connectedSystemId
             });
 
@@ -910,7 +915,7 @@ public class SyncPreviewServer
             // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
             // join intact, so nothing downstream changes, and the tree states only the retained join (#1649).
             if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
-                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context, refreshCacheForWorkingMvo);
+                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context, refreshCacheForWorkingMvo, keepJoin: joinKeptForExportRule);
             else if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.RemainJoined)
                 await BuildRetainedJoinRootAsync(result, cso, importRules, context);
 
@@ -1974,12 +1979,16 @@ public class SyncPreviewServer
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
     /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the Metaverse Object before
     /// evaluating the recall's exports; see <see cref="PreviewCsoCoreAsync"/>.</param>
+    /// <param name="keepJoin">Whether an export rule made the join (#2021), so the run keeps it: it withdraws only the
+    /// values this system contributed, puts nothing to the Deletion Rule, and records an OutOfScopeRetainJoin root, or
+    /// nothing at all when there is nothing to withdraw. Mirrors <c>WithdrawImportContributionsKeepingJoinAsync</c>.</param>
     private async Task BuildOutOfScopeCascadeAsync(
         SyncPreviewResult result,
         ConnectedSystemObject cso,
         List<SyncRule> importRules,
         CsoPreviewContext context,
-        bool refreshCacheForWorkingMvo)
+        bool refreshCacheForWorkingMvo,
+        bool keepJoin = false)
     {
         var guardedRepository = context.GuardedRepository;
         var mvoId = cso.MetaverseObjectId!.Value;
@@ -2019,9 +2028,21 @@ public class SyncPreviewServer
 
         // The disconnecting system's name, so the decision's reason reads as the real run's does (which has
         // the system to hand as _connectedSystem.Name); the shared name lookup is what this preview has.
+        var csoTypeForKeptJoin = context.ObjectTypes.FirstOrDefault(ot => ot.Id == cso.TypeId);
+        if (keepJoin && (csoTypeForKeptJoin is not { RemoveContributedAttributesOnObsoletion: true }
+            || workingMvo.AttributeValues.All(av => av.ContributedBySystemId != context.ConnectedSystemId)
+            || joinedSystemIds.Count(id => id == context.ConnectedSystemId) > 1))
+        {
+            // The run keeps the join and has nothing it can withdraw (nothing contributed, recall off, or values that
+            // cannot be told apart from another object's from this system), so it records nothing.
+            return;
+        }
+
         context.SystemNames.TryGetValue(context.ConnectedSystemId, out var disconnectingSystemName);
-        var deletionDecision = _syncEngine.EvaluateMvoDeletionRule(
-            workingMvo, context.ConnectedSystemId, remainingConnectedSystemIds, disconnectingSystemName);
+        // A kept join puts nothing to the Deletion Rule: no connector leaves.
+        var deletionDecision = keepJoin
+            ? MvoDeletionDecision.NotDeleted()
+            : _syncEngine.EvaluateMvoDeletionRule(workingMvo, context.ConnectedSystemId, remainingConnectedSystemIds, disconnectingSystemName);
 
         // Attribute recall, mirrored from HandleCsoOutOfScopeAsync (#91, #1570): skipped entirely when the
         // Metaverse Object would be deleted immediately, since the work would be discarded moments later
@@ -2101,7 +2122,8 @@ public class SyncPreviewServer
                 _syncEngine.ApplyPendingAttributeChanges(workingMvo);
                 if (refreshCacheForWorkingMvo)
                     await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
-                await context.PreviewServer.RecordPreviewedJoinAsync(context.Cache, workingMvo.Id, cso.TypeId, joined: false);
+                if (!keepJoin)
+                    await context.PreviewServer.RecordPreviewedJoinAsync(context.Cache, workingMvo.Id, cso.TypeId, joined: false);
                 ComposeOutbound(result, await context.PreviewServer.EvaluateOutboundPreviewForMaterialisedMvosAsync([workingMvo], context.Cache,
                     synchronisationChanges: (changedAttributes, removedAttributes)));
             }
@@ -2110,7 +2132,7 @@ public class SyncPreviewServer
         // Nothing recalled, but the broken join can take the Metaverse Object out of a connection criterion's scope
         // (#2021), and the run evaluates its exports for it. The join is broken only in memory here, so it is recorded in
         // the cache's connections; a Metaverse Object deleted now is deprovisioned below instead.
-        if (!skipRecallForImmediateDeletion && attributeChangeCount == 0 && context.Cache.ConnectionCriteriaObjectTypeIds.Contains(cso.TypeId))
+        if (!keepJoin && !skipRecallForImmediateDeletion && attributeChangeCount == 0 && context.Cache.ConnectionCriteriaObjectTypeIds.Contains(cso.TypeId))
         {
             if (refreshCacheForWorkingMvo)
                 await context.PreviewServer.RefreshExportEvaluationCacheForPageAsync(context.Cache, [workingMvo.Id]);
@@ -2121,9 +2143,15 @@ public class SyncPreviewServer
 
         // The DisconnectedOutOfScope root: same shape as the real run's (#1085 attribution, #1086 identity
         // snapshot), DetailCount carrying the attribute change count only when there is one to show.
+        // A kept join with nothing withdrawn changes nothing, and the run records nothing.
+        if (keepJoin && attributeChangeCount == 0 && preservedNoSourceAttributeCount == 0)
+            return;
+
         var root = new SyncOutcomeNode
         {
-            OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            OutcomeType = keepJoin
+                ? ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin
+                : ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
             TargetEntityId = mvoId,
             TargetEntityDescription = mvoDisplayName,
             SyncRuleId = scopingSyncRule?.Id,

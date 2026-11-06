@@ -92,7 +92,7 @@ A **leaver** event occurs when an identity is removed, or marked inactive, in th
 
 1. **Import**<br /> JIM detects the change: the record has been deleted from the source system, so its Connected System Object is **obsoleted**; or a status attribute has changed, such as `employeeStatus` becoming "Terminated".
 
-2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object (unless the import rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps it joined), and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
+2. **Inbound synchronisation**<br /> An obsoleted Connected System Object, or one that has fallen out of the import Synchronisation Rule's scope, is **disconnected** from its Metaverse Object (unless the import rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps it joined, or, for an object leaving scope, an export rule made its join), and the [Deletion Rules](#deletion-rules) decide what happens to the Metaverse Object. A status change flows in like any other change.
 
 3. **Outbound evaluation**<br /> Each export Synchronisation Rule reacts. A Metaverse Object that is deleted, or falls out of the rule's scope, is **deprovisioned** from that rule's target system; a status change flows out through the rule's expressions, to disable an account, for example.
 

@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An import Synchronisation Rule scoped away from objects an export rule provisioned no longer disconnects them, which made JIM provision them again on every run. Leaving an import rule's scope now withdraws only the values that rule brought in. (#2021)
 - 🐛 A synchronisation's completion message and processed count now report the objects it processed, instead of the handful its final export review looked at (a million-object run read "1 objects ... avg 0 obj/s"). (#2790)
 - 🐛 Cancelling the confirmation after moving a Connected System's Object Matching switch between Simple and Advanced now puts the switch back; before, it kept showing the mode that was never applied.
 - 🐛 A schema refresh now lists an attribute that became harder to write, and flags each Attribute Flow writing one that became read-only, so **Apply & Disable Dependents** disables it. Before, the change applied silently and the flow kept writing it. (#2755)
