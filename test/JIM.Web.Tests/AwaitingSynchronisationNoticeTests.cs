@@ -24,11 +24,11 @@ public class AwaitingSynchronisationNoticeTests : JimComponentTestContext
     private const string Truncated = "[data-testid='jim-awaiting-synchronisation-truncated']";
 
     [Test]
-    public void Render_ChangesWaiting_ListsOneRowPerChange()
+    public void Render_SeveralChangesToOneRule_ListsOneRowForTheRule()
     {
         var cut = RenderNotice(Entry(changeCount: 3, listed: 3), runProfile: null);
 
-        Assert.That(cut.FindAll("[data-testid='jim-awaiting-synchronisation-changes'] tbody tr"), Has.Count.EqualTo(3));
+        Assert.That(cut.FindAll("[data-testid='jim-awaiting-synchronisation-changes'] tbody tr"), Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -49,7 +49,7 @@ public class AwaitingSynchronisationNoticeTests : JimComponentTestContext
         var cut = RenderNotice(entry, runProfile: null);
 
         var activityId = entry.Changes[0].ConfigurationChangeActivityId;
-        Assert.That(cut.Find($"a[href='/activity/{activityId}']").TextContent, Does.Contain("Change 1"));
+        Assert.That(cut.Find($"a[href='/activity/{activityId}']").TextContent, Does.Contain("Attribute Flow changed"));
     }
 
     [Test]
@@ -140,7 +140,8 @@ public class AwaitingSynchronisationNoticeTests : JimComponentTestContext
             Id = i,
             ConnectedSystemId = 3,
             ConnectedSystemObjectTypeId = 7,
-            Reason = $"Change {i}",
+            Reason = "Import Users: Attribute Flow changed (Sync-affecting)",
+            SyncRuleId = 1,
             RequestedAt = DateTime.UtcNow.AddMinutes(-i),
             ConfigurationChangeActivityId = activityIds ? Guid.NewGuid() : null,
             InitiatedByType = ActivityInitiatorType.System,
