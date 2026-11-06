@@ -66,7 +66,7 @@ Each Connected System Object a synchronisation visits ends in one of these outco
 ```jim-diagram
 archetype: decision
 title: What a synchronisation does with a Connected System Object it visits
-desc: 'A Connected System Object a synchronisation visits is checked against the scope of the import rules for its Object Type. If it is in scope and already joined to a Metaverse Object, or an Object Matching Rule finds one, the join stands and values flow. If it is in scope and nothing matches, the rule projects a new Metaverse Object when projection is on, and otherwise the object stays unjoined. If it is out of scope and not joined, nothing happens. If it is out of scope and joined, the Out-of-Scope Action decides: Disconnect breaks the join and withdraws the values the object contributed, and Remain joined keeps the join and stops values flowing.'
+desc: 'A Connected System Object a synchronisation visits is checked against the scope of the import rules for its Object Type. If it is in scope and already joined to a Metaverse Object, or an Object Matching Rule finds one, the join stands and values flow. If it is in scope and nothing matches, the rule projects a new Metaverse Object when projection is on, and otherwise the object stays unjoined. If it is out of scope and not joined, nothing happens. If it is out of scope and joined, the Out-of-Scope Action decides: Disconnect breaks the join and withdraws the values the object contributed, and Remain joined keeps the join and stops values flowing. A join an export rule made is never broken here: Disconnect withdraws only the values, and the export rule''s own scope decides the join.'
 start: {label: Connected System Object}
 questions:
 - {id: scope, label: 'In scope of an import rule?', sub: its Scoping Criteria}
@@ -91,6 +91,8 @@ answers:
 ```
 
 An import rule's **Out-of-Scope Action** (**When objects fall out of scope** on the rule's Scope tab) is **Disconnect from Metaverse** by default. With **Remain joined (stop Attribute Flow)** the Connected System Object stays joined to its Metaverse Object, but nothing flows from it while it is out of scope, and the values it already contributed stay where they are. The run records this on the object's execution item as **Left scope, join kept**, naming the rule; see [Execution Items](activity-execution-items.md). An export rule has no such choice: its [Deprovisioning Action](deprovisioning.md) decides what happens to the account.
+
+Each Synchronisation Rule manages only what it owns. A join an export rule made, by provisioning the object or by matching it on export, belongs to that export rule, and only the export rule's own scope ends it. So when such an object is out of scope of every import rule, the Out-of-Scope Action decides only what happens to the values the import rules brought in: **Disconnect from Metaverse** withdraws them (when the Object Type's attribute recall is on) and keeps the join, recorded as **Left scope, join kept** with the withdrawn values beneath it, and **Remain joined** keeps them. An object the import rules never took in, such as a mail contact JIM provisioned into an OU an import rule leaves out, is left exactly as it is. Where another object from the same Connected System is joined to the same Metaverse Object, JIM cannot tell whose values are whose, so it withdraws nothing.
 
 ## :material-update: What re-checks an object
 

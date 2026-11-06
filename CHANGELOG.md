@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 An import Synchronisation Rule scoped away from objects an export rule provisioned no longer disconnects them, which made JIM provision them again on every run. Leaving an import rule's scope now withdraws only the values that rule brought in. (#2021)
 - 🐛 `New-JIMSyncRule` now writes the warnings the save raises, such as an Attribute Flow expression that reads an attribute the Object Type does not have, as `Set-JIMSyncRule` already did.
 - 🐛 A synchronisation's completion message and processed count now report the objects it processed, instead of the handful its final export review looked at (a million-object run read "1 objects ... avg 0 obj/s"). (#2790)
 - 🐛 Cancelling the confirmation after moving a Connected System's Object Matching switch between Simple and Advanced now puts the switch back; before, it kept showing the mode that was never applied.

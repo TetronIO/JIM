@@ -65,6 +65,8 @@ When an object falls out of scope of every import Synchronisation Rule with Scop
 
 When the rule's Out-of-Scope Action is **Remain joined (stop Attribute Flow)** instead, there is no cascade: the preview shows a single node, **Would leave scope and keep its Metaverse Object join**, naming the rule and the Metaverse Object, with nothing beneath it, exactly as the run would record it.
 
+There is no cascade either for an object an export rule joined, by provisioning it or matching it on export, because only the export rule's scope can end that join. Under **Disconnect from Metaverse** the preview shows the same **Would leave scope and keep its Metaverse Object join** node with the values the import rules brought in beneath it, which the run withdraws; when there are none, it shows nothing, because nothing changes.
+
 !!! note "A scheduled deletion stages nothing yet"
 
     When the Deletion Rule's outcome is a *scheduled* deletion (a grace period applies), nothing downstream is evaluated: no target account is deprovisioned until the grace period actually elapses and the deletion happens for real. The preview reflects that: you see the Metaverse Object would be scheduled for deletion, and nothing more, which is exactly what a real synchronisation would do too.
