@@ -3,7 +3,9 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using ActivityInitiatorType = JIM.Models.Activities.ActivityInitiatorType;
 using JIM.Models.Core;
+using JIM.Models.Enums;
 using JIM.PostgresData;
 using JIM.TestSupport;
 using Microsoft.EntityFrameworkCore;
@@ -119,6 +121,56 @@ public class MvoDeletionSpanDatabaseTests
 
         await using var verify = NewContext();
         Assert.That(await verify.MetaverseObjects.AnyAsync(m => m.Id == ids[0]), Is.False, "the object is deleted");
+    }
+
+    /// <summary>
+    /// The deleters' change records are persisted in bulk (#2669): a <c>MvoChange.Persist</c> span with one child per
+    /// COPY and one for the commit, each COPY counting the rows it wrote, so a deprovisioning run shows where writing
+    /// its Deleted records goes.
+    /// </summary>
+    [Test]
+    public async Task PersistPendingMvoChangesAsync_TwoChanges_ReportsPersistSpanWithChildPerCopyAndCommitAsync()
+    {
+        await using var seed = NewContext();
+        var personType = new MetaverseObjectType { Name = "Person", PluralName = "People" };
+        var displayName = new MetaverseAttribute { Name = "Display Name", Type = AttributeDataType.Text };
+        seed.AddRange(personType, displayName);
+        await seed.SaveChangesAsync();
+
+        var changes = Enumerable.Range(0, 2).Select(i =>
+        {
+            var change = new MetaverseObjectChange
+            {
+                ChangeTime = DateTime.UtcNow,
+                ChangeType = ObjectChangeType.Deleted,
+                InitiatedByType = ActivityInitiatorType.System,
+                DeletedMetaverseObjectId = Guid.NewGuid(),
+                DeletedObjectTypeId = personType.Id
+            };
+            change.AddAttributeValueChange(
+                new MetaverseObjectAttributeValue { Attribute = displayName, AttributeId = displayName.Id, StringValue = $"Person {i}" },
+                ValueChangeType.Remove);
+            return change;
+        }).ToList();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var spans = await RecordAsync(() => repository.Sync.PersistPendingMvoChangesAsync(changes, []));
+
+        var persist = spans.Single(s => s.DisplayName == "MvoChange.Persist");
+        var children = spans.Where(s => s.ParentSpanId == persist.SpanId).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(persist.GetTagItem("changeCount"), Is.EqualTo(2), "the parent span counts the change records");
+            Assert.That(children.Select(s => s.DisplayName), Is.EquivalentTo(new[]
+            {
+                "MvoChange.Persist.Changes", "MvoChange.Persist.Attributes", "MvoChange.Persist.Values", "MvoChange.Persist.Commit"
+            }), "one child per COPY and one for the commit");
+            Assert.That(children.Single(s => s.DisplayName == "MvoChange.Persist.Changes").GetTagItem("rowCount"), Is.EqualTo(2));
+            Assert.That(children.Single(s => s.DisplayName == "MvoChange.Persist.Attributes").GetTagItem("rowCount"), Is.EqualTo(2));
+            Assert.That(children.Single(s => s.DisplayName == "MvoChange.Persist.Values").GetTagItem("rowCount"), Is.EqualTo(2));
+        }
     }
 
     /// <summary>

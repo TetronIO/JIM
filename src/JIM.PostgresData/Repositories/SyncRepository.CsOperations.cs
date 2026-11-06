@@ -1909,11 +1909,11 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// The reference recall existence query (#1003). Matches by resolved reference id or by
-    /// raw reference string ignoring case, the database lowering both sides so it never depends on .NET folding alike
-    /// (#2051); a case-exact value's exact match is decided by the caller (ReferenceValueIndex). Driven by the
-    /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
-    /// group's member rows - milliseconds - rather than materialising them all through EF Core.
+    /// The reference recall existence query (#1003). A resolved reference is matched by its id alone; an unresolved
+    /// one by its raw string ignoring case, the database lowering both sides so it never depends on .NET folding alike
+    /// (#2051); a case-exact value's exact match is decided by the caller (ReferenceValueIndex). Each way of matching
+    /// is an index lookup on the values sought (see <see cref="CsoReferenceValueMatchSql"/>), so the cost follows the
+    /// number of deleted objects and the rows that name them, not the membership of the groups searched (#2669).
     /// Call per target Connected System so identical values cannot cross-match between systems.
     /// </summary>
     public async Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
@@ -1931,29 +1931,9 @@ public partial class SyncRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         await using var command = connection.CreateCommand();
-        command.CommandText =
-            @"SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
-              FROM ""ConnectedSystemObjectAttributeValues""
-              WHERE ""ConnectedSystemObjectId"" = ANY(@csoIds)
-                AND ""AttributeId"" = ANY(@attributeIds)
-                AND (""ReferenceValueId"" = ANY(@deletedCsoIds)
-                     OR LOWER(""UnresolvedReferenceValue"") IN (SELECT lower(v) FROM unnest(@referenceValues) AS v))";
-        var csoIdsParameter = command.CreateParameter();
-        csoIdsParameter.ParameterName = "csoIds";
-        csoIdsParameter.Value = connectedSystemObjectIds.ToArray();
-        command.Parameters.Add(csoIdsParameter);
-        var attributeIdsParameter = command.CreateParameter();
-        attributeIdsParameter.ParameterName = "attributeIds";
-        attributeIdsParameter.Value = connectedSystemAttributeIds.ToArray();
-        command.Parameters.Add(attributeIdsParameter);
-        var deletedCsoIdsParameter = command.CreateParameter();
-        deletedCsoIdsParameter.ParameterName = "deletedCsoIds";
-        deletedCsoIdsParameter.Value = deletedReferenceCsoIds.ToArray();
-        command.Parameters.Add(deletedCsoIdsParameter);
-        var referenceValuesParameter = command.CreateParameter();
-        referenceValuesParameter.ParameterName = "referenceValues";
-        referenceValuesParameter.Value = referenceValues.ToArray();
-        command.Parameters.Add(referenceValuesParameter);
+        command.CommandText = CsoReferenceValueMatchSql;
+        AddCsoReferenceValueMatchParameters(command, connectedSystemObjectIds, connectedSystemAttributeIds,
+            deletedReferenceCsoIds, referenceValues);
 
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
@@ -1969,6 +1949,55 @@ public partial class SyncRepository
         }
 
         return matches;
+    }
+
+    /// <summary>
+    /// The statement behind <see cref="GetCsoReferenceValueMatchesAsync"/>, exposed so its plan can be checked
+    /// (<c>ReferenceRecallStagingDatabaseTests</c>).
+    /// </summary>
+    /// <remarks>
+    /// Two arms, each led by the predicate an index answers, rather than one OR (#2669). Held in one OR, the string
+    /// comparison could be served by no index, so PostgreSQL read every member row of every referencing group and
+    /// tested each: about 8 s of a 5,000-leaver deprovisioning at Scale500k25kGroups. The first arm looks the deleted
+    /// objects' ids up in the <c>ReferenceValueId</c> index; the second looks the lowered values up in
+    /// <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, whose predicate (<c>UnresolvedReferenceValue IS NOT NULL AND
+    /// ReferenceValueId IS NULL</c>) the arm repeats so the partial index applies. The arms are disjoint on
+    /// <c>ReferenceValueId</c>, so <c>UNION ALL</c> returns each row at most once. The values are lowered in the
+    /// database, as the stored side is, so the narrowing never depends on .NET folding case the same way (#2051).
+    /// </remarks>
+    internal const string CsoReferenceValueMatchSql =
+        @"SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+          FROM ""ConnectedSystemObjectAttributeValues""
+          WHERE ""ReferenceValueId"" = ANY(@deletedCsoIds)
+            AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
+            AND ""AttributeId"" = ANY(@attributeIds)
+          UNION ALL
+          SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+          FROM ""ConnectedSystemObjectAttributeValues""
+          WHERE LOWER(""UnresolvedReferenceValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@referenceValues) AS v))
+            AND ""UnresolvedReferenceValue"" IS NOT NULL
+            AND ""ReferenceValueId"" IS NULL
+            AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
+            AND ""AttributeId"" = ANY(@attributeIds)";
+
+    /// <summary>
+    /// Binds the parameters of <see cref="CsoReferenceValueMatchSql"/>.
+    /// </summary>
+    internal static void AddCsoReferenceValueMatchParameters(
+        System.Data.Common.DbCommand command,
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> referenceValues)
+    {
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = connectedSystemObjectIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = connectedSystemAttributeIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("deletedCsoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = deletedReferenceCsoIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("referenceValues", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = referenceValues.ToArray() });
     }
 
     /// <summary>

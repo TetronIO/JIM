@@ -58,6 +58,12 @@ public partial class SyncRepository
             }
         }
 
+        // Spans on the shared JIM.PostgresData.Sync source (#2669), so a run shows where writing its change records
+        // goes: one parent, a child per COPY carrying the rows it wrote, and the commit.
+        using var persistSpan = MvoActivitySource.StartActivity("MvoChange.Persist");
+        persistSpan?.SetTag("changeCount", newChanges.Count);
+        persistSpan?.SetTag("appendCount", attributeAppendsToExistingChanges.Count);
+
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
 
@@ -68,7 +74,11 @@ public partial class SyncRepository
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
         if (newChanges.Count > 0)
+        {
+            using var changesSpan = MvoActivitySource.StartActivity("MvoChange.Persist.Changes");
+            changesSpan?.SetTag("rowCount", newChanges.Count);
             await BulkInsertMvoChangesRawAsync(newChanges);
+        }
 
         // Attribute rows from BOTH sets write to the same table in one COPY call.
         var allAttrChanges = newChanges
@@ -78,7 +88,11 @@ public partial class SyncRepository
             .ToList();
 
         if (allAttrChanges.Count > 0)
+        {
+            using var attributesSpan = MvoActivitySource.StartActivity("MvoChange.Persist.Attributes");
+            attributesSpan?.SetTag("rowCount", allAttrChanges.Count);
             await BulkInsertMvoChangeAttributesRawAsync(allAttrChanges);
+        }
 
         var allValueChanges = newChanges
             .Concat(attributeAppendsToExistingChanges)
@@ -87,9 +101,14 @@ public partial class SyncRepository
             .ToList();
 
         if (allValueChanges.Count > 0)
+        {
+            using var valuesSpan = MvoActivitySource.StartActivity("MvoChange.Persist.Values");
+            valuesSpan?.SetTag("rowCount", allValueChanges.Count);
             await BulkInsertMvoChangeAttributeValuesRawAsync(allValueChanges);
+        }
 
-        await transaction.CommitAsync();
+        using (MvoActivitySource.StartActivity("MvoChange.Persist.Commit"))
+            await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
 
         Log.Debug("PersistPendingMvoChangesAsync: Persisted {NewCount} new MVO changes and appended children to {AppendCount} existing; {AttrCount} attribute changes, {ValueCount} value changes",

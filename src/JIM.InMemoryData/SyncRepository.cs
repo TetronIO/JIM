@@ -748,6 +748,9 @@ public class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         var result = new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
@@ -1926,16 +1929,17 @@ public class SyncRepository : ISyncRepository
         var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
         var loweredValues = referenceValues.Select(value => IdentifierKey.For(value, caseExact: false)).ToHashSet(StringComparer.Ordinal);
 
-        // Same comparison semantics as the SQL implementation: exact match on the resolved
-        // reference id, or the pre-lowered raw reference string against LOWER(value).
+        // Same comparison semantics as the SQL implementation: a resolved reference by its id alone, an
+        // unresolved one by the pre-lowered raw reference string against LOWER(value) (#2669).
         var matches = csoIds
             .Select(id => _csos.TryGetValue(id, out var cso) ? cso : null)
             .Where(cso => cso != null)
             .SelectMany(cso => cso!.AttributeValues
                 .Where(av => attributeIds.Contains(av.AttributeId) &&
-                             ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
-                              (av.UnresolvedReferenceValue != null &&
-                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false)))))
+                             (av.ReferenceValueId.HasValue
+                                 ? deletedCsoIds.Contains(av.ReferenceValueId.Value)
+                                 : av.UnresolvedReferenceValue != null &&
+                                   loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false))))
                 .Select(av => new CsoReferenceValueMatch
                 {
                     AttributeValueId = av.Id,

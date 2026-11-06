@@ -146,6 +146,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByAttributeValuesAsync(connectedSystemId, attributeId, attributeValues);

@@ -100,6 +100,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+        => _inner.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(connectedSystemId, csoIds);
+
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
         => _inner.GetConnectedSystemObjectDisplaySnapshotsAsync(csoIds);
 

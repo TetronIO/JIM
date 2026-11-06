@@ -1126,7 +1126,7 @@ public class SyncImportTaskProcessor
         // persisted, to bound memory at scale (#1079 Regression B). This is safe: reconciliation
         // below only needs each CSO's Id from this list (allPendingExportsByCsoId lookup) and
         // reloads fresh AttributeValues from the database per page via
-        // GetConnectedSystemObjectsByIdsNoTrackingAsync - see ReconcilePendingExportsAsync.
+        // GetConnectedSystemObjectsCoreByIdsNoTrackingAsync - see ReconcilePendingExportsAsync.
         // We don't call ClearChangeTracker() again here: these CSOs were hydrated with
         // AsNoTrackingWithIdentityResolution and persisted via raw SQL, so nothing here was ever
         // added to the change tracker in the first place.
@@ -5893,18 +5893,35 @@ public class SyncImportTaskProcessor
             // The in-memory CSOs may have stale/empty AttributeValues if the change tracker
             // was cleared between save-phase batches (which detaches entities and EF fixup
             // clears navigation collections). AsNoTracking avoids polluting the tracker.
-            var pageCsos = await _syncRepo.GetConnectedSystemObjectsByIdsNoTrackingAsync(
-                _connectedSystem.Id, pageCsoIds);
+            // The Core load leaves out the objects a reference names (#2669): reconciliation compares a reference by
+            // its id and string only, and a group would otherwise bring every member's object with it.
+            List<ConnectedSystemObject> pageCsos;
+            using (var loadSpan = Diagnostics.Sync.StartSpan("ReconcileLoadPageCsos"))
+            {
+                pageCsos = await _syncRepo.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(
+                    _connectedSystem.Id, pageCsoIds);
+                loadSpan.SetTag("csoCount", pageCsos.Count);
+                loadSpan.SetTag("attributeValueCount", pageCsos.Sum(cso => cso.AttributeValues.Count));
+                loadSpan.SetSuccess();
+            }
 
             // Which of this page's accounts are still owed a password, read only when the page holds a change written
             // with an interim value until an Initial Password is delivered (#2039): the engine holds such a change while
             // one is owed and releases it once none is. Null otherwise, and then never read.
-            var metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
-
+            //
             // Which of this page's objects still have a change on the Exchange queue, read only when the page holds a
             // connector-defined change awaiting Exchange (#2021): the engine holds such a change while one is queued and
             // judges it as any other once none is. Null otherwise, and then never read.
-            var connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(pageCsos, allPendingExportsByCsoId);
+            IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword;
+            IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange;
+            using (var lookupsSpan = Diagnostics.Sync.StartSpan("ReconcilePageLookups"))
+            {
+                metaverseObjectIdsOwedPassword = await GetMetaverseObjectIdsOwedPasswordForPageAsync(pageCsos, allPendingExportsByCsoId);
+                connectedSystemObjectIdsWithExchangeChange = await GetConnectedSystemObjectIdsWithExchangeChangeForPageAsync(pageCsos, allPendingExportsByCsoId);
+                lookupsSpan.SetTag("owedPasswordCount", metaverseObjectIdsOwedPassword?.Count ?? 0);
+                lookupsSpan.SetTag("exchangeChangeCount", connectedSystemObjectIdsWithExchangeChange?.Count ?? 0);
+                lookupsSpan.SetSuccess();
+            }
 
             // Thread-safe batch collections for deferred database operations (per page)
             var pendingExportsToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
@@ -6178,7 +6195,13 @@ public class SyncImportTaskProcessor
                 }
             }
 
-            await _syncRepo.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
+            using (var persistSpan = Diagnostics.Sync.StartSpan("ReconcilePersistRpeiOutcomes")
+                .SetTag("rpeiCount", modifiedRpeiList.Count)
+                .SetTag("outcomeCount", newOutcomes.Count))
+            {
+                await _syncRepo.BulkUpdateRpeiOutcomesAsync(modifiedRpeiList, newOutcomes);
+                persistSpan.SetSuccess();
+            }
 
             Log.Debug("ReconcilePendingExportsAsync: Updated {RpeiCount} existing RPEIs with {OutcomeCount} new reconciliation outcomes",
                 modifiedRpeiList.Count, newOutcomes.Count);

@@ -814,6 +814,34 @@ public class ReferenceRecallExportTests
     }
 
     /// <summary>
+    /// A resolved reference names its object by id (#2669): a member row resolved to another object must not be
+    /// removed merely because the DN string it retains equals the deleted object's DN.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ResolvedRowToAnotherObjectWithSameDn_StagesNothingAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var (otherMvo, _) = SeedMemberWithTargetCso("uid=lena.leaver2,ou=People,dc=glitterband,dc=local");
+        var otherCsoId = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.MetaverseObjectId == otherMvo.Id && c.ConnectedSystemId == TargetSystemId).Id;
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var memberRow = groupTargetCso.AttributeValues.Single(av => av.AttributeId == CsMemberAttributeId);
+        memberRow.ReferenceValueId = otherCsoId;
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0),
+            "The row is resolved to a different object; its retained DN string does not make it the deleted object");
+        Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id), Is.False);
+    }
+
+    /// <summary>
     /// A caller-provided run-scoped cache must be honoured: staging must not reload Synchronisation
     /// Rules per flush (the pre-#1003 behaviour rebuilt the rule cache on every deletion flush).
     /// </summary>
