@@ -36,7 +36,8 @@ public class BuiltInMetaverseSchemaSyncTests
         Constants.BuiltInAttributes.TimeZone,
         Constants.BuiltInAttributes.MiddleName,
         Constants.BuiltInAttributes.HonorificPrefix,
-        Constants.BuiltInAttributes.HonorificSuffix
+        Constants.BuiltInAttributes.HonorificSuffix,
+        Constants.BuiltInAttributes.LegacyExchangeDn
     };
 
     private Mock<IRepository> _repo = null!;

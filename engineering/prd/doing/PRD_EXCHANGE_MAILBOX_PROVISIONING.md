@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning (on-premises)
 
-- **Status:** Doing (Phases 3 to 5 and 6a of the implementation plan complete)
+- **Status:** Doing (Phases 1 to 7 of the implementation plan complete; Phase 8, integration and flag removal, next)
 - **Created:** 2026-10-31
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
@@ -119,9 +119,9 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 **GAL synchronisation**
 
-21. A Synchronisation Rule can provision in-scope Metaverse Objects from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
+21. Synchronisation Rules can provision in-scope people and mail-enabled groups from other forests as `contact` objects in a designated OU of each target forest, as MailContact recipients whose external address is the source recipient's primary SMTP address.
 22. Each contact's `proxyAddresses` include an `X500:` address made from the source recipient's `legacyExchangeDN`, so replies to old messages and cached entries do not bounce.
-23. Contacts JIM created are never imported back and projected as people. The documented setup leaves the GAL OU out of the importing Connected System's scope, and JIM warns when an importing Connected System's scope includes a container that a Synchronisation Rule provisions contacts into. The warning shows in the portal and comes back from the REST API and PowerShell when scope is set there.
+23. Contacts JIM created are never imported back and projected as people. Each stays joined to its source identity, and an import rule's scope governs only the joins import made, so an import rule for a forest's own contacts, scoped to its other OUs, leaves JIM's contacts alone. The GAL OU stays in the Connected System's scope, because the LDAP Connector exports only within it (decisions 17 to 19).
 24. Address book attributes (display name, company, department, phone numbers) flow as ordinary attributes, and a contact is deleted when its source leaves scope, under the normal deprovisioning rules.
 
 **Import and reporting**
@@ -164,7 +164,7 @@ JIM has none of this today. The LDAP Connector writes Exchange attributes like a
 
 ### Scenario 4: GAL sync between two forests
 
-**Given**: Synchronisation Rules provision PANOPLY's people as contacts in `OU=GALSync` in RESURGAM, and the reverse, with source rules scoped to exclude each GAL OU
+**Given**: Synchronisation Rules provision PANOPLY's people as contacts in `OU=GALSync` in RESURGAM, and the reverse, and RESURGAM imports its own contacts through a rule scoped to its other OUs
 **When**: Carol joins in PANOPLY with a mailbox
 **Then**: a contact for Carol appears in RESURGAM's address book with her PANOPLY address and an `X500:` proxy of her `legacyExchangeDN`, and RESURGAM's next import does not project her contact as a second person
 
@@ -250,7 +250,7 @@ Made on 2026-11-01, in review of the [portal mock](https://claude.ai/artifact/WJ
 10. **The object timeline has one row per follow-up**, updated in place. A row per attempt would flood the timeline exactly when someone is investigating (requirement 13).
 11. ~~**A cancellation holds until the declared state changes**, the same rule as Parked. Otherwise the next export would queue the cancelled change again (requirement 11).~~ Superseded by decision 16 on 2026-11-03: there is no Cancel.
 12. **The retry policy is fixed for the first release**: backoff from 2 minutes to an hour, parked after 24 hours of failures, revisited after the integration tests (requirement 11).
-13. **JIM warns about the GAL loop** rather than leaving it to the docs (requirement 23).
+13. ~~**JIM warns about the GAL loop** rather than leaving it to the docs (requirement 23).~~ Superseded by decision 19 on 2026-11-06: the loop is prevented, so there is nothing to warn about.
 14. **Exchange gets its own Operations tab**, separate from Passwords, whose lifecycle differs (requirement 13).
 
 Made on 2026-11-01, in review of the [implementation plan](../../plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md):
@@ -260,6 +260,12 @@ Made on 2026-11-01, in review of the [implementation plan](../../plans/doing/EXC
 Made on 2026-11-03, in building Phase 6:
 
 16. **An Exchange change cannot be cancelled; Retry is the only administrator action.** JIM is a desired-state engine: a Cancel that held against a restated declaration would leave the declaration and Exchange out of step with nothing to say so, and no rule for what a later declaration should then do. Nothing is lost without it. A parked change has already stopped (JIM parks after 24 hours of failures, or at once on a refusal or missing permissions). A wrong change is fixed by changing the declaration (the source data or the Attribute Flow), which supersedes the queued change. A change nobody is owed any more is withdrawn by the delivery lane. Supersedes decision 11 (requirements 11, 13 and 28).
+
+Made on 2026-11-05 and 2026-11-06, in planning GAL synchronisation:
+
+17. **There is no Contact Metaverse Object Type.** A person or group in the Metaverse is one identity, provisioned to each system in the form it needs: an account in its own forest, a contact in the others. People and mail-enabled groups both reach the other forests' address books (requirement 21).
+18. **"From PANOPLY, not from RESURGAM" is a connection scoping criterion** (**Has** / **Has no** an object of a Connected System Object Type), keyed on the Object Type the identity is joined to rather than on how the join was made, so a rule's own contacts can never change its answer. A general feature, not behind the flag.
+19. **Synchronisation Rules are isolated, which prevents the GAL loop** (requirement 23). A join an export rule made belongs to that export rule, and only its scope ends it; an import rule's Out-of-Scope Action decides only what happens to the values the import rules brought in. Before this, an import rule for a forest's own contacts disconnected every contact JIM had provisioned, and the export rule provisioned them again on every run. A warning could not tell that setup from the ordinary "import users, provision users" one, so it would have fired for nearly everyone. Supersedes decision 13.
 
 ## Open Questions
 

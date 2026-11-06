@@ -85,6 +85,7 @@ public static class Constants
         public static string ExtensionAttribute9 => "Extension Attribute 9";
         public static string Emails => "Emails";
         public static string HideFromAddressLists => "Hide From Address Lists?";
+        public static string LegacyExchangeDn => "Legacy Exchange DN";
         public static string MailNickname => "Mail Nickname";
         public static string ObjectGuid => "Object GUID";
         public static string ObjectSid => "Object SID";
