@@ -1030,6 +1030,15 @@ finally
 }
 ```
 
+#### Object change history (named by plain id)
+
+Connected System Object and Metaverse Object change history is relational: a change record per object and change, its attribute changes, and a value per added or removed value (`ConnectedSystemObjectChange*`, `MetaverseObjectChange*`). Every history row names the object it is about, and every reference value names the object it refers to, by a **plain id**: no foreign key and no EF navigation (#2669). Run Profile Execution Items and Activities name their objects the same way.
+
+- **Deleting an object never touches its history.** The id stays on every row that names it, the object's own deletion record included (`ChangeType = Deleted`, with its name, type and final values). There is no `ON DELETE SET NULL` and no re-keying statement, so a leaver cohort's deletion writes nothing to the history tables, and a Connector Space clear or a Connected System deletion that keeps history leaves it as it was.
+- **Readers resolve the id when they read it**, always in one order: the live object; else its deletion record; else the row's own snapshot (an item's name and external ID, a change value's DN); else "no longer held by JIM". `ResolvedObjectReference` carries the answer, read in one batch per kind of object (`Get*ObjectReferenceSummariesAsync`), and the windowed change value reads resolve the same order in SQL. "Is it live?" is an existence test on the object table, so a surface links only to an object it found live.
+- **Rows written before this** may hold a null id: earlier releases cleared it on deletion. The `AuditReferencesWithoutForeignKeys` migration restored it on every record that kept it in `DeletedMetaverseObjectId` or `DeletedConnectedSystemObjectId`; for the rest, the external-ID fallbacks (a deleted object's history, the Causality Explorer timeline) read only rows holding no id.
+- **Live data keeps its constraints**: an object's own values, joins, references between objects, Pending Exports and other queued work. `AuditReferenceCatalogueTests` holds the exact set of foreign keys into the two object tables to that list, each with its reason, and `AuditReferenceDeletionWritesDatabaseTests` asserts that no deletion entry point updates or deletes a history row.
+
 #### Configuration change history (snapshot on the Activity)
 
 Configuration changes carry their change payload **on the Activity**, not in a relational change table. Three nullable columns on `Activity` hold it: `ConfigurationChangeSnapshot` (jsonb), `ChangeReason` (text), and `ConfigurationChangeVersion` (int). All are null for the high-volume sync and identity activities, so the common path is unaffected.
