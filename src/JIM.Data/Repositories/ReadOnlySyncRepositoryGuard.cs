@@ -100,8 +100,15 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
-        => _inner.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(connectedSystemId, csoIds);
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
+        => _inner.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(connectedSystemId, csoIds, excludedAttributeIds);
+
+    public Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions)
+        => _inner.GetReconciliationProbeValuesAsync(questions);
+
+    public Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync()
+        => _inner.DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
 
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
         => _inner.GetConnectedSystemObjectDisplaySnapshotsAsync(csoIds);

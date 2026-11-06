@@ -1981,6 +1981,228 @@ public partial class SyncRepository
             AND ""AttributeId"" = ANY(@attributeIds)";
 
     /// <summary>
+    /// How many ids and strings one probe statement sends at most; larger plans are asked in several statements.
+    /// </summary>
+    private const int ReconciliationProbeChunkTuples = 10_000;
+
+    /// <inheritdoc />
+    public async Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions)
+    {
+        var answers = new List<ProbedAttributeValues>(questions.Count);
+        if (questions.Count == 0)
+            return answers;
+
+        // One question per object and attribute: two would split one attribute's candidates between two answers.
+        var duplicate = questions.GroupBy(q => (q.ConnectedSystemObjectId, q.AttributeId)).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new ArgumentException(
+                $"More than one reconciliation probe question for attribute {duplicate.Key.AttributeId} of Connected System Object {duplicate.Key.ConnectedSystemObjectId}.",
+                nameof(questions));
+
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        foreach (var chunk in ChunkReconciliationProbeQuestions(questions))
+        {
+            var candidatesByPair = chunk.ToDictionary(q => (q.ConnectedSystemObjectId, q.AttributeId),
+                _ => new Dictionary<Guid, ConnectedSystemObjectAttributeValue>());
+
+            var valueQuestions = chunk.Where(q => q.ReferenceIds.Count + q.ExactValues.Count + q.CaseInsensitiveValues.Count > 0).ToList();
+            if (valueQuestions.Count > 0)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = ReconciliationProbeValuesSql;
+                AddReconciliationProbeValuesParameters(command,
+                    valueQuestions.Select(q => q.ConnectedSystemObjectId).Distinct().ToList(),
+                    valueQuestions.Select(q => q.AttributeId).Distinct().ToList(),
+                    valueQuestions.SelectMany(q => q.ReferenceIds).Distinct().ToList(),
+                    valueQuestions.SelectMany(q => q.ExactValues).Distinct(StringComparer.Ordinal).ToList(),
+                    valueQuestions.SelectMany(q => q.CaseInsensitiveValues).Distinct(StringComparer.Ordinal).ToList());
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    // The arms match ids and strings across every object and attribute of the chunk, so a row can belong
+                    // to a pair nobody asked about (dropped) or be returned by two arms (kept once).
+                    var row = new ConnectedSystemObjectAttributeValue
+                    {
+                        Id = reader.GetGuid(0),
+                        AttributeId = reader.GetInt32(2),
+                        ReferenceValueId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                        UnresolvedReferenceValue = reader.IsDBNull(4) ? null : reader.GetString(4)
+                    };
+                    if (candidatesByPair.TryGetValue((reader.GetGuid(1), row.AttributeId), out var candidates))
+                        candidates.TryAdd(row.Id, row);
+                }
+            }
+
+            var countQuestions = chunk.Where(q => q.NeedsCount).ToList();
+            var countsByPair = new Dictionary<(Guid, int), int>();
+            if (countQuestions.Count > 0)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = ReconciliationProbeCountSql;
+                AddReconciliationProbeCountParameters(command,
+                    countQuestions.Select(q => q.ConnectedSystemObjectId).ToList(),
+                    countQuestions.Select(q => q.AttributeId).ToList());
+
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                    countsByPair[(reader.GetGuid(0), reader.GetInt32(1))] = reader.GetInt32(2);
+            }
+
+            foreach (var question in chunk)
+            {
+                var pair = (question.ConnectedSystemObjectId, question.AttributeId);
+                int? cappedCount = null;
+                if (question.NeedsCount)
+                {
+                    if (!countsByPair.TryGetValue(pair, out var count))
+                        throw new InvalidOperationException(
+                            $"The reconciliation probe returned no count for attribute {question.AttributeId} of Connected System Object {question.ConnectedSystemObjectId}.");
+                    cappedCount = count;
+                }
+
+                answers.Add(new ProbedAttributeValues
+                {
+                    ConnectedSystemObjectId = question.ConnectedSystemObjectId,
+                    AttributeId = question.AttributeId,
+                    ProbedChangeIds = question.ChangeIds,
+                    CandidateValues = candidatesByPair[pair].Values.ToList(),
+                    CappedValueCount = cappedCount
+                });
+            }
+        }
+
+        return answers;
+    }
+
+    private static IEnumerable<List<ReconciliationProbeQuestion>> ChunkReconciliationProbeQuestions(IEnumerable<ReconciliationProbeQuestion> questions)
+    {
+        var chunk = new List<ReconciliationProbeQuestion>();
+        var tuples = 0;
+        foreach (var question in questions)
+        {
+            if (chunk.Count > 0 && tuples + question.TupleCount > ReconciliationProbeChunkTuples)
+            {
+                yield return chunk;
+                chunk = [];
+                tuples = 0;
+            }
+
+            chunk.Add(question);
+            tuples += question.TupleCount;
+        }
+
+        if (chunk.Count > 0)
+            yield return chunk;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync()
+    {
+        var sample = IdentifierKey.FoldingCheckSample;
+
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT lower(@sample) = @folded";
+        command.Parameters.Add(new NpgsqlParameter("sample", NpgsqlTypes.NpgsqlDbType.Text) { Value = sample });
+        command.Parameters.Add(new NpgsqlParameter("folded", NpgsqlTypes.NpgsqlDbType.Text) { Value = IdentifierKey.For(sample, caseExact: false) });
+        return await command.ExecuteScalarAsync() is true;
+    }
+
+    /// <summary>
+    /// The candidate rows statement behind <see cref="GetReconciliationProbeValuesAsync"/>, exposed so its plan can be
+    /// checked (<c>ReconciliationCsoLoadDatabaseTests</c>).
+    /// </summary>
+    /// <remarks>
+    /// Three arms, each led by the predicate an index answers, the shape <see cref="CsoReferenceValueMatchSql"/> takes
+    /// for the same reason (#2669): held in one OR, no index could serve the string comparisons, and PostgreSQL would read
+    /// every member of every group asked about. The referenced ids are looked up in the <c>ReferenceValueId</c> index;
+    /// exact strings in <c>IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue</c>, over resolved and
+    /// unresolved rows alike; lowered strings in <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, whose predicate the arm repeats
+    /// so the partial index applies, and which therefore finds unresolved rows only. That is all a change naming an
+    /// object can match by string ignoring case, since a resolved row names its object by id alone
+    /// (<c>SyncEngine.ReferenceRowMatches</c>); the planner sends no other case-insensitive question. Both sides are
+    /// lowered in the database, and the planner asks only for ASCII strings, and only once
+    /// <see cref="DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/> has confirmed the database folds the non-ASCII characters
+    /// JIM folds into ASCII as JIM does. The arms may overlap and match across the objects and attributes of one
+    /// statement, so the caller keeps each row once, under the question for its own object and attribute.
+    /// </remarks>
+    internal const string ReconciliationProbeValuesSql =
+        @"SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+          FROM ""ConnectedSystemObjectAttributeValues""
+          WHERE ""ReferenceValueId"" = ANY(@referenceIds)
+            AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
+            AND ""AttributeId"" = ANY(@attributeIds)
+          UNION ALL
+          SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+          FROM ""ConnectedSystemObjectAttributeValues""
+          WHERE ""UnresolvedReferenceValue"" = ANY(@exactValues)
+            AND ""UnresolvedReferenceValue"" IS NOT NULL
+            AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
+            AND ""AttributeId"" = ANY(@attributeIds)
+          UNION ALL
+          SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+          FROM ""ConnectedSystemObjectAttributeValues""
+          WHERE LOWER(""UnresolvedReferenceValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@caseInsensitiveValues) AS v))
+            AND ""UnresolvedReferenceValue"" IS NOT NULL
+            AND ""ReferenceValueId"" IS NULL
+            AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
+            AND ""AttributeId"" = ANY(@attributeIds)";
+
+    /// <summary>
+    /// The capped count statement behind <see cref="GetReconciliationProbeValuesAsync"/>, exposed so its plan can be
+    /// checked: per object and attribute, how many values it holds, stopping at two. Each pair reads at most two rows
+    /// through the (object, attribute) index, however many members a group has.
+    /// </summary>
+    internal const string ReconciliationProbeCountSql =
+        @"SELECT p.cso_id, p.attribute_id, c.value_count
+          FROM unnest(@countCsoIds, @countAttributeIds) AS p(cso_id, attribute_id)
+          CROSS JOIN LATERAL (
+              SELECT count(*)::integer AS value_count
+              FROM (
+                  SELECT 1
+                  FROM ""ConnectedSystemObjectAttributeValues"" AS av
+                  WHERE av.""ConnectedSystemObjectId"" = p.cso_id
+                    AND av.""AttributeId"" = p.attribute_id
+                  LIMIT 2
+              ) AS capped
+          ) AS c";
+
+    /// <summary>
+    /// Binds the parameters of <see cref="ReconciliationProbeValuesSql"/>.
+    /// </summary>
+    internal static void AddReconciliationProbeValuesParameters(System.Data.Common.DbCommand command, IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int> attributeIds, IReadOnlyCollection<Guid> referenceIds, IReadOnlyCollection<string> exactValues,
+        IReadOnlyCollection<string> caseInsensitiveValues)
+    {
+        command.Parameters.Add(new NpgsqlParameter("csoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = csoIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("attributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = attributeIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("referenceIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = referenceIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("exactValues", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = exactValues.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("caseInsensitiveValues", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            { Value = caseInsensitiveValues.ToArray() });
+    }
+
+    /// <summary>
+    /// Binds the parameters of <see cref="ReconciliationProbeCountSql"/>: one object and attribute per position.
+    /// </summary>
+    internal static void AddReconciliationProbeCountParameters(System.Data.Common.DbCommand command, IReadOnlyList<Guid> csoIds,
+        IReadOnlyList<int> attributeIds)
+    {
+        command.Parameters.Add(new NpgsqlParameter("countCsoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = csoIds.ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("countAttributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = attributeIds.ToArray() });
+    }
+
+    /// <summary>
     /// Binds the parameters of <see cref="CsoReferenceValueMatchSql"/>.
     /// </summary>
     internal static void AddCsoReferenceValueMatchParameters(

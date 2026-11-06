@@ -28,6 +28,28 @@ public static class IdentifierKey
 
     private static readonly StringComparer IgnoringCaseComparer = new FoldingComparer();
 
+    private static readonly Lazy<IReadOnlyList<char>> NonAsciiFoldedToAscii = new(() => Enumerable.Range(0x80, 0x10000 - 0x80)
+        .Where(code => code is < 0xD800 or > 0xDFFF)
+        .Select(code => (char)code)
+        .Where(character => Fold(character) < 0x80)
+        .ToList());
+
+    /// <summary>
+    /// The characters outside ASCII that this folding turns into ASCII (today the dotted capital I and the Kelvin sign),
+    /// found by folding every character of the Basic Multilingual Plane. A value written in ASCII can equal, ignoring
+    /// case, a stored value carrying one of these and nothing else outside ASCII; a database lookup ignoring case finds
+    /// such a value only where the database folds these characters the same way (#2669).
+    /// </summary>
+    public static IReadOnlyList<char> NonAsciiCharactersFoldedToAscii => NonAsciiFoldedToAscii.Value;
+
+    /// <summary>
+    /// The text a database's <c>lower()</c> is checked against before it is trusted to match ASCII identifiers ignoring
+    /// case as this folding does (#2669): every ASCII capital and every character in
+    /// <see cref="NonAsciiCharactersFoldedToAscii"/>. The database agrees when <c>lower()</c> of it equals
+    /// <see cref="For"/> of it, ignoring case.
+    /// </summary>
+    public static string FoldingCheckSample => "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + string.Concat(NonAsciiCharactersFoldedToAscii);
+
     /// <summary>
     /// The value as a key for identity lookups: unchanged when case-exact, else folded (see the remarks). Keys built
     /// this way are compared ordinally, so one dictionary can hold values of both kinds.

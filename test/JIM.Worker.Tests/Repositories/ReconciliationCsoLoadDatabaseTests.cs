@@ -259,4 +259,393 @@ public class ReconciliationCsoLoadDatabaseTests
             Assert.That(overCore.PendingExportToUpdate?.Status, Is.EqualTo(PendingExportStatus.ExportNotConfirmed));
         }
     }
+
+    #region Probed values (#2669)
+
+    private async Task<ConnectedSystemObjectTypeAttribute> LoadAttributeAsync(JimDbContext ctx, int attributeId) =>
+        await ctx.ConnectedSystemAttributes.SingleAsync(a => a.Id == attributeId);
+
+    private static PendingExportAttributeValueChange MemberChange(ConnectedSystemObjectTypeAttribute attribute,
+        PendingExportAttributeChangeType changeType, Guid? resolvedTo = null, string? stringValue = null, string? unresolvedValue = null) => new()
+    {
+        Id = Guid.NewGuid(), Attribute = attribute, AttributeId = attribute.Id, ChangeType = changeType,
+        Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+        ResolvedReferenceCsoId = resolvedTo, StringValue = stringValue, UnresolvedReferenceValue = unresolvedValue
+    };
+
+    private static PendingExport PendingExportFor(SeededGroup seeded, Guid csoId, IEnumerable<PendingExportAttributeValueChange> changes) => new()
+    {
+        Id = Guid.NewGuid(), ConnectedSystemId = seeded.ConnectedSystemId, ConnectedSystemObjectId = csoId,
+        ChangeType = PendingExportChangeType.Update, Status = PendingExportStatus.Exported, AttributeValueChanges = new(changes.ToList())
+    };
+
+    /// <summary>
+    /// Adds member rows to a seeded object: each resolved to the given object (or unresolved), holding the given DN.
+    /// </summary>
+    private async Task AddMemberRowsAsync(Guid csoId, int attributeId, params (Guid? ReferenceValueId, string Dn)[] rows)
+    {
+        await using var ctx = NewContext();
+        var cso = await ctx.ConnectedSystemObjects.AsTracking().SingleAsync(c => c.Id == csoId);
+        var attribute = await ctx.ConnectedSystemAttributes.AsTracking().SingleAsync(a => a.Id == attributeId);
+        foreach (var (referenceValueId, dn) in rows)
+        {
+            ctx.Add(new ConnectedSystemObjectAttributeValue
+            {
+                Id = Guid.NewGuid(), ConnectedSystemObject = cso, Attribute = attribute,
+                ReferenceValueId = referenceValueId, UnresolvedReferenceValue = dn
+            });
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// A group object with no member values, in the seeded system and type.
+    /// </summary>
+    private async Task<Guid> AddEmptyGroupAsync(SeededGroup seeded)
+    {
+        await using var ctx = NewContext();
+        var template = await ctx.ConnectedSystemObjects.AsTracking().Include(c => c.Type).Include(c => c.ConnectedSystem)
+            .SingleAsync(c => c.Id == seeded.GroupCsoId);
+        var group = new ConnectedSystemObject { Type = template.Type, ConnectedSystem = template.ConnectedSystem, Status = ConnectedSystemObjectStatus.Normal };
+        ctx.Add(group);
+        await ctx.SaveChangesAsync();
+        return group.Id;
+    }
+
+    /// <summary>
+    /// The reconciliation load leaves out the values of the attributes it is told to: the member values reconciliation
+    /// probes instead. The object's DN and its name, which the execution item's snapshots read, are still loaded.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsCoreByIdsNoTrackingAsync_ExcludedAttribute_LeavesOnlyItsValuesOutAsync()
+    {
+        var seeded = await SeedGroupAsync();
+        int cnAttributeId;
+        await using (var seed = NewContext())
+        {
+            var type = await seed.ConnectedSystemObjectTypes.AsTracking().SingleAsync(t => t.Attributes.Any(a => a.Id == seeded.MemberAttributeId));
+            var cn = new ConnectedSystemObjectTypeAttribute
+            {
+                Name = "cn", ConnectedSystemObjectType = type, Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, Selected = true
+            };
+            seed.Add(cn);
+            var group = await seed.ConnectedSystemObjects.AsTracking().SingleAsync(c => c.Id == seeded.GroupCsoId);
+            seed.Add(new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = group, Attribute = cn, StringValue = "Team Alpha" });
+            await seed.SaveChangesAsync();
+            cnAttributeId = cn.Id;
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var group2 = (await repository.Sync.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(seeded.ConnectedSystemId, [seeded.GroupCsoId],
+            [seeded.MemberAttributeId])).Single();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(group2.AttributeValues.Where(av => av.AttributeId == seeded.MemberAttributeId), Is.Empty, "The probed member values are not loaded");
+            Assert.That(group2.AttributeValues, Has.Count.EqualTo(2), "The DN and the name are");
+            Assert.That(group2.AttributeValues.Any(av => av.AttributeId == cnAttributeId && av.StringValue == "Team Alpha"), Is.True);
+            Assert.That(group2.Name, Is.EqualTo("Team Alpha"));
+            Assert.That(group2.AttributeValues.Select(av => av.Attribute), Is.All.Not.Null);
+            Assert.That(ctx.ChangeTracker.Entries().Count(), Is.Zero, "The load must not track what it reads");
+        }
+    }
+
+    /// <summary>
+    /// The database only narrows: for every change, the rows the probe returns include every row the .NET comparison
+    /// matches over the full load. Covered: resolved rows by id, a row resolved to another object retaining a member's
+    /// DN in capitals (which matches nothing, a resolved row naming its object by id), unresolved rows in other cases, and
+    /// unresolved rows whose non-ASCII characters JIM folds into ASCII (the dotted capital I, the Kelvin sign), which only
+    /// a database whose <c>lower()</c> folds them likewise finds. Then the same for a case-exact attribute, whose strings
+    /// are sought exactly among all rows.
+    /// </summary>
+    [Test]
+    public async Task GetReconciliationProbeValuesAsync_EveryChange_CandidatesIncludeEveryDotNetMatchAsync()
+    {
+        var seeded = await SeedGroupAsync();
+        await AddMemberRowsAsync(seeded.GroupCsoId, seeded.MemberAttributeId,
+            (seeded.MemberCsoIds["bob"], seeded.MemberDns["carol"].ToUpperInvariant()),
+            (null, "uid=nİck,ou=People,dc=glitterband,dc=local"),
+            (null, "uid=Kate,ou=People,dc=glitterband,dc=local"),
+            (null, "UID=Frank,OU=People,DC=glitterband,DC=local"));
+
+        foreach (var caseExact in new[] { false, true })
+        {
+            await using (var update = NewContext())
+            {
+                await update.ConnectedSystemAttributes.Where(a => a.Id == seeded.MemberAttributeId)
+                    .ExecuteUpdateAsync(s => s.SetProperty(a => a.CaseExact, caseExact));
+            }
+
+            await using var ctx = NewContext();
+            var repository = new PostgresDataRepository(ctx);
+            var member = await LoadAttributeAsync(ctx, seeded.MemberAttributeId);
+            string Dn(string uid) => $"uid={uid},ou=People,dc=glitterband,dc=local";
+
+            var changes = new Dictionary<string, PendingExportAttributeValueChange>();
+            foreach (var name in new[] { "alice", "bob", "carol", "dave", "erin" })
+            {
+                changes[$"add {name}"] = MemberChange(member, PendingExportAttributeChangeType.Add, seeded.MemberCsoIds[name], seeded.MemberDns[name]);
+                changes[$"remove {name} in capitals"] = MemberChange(member, PendingExportAttributeChangeType.Remove, seeded.MemberCsoIds[name],
+                    seeded.MemberDns[name].ToUpperInvariant());
+            }
+            foreach (var uid in new[] { "nick", "kate", "frank" })
+                changes[$"remove {uid}"] = MemberChange(member, PendingExportAttributeChangeType.Remove, Guid.NewGuid(), Dn(uid));
+            if (caseExact)
+            {
+                // Naming no object, so matched by string among resolved rows too: probed only on a case-exact attribute.
+                changes["unresolved remove alice"] = MemberChange(member, PendingExportAttributeChangeType.Remove, unresolvedValue: seeded.MemberDns["alice"]);
+                changes["unresolved remove frank"] = MemberChange(member, PendingExportAttributeChangeType.Remove, unresolvedValue: "UID=Frank,OU=People,DC=glitterband,DC=local");
+            }
+            changes["remove all"] = MemberChange(member, PendingExportAttributeChangeType.RemoveAll);
+
+            var plan = SyncEngine.PlanReconciliationProbes([PendingExportFor(seeded, seeded.GroupCsoId, changes.Values)],
+                await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync());
+            var answer = (await repository.Sync.GetReconciliationProbeValuesAsync(plan.Questions)).Single();
+            var fullLoad = (await repository.Sync.GetConnectedSystemObjectsByIdsNoTrackingAsync(seeded.ConnectedSystemId, [seeded.GroupCsoId])).Single();
+            var memberRows = fullLoad.AttributeValues.Where(av => av.AttributeId == seeded.MemberAttributeId).ToList();
+            var candidateIds = answer.CandidateValues.Select(c => c.Id).ToHashSet();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(plan.FullLoadPairCount, Is.Zero, $"caseExact={caseExact}");
+                Assert.That(answer.ProbedChangeIds, Is.EquivalentTo(changes.Values.Select(c => c.Id)));
+                Assert.That(answer.CappedValueCount, Is.EqualTo(2), "Seven member rows, capped at two");
+                foreach (var (name, change) in changes.Where(c => c.Value.ChangeType != PendingExportAttributeChangeType.RemoveAll))
+                {
+                    var matches = memberRows.Where(row => SyncEngine.ValueExistsOnCso([row], change)).Select(row => row.Id).ToList();
+                    Assert.That(candidateIds.IsSupersetOf(matches), Is.True, $"caseExact={caseExact}: {name} matches rows the probe did not return");
+                }
+
+                if (!caseExact)
+                {
+                    Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["remove nick"])), Is.EqualTo(1),
+                        "The dotted capital I folds into the ASCII DN");
+                    Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["remove kate"])), Is.EqualTo(1),
+                        "The Kelvin sign folds into the ASCII DN");
+                    Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["remove carol in capitals"])), Is.Zero,
+                        "A row resolved to Bob names Bob, whatever DN it retains");
+                }
+                else
+                {
+                    Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["unresolved remove alice"])), Is.EqualTo(1),
+                        "Naming no object, the change matches Alice's resolved row by its exact DN");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The count a verdict depends on is the attribute's value count capped at two: none, one, and two for several.
+    /// </summary>
+    [Test]
+    public async Task GetReconciliationProbeValuesAsync_CountAsked_ReturnsCountCappedAtTwoAsync()
+    {
+        var seeded = await SeedGroupAsync();
+        var emptyGroupId = await AddEmptyGroupAsync(seeded);
+        var oneMemberGroupId = await AddEmptyGroupAsync(seeded);
+        await AddMemberRowsAsync(oneMemberGroupId, seeded.MemberAttributeId, (seeded.MemberCsoIds["alice"], seeded.MemberDns["alice"]));
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var member = await LoadAttributeAsync(ctx, seeded.MemberAttributeId);
+
+        var plan = SyncEngine.PlanReconciliationProbes(
+            new[] { emptyGroupId, oneMemberGroupId, seeded.GroupCsoId }
+                .Select(id => PendingExportFor(seeded, id, [MemberChange(member, PendingExportAttributeChangeType.RemoveAll)])),
+            databaseFoldsCaseLikeIdentifierKey: true);
+        var answers = (await repository.Sync.GetReconciliationProbeValuesAsync(plan.Questions)).ToDictionary(a => a.ConnectedSystemObjectId);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(answers, Has.Count.EqualTo(3));
+            Assert.That(answers[emptyGroupId].CappedValueCount, Is.EqualTo(0));
+            Assert.That(answers[oneMemberGroupId].CappedValueCount, Is.EqualTo(1));
+            Assert.That(answers[seeded.GroupCsoId].CappedValueCount, Is.EqualTo(2));
+            Assert.That(answers.Values.SelectMany(a => a.CandidateValues), Is.Empty, "A count-only question returns no rows");
+        }
+    }
+
+    /// <summary>
+    /// The test database (and JIM's own, C.UTF-8) folds the characters JIM folds into ASCII as JIM does, so reconciliation
+    /// may ask it to match references ignoring case.
+    /// </summary>
+    [Test]
+    public async Task DoesDatabaseFoldCaseLikeIdentifierKeyAsync_TestDatabase_ReturnsTrueAsync()
+    {
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        Assert.That(await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync(), Is.True);
+    }
+
+    /// <summary>
+    /// Reconciliation as it now runs (#2669), with the member attribute probed and left out of the load, reaches the same
+    /// verdicts as over the full load, for a group with members added and removed (resolved changes, as export
+    /// resolution writes them). What the import showed is recorded for each unconfirmed change on its own: the rows
+    /// matching it, or that its value is absent. It deliberately no longer equals the full load's record, which lists
+    /// every member of the group: on a large group that wrote the whole member list once per retried change.
+    /// </summary>
+    [Test]
+    public async Task ReconcileCsoAgainstPendingExport_OverProbedValues_SameVerdictsAsFullLoadAsync()
+    {
+        var seeded = await SeedGroupAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var member = await LoadAttributeAsync(ctx, seeded.MemberAttributeId);
+
+        var template = new Dictionary<string, PendingExportAttributeValueChange>();
+        void Add(string key, string name, PendingExportAttributeChangeType changeType, string? dn = null) =>
+            template[key] = MemberChange(member, changeType, seeded.MemberCsoIds[name], dn ?? seeded.MemberDns[name]);
+        Add("add alice", "alice", PendingExportAttributeChangeType.Add);
+        Add("add bob", "bob", PendingExportAttributeChangeType.Add);
+        Add("remove carol", "carol", PendingExportAttributeChangeType.Remove);
+        Add("remove dave", "dave", PendingExportAttributeChangeType.Remove);
+        Add("add erin in another case", "erin", PendingExportAttributeChangeType.Add, seeded.MemberDns["erin"]);
+
+        PendingExport NewPendingExport() => PendingExportFor(seeded, seeded.GroupCsoId, template.Values.Select(c => new PendingExportAttributeValueChange
+        {
+            Id = c.Id, Attribute = c.Attribute, AttributeId = c.AttributeId, ChangeType = c.ChangeType, Status = c.Status,
+            ResolvedReferenceCsoId = c.ResolvedReferenceCsoId, StringValue = c.StringValue, UnresolvedReferenceValue = c.UnresolvedReferenceValue
+        }));
+
+        var engine = new SyncEngine();
+        var fullLoad = (await repository.Sync.GetConnectedSystemObjectsByIdsNoTrackingAsync(seeded.ConnectedSystemId, [seeded.GroupCsoId])).Single();
+        var overFull = new PendingExportReconciliationResult();
+        engine.ReconcileCsoAgainstPendingExport(fullLoad, NewPendingExport(), overFull);
+
+        var probedExport = NewPendingExport();
+        var plan = SyncEngine.PlanReconciliationProbes([probedExport], await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync());
+        var answers = await repository.Sync.GetReconciliationProbeValuesAsync(plan.Questions);
+        var probedLoad = (await repository.Sync.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(seeded.ConnectedSystemId, [seeded.GroupCsoId],
+            answers.Select(a => a.AttributeId).ToList())).Single();
+        var overProbe = new PendingExportReconciliationResult();
+        engine.ReconcileCsoAgainstPendingExport(probedLoad, probedExport, overProbe, probedValuesByAttributeId: answers.ToDictionary(a => a.AttributeId));
+
+        var expectedConfirmed = new[] { template["add alice"].Id, template["remove carol"].Id, template["add erin in another case"].Id };
+        var expectedRetried = new[] { template["add bob"].Id, template["remove dave"].Id };
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Questions, Has.Count.EqualTo(1), "The member attribute is probed");
+            Assert.That(probedLoad.AttributeValues.Where(av => av.AttributeId == seeded.MemberAttributeId), Is.Empty);
+            Assert.That(overFull.ConfirmedChanges.Select(c => c.Id), Is.EquivalentTo(expectedConfirmed), "Confirmed over the full load");
+            Assert.That(overProbe.ConfirmedChanges.Select(c => c.Id), Is.EquivalentTo(expectedConfirmed), "Confirmed over the probe");
+            Assert.That(overProbe.RetryChanges.Select(c => c.Id), Is.EquivalentTo(expectedRetried), "Retried over the probe");
+            Assert.That(overProbe.RetryChanges.Select(c => c.Id), Is.EquivalentTo(overFull.RetryChanges.Select(c => c.Id)));
+            Assert.That(overProbe.PendingExportToUpdate?.Status, Is.EqualTo(overFull.PendingExportToUpdate?.Status));
+            Assert.That(overProbe.RetryChanges.ToDictionary(c => c.Id, c => c.LastImportedValue), Is.EquivalentTo(new Dictionary<Guid, string?>
+            {
+                [template["add bob"].Id] = "(value not present)",
+                [template["remove dave"].Id] = seeded.MemberDns["dave"]
+            }), "Bounded to what matched each change");
+        }
+    }
+
+    /// <summary>
+    /// The probe must find its rows through indexes keyed on what it is looking for, never by reading a group's members
+    /// (#2669): the referenced ids on the reference index, exact strings on the string index, lowered strings on the
+    /// partial functional index over unresolved references, and the capped count by stopping after two rows of the
+    /// object's own attribute. The same shape the reference recall query's plan check holds that query to.
+    /// </summary>
+    [Test]
+    public async Task GetReconciliationProbeValuesAsync_LargeGroup_PlanReadsOnlyTheSoughtRowsThroughIndexesAsync()
+    {
+        var seeded = await SeedGroupAsync();
+        var aliceId = seeded.MemberCsoIds["alice"];
+
+        await using var ctx = NewContext();
+        var connection = (Npgsql.NpgsqlConnection)ctx.Database.GetDbConnection();
+        await connection.OpenAsync();
+
+        // A large group: 2,000 more members held as resolved references (each keeping its DN, as resolution leaves it)
+        // and 20,000 still unresolved. Copied from seeded rows so every other column takes a valid value.
+        await using (var populate = new Npgsql.NpgsqlCommand("""
+            INSERT INTO "ConnectedSystemObjects"
+            SELECT (jsonb_populate_record(cso, jsonb_build_object('Id', md5('member' || n)::uuid))).*
+            FROM "ConnectedSystemObjects" AS cso, generate_series(1, 2000) AS n
+            WHERE cso."Id" = @aliceId;
+
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('resolved' || n)::uuid,
+                'ReferenceValueId', md5('member' || n)::uuid,
+                'UnresolvedReferenceValue', 'uid=member' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, 2000) AS n
+            WHERE av."ConnectedSystemObjectId" = @groupCsoId AND av."ReferenceValueId" = @aliceId;
+
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('unresolved' || n)::uuid,
+                'UnresolvedReferenceValue', 'uid=pending' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, 20000) AS n
+            WHERE av."ConnectedSystemObjectId" = @groupCsoId AND av."ReferenceValueId" IS NULL
+              AND av."AttributeId" = @memberAttributeId;
+
+            -- Each member holds its own DN, as every object does, so the statistics see a table of many objects' values
+            -- rather than one group's: the count's plan is judged against the shape a real table has.
+            INSERT INTO "ConnectedSystemObjectAttributeValues"
+            SELECT (jsonb_populate_record(av, jsonb_build_object(
+                'Id', md5('dn' || n)::uuid,
+                'ConnectedSystemObjectId', md5('member' || n)::uuid,
+                'StringValue', 'uid=member' || n || ',ou=People,dc=glitterband,dc=local'))).*
+            FROM "ConnectedSystemObjectAttributeValues" AS av, generate_series(1, 2000) AS n
+            WHERE av."ConnectedSystemObjectId" = @aliceId;
+
+            ANALYZE "ConnectedSystemObjects";
+            ANALYZE "ConnectedSystemObjectAttributeValues";
+            """, connection))
+        {
+            populate.Parameters.AddWithValue("groupCsoId", seeded.GroupCsoId);
+            populate.Parameters.AddWithValue("aliceId", aliceId);
+            populate.Parameters.AddWithValue("memberAttributeId", seeded.MemberAttributeId);
+            await populate.ExecuteNonQueryAsync();
+        }
+
+        async Task<List<string>> ExplainAsync(Npgsql.NpgsqlCommand explain)
+        {
+            var lines = new List<string>();
+            await using var reader = await explain.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                lines.Add(reader.GetString(0));
+            return lines;
+        }
+
+        await using var explainValues = new Npgsql.NpgsqlCommand(
+            "EXPLAIN " + JIM.PostgresData.Repositories.SyncRepository.ReconciliationProbeValuesSql, connection);
+        JIM.PostgresData.Repositories.SyncRepository.AddReconciliationProbeValuesParameters(explainValues,
+            [seeded.GroupCsoId], [seeded.MemberAttributeId], [aliceId], [seeded.MemberDns["alice"]], [seeded.MemberDns["erin"]]);
+        var valuesPlan = await ExplainAsync(explainValues);
+
+        await using var explainCount = new Npgsql.NpgsqlCommand(
+            "EXPLAIN " + JIM.PostgresData.Repositories.SyncRepository.ReconciliationProbeCountSql, connection);
+        JIM.PostgresData.Repositories.SyncRepository.AddReconciliationProbeCountParameters(explainCount,
+            [seeded.GroupCsoId], [seeded.MemberAttributeId]);
+        var countPlan = await ExplainAsync(explainCount);
+
+        var valuesText = string.Join("\n", valuesPlan);
+        var countText = string.Join("\n", countPlan);
+        var indexConditions = valuesPlan.Where(line => line.Contains("Index Cond:")).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(valuesPlan.Concat(countPlan).Any(line => line.Contains("Seq Scan on \"ConnectedSystemObjectAttributeValues\"")), Is.False,
+                "The probe scans every attribute value.\n" + valuesText + "\n" + countText);
+            Assert.That(indexConditions.Any(line => line.Contains("\"ReferenceValueId\" = ANY")), Is.True,
+                "The referenced id must be an index condition.\n" + valuesText);
+            Assert.That(indexConditions.Any(line => line.Contains("\"UnresolvedReferenceValue\" = ANY")), Is.True,
+                "The exact string must be an index condition.\n" + valuesText);
+            Assert.That(indexConditions.Any(line => line.Contains("lower(")), Is.True,
+                "The lowered string must be an index condition.\n" + valuesText);
+            Assert.That(valuesPlan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("lower(")), Is.False,
+                "The string must not be compared row by row after a scan.\n" + valuesText);
+            Assert.That(countPlan.Any(line => line.Contains("Limit")), Is.True,
+                "The count must stop after two rows.\n" + countText);
+            Assert.That(countPlan.Any(line => line.Contains("Index Cond:") && line.Contains("\"ConnectedSystemObjectId\" = p.cso_id")), Is.True,
+                "The count must read the object's own rows through the (object, attribute) index.\n" + countText);
+        }
+    }
+
+    #endregion
 }

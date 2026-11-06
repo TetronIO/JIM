@@ -1426,6 +1426,107 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
+    #region Reference matching: a resolved reference names its object by id (#2669)
+
+    private const string AliceDn = "uid=alice,ou=People,dc=glitterband,dc=local";
+
+    private static readonly ConnectedSystemObjectTypeAttribute ReferenceMemberAttribute = new()
+    {
+        Id = 7, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued
+    };
+
+    private static ConnectedSystemObject GroupWithMemberRow(Guid? referenceValueId, string dn)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = ReferenceMemberAttribute.Id, Attribute = ReferenceMemberAttribute,
+            ReferenceValueId = referenceValueId, UnresolvedReferenceValue = dn
+        });
+        return cso;
+    }
+
+    private static PendingExportAttributeValueChange MemberChange(PendingExportAttributeChangeType changeType, Guid? resolvedTo,
+        string? stringValue = null, string? unresolvedValue = null) => new()
+    {
+        Id = Guid.NewGuid(), AttributeId = ReferenceMemberAttribute.Id, Attribute = ReferenceMemberAttribute, ChangeType = changeType,
+        Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+        ResolvedReferenceCsoId = resolvedTo, StringValue = stringValue, UnresolvedReferenceValue = unresolvedValue
+    };
+
+    /// <summary>
+    /// The rule reference recall applies (#2669, <c>ExportEvaluationServer</c>'s existence query): a resolved row names its
+    /// object by id alone, so a row resolved to another object whose retained DN equals the removed member's (here in
+    /// another case) names some other object, and the member is gone. Judged the same over the value list and over the
+    /// per-attribute index reconciliation builds.
+    /// </summary>
+    [Test]
+    public void ReferenceRemove_ResolvedToAAgainstRowResolvedToBWithCaseVariantDn_IsAbsentInBothPaths()
+    {
+        var removedMemberId = Guid.NewGuid();
+        var cso = GroupWithMemberRow(Guid.NewGuid(), AliceDn.ToUpperInvariant());
+        var change = MemberChange(PendingExportAttributeChangeType.Remove, removedMemberId, stringValue: AliceDn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True, "Value-list path: the Remove is confirmed");
+            Assert.That(ReconcileOne(cso, change).ConfirmedChanges, Does.Contain(change), "Index path: the Remove is confirmed");
+        }
+    }
+
+    /// <summary>
+    /// The same Remove against the same DN held as an unresolved row: an unresolved reference is matched by its string,
+    /// ignoring case, so the member is still there and the Remove is not confirmed, in both paths.
+    /// </summary>
+    [Test]
+    public void ReferenceRemove_ResolvedToAAgainstUnresolvedRowWithCaseVariantDn_IsPresentInBothPaths()
+    {
+        var cso = GroupWithMemberRow(null, AliceDn.ToUpperInvariant());
+        var change = MemberChange(PendingExportAttributeChangeType.Remove, Guid.NewGuid(), stringValue: AliceDn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False, "Value-list path: the Remove is not confirmed");
+            Assert.That(ReconcileOne(cso, change).RetryChanges, Does.Contain(change), "Index path: the Remove is retried");
+        }
+    }
+
+    /// <summary>
+    /// A row resolved to the very object the change names is matched by that id, whatever DN it retains.
+    /// </summary>
+    [Test]
+    public void ReferenceAdd_ResolvedToAAgainstRowResolvedToAWithAnotherDn_IsPresentInBothPaths()
+    {
+        var memberId = Guid.NewGuid();
+        var cso = GroupWithMemberRow(memberId, "uid=renamed,ou=People,dc=glitterband,dc=local");
+        var change = MemberChange(PendingExportAttributeChangeType.Add, memberId, stringValue: AliceDn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+            Assert.That(ReconcileOne(cso, change).ConfirmedChanges, Does.Contain(change));
+        }
+    }
+
+    /// <summary>
+    /// A change naming no object has only its string to go on, so it still matches a resolved row by the DN that row
+    /// retains, ignoring case, as it always has.
+    /// </summary>
+    [Test]
+    public void ReferenceRemove_UnresolvedChangeAgainstResolvedRowWithCaseVariantDn_IsPresentInBothPaths()
+    {
+        var cso = GroupWithMemberRow(Guid.NewGuid(), AliceDn.ToUpperInvariant());
+        var change = MemberChange(PendingExportAttributeChangeType.Remove, null, unresolvedValue: AliceDn);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False);
+            Assert.That(ReconcileOne(cso, change).RetryChanges, Does.Contain(change));
+        }
+    }
+
+    #endregion
+
     #region Helpers
 
     private static ConnectedSystemObject CreateCsoWithAttributeValue(

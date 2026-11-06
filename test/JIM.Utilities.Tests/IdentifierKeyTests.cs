@@ -24,6 +24,47 @@ public class IdentifierKeyTests
         Assert.That(IdentifierKey.For("\u0130STANBUL", caseExact: false), Is.EqualTo("istanbul"));
     }
 
+    /// <summary>
+    /// The characters outside ASCII that JIM's folding turns into ASCII (#2669), found by folding every character of the
+    /// Basic Multilingual Plane. Reconciliation matches an ASCII reference ignoring case in the database, so a stored value
+    /// carrying one of these is found only if the database's <c>lower()</c> folds it the same way, which is checked once
+    /// per run against <see cref="IdentifierKey.FoldingCheckSample"/>. Should a .NET release fold another character into
+    /// ASCII, this fails, and the sample (built from the same list) carries it.
+    /// </summary>
+    [Test]
+    public void NonAsciiCharactersFoldedToAscii_EveryCharacterFolded_IsTheDottedCapitalIAndTheKelvinSign()
+    {
+        var found = Enumerable.Range(0x80, 0x10000 - 0x80)
+            .Where(code => code is < 0xD800 or > 0xDFFF)
+            .Select(code => (char)code)
+            .Where(character => IdentifierKey.For(character.ToString(), caseExact: false)[0] < 0x80)
+            .ToList();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(found, Is.EqualTo(new[] { '\u0130', '\u212a' }), "The dotted capital I folds to i and the Kelvin sign to k");
+            Assert.That(IdentifierKey.NonAsciiCharactersFoldedToAscii, Is.EqualTo(found));
+        }
+    }
+
+    /// <summary>
+    /// The sample the database's folding is checked against holds every ASCII capital and every character
+    /// <see cref="IdentifierKey.NonAsciiCharactersFoldedToAscii"/> lists, and JIM folds it to ASCII lower case.
+    /// </summary>
+    [Test]
+    public void FoldingCheckSample_HoldsAsciiCapitalsAndNonAsciiFolds_FoldsToAsciiLowerCase()
+    {
+        var sample = IdentifierKey.FoldingCheckSample;
+        var folded = IdentifierKey.For(sample, caseExact: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(sample, Does.Contain("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+            Assert.That(IdentifierKey.NonAsciiCharactersFoldedToAscii.All(sample.Contains), Is.True);
+            Assert.That(folded.All(character => character < 0x80 && !char.IsUpper(character)), Is.True, folded);
+        }
+    }
+
     private static readonly string[][] SamePairsIgnoringCase =
     [
         ["JBloggs", "jbloggs"],
