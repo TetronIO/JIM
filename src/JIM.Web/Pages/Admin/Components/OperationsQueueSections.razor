@@ -327,9 +327,6 @@
     private int _queuedRowBudget = QueueRowBudget.ProvisionalRows;
 
     private bool _observingQueue;
-    // The tables jimCompactFit is watching, by body id: each exists only while it has rows, so it is watched from the
-    // render that draws it and released by the render that removes it, like the Queued row measurement above.
-    private readonly HashSet<string> _compactWatched = [];
     private DotNetObjectReference<OperationsQueueSections>? _selfReference;
     private OperationsActivityFilters? _appliedFilters;
 
@@ -429,42 +426,6 @@
         else if (!tableDrawn && _observingQueue)
         {
             await StopObservingQueueAsync();
-        }
-
-        await SyncCompactWatchAsync(QueuedBodyId, tableDrawn);
-        await SyncCompactWatchAsync(RunningBodyId, _runningRows.Count > 0);
-    }
-
-    /// <summary>
-    /// Sheds the text of a table's chips (an initiator's name) the moment its full-size contents would not fit, as
-    /// the Completed grid does through its CompactWhenCrowded.
-    /// </summary>
-    private async Task SyncCompactWatchAsync(string bodyId, bool tableDrawn)
-    {
-        if (tableDrawn == _compactWatched.Contains(bodyId))
-            return;
-
-        var selector = $"#{bodyId} .mud-table-container";
-        try
-        {
-            if (tableDrawn)
-            {
-                await JS.InvokeVoidAsync("jimCompactFit.watch", selector);
-                _compactWatched.Add(bodyId);
-            }
-            else
-            {
-                _compactWatched.Remove(bodyId);
-                await JS.InvokeVoidAsync("jimCompactFit.unwatch", selector);
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // Prerendering: JS interop is not available yet; the next render watches the table.
-        }
-        catch (JSDisconnectedException)
-        {
-            // The circuit has gone, and the table with it.
         }
     }
 
@@ -751,9 +712,6 @@
 
         if (_observingQueue)
             await StopObservingQueueAsync();
-
-        foreach (var bodyId in _compactWatched.ToList())
-            await SyncCompactWatchAsync(bodyId, tableDrawn: false);
 
         _selfReference?.Dispose();
     }
