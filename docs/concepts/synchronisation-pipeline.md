@@ -84,7 +84,7 @@ Sync is the core phase, where JIM reconciles each Connector Space with the Metav
 
 Inbound sync processes Connected System Objects from source systems and updates the Metaverse. For each one in scope:
 
-1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope is disconnected from its Metaverse Object, unless the rule's [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps the join, or an export rule made the join, in which case only the export rule's scope can end it.
+1. **Scoping**<br /> JIM evaluates the Synchronisation Rule's scoping to decide whether the object should be processed. An object that falls out of scope loses its join unless the [Out-of-Scope Action](../configuration/scoping-criteria.md) keeps it or an export rule made it.
 
 2. **Matching**<br /> JIM looks for the Metaverse Object the object belongs to, using the [Object Matching Rules](../configuration/object-matching-rules.md), which correlate it with an existing Metaverse Object on, say, an employee ID, an email address, or a combination of attributes.
 
