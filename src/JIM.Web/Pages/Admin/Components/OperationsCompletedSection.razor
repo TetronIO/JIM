@@ -638,6 +638,14 @@
     ];
 
     private VirtualisedDataGrid<Activity>? _grid;
+
+    /// <summary>
+    /// The Operations page's demo mode, cascaded from the page: the list shows <see cref="OperationsCompletedDemoData"/>.
+    /// </summary>
+    [CascadingParameter(Name = "OperationsDemoMode")]
+    public bool DemoMode { get; set; }
+
+    private List<Activity>? _demoActivities;
     private bool _panelOpen;
     private Activity? _selectedActivity;
 
@@ -690,6 +698,10 @@
     {
         // The grid loads its own first window as soon as it is in the DOM.
         _appliedFilters = Filters;
+
+        // Demo mode's rows are fixed sample data: nothing changes, so nothing to listen for or poll.
+        if (DemoMode)
+            return;
 
         // Event-driven refresh (issue #307): a Worker Task deletion means a run finished (so history
         // changes) and Activity progress updates drive the in-progress rows; both trigger an immediate
@@ -786,6 +798,9 @@
     /// </summary>
     private async Task<VirtualisedWindow<Activity>> LoadWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
+        if (DemoMode)
+            return LoadDemoWindow(request);
+
         using var jim = JimFactory.Create();
         var result = await jim.Activities.GetActivitiesRangeAsync(
             request.StartIndex,
@@ -810,6 +825,34 @@
             _lastDataFingerprint = BuildFingerprint(result.Results.Take(FingerprintWindowSize));
 
         return new VirtualisedWindow<Activity>(result.Results, result.TotalResults);
+    }
+
+    /// <summary>
+    /// Demo mode's window: the sample Activities, searched and sorted in memory as the database read would.
+    /// </summary>
+    private VirtualisedWindow<Activity> LoadDemoWindow(VirtualisedWindowRequest request)
+    {
+        _demoActivities ??= OperationsCompletedDemoData.Build(DateTime.UtcNow);
+        IEnumerable<Activity> rows = _demoActivities;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(a => new[] { a.TargetName, a.TargetContext, a.InitiatedByName, a.ScheduledByScheduleName }
+                .Any(v => v?.Contains(search, StringComparison.OrdinalIgnoreCase) == true));
+        }
+
+        Func<Activity, object?> key = request.SortBy switch
+        {
+            "status" => a => a.Status,
+            "connectedsystem" => a => a.TargetContext,
+            "target" => a => a.TargetName,
+            "initiatedby" => a => a.ScheduledByScheduleName ?? a.InitiatedByName,
+            "executiontime" => a => a.ExecutionTime,
+            _ => a => a.Created
+        };
+        rows = request.SortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
+        return rows.ToWindow(request);
     }
 
     private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();

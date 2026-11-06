@@ -9,8 +9,6 @@
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
-@inject NavigationManager NavigationManager
-@inject IWebHostEnvironment Environment
 @inject IUiNotificationService UiNotifications
 @inject IActivityEtaTracker EtaTracker
 @inject IJSRuntime JS
@@ -334,25 +332,26 @@
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _demoMode;
 
+    /// <summary>
+    /// The Operations page's demo mode, cascaded from the page.
+    /// </summary>
+    [CascadingParameter(Name = "OperationsDemoMode")]
+    public bool DemoMode { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         using var jim = JimFactory.Create();
 
-        // In development, ?d=true query string activates demo mode with mock data
-        if (Environment.IsDevelopment())
+        // Demo mode (the Operations page's ?d=true, Development only) shows sample queue data.
+        if (DemoMode)
         {
-            var uri = new Uri(NavigationManager.Uri);
-            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-            if (string.Equals(query["d"], "true", StringComparison.OrdinalIgnoreCase))
-            {
-                var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                _demoMode = true;
-                _workerTaskHeaders = OperationsQueueDemoData.Build(user.Id, user.NameOrId);
-                _scheduleProgress = OperationsQueueDemoData.ScheduleProgress(_workerTaskHeaders);
-                _medianDurations = OperationsQueueDemoData.MedianDurations();
-                RebuildRows();
-                return;
-            }
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            _demoMode = true;
+            _workerTaskHeaders = OperationsQueueDemoData.Build(user.Id, user.NameOrId);
+            _scheduleProgress = OperationsQueueDemoData.ScheduleProgress(_workerTaskHeaders);
+            _medianDurations = OperationsQueueDemoData.MedianDurations();
+            RebuildRows();
+            return;
         }
 
         _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();

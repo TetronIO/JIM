@@ -378,6 +378,14 @@
 
     private VirtualisedDataGrid<ScheduleHeader>? _grid;
 
+    /// <summary>
+    /// The Operations page's demo mode, cascaded from the page: the list shows <see cref="OperationsSchedulesDemoData"/>.
+    /// </summary>
+    [CascadingParameter(Name = "OperationsDemoMode")]
+    public bool DemoMode { get; set; }
+
+    private List<ScheduleHeader>? _demoSchedules;
+
     // The Schedule whose executions the dialog is showing. Held as the header rather than the id alone so the
     // dialog title can name it without a second read.
     private ScheduleHeader? _executionsSchedule;
@@ -397,6 +405,9 @@
     /// </summary>
     private async Task<VirtualisedWindow<ScheduleHeader>> LoadScheduleWindowAsync(VirtualisedWindowRequest request, CancellationToken _)
     {
+        if (DemoMode)
+            return LoadDemoWindow(request);
+
         using var jim = JimFactory.Create();
         var result = await jim.Scheduler.GetScheduleHeadersRangeAsync(
             request.StartIndex,
@@ -407,6 +418,42 @@
             request.IncludeTotalCount);
 
         return new VirtualisedWindow<ScheduleHeader>(result.Results, result.TotalResults);
+    }
+
+    /// <summary>
+    /// Demo mode's window: the sample Schedules, searched and sorted in memory as the database read would.
+    /// </summary>
+    private VirtualisedWindow<ScheduleHeader> LoadDemoWindow(VirtualisedWindowRequest request)
+    {
+        _demoSchedules ??= OperationsSchedulesDemoData.Build(DateTime.UtcNow);
+        IEnumerable<ScheduleHeader> rows = _demoSchedules;
+
+        if (!string.IsNullOrWhiteSpace(request.SearchText))
+        {
+            var search = request.SearchText;
+            rows = rows.Where(h => h.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || h.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        Func<ScheduleHeader, object?> key = request.SortBy switch
+        {
+            "nextruntime" => h => h.NextRunTime,
+            "lastruntime" => h => h.LastRunTime,
+            "status" => h => h.IsEnabled,
+            _ => h => h.Name
+        };
+        rows = request.SortDescending ? rows.OrderByDescending(key) : rows.OrderBy(key);
+        return rows.ToWindow(request);
+    }
+
+    /// <summary>
+    /// Demo mode's answer to any action that would read or change a real Schedule: its Schedules exist only on screen.
+    /// </summary>
+    private bool RefuseInDemoMode()
+    {
+        if (DemoMode)
+            Snackbar.Add("Not available in demo mode: these Schedules are sample data.", Severity.Info);
+        return DemoMode;
     }
 
     /// <summary>
@@ -445,6 +492,9 @@
 
     private void OpenExecutionsDialog(ScheduleHeader header)
     {
+        if (RefuseInDemoMode())
+            return;
+
         _executionsSchedule = header;
         _executionsDialogVisible = true;
     }
@@ -464,11 +514,17 @@
 
     private async Task HandleRowClicked(ScheduleHeader header)
     {
+        if (RefuseInDemoMode())
+            return;
+
         await OpenScheduleEditorAsync(header.Id);
     }
 
     private async Task HandleCreateScheduleAsync()
     {
+        if (RefuseInDemoMode())
+            return;
+
         await OpenScheduleEditorAsync(null);
     }
 
@@ -501,6 +557,9 @@
 
     private async Task HandleToggleEnabledAsync(ScheduleHeader header)
     {
+        if (RefuseInDemoMode())
+            return;
+
         using var jim = JimFactory.Create();
 
         // The table holds lightweight projections, so the Schedule itself is re-loaded before it is mutated and
@@ -532,6 +591,9 @@
 
     private async Task HandleRunNowAsync(ScheduleHeader header)
     {
+        if (RefuseInDemoMode())
+            return;
+
         if (header.StepCount == 0)
         {
             Snackbar.Add("Cannot run a schedule with no steps.", Severity.Warning);
@@ -596,6 +658,9 @@
 
     private async Task HandleDeleteAsync(ScheduleHeader header)
     {
+        if (RefuseInDemoMode())
+            return;
+
         // Built-in schedules cannot be deleted (the delete affordance is already locked for them; this is the
         // defence-in-depth guard so the application layer never throws into the circuit).
         if (header.BuiltIn)

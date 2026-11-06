@@ -328,6 +328,12 @@ An explanatory tooltip that runs as one long line is hard to read and stretches 
 
 A single-sentence description needs none of this and renders unchanged. The site-wide `24rem` measure cap and left-alignment (`site.css` > "Tooltip measure") is what keeps a long *single* sentence from running off the page; MudBlazor sets no `max-width` on `.mud-tooltip` at all.
 
+## Operations demo mode
+
+**`/admin/operations?d=true`, in Development only, fills every section of the Operations page's Activity and Schedules tabs with sample data**, so a layout can be judged fully populated without a worker: the Service Health strip, the tab badges, Queued, In Progress, Completed and the Schedules list. The page reads the flag once and cascades it as `OperationsDemoMode`; no section reads the query string itself. The data lives in `Operations*DemoData` beside the components, and actions that would read or change a real Schedule are refused with a notice.
+
+`OperationsDemoDataTests` fails when a new outcome counter, Activity status, run type, initiator kind, Schedule status, trigger pattern, service or health status has no demo coverage, so add it to the demo data in the same change that adds it to the page.
+
 ## Configuration Change Preview panels
 
 **Every editing surface that opens a `<ConfigurationChangePreviewPanel />` passes `OnClose`.** Point it at the surface's existing `Discard...Preview()` method (the one that forgets the Activity id, the previewed proposal and the last read), so closing removes the panel and the save confirmation stops citing the preview. The panel renders the close control only when the callback is set, so the one surface that shows a preview as a record rather than as a question, the Activity page, leaves it unset. A running preview closed this way is not cancelled; it finishes as an Activity. The affordance itself is covered by `ConfigurationChangePreviewPanelTests`; the wiring is a convention, so check it by reading the panel's call sites (`grep -n "<ConfigurationChangePreviewPanel" -A4`).
