@@ -334,7 +334,47 @@ public class SyncServer : ISyncServer
             _jim.ConnectedSystems.LinkDeleteChangeRecords(connectedSystemObjects, rpeis, changeTrackingEnabled);
         }
 
+        // Each Deleted change record belongs to the execution item reporting the deletion, by a foreign key, so the
+        // items are given their ids now (time-ordered, as the records' are) and their rows are written with the records.
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ActivityId == Guid.Empty && rpei.Activity != null)
+                rpei.ActivityId = rpei.Activity.Id;
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = ChangeRecordIds.New();
+            if (rpei.ConnectedSystemObjectChange != null)
+                rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+        }
+
+        // The deletions, their execution items and their Deleted change records in one transaction (#2807): a failure
+        // between them must not leave objects gone with no record of their going. Only the items' own rows are written
+        // here; the page's execution item flush writes the rest of each item later (the outcomes the Metaverse Object
+        // deletion flush goes on to add to it among them), told these rows exist. A caller already holding a
+        // transaction keeps it.
+        await using var transaction = await _syncRepo.BeginTransactionAsync();
+
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
+
+        using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionPersistExecutionItems").SetTag("rpeiCount", rpeis.Count))
+            await _syncRepo.InsertRpeiRowsAsync(rpeis);
+
+        var deletionRecords = rpeis.Where(r => r.ConnectedSystemObjectChange != null).ToList();
+        if (deletionRecords.Count > 0)
+        {
+            using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionPersistChangeRecords")
+                .SetTag("recordCount", deletionRecords.Count)
+                .SetTag("attributeChangeCount", deletionRecords.Sum(r => r.ConnectedSystemObjectChange!.AttributeChanges.Count))
+                .SetTag("valueCount", deletionRecords.Sum(r => r.ConnectedSystemObjectChange!.AttributeChanges.Sum(a => a.ValueChanges.Count))))
+            {
+                await _syncRepo.PersistRpeiCsoChangesAsync(deletionRecords);
+            }
+        }
+
+        if (transaction != null)
+        {
+            using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionCommit").SetTag("csoCount", connectedSystemObjects.Count))
+                await transaction.CommitAsync();
+        }
     }
 
     public async Task DeleteConnectedSystemObjectsQuietlyAsync(List<ConnectedSystemObject> connectedSystemObjects, Activity activity)

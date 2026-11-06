@@ -33,16 +33,27 @@ public partial class SyncRepository
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public async Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis, IReadOnlySet<Guid>? rowsAlreadyWritten = null)
     {
         if (rpeis.Count == 0)
             return true;
 
-        // Pre-generate IDs for all RPEIs (bypasses EF ValueGeneratedOnAdd)
+        // Pre-generate IDs for all RPEIs (bypasses EF ValueGeneratedOnAdd); time-ordered, so the rows land on the
+        // growing end of each index rather than a random page of it (#2807).
         foreach (var rpei in rpeis)
         {
             if (rpei.Id == Guid.Empty)
-                rpei.Id = Guid.NewGuid();
+                rpei.Id = ChangeRecordIds.New();
+        }
+
+        // Items whose own rows a deletion's transaction wrote already (#2807): everything else of theirs is written here
+        // as for any other item, and their rows only brought up to date, since outcomes were added after the delete.
+        var rowsToInsert = rpeis;
+        List<ActivityRunProfileExecutionItem> rowsToUpdate = [];
+        if (rowsAlreadyWritten is { Count: > 0 })
+        {
+            rowsToInsert = rpeis.Where(r => !rowsAlreadyWritten.Contains(r.Id)).ToList();
+            rowsToUpdate = rpeis.Where(r => rowsAlreadyWritten.Contains(r.Id)).ToList();
         }
 
         // Increase command timeout for large RPEI persistence. With 5K+ RPEIs, the bulk
@@ -93,16 +104,31 @@ public partial class SyncRepository
             Log.Information("BulkInsertRpeisAsync: Writing {RpeiCount} RPEIs and {OutcomeCount} outcomes across {Parallelism} parallel connections",
                 rpeis.Count, allOutcomes.Count, parallelism);
 
-            await ParallelBatchWriter.ExecuteAsync(
-                rpeis,
-                parallelism,
-                connectionString,
-                async (connection, partition) =>
-                {
-                    await using var tx = await connection!.BeginTransactionAsync();
-                    await BulkInsertRpeisOnConnectionAsync(connection, tx, partition.ToList());
-                    await tx.CommitAsync();
-                });
+            if (rowsToInsert.Count > 0)
+            {
+                await ParallelBatchWriter.ExecuteAsync(
+                    rowsToInsert,
+                    parallelism,
+                    connectionString,
+                    async (connection, partition) =>
+                    {
+                        await using var tx = await connection!.BeginTransactionAsync();
+                        await BulkInsertRpeisOnConnectionAsync(connection, tx, partition.ToList());
+                        await tx.CommitAsync();
+                    });
+            }
+
+            // Step 1b: bring the rows written already up to date, on the main EF connection. Its temporary table lives
+            // for one transaction, so the update has one of its own unless the caller holds one.
+            if (rowsToUpdate.Count > 0)
+            {
+                await using var updateTransaction = _context.Database.CurrentTransaction == null
+                    ? await _context.Database.BeginTransactionAsync()
+                    : null;
+                await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
+                if (updateTransaction != null)
+                    await updateTransaction.CommitAsync();
+            }
 
             // Step 2: Persist CSO change records via raw SQL (same approach as PersistRpeiCsoChangesAsync).
             // EF AddRange + SaveChangesAsync is not safe here: it traverses navigation properties into
@@ -175,7 +201,12 @@ public partial class SyncRepository
                 await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
                 var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
 
-                await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rpeis);
+                if (rowsToInsert.Count > 0)
+                    await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rowsToInsert);
+
+                // The rows a deletion's transaction wrote already, brought up to date (#2807).
+                if (rowsToUpdate.Count > 0)
+                    await BulkUpdateRpeiFieldsRawAsync(rowsToUpdate);
 
                 if (outcomeCsoChanges.Count > 0)
                 {
@@ -220,6 +251,34 @@ public partial class SyncRepository
 
         _context.Database.SetCommandTimeout(previousTimeout);
         return true; // Raw SQL used — RPEIs persisted outside EF change tracker
+    }
+
+    /// <inheritdoc />
+    public async Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        if (rpeis.Count == 0)
+            return;
+
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ActivityId == Guid.Empty)
+                throw new InvalidOperationException(
+                    "InsertRpeiRowsAsync: every execution item must carry its Activity's id before its row is written.");
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = ChangeRecordIds.New();
+        }
+
+        // On the context's own connection, so the rows join whatever transaction the caller holds: a deletion's, whose
+        // change records name these items (#2807). Without one, the rows get a transaction of their own.
+        await using var transaction = _context.Database.CurrentTransaction == null
+            ? await _context.Database.BeginTransactionAsync()
+            : null;
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction)_context.Database.CurrentTransaction!.GetDbTransaction();
+        await BulkInsertRpeisOnConnectionAsync(npgsqlConn, npgsqlTx, rpeis);
+        if (transaction != null)
+            await transaction.CommitAsync();
     }
 
     public void DetachRpeisFromChangeTracker(List<ActivityRunProfileExecutionItem> rpeis)
@@ -898,7 +957,7 @@ public partial class SyncRepository
             foreach (var candidate in rpei.MatchCandidates)
             {
                 if (candidate.Id == Guid.Empty)
-                    candidate.Id = Guid.NewGuid();
+                    candidate.Id = ChangeRecordIds.New();
                 candidate.ActivityRunProfileExecutionItemId = rpei.Id;
             }
 
@@ -1197,7 +1256,7 @@ public partial class SyncRepository
         foreach (var outcome in outcomes)
         {
             if (outcome.Id == Guid.Empty)
-                outcome.Id = Guid.NewGuid();
+                outcome.Id = ChangeRecordIds.New();
 
             outcome.ActivityRunProfileExecutionItemId = rpeiId;
             outcome.ParentSyncOutcomeId = parentId;

@@ -729,8 +729,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId)
         => throw new PreviewWriteAttemptedException(nameof(RecordExclusionDiscardCountsAsync));
 
-    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis, IReadOnlySet<Guid>? rowsAlreadyWritten = null)
         => throw new PreviewWriteAttemptedException(nameof(BulkInsertRpeisAsync));
+
+    public Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis)
+        => throw new PreviewWriteAttemptedException(nameof(InsertRpeiRowsAsync));
 
     public Task BulkUpdateRpeiOutcomesAsync(List<ActivityRunProfileExecutionItem> rpeis, List<ActivityRunProfileExecutionItemSyncOutcome> newOutcomes)
         => throw new PreviewWriteAttemptedException(nameof(BulkUpdateRpeiOutcomesAsync));

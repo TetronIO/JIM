@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Servers;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -343,11 +344,25 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
 
     #region Callers
 
-    [Test]
-    public async Task DeleteConnectedSystemObjectsAsync_ExecutionItemPath_DeletesTheObjectsAndPersistsTheirRecordsWithTheirItemsAsync()
+    /// <summary>
+    /// The synchronisation's deletion of objects that left their Connected System: the delete writes each object's
+    /// execution item and deletion record with it (#2807), and the page's execution item flush, run afterwards as
+    /// <c>FlushRpeisAsync</c> runs it, writes the rest of each item (the outcomes the Metaverse Object deletion flush
+    /// hung on it in between, its summary) without writing the item or its record a second time. Both of the flush's
+    /// write paths, since the parallel one writes the items on connections of its own.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task DeleteConnectedSystemObjectsAsync_ExecutionItemPath_WritesItemsAndRecordsWithTheDeleteAndTheFlushCompletesThemAsync(bool parallel)
     {
+        using var parallelPath = parallel ? ParallelWritePathScope.Enter() : null;
+        var count = parallel ? ParallelWritePathScope.Threshold : 3;
+        if (parallel)
+            ParallelWritePathScope.AssertEngaged(count);
+
         var schema = await SeedSchemaAsync();
-        var objectIds = await SeedObjectsWithValuesAsync(schema, 3);
+        var objectIds = await SeedObjectsWithValuesAsync(schema, count);
+        string? expectedSummary;
         Guid activityId;
         await using (var seed = NewContext())
         {
@@ -367,7 +382,7 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
                 .Where(c => ids.Contains(c.Id))
                 .ToListAsync();
             var activity = new JimActivity { Id = activityId, InitiatedByType = ActivityInitiatorType.System, InitiatedByName = "Scheduler" };
-            // As the obsoletion handling queues them: one execution item per object, naming it.
+            // As the obsoletion handling queues them: one execution item per object, naming it, with its outcome.
             var items = objects.Select(cso =>
             {
                 var item = activity.PrepareRunProfileExecutionItem();
@@ -375,18 +390,25 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
                 item.ConnectedSystemObjectId = cso.Id;
                 item.ObjectChangeType = ObjectChangeType.Deleted;
                 item.SnapshotCsoDisplayFields(cso);
+                SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                    targetEntityId: cso.Id, targetEntityDescription: cso.NameOrId);
+                SyncOutcomeBuilder.BuildOutcomeSummary(item);
                 return item;
             }).ToList();
 
             using var jim = new JimApplication(repository, syncRepository: repository.Sync);
             await new SyncServer(jim).DeleteConnectedSystemObjectsAsync(objects, items);
 
-            // Then the page's execution item flush, as FlushRpeisAsync writes them: the items, then each record under the
-            // id its item was given.
-            await repository.Sync.BulkInsertRpeisAsync(items);
+            // Then the Metaverse Object deletion flush hangs a consequence on each item, as it hangs a deprovisioning
+            // Pending Export under the deletion that caused it, and the page's execution item flush writes the lot.
             foreach (var item in items)
-                item.ConnectedSystemObjectChange!.ActivityRunProfileExecutionItemId = item.Id;
-            await repository.Sync.PersistRpeiCsoChangesAsync(items);
+            {
+                SyncOutcomeBuilder.AddChildOutcome(item, item.SyncOutcomes.Single(),
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, targetEntityDescription: "Downstream");
+                SyncOutcomeBuilder.BuildOutcomeSummary(item);
+            }
+            expectedSummary = items[0].OutcomeSummary;
+            await repository.Sync.BulkInsertRpeisAsync(items, items.Select(i => i.Id).ToHashSet());
         }
 
         await using var verify = NewContext();
@@ -397,13 +419,28 @@ public class ConnectedSystemObjectBatchDeletionDatabaseTests
             .Where(c => c.DeletedConnectedSystemObjectId.HasValue && deletedIds.Contains(c.DeletedConnectedSystemObjectId.Value))
             .ToListAsync();
         var persistedItems = await verify.ActivityRunProfileExecutionItems.AsNoTracking().Where(i => i.ActivityId == activityId).ToListAsync();
+        var persistedItemIds = persistedItems.Select(i => i.Id).ToArray();
+        var outcomes = await verify.ActivityRunProfileExecutionItemSyncOutcomes.AsNoTracking()
+            .Where(o => persistedItemIds.Contains(o.ActivityRunProfileExecutionItemId))
+            .ToListAsync();
+        var deletedKey = ((int)ObjectChangeType.Deleted).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var deletedCounter = await verify.ActivityStatCounters.AsNoTracking()
+            .Where(c => c.ActivityId == activityId && c.Dimension == ActivityStatDimension.ObjectChangeType && c.Key == deletedKey)
+            .Select(c => c.Count)
+            .SingleOrDefaultAsync();
         using (Assert.EnterMultipleScope())
         {
             Assert.That(await verify.ConnectedSystemObjects.CountAsync(c => deletedIds.Contains(c.Id)), Is.Zero, "the objects are deleted");
-            Assert.That(persistedItems, Has.Count.EqualTo(objectIds.Count), "one execution item each");
+            Assert.That(persistedItems, Has.Count.EqualTo(count), "one execution item each, written once");
             Assert.That(persistedItems.Select(i => i.ConnectedSystemObjectId), Is.EquivalentTo(objectIds.Select(id => (Guid?)id)),
                 "each item keeps the id of the object it deleted, as history (#2669)");
-            Assert.That(records, Has.Count.EqualTo(objectIds.Count), "one deletion record each");
+            Assert.That(expectedSummary, Is.Not.Null, "precondition: the outcomes make a summary");
+            Assert.That(persistedItems.Select(i => i.OutcomeSummary), Is.All.EqualTo(expectedSummary),
+                "the flush brings each item's summary up to date with the outcome added after the delete");
+            Assert.That(outcomes, Has.Count.EqualTo(count * 2), "each item's outcome tree is written, the outcome added after the delete included");
+            Assert.That(outcomes.Count(o => o.ParentSyncOutcomeId != null), Is.EqualTo(count), "each added outcome keeps its parent");
+            Assert.That(deletedCounter, Is.EqualTo(count), "each item is counted once");
+            Assert.That(records, Has.Count.EqualTo(count), "one deletion record each, written once");
             Assert.That(records.Select(r => r.ConnectedSystemObjectId), Is.EquivalentTo(objectIds.Select(id => (Guid?)id)),
                 "each deletion record names its object by its subject id");
             Assert.That(records.Select(r => r.ChangeType).Distinct(), Is.EqualTo(new[] { ObjectChangeType.Deleted }));

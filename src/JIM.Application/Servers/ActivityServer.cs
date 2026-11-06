@@ -260,7 +260,7 @@ public partial class ActivityServer
         foreach (var item in items)
         {
             if (item.Id == Guid.Empty)
-                item.Id = Guid.NewGuid();
+                item.Id = ChangeRecordIds.New();
             item.Activity = activity;
             item.ActivityId = activity.Id;
             activity.RunProfileExecutionItems.Add(item);

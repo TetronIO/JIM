@@ -50,6 +50,18 @@ public class ChangeRecordIdVersionDatabaseTests
         """SELECT "ConnectedSystemObjectChangeAttributeId" FROM "ConnectedSystemObjectChangeAttributeValues" """
     ];
 
+    /// <summary>
+    /// The execution item tables (#2807): the items themselves, their outcome trees and their ambiguous match candidates.
+    /// </summary>
+    private static readonly string[] ExecutionItemIdColumns =
+    [
+        """SELECT "Id" FROM "ActivityRunProfileExecutionItems" """,
+        """SELECT "Id" FROM "ActivityRunProfileExecutionItemSyncOutcomes" """,
+        """SELECT "ActivityRunProfileExecutionItemId" FROM "ActivityRunProfileExecutionItemSyncOutcomes" """,
+        """SELECT "Id" FROM "ActivityRunProfileExecutionItemMatchCandidates" """,
+        """SELECT "ActivityRunProfileExecutionItemId" FROM "ActivityRunProfileExecutionItemMatchCandidates" """
+    ];
+
     private string _connectionString = null!;
     private MetaverseObjectType _personType = null!;
     private MetaverseAttribute _displayName = null!;
@@ -226,6 +238,59 @@ public class ChangeRecordIdVersionDatabaseTests
             await new PostgresDataRepository(ctx).Activity.CreateActivityRunProfileExecutionItemsAsync([item]);
 
         await AssertEveryIdIsVersion7Async(CsoChangeIdColumns, expectedRows: 1);
+    }
+
+    /// <summary>
+    /// The execution item writer gives the items it writes, their outcomes and their match candidates time-ordered ids
+    /// (#2807), on both its single-connection path and its parallel one: the execution item tables grow with every run,
+    /// as the change tables do.
+    /// </summary>
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task BulkInsertRpeisAsync_ItemsWithOutcomesAndCandidates_WritesVersion7IdsAsync(bool parallel)
+    {
+        using var parallelPath = parallel ? ParallelWritePathScope.Enter() : null;
+        var count = parallel ? ParallelWritePathScope.Threshold : 3;
+        if (parallel)
+            ParallelWritePathScope.AssertEngaged(count);
+
+        var items = Enumerable.Range(0, count).Select(i =>
+        {
+            var item = new ActivityRunProfileExecutionItem
+            {
+                ActivityId = _activityId,
+                ObjectChangeType = ObjectChangeType.NoChange,
+                ErrorType = ActivityRunProfileExecutionItemErrorType.AmbiguousMatch
+            };
+            var root = new ActivityRunProfileExecutionItemSyncOutcome
+            {
+                ActivityRunProfileExecutionItem = item,
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected
+            };
+            var child = new ActivityRunProfileExecutionItemSyncOutcome
+            {
+                ActivityRunProfileExecutionItem = item,
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+                ParentSyncOutcome = root
+            };
+            root.Children.Add(child);
+            item.SyncOutcomes.Add(root);
+            item.SyncOutcomes.Add(child);
+            item.MatchCandidates.Add(new ActivityRunProfileExecutionItemMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.MetaverseObject,
+                CandidateId = Guid.NewGuid(),
+                DisplayNameSnapshot = $"Candidate {i}",
+                Ordinal = 1,
+                CandidateTotal = 1
+            });
+            return item;
+        }).ToList();
+
+        await using (var ctx = NewContext())
+            await new PostgresDataRepository(ctx).Sync.BulkInsertRpeisAsync(items);
+
+        await AssertEveryIdIsVersion7Async(ExecutionItemIdColumns, expectedRows: count);
     }
 
     private MetaverseObjectChange MvoChange(string displayName)

@@ -5,6 +5,7 @@ using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Sync;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Services;
 
@@ -107,7 +108,7 @@ public static class MetaverseObjectDeletionRuleApplier
         ArgumentNullException.ThrowIfNull(schedulingItem);
 
         if (schedulingItem.Id == Guid.Empty)
-            schedulingItem.Id = Guid.NewGuid();
+            schedulingItem.Id = ChangeRecordIds.New();
         mvo.DeletionScheduledByRunProfileExecutionItemId = schedulingItem.Id;
     }
 
@@ -124,7 +125,7 @@ public static class MetaverseObjectDeletionRuleApplier
         ArgumentNullException.ThrowIfNull(deletingItem);
 
         if (deletingItem.Id == Guid.Empty)
-            deletingItem.Id = Guid.NewGuid();
+            deletingItem.Id = ChangeRecordIds.New();
         mvo.DeletingRunProfileExecutionItemId = deletingItem.Id;
     }
 
