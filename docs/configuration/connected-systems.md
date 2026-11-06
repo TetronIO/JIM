@@ -95,7 +95,7 @@ A saved configuration change reaches existing objects only when a synchronisatio
 
 ### Changes the next synchronisation applies
 
-Saving an import Synchronisation Rule, an Object Matching Rule or an Attribute Priority order records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing one row per rule changed: what was done to it, when it was last changed and by whom. Expand a row to see each change, linked to its Activity. **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip counting the changes waiting, and the rule shows an **Awaiting synchronisation** chip.
+Saving an import Synchronisation Rule, an Object Matching Rule or an Attribute Priority order records the change as awaiting synchronisation for the Connected System Object Type it affects. The Connected System's page shows one notice per Object Type, **Changes awaiting synchronisation: {Type}**, listing one row per changed rule, expanding to each change's Activity. **Run now** opens the queue dialog with the Delta Synchronisation Run Profile chosen, or the Full Synchronisation one where the system has no Delta; you can pick another. The Connected Systems list marks the system with a chip counting the changes waiting, and the rule shows an **Awaiting synchronisation** chip.
 
 The Connected System's next synchronisation, Delta or Full, processes every object of that Object Type and only the changed objects of the others, then marks the changes applied:
 
@@ -105,7 +105,7 @@ The Connected System's next synchronisation, Delta or Full, processes every obje
 - **The cost is the whole Object Type**<br /> On a large Object Type, the next Delta Synchronisation takes as long as processing every object of that type. The notice gives the object count: run it in a quiet period, or choose **Run now** to start it straight away.
 - **Export follows on its own**<br /> Every Metaverse Object the Object Type joins or projects is processed too, so export evaluation runs on them as usual.
 
-The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it, one row per rule as on the Connected System page, with **Changes applied** or **Changes not applied** beside its heading once the run has finished. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
+The synchronisation's Activity has a section, **Processed every {Type} object**, listing the changes behind it and whether it applied them. Each change's own Activity says **Applied by** that run, or **Awaiting the next synchronisation** of the system.
 
 ### Changes pending a Full Synchronisation
 
