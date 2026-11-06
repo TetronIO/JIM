@@ -6,6 +6,7 @@ using Bunit;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Tests;
@@ -224,5 +225,27 @@ public class InitiatorChipTests : JimComponentTestContext
             .Add(c => c.ChangeInitiatorType, MetaverseObjectChangeInitiatorType.System));
 
         Assert.That(cut.FindAll("[data-testid=jim-initiator-system]"), Has.Count.EqualTo(1));
+    }
+
+    [TestCase(ActivityInitiatorType.ApiKey, "Infrastructure Key", "API Key: Infrastructure Key")]
+    [TestCase(ActivityInitiatorType.System, null, "System")]
+    public void Render_Tooltip_SaysWhatKindOfInitiatorItIs(ActivityInitiatorType type, string? name, string expected)
+    {
+        // A crowded list shows the chip's tag alone, so the tooltip has to say what the name is a name of.
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, type)
+            .Add(c => c.InitiatedByName, name));
+
+        Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Render_ScheduleTooltip_SaysItIsASchedule()
+    {
+        var cut = Render<InitiatorChip>(p => p
+            .Add(c => c.InitiatedByType, ActivityInitiatorType.System)
+            .Add(c => c.ScheduleName, "Nightly HR sync"));
+
+        Assert.That(cut.FindComponent<MudTooltip>().Instance.Text, Is.EqualTo("Schedule: Nightly HR sync"));
     }
 }

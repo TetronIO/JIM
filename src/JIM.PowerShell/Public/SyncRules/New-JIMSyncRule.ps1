@@ -54,8 +54,9 @@ function New-JIMSyncRule {
         Returns the rule created.
 
     .OUTPUTS
-        With -PassThru, the rule created; otherwise nothing. A deletion source warning is written to the warning
-        stream either way. AwaitingSynchronisation lists the Connected System Object Type an enabled import rule makes
+        With -PassThru, the rule created; otherwise nothing. Either way, any warning the save raised (for example, an
+        Attribute Flow expression that reads an attribute the Object Type does not have) and any deletion source warning
+        are written to the warning stream. AwaitingSynchronisation lists the Connected System Object Type an enabled import rule makes
         its Connected System's next synchronisation process in full, with how many objects that is and about how long it
         takes; it is empty for an export rule and for a rule created disabled, and a warning saying the same is written to
         the warning stream.
@@ -185,6 +186,11 @@ function New-JIMSyncRule {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules" -Method 'POST' -Body $body
 
                 Write-Verbose "Created Synchronisation Rule: $($result.id) ($($result.name))"
+
+                # Non-blocking warnings the save raised; the rule was created, and each is written as the server phrased it.
+                foreach ($saveWarning in @($result.Warnings | Where-Object { $_ })) {
+                    Write-Warning $saveWarning
+                }
 
                 # The new rule projects into a Metaverse Object Type deleted When Authoritative Source Disconnected, from a
                 # system that is not one of its authoritative sources (#1256): reported, never blocking.

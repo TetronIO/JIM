@@ -430,6 +430,23 @@ Describe 'New-JIMSyncRule' {
         }
     }
 
+    Context 'Save warnings' {
+
+        It 'Writes each save warning the create returned, as Set-JIMSyncRule does' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $brokenFlow = "The expression for 'Display Name' reads cs[""surname""], which is not an attribute of 'user', so it never has a value."
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test'; Warnings = @($brokenFlow) } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Confirm:$false `
+                    -WarningVariable saveWarnings -WarningAction SilentlyContinue | Out-Null
+
+                $saveWarnings | Should -HaveCount 1
+                $saveWarnings[0].Message | Should -Be $brokenFlow
+            }
+        }
+    }
+
     Context 'Deletion source warning (#1256)' {
 
         It 'Surfaces the deletion source warning the API attaches as a warning' {

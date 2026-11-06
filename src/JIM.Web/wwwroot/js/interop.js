@@ -629,3 +629,69 @@ window.jimExpressionAssist = {
         delete textarea._jimAssist;
     }
 };
+
+// Compact-when-crowded tables (VirtualisedDataGrid's CompactWhenCrowded). A table's Outcomes and Initiated By chips
+// shed their text, keeping their icons and tags, the moment the table's full-size contents would overflow its
+// container. A fixed breakpoint cannot decide this: how wide the Outcomes column needs to be depends on the rows (one
+// import chip, or eleven synchronisation chips), so a fixed width collapses too early for quiet runs and too late for
+// busy ones. The state is a data attribute rather than a class because Blazor owns the container's class list and
+// would overwrite a class on its next render; it never touches an attribute it did not render.
+window.jimCompactFit = {
+    _watched: {},
+    watch: function (selector) {
+        window.jimCompactFit.unwatch(selector);
+        var element = document.querySelector(selector);
+        if (!element) return false;
+
+        var entry = { element: element, frame: null, compactAt: null };
+        var crowded = function () { return element.scrollWidth > element.clientWidth + 1; };
+        entry.apply = function () {
+            var width = element.clientWidth;
+            if (entry.compactAt !== null) {
+                // Sticky: once compact, stay compact until the table is wider than where it last overflowed, so a
+                // busy row scrolling in and out of the window cannot flip the whole table back and forth.
+                if (width <= entry.compactAt) return;
+                element.removeAttribute('data-jim-compact');
+                if (crowded()) {
+                    element.setAttribute('data-jim-compact', '');
+                    entry.compactAt = width;
+                } else {
+                    entry.compactAt = null;
+                }
+                return;
+            }
+            if (crowded()) {
+                element.setAttribute('data-jim-compact', '');
+                entry.compactAt = width;
+            }
+        };
+        // Once per animation frame. Trying the full-size layout, measuring and settling all happen inside one frame,
+        // so the reader never sees the table flash full size.
+        entry.handler = function () {
+            if (entry.frame) return;
+            entry.frame = window.requestAnimationFrame(function () {
+                entry.frame = null;
+                entry.apply();
+            });
+        };
+
+        entry.apply();
+        // The container's width changes with the window, the nav drawer and the side panel; its rows change as the
+        // virtualiser loads windows while the reader scrolls. Either can be the thing that stops the table fitting.
+        entry.resizeObserver = new ResizeObserver(entry.handler);
+        entry.resizeObserver.observe(element);
+        entry.mutationObserver = new MutationObserver(entry.handler);
+        entry.mutationObserver.observe(element, { childList: true, subtree: true });
+        window.jimCompactFit._watched[selector] = entry;
+        return true;
+    },
+    unwatch: function (selector) {
+        var entry = window.jimCompactFit._watched[selector];
+        if (!entry) return;
+
+        if (entry.frame) window.cancelAnimationFrame(entry.frame);
+        entry.resizeObserver.disconnect();
+        entry.mutationObserver.disconnect();
+        delete window.jimCompactFit._watched[selector];
+    }
+};

@@ -25,7 +25,7 @@
    loading) lives in the shared grid; this section supplies the columns, the window loader and the empty states. The
    columns take the widths Queued and In progress use, so the three sections line up. The URL parameters are
    prefixed so this grid's state cannot collide with the Schedules tab's on the shared page URL. *@
-<VirtualisedDataGrid @ref="_grid" T="Activity"
+<VirtualisedDataGrid @ref="_grid" T="Activity" CompactWhenCrowded="true"
                      ContainerId="operations-history"
                      UrlParameterPrefix="h-"
                      DefaultSortBy="created"
@@ -119,154 +119,74 @@
                             {
                                 @if (activity.TotalAdded > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects added" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Success" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" Class="jim-stat-chip">
-                                            @activity.TotalAdded.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects added" Count="@activity.TotalAdded" Color="Color.Success" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Added)" />
                                 }
                                 @if (activity.TotalUpdated > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects updated" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" Class="jim-stat-chip">
-                                            @activity.TotalUpdated.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects updated" Count="@activity.TotalUpdated" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Updated)" />
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="Connected System Object deletions detected" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                            @activity.TotalDeleted.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Object deletions detected" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
                                 }
                             }
                             else if (runType == "Sync")
                             {
                                 @if (activity.TotalProjected > 0)
                                 {
-                                    <MudTooltip Text="Metaverse Objects projected" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" Class="jim-stat-chip">
-                                            @activity.TotalProjected.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Metaverse Objects projected" Count="@activity.TotalProjected" Color="Color.Primary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Projected)" />
                                 }
                                 @if (activity.TotalJoined > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects joined" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Secondary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" Class="jim-stat-chip">
-                                            @activity.TotalJoined.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects joined" Count="@activity.TotalJoined" Color="Color.Secondary" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Joined)" />
                                 }
                                 @if (activity.TotalAttributeFlows > 0)
                                 {
-                                    <MudTooltip Text="Metaverse Objects with Attribute Flow" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" Class="jim-stat-chip">
-                                            @activity.TotalAttributeFlows.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Metaverse Objects with Attribute Flow" Count="@activity.TotalAttributeFlows" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.AttributeFlow)" />
                                 }
                                 @if (activity.TotalDisconnected > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects disconnected" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" Class="jim-stat-chip">
-                                            @activity.TotalDisconnected.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects disconnected" Count="@activity.TotalDisconnected" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Disconnected)" />
                                 }
                                 @if (activity.TotalDisconnectedOutOfScope > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects disconnected (out of scope)" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
-                                            @activity.TotalDisconnectedOutOfScope.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects disconnected (out of scope)" Count="@activity.TotalDisconnectedOutOfScope" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" />
                                 }
                                 @if (activity.TotalOutOfScopeRetainJoin > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects out of scope (join retained)" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
-                                            @activity.TotalOutOfScopeRetainJoin.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects out of scope (join retained)" Count="@activity.TotalOutOfScopeRetainJoin" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" />
                                 }
                                 @if (activity.TotalDeleted > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects deleted" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" Class="jim-stat-chip">
-                                            @activity.TotalDeleted.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects deleted" Count="@activity.TotalDeleted" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deleted)" />
                                 }
                                 @if (activity.TotalDriftCorrections > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects drift corrected" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" Class="jim-stat-chip">
-                                            @activity.TotalDriftCorrections.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects drift corrected" Count="@activity.TotalDriftCorrections" Color="Color.Warning" Icon="@Helpers.GetOperationIcon(ObjectChangeType.DriftCorrection)" />
                                 }
                                 @if (activity.TotalProvisioned > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects provisioned" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" Class="jim-stat-chip">
-                                            @activity.TotalProvisioned.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects provisioned" Count="@activity.TotalProvisioned" Color="Color.Primary" Icon="@Helpers.GetOutcomeTypeIcon(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned)" />
                                 }
                                 @if (activity.TotalPendingExports > 0)
                                 {
-                                    <MudTooltip Text="Connected System Object Pending Exports" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" Class="jim-stat-chip">
-                                            @activity.TotalPendingExports.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Object Pending Exports" Count="@activity.TotalPendingExports" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.PendingExport)" />
                                 }
                             }
                             else if (runType == "Export")
                             {
                                 @if (activity.TotalExported > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects exported" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" Class="jim-stat-chip">
-                                            @activity.TotalExported.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects exported" Count="@activity.TotalExported" Color="Color.Info" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Exported)" />
                                 }
                                 @if (activity.TotalDeprovisioned > 0)
                                 {
-                                    <MudTooltip Text="Connected System Objects deprovisioned" Arrow="true" Placement="Placement.Top">
-                                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
-                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" Class="jim-stat-chip">
-                                            @activity.TotalDeprovisioned.ToString("N0")
-                                        </MudChip>
-                                    </MudTooltip>
+                                    <StatChip Label="Connected System Objects deprovisioned" Count="@activity.TotalDeprovisioned" Color="Color.Error" Icon="@Helpers.GetOperationIcon(ObjectChangeType.Deprovisioned)" />
                                 }
                             }
                             @if (activity.TotalErrors > 0)
                             {
-                                <MudTooltip Text="Errors" Arrow="true" Placement="Placement.Top">
-                                    <MudChip T="string" Color="Color.Error" Variant="Variant.Filled"
-                                             Icon="@Icons.Material.Filled.Error" Class="jim-stat-chip">
-                                        @activity.TotalErrors.ToString("N0")
-                                    </MudChip>
-                                </MudTooltip>
+                                <StatChip Label="Errors" Count="@activity.TotalErrors" Color="Color.Error" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Error" />
                             }
                         </MudStack>
                     }

@@ -212,6 +212,15 @@ else if (ReservesHeight)
     /// <summary>The sort direction applied when the URL names none. Time-ordered lists (Activities, Pending
     /// Exports) open newest first, so their default is descending; an absent desc parameter in the URL means
     /// this default, never "ascending".</summary>
+    /// <summary>
+    /// Sheds the text of the table's chips (an outcome's figure, an initiator's name) the moment its full-size
+    /// contents would no longer fit, keeping their icons and tags with the detail in their tooltips. It stays compact
+    /// until the table is widened past the point where it last overflowed, so rows loading as the reader scrolls
+    /// cannot flip it back and forth.
+    /// </summary>
+    [Parameter]
+    public bool CompactWhenCrowded { get; set; }
+
     [Parameter]
     public bool DefaultSortDescending { get; set; }
 
@@ -503,6 +512,9 @@ else if (ReservesHeight)
         if (string.IsNullOrWhiteSpace(MaxHeight))
             await InvokeInteropAsync<bool>("jimVirtualList.fit", ScrollContainerSelector);
 
+        if (CompactWhenCrowded)
+            await InvokeInteropAsync<bool>("jimCompactFit.watch", ScrollContainerSelector);
+
         if (!KeepsUrlState)
         {
             // Nothing to restore and nothing to watch for: this grid holds no URL state, and scroll tracking
@@ -759,6 +771,8 @@ else if (ReservesHeight)
         _loading.Dispose();
         await InvokeInteropAsync<object>("jimVirtualList.stop", ScrollContainerSelector);
         await InvokeInteropAsync<object>("jimVirtualList.unfit", ScrollContainerSelector);
+        if (CompactWhenCrowded)
+            await InvokeInteropAsync<object>("jimCompactFit.unwatch", ScrollContainerSelector);
         _selfReference?.Dispose();
     }
 }

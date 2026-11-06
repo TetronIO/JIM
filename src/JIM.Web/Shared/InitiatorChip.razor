@@ -26,7 +26,7 @@
 else if (!string.IsNullOrEmpty(ScheduleName))
 {
     <span class="jim-initiator-chip" data-testid="jim-initiator-schedule">
-        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@ScheduleName" Class="ma-0"
+        <ObjectChip Kind="ObjectChipKind.Schedule" Name="@ScheduleName" Class="ma-0" Tooltip="@($"Schedule: {ScheduleName}")"
                     Href="@(ScheduleExecutionId is { } executionId ? $"/admin/operations/schedule-executions/{executionId}" : null)" />
     </span>
 }
@@ -47,6 +47,7 @@ else if (InitiatedByType == ActivityInitiatorType.ApiKey)
 {
     <span class="jim-initiator-chip" data-testid="jim-initiator-api-key">
         <ObjectChip Kind="ObjectChipKind.ApiKey" Name="@(InitiatedByName ?? "API Key")" Class="ma-0"
+                    Tooltip="@(InitiatedByName is { } keyName ? $"API Key: {keyName}" : "API Key")"
                     Href="@(InitiatedById is { } keyId ? $"/admin/apikeys/{keyId}" : null)" />
     </span>
 }

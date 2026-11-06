@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon and its Initiated By chips just their tag (KEY, SCH, JIM and so on). Hovering a chip shows its full detail, including the exact count.
 - 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
 - 🔄 On Active Directory, the attributes only Exchange may set (`homeMDB`, `msExchRecipientTypeDetails` and five more) are discovered read-only, so no Attribute Flow can write them: written directly, they create no mailbox. They are still imported. (#2755)
 - 🔄 Discovering servers through the REST API or PowerShell can name the setting they are for (`?setting=`, `Get-JIMConnectedSystemDirectoryServer -Setting`), for a Connector that discovers servers for more than one, and each server found carries its version where the directory records one. (#2021)
@@ -32,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An import Synchronisation Rule scoped away from objects an export rule provisioned no longer disconnects them, which made JIM provision them again on every run. Leaving an import rule's scope now withdraws only the values that rule brought in. (#2021)
+- 🐛 `New-JIMSyncRule` now writes the warnings the save raises, such as an Attribute Flow expression that reads an attribute the Object Type does not have, as `Set-JIMSyncRule` already did.
 - 🐛 A synchronisation's completion message and processed count now report the objects it processed, instead of the handful its final export review looked at (a million-object run read "1 objects ... avg 0 obj/s"). (#2790)
 - 🐛 Cancelling the confirmation after moving a Connected System's Object Matching switch between Simple and Advanced now puts the switch back; before, it kept showing the mode that was never applied.
 - 🐛 A schema refresh now lists an attribute that became harder to write, and flags each Attribute Flow writing one that became read-only, so **Apply & Disable Dependents** disables it. Before, the change applied silently and the flow kept writing it. (#2755)

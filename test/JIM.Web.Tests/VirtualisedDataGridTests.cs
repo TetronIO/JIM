@@ -307,6 +307,32 @@ public class VirtualisedDataGridTests : JimComponentTestContext
     }
 
     [Test]
+    public void VirtualisedDataGrid_CompactWhenCrowded_WatchesTheTableForOverflow()
+    {
+        // The Activity and Operations lists shed their chips' text when their columns would not fit; the script that
+        // decides that has to be told which table to watch.
+        var cut = Render<VirtualisedDataGrid<string>>(parameters => parameters
+            .Add(c => c.LoadWindow, (_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)))
+            .Add(c => c.Columns, _ => { })
+            .Add(c => c.ContainerId, "crowded-grid")
+            .Add(c => c.DefaultSortBy, "Name")
+            .Add(c => c.CompactWhenCrowded, true));
+
+        cut.WaitForAssertion(() =>
+            Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimCompactFit.watch"
+                && i.Arguments.FirstOrDefault() as string == "#crowded-grid .mud-table-container"), Is.True));
+    }
+
+    [Test]
+    public void VirtualisedDataGrid_NotCompactWhenCrowded_LeavesTheTableAlone()
+    {
+        var cut = RenderGrid((_, _) => Task.FromResult(new VirtualisedWindow<string>(new List<string> { "row" }, 1)));
+
+        cut.WaitForAssertion(() => Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimVirtualList.fit"), Is.True));
+        Assert.That(JSInterop.Invocations.Any(i => i.Identifier == "jimCompactFit.watch"), Is.False);
+    }
+
+    [Test]
     public void VirtualisedDataGrid_ShowSearchFalse_RendersNoSearchBoxButKeepsTheCount()
     {
         // A list that is small by construction (the queued steps of one Schedule Execution) says nothing more for
