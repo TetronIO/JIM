@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Servers;
 
@@ -154,8 +155,13 @@ public class SyncServer : ISyncServer
             foreach (var attributeValue in attributesToCapture)
                 change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove, syncRuleNameCache.Resolve);
 
+            // The deletion and its record in one transaction (#2669): a failure between the two must not leave the
+            // object gone with no record of its going.
+            await using var transaction = await _syncRepo.BeginTransactionAsync();
             var retired = await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
             await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);
+            if (transaction != null)
+                await transaction.CommitAsync();
             return retired;
         }
 
@@ -207,7 +213,7 @@ public class SyncServer : ISyncServer
 
                     var change = new MetaverseObjectChange
                     {
-                        Id = Guid.NewGuid(),
+                        Id = ChangeRecordIds.New(),
                         ChangeType = ObjectChangeType.Deleted,
                         ChangeTime = DateTime.UtcNow,
                         InitiatedByType = activity.InitiatedByType,
@@ -238,17 +244,29 @@ public class SyncServer : ISyncServer
             buildSpan.SetSuccess();
         }
 
+        // The deletions and their Deleted change records in one transaction (#2669): a failure between the two must not
+        // leave objects gone with no record of their going. A caller already holding a transaction keeps it.
+        await using var transaction = await _syncRepo.BeginTransactionAsync();
+
         var retired = await _syncRepo.DeleteMetaverseObjectsAsync(deletions.Select(d => d.Mvo).ToList());
 
         // Persist the Deleted change records after the deletions, matching the singular method's
-        // ordering. The bulk COPY path writes the parent, attribute and value rows in one
-        // transaction instead of the singular path's one INSERT per row.
+        // ordering. The bulk COPY path writes the parent, attribute and value rows instead of the
+        // singular path's one INSERT per row.
         if (changes.Count > 0)
         {
             using var persistSpan = Diagnostics.Diagnostics.Sync.StartSpan("MvoDeletionPersistChangeRecords")
-                .SetTag("changeCount", changes.Count);
+                .SetTag("changeCount", changes.Count)
+                .SetTag("attributeChangeCount", changes.Sum(c => c.AttributeChanges.Count))
+                .SetTag("valueChangeCount", changes.Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)));
             await _syncRepo.PersistPendingMvoChangesAsync(changes, []);
             persistSpan.SetSuccess();
+        }
+
+        if (transaction != null)
+        {
+            using (Diagnostics.Diagnostics.Sync.StartSpan("MvoDeletionCommit").SetTag("mvoCount", deletions.Count))
+                await transaction.CommitAsync();
         }
 
         return retired;
@@ -332,16 +350,27 @@ public class SyncServer : ISyncServer
             deletionRecords = _jim.ConnectedSystems.BuildQuietDeletionChangeRecords(connectedSystemObjects, activity, changeTrackingEnabled);
         }
 
+        // The deletions and their records in one transaction (#2669): a failure between the two must not leave objects
+        // gone with no record of their going. A caller already holding a transaction keeps it.
+        await using var transaction = await _syncRepo.BeginTransactionAsync();
+
         await _syncRepo.DeleteConnectedSystemObjectsAsync(connectedSystemObjects);
 
         if (deletionRecords.Count > 0)
         {
             using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionPersistChangeRecords")
                 .SetTag("recordCount", deletionRecords.Count)
+                .SetTag("attributeChangeCount", deletionRecords.Sum(r => r.AttributeChanges.Count))
                 .SetTag("valueCount", deletionRecords.Sum(r => r.AttributeChanges.Sum(a => a.ValueChanges.Count))))
             {
                 await _syncRepo.PersistCsoChangesAsync(deletionRecords);
             }
+        }
+
+        if (transaction != null)
+        {
+            using (Diagnostics.Diagnostics.Sync.StartSpan("CsoDeletionCommit").SetTag("csoCount", connectedSystemObjects.Count))
+                await transaction.CommitAsync();
         }
     }
 

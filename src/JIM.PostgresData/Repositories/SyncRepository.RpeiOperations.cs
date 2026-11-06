@@ -6,6 +6,7 @@ using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -246,24 +247,10 @@ public partial class SyncRepository
     /// </summary>
     private async Task InsertCsoChangeHierarchyRawAsync(List<ConnectedSystemObjectChange> changes)
     {
-        // Pre-generate IDs for all entities in the hierarchy
+        // Pre-generate IDs for all entities in the hierarchy; time-ordered, so the rows land on
+        // the growing end of each index rather than a random page of it (#2669).
         foreach (var change in changes)
-        {
-            if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
-
-            foreach (var attrChange in change.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.Id == Guid.Empty)
-                        valueChange.Id = Guid.NewGuid();
-                }
-            }
-        }
+            ChangeRecordIds.AssignMissing(change);
 
         // Step 1: INSERT parent ConnectedSystemObjectChange rows
         await BulkInsertCsoChangesRawAsync(changes);
@@ -305,24 +292,10 @@ public partial class SyncRepository
             return;
 
         // Pre-generate IDs for all entities in the graph so FK relationships are known
-        // before we build the raw SQL statements.
+        // before we build the raw SQL statements; time-ordered, so the rows land on the growing
+        // end of each index rather than a random page of it (#2669).
         foreach (var change in changes)
-        {
-            if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
-
-            foreach (var attrChange in change.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.Id == Guid.Empty)
-                        valueChange.Id = Guid.NewGuid();
-                }
-            }
-        }
+            ChangeRecordIds.AssignMissing(change);
 
         // Increase command timeout for large change record persistence. With 5K+ CSOs and
         // 20+ attributes each, the three-table bulk insert can generate 100K+ rows.
