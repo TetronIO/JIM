@@ -645,15 +645,26 @@ window.jimCompactFit = {
 
         var entry = { element: element, frame: null, compactAt: null };
         var crowded = function () { return element.scrollWidth > element.clientWidth + 1; };
+        // A page can group several tables into one compact state (data-jim-compact-scope on an ancestor): the
+        // Operations page's Queued and In Progress tables are fixed-layout, which clip rather than overflow, so they
+        // follow the Completed grid's decision rather than making their own.
+        var scope = element.closest('[data-jim-compact-scope]');
+        var setCompact = function (on) {
+            [element, scope].forEach(function (target) {
+                if (!target) return;
+                if (on) target.setAttribute('data-jim-compact', '');
+                else target.removeAttribute('data-jim-compact');
+            });
+        };
         entry.apply = function () {
             var width = element.clientWidth;
             if (entry.compactAt !== null) {
                 // Sticky: once compact, stay compact until the table is wider than where it last overflowed, so a
                 // busy row scrolling in and out of the window cannot flip the whole table back and forth.
                 if (width <= entry.compactAt) return;
-                element.removeAttribute('data-jim-compact');
+                setCompact(false);
                 if (crowded()) {
-                    element.setAttribute('data-jim-compact', '');
+                    setCompact(true);
                     entry.compactAt = width;
                 } else {
                     entry.compactAt = null;
@@ -661,7 +672,7 @@ window.jimCompactFit = {
                 return;
             }
             if (crowded()) {
-                element.setAttribute('data-jim-compact', '');
+                setCompact(true);
                 entry.compactAt = width;
             }
         };
@@ -675,6 +686,7 @@ window.jimCompactFit = {
             });
         };
 
+        entry.setCompact = setCompact;
         entry.apply();
         // The container's width changes with the window, the nav drawer and the side panel; its rows change as the
         // virtualiser loads windows while the reader scrolls. Either can be the thing that stops the table fitting.
@@ -690,6 +702,7 @@ window.jimCompactFit = {
         if (!entry) return;
 
         if (entry.frame) window.cancelAnimationFrame(entry.frame);
+        entry.setCompact(false);
         entry.resizeObserver.disconnect();
         entry.mutationObserver.disconnect();
         delete window.jimCompactFit._watched[selector];

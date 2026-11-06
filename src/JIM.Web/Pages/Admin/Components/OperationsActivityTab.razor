@@ -123,7 +123,10 @@
 @* ─── Sections, later at the top ─── *@
 @* Every section is always on the page. The tab owns which are unfolded, because it keeps that in the URL; each
    section's chevron asks for its own to be flipped. *@
-<div class="d-flex flex-column gap-4">
+@* One compact state for all three tables: when the Completed grid's chips would not fit, Queued's and In Progress's
+   collapse with them (jimCompactFit marks this scope), so the three read alike. Queued and In Progress cannot decide
+   for themselves: they are fixed-layout tables, which clip rather than overflow. *@
+<div class="d-flex flex-column gap-4" data-jim-compact-scope>
     <OperationsQueueSections QueuedExpanded="_sections.Queued" InProgressExpanded="_sections.InProgress"
                              ToggleRequested="OnToggleSectionAsync"
                              Filters="_filters" ScheduleName="ScheduleNameFor" />

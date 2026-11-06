@@ -2994,22 +2994,32 @@ html[lang] .jim-schema-change-table td {
 
 /* jimCompactFit sets data-jim-compact on a table's scroll container the moment its full-size contents would overflow.
    Outcome chips then show their icon alone and initiator chips their tag alone; both tooltips carry the detail
-   (<StatChip /> always puts the exact figure in its tooltip; <InitiatorChip /> names the kind). The html[lang]
+   (<StatChip /> always puts the exact figure in its tooltip; <InitiatorChip /> names the kind). Any other chip
+   takes part by carrying jim-compact-chip, its text in a jim-compact-hide span, and a tooltip with that text. The html[lang]
    qualifier and !important are needed to beat .mud-chip.jim-stat-chip's padding and MudBlazor's icon margins. */
 [data-jim-compact] .jim-stat-chip-count,
+[data-jim-compact] .jim-compact-hide,
 [data-jim-compact] .jim-follow-up-chips-label,
 [data-jim-compact] .jim-initiator-chip .jim-object-chip-type,
 [data-jim-compact] .jim-initiator-chip .jim-object-chip-name {
     display: none;
 }
 
-html[lang] [data-jim-compact] .mud-chip.jim-stat-chip {
+html[lang] [data-jim-compact] .mud-chip.jim-stat-chip,
+html[lang] [data-jim-compact] .mud-chip.jim-compact-chip {
     padding-left: 7px !important;
     padding-right: 7px !important;
 }
 
-html[lang] [data-jim-compact] .mud-chip.jim-stat-chip .mud-chip-icon {
+html[lang] [data-jim-compact] .mud-chip.jim-stat-chip .mud-chip-icon,
+html[lang] [data-jim-compact] .mud-chip.jim-compact-chip .mud-chip-icon {
     margin: 0 !important;
+}
+
+/* The Schedules list's Name is its fill column (max-width: 0 lets it absorb the slack); without a floor it would be
+   squeezed to nothing before the list ever overflowed, so Trigger and Outcome would never collapse. */
+.mud-table-root .mud-table-cell.jim-fill-column.jim-schedule-name-column {
+    min-width: 14rem;
 }
 
 /* With its name gone the chip's own pill would only frame the tag, so the tag stands alone. */
