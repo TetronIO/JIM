@@ -13,6 +13,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 
 namespace JIM.Application.Servers;
 
@@ -212,7 +213,7 @@ public class SyncServer : ISyncServer
 
                     var change = new MetaverseObjectChange
                     {
-                        Id = Guid.NewGuid(),
+                        Id = ChangeRecordIds.New(),
                         ChangeType = ObjectChangeType.Deleted,
                         ChangeTime = DateTime.UtcNow,
                         InitiatedByType = activity.InitiatedByType,

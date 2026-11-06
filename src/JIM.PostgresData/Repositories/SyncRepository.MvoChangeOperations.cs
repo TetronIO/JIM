@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -20,24 +21,10 @@ public partial class SyncRepository
             return;
 
         // Pre-generate IDs for new-change graph entities so FK relationships are known
-        // before building the COPY binary import statements.
+        // before building the COPY binary import statements. Time-ordered, so the rows land on
+        // the growing end of each index rather than a random page of it (#2669).
         foreach (var change in newChanges)
-        {
-            if (change.Id == Guid.Empty)
-                change.Id = Guid.NewGuid();
-
-            foreach (var attrChange in change.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-
-                foreach (var valueChange in attrChange.ValueChanges)
-                {
-                    if (valueChange.Id == Guid.Empty)
-                        valueChange.Id = Guid.NewGuid();
-                }
-            }
-        }
+            ChangeRecordIds.AssignMissing(change);
 
         // For appends, the parent id must already be set (it's the existing MvoChange row).
         // Only the attribute/value children need id generation — writing a new parent here
@@ -48,14 +35,7 @@ public partial class SyncRepository
                 throw new InvalidOperationException(
                     "PersistPendingMvoChangesAsync (append): each MvoChange must already have its existing parent Id set.");
 
-            foreach (var attrChange in change.AttributeChanges)
-            {
-                if (attrChange.Id == Guid.Empty)
-                    attrChange.Id = Guid.NewGuid();
-
-                foreach (var valueChange in attrChange.ValueChanges.Where(vc => vc.Id == Guid.Empty))
-                    valueChange.Id = Guid.NewGuid();
-            }
+            ChangeRecordIds.AssignMissingToAttributes(change);
         }
 
         // Spans on the shared JIM.PostgresData.Sync source (#2669), so a run shows where writing its change records
