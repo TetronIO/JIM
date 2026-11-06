@@ -5881,6 +5881,13 @@ public class SyncImportTaskProcessor
 
         var processedCount = 0;
 
+        // Once per run (#2669): reconciliation asks the database to match references ignoring case only when its lower()
+        // folds case as JIM's identifier comparison does; otherwise those references are loaded and compared in .NET.
+        var databaseFoldsCaseLikeIdentifierKey = await _syncRepo.DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
+        if (!databaseFoldsCaseLikeIdentifierKey)
+            Log.Warning("ReconcilePendingExportsAsync: The database's lower() does not fold case as JIM does; references compared " +
+                "ignoring case are loaded in full for reconciliation rather than probed");
+
         // Track existing import RPEIs that had reconciliation outcomes merged onto them.
         // Keyed by RPEI Id to deduplicate when a CSO has both confirmed + failed changes.
         var modifiedExistingRpeis = new System.Collections.Concurrent.ConcurrentDictionary<Guid, ActivityRunProfileExecutionItem>();
@@ -5889,17 +5896,72 @@ public class SyncImportTaskProcessor
         {
             var pageCsoIds = csoList.Skip(page * pageSize).Take(pageSize).Select(c => c.Id).ToList();
 
+            // Probe rather than load the values of large multi-valued references (#2669): a group's member attribute would
+            // otherwise bring every member's value for a handful of changes (761,000 and 1.73 million values on two pages
+            // of a 500,000-user, 25,000-group run). The planner decides which attributes of which objects can be asked
+            // about exactly; the database returns the rows that could match each change and, where a verdict depends on
+            // it, the value count capped at two; the engine judges them with the same comparison it applies to a full load.
+            // What is probed is left out of the load below, decided from the answers so the two can never disagree.
+            var probePlan = SyncEngine.PlanReconciliationProbes(
+                pageCsoIds.Select(id => allPendingExportsByCsoId.GetValueOrDefault(id)).OfType<JIM.Models.Transactional.PendingExport>(),
+                databaseFoldsCaseLikeIdentifierKey);
+            var probedValuesByCsoId = new Dictionary<Guid, Dictionary<int, ProbedAttributeValues>>();
+            using (var probeSpan = Diagnostics.Sync.StartSpan("ReconcileProbeValues"))
+            {
+                var answers = probePlan.Questions.Count == 0
+                    ? []
+                    : await _syncRepo.GetReconciliationProbeValuesAsync(probePlan.Questions);
+                foreach (var answer in answers)
+                {
+                    if (!probedValuesByCsoId.TryGetValue(answer.ConnectedSystemObjectId, out var byAttributeId))
+                    {
+                        byAttributeId = new Dictionary<int, ProbedAttributeValues>();
+                        probedValuesByCsoId[answer.ConnectedSystemObjectId] = byAttributeId;
+                    }
+
+                    if (!byAttributeId.TryAdd(answer.AttributeId, answer))
+                        throw new ReconciliationProbeIncompleteException(
+                            $"The reconciliation probe answered attribute {answer.AttributeId} of Connected System Object {answer.ConnectedSystemObjectId} twice.");
+                }
+
+                var unanswered = probePlan.Questions.FirstOrDefault(q =>
+                    !probedValuesByCsoId.TryGetValue(q.ConnectedSystemObjectId, out var byAttributeId) || !byAttributeId.ContainsKey(q.AttributeId));
+                if (unanswered != null)
+                    throw new ReconciliationProbeIncompleteException(
+                        $"The reconciliation probe returned no answer for attribute {unanswered.AttributeId} of Connected System Object {unanswered.ConnectedSystemObjectId}.");
+
+                probeSpan.SetTag("probedPairs", probePlan.Questions.Count);
+                probeSpan.SetTag("fullLoadPairs", probePlan.FullLoadPairCount);
+                probeSpan.SetTag("tuples", probePlan.Questions.Sum(q => q.TupleCount));
+                probeSpan.SetTag("candidateRows", answers.Sum(a => a.CandidateValues.Count));
+                probeSpan.SetSuccess();
+            }
+
             // Reload CSOs with fresh AttributeValues from the database for this page.
             // The in-memory CSOs may have stale/empty AttributeValues if the change tracker
             // was cleared between save-phase batches (which detaches entities and EF fixup
             // clears navigation collections). AsNoTracking avoids polluting the tracker.
             // The Core load leaves out the objects a reference names (#2669): reconciliation compares a reference by
             // its id and string only, and a group would otherwise bring every member's object with it.
-            List<ConnectedSystemObject> pageCsos;
+            // Objects are loaded in groups sharing the attributes left out of them: usually one group with the member
+            // attribute left out and one with nothing left out.
+            var pageCsos = new List<ConnectedSystemObject>(pageCsoIds.Count);
             using (var loadSpan = Diagnostics.Sync.StartSpan("ReconcileLoadPageCsos"))
             {
-                pageCsos = await _syncRepo.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(
-                    _connectedSystem.Id, pageCsoIds);
+                var loadGroups = pageCsoIds
+                    .GroupBy(id => probedValuesByCsoId.TryGetValue(id, out var byAttributeId)
+                        ? string.Join(",", byAttributeId.Keys.Order())
+                        : string.Empty)
+                    .ToList();
+                foreach (var loadGroup in loadGroups)
+                {
+                    var groupIds = loadGroup.ToList();
+                    var excludedAttributeIds = loadGroup.Key.Length == 0 ? null : probedValuesByCsoId[groupIds[0]].Keys.ToList();
+                    pageCsos.AddRange(await _syncRepo.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(
+                        _connectedSystem.Id, groupIds, excludedAttributeIds));
+                }
+
+                loadSpan.SetTag("loadGroupCount", loadGroups.Count);
                 loadSpan.SetTag("csoCount", pageCsos.Count);
                 loadSpan.SetTag("attributeValueCount", pageCsos.Sum(cso => cso.AttributeValues.Count));
                 loadSpan.SetSuccess();
@@ -5928,6 +5990,7 @@ public class SyncImportTaskProcessor
             var pendingExportsToUpdate = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExport>();
             var confirmedAttrChangesToDelete = new System.Collections.Concurrent.ConcurrentBag<JIM.Models.Transactional.PendingExportAttributeValueChange>();
             var pageExecutionItems = new System.Collections.Concurrent.ConcurrentBag<ActivityRunProfileExecutionItem>();
+            var probeFailures = new System.Collections.Concurrent.ConcurrentQueue<ReconciliationProbeIncompleteException>();
 
             // Process CSOs in parallel - reconciliation is pure in-memory comparison.
             // All Pending Exports are already loaded; no database queries per CSO in this loop.
@@ -5956,7 +6019,7 @@ public class SyncImportTaskProcessor
                         // Perform in-memory reconciliation (no database operations)
                         var result = new PendingExportReconciliationResult();
                         _syncEngine.ReconcileCsoAgainstPendingExport(cso, pendingExport, result, metaverseObjectIdsOwedPassword,
-                            connectedSystemObjectIdsWithExchangeChange);
+                            connectedSystemObjectIdsWithExchangeChange, probedValuesByCsoId.GetValueOrDefault(cso.Id));
 
                         if (isFirstPage)
                         {
@@ -6092,12 +6155,26 @@ public class SyncImportTaskProcessor
 
                         Interlocked.Increment(ref processedCount);
                     }
+                    catch (ReconciliationProbeIncompleteException ex)
+                    {
+                        // A defect in planning the probe, never a state of the data (#2669): collected and rethrown below,
+                        // before anything of this page is persisted, so the Activity fails rather than leave a change unjudged.
+                        probeFailures.Enqueue(ex);
+                        Interlocked.Increment(ref processedCount);
+                    }
                     catch (Exception ex)
                     {
                         Log.Error(ex, "ReconcilePendingExportsAsync: Error reconciling Pending Exports for CSO {CsoId}", cso.Id);
                         Interlocked.Increment(ref processedCount);
                     }
                 });
+
+                if (probeFailures.TryPeek(out var firstProbeFailure))
+                {
+                    Log.Error(firstProbeFailure, "ReconcilePendingExportsAsync: {Count} Connected System Object(s) on page {Page} had a change their " +
+                        "probed values could not answer; failing the import", probeFailures.Count, page + 1);
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(firstProbeFailure).Throw();
+                }
 
                 if (isFirstPage)
                 {

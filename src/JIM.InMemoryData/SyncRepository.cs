@@ -747,8 +747,50 @@ public class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
+    /// <summary>
+    /// Same answers as the SQL implementation (#2669): candidates by referenced id, by exact string among all rows and by
+    /// lowered string among unresolved rows, with the value count capped at two when asked.
+    /// </summary>
+    public Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions)
+    {
+        var answers = questions.Select(question =>
+        {
+            var rows = _csos.TryGetValue(question.ConnectedSystemObjectId, out var cso)
+                ? cso.AttributeValues.Where(av => av.AttributeId == question.AttributeId).ToList()
+                : [];
+            var referenceIds = question.ReferenceIds.ToHashSet();
+            var exactValues = question.ExactValues.ToHashSet(StringComparer.Ordinal);
+            var loweredValues = question.CaseInsensitiveValues.Select(v => IdentifierKey.For(v, caseExact: false)).ToHashSet(StringComparer.Ordinal);
+
+            var candidates = rows
+                .Where(av => (av.ReferenceValueId.HasValue && referenceIds.Contains(av.ReferenceValueId.Value)) ||
+                             (av.UnresolvedReferenceValue != null && exactValues.Contains(av.UnresolvedReferenceValue)) ||
+                             (!av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null &&
+                              loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false))))
+                .Select(av => new ConnectedSystemObjectAttributeValue
+                {
+                    Id = av.Id, AttributeId = av.AttributeId, ReferenceValueId = av.ReferenceValueId, UnresolvedReferenceValue = av.UnresolvedReferenceValue
+                })
+                .ToList();
+
+            return new ProbedAttributeValues
+            {
+                ConnectedSystemObjectId = question.ConnectedSystemObjectId,
+                AttributeId = question.AttributeId,
+                ProbedChangeIds = question.ChangeIds,
+                CandidateValues = candidates,
+                CappedValueCount = question.NeedsCount ? Math.Min(rows.Count, 2) : null
+            };
+        }).ToList();
+
+        return Task.FromResult(answers);
+    }
+
+    public Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync() => Task.FromResult(true);
 
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
     {

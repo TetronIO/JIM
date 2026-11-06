@@ -229,7 +229,28 @@ public interface ISyncRepository
     /// <c>ReferenceValue</c> navigation is left null; <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c> are
     /// loaded, and are all reconciliation compares).
     /// </summary>
-    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+    /// <param name="connectedSystemId">The Connected System the objects belong to.</param>
+    /// <param name="csoIds">The objects to load.</param>
+    /// <param name="excludedAttributeIds">Attributes whose values are left out (#2669): reconciliation probes them
+    /// instead (<see cref="GetReconciliationProbeValuesAsync"/>). Null or empty loads every value.</param>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null);
+
+    /// <summary>
+    /// Answers Pending Export reconciliation's questions about multi-valued reference attributes (#2669): for each
+    /// question, the stored rows that could match one of its changes (a superset; the engine judges them) and, when
+    /// asked, how many values the attribute holds, capped at two. Exactly one answer per question, in no particular
+    /// order. Each way of matching is an index lookup on what is sought, so the cost follows the changes being confirmed,
+    /// not the membership of the groups they belong to.
+    /// </summary>
+    Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions);
+
+    /// <summary>
+    /// Whether the database's <c>lower()</c> folds every character that JIM's own identifier folding turns into ASCII
+    /// exactly as JIM does (<c>IdentifierKey.FoldingCheckSample</c>, #2669). Reconciliation asks the database to match a
+    /// reference ignoring case only when it does; otherwise those references are loaded and compared in .NET.
+    /// </summary>
+    Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
 
     /// <summary>
     /// Summary-tier lookup of the external ID and object type name for the given CSOs, keyed by CSO ID.

@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -37,7 +38,8 @@ public partial class SyncEngine
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
-        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null)
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null,
+        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null)
     {
         if (pendingExport == null)
         {
@@ -105,7 +107,13 @@ public partial class SyncEngine
 
         foreach (var attrChange in changesAwaitingConfirmation)
         {
-            var confirmed = IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange);
+            // A probed attribute (#2669) is judged only from what the probe was given for it, never from the values
+            // loaded with the object, which leave it out.
+            ProbedAttributeValues? probed = null;
+            var isProbed = probedValuesByAttributeId != null && probedValuesByAttributeId.TryGetValue(attrChange.AttributeId, out probed);
+            var confirmed = isProbed
+                ? IsAttributeChangeConfirmedOverProbe(probed!, attrChange)
+                : IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange);
 
             if (Log.IsEnabled(Serilog.Events.LogEventLevel.Verbose))
             {
@@ -115,7 +123,9 @@ public partial class SyncEngine
                     attrChange.ChangeType,
                     connectedSystemObject.Id,
                     LogSanitiser.Sanitise(GetExpectedValueAsString(attrChange)),
-                    LogSanitiser.Sanitise(GetImportedValueAsString(attrValuesByAttrId, attrChange)),
+                    LogSanitiser.Sanitise(isProbed
+                        ? GetProbedImportedValueAsString(probed!, attrChange)
+                        : GetImportedValueAsString(attrValuesByAttrId, attrChange)),
                     confirmed);
             }
 
@@ -139,7 +149,9 @@ public partial class SyncEngine
                 // Never given up on (#2119): however many imports have not seen it, the change is sent again at the
                 // next export run, and the caller reports it as not confirmed on every import that misses it.
                 attrChange.Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
-                attrChange.LastImportedValue = GetImportedValueAsString(attrValuesByAttrId, attrChange);
+                attrChange.LastImportedValue = isProbed
+                    ? GetProbedImportedValueAsString(probed!, attrChange)
+                    : GetImportedValueAsString(attrValuesByAttrId, attrChange);
                 result.RetryChanges.Add(attrChange);
                 Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
                     "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
@@ -180,6 +192,211 @@ public partial class SyncEngine
             UpdatePendingExportStatus(pendingExport);
             result.PendingExportToUpdate = pendingExport;
         }
+    }
+
+    /// <summary>
+    /// Decides, for one page of Pending Export reconciliation, which attribute values are asked about rather than loaded
+    /// (#2669). A large group's member attribute would otherwise bring every member's value into memory for a handful of
+    /// changes: on a 500,000-user, 25,000-group run, two pages loaded 761,000 and 1.73 million values.
+    /// <para>
+    /// A Connected System Object's attribute is probed when it is a multi-valued reference attribute (not a naming
+    /// attribute, an External ID or a Secondary External ID, which are read beyond the verdict), and every change awaiting
+    /// confirmation on it can be put as a question the database answers exactly through an index:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>a change naming an object (<c>ResolvedReferenceCsoId</c>) is sought by that id among resolved rows, since a
+    /// resolved row names its object by id alone (<see cref="ValueExistsOnCso"/>), and by its strings among unresolved
+    /// rows;</item>
+    /// <item>on a case-exact attribute, strings are sought exactly, among all rows;</item>
+    /// <item>ignoring case, strings are sought among unresolved rows only, and only when ASCII and the database folds case
+    /// as JIM does (<paramref name="databaseFoldsCaseLikeIdentifierKey"/>). A change naming no object matches resolved rows
+    /// by string too, and no index finds a resolved row by its lowered string, so such a change loads its pair in full;
+    /// so does a non-ASCII string, whose folding the database need not share;</item>
+    /// <item>a change whose verdict depends on the value count (empty, RemoveAll, a whole-set Update) asks for the count,
+    /// capped at two.</item>
+    /// </list>
+    /// <para>
+    /// Anything else loads in full, as before: one change that cannot be put as a question takes its whole pair with it.
+    /// </para>
+    /// </summary>
+    /// <param name="pendingExports">The Pending Exports of the page's Connected System Objects.</param>
+    /// <param name="databaseFoldsCaseLikeIdentifierKey">Whether the database's <c>lower()</c> folds case as
+    /// <see cref="IdentifierKey"/> does (<c>ISyncRepository.DoesDatabaseFoldCaseLikeIdentifierKeyAsync</c>).</param>
+    public static ReconciliationProbePlan PlanReconciliationProbes(IEnumerable<PendingExport> pendingExports, bool databaseFoldsCaseLikeIdentifierKey)
+    {
+        var questions = new List<ReconciliationProbeQuestion>();
+        var fullLoadPairCount = 0;
+
+        foreach (var pendingExport in pendingExports)
+        {
+            if (pendingExport.ConnectedSystemObjectId is not { } connectedSystemObjectId)
+                continue;
+
+            var pairs = pendingExport.AttributeValueChanges
+                .Where(IsAwaitingConfirmation)
+                .GroupBy(c => c.AttributeId)
+                .Where(pair => pair.Any(c => c.Attribute is { Type: AttributeDataType.Reference, AttributePlurality: AttributePlurality.MultiValued }));
+
+            foreach (var pair in pairs)
+            {
+                var question = TryPutAsQuestion(connectedSystemObjectId, pair.Key, pair.ToList(), databaseFoldsCaseLikeIdentifierKey);
+                if (question != null)
+                    questions.Add(question);
+                else
+                    fullLoadPairCount++;
+            }
+        }
+
+        return new ReconciliationProbePlan { Questions = questions, FullLoadPairCount = fullLoadPairCount };
+    }
+
+    private static bool IsAwaitingConfirmation(PendingExportAttributeValueChange change) =>
+        change.Status is PendingExportAttributeChangeStatus.ExportedPendingConfirmation or PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+
+    /// <summary>
+    /// The question for one attribute of one object, or null when any of its changes cannot be put as one (see
+    /// <see cref="PlanReconciliationProbes"/>).
+    /// </summary>
+    private static ReconciliationProbeQuestion? TryPutAsQuestion(Guid connectedSystemObjectId, int attributeId,
+        List<PendingExportAttributeValueChange> changes, bool databaseFoldsCaseLikeIdentifierKey)
+    {
+        var referenceIds = new HashSet<Guid>();
+        var exactValues = new HashSet<string>(StringComparer.Ordinal);
+        var caseInsensitiveValues = new HashSet<string>(StringComparer.Ordinal);
+        var needsCount = false;
+
+        foreach (var change in changes)
+        {
+            var attribute = (ConnectedSystemObjectTypeAttribute?)change.Attribute;
+            if (attribute is not { Type: AttributeDataType.Reference, AttributePlurality: AttributePlurality.MultiValued } ||
+                attribute.IsExternalId || attribute.IsSecondaryExternalId || ObjectNaming.ConnectedSystemNameRank(attribute.Name) >= 0)
+                return null;
+
+            // Confirmed whatever the import shows (#2021): nothing to ask.
+            if (IsConnectorDefinedClear(change))
+                continue;
+
+            var countOnly = change.ChangeType == PendingExportAttributeChangeType.RemoveAll ||
+                            (change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update &&
+                             IsPendingChangeEmpty(change));
+            needsCount |= countOnly || IsWholeSetUpdate(change);
+            if (countOnly || change.ChangeType is not (PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update
+                    or PendingExportAttributeChangeType.Remove))
+                continue;
+
+            if (change.ResolvedReferenceCsoId is { } referenceId)
+                referenceIds.Add(referenceId);
+
+            var strings = new[] { change.UnresolvedReferenceValue, change.StringValue }.Where(v => !string.IsNullOrEmpty(v)).Select(v => v!).ToList();
+            if (strings.Count == 0)
+                continue;
+
+            if (attribute.CaseExact)
+            {
+                exactValues.UnionWith(strings);
+                continue;
+            }
+
+            if (!change.ResolvedReferenceCsoId.HasValue || !databaseFoldsCaseLikeIdentifierKey || !strings.All(IsAscii))
+                return null;
+
+            caseInsensitiveValues.UnionWith(strings);
+        }
+
+        return new ReconciliationProbeQuestion
+        {
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            AttributeId = attributeId,
+            ChangeIds = changes.Select(c => c.Id).ToHashSet(),
+            ReferenceIds = referenceIds,
+            ExactValues = exactValues,
+            CaseInsensitiveValues = caseInsensitiveValues,
+            NeedsCount = needsCount
+        };
+    }
+
+    private static bool IsAscii(string value) => value.All(character => character < 0x80);
+
+    /// <summary>
+    /// Set-free equivalent of <see cref="IsAttributeChangeConfirmed(Dictionary{int, List{ConnectedSystemObjectAttributeValue}}, PendingExportAttributeValueChange)"/>
+    /// over probed values (#2669): the same verdict for every change type, with the candidate rows standing in for the
+    /// attribute's values in the value comparison (they include every row it could match) and the capped count standing in
+    /// for the value count. Fails rather than judge a change the probe was not asked about, or a count it was not given.
+    /// </summary>
+    private static bool IsAttributeChangeConfirmedOverProbe(ProbedAttributeValues probed, PendingExportAttributeValueChange attrChange)
+    {
+        if (!probed.ProbedChangeIds.Contains(attrChange.Id))
+            throw new ReconciliationProbeIncompleteException(
+                $"Attribute change {attrChange.Id} on attribute {attrChange.AttributeId} of Connected System Object {probed.ConnectedSystemObjectId} " +
+                "was not among the changes its values were probed for, so its verdict cannot be decided from them.");
+
+        if (attrChange.Attribute == null)
+            return false;
+
+        // An empty connector-defined value lets Exchange decide, so whatever the import shows is what was asked for (#2021).
+        if (IsConnectorDefinedClear(attrChange))
+            return true;
+
+        switch (attrChange.ChangeType)
+        {
+            case PendingExportAttributeChangeType.Add:
+            case PendingExportAttributeChangeType.Update:
+                if (IsPendingChangeEmpty(attrChange))
+                    return ProbedCount(probed, attrChange) == 0;
+
+                // An Update against a multi-valued attribute is confirmed only when it holds exactly that value (#2182).
+                if (IsWholeSetUpdate(attrChange) && ProbedCount(probed, attrChange) != 1)
+                    return false;
+
+                return ValueExistsOnCso(probed.CandidateValues, attrChange);
+
+            case PendingExportAttributeChangeType.Remove:
+                return !ValueExistsOnCso(probed.CandidateValues, attrChange);
+
+            case PendingExportAttributeChangeType.RemoveAll:
+                return ProbedCount(probed, attrChange) == 0;
+
+            default:
+                return false;
+        }
+    }
+
+    private static int ProbedCount(ProbedAttributeValues probed, PendingExportAttributeValueChange attrChange) =>
+        probed.CappedValueCount ?? throw new ReconciliationProbeIncompleteException(
+            $"Attribute change {attrChange.Id} ({attrChange.ChangeType}) on attribute {attrChange.AttributeId} of Connected System Object " +
+            $"{probed.ConnectedSystemObjectId} depends on how many values the attribute holds, and its values were probed without the count.");
+
+    /// <summary>
+    /// What the import showed for one change judged over probed values (#2669), recorded as its last imported value: the
+    /// stored values matching it (with a note when a whole-set Update found others beside it), that its value is absent,
+    /// or, for a change judged by the count alone, how many values are held. Bounded by the change, never the attribute's
+    /// whole value set, which for a group is its whole membership.
+    /// </summary>
+    internal static string GetProbedImportedValueAsString(ProbedAttributeValues probed, PendingExportAttributeValueChange attrChange)
+    {
+        var countOnly = attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll ||
+                        (attrChange.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update &&
+                         IsPendingChangeEmpty(attrChange));
+        if (countOnly)
+        {
+            return ProbedCount(probed, attrChange) switch
+            {
+                0 => "(no values)",
+                1 => "(1 value)",
+                _ => "(2 or more values)"
+            };
+        }
+
+        var matched = probed.CandidateValues
+            .Where(row => ValueExistsOnCso([row], attrChange))
+            .Select(row => row.UnresolvedReferenceValue ?? row.ReferenceValueId?.ToString())
+            .Where(value => value != null)
+            .ToList();
+        if (matched.Count == 0)
+            return "(value not present)";
+
+        var shown = string.Join(", ", matched);
+        return IsWholeSetUpdate(attrChange) && probed.CappedValueCount > matched.Count ? shown + " (and other values)" : shown;
     }
 
     /// <summary>
@@ -491,10 +708,11 @@ public partial class SyncEngine
     /// Text compares through <see cref="AttributeValueComparison"/> (#2051): an identifier (an External ID, a
     /// Secondary External ID) ignores case unless declared case-exact, because a directory reports a name in the case
     /// it stored, which need not be the case JIM wrote (#2195); every other text attribute compares exactly, so a change
-    /// of case is confirmed only when the new case arrives. A resolved reference is the object it names, so it is
-    /// confirmed by the referenced Connected System Object's id; its DN, like an unresolved one, ignores case.
+    /// of case is confirmed only when the new case arrives. A reference is matched row by row as
+    /// <see cref="ReferenceRowMatches"/> describes: a resolved row by the id of the object it names, an unresolved one by
+    /// its string, ignoring case unless the attribute is case-exact.
     /// </remarks>
-    public static bool ValueExistsOnCso(List<ConnectedSystemObjectAttributeValue> csoValues, PendingExportAttributeValueChange attrChange)
+    public static bool ValueExistsOnCso(IReadOnlyList<ConnectedSystemObjectAttributeValue> csoValues, PendingExportAttributeValueChange attrChange)
     {
         if (csoValues.Count == 0)
             return false;
@@ -536,21 +754,38 @@ public partial class SyncEngine
                 attrChange.GuidValue.HasValue &&
                 csoValues.Any(v => v.GuidValue == attrChange.GuidValue),
 
-            AttributeDataType.Reference =>
-                // Reference attributes can be stored in two ways:
-                // 1. UnresolvedReferenceValue — the raw DN string (before or after resolution)
-                // 2. StringValue — set during export resolution (when UnresolvedReferenceValue is cleared)
-                // We need to check both the Pending Export value AND the CSO values to handle both cases.
-                // A resolved reference also matches by the referenced object's id, whatever either DN says.
-                (attrChange.ResolvedReferenceCsoId.HasValue &&
-                 csoValues.Any(v => v.ReferenceValueId == attrChange.ResolvedReferenceCsoId)) ||
-                (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.UnresolvedReferenceValue))) ||
-                (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 csoValues.Any(v => AttributeValueComparison.AreSame(attrChange.Attribute, v.UnresolvedReferenceValue, attrChange.StringValue))),
+            AttributeDataType.Reference => csoValues.Any(v => ReferenceRowMatches(v, attrChange)),
 
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Whether one stored reference row holds the value a reference change names. A resolved reference names its object
+    /// by id, and only an unresolved one by its string (#2669): the rule the reference recall existence query applies
+    /// (<c>ExportEvaluationServer</c> over <c>SyncRepository.CsoReferenceValueMatchSql</c>). So when the change names an
+    /// object too (<c>ResolvedReferenceCsoId</c>, stamped by export resolution), a resolved row matches by that id alone,
+    /// and a resolved row whose retained DN equals the change's while its id points at a different object names some
+    /// other object and is not a match. An unresolved row is matched by its string, ignoring case unless the attribute is
+    /// case-exact, against either string the change carries: <c>UnresolvedReferenceValue</c>, or <c>StringValue</c>, where
+    /// export resolution puts the DN it resolved to. A change naming no object has only its strings, and matches any row
+    /// by them, resolved rows included, as it always has.
+    /// </summary>
+    /// <remarks>
+    /// One rule for every path, so they cannot disagree: the full load (<see cref="ValueExistsOnCso"/>), the per-attribute
+    /// index (<see cref="ValueExistsInIndex"/>) and probed values, whose questions are shaped by it
+    /// (<see cref="PlanReconciliationProbes"/>). It also keeps the probe exact without a lowered index over resolved rows:
+    /// only unresolved rows are ever matched by a string ignoring case for a change that names an object.
+    /// </remarks>
+    private static bool ReferenceRowMatches(ConnectedSystemObjectAttributeValue row, PendingExportAttributeValueChange change)
+    {
+        if (row.ReferenceValueId.HasValue && change.ResolvedReferenceCsoId.HasValue)
+            return row.ReferenceValueId == change.ResolvedReferenceCsoId;
+
+        return (!string.IsNullOrEmpty(change.UnresolvedReferenceValue) &&
+                AttributeValueComparison.AreSame(change.Attribute, row.UnresolvedReferenceValue, change.UnresolvedReferenceValue)) ||
+               (!string.IsNullOrEmpty(change.StringValue) &&
+                AttributeValueComparison.AreSame(change.Attribute, row.UnresolvedReferenceValue, change.StringValue));
     }
 
     /// <summary>
@@ -581,11 +816,21 @@ public partial class SyncEngine
         public required List<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
 
         public HashSet<string>? TextValues { get; init; }
-        public HashSet<string>? ReferenceValues { get; init; }
 
         /// <summary>
-        /// The ids of the Connected System Objects the values reference, so a resolved reference is matched by the
-        /// object it names (see <see cref="ValueExistsOnCso"/>).
+        /// The strings of the unresolved reference rows, which every reference change matches by string.
+        /// </summary>
+        public HashSet<string>? UnresolvedRowReferenceValues { get; init; }
+
+        /// <summary>
+        /// The strings the resolved reference rows retain, which only a change naming no object matches by
+        /// (see <see cref="ReferenceRowMatches"/>).
+        /// </summary>
+        public HashSet<string>? ResolvedRowReferenceValues { get; init; }
+
+        /// <summary>
+        /// The ids of the Connected System Objects the resolved rows reference, so a resolved reference is matched by the
+        /// object it names (see <see cref="ReferenceRowMatches"/>).
         /// </summary>
         public HashSet<Guid>? ReferenceIds { get; init; }
 
@@ -633,11 +878,14 @@ public partial class SyncEngine
             {
                 Count = values.Count,
                 RawValues = values,
-                // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
-                // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
-                // so a single index built from that one CSO-side field covers both probes.
+                // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched against the CSO's
+                // UnresolvedReferenceValue (see ReferenceRowMatches), so one set per kind of row covers both. Resolved and
+                // unresolved rows are kept apart because a change naming an object matches a resolved row by id alone.
                 StringComparer = stringComparer,
-                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
+                UnresolvedRowReferenceValues = values.Where(v => !v.ReferenceValueId.HasValue && v.UnresolvedReferenceValue != null)
+                    .Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
+                ResolvedRowReferenceValues = values.Where(v => v.ReferenceValueId.HasValue && v.UnresolvedReferenceValue != null)
+                    .Select(v => v.UnresolvedReferenceValue!).ToHashSet(stringComparer),
                 ReferenceIds = values.Where(v => v.ReferenceValueId.HasValue).Select(v => v.ReferenceValueId!.Value).ToHashSet()
             },
 
@@ -732,7 +980,7 @@ public partial class SyncEngine
             AttributeDataType.Binary => index.BinaryValues != null,
             AttributeDataType.Boolean => index.BooleanValues != null,
             AttributeDataType.Guid => index.GuidValues != null,
-            AttributeDataType.Reference => index.ReferenceValues != null,
+            AttributeDataType.Reference => index.UnresolvedRowReferenceValues != null && index.ResolvedRowReferenceValues != null,
             // NotSet and any future types: ValueExistsOnCso's default arm returns false, matching
             // the fast switch's own default arm, so either route is equivalent; take the fallback
             // for uniformity.
@@ -780,17 +1028,22 @@ public partial class SyncEngine
                 attrChange.GuidValue.HasValue &&
                 (index.GuidValues?.Contains(attrChange.GuidValue.Value) ?? false),
 
+            // ReferenceRowMatches over sets: a change naming an object matches resolved rows by that id and unresolved
+            // rows by string; a change naming none matches every row by string.
             AttributeDataType.Reference =>
                 (attrChange.ResolvedReferenceCsoId.HasValue &&
                  (index.ReferenceIds?.Contains(attrChange.ResolvedReferenceCsoId.Value) ?? false)) ||
-                (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
-                 (index.ReferenceValues?.Contains(attrChange.UnresolvedReferenceValue) ?? false)) ||
-                (!string.IsNullOrEmpty(attrChange.StringValue) &&
-                 (index.ReferenceValues?.Contains(attrChange.StringValue) ?? false)),
+                ReferenceStringInIndex(index, attrChange.UnresolvedReferenceValue, attrChange.ResolvedReferenceCsoId.HasValue) ||
+                ReferenceStringInIndex(index, attrChange.StringValue, attrChange.ResolvedReferenceCsoId.HasValue),
 
             _ => false
         };
     }
+
+    private static bool ReferenceStringInIndex(AttributeValueIndex index, string? value, bool changeNamesAnObject) =>
+        !string.IsNullOrEmpty(value) &&
+        ((index.UnresolvedRowReferenceValues?.Contains(value) ?? false) ||
+         (!changeNamesAnObject && (index.ResolvedRowReferenceValues?.Contains(value) ?? false)));
 
     /// <summary>
     /// Builds the per-attribute value index <see cref="IsAttributeChangeConfirmedFast"/> reads, from a

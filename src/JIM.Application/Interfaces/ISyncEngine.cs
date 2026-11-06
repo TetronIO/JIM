@@ -234,7 +234,8 @@ public interface ISyncEngine
         PendingExport? pendingExport,
         PendingExportReconciliationResult result,
         IReadOnlySet<Guid>? metaverseObjectIdsOwedPassword = null,
-        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null);
+        IReadOnlySet<Guid>? connectedSystemObjectIdsWithExchangeChange = null,
+        IReadOnlyDictionary<int, ProbedAttributeValues>? probedValuesByAttributeId = null);
 
     /// <summary>
     /// Judges the connector-defined changes a Pending Export holds while Exchange may still owe them (#2021) when the

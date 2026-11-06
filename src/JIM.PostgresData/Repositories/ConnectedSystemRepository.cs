@@ -3037,18 +3037,39 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// compares through each value's attribute definition (its type, plurality and case rules), and materialising that
     /// shared definition by hand would duplicate the entity mapping for a load that is now one row per value. Identity
     /// resolution has every value of an attribute share one definition instance.
+    /// <para>
+    /// <paramref name="excludedAttributeIds"/> leaves out the values reconciliation probes instead of loading (#2669), a
+    /// filtered include, so a large group's member values are never read here: on a 500,000-user, 25,000-group run two
+    /// pages loaded 761,000 and 1.73 million of them. The caller excludes an attribute only for objects whose every change
+    /// on it the probe answers.
+    /// </para>
     /// </remarks>
-    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
     {
         var idList = csoIds.ToList();
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        return await Repository.Database.ConnectedSystemObjects
+        var query = Repository.Database.ConnectedSystemObjects
             .AsNoTrackingWithIdentityResolution()
-            .AsSplitQuery()
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.Attribute)
+            .AsSplitQuery();
+
+        if (excludedAttributeIds is { Count: > 0 })
+        {
+            var excluded = excludedAttributeIds.ToList();
+            query = query
+                .Include(cso => cso.AttributeValues.Where(av => !excluded.Contains(av.AttributeId)))
+                    .ThenInclude(av => av.Attribute);
+        }
+        else
+        {
+            query = query
+                .Include(cso => cso.AttributeValues)
+                    .ThenInclude(av => av.Attribute);
+        }
+
+        return await query
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
     }

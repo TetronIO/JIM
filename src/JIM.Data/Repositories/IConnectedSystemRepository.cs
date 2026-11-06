@@ -183,7 +183,8 @@ public interface IConnectedSystemRepository
     /// value carries <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c>, which is all reconciliation compares;
     /// its <c>ReferenceValue</c> navigation is left null, so a group does not bring every member's object with it.
     /// </summary>
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null);
 
     public Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem);
 
