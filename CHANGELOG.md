@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon and its Initiated By chips just their tag (KEY, SCH, JIM and so on). Hovering a chip shows its full detail, including the exact count.
+- 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon and its Initiated By chips just their tag (KEY, SCH, JIM and so on), and on the Schedules tab each Schedule's Trigger and last Outcome show just their icon. Hovering a chip shows its full detail, including the exact count.
 - 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
 - 🔄 On Active Directory, the attributes only Exchange may set (`homeMDB`, `msExchRecipientTypeDetails` and five more) are discovered read-only, so no Attribute Flow can write them: written directly, they create no mailbox. They are still imported. (#2755)
 - 🔄 Discovering servers through the REST API or PowerShell can name the setting they are for (`?setting=`, `Get-JIMConnectedSystemDirectoryServer -Setting`), for a Connector that discovers servers for more than one, and each server found carries its version where the directory records one. (#2021)
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 A Schedule's description on the Operations page's Schedules tab no longer wraps over many lines in a narrow window; it follows the name on one line, with the full text on hover.
 - 🐛 `New-JIMSyncRule` now writes the warnings the save raises, such as an Attribute Flow expression that reads an attribute the Object Type does not have, as `Set-JIMSyncRule` already did.
 - 🐛 A synchronisation's completion message and processed count now report the objects it processed, instead of the handful its final export review looked at (a million-object run read "1 objects ... avg 0 obj/s"). (#2790)
 - 🐛 Cancelling the confirmation after moving a Connected System's Object Matching switch between Simple and Advanced now puts the switch back; before, it kept showing the mode that was never applied.

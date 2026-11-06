@@ -16,7 +16,7 @@
    and the toolbar count) lives in the shared grid; this tab supplies the columns, the window loader and the
    empty states. The URL parameters are prefixed so this grid's state cannot collide with the Activity tab's on
    the shared Operations page URL. *@
-<VirtualisedDataGrid @ref="_grid" T="ScheduleHeader"
+<VirtualisedDataGrid @ref="_grid" T="ScheduleHeader" CompactWhenCrowded="true"
                      ContainerId="operations-schedules"
                      UrlParameterPrefix="s-"
                      DefaultSortBy="name"
@@ -32,27 +32,20 @@
         </MudButton>
     </ToolBarExtras>
     <Columns>
-        <TemplateColumn T="ScheduleHeader" Title="Name" Sortable="false">
+        @* Name is the fill column: it takes the width the other columns leave and clips the description after the name,
+           so a long description can never wrap the row (a virtualised row is a fixed height). Its minimum width is
+           what lets the list go compact, collapsing Trigger and Outcome, before the name is squeezed away. *@
+        <TemplateColumn T="ScheduleHeader" Title="Name" Sortable="false"
+                        HeaderClass="jim-fill-column jim-schedule-name-column" CellClass="jim-fill-column jim-schedule-name-column">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Name" Name="name" />
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
-                @* One line: a virtualised row is a fixed height, so a description stacked under the name is
-                   clipped on the Schedules that have one and leaves dead space on the Schedules that do not.
-                   The name holds its width and the description is what gives way. *@
-                <div class="jim-attr-single-line">
-                    <MudText Typo="Typo.body1">@schedule.Name</MudText>
-                    @if (!string.IsNullOrEmpty(schedule.Description))
-                    {
-                        <MudTooltip Text="@schedule.Description" Arrow="true" Placement="Placement.Top" RootClass="jim-attr-single-line-value">
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary jim-attr-single-line-value">@schedule.Description</MudText>
-                        </MudTooltip>
-                    }
-                </div>
+                <OneLineText Text="@schedule.Name" Secondary="@schedule.Description" />
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Steps" Sortable="false">
+        <TemplateColumn T="ScheduleHeader" Title="Steps" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Steps</MudText>
             </HeaderTemplate>
@@ -63,29 +56,35 @@
                 </MudChip>
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Trigger" Sortable="false">
+        <TemplateColumn T="ScheduleHeader" Title="Trigger" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Trigger</MudText>
             </HeaderTemplate>
             <CellTemplate>
                 @{ var schedule = context.Item; }
+                @* The description hides when the list is crowded, leaving the icon; the tooltip keeps it. *@
                 @if (schedule.TriggerType == ScheduleTriggerType.Cron)
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info"
-                             Icon="@Icons.Material.Filled.Schedule">
-                        @ScheduleTriggerDisplay.Describe(schedule)
-                    </MudChip>
+                    var trigger = ScheduleTriggerDisplay.Describe(schedule);
+                    <MudTooltip Text="@trigger" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="jim-compact-chip"
+                                 Icon="@Icons.Material.Filled.Schedule">
+                            <span class="jim-compact-hide">@trigger</span>
+                        </MudChip>
+                    </MudTooltip>
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default"
-                             Icon="@Icons.Material.Filled.TouchApp">
-                        Manual
-                    </MudChip>
+                    <MudTooltip Text="Manual: runs only when started" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="jim-compact-chip"
+                                 Icon="@Icons.Material.Filled.TouchApp">
+                            <span class="jim-compact-hide">Manual</span>
+                        </MudChip>
+                    </MudTooltip>
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Next Run" Sortable="false" HeaderClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="Next Run" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Next Run" Name="nextruntime" />
             </HeaderTemplate>
@@ -104,7 +103,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Last Run" Sortable="false" HeaderClass="jim-nowrap">
+        <TemplateColumn T="ScheduleHeader" Title="Last Run" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Last Run" Name="lastruntime" />
             </HeaderTemplate>
@@ -128,7 +127,7 @@
            failures (Complete With Error) names the steps that failed. Its own column, rather than
            sharing the Last Run cell, because a virtualised row is a fixed height and a stacked chip is clipped
            on exactly the rows that have run. *@
-        <TemplateColumn T="ScheduleHeader" Title="Outcome" Sortable="false">
+        <TemplateColumn T="ScheduleHeader" Title="Outcome" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Outcome</MudText>
             </HeaderTemplate>
@@ -137,10 +136,14 @@
                 @if (schedule.LastExecutionStatus.HasValue)
                 {
                     var lastExecutionStatus = schedule.LastExecutionStatus.Value;
-                    <MudChip T="string" Variant="Variant.Text" Class="ma-0"
-                             Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)">
-                        @ScheduleExecutionDisplay.LastOutcomeLabel(schedule)
-                    </MudChip>
+                    var outcome = ScheduleExecutionDisplay.LastOutcomeLabel(schedule);
+                    <MudTooltip Text="@outcome" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Variant="Variant.Text" Class="ma-0 jim-compact-chip"
+                                 Color="Helpers.GetScheduleExecutionMudBlazorColorForStatus(lastExecutionStatus)"
+                                 Icon="@Helpers.GetScheduleExecutionStatusIcon(lastExecutionStatus)">
+                            <span class="jim-compact-hide">@outcome</span>
+                        </MudChip>
+                    </MudTooltip>
                 }
                 else
                 {
@@ -148,7 +151,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false">
+        <TemplateColumn T="ScheduleHeader" Title="Status" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <VirtualisedSortHeader Title="Status" Name="status" />
             </HeaderTemplate>
@@ -168,7 +171,7 @@
                 }
             </CellTemplate>
         </TemplateColumn>
-        <TemplateColumn T="ScheduleHeader" Title="Actions" Sortable="false">
+        <TemplateColumn T="ScheduleHeader" Title="Actions" Sortable="false" HeaderClass="jim-nowrap" CellClass="jim-nowrap">
             <HeaderTemplate>
                 <MudText Typo="Typo.button">Actions</MudText>
             </HeaderTemplate>

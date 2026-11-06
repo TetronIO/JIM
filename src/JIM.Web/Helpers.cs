@@ -495,6 +495,26 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Returns the icon for a Schedule Execution's overall status, shown beside its colour on the Schedules list so the
+    /// outcome still reads when a crowded list collapses the chip to its icon.
+    /// </summary>
+    /// <param name="status">The Schedule Execution status to show.</param>
+    public static string GetScheduleExecutionStatusIcon(ScheduleExecutionStatus status)
+    {
+        return status switch
+        {
+            ScheduleExecutionStatus.Complete => Icons.Material.Filled.CheckCircle,
+            ScheduleExecutionStatus.CompleteWithError => Icons.Material.Filled.ReportProblem,
+            ScheduleExecutionStatus.InProgress => Icons.Material.Filled.Sync,
+            ScheduleExecutionStatus.Failed => Icons.Material.Filled.Error,
+            ScheduleExecutionStatus.Cancelled => Icons.Material.Filled.Cancel,
+            ScheduleExecutionStatus.Paused => Icons.Material.Filled.PauseCircle,
+            ScheduleExecutionStatus.Queued => Icons.Material.Filled.HourglassEmpty,
+            _ => Icons.Material.Filled.HelpOutline,
+        };
+    }
+
+    /// <summary>
     /// Returns the chip colour for an individual step's status within a Schedule Execution. Mirrors
     /// <see cref="GetActivityMudBlazorColorForStatus"/> for the statuses the two have in common, so a step and the
     /// Activity behind it are never coloured differently.
