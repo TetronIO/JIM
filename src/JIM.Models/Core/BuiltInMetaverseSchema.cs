@@ -79,6 +79,8 @@ public static class BuiltInMetaverseSchema
                 standardMappings: Ldap("msExchHideFromAddressLists", "Exchange attribute.")),
             Define(Constants.BuiltInAttributes.Info, AttributeDataType.Text, AttributePlurality.SingleValued, UserAndGroup,
                 standardMappings: Ldap("info")),
+            Define(Constants.BuiltInAttributes.LegacyExchangeDn, AttributeDataType.Text, AttributePlurality.SingleValued, UserAndGroup,
+                standardMappings: Ldap("legacyExchangeDN", "Exchange sets it and the LDAP Connector reads it as read-only, so it flows in only. GAL synchronisation builds a contact's X500: proxy address from it.")),
             Define(Constants.BuiltInAttributes.MailNickname, AttributeDataType.Text, AttributePlurality.SingleValued, UserAndGroup,
                 standardMappings: Ldap("mailNickname", "Exchange alias attribute.")),
             Define(Constants.BuiltInAttributes.ObjectGuid, AttributeDataType.Guid, AttributePlurality.SingleValued, UserAndGroup,

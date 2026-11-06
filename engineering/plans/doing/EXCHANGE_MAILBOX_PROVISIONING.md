@@ -1,6 +1,6 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1 to 6 and 7a complete; Phase 7b, GAL synchronisation's own pieces, next)
+- **Status:** Doing (Phases 1 to 7 complete; Phase 8, integration, compliance and flag removal, next)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
@@ -294,7 +294,7 @@ Decided on 5 November 2026, after reconciling with the earlier GAL work (#944, c
 
 - **No Contact Metaverse Object Type.** A person or group in the Metaverse is one identity, provisioned to each system in the form it needs: an account in its own forest, a contact in the others.
 - **People and groups** both reach the other forests' address books.
-- **The GAL OU stays in each forest's Connected System scope.** The LDAP Connector refuses any export outside the selected containers, so requirement 23's "leave it out of scope" would fail every contact export. Loop safety comes from rule scoping, the Remain Joined out-of-scope action and a warning instead (7b).
+- **The GAL OU stays in each forest's Connected System scope.** The LDAP Connector refuses any export outside the selected containers, so requirement 23's "leave it out of scope" would fail every contact export. Loop safety comes from Synchronisation Rule isolation instead (7b).
 - **"From PANOPLY, not from RESURGAM" is a connection criterion**, keyed on the Object Type the identity is joined to rather than on how the join was made, so a rule's own contacts can never change its answer.
 
 #### Phase 7a: the connection criterion ✅
@@ -308,13 +308,13 @@ A general feature, not behind the flag.
 - **Surfaces.** Portal criterion editor and scope tester, REST (`connectedObjectTypeId`, tester `connectedObjectTypeIds`), PowerShell (`-ConnectedSystemName`/`-ConnectedObjectTypeName`, `Test-JIMScope -ConnectedObjectTypeId`), explanations worded as connections.
 - **Gap, filed separately ([#2787](https://github.com/TetronIO/JIM/issues/2787)):** a saved configuration test case does not record connections, so it tests as having none.
 
-#### Phase 7b: GAL sync's own pieces (behind the flag)
+#### Phase 7b: GAL sync's own pieces ✅
 
-- **Legacy Exchange DN**, a built-in Metaverse Attribute (User and Group), with a Standard Mapping from `legacyExchangeDN`.
-- **The X500 proxy (requirement 22)**, built by the export expression `Split(Join(mv["Proxy Addresses"], "|") + IIF(HasValue(mv["Legacy Exchange DN"]), "|X500:" + mv["Legacy Exchange DN"], ""), "|")`, proven by unit test with and without proxies and an empty Legacy Exchange DN.
-- **The GAL loop warning (requirement 23, decision 13, re-expressed):** raised when an import rule takes in an Object Type an export rule on the same Connected System provisions, unscoped or with Disconnect as its out-of-scope action, naming the remedy. Computed in the application layer, so the portal, REST and PowerShell show the same text.
-- **Groups:** the export rule scopes to mail-enabled groups, and a group's contact takes its primary address and proxies.
-- **PRD amendment:** requirement 21 names groups; requirement 23 and Scenario 4 drop container exclusion for rule scoping and the warning; decision 13 re-worded; a new decision records the connection criterion and "no Contact type".
+- **Synchronisation Rule isolation ([TetronIO/JIM#2797](https://github.com/TetronIO/JIM/pull/2797)), in place of the planned GAL loop warning (requirement 23, decision 13).** A warning could not tell the GAL loop from the ordinary "import users, provision users" setup, so it would have fired for nearly everyone. The loop came from the engine instead: an import rule's Out-of-Scope Action applied to any joined object outside its scope, including the contacts an export rule had provisioned, so an import rule for a forest's own contacts disconnected every one of JIM's, and the export rule provisioned them again. Now a join an export rule made is that rule's alone, and leaving an import rule's scope withdraws only the values it brought in (when recall is on), keeping the join. Where another object from the same Connected System is joined to the identity, nothing is withdrawn, because values record their system and not their object.
+- **Legacy Exchange DN**, a built-in Metaverse Attribute (User and Group, Text), with a Standard Mapping from `legacyExchangeDN`. It is not behind the flag: the built-in schema has no way to gate an attribute, and Proxy Addresses ships ungated already.
+- **The X500 proxy (requirement 22)** needs no new function. `Split(Join(mv["Proxy Addresses"], "|") + IIF(HasValue(mv["Legacy Exchange DN"]), "|X500:" + mv["Legacy Exchange DN"], ""), "|")` is proven through the export Attribute Flow pipeline: proxies with and without a Legacy Exchange DN, neither (no value), and an `X500:` address the recipient already holds, which the pipeline keeps once.
+- **Groups:** a workflow test proves an export rule from people and one from groups, each scoped by a connection criterion, provisioning into the same `contact` Object Type. Scoping groups to mail-enabled ones and giving a group's contact its primary address are configuration, documented with GAL synchronisation in Phase 8.
+- **PRD amendment:** requirement 21 names groups; requirement 23 and Scenario 4 rely on rule isolation; decision 13 is superseded by decision 19; decisions 17 and 18 record "no Contact type" and the connection criterion.
 
 ### Phase 8: Integration, compliance and flag removal (5 days, plus lab time)
 
