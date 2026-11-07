@@ -222,18 +222,20 @@ public class DeferredExportChunkDatabaseTests
             "deferred and still executable, strictly after the cursor, in (CreatedAt, Id) order");
     }
 
-    // ─── GetDeferredExportsByIdsAsync ───
+    // ─── GetPendingExportsByIdsAsync (the one load path, #2813) ───
 
     [Test]
-    public async Task GetDeferredExportsByIdsAsync_SomeIds_LoadsTheGraphTheConnectorReadsInQueueOrderUntrackedAsync()
+    public async Task GetPendingExportsByIdsAsync_SomeIds_LoadsTheGraphTheConnectorReadsInQueueOrderUntrackedAsync()
     {
         var s = await SeedSchemaAsync();
         var later = await SeedDeferredExportAsync(s, T0.AddSeconds(2), [Guid.NewGuid()]);
         var earlier = await SeedDeferredExportAsync(s, T0.AddSeconds(1), [Guid.NewGuid()]);
         await SeedDeferredExportAsync(s, T0.AddSeconds(3), [Guid.NewGuid()]);
 
+        // Tracking by default, as the worker's contexts are (JIM.Worker's Program.cs), so the load must opt out itself.
         await using var ctx = NewContext();
-        var exports = await new PostgresDataRepository(ctx).Sync.GetDeferredExportsByIdsAsync([later, earlier]);
+        ctx.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.TrackAll;
+        var exports = await new PostgresDataRepository(ctx).Sync.GetPendingExportsByIdsAsync([later, earlier]);
 
         using (Assert.EnterMultipleScope())
         {

@@ -500,16 +500,19 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Deletes <see cref="ConnectedSystemObjectAttributeValue"/> rows by Id. Detaches any tracked
-    /// instances first (belt-and-braces per the raw-SQL rule in <c>src/CLAUDE.md</c>): the export
-    /// batch loader is <c>AsNoTracking</c> + <c>ClearChangeTracker()</c> per batch today, but a
-    /// future caller on a tracking context must not be silently corrupted - see
-    /// <see cref="DetachTrackedEntities{T}"/>'s remarks for the <c>DbUpdateConcurrencyException</c>
-    /// failure mode this guards against.
+    /// Deletes <see cref="ConnectedSystemObjectAttributeValue"/> rows by Id, first detaching any tracked
+    /// instance of them (the raw-SQL rule in <c>src/CLAUDE.md</c>; see
+    /// <see cref="DetachTrackedEntities{T}"/>'s remarks for the <c>DbUpdateConcurrencyException</c> a
+    /// tracked instance left behind causes). Whether anything is tracked depends on the caller's context:
+    /// the worker's long-lived context tracks by default, and the parallel export path re-loads each batch
+    /// tracked, so a batch holding a large group tracks every one of its member values. The detach is
+    /// set-based, so it costs one pass over the tracker however many values are removed (#2813: matching
+    /// against a list of the removed ids took seconds per batch).
     /// </summary>
     private async Task DeleteCsoAttributeValuesByIdAsync(List<Guid> removalValueIds)
     {
-        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(av => removalValueIds.Contains(av.Id));
+        var removalValueIdSet = removalValueIds.ToHashSet();
+        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(removalValueIdSet, av => av.Id);
 
         if (_context.Database.IsRelational())
         {
@@ -520,7 +523,7 @@ public partial class SyncRepository
         else
         {
             var entities = await _context.ConnectedSystemObjectAttributeValues
-                .Where(av => removalValueIds.Contains(av.Id))
+                .Where(av => removalValueIdSet.Contains(av.Id))
                 .ToListAsync();
             _context.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
             await _context.SaveChangesAsync();
@@ -1015,12 +1018,13 @@ public partial class SyncRepository
         // deleted in the same page flush; that matches zero rows and throws
         // DbUpdateConcurrencyException, poisoning every later SaveChangesAsync on the context
         // (Scenario-004-DeletionRules Test 3 failure, issue #993).
-        var pendingExportIds = await _context.PendingExports
+        var pendingExportIds = (await _context.PendingExports
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIds.Contains(pe.ConnectedSystemObjectId.Value))
             .Select(pe => pe.Id)
-            .ToListAsync();
+            .ToListAsync())
+            .ToHashSet();
         DetachTrackedChildEntities(pendingExportIds);
-        DetachTrackedEntities<PendingExport>(pe => pendingExportIds.Contains(pe.Id));
+        DetachTrackedEntities<PendingExport>(pendingExportIds, pe => pe.Id);
 
         // Use raw SQL for performance and to avoid change tracker identity conflicts.
         // After ClearChangeTracker(), loading PEs with Include chains would create
@@ -1068,9 +1072,9 @@ public partial class SyncRepository
 
         // Detach any tracked children and parents to prevent EF Core's ClientSetNull
         // behaviour from interfering with our explicit deletion order.
-        DetachTrackedChildEntities(pendingExportIds);
-        DetachTrackedEntities<PendingExport>(
-            e => pendingExportIds.Contains(e.Id));
+        var pendingExportIdSet = pendingExportIds.ToHashSet();
+        DetachTrackedChildEntities(pendingExportIdSet);
+        DetachTrackedEntities<PendingExport>(pendingExportIdSet, e => e.Id);
 
         if (_context.Database.IsRelational())
         {
@@ -1306,8 +1310,7 @@ public partial class SyncRepository
         var changeIds = changeList.Select(c => c.Id).ToList();
 
         // Detach any tracked instances to prevent change tracker conflicts
-        DetachTrackedEntities<PendingExportAttributeValueChange>(
-            e => changeIds.Contains(e.Id));
+        DetachTrackedEntities<PendingExportAttributeValueChange>(changeIds.ToHashSet(), e => e.Id);
 
         if (_context.Database.IsRelational())
         {
@@ -1673,25 +1676,36 @@ public partial class SyncRepository
     }
 
     /// <summary>
-    /// Detaches all tracked entities of type T that match the predicate.
-    /// Used before ExecuteDeleteAsync to prevent the change tracker from interfering
-    /// with direct SQL operations (e.g., ClientSetNull cascading on orphaned children).
+    /// Detaches every tracked entity of type T whose key, as <paramref name="keyOf"/> reads it, is one of
+    /// <paramref name="keys"/>. Used before a raw SQL write to keep the change tracker from interfering with it (e.g.
+    /// ClientSetNull cascading on orphaned children). <paramref name="keyOf"/> returns null for an entity outside the
+    /// write's scope, which is how a caller narrows the match beyond the key.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Takes a set rather than a free predicate (#2813), so the match costs one lookup per tracked entry. A predicate
+    /// testing <c>list.Contains(entity.Id)</c> was O(tracked x keys): optimistic export apply removing 9,000 member
+    /// values from a batch tracking 900,000 took over five seconds in this scan alone.
+    /// </para>
+    /// <para>
     /// Change detection is suppressed while enumerating: mid-sync, tracked entities routinely
     /// hold navigations to untracked instances that duplicate already-tracked keys (cross-page
     /// reference resolution builds such graphs), and ChangeTracker.Entries&lt;T&gt;() otherwise
     /// runs DetectChanges, attaches those graphs, and throws an identity conflict. Detaching
     /// needs only the entries already tracked, so skipping detection is safe.
+    /// </para>
     /// </remarks>
-    private void DetachTrackedEntities<T>(Func<T, bool> predicate) where T : class
+    private void DetachTrackedEntities<T>(IReadOnlySet<Guid> keys, Func<T, Guid?> keyOf) where T : class
     {
+        if (keys.Count == 0)
+            return;
+
         var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
         _context.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
             var entries = _context.ChangeTracker.Entries<T>()
-                .Where(e => predicate(e.Entity))
+                .Where(e => keyOf(e.Entity) is { } key && keys.Contains(key))
                 .ToList();
 
             foreach (var entry in entries)
@@ -1705,21 +1719,21 @@ public partial class SyncRepository
 
     /// <summary>
     /// Detaches tracked PendingExportAttributeValueChange entities whose PendingExportId shadow FK
-    /// matches any of the given parent IDs. Accesses the shadow property via the change tracker entry.
-    /// Change detection is suppressed for the same reason as <see cref="DetachTrackedEntities{T}"/>.
+    /// is one of the given parent IDs. Accesses the shadow property via the change tracker entry.
+    /// Set-based and with change detection suppressed, for the reasons given on
+    /// <see cref="DetachTrackedEntities{T}"/>.
     /// </summary>
-    private void DetachTrackedChildEntities(List<Guid> pendingExportIds)
+    private void DetachTrackedChildEntities(IReadOnlySet<Guid> pendingExportIds)
     {
+        if (pendingExportIds.Count == 0)
+            return;
+
         var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
         _context.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
             var entries = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-                .Where(e =>
-                {
-                    var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
-                    return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
-                })
+                .Where(e => e.Property<Guid?>("PendingExportId").CurrentValue is { } fkValue && pendingExportIds.Contains(fkValue))
                 .ToList();
 
             foreach (var entry in entries)

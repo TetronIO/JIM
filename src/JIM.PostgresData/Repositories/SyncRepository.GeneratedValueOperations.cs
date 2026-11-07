@@ -254,7 +254,7 @@ public partial class SyncRepository
         // raw DELETE does for any other entity (src/CLAUDE.md, "Raw SQL Writes Must Fix Up or Detach Tracked
         // Instances").
         var idSet = assignmentIds.ToHashSet();
-        DetachTrackedEntities<GeneratedValueAssignment>(a => idSet.Contains(a.Id));
+        DetachTrackedEntities<GeneratedValueAssignment>(idSet, a => a.Id);
 
         await _context.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""GeneratedValueAssignments"" WHERE ""Id"" = ANY({0})",

@@ -41,7 +41,7 @@ public partial class SyncRepository
         // deletes, or the next SaveChangesAsync would act on a row that no longer exists (src/CLAUDE.md, "Raw SQL
         // Writes Must Fix Up or Detach Tracked Instances").
         var idSet = assignmentIds.ToHashSet();
-        DetachTrackedEntities<GeneratedValueAssignment>(a => idSet.Contains(a.Id));
+        DetachTrackedEntities<GeneratedValueAssignment>(idSet, a => a.Id);
 
         return await RetiredGeneratedValueSql.RetireAndDeleteAssignmentsAsync(_context, assignmentIds, reason, activityId);
     }

@@ -163,8 +163,10 @@ public partial class SyncRepository
 
         // Raw SQL bypasses the change tracker: fix up any tracked copy of the value so a later save does not write the
         // old value back (src/CLAUDE.md, Raw SQL Writes Must Fix Up or Detach Tracked Instances).
-        DetachTrackedEntities<JIM.Models.Core.MetaverseObjectAttributeValue>(av => av.AttributeId == attributeId && av.MetaverseObject != null && av.MetaverseObject.Id == metaverseObjectId);
-        DetachTrackedEntities<JIM.Models.Core.MetaverseObject>(mvo => mvo.Id == metaverseObjectId);
+        var metaverseObjectIds = new HashSet<Guid> { metaverseObjectId };
+        DetachTrackedEntities<JIM.Models.Core.MetaverseObjectAttributeValue>(metaverseObjectIds,
+            av => av.AttributeId == attributeId ? av.MetaverseObject?.Id : null);
+        DetachTrackedEntities<JIM.Models.Core.MetaverseObject>(metaverseObjectIds, mvo => mvo.Id);
         return true;
     }
 
@@ -197,7 +199,7 @@ public partial class SyncRepository
         if (updated != 1)
             return false;
 
-        DetachTrackedEntities<PendingExportAttributeValueChange>(c => c.Id == changeId);
+        DetachTrackedEntities<PendingExportAttributeValueChange>(new HashSet<Guid> { changeId }, c => c.Id);
         return true;
     }
 
@@ -228,7 +230,7 @@ public partial class SyncRepository
             return;
 
         var idSet = ids.ToHashSet();
-        DetachTrackedEntities<GeneratedValueRevisionPending>(r => idSet.Contains(r.Id));
+        DetachTrackedEntities<GeneratedValueRevisionPending>(idSet, r => r.Id);
         await _context.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""GeneratedValueRevisionsPending"" WHERE ""Id"" = ANY({0})", ids.ToArray());
     }
@@ -249,7 +251,7 @@ public partial class SyncRepository
 
         // Fix up any tracked copies to match (src/CLAUDE.md, Raw SQL Writes Must Fix Up or Detach Tracked Instances).
         var idSet = connectedSystemObjectIds.ToHashSet();
-        DetachTrackedEntities<PendingExport>(pe => pe.ConnectedSystemObjectId.HasValue && idSet.Contains(pe.ConnectedSystemObjectId.Value));
+        DetachTrackedEntities<PendingExport>(idSet, pe => pe.ConnectedSystemObjectId);
         return released;
     }
 
@@ -278,11 +280,10 @@ public partial class SyncRepository
         {
             // Raw SQL bypasses the tracker: drop any tracked copy so a later save cannot write the allowance back
             // (src/CLAUDE.md, Raw SQL Writes Must Fix Up or Detach Tracked Instances).
-            var mvoSet = metaverseObjectIds.ToHashSet();
-            var csoSet = connectedSystemObjectIds.ToHashSet();
-            DetachTrackedEntities<GeneratedValueAssignment>(a => a.RenameAuthorised && a.RejectedByConnectedSystemId == connectedSystemId
-                && ((a.MetaverseObjectId.HasValue && mvoSet.Contains(a.MetaverseObjectId.Value))
-                    || (a.ConnectedSystemObjectId.HasValue && csoSet.Contains(a.ConnectedSystemObjectId.Value))));
+            // Either key places an allowance in scope, so each is matched in turn.
+            bool InScope(GeneratedValueAssignment a) => a.RenameAuthorised && a.RejectedByConnectedSystemId == connectedSystemId;
+            DetachTrackedEntities<GeneratedValueAssignment>(metaverseObjectIds.ToHashSet(), a => InScope(a) ? a.MetaverseObjectId : null);
+            DetachTrackedEntities<GeneratedValueAssignment>(connectedSystemObjectIds.ToHashSet(), a => InScope(a) ? a.ConnectedSystemObjectId : null);
         }
 
         return cleared;

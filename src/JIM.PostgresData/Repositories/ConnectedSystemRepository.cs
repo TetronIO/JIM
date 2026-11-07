@@ -5143,8 +5143,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
     {
         // CSO.Type is intentionally not included here: the file connector (the only consumer
-        // of this query) never reads it. The calls-path sibling query, GetExecutableExportBatchAsync,
-        // does include Type because LdapConnectorExport requires it.
+        // of this query) never reads it. The calls path loads its batches with GetPendingExportsByIdsAsync,
+        // which does include Type because LdapConnectorExport requires it.
         return await Repository.Database.PendingExports
             .AsNoTracking()
             .AsSplitQuery()
@@ -5177,32 +5177,64 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ToDictionaryAsync(x => x.ChangeType, x => x.Count);
     }
 
-    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    /// <summary>
+    /// Selects the next batch of executable exports as summaries (#2813). Choosing a batch needs only each export's id,
+    /// change type, status, deferral flag and cursor, so nothing else is read: loading every selected export's object with
+    /// every one of its attribute values here, for the parallel path to throw away and each worker to load again, took
+    /// 11 s of a 500k-user leaver run's export, serially, under the caller's context gate.
+    /// </summary>
+    /// <remarks>
+    /// The statement is the SQL EF Core generates for <see cref="ExecutableExportBatchSummaryQuery"/>, read with a data
+    /// reader rather than EF's materialiser (src/CLAUDE.md, "Worker Hot Path"): the selection then shares its eligibility
+    /// predicate and keyset cursor with the counts, the deferred collection and the probe beside it, rather than
+    /// restating them in a second dialect that could drift from them.
+    /// </remarks>
+    public async Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
-        return await ExecutableExportBatchQuery(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes)
-            .AsNoTracking()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            // CSO.Type is required by LdapConnectorExport: GetObjectClass() reads Type.Name as
-            // an object-class fallback, and InjectPlaceholderModificationsIfNeeded() assigns
-            // the Type entity onto synthesised placeholder attribute changes. The file-path
-            // sibling query (GetExecutableExportsAsync) does not include Type because the
-            // file connector never reads it.
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .ToListAsync();
+        var query = ExecutableExportBatchSummaryQuery(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
+        if (!Repository.Database.Database.IsRelational())
+            return await query.ToListAsync();
+
+        await using var command = query.CreateDbCommand();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(command.Connection!);
+        command.Transaction = Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        var summaries = new List<ExecutableExportSummary>(take);
+        await using var reader = await command.ExecuteReaderAsync();
+        var idOrdinal = reader.GetOrdinal(nameof(ExecutableExportSummary.Id));
+        var changeTypeOrdinal = reader.GetOrdinal(nameof(ExecutableExportSummary.ChangeType));
+        var statusOrdinal = reader.GetOrdinal(nameof(ExecutableExportSummary.Status));
+        var hasUnresolvedReferencesOrdinal = reader.GetOrdinal(nameof(ExecutableExportSummary.HasUnresolvedReferences));
+        var createdAtOrdinal = reader.GetOrdinal(nameof(ExecutableExportSummary.CreatedAt));
+        while (await reader.ReadAsync())
+        {
+            summaries.Add(new ExecutableExportSummary(
+                reader.GetGuid(idOrdinal),
+                (PendingExportChangeType)reader.GetInt32(changeTypeOrdinal),
+                (PendingExportStatus)reader.GetInt32(statusOrdinal),
+                reader.GetBoolean(hasUnresolvedReferencesOrdinal),
+                // As EF Core reads it, so the cursor handed back for the next batch compares equal to the row's value.
+                reader.GetFieldValue<DateTime>(createdAtOrdinal)));
+        }
+
+        return summaries;
     }
 
     /// <summary>
-    /// The batch of executable exports <see cref="GetExecutableExportBatchAsync"/> reads, without its
-    /// Include chain: eligibility, the Run Profile Safeguards exclusions, the keyset cursor, ordering
-    /// and page size. Separate so the plan PostgreSQL chooses for it can be tested (#2496); every split
-    /// query of the batch read embeds it as its subquery.
+    /// The statement <see cref="GetExecutableExportBatchSummaryAsync"/> runs: <see cref="ExecutableExportBatchQuery"/>
+    /// projected to its summary columns. Separate so the plan PostgreSQL chooses for it can be tested (#2496, #2813).
+    /// </summary>
+    internal IQueryable<ExecutableExportSummary> ExecutableExportBatchSummaryQuery(int connectedSystemId, int take, DateTime? afterCreatedAt,
+        Guid? afterId, IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
+    {
+        return ExecutableExportBatchQuery(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes)
+            .Select(pe => new ExecutableExportSummary(pe.Id, pe.ChangeType, pe.Status, pe.HasUnresolvedReferences, pe.CreatedAt));
+    }
+
+    /// <summary>
+    /// The batch of executable exports <see cref="GetExecutableExportBatchSummaryAsync"/> selects: eligibility, the Run
+    /// Profile Safeguards exclusions, the keyset cursor, ordering and page size.
     /// </summary>
     internal IQueryable<PendingExport> ExecutableExportBatchQuery(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
@@ -5254,11 +5286,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// strictly after the given keyset cursor, in a single query. Used to fast-path the export
     /// batch-collection loop once a batch is discovered to be made up entirely of deferred exports:
     /// paging through the remainder 100 rows at a time would only ever build the same deferred list
-    /// one page slower (issue #985). Same keyset predicate as <see cref="GetExecutableExportBatchAsync"/>,
+    /// one page slower (issue #985). Same keyset predicate as <see cref="GetExecutableExportBatchSummaryAsync"/>,
     /// restricted to HasUnresolvedReferences exports, with no page size limit. Ids only: loading the
     /// exports themselves here, with every member value of every deferred group, took 190 seconds and
     /// most of the worker's memory for 39,907 exports at 790k objects; the deferred pass now loads
-    /// them a chunk at a time (<see cref="GetDeferredExportsByIdsAsync"/>).
+    /// them a chunk at a time (<see cref="GetPendingExportsByIdsAsync"/>).
     /// </summary>
     public async Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
     {
@@ -5269,34 +5301,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .Select(pe => pe.Id)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Loads one chunk of the deferred export pass by id, untracked, in (CreatedAt, Id) order. The
-    /// Include chain is the one the pass has always read the deferred exports with:
-    /// AttributeValueChanges and their attributes for reference resolution, and the object with its
-    /// type (LdapConnectorExport's GetObjectClass() fallback and placeholder modifications) and its
-    /// attribute values with their attributes.
-    /// </summary>
-    public async Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-    {
-        if (pendingExportIds.Count == 0)
-            return [];
-
-        return await Repository.Database.PendingExports
-            .AsNoTracking()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(pe => pendingExportIds.Contains(pe.Id))
-            .OrderBy(pe => pe.CreatedAt)
-            .ThenBy(pe => pe.Id)
             .ToListAsync();
     }
 
@@ -5366,16 +5370,33 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
-    /// Uses the same includes as GetExecutableExportsAsync to ensure connectors have access to
-    /// CSO attributes, attribute value changes, and attribute definitions.
+    /// Loads Pending Exports by id for execution (#2813): the one load export execution uses, for a batch run
+    /// sequentially, a batch re-loaded on a parallel worker's own context, and a chunk of the deferred pass.
     /// </summary>
-    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    /// <remarks>
+    /// <para>
+    /// The Include chain is everything execution reads: each change's attribute (reference resolution, the Connectors);
+    /// the object's type (LdapConnectorExport's object class fallback, and the type it gives the placeholder changes it
+    /// synthesises); and the object's attribute values WITH their attributes. The last is load-bearing:
+    /// LdapConnectorExport counts a group's current members by <c>av.Attribute.Name</c>, so a value without its
+    /// attribute counts as no member, and removing one member of a populated group would inject the placeholder member.
+    /// The parallel reload once left it out and was right only by the change tracker fixing up the attributes the
+    /// batch's changes had loaded.
+    /// </para>
+    /// <para>
+    /// Untracked, whatever the context's default: everything execution writes is raw SQL, so tracking bought nothing
+    /// but cost, a change tracker entry and snapshot for every member value of every group in the batch, scanned again
+    /// by every detach. With identity resolution, so the graph holds one instance of each attribute and type however
+    /// many values share it, as the tracked reload did, rather than one per row.
+    /// </para>
+    /// </remarks>
+    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
     {
         if (pendingExportIds.Count == 0)
             return [];
 
         return await Repository.Database.PendingExports
+            .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
@@ -5383,8 +5404,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(cso => cso!.Type)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
             .Where(pe => pendingExportIds.Contains(pe.Id))
             .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
             .ToListAsync();
     }
 

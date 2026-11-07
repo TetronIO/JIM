@@ -415,20 +415,17 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _inner.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    public Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
-        => _inner.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
+        => _inner.GetExecutableExportBatchSummaryAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
     public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-        => _inner.GetDeferredExportsByIdsAsync(pendingExportIds);
-
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _inner.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
-    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         => _inner.GetPendingExportsByIdsAsync(pendingExportIds);
 
     /// <summary>

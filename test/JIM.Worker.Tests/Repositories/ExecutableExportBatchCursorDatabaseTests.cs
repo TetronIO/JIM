@@ -15,7 +15,7 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Real-PostgreSQL verification of the keyset cursor behind
-/// <see cref="ConnectedSystemRepository.GetExecutableExportBatchAsync"/> (#2496). The export loop reads
+/// <see cref="ConnectedSystemRepository.GetExecutableExportBatchSummaryAsync"/> (#2496, #2813). The export loop reads
 /// one batch at a time strictly after the last row of the previous batch; the read stays cheap only
 /// while PostgreSQL can seek IX_PendingExports_ConnectedSystemId_CreatedAt_Id to the cursor and stop
 /// after one page. Written as <c>CreatedAt &gt; x OR (CreatedAt = x AND Id &gt; y)</c> alone, the
@@ -80,7 +80,7 @@ public class ExecutableExportBatchCursorDatabaseTests
     /// </summary>
     [TestCase(false)]
     [TestCase(true)]
-    public async Task ExecutableExportBatchQuery_MidRunCursor_SeeksTheIndexToTheCursorAsync(bool genericPlan)
+    public async Task ExecutableExportBatchSummaryQuery_MidRunCursor_SeeksTheIndexToTheCursorAsync(bool genericPlan)
     {
         var connectedSystemId = await SeedConnectedSystemAsync();
         await SeedCreateExportsAsync(connectedSystemId, ExportedCount, PendingCount);
@@ -101,7 +101,7 @@ public class ExecutableExportBatchCursorDatabaseTests
     /// against dropping or repeating a row at a timestamp tie.
     /// </summary>
     [Test]
-    public async Task GetExecutableExportBatchAsync_RowsSharingTheCursorsCreatedAt_PagesThemOnIdAsync()
+    public async Task GetExecutableExportBatchSummaryAsync_RowsSharingTheCursorsCreatedAt_PagesThemOnIdAsync()
     {
         var connectedSystemId = await SeedConnectedSystemAsync();
         var ids = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).OrderBy(id => id).ToList();
@@ -130,7 +130,7 @@ public class ExecutableExportBatchCursorDatabaseTests
 
         await using var ctx = NewContext();
         var batch = await new PostgresDataRepository(ctx).ConnectedSystems
-            .GetExecutableExportBatchAsync(connectedSystemId, take: 100, afterCreatedAt: tiedAt, afterId: ids[2]);
+            .GetExecutableExportBatchSummaryAsync(connectedSystemId, take: 100, afterCreatedAt: tiedAt, afterId: ids[2]);
 
         Assert.That(batch.Select(pe => pe.Id).Take(2), Is.EqualTo(ids.Skip(3)),
             "the tied rows after the cursor's Id come first, in Id order");
@@ -192,7 +192,7 @@ public class ExecutableExportBatchCursorDatabaseTests
     }
 
     /// <summary>
-    /// The plan PostgreSQL chooses for the batch read's root query, exactly as the repository builds it. A custom plan
+    /// The plan PostgreSQL chooses for the batch selection, exactly as the repository runs it. A custom plan
     /// is made for the cursor's values, as the worker's unprepared statements get. A generic plan is made without
     /// them, as a prepared statement may get: the query is prepared with positional placeholders and explained under
     /// <c>plan_cache_mode = force_generic_plan</c>.
@@ -204,7 +204,7 @@ public class ExecutableExportBatchCursorDatabaseTests
 
         var repository = (ConnectedSystemRepository)new PostgresDataRepository(ctx).ConnectedSystems;
         await using var explain = repository
-            .ExecutableExportBatchQuery(connectedSystemId, take: 100, cursorCreatedAt, cursorId)
+            .ExecutableExportBatchSummaryQuery(connectedSystemId, take: 100, cursorCreatedAt, cursorId)
             .CreateDbCommand();
 
         if (genericPlan)

@@ -3435,11 +3435,11 @@ public class ExportExecutionTests
         public int RemainingDeferredCalls;
         public int ExecutableProbeCalls;
 
-        public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+        public override Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
             IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
         {
             Interlocked.Increment(ref BatchLoadCalls);
-            return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
+            return base.GetExecutableExportBatchSummaryAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
         }
 
         public override Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
@@ -3503,7 +3503,7 @@ public class ExportExecutionTests
             return base.PersistResolvedReferencesAsync(pendingExports, resolvedChanges);
         }
 
-        public override Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        public override Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         {
             lock (_persistLock)
             {
@@ -3964,17 +3964,27 @@ public class ExportExecutionTests
 
     /// <summary>
     /// Records each chunk the deferred pass loads, into a log the test's progress callback writes to as well, so the
-    /// order of loads and progress reports can be read back.
+    /// order of loads and progress reports can be read back. The pass loads its chunks through the same load as the
+    /// parallel workers load their batches (#2813), and here the workers share this repository; a chunk is told apart as
+    /// the load of exports still waiting on their references, since each chunk is resolved before any of its batches is
+    /// handed out.
     /// </summary>
     private sealed class DeferredChunkRecordingSyncRepository(List<string> events) : SyncRepository
     {
         public List<int> ChunkSizes { get; } = [];
 
-        public override Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        public override async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         {
-            ChunkSizes.Add(pendingExportIds.Count);
-            events.Add($"load:{pendingExportIds.Count}");
-            return base.GetDeferredExportsByIdsAsync(pendingExportIds);
+            var loaded = await base.GetPendingExportsByIdsAsync(pendingExportIds);
+            if (loaded.Any(pe => pe.HasUnresolvedReferences))
+            {
+                lock (events)
+                {
+                    ChunkSizes.Add(pendingExportIds.Count);
+                    events.Add($"load:{pendingExportIds.Count}");
+                }
+            }
+            return loaded;
         }
     }
 

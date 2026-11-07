@@ -228,6 +228,41 @@ public class OptimisticExportApplyDatabaseTests
     }
 
     /// <summary>
+    /// (2b) The set-based detach (#2813) is exact: with every value of the object tracked, only the removed ones leave
+    /// the tracker, the rest stay tracked as they were, and a later save on the same context (deleting the object, which
+    /// cascades to its still-tracked values) succeeds with the database holding nothing of the object afterwards.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_SomeOfManyTrackedValuesRemoved_DetachesExactlyThoseAndSaveSucceedsAsync()
+    {
+        var (_, csoId) = await SeedCsoAsync("kept1@example.com", "doomed1@example.com", "kept2@example.com", "doomed2@example.com");
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        var trackedCso = await ctx.ConnectedSystemObjects
+            .Include(c => c.AttributeValues)
+            .SingleAsync(c => c.Id == csoId);
+        var removedIds = trackedCso.AttributeValues.Where(av => av.StringValue!.StartsWith("doomed", StringComparison.Ordinal)).Select(av => av.Id).ToList();
+        var keptIds = trackedCso.AttributeValues.Where(av => av.StringValue!.StartsWith("kept", StringComparison.Ordinal)).Select(av => av.Id).ToList();
+
+        await repository.Sync.ApplyExportedAttributeValuesAsync([], removedIds, [csoId]);
+
+        var trackedValueIds = ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+            .Where(e => e.State == EntityState.Unchanged)
+            .Select(e => e.Entity.Id)
+            .ToList();
+        Assert.That(trackedValueIds, Is.EquivalentTo(keptIds),
+            "exactly the removed values are detached; the kept ones stay tracked, unchanged");
+
+        ctx.ConnectedSystemObjects.Remove(trackedCso);
+        Assert.That(async () => await ctx.SaveChangesAsync(), Throws.Nothing);
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ConnectedSystemObjectAttributeValues.AnyAsync(av => EF.Property<Guid>(av, "ConnectedSystemObjectId") == csoId),
+            Is.False, "the removed values were deleted by the apply and the kept ones by the cascade");
+    }
+
+    /// <summary>
     /// (3) Idempotency at the SQL layer: re-running the calculator against a Connected System
     /// Object freshly reloaded from the database after a prior apply finds the exported value
     /// already there and produces an empty delta, so a repeated ApplyExportedAttributeValuesAsync

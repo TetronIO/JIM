@@ -2014,16 +2014,18 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets a batch of executable exports using keyset pagination ordered by (CreatedAt, Id).
+    /// Selects the next batch of executable exports, using keyset pagination ordered by (CreatedAt, Id).
     /// Pass the CreatedAt and Id of the last row of the previous batch to fetch the next one;
     /// pass null for both to start from the beginning. Keyset (rather than offset) paging keeps
     /// batch collection a single forward sweep even as executed rows drop out of the query and
-    /// deferred rows remain in it (issue #985). Uses AsNoTracking in production for minimal EF
-    /// overhead.
+    /// deferred rows remain in it (issue #985). Summary-tier (#2813): the selection decides from the
+    /// summaries alone, and the chosen exports are loaded with <see cref="GetPendingExportsByIdsAsync"/>
+    /// by whichever context executes them. Eligibility is the whole of the readiness check: an Update with
+    /// no exportable attribute change, and a Create or Delete already exported, are never selected.
     /// </summary>
     /// <param name="excludedChangeTypes">Run Profile Safeguards (#1618): change types withheld for
     /// the whole run, excluded at the database level; null or empty excludes nothing.</param>
-    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
@@ -2032,24 +2034,17 @@ public interface ISyncRepository
     /// loop to fast-path once a batch is discovered to be made up entirely of deferred exports,
     /// instead of continuing to page through the remainder 100 rows at a time purely to build the
     /// deferred list (issue #985). Ids only: the deferred pass loads them a chunk at a time with
-    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same ordering and filtering semantics as
-    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
+    /// <see cref="GetPendingExportsByIdsAsync"/>. Same ordering and filtering semantics as
+    /// <see cref="GetExecutableExportBatchSummaryAsync"/>, restricted to HasUnresolvedReferences exports.
     /// </summary>
     Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
-
-    /// <summary>
-    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
-    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read. An id with
-    /// no row is left out.
-    /// </summary>
-    Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
     /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
     /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
     /// not prove the rest of the queue is deferred too. Same filtering semantics as
-    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred exports; a cheap
+    /// <see cref="GetExecutableExportBatchSummaryAsync"/>, restricted to non-deferred exports; a cheap
     /// existence check with no entity materialisation.
     /// </summary>
     Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
@@ -2093,10 +2088,13 @@ public interface ISyncRepository
     Task<int> RecoverStrandedExecutingPendingExportsAsync();
 
     /// <summary>
-    /// Reloads Pending Exports by their IDs with full object graph.
-    /// Used during parallel export processing to reload exports in a separate context.
+    /// Loads Pending Exports by id for execution (#2813): the one load of an export's graph that export execution
+    /// uses, for a batch run sequentially, a batch re-loaded on a parallel worker's own context, and a chunk of the
+    /// deferred pass alike, so no path can be handed a graph another path's Connector reads differently. Untracked, in
+    /// (CreatedAt, Id) order, with each change's attribute, and the object with its type and its attribute values
+    /// with their attributes. An id with no row is left out.
     /// </summary>
-    Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+    Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     #endregion
 

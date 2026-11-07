@@ -329,6 +329,38 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #2813: the caller selects a batch by summary, so when a worker cannot load the batch on its own context there is
+    /// no copy of its exports to name the failures from. Each failure is still recorded, naming its object and change as
+    /// before: the exports are loaded on the caller's context to describe them.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelBatchCannotBeLoaded_RecordsAFailureNamingEachObjectAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var exports = SeedFreshExports(targetSystem, 4);
+        var connector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, connector.Object, SyncRunMode.PreviewAndSync, new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2 },
+            CancellationToken.None, connectorFactory: () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object,
+            repositoryFactory: () => new SyncRepositoryScope(new UnloadableSyncRepository()));
+
+        var objectByExport = exports.ToDictionary(pe => pe.Id, pe => pe.ConnectedSystemObject);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.Zero, "no batch could be loaded, so none was sent");
+            Assert.That(result.FailedCount, Is.EqualTo(2), "each worker's first batch failed, and a failed batch stops the taking");
+            Assert.That(result.ProcessedExportItems, Has.Count.EqualTo(2));
+            Assert.That(result.ProcessedExportItems.All(item => !item.Succeeded && item.ErrorMessage!.Contains(UnloadableSyncRepository.Failure)), Is.True,
+                "each item reports the load's failure");
+            Assert.That(result.ProcessedExportItems.All(item => item.ConnectedSystemObject != null
+                && item.ConnectedSystemObject.Id == objectByExport[item.PendingExportId!.Value]!.Id), Is.True,
+                "each item names its export's object, as it did when the caller held the batch's exports");
+            Assert.That(result.ProcessedExportItems.All(item => item.ChangeType == PendingExportChangeType.Update), Is.True);
+        }
+    }
+
+    /// <summary>
     /// #1820: the per-batch callback and progress both write through the caller's DbContext, which is not safe for two
     /// workers at once, so they are never run concurrently; and every batch's items reach the callback exactly once.
     /// </summary>
@@ -1504,6 +1536,17 @@ public class ExportExecutionParallelBatchTests
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// A per-batch repository whose context cannot load the batch, as when it cannot reach the database.
+    /// </summary>
+    private sealed class UnloadableSyncRepository : SyncRepository
+    {
+        public const string Failure = "The batch's context could not reach the database";
+
+        public override Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+            => throw new InvalidOperationException(Failure);
+    }
 
     /// <summary>
     /// Seeds a Metaverse Object with a joined CSO carrying an external identifier, so a deferred export
