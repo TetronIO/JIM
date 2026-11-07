@@ -24,7 +24,10 @@ public class PendingExportAttributeValueChange
     /// to populate <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ReferenceValueId"/>
     /// without a further database round-trip, including across a worker restart or a cross-run retry
     /// (persisting this column is what makes that survive; see SPEC-1079B). Left null when the
-    /// reference has never been resolved by this or an earlier export run.
+    /// reference has never been resolved by this or an earlier export run. A reference recall
+    /// removal is stamped as it is staged instead, with the departing member's own object (#2809),
+    /// which reconciliation then matches resolved rows by; that object is usually deprovisioned in
+    /// the same run, which the soft pointer below allows for.
     /// <para>
     /// Deliberately a soft pointer: no foreign key constraint and no index. The only consumer is the
     /// optimistic apply projection, which is never queried by value, so an index would tax the

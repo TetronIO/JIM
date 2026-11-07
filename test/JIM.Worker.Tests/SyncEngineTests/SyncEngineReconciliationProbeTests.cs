@@ -397,6 +397,42 @@ public class SyncEngineReconciliationProbeTests
     }
 
     /// <summary>
+    /// Each pair loaded in full is counted by why (#2809), so a run's log can say why a page fell back rather than only how
+    /// many pairs did: the first change that cannot be put as a question decides its pair's reason.
+    /// </summary>
+    [Test]
+    public void PlanReconciliationProbes_PairsLoadedInFull_CountedByReason()
+    {
+        var named = new ConnectedSystemObjectTypeAttribute { Id = 30, Name = "cn", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued };
+        var exports = new[]
+        {
+            PendingExportFor(Guid.NewGuid(), [Change(named, PendingExportAttributeChangeType.Add, AliceId, Dn("alice"))]),
+            PendingExportFor(Guid.NewGuid(), [Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, stringValue: Dn("bob"))]),
+            PendingExportFor(Guid.NewGuid(), [Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, unresolvedValue: Dn("carol"))]),
+            PendingExportFor(Guid.NewGuid(), [Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, DaveId, Dn("josé"))]),
+            PendingExportFor(Guid.NewGuid(), [Change(CaseInsensitiveMember, PendingExportAttributeChangeType.Remove, ErinId, Dn("erin"))])
+        };
+
+        var folds = SyncEngine.PlanReconciliationProbes(exports, databaseFoldsCaseLikeIdentifierKey: true);
+        var disagrees = SyncEngine.PlanReconciliationProbes(exports.Skip(4), databaseFoldsCaseLikeIdentifierKey: false);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(folds.FullLoadPairCount, Is.EqualTo(4));
+            Assert.That(folds.FullLoadPairCountsByReason, Is.EquivalentTo(new Dictionary<ReconciliationProbeFallbackReason, int>
+            {
+                [ReconciliationProbeFallbackReason.IdentifierOrNamingAttribute] = 1,
+                [ReconciliationProbeFallbackReason.NamesNoObject] = 2,
+                [ReconciliationProbeFallbackReason.NonAsciiValue] = 1
+            }));
+            Assert.That(disagrees.FullLoadPairCountsByReason, Is.EquivalentTo(new Dictionary<ReconciliationProbeFallbackReason, int>
+            {
+                [ReconciliationProbeFallbackReason.DatabaseFoldsCaseDifferently] = 1
+            }));
+        }
+    }
+
+    /// <summary>
     /// A change whose attribute definition is not loaded cannot be planned for, so its pair loads in full; and only the
     /// changes awaiting confirmation are asked about.
     /// </summary>
@@ -415,6 +451,129 @@ public class SyncEngineReconciliationProbeTests
         {
             Assert.That(plan.Questions, Is.Empty);
             Assert.That(plan.FullLoadPairCount, Is.EqualTo(1));
+        }
+    }
+
+    #endregion
+
+    #region A reference recall removal (#2809)
+
+    /// <summary>
+    /// What a group's member attribute holds when a leaver's recall removal is confirmed.
+    /// </summary>
+    public enum LeaverRow
+    {
+        /// <summary>The leaver is still a member: a row resolved to the leaver's object.</summary>
+        StillResolvedToTheLeaver,
+
+        /// <summary>The leaver has gone; only another member is held.</summary>
+        Absent,
+
+        /// <summary>The leaver is still listed, by a DN in another case that resolved to nothing (as deleting the leaver's
+        /// object leaves the row).</summary>
+        UnresolvedInAnotherCase,
+
+        /// <summary>A stale row resolved to another object, keeping the leaver's DN.</summary>
+        ResolvedToAnotherObjectWithTheLeaversDn
+    }
+
+    private static readonly Guid LeaverCsoId = Guid.NewGuid();
+
+    /// <summary>
+    /// The removal reference recall stages for a leaver, as the recall decision makes it, sent and awaiting the confirming
+    /// import.
+    /// </summary>
+    private PendingExportAttributeValueChange RecallRemovalOfTheLeaver()
+    {
+        var flow = new ReferenceRecallDirectFlow
+        {
+            ExportRule = new JIM.Models.Logic.SyncRule { Id = 1, Name = "Group Export", ConnectedSystemId = 1 },
+            TargetAttribute = CaseInsensitiveMember,
+            SourcePlurality = AttributePlurality.MultiValued
+        };
+        var change = _engine.DecideRecallRemovalChange(flow, new ResolvedRecallReference(LeaverCsoId, Dn("lena")))!;
+        change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        return change;
+    }
+
+    private static ConnectedSystemObject GroupHolding(LeaverRow leaverRow)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        void Add(Guid? referenceValueId, string dn) => cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = CaseInsensitiveMemberId, Attribute = CaseInsensitiveMember,
+            ReferenceValueId = referenceValueId, UnresolvedReferenceValue = dn
+        });
+
+        Add(AliceId, Dn("alice"));
+        switch (leaverRow)
+        {
+            case LeaverRow.StillResolvedToTheLeaver:
+                Add(LeaverCsoId, Dn("lena"));
+                break;
+            case LeaverRow.UnresolvedInAnotherCase:
+                Add(null, Dn("lena").ToUpperInvariant());
+                break;
+            case LeaverRow.ResolvedToAnotherObjectWithTheLeaversDn:
+                Add(BobId, Dn("lena"));
+                break;
+        }
+
+        return cso;
+    }
+
+    /// <summary>
+    /// A leaver's recall removal on a case-insensitive member attribute is put to the database as a question, by the
+    /// leaver's object among resolved rows and by the lowered DN among unresolved ones, so the group's members are not
+    /// loaded to confirm it (#2809: on the 500,000-user run no leaver group probed, and loading them cost 14.9 s).
+    /// </summary>
+    [Test]
+    public void PlanReconciliationProbes_RecallRemovalOnCaseInsensitiveReference_AsksByTheLeaversObjectAndLoweredDn()
+    {
+        var removal = RecallRemovalOfTheLeaver();
+
+        var plan = Plan(true, removal);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.FullLoadPairCount, Is.Zero, "The leaver group's member attribute is not loaded in full");
+            Assert.That(plan.Questions, Has.Count.EqualTo(1));
+            Assert.That(plan.Questions.Single().ReferenceIds, Is.EquivalentTo(new[] { LeaverCsoId }));
+            Assert.That(plan.Questions.Single().CaseInsensitiveValues, Is.EquivalentTo(new[] { Dn("lena") }));
+        }
+    }
+
+    /// <summary>
+    /// Over the probe and over the full load alike, the leaver's removal is confirmed only once the group holds no row
+    /// naming the leaver: not while a row resolved to the leaver's object remains, nor while an unresolved row carries the
+    /// leaver's DN in another case; and a stale row resolved to another object names that object, whatever DN it keeps.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_RecallRemoval_SameVerdictOverProbeAndFullLoad([Values] LeaverRow leaverRow, [Values] bool everyRow)
+    {
+        var expectedConfirmed = leaverRow is LeaverRow.Absent or LeaverRow.ResolvedToAnotherObjectWithTheLeaversDn;
+
+        var fullCso = GroupHolding(leaverRow);
+        var fullRemoval = RecallRemovalOfTheLeaver();
+        var overFull = new PendingExportReconciliationResult();
+        _engine.ReconcileCsoAgainstPendingExport(fullCso, PendingExportFor(fullCso.Id, [fullRemoval]), overFull);
+
+        var probedRemoval = RecallRemovalOfTheLeaver();
+        var probedExport = PendingExportFor(fullCso.Id, [probedRemoval]);
+        var plan = SyncEngine.PlanReconciliationProbes([probedExport], databaseFoldsCaseLikeIdentifierKey: true);
+        var answers = Answer(fullCso, plan.Questions, everyRow);
+        var overProbe = new PendingExportReconciliationResult();
+        _engine.ReconcileCsoAgainstPendingExport(WithoutValuesOf(fullCso, answers.Keys), probedExport, overProbe,
+            probedValuesByAttributeId: answers);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.FullLoadPairCount, Is.Zero, "Probed, not loaded");
+            Assert.That(answers.Keys, Is.EquivalentTo(new[] { CaseInsensitiveMemberId }));
+            Assert.That(overFull.ConfirmedChanges.Count == 1, Is.EqualTo(expectedConfirmed), "Full load");
+            Assert.That(overProbe.ConfirmedChanges.Count == 1, Is.EqualTo(expectedConfirmed), "Probe");
+            Assert.That(overProbe.RetryChanges.Count, Is.EqualTo(overFull.RetryChanges.Count));
+            Assert.That(overProbe.PendingExportToDelete != null, Is.EqualTo(overFull.PendingExportToDelete != null));
         }
     }
 

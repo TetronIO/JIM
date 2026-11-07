@@ -202,6 +202,50 @@ public class ReferenceRecallExportTests
     }
 
     /// <summary>
+    /// The removal names the leaver's Connected System Object in the target (#2809), the object recall found the group's
+    /// row by. Sent and awaiting its confirming import, the group's case-insensitive member attribute is then put to the
+    /// database as a question rather than loaded in full: before this, every leaver group on every page loaded its whole
+    /// membership (14.9 s of a 36.2 s Delta Import at 500,000 users).
+    /// </summary>
+    [TestCase(false, TestName = "StageReferenceRecallExports_FastPath_RemovalNamesTheLeaversObjectAndIsProbedAsync")]
+    [TestCase(true, TestName = "StageReferenceRecallExports_Fallback_RemovalNamesTheLeaversObjectAndIsProbedAsync")]
+    public async Task StageReferenceRecallExports_RemovalNamesTheLeaversObjectAndIsProbedAsync(bool fallback)
+    {
+        // Arrange
+        if (fallback)
+            AddExpressionMappingMentioningMembers();
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var memberCsoId = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.MetaverseObjectId == memberMvo.Id && c.ConnectedSystemId == TargetSystemId).Id;
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(fallback ? result.FallbackReferencingObjects : result.FastPathReferencingObjects, Is.EqualTo(1));
+        var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        var removal = pendingExport.AttributeValueChanges.Single(avc => avc.AttributeId == CsMemberAttributeId);
+
+        // As the export leaves it: sent, awaiting the confirming import.
+        pendingExport.Status = PendingExportStatus.Exported;
+        removal.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var plan = JIM.Application.Servers.SyncEngine.PlanReconciliationProbes([pendingExport], databaseFoldsCaseLikeIdentifierKey: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(removal.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove));
+            Assert.That(removal.StringValue, Is.EqualTo(memberDn), "The DN export writes is the one captured before deletion");
+            Assert.That(removal.ResolvedReferenceCsoId, Is.EqualTo(memberCsoId), "The removal names the leaver's object in the target");
+            Assert.That(plan.FullLoadPairCount, Is.Zero, "The group's members are not loaded to confirm the removal");
+            Assert.That(plan.Questions.Single().ReferenceIds, Is.EquivalentTo(new[] { memberCsoId }));
+        }
+    }
+
+    /// <summary>
     /// A leaver who was never provisioned to the target has nothing there to remove: no Pending Export
     /// may be staged for the group (an unresolved removal would sit deferred forever).
     /// </summary>

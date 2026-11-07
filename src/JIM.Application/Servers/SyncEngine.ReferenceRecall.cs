@@ -20,22 +20,23 @@ public partial class SyncEngine
     /// <summary>
     /// Decides the removal change a recall stages for one matched target row. Its shape follows the target
     /// attribute's plurality, as full evaluation's does (#2182): where both the source and the target are
-    /// multi-valued, a Remove carrying the resolved value (the connector must be told which value to remove);
-    /// everywhere else a null-clearing Update, since a single-valued target is told what it holds rather than which
-    /// value left it. A multi-valued removal with no resolvable value stages nothing, because a Remove that names no
+    /// multi-valued, a Remove carrying the resolved value (the connector must be told which value to remove) and
+    /// naming the departing member's Connected System Object (#2809); everywhere else a null-clearing Update, since a
+    /// single-valued target is told what it holds rather than which value left it. A multi-valued removal with no resolvable value stages nothing, because a Remove that names no
     /// value cannot be exported. The orchestrator counts a null as a dropped change.
     /// </summary>
     /// <param name="flow">The direct reference flow whose target attribute still holds the deleted value.</param>
-    /// <param name="resolvedRemovalValue">The deleted object's resolved value in the flow's target system
-    /// (for example its Distinguished Name), captured before deletion; null when it was never captured.</param>
+    /// <param name="removal">The deleted object's resolved reference in the flow's target system (for example its
+    /// Distinguished Name, with the Connected System Object it names), captured before deletion; null when it was
+    /// never captured.</param>
     public PendingExportAttributeValueChange? DecideRecallRemovalChange(
         ReferenceRecallDirectFlow flow,
-        string? resolvedRemovalValue)
+        ResolvedRecallReference? removal)
     {
         if (flow.SourcePlurality == AttributePlurality.MultiValued &&
             flow.TargetAttribute.AttributePlurality == AttributePlurality.MultiValued)
         {
-            if (resolvedRemovalValue == null)
+            if (removal == null)
                 return null;
 
             return new PendingExportAttributeValueChange
@@ -44,7 +45,13 @@ public partial class SyncEngine
                 Attribute = flow.TargetAttribute,
                 AttributeId = flow.TargetAttribute.Id,
                 ChangeType = PendingExportAttributeChangeType.Remove,
-                StringValue = resolvedRemovalValue,
+                StringValue = removal.Value,
+                // Names the departing member's object, as export resolution names the object of every other reference
+                // change (#2809), so reconciliation matches resolved rows by that object and only unresolved rows by the
+                // DN, which its probe answers through indexes rather than loading the group. A soft pointer: the object is
+                // usually deprovisioned in the same leaver run, and nothing that reads the id needs it to exist; export
+                // writes StringValue.
+                ResolvedReferenceCsoId = removal.ConnectedSystemObjectId,
                 SyncRuleId = flow.ExportRule.Id,
                 SyncRuleName = flow.ExportRule.Name
             };

@@ -481,7 +481,7 @@ public class ExportEvaluationServer
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         List<PendingExport>? existingPendingExports = null,
-        Dictionary<Guid, Dictionary<int, string>>? preResolvedReferences = null,
+        Dictionary<Guid, Dictionary<int, ResolvedRecallReference>>? preResolvedReferences = null,
         bool recallSemantics = false)
     {
         var result = new ExportEvaluationResult();
@@ -538,15 +538,15 @@ public class ExportEvaluationServer
             }
 
             // Flatten the pre-resolved reference values for this rule's target system (reference recall, #908).
-            IReadOnlyDictionary<Guid, string>? preResolvedForSystem = null;
+            IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedForSystem = null;
             if (preResolvedReferences != null)
             {
-                var forSystem = new Dictionary<Guid, string>();
-                foreach (var (referencedMvoId, resolvedValue) in preResolvedReferences
+                var forSystem = new Dictionary<Guid, ResolvedRecallReference>();
+                foreach (var (referencedMvoId, resolvedReference) in preResolvedReferences
                     .Select(kvp => (kvp.Key, Value: kvp.Value.TryGetValue(exportRule.ConnectedSystemId, out var value) ? value : null))
                     .Where(pair => pair.Value != null))
                 {
-                    forSystem[referencedMvoId] = resolvedValue!;
+                    forSystem[referencedMvoId] = resolvedReference!;
                 }
                 preResolvedForSystem = forSystem;
             }
@@ -1328,12 +1328,14 @@ public class ExportEvaluationServer
                 if (resolvedAnchor!.Attribute?.CaseExact == true)
                     context.CaseExactReferenceValues.Add((referencedId, cso.ConnectedSystemId));
 
-                if (!context.ResolvedReferenceValuesBySystem.TryGetValue(referencedId, out var bySystem))
+                if (!context.ResolvedReferencesBySystem.TryGetValue(referencedId, out var bySystem))
                 {
-                    bySystem = new Dictionary<int, string>();
-                    context.ResolvedReferenceValuesBySystem[referencedId] = bySystem;
+                    bySystem = new Dictionary<int, ResolvedRecallReference>();
+                    context.ResolvedReferencesBySystem[referencedId] = bySystem;
                 }
-                bySystem[cso.ConnectedSystemId] = resolvedValue;
+                // The value and the object it names are taken from the same Connected System Object, so a removal staged
+                // from them names one object both ways (#2809).
+                bySystem[cso.ConnectedSystemId] = new ResolvedRecallReference(cso.Id, resolvedValue);
             }
         }
 
@@ -1586,9 +1588,9 @@ public class ExportEvaluationServer
                             deletedCsoIds.TryGetValue(systemId, out var deletedCsoIdValue))
                             deletedCsoId = deletedCsoIdValue;
                         string? resolvedValue = null;
-                        if (context.ResolvedReferenceValuesBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var resolvedBySystem) &&
-                            resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
-                            resolvedValue = resolvedValueForSystem;
+                        if (context.ResolvedReferencesBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var resolvedBySystem) &&
+                            resolvedBySystem.TryGetValue(systemId, out var resolvedReferenceForSystem))
+                            resolvedValue = resolvedReferenceForSystem.Value;
                         if (deletedCsoId == null && resolvedValue == null)
                             continue;
 
@@ -1673,16 +1675,16 @@ public class ExportEvaluationServer
 
                 var flow = flowBySystemAndAttribute[(systemId, match.AttributeId)];
 
-                string? removalValue = null;
-                if (context.ResolvedReferenceValuesBySystem.TryGetValue(deletedMvoId, out var resolvedBySystem) &&
-                    resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
-                    removalValue = resolvedValueForSystem;
+                ResolvedRecallReference? removal = null;
+                if (context.ResolvedReferencesBySystem.TryGetValue(deletedMvoId, out var resolvedBySystem) &&
+                    resolvedBySystem.TryGetValue(systemId, out var resolvedReferenceForSystem))
+                    removal = resolvedReferenceForSystem;
 
                 // The removal-change verdict comes from the pure engine (#288 extraction), and follows the target
                 // attribute's plurality (#2182): a value-carrying Remove where source and target are both
                 // multi-valued (or null when that value cannot be resolved, so nothing can be staged), and a
                 // null-clearing Update everywhere else.
-                var change = _syncEngine.DecideRecallRemovalChange(flow, removalValue);
+                var change = _syncEngine.DecideRecallRemovalChange(flow, removal);
                 if (change == null)
                 {
                     result.UnresolvableChangesDropped++;
@@ -1898,7 +1900,7 @@ public class ExportEvaluationServer
                     evaluation = await EvaluateExportRulesWithNoNetChangeDetectionAsync(
                         referencingMvo, removedRows, cache, deferSave: true,
                         removedAttributes: [.. removedRows], existingPendingExports: fallbackPendingExports,
-                        preResolvedReferences: context.ResolvedReferenceValuesBySystem,
+                        preResolvedReferences: context.ResolvedReferencesBySystem,
                         recallSemantics: true);
                 }
                 catch (ScopingCriterionFailedException scopingEx)
@@ -2546,7 +2548,7 @@ public class ExportEvaluationServer
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         List<PendingExport>? existingPendingExports = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         bool recallSemantics = false,
         List<AttributeFlowError>? flowErrors = null,
         List<ExportObjectTypeConflict>? objectTypeConflicts = null,
@@ -3230,7 +3232,7 @@ public class ExportEvaluationServer
         out int csoAlreadyCurrentCount,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
         List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
         => _syncEngine.ComputeAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,

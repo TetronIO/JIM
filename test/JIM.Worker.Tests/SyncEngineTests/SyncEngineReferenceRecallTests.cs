@@ -35,7 +35,7 @@ public class SyncEngineReferenceRecallTests
         // The connector must be told which value to remove from the multi-valued attribute (which member DN).
         var flow = Flow(AttributePlurality.MultiValued);
 
-        var change = _engine.DecideRecallRemovalChange(flow, "cn=deleted-user,dc=corp");
+        var change = _engine.DecideRecallRemovalChange(flow, new ResolvedRecallReference(Guid.NewGuid(), "cn=deleted-user,dc=corp"));
 
         using (Assert.EnterMultipleScope())
         {
@@ -47,12 +47,46 @@ public class SyncEngineReferenceRecallTests
         }
     }
 
+    /// <summary>
+    /// The removal names the departing member's Connected System Object in the target (#2809), as export resolution names
+    /// the object of every other reference change: reconciliation then matches resolved rows by that object and only
+    /// unresolved rows by the DN, which its probe answers through indexes instead of loading the whole group.
+    /// </summary>
+    [Test]
+    public void DecideRecallRemovalChange_MultiValuedSourceWithAResolvedValue_NamesTheDepartingMembersObject()
+    {
+        var departingMemberCsoId = Guid.NewGuid();
+
+        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.MultiValued),
+            new ResolvedRecallReference(departingMemberCsoId, "cn=deleted-user,dc=corp"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change, Is.Not.Null);
+            Assert.That(change!.ResolvedReferenceCsoId, Is.EqualTo(departingMemberCsoId));
+            Assert.That(change.StringValue, Is.EqualTo("cn=deleted-user,dc=corp"), "The DN export writes is the one captured");
+            Assert.That(change.UnresolvedReferenceValue, Is.Null, "Nothing is left for export resolution to resolve");
+        }
+    }
+
+    /// <summary>
+    /// A clearing Update names no value, so it names no object either.
+    /// </summary>
+    [Test]
+    public void DecideRecallRemovalChange_SingleValuedSource_NamesNoObject()
+    {
+        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.SingleValued),
+            new ResolvedRecallReference(Guid.NewGuid(), "cn=deleted-user,dc=corp"));
+
+        Assert.That(change!.ResolvedReferenceCsoId, Is.Null);
+    }
+
     [Test]
     public void DecideRecallRemovalChange_MultiValuedSourceWithNoResolvableValue_StagesNothing()
     {
         // A multi-valued removal must name the value to remove; a row matched by resolved reference only,
         // with no captured value, cannot be staged and is counted as dropped by the orchestrator.
-        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.MultiValued), resolvedRemovalValue: null);
+        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.MultiValued), removal: null);
 
         Assert.That(change, Is.Null);
     }
@@ -62,7 +96,7 @@ public class SyncEngineReferenceRecallTests
     {
         // The same shape full evaluation produces for a single-valued removal: an Update carrying no value,
         // which tells the target system to clear the attribute.
-        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.SingleValued), "cn=deleted-user,dc=corp");
+        var change = _engine.DecideRecallRemovalChange(Flow(AttributePlurality.SingleValued), new ResolvedRecallReference(Guid.NewGuid(), "cn=deleted-user,dc=corp"));
 
         using (Assert.EnterMultipleScope())
         {

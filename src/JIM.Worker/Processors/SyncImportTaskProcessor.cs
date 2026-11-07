@@ -5935,6 +5935,18 @@ public class SyncImportTaskProcessor
                 probeSpan.SetTag("tuples", probePlan.Questions.Sum(q => q.TupleCount));
                 probeSpan.SetTag("candidateRows", answers.Sum(a => a.CandidateValues.Count));
                 probeSpan.SetSuccess();
+
+                // Why a page's Pending Exports took the full load (#2809): once per page that loaded any pair in full, so
+                // a run's log says why its reconciliation read whole groups, without a line per object.
+                if (probePlan.FullLoadPairCount > 0)
+                {
+                    Log.Information("ReconcilePendingExportsAsync: Page {Page} of {PageCount}: {FullLoadPairs} multi-valued reference " +
+                        "attribute(s) loaded in full rather than probed ({Reasons}); {ProbedPairs} probed with {Tuples} tuple(s), " +
+                        "{CandidateRows} candidate row(s)",
+                        page + 1, totalPages, probePlan.FullLoadPairCount,
+                        string.Join(", ", probePlan.FullLoadPairCountsByReason.OrderBy(r => r.Key).Select(r => $"{r.Key}={r.Value}")),
+                        probePlan.Questions.Count, probePlan.Questions.Sum(q => q.TupleCount), answers.Sum(a => a.CandidateValues.Count));
+                }
             }
 
             // Reload CSOs with fresh AttributeValues from the database for this page.

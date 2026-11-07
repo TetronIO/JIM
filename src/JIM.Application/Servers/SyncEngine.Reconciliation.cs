@@ -226,6 +226,7 @@ public partial class SyncEngine
     {
         var questions = new List<ReconciliationProbeQuestion>();
         var fullLoadPairCount = 0;
+        var fullLoadPairCountsByReason = new Dictionary<ReconciliationProbeFallbackReason, int>();
 
         foreach (var pendingExport in pendingExports)
         {
@@ -239,15 +240,26 @@ public partial class SyncEngine
 
             foreach (var pair in pairs)
             {
-                var question = TryPutAsQuestion(connectedSystemObjectId, pair.Key, pair.ToList(), databaseFoldsCaseLikeIdentifierKey);
+                var question = TryPutAsQuestion(connectedSystemObjectId, pair.Key, pair.ToList(), databaseFoldsCaseLikeIdentifierKey,
+                    out var fallbackReason);
                 if (question != null)
+                {
                     questions.Add(question);
+                }
                 else
+                {
                     fullLoadPairCount++;
+                    fullLoadPairCountsByReason[fallbackReason] = fullLoadPairCountsByReason.GetValueOrDefault(fallbackReason) + 1;
+                }
             }
         }
 
-        return new ReconciliationProbePlan { Questions = questions, FullLoadPairCount = fullLoadPairCount };
+        return new ReconciliationProbePlan
+        {
+            Questions = questions,
+            FullLoadPairCount = fullLoadPairCount,
+            FullLoadPairCountsByReason = fullLoadPairCountsByReason
+        };
     }
 
     private static bool IsAwaitingConfirmation(PendingExportAttributeValueChange change) =>
@@ -255,11 +267,14 @@ public partial class SyncEngine
 
     /// <summary>
     /// The question for one attribute of one object, or null when any of its changes cannot be put as one (see
-    /// <see cref="PlanReconciliationProbes"/>).
+    /// <see cref="PlanReconciliationProbes"/>), with <paramref name="fallbackReason"/> saying why the first such change
+    /// could not.
     /// </summary>
     private static ReconciliationProbeQuestion? TryPutAsQuestion(Guid connectedSystemObjectId, int attributeId,
-        List<PendingExportAttributeValueChange> changes, bool databaseFoldsCaseLikeIdentifierKey)
+        List<PendingExportAttributeValueChange> changes, bool databaseFoldsCaseLikeIdentifierKey,
+        out ReconciliationProbeFallbackReason fallbackReason)
     {
+        fallbackReason = default;
         var referenceIds = new HashSet<Guid>();
         var exactValues = new HashSet<string>(StringComparer.Ordinal);
         var caseInsensitiveValues = new HashSet<string>(StringComparer.Ordinal);
@@ -270,7 +285,10 @@ public partial class SyncEngine
             var attribute = (ConnectedSystemObjectTypeAttribute?)change.Attribute;
             if (attribute is not { Type: AttributeDataType.Reference, AttributePlurality: AttributePlurality.MultiValued } ||
                 attribute.IsExternalId || attribute.IsSecondaryExternalId || ObjectNaming.ConnectedSystemNameRank(attribute.Name) >= 0)
+            {
+                fallbackReason = ReconciliationProbeFallbackReason.IdentifierOrNamingAttribute;
                 return null;
+            }
 
             // Confirmed whatever the import shows (#2021): nothing to ask.
             if (IsConnectorDefinedClear(change))
@@ -298,7 +316,12 @@ public partial class SyncEngine
             }
 
             if (!change.ResolvedReferenceCsoId.HasValue || !databaseFoldsCaseLikeIdentifierKey || !strings.All(IsAscii))
+            {
+                fallbackReason = !change.ResolvedReferenceCsoId.HasValue ? ReconciliationProbeFallbackReason.NamesNoObject
+                    : !databaseFoldsCaseLikeIdentifierKey ? ReconciliationProbeFallbackReason.DatabaseFoldsCaseDifferently
+                    : ReconciliationProbeFallbackReason.NonAsciiValue;
                 return null;
+            }
 
             caseInsensitiveValues.UnionWith(strings);
         }
@@ -764,9 +787,9 @@ public partial class SyncEngine
     /// Whether one stored reference row holds the value a reference change names. A resolved reference names its object
     /// by id, and only an unresolved one by its string (#2669): the rule the reference recall existence query applies
     /// (<c>ExportEvaluationServer</c> over <c>SyncRepository.CsoReferenceValueMatchSql</c>). So when the change names an
-    /// object too (<c>ResolvedReferenceCsoId</c>, stamped by export resolution), a resolved row matches by that id alone,
-    /// and a resolved row whose retained DN equals the change's while its id points at a different object names some
-    /// other object and is not a match. An unresolved row is matched by its string, ignoring case unless the attribute is
+    /// object too (<c>ResolvedReferenceCsoId</c>, stamped by export resolution, or by reference recall as it stages a
+    /// removal), a resolved row matches by that id alone, and a resolved row whose retained DN equals the change's while
+    /// its id points at a different object names some other object and is not a match. An unresolved row is matched by its string, ignoring case unless the attribute is
     /// case-exact, against either string the change carries: <c>UnresolvedReferenceValue</c>, or <c>StringValue</c>, where
     /// export resolution puts the DN it resolved to. A change naming no object has only its strings, and matches any row
     /// by them, resolved rows included, as it always has.
