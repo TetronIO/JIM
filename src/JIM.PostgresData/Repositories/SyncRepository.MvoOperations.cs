@@ -959,7 +959,7 @@ public partial class SyncRepository
         }
         using (var trackerSpan = MvoActivitySource.StartActivity("Mvo.Delete.UpdateTracker"))
         {
-            var (scanned, detached, cleared) = ReflectDeletedMetaverseObjectsInTracker(mvoIdSet);
+            var (scanned, detached, cleared) = ReflectDeletedMetaverseObjectsInTracker(_context, mvoIdSet);
             trackerSpan?.SetTag("entriesScanned", scanned);
             trackerSpan?.SetTag("detachedCount", detached);
             trackerSpan?.SetTag("clearedForeignKeyCount", cleared);
@@ -983,15 +983,16 @@ public partial class SyncRepository
     /// stale value back or acts on a row that no longer exists. Driven by the model's foreign keys, so a child table
     /// added later is covered without being named here. Change detection is suppressed while enumerating, for the
     /// reason given on <see cref="DetachTrackedEntities{T}"/>. Returns how many entries it scanned, detached and
-    /// cleared a foreign key on, for the deleter's span.
+    /// cleared a foreign key on, for the deleter's span. Internal so <c>DeletionTrackerForeignKeyCoverageTests</c> can hold
+    /// it to every foreign key in the model.
     /// </summary>
-    private (int Scanned, int Detached, int Cleared) ReflectDeletedMetaverseObjectsInTracker(HashSet<Guid> deletedIds)
+    internal static (int Scanned, int Detached, int Cleared) ReflectDeletedMetaverseObjectsInTracker(DbContext context, HashSet<Guid> deletedIds)
     {
-        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
-        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        var autoDetectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {
-            var entries = _context.ChangeTracker.Entries().ToList();
+            var entries = context.ChangeTracker.Entries().ToList();
             var detached = 0;
             var cleared = 0;
 
@@ -1028,7 +1029,7 @@ public partial class SyncRepository
         }
         finally
         {
-            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+            context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
     }
 
