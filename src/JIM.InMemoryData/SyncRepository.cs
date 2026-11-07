@@ -644,7 +644,31 @@ public class SyncRepository : ISyncRepository
     /// primary external ID, or its secondary when it has no primary yet, and carries the stored
     /// hash/fingerprint/status/partition alongside the CSO ID.
     /// </summary>
-    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+    public virtual Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId) =>
+        Task.FromResult(BuildCsoImportStateLookup(connectedSystemId));
+
+    /// <summary>
+    /// #2705: honest in-memory equivalent of the Postgres per-page lookup: the entries the whole lookup holds for the keys
+    /// asked about, built by the same code, so the two cannot disagree. Refuses a key ignoring case outside ASCII, as the
+    /// Postgres implementation does, so a caller that forgets to load the whole lookup for one fails here too. Virtual so
+    /// tests can see what a run asked for.
+    /// </summary>
+    public virtual Task<Dictionary<string, CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes)
+    {
+        CsoLookupKey.EnsureCanBeLookedUpInDatabase(probes);
+
+        var asked = probes.Select(probe => CsoLookupKey.For(connectedSystemId, probe.AttributeId, probe.ValueKey)).ToHashSet(CsoLookupKey.Comparer);
+        var result = BuildCsoImportStateLookup(connectedSystemId)
+            .Where(entry => asked.Contains(entry.Key))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, CsoLookupKey.Comparer);
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D8: keys each CSO by its primary external ID, or its secondary when it has no primary yet, and carries the
+    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// </summary>
+    private Dictionary<string, CsoImportStateLookupEntry> BuildCsoImportStateLookup(int connectedSystemId)
     {
         var result = new Dictionary<string, CsoImportStateLookupEntry>(CsoLookupKey.Comparer);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
@@ -675,7 +699,7 @@ public class SyncRepository : ISyncRepository
                 }
             }
         }
-        return Task.FromResult(result);
+        return result;
     }
 
     /// <summary>
@@ -790,7 +814,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(answers);
     }
 
-    public Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync() => Task.FromResult(true);
+    public virtual Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync() => Task.FromResult(true);
 
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
     {

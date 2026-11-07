@@ -155,6 +155,19 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 
     /// <summary>
+    /// #2705: the entries <see cref="GetAllCsoImportStateLookupAsync"/> would hold for just the given External IDs, keyed
+    /// the same way. An object is found by a probe when the value it is keyed by (its External ID, or its Secondary External
+    /// ID while it has no External ID value) is held under the probe's attribute and has the probe's key, whichever value
+    /// column holds it: a value kept under an attribute's earlier data type keys as the whole lookup keys it. Text is
+    /// compared exactly for a case-exact attribute and by the database's <c>lower()</c> otherwise, then every row is keyed
+    /// in .NET as the whole lookup keys it and kept only if that key was asked for.
+    /// </summary>
+    /// <exception cref="ArgumentException">A probe ignoring case carries a key outside ASCII, which the database cannot be
+    /// trusted to fold as JIM does.</exception>
+    public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(
+        int connectedSystemId, IReadOnlyCollection<JIM.Models.Staging.CsoExternalIdProbe> probes);
+
+    /// <summary>
     /// SPEC-1082 D6: the only code path permitted to write ImportStateHash/ImportStateFingerprint,
     /// and only after the batch's attribute-value writes have committed. Never touches LastUpdated.
     /// </summary>

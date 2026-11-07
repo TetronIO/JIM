@@ -137,6 +137,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetAllCsoImportStateLookupAsync(connectedSystemId);
 
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes)
+        => _repo.ConnectedSystems.GetCsoImportStateLookupByExternalIdsAsync(connectedSystemId, probes);
+
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
         => _repo.ConnectedSystems.StampImportStateAsync(stamps);
 

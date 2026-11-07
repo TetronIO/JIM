@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -2888,6 +2889,186 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         return result;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// #2705: one set-based statement per call, raw Npgsql since it runs once per page of a Delta Import. Each value is
+    /// looked up in every column that could hold a value keyed the same way, because the whole lookup keys a value from
+    /// whichever column holds it (<see cref="CsoLookupKey.ValueKey"/>): text in <c>StringValue</c> always, exactly for a
+    /// case-exact attribute and through <c>lower()</c> otherwise, and also in the typed column of each data type the key
+    /// reads back as (a GUID, a number, a long number, a decimal), so a value kept under an attribute's earlier data type
+    /// (#2128) is still found. Each arm is an index lookup on what is sought: <c>(AttributeId, StringValue)</c>,
+    /// <c>(AttributeId, lower(StringValue))</c>, and the typed <c>(AttributeId, ...Value)</c> indexes.
+    /// </para>
+    /// <para>
+    /// The database only finds candidates. Each row is then keyed in .NET exactly as
+    /// <see cref="GetAllCsoImportStateLookupAsync"/> keys it and kept only if that key was asked for, so the database's
+    /// folding can add nothing the whole lookup would not hold. It can only miss something where it folds less than JIM,
+    /// which <see cref="CsoLookupKey.EnsureCanBeLookedUpInDatabase"/> rules out for the keys allowed here, given the
+    /// caller's check of the database's folding.
+    /// </para>
+    /// <para>
+    /// As in the whole lookup, an object is keyed by its External ID, or by its Secondary External ID only while it holds
+    /// no External ID value. Two objects keyed alike is corrupt data the whole lookup also meets: as there, one is kept,
+    /// and here it is logged.
+    /// </para>
+    /// </remarks>
+    public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes)
+    {
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(CsoLookupKey.Comparer);
+        if (probes.Count == 0)
+            return result;
+
+        CsoLookupKey.EnsureCanBeLookedUpInDatabase(probes);
+        var asked = probes.Select(probe => CsoLookupKey.For(connectedSystemId, probe.AttributeId, probe.ValueKey)).ToHashSet(CsoLookupKey.Comparer);
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+        await using var command = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx };
+        PrepareCsoImportStateLookupByExternalIdsCommand(command, connectedSystemId, probes);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            // Column order is CsoImportStateLookupByExternalIdsSelect's.
+            var csoId = reader.GetGuid(0);
+            var valueKey = CsoLookupKey.ValueKey(
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                reader.IsDBNull(8) ? null : reader.GetInt64(8),
+                reader.IsDBNull(9) ? null : reader.GetGuid(9),
+                reader.IsDBNull(10) ? null : reader.GetDecimal(10),
+                reader.GetBoolean(11));
+            if (valueKey == null)
+                continue;
+
+            // A row the database matched where JIM's own folding would not is not the object the key names.
+            var key = CsoLookupKey.For(connectedSystemId, reader.GetInt32(5), valueKey);
+            if (!asked.Contains(key))
+                continue;
+
+            if (result.TryGetValue(key, out var kept))
+            {
+                if (kept.CsoId != csoId)
+                {
+                    Log.Warning("GetCsoImportStateLookupByExternalIdsAsync: Connected System Objects {KeptCsoId} and {OtherCsoId} in Connected System {ConnectedSystemId} have the same External ID. Matching imports to {KeptCsoId}. This indicates duplicate objects that should be investigated.",
+                        kept.CsoId, csoId, connectedSystemId, kept.CsoId);
+                }
+                continue;
+            }
+
+            result[key] = new CsoImportStateLookupEntry(
+                csoId,
+                reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                reader.IsDBNull(2) ? null : reader.GetGuid(2),
+                (ConnectedSystemObjectStatus)reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The outer statement of <see cref="GetCsoImportStateLookupByExternalIdsAsync"/>; <c>{0}</c> is the arms, joined by
+    /// <c>UNION ALL</c>. An object matched under its External ID attribute is kept; one matched under its Secondary External
+    /// ID attribute only while it holds no External ID value, as the whole lookup keys it.
+    /// </summary>
+    private const string CsoImportStateLookupByExternalIdsSelect = """
+        SELECT cso."Id", cso."ImportStateHash", cso."ImportStateFingerprint", cso."Status", cso."PartitionId",
+               m."AttributeId", m."StringValue", m."IntValue", m."LongValue", m."GuidValue", m."DecimalValue", a."CaseExact"
+        FROM ({0}) AS m
+        JOIN "ConnectedSystemObjects" cso ON cso."Id" = m."ConnectedSystemObjectId"
+        JOIN "ConnectedSystemAttributes" a ON a."Id" = m."AttributeId"
+        WHERE cso."ConnectedSystemId" = @connectedSystemId
+          AND (m."AttributeId" = cso."ExternalIdAttributeId"
+               OR (m."AttributeId" = cso."SecondaryExternalIdAttributeId"
+                   AND NOT EXISTS (
+                       SELECT 1 FROM "ConnectedSystemObjectAttributeValues" external_id
+                       WHERE external_id."ConnectedSystemObjectId" = cso."Id"
+                         AND external_id."AttributeId" = cso."ExternalIdAttributeId"
+                         AND (external_id."StringValue" IS NOT NULL OR external_id."IntValue" IS NOT NULL OR external_id."LongValue" IS NOT NULL
+                              OR external_id."GuidValue" IS NOT NULL OR external_id."DecimalValue" IS NOT NULL))))
+        """;
+
+    /// <summary>
+    /// One arm of <see cref="CsoImportStateLookupByExternalIdsSelect"/>: the attribute values matching a pair of parallel
+    /// arrays (attribute id, value). <c>{0}</c> is the arm's parameter name stem; <c>{1}</c> its value predicate, led by the
+    /// column its index serves.
+    /// </summary>
+    /// <remarks>
+    /// Each value is looked up on its own, through the index, by a LATERAL subquery the planner may not flatten
+    /// (<c>OFFSET 0</c>). Left as a join, it costs the array against the whole index and can choose a merge join that walks
+    /// the index from one end: measured at 500,000 objects, a text arm did exactly that, and only finished early because no
+    /// attribute sorted before the one sought. A per-value probe costs the same whatever else the table holds.
+    /// </remarks>
+    private const string CsoImportStateLookupByExternalIdsArm = """
+        SELECT av."ConnectedSystemObjectId", av."AttributeId", av."StringValue", av."IntValue", av."LongValue", av."GuidValue", av."DecimalValue"
+        FROM unnest(@{0}AttributeIds, @{0}Values) AS p("AttributeId", "Value")
+        CROSS JOIN LATERAL (
+            SELECT av."ConnectedSystemObjectId", av."AttributeId", av."StringValue", av."IntValue", av."LongValue", av."GuidValue", av."DecimalValue"
+            FROM "ConnectedSystemObjectAttributeValues" av
+            WHERE av."AttributeId" = p."AttributeId" AND {1}
+            OFFSET 0) AS av
+        """;
+
+    /// <summary>
+    /// Builds <see cref="GetCsoImportStateLookupByExternalIdsAsync"/>'s statement and parameters on <paramref name="command"/>,
+    /// with an arm only for the kinds of value asked about. Exposed so the plan can be checked
+    /// (<c>CsoImportStateLookupByExternalIdsDatabaseTests</c>).
+    /// </summary>
+    internal static void PrepareCsoImportStateLookupByExternalIdsCommand(NpgsqlCommand command, int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes)
+    {
+        var exactText = new List<(int AttributeId, string Value)>();
+        var lowerText = new List<(int AttributeId, string Value)>();
+        var guids = new List<(int AttributeId, Guid Value)>();
+        var ints = new List<(int AttributeId, int Value)>();
+        var longs = new List<(int AttributeId, long Value)>();
+        var decimals = new List<(int AttributeId, decimal Value)>();
+
+        foreach (var probe in probes.Distinct())
+        {
+            var key = probe.ValueKey;
+            (probe.CaseExact ? exactText : lowerText).Add((probe.AttributeId, key));
+
+            // Each typed column only where the key reads back as that type and keys back to itself, which is when a value
+            // in that column would key the same (CsoLookupKey.ValueKey: ToString() for numbers, canonical for decimals,
+            // lower case for GUIDs).
+            if (Guid.TryParseExact(key, "D", out var guid) && guid.ToString().ToLowerInvariant() == key)
+                guids.Add((probe.AttributeId, guid));
+            if (int.TryParse(key, NumberStyles.AllowLeadingSign, CultureInfo.CurrentCulture, out var intValue) && intValue.ToString() == key)
+                ints.Add((probe.AttributeId, intValue));
+            if (long.TryParse(key, NumberStyles.AllowLeadingSign, CultureInfo.CurrentCulture, out var longValue) && longValue.ToString() == key)
+                longs.Add((probe.AttributeId, longValue));
+            if (decimal.TryParse(key, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue) && ExternalIdValue.ToCanonicalString(decimalValue) == key)
+                decimals.Add((probe.AttributeId, decimalValue));
+        }
+
+        var arms = new List<string>();
+        void AddArm<T>(string stem, string predicate, List<(int AttributeId, T Value)> values, NpgsqlTypes.NpgsqlDbType valueType)
+        {
+            if (values.Count == 0)
+                return;
+
+            arms.Add(string.Format(CultureInfo.InvariantCulture, CsoImportStateLookupByExternalIdsArm, stem, predicate));
+            command.Parameters.Add(new NpgsqlParameter($"{stem}AttributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                { Value = values.Select(v => v.AttributeId).ToArray() });
+            command.Parameters.Add(new NpgsqlParameter($"{stem}Values", NpgsqlTypes.NpgsqlDbType.Array | valueType) { Value = values.Select(v => v.Value).ToArray() });
+        }
+
+        // The key ignoring case is already folded to lower-case ASCII, so lower() of the stored value is compared with it as it is.
+        AddArm("exactText", "av.\"StringValue\" = p.\"Value\"", exactText, NpgsqlTypes.NpgsqlDbType.Text);
+        AddArm("lowerText", "lower(av.\"StringValue\") = p.\"Value\" AND av.\"StringValue\" IS NOT NULL", lowerText, NpgsqlTypes.NpgsqlDbType.Text);
+        AddArm("guid", "av.\"GuidValue\" = p.\"Value\"", guids, NpgsqlTypes.NpgsqlDbType.Uuid);
+        AddArm("int", "av.\"IntValue\" = p.\"Value\"", ints, NpgsqlTypes.NpgsqlDbType.Integer);
+        AddArm("long", "av.\"LongValue\" = p.\"Value\"", longs, NpgsqlTypes.NpgsqlDbType.Bigint);
+        AddArm("decimal", "av.\"DecimalValue\" = p.\"Value\"", decimals, NpgsqlTypes.NpgsqlDbType.Numeric);
+
+        command.CommandText = string.Format(CultureInfo.InvariantCulture, CsoImportStateLookupByExternalIdsSelect, string.Join("\nUNION ALL\n", arms));
+        command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
     }
 
     /// <summary>

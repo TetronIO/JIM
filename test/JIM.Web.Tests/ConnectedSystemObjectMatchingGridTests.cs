@@ -121,10 +121,14 @@ public class ConnectedSystemObjectMatchingGridTests : JimComponentTestContext
         var modeSwitch = component.FindComponent<MudSwitch<bool>>();
 
         modeSwitch.Find("input").Change(true);
+
+        // The confirmation opens asynchronously, so wait for it rather than look for its button at once: on a loaded
+        // runner the dialog had not rendered yet and the lookup found nothing.
+        provider.WaitForAssertion(() => Assert.That(provider.FindAll("button").Count(b => b.TextContent.Trim() == "Cancel"), Is.EqualTo(1)));
         provider.FindAll("button").Single(b => b.TextContent.Trim() == "Cancel").Click();
 
-        Assert.That(modeSwitch.Find("input").HasAttribute("checked"), Is.False,
-            "the mode is still Simple, so the switch must show Simple");
+        modeSwitch.WaitForAssertion(() => Assert.That(modeSwitch.Find("input").HasAttribute("checked"), Is.False,
+            "the mode is still Simple, so the switch must show Simple"));
     }
 
     private IRenderedComponent<ConnectedSystemObjectMatchingTab> RenderMatchingTab(ConnectedSystem connectedSystem)
