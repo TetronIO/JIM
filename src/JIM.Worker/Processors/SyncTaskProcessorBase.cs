@@ -175,6 +175,11 @@ public abstract class SyncTaskProcessorBase
     // Batch collection for deferred CSO deletions (avoid per-CSO database calls)
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
+    // The execution items whose own rows (and Deleted change records) the obsolete CSO deletion wrote in its transaction
+    // (#2807). They stay on the Activity until the page's FlushRpeisAsync, which writes the rest of each (the Metaverse
+    // Object deletion flush hangs outcomes on them in between) without inserting the rows or the records a second time.
+    private readonly HashSet<Guid> _rpeiIdsWrittenWithDeletion = [];
+
     // Tracks MVO IDs that have had CSOs disconnected in-memory during this batch but not yet flushed to the database.
     // Used by AttemptJoinAsync to avoid false CouldNotJoinDueToExistingJoin errors when an obsolete CSO
     // is disconnected and a new CSO tries to join the same MVO within the same page.
@@ -1007,12 +1012,78 @@ public abstract class SyncTaskProcessorBase
         if (pageRpeis.Count == 0)
             return;
 
+        PrepareRpeisForPersistence(pageRpeis);
+
+        // Items the obsolete CSO deletion wrote with their Deleted change records (#2807): their rows and records exist,
+        // so the writes below bring the rows up to date and write everything else of theirs, but not those again.
+        var rowsWrittenWithDeletion = _rpeiIdsWrittenWithDeletion.Count == 0
+            ? null
+            : pageRpeis.Where(r => _rpeiIdsWrittenWithDeletion.Contains(r.Id)).Select(r => r.Id).ToHashSet();
+
+        // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
+        // Returns true if raw SQL was used, false if EF fallback was used.
+        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(pageRpeis, rowsWrittenWithDeletion);
+
+        // Persist CSO change records separately. BulkInsertRpeisAsync only inserts RPEI scalar
+        // columns; the ConnectedSystemObjectChange navigation graph requires its own persistence.
+        // This covers change records created during sync (e.g., provisioning CSO "Added" records).
+        // Update ActivityRunProfileExecutionItemId on each change to the now-assigned RPEI ID,
+        // because the change was created before FlushRpeisAsync assigned IDs.
+        if (_csoChangeTrackingEnabled)
+        {
+            foreach (var rpei in pageRpeis)
+            {
+                if (rpei.ConnectedSystemObjectChange != null)
+                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
+            }
+
+            await _syncRepo.PersistRpeiCsoChangesAsync(rowsWrittenWithDeletion == null
+                ? pageRpeis
+                : pageRpeis.Where(r => !rowsWrittenWithDeletion.Contains(r.Id)).ToList());
+        }
+
+        if (usedRawSql)
+        {
+            // Production: accumulate summary stats from this batch before clearing RPEIs.
+            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
+            // in memory for a final calculation (which caused OOM at 100K+ objects).
+            Worker.AccumulateActivitySummaryStats(_activity, pageRpeis);
+
+            // Clear from Activity's collection and detach from change tracker so no
+            // subsequent SaveChangesAsync re-inserts them.
+            _activity.RunProfileExecutionItems.Clear();
+            _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
+            _hasRawSqlSupport = true;
+
+            // Released from the Activity, so no later flush passes them again. With the EF fallback they stay on the
+            // Activity, and so in the set, for every later flush to skip as this one did.
+            if (rowsWrittenWithDeletion != null)
+                _rpeiIdsWrittenWithDeletion.ExceptWith(rowsWrittenWithDeletion);
+        }
+        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
+        // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
+        // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
+
+        // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
+        _mvoIdToRpei.Clear();
+        _mvoIdsChangedByExportEvaluation.Clear();
+        _deferredMvoRpeiMappings.Clear();
+    }
+
+    /// <summary>
+    /// Readies execution items for writing: the Activity's id, an id of their own (time-ordered, #2807), the display
+    /// snapshots of the Connected System Objects they name, the outcome fields only knowable once the page's Metaverse
+    /// Objects are persisted, and their outcome summaries. Idempotent: an item readied once, then given further outcomes,
+    /// is readied again before its outcomes are written.
+    /// </summary>
+    private void PrepareRpeisForPersistence(List<ActivityRunProfileExecutionItem> rpeis)
+    {
         // Ensure all RPEIs have ActivityId set, IDs pre-generated, and CSO display snapshots populated
-        foreach (var rpei in pageRpeis)
+        foreach (var rpei in rpeis)
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = Guid.NewGuid();
+                rpei.Id = ChangeRecordIds.New();
 
             // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
             // This centralised call ensures every sync RPEI gets snapshots regardless of creation path.
@@ -1026,7 +1097,7 @@ public abstract class SyncTaskProcessorBase
         // By this point both have run, so we can fill in any blanks.
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
         {
-            foreach (var rpei in pageRpeis)
+            foreach (var rpei in rpeis)
             {
                 var mvo = rpei.ConnectedSystemObject?.MetaverseObject;
                 if (mvo == null) continue;
@@ -1063,51 +1134,9 @@ public abstract class SyncTaskProcessorBase
         // This runs after all outcome nodes have been attached (including export evaluation).
         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
         {
-            foreach (var rpei in pageRpeis)
+            foreach (var rpei in rpeis)
                 SyncOutcomeBuilder.BuildOutcomeSummary(rpei);
         }
-
-        // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
-        // Returns true if raw SQL was used, false if EF fallback was used.
-        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(pageRpeis);
-
-        // Persist CSO change records separately. BulkInsertRpeisAsync only inserts RPEI scalar
-        // columns; the ConnectedSystemObjectChange navigation graph requires its own persistence.
-        // This covers change records created during sync (e.g., provisioning CSO "Added" records).
-        // Update ActivityRunProfileExecutionItemId on each change to the now-assigned RPEI ID,
-        // because the change was created before FlushRpeisAsync assigned IDs.
-        if (_csoChangeTrackingEnabled)
-        {
-            foreach (var rpei in pageRpeis)
-            {
-                if (rpei.ConnectedSystemObjectChange != null)
-                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
-            }
-
-            await _syncRepo.PersistRpeiCsoChangesAsync(pageRpeis);
-        }
-
-        if (usedRawSql)
-        {
-            // Production: accumulate summary stats from this batch before clearing RPEIs.
-            // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
-            // in memory for a final calculation (which caused OOM at 100K+ objects).
-            Worker.AccumulateActivitySummaryStats(_activity, pageRpeis);
-
-            // Clear from Activity's collection and detach from change tracker so no
-            // subsequent SaveChangesAsync re-inserts them.
-            _activity.RunProfileExecutionItems.Clear();
-            _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
-            _hasRawSqlSupport = true;
-        }
-        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
-        // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
-        // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
-
-        // Clear per-page MVO→RPEI lookup (only used within a single page's processing)
-        _mvoIdToRpei.Clear();
-        _mvoIdsChangedByExportEvaluation.Clear();
-        _deferredMvoRpeiMappings.Clear();
     }
 
     /// <summary>
@@ -3954,7 +3983,7 @@ public abstract class SyncTaskProcessorBase
         // Why an export exists is not a level of detail an administrator can turn off (#1223), so the queueing item
         // is recorded whatever the tracking level. The rows are already persisted, so the page flush writes the stamp.
         if (item.Id == Guid.Empty)
-            item.Id = Guid.NewGuid();
+            item.Id = ChangeRecordIds.New();
         foreach (var delete in deletes)
         {
             delete.RecordStager(item.Id);
@@ -4922,7 +4951,7 @@ public abstract class SyncTaskProcessorBase
                     foreach (var outcome in newOutcomes)
                     {
                         if (outcome.Id == Guid.Empty)
-                            outcome.Id = Guid.NewGuid();
+                            outcome.Id = ChangeRecordIds.New();
                     }
 
                     await _syncRepo.BulkUpdateRpeiOutcomesAsync(updatedExistingRpeis, newOutcomes);
@@ -5251,7 +5280,7 @@ public abstract class SyncTaskProcessorBase
             return;
 
         if (queueingItem.Id == Guid.Empty)
-            queueingItem.Id = Guid.NewGuid();
+            queueingItem.Id = ChangeRecordIds.New();
 
         foreach (var pendingExport in pendingExports)
             pendingExport.RecordStager(queueingItem.Id);
@@ -5893,7 +5922,11 @@ public abstract class SyncTaskProcessorBase
         var csosToDelete = _obsoleteCsosToDelete.Select(x => x.Cso).ToList();
         var executionItems = _obsoleteCsosToDelete.Select(x => x.ExecutionItem).ToList();
 
+        // The deletion writes these items' rows with their Deleted change records, in its own transaction (#2807), so
+        // they are readied for writing now, as the page's execution item flush readies every item.
+        PrepareRpeisForPersistence(executionItems);
         await _syncServer.DeleteConnectedSystemObjectsAsync(csosToDelete, executionItems);
+        _rpeiIdsWrittenWithDeletion.UnionWith(executionItems.Select(i => i.Id));
         Log.Verbose("FlushObsoleteCsoOperationsAsync: Deleted {Count} obsolete CSOs in batch", _obsoleteCsosToDelete.Count);
 
         _obsoleteCsosToDelete.Clear();
@@ -6264,7 +6297,7 @@ public abstract class SyncTaskProcessorBase
                 // The deletion item's id is assigned here where missing, because the RPEI flush that would
                 // otherwise assign it runs after this method; the flush only fills ids in where absent.
                 if (mvoDeletedNode.Rpei.Id == Guid.Empty)
-                    mvoDeletedNode.Rpei.Id = Guid.NewGuid();
+                    mvoDeletedNode.Rpei.Id = ChangeRecordIds.New();
                 pendingExport.RecordStager(mvoDeletedNode.Rpei.Id);
                 queueingStamps.Add((pendingExport.Id, mvoDeletedNode.Rpei.Id));
                 nestedCount++;
@@ -6277,7 +6310,7 @@ public abstract class SyncTaskProcessorBase
 
             var cascadeRpei = new ActivityRunProfileExecutionItem
             {
-                Id = Guid.NewGuid(),
+                Id = ChangeRecordIds.New(),
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = pendingExport.Id,
@@ -6620,7 +6653,7 @@ public abstract class SyncTaskProcessorBase
             csoSnapshots.TryGetValue(csoId, out var snapshot);
             var recallRpei = new ActivityRunProfileExecutionItem
             {
-                Id = Guid.NewGuid(),
+                Id = ChangeRecordIds.New(),
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = stagedPendingExport.Id,
@@ -8276,7 +8309,7 @@ public abstract class SyncTaskProcessorBase
             // export run reads as an ordinary update, with nothing to say the values it is putting back were
             // changed behind JIM's back.
             if (runProfileExecutionItem.Id == Guid.Empty)
-                runProfileExecutionItem.Id = Guid.NewGuid();
+                runProfileExecutionItem.Id = ChangeRecordIds.New();
             foreach (var correctiveExport in result.CorrectiveExports)
                 correctiveExport.RecordStager(runProfileExecutionItem.Id);
 

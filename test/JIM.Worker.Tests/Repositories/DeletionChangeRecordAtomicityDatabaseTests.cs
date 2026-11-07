@@ -50,7 +50,13 @@ public class DeletionChangeRecordAtomicityDatabaseTests
         MetaverseObjectPortal,
 
         /// <summary><c>SyncServer.DeleteConnectedSystemObjectsQuietlyAsync</c>, a leaver cohort's; records by <c>PersistCsoChangesAsync</c>.</summary>
-        ConnectedSystemObjectsQuiet
+        ConnectedSystemObjectsQuiet,
+
+        /// <summary>
+        /// <c>SyncServer.DeleteConnectedSystemObjectsAsync</c>, the synchronisation flush's for objects that left their
+        /// Connected System, each with an execution item; records by <c>PersistRpeiCsoChangesAsync</c> (#2807).
+        /// </summary>
+        ConnectedSystemObjectsWithExecutionItems
     }
 
     private sealed record Seeded(Guid MvoId, Guid CsoId);
@@ -89,6 +95,7 @@ public class DeletionChangeRecordAtomicityDatabaseTests
     [TestCase(DeletionEntryPoint.MetaverseObjectSynchronisation)]
     [TestCase(DeletionEntryPoint.MetaverseObjectPortal)]
     [TestCase(DeletionEntryPoint.ConnectedSystemObjectsQuiet)]
+    [TestCase(DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems)]
     public async Task Delete_ChangeRecordWriteFails_ObjectIsNotDeletedAndNoDeletionRecordIsWrittenAsync(DeletionEntryPoint entryPoint)
     {
         var seeded = await SeedAsync();
@@ -116,6 +123,7 @@ public class DeletionChangeRecordAtomicityDatabaseTests
     [TestCase(DeletionEntryPoint.MetaverseObjectSynchronisation)]
     [TestCase(DeletionEntryPoint.MetaverseObjectPortal)]
     [TestCase(DeletionEntryPoint.ConnectedSystemObjectsQuiet)]
+    [TestCase(DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems)]
     public async Task Delete_NoFailure_ObjectIsDeletedAndItsDeletionRecordIsWrittenAsync(DeletionEntryPoint entryPoint)
     {
         var seeded = await SeedAsync();
@@ -132,6 +140,66 @@ public class DeletionChangeRecordAtomicityDatabaseTests
         {
             Assert.That(objectExists, Is.False, $"{entryPoint}: the object is deleted");
             Assert.That(deletionRecords, Is.EqualTo(1), $"{entryPoint}: one deletion record names it");
+        }
+    }
+
+    /// <summary>
+    /// A synchronisation's deletion record belongs to the execution item reporting the deletion, so the item is written
+    /// with the delete as well (#2807): it rolls back with a failed record, and lands with a successful one, the record
+    /// naming it.
+    /// </summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public async Task DeleteConnectedSystemObjectsAsync_WithExecutionItems_ItemIsWrittenWithTheDeleteOrNotAtAllAsync(bool recordWriteFails)
+    {
+        var seeded = await SeedAsync();
+        Guid itemId;
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var failure = new InjectedFailureException();
+            var (jimRepository, syncRepository) = recordWriteFails
+                ? WithFailureInjected(DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems, repository, failure)
+                : (repository, repository.Sync);
+            using var jim = new JimApplication(jimRepository, syncRepository: syncRepository);
+            var activity = await ctx.Activities.FirstAsync();
+            var leavers = await LoadConnectedSystemObjectsAsync(ctx, seeded);
+            var items = DeletionItems(activity, leavers);
+
+            if (recordWriteFails)
+                Assert.ThrowsAsync<InjectedFailureException>(() => new SyncServer(jim).DeleteConnectedSystemObjectsAsync(leavers, items));
+            else
+                await new SyncServer(jim).DeleteConnectedSystemObjectsAsync(leavers, items);
+
+            itemId = items.Single().Id;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(itemId, Is.Not.EqualTo(Guid.Empty), "the item is given its id before its record is written, so the record can name it");
+            Assert.That(itemId.Version, Is.EqualTo(7), "the item's id is time-ordered, as the change records' are");
+        }
+
+        await using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT (SELECT COUNT(*) FROM "ActivityRunProfileExecutionItems" WHERE "Id" = @item),
+                   (SELECT COUNT(*) FROM "ConnectedSystemObjectChanges" WHERE "ActivityRunProfileExecutionItemId" = @item AND "ChangeType" = @deleted)
+            """, connection);
+        command.Parameters.Add(new NpgsqlParameter("item", NpgsqlDbType.Uuid) { Value = itemId });
+        command.Parameters.Add(new NpgsqlParameter("deleted", NpgsqlDbType.Integer) { Value = (int)ObjectChangeType.Deleted });
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        var (itemRows, records) = (reader.GetInt64(0), reader.GetInt64(1));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(itemRows, Is.EqualTo(recordWriteFails ? 0 : 1),
+                recordWriteFails ? "the item rolls back with the delete and its record" : "the item is written with the delete");
+            Assert.That(records, Is.EqualTo(recordWriteFails ? 0 : 1),
+                recordWriteFails ? "no record is written" : "the deletion record belongs to the item");
         }
     }
 
@@ -154,6 +222,8 @@ public class DeletionChangeRecordAtomicityDatabaseTests
                 (ThrowingMetaverseRepositoryProxy.Create(repository, nameof(IMetaverseRepository.CreateMetaverseObjectChangeDirectAsync), failure), repository.Sync),
             DeletionEntryPoint.ConnectedSystemObjectsQuiet =>
                 (repository, ThrowFromSync(nameof(ISyncRepository.PersistCsoChangesAsync))),
+            DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems =>
+                (repository, ThrowFromSync(nameof(ISyncRepository.PersistRpeiCsoChangesAsync))),
             _ => throw new ArgumentOutOfRangeException(nameof(entryPoint), entryPoint, null)
         };
     }
@@ -183,18 +253,40 @@ public class DeletionChangeRecordAtomicityDatabaseTests
             }
             case DeletionEntryPoint.ConnectedSystemObjectsQuiet:
             {
-                var leavers = await ctx.ConnectedSystemObjects
-                    .Include(c => c.Type)
-                    .Include(c => c.AttributeValues).ThenInclude(v => v.Attribute)
-                    .Where(c => c.Id == seeded.CsoId)
-                    .ToListAsync();
+                var leavers = await LoadConnectedSystemObjectsAsync(ctx, seeded);
                 await new SyncServer(jim).DeleteConnectedSystemObjectsQuietlyAsync(leavers, activity);
+                break;
+            }
+            case DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems:
+            {
+                var leavers = await LoadConnectedSystemObjectsAsync(ctx, seeded);
+                await new SyncServer(jim).DeleteConnectedSystemObjectsAsync(leavers, DeletionItems(activity, leavers));
                 break;
             }
             default:
                 throw new ArgumentOutOfRangeException(nameof(entryPoint), entryPoint, null);
         }
     }
+
+    private static Task<List<ConnectedSystemObject>> LoadConnectedSystemObjectsAsync(JimDbContext ctx, Seeded seeded) => ctx.ConnectedSystemObjects
+        .Include(c => c.Type)
+        .Include(c => c.AttributeValues).ThenInclude(v => v.Attribute)
+        .Where(c => c.Id == seeded.CsoId)
+        .ToListAsync();
+
+    /// <summary>
+    /// One execution item per object, as the synchronisation's obsoletion handling prepares them.
+    /// </summary>
+    private static List<ActivityRunProfileExecutionItem> DeletionItems(Activity activity, List<ConnectedSystemObject> leavers) =>
+        leavers.Select(cso =>
+        {
+            var item = activity.PrepareRunProfileExecutionItem();
+            item.ConnectedSystemObject = cso;
+            item.ConnectedSystemObjectId = cso.Id;
+            item.ObjectChangeType = ObjectChangeType.Deleted;
+            item.SnapshotCsoDisplayFields(cso);
+            return item;
+        }).ToList();
 
     private static Task<MetaverseObject> LoadMetaverseObjectAsync(JimDbContext ctx, Seeded seeded) => ctx.MetaverseObjects
         .Include(m => m.Type)
@@ -207,7 +299,7 @@ public class DeletionChangeRecordAtomicityDatabaseTests
     /// </summary>
     private async Task<(bool ObjectExists, long DeletionRecords)> ReadStateAsync(DeletionEntryPoint entryPoint, Seeded seeded)
     {
-        var (sql, id) = entryPoint == DeletionEntryPoint.ConnectedSystemObjectsQuiet
+        var (sql, id) = entryPoint is DeletionEntryPoint.ConnectedSystemObjectsQuiet or DeletionEntryPoint.ConnectedSystemObjectsWithExecutionItems
             ? ("""
                SELECT EXISTS (SELECT 1 FROM "ConnectedSystemObjects" WHERE "Id" = @id),
                       (SELECT COUNT(*) FROM "ConnectedSystemObjectChanges" WHERE "DeletedConnectedSystemObjectId" = @id AND "ChangeType" = @deleted)

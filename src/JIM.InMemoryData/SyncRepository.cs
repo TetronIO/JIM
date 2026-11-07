@@ -2436,12 +2436,15 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis, IReadOnlySet<Guid>? rowsAlreadyWritten = null)
     {
         foreach (var rpei in rpeis)
         {
             if (rpei.Id == Guid.Empty)
-                rpei.Id = Guid.NewGuid();
+                rpei.Id = ChangeRecordIds.New();
+
+            // An item whose row a deletion wrote already (#2807) is the same instance in this store, so storing it again
+            // is the production writer's update of its mutable columns.
             _rpeis[rpei.Id] = rpei;
 
             // Generate IDs for SyncOutcomes (matches PostgresDataRepository.FlattenSyncOutcomes behaviour)
@@ -2455,7 +2458,7 @@ public class SyncRepository : ISyncRepository
             foreach (var candidate in rpei.MatchCandidates)
             {
                 if (candidate.Id == Guid.Empty)
-                    candidate.Id = Guid.NewGuid();
+                    candidate.Id = ChangeRecordIds.New();
                 candidate.ActivityRunProfileExecutionItemId = rpei.Id;
                 _matchCandidates[candidate.Id] = candidate;
             }
@@ -2526,13 +2529,28 @@ public class SyncRepository : ISyncRepository
         foreach (var outcome in roots)
         {
             if (outcome.Id == Guid.Empty)
-                outcome.Id = Guid.NewGuid();
+                outcome.Id = ChangeRecordIds.New();
             outcome.ActivityRunProfileExecutionItemId = rpeiId;
             outcome.ParentSyncOutcomeId = parentId;
 
             if (outcome.Children.Count > 0)
                 AssignSyncOutcomeIds(outcome.Children, rpeiId, outcome.Id);
         }
+    }
+
+    public Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    {
+        foreach (var rpei in rpeis)
+        {
+            if (rpei.ActivityId == Guid.Empty)
+                throw new InvalidOperationException(
+                    "InsertRpeiRowsAsync: every execution item must carry its Activity's id before its row is written.");
+            if (rpei.Id == Guid.Empty)
+                rpei.Id = ChangeRecordIds.New();
+            _rpeis[rpei.Id] = rpei;
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task BulkUpdateRpeiOutcomesAsync(

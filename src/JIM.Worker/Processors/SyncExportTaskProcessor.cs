@@ -16,6 +16,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.PostgresData;
 using Serilog;
 
@@ -510,7 +511,7 @@ public class SyncExportTaskProcessor
             {
                 rpei.ActivityId = _activity.Id;
                 if (rpei.Id == Guid.Empty)
-                    rpei.Id = Guid.NewGuid();
+                    rpei.Id = ChangeRecordIds.New();
                 if (rpei.ConnectedSystemObjectChange != null)
                     rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
                 if (rpei.ConnectedSystemObject != null)

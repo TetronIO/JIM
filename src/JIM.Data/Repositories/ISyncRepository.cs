@@ -1477,11 +1477,28 @@ public interface ISyncRepository
     Task RecordExclusionDiscardCountsAsync(Guid activityId, IReadOnlyDictionary<int, long> entriesDiscardedByContainerId);
 
     /// <summary>
-    /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker.
+    /// Bulk inserts RPEIs via raw SQL, bypassing the EF change tracker: the items, their outcome trees, the change
+    /// records those outcomes carry, their causal edges and match candidates, and the Activity's stat counters for them.
     /// Returns true if raw SQL was used (RPEIs are outside EF tracking),
     /// false if the EF fallback was used (RPEIs remain tracked).
     /// </summary>
-    Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis);
+    /// <param name="rpeis">The items to write.</param>
+    /// <param name="rowsAlreadyWritten">The ids of items among <paramref name="rpeis"/> whose own rows were written
+    /// already, by <see cref="InsertRpeiRowsAsync"/> in a deletion's transaction (#2807). Their rows are not inserted
+    /// again; their mutable columns (the outcome summary, the error fields) are brought up to date instead, and everything
+    /// else is written for them as for any other item, counters included. Their own change records were written with
+    /// their rows, so callers leave them out of <see cref="PersistRpeiCsoChangesAsync"/>.</param>
+    Task<bool> BulkInsertRpeisAsync(List<ActivityRunProfileExecutionItem> rpeis, IReadOnlySet<Guid>? rowsAlreadyWritten = null);
+
+    /// <summary>
+    /// Writes only the items' own rows (#2807): no outcomes, edges, match candidates, change records or stat counters.
+    /// For items that must exist in the same transaction as something else, such as the execution items of a
+    /// synchronisation's Connected System Object deletion, which its Deleted change records belong to. Joins the
+    /// caller's transaction; the page's later <see cref="BulkInsertRpeisAsync"/> writes the rest of each item, given the
+    /// items' ids as already written. Each item must carry its Activity's id; one without an id is given a
+    /// time-ordered one.
+    /// </summary>
+    Task InsertRpeiRowsAsync(List<ActivityRunProfileExecutionItem> rpeis);
 
     /// <summary>
     /// Bulk inserts causal edges via chunked raw SQL, bypassing the EF change tracker (#1223).

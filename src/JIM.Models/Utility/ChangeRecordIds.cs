@@ -8,7 +8,9 @@ namespace JIM.Models.Utility;
 
 /// <summary>
 /// The ids of change records: the Metaverse Object and Connected System Object change rows, their attribute rows and
-/// their value rows. Every writer of those tables takes its ids from here, so they are all time-ordered (#2669).
+/// their value rows. Every writer of those tables takes its ids from here, so they are all time-ordered (#2669). The
+/// Run Profile Execution Items a run records, with their outcome and match candidate rows, take theirs from here too
+/// (#2807): they are history written in bulk on every run, as change records are.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -1751,7 +1751,7 @@ public class SyncImportTaskProcessor
         {
             rpei.ActivityId = _activity.Id;
             if (rpei.Id == Guid.Empty)
-                rpei.Id = Guid.NewGuid();
+                rpei.Id = ChangeRecordIds.New();
 
             // Snapshot CSO display fields (ExternalId, DisplayName, ObjectType) for historical preservation.
             // Defence-in-depth: ensures snapshots are populated even if individual code paths missed them.
@@ -6266,7 +6266,7 @@ public class SyncImportTaskProcessor
                 foreach (var outcome in rpeiNewOutcomes)
                 {
                     if (outcome.Id == Guid.Empty)
-                        outcome.Id = Guid.NewGuid();
+                        outcome.Id = ChangeRecordIds.New();
                     outcome.ActivityRunProfileExecutionItemId = rpei.Id;
                     newOutcomes.Add(outcome);
                 }

@@ -174,7 +174,11 @@ public interface ISyncServer
 
     /// <summary>
     /// Deletes CSOs with associated RPEIs. Captures final attribute snapshots on the RPEIs
-    /// before deletion for audit trail, then deletes the CSOs.
+    /// before deletion for audit trail, then deletes the CSOs and writes the RPEIs' own rows and their Deleted change
+    /// records in the same transaction (#2807), so a failure leaves neither. Each RPEI is given its id here where it
+    /// has none; the caller's later RPEI flush must pass those ids to
+    /// <see cref="JIM.Data.Repositories.ISyncRepository.BulkInsertRpeisAsync"/> as already written, and leave the
+    /// RPEIs out of its change record write.
     /// </summary>
     Task DeleteConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,

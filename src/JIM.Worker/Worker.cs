@@ -20,6 +20,7 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Models.Utility;
 using JIM.Utilities;
 using JIM.Worker.Processors;
 using Serilog;
@@ -1238,7 +1239,7 @@ public class Worker : BackgroundService
 
                     // The item recording this deletion is created after it, but its id is fixed now so the Deleted
                     // change record can name it (#2460).
-                    var deletionItemId = Guid.NewGuid();
+                    var deletionItemId = ChangeRecordIds.New();
                     mvo.DeletingRunProfileExecutionItemId = deletionItemId;
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
@@ -1369,7 +1370,7 @@ public class Worker : BackgroundService
                     Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
                     executionItems.Add(new ActivityRunProfileExecutionItem
                     {
-                        Id = Guid.NewGuid(),
+                        Id = ChangeRecordIds.New(),
                         ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
                         ErrorMessage = ex.Message,
                         ErrorStackTrace = ex.StackTrace,
@@ -1545,7 +1546,7 @@ public class Worker : BackgroundService
     {
         var executionItem = new ActivityRunProfileExecutionItem
         {
-            Id = Guid.NewGuid(),
+            Id = ChangeRecordIds.New(),
             ObjectChangeType = ObjectChangeType.PendingExport,
             ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId,
             PendingExportId = pendingExport.Id,
