@@ -35,9 +35,11 @@ namespace JIM.PostgresData.Repositories;
 /// <item><c>ConnectedSystemObjectAttributeValues.ReferenceValueId</c> and
 /// <c>MetaverseObjectAttributeValues.UnresolvedReferenceValueId</c>: no action, so cleared by an UPDATE before the
 /// delete. Tracked values are cleared to match.</item>
-/// <item><c>PendingExports.ConnectedSystemObjectId</c>, <c>PendingPasswordChanges.ConnectedSystemObjectId</c> and <c>.ProvisionedConnectedSystemObjectId</c>: set null by the
-/// database. Tracked rows are cleared to match.</item>
+/// <item><c>PendingExports.ConnectedSystemObjectId</c>, <c>PendingPasswordChanges.ConnectedSystemObjectId</c> and <c>.ProvisionedConnectedSystemObjectId</c>, and
+/// <c>PendingExchangeChanges.ConnectedSystemObjectId</c>: set null by the database. Tracked rows are cleared to match.</item>
 /// </list>
+/// <c>DeletionTrackerForeignKeyCoverageTests</c> holds this list to the model: a foreign key into the table that the
+/// tracker pass does not handle fails there (#2799).
 /// History is not among them (#2669): change records, change values and Run Profile Execution Items name the object by a
 /// plain id, with no foreign key, so the delete leaves them as they are and the tracker has nothing to match.
 /// Clearing sets a foreign key's current and original value to null and its navigation to null, so the tracker holds
@@ -149,9 +151,10 @@ internal static class ConnectedSystemObjectDeletionSql
     /// (<c>src/CLAUDE.md</c>, "Tracker surgery must not trigger DetectChanges"). The entries are materialised first:
     /// clearing a foreign key moves its entry between the tracker's per-state maps, which the enumeration reads.
     /// References are cleared while the deleted objects are still tracked, so EF Core's own fix-up also takes the rows
-    /// out of the objects' inverse collections.
+    /// out of the objects' inverse collections. Internal so <c>DeletionTrackerForeignKeyCoverageTests</c> can hold it to
+    /// every foreign key in the model.
     /// </remarks>
-    private static (int Scanned, int Detached, int Cleared, int RemovedFromCollections) UpdateTracker(JimDbContext context, HashSet<Guid> ids)
+    internal static (int Scanned, int Detached, int Cleared, int RemovedFromCollections) UpdateTracker(JimDbContext context, HashSet<Guid> ids)
     {
         var detectChanges = context.ChangeTracker.AutoDetectChangesEnabled;
         context.ChangeTracker.AutoDetectChangesEnabled = false;
@@ -362,6 +365,12 @@ internal static class ConnectedSystemObjectDeletionSql
                     cleared++;
                 }
                 return cleared;
+
+            // Its account gone, the change stays on the Exchange queue for the delivery lane to withdraw (#2021); left
+            // holding the id, a save of the row writes it back and fails with 23503 (#2799).
+            case PendingExchangeChange exchangeChange when References(exchangeChange.ConnectedSystemObjectId, ids):
+                ClearForeignKey(entry, nameof(PendingExchangeChange.ConnectedSystemObjectId));
+                return 1;
 
             default:
                 return 0;
