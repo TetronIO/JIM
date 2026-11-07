@@ -264,6 +264,17 @@ public class ConnectedSystemObject
     [NotMapped]
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
 
+    /// <summary>
+    /// #2817: the multi-valued reference attributes this instance was loaded without most of the values of, each with the
+    /// database's answer that says which of its values were loaded and why the rest were not needed. Null for an instance
+    /// loaded whole, which is every instance outside a Delta Import's comparison. A Delta Import compares an attribute named
+    /// here only with its answer, and refuses to compare it at all without one, so a value it did not load can never read
+    /// as one the object does not hold.
+    /// </summary>
+    [NotMapped]
+    [JsonIgnore]
+    public IReadOnlyDictionary<int, HeldReferenceValueAnswer>? PartiallyLoadedAttributes { get; set; }
+
     [NotMapped]
     public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue
     {

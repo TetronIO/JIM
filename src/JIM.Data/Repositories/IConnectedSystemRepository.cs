@@ -183,6 +183,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// #2817: <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>, leaving out the values of
+    /// <paramref name="excludedAttributeIds"/> other than <paramref name="includedValueIds"/>.
+    /// </summary>
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds);
+
+    /// <summary>
     /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
     /// reference value, the referenced Connected System Object (<c>ReferenceValue</c>). Loading the referenced objects
     /// reads one row per member of a group; a caller that only compares references by id and string wants
@@ -1291,8 +1298,10 @@ public interface IConnectedSystemRepository
     /// so callers can distinguish "no references" from "not fetched" without a fallback query.
     /// </summary>
     /// <param name="csoIds">The CSOs whose reference attribute values should be looked up.</param>
+    /// <param name="excludedAttributeIds">Attributes whose reference values are left out (#2817). Null or empty leaves nothing out.</param>
     /// <returns>Dictionary keyed by owning CSO ID; each value maps referenced CSO GUIDs to their external ID strings.</returns>
-    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null);
 
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.

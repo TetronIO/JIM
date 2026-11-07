@@ -233,6 +233,28 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// #2817: <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>, leaving out the values of the
+    /// named attributes except the named values: a Delta Import loads, of a large group's member attribute, only the values
+    /// <see cref="GetHeldReferenceValueAnswersAsync"/> said it could still decide either way.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the objects belong to.</param>
+    /// <param name="csoIds">The objects to load.</param>
+    /// <param name="excludedAttributeIds">The attributes whose values are left out.</param>
+    /// <param name="includedValueIds">Values of those attributes to load all the same.</param>
+    Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds);
+
+    /// <summary>
+    /// #2817: answers, in one round trip, which values each named multi-valued reference attribute holds that none of the
+    /// imported values match exactly, which imported values no held value matches exactly, and which held values name an
+    /// object whose External ID equals an unmatched imported value through <c>lower()</c>. The database compares every
+    /// member of a group; the Worker reads only what is left undecided (see <see cref="HeldReferenceValueAnswer"/>).
+    /// </summary>
+    /// <param name="questions">At most one per object and attribute.</param>
+    /// <returns>One answer per question, in the questions' order.</returns>
+    Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions);
+
+    /// <summary>
     /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
     /// reference value, the referenced Connected System Object. Pending Export reconciliation reads the lighter
     /// <see cref="GetConnectedSystemObjectsCoreByIdsNoTrackingAsync"/> instead.
@@ -369,7 +391,11 @@ public interface ISyncRepository
     /// Import processing previously issued the single-CSO variant once per existing object
     /// (535K round trips at Scale500k25kGroups); callers with a hydrated page should use this instead.
     /// </summary>
-    Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
+    /// <param name="csoIds">The objects whose references are looked up.</param>
+    /// <param name="excludedAttributeIds">Attributes whose references are left out (#2817): those a Delta Import loaded only
+    /// in part, whose answer carries the External IDs it needs. Null or empty leaves nothing out.</param>
+    Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null);
 
     /// <summary>
     /// Gets the Connected System ID of each CSO joined to a specific MVO across all Connected Systems:

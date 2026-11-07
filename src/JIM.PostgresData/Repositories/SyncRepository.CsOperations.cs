@@ -2113,6 +2113,199 @@ public partial class SyncRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Raw Npgsql, once per page of a Delta Import (#2817). The database reads every member of each group asked about,
+    /// which is the comparison's own cost and cannot be avoided while a Connector reports a group's whole member list; what
+    /// it returns is only what is left undecided, so a group of 450,000 members that lost a few costs those few rows to
+    /// read and nothing to hold. See <see cref="HeldReferenceValueAnswersSql"/> for the statement.
+    /// </remarks>
+    public async Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var answers = questions.Select(question => new HeldReferenceValueAnswer(question)).ToList();
+        if (questions.Count == 0)
+            return answers;
+
+        // One question per object and attribute: two would answer one attribute twice, each about only part of it.
+        var duplicate = questions.GroupBy(q => (q.ConnectedSystemObjectId, q.AttributeId)).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new ArgumentException(
+                $"More than one held reference value question for attribute {duplicate.Key.AttributeId} of Connected System Object {duplicate.Key.ConnectedSystemObjectId}.",
+                nameof(questions));
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand
+        {
+            Connection = connection,
+            Transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction()
+        };
+        PrepareHeldReferenceValueAnswersCommand(command, questions);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            // Column order is HeldReferenceValueAnswersSql's: kind, question (1-based), value id, unresolved reference,
+            // referenced object, its External ID, imported value.
+            var answer = answers[reader.GetInt32(1) - 1];
+            var kind = reader.GetInt32(0);
+            if (kind == HeldReferenceValueAnswerUnmatchedIncoming)
+            {
+                answer.UnmatchedIncomingValues.Add(reader.GetString(6));
+                continue;
+            }
+
+            var valueId = reader.GetGuid(2);
+            var unresolvedReferenceValue = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var referenceValueId = reader.IsDBNull(4) ? (Guid?)null : reader.GetGuid(4);
+            if (referenceValueId.HasValue && !reader.IsDBNull(5))
+                answer.ReferencedExternalIds.TryAdd(referenceValueId.Value, reader.GetString(5));
+
+            if (kind == HeldReferenceValueAnswerUnmatchedHeld)
+                answer.UnmatchedValueIds.Add(valueId);
+            else if (answer.RelatedValues.TrueForAll(related => related.Id != valueId))
+                answer.RelatedValues.Add(new HeldReferenceValue(valueId, unresolvedReferenceValue, referenceValueId));
+        }
+
+        return answers;
+    }
+
+    /// <summary>A held value no imported value matches exactly.</summary>
+    private const int HeldReferenceValueAnswerUnmatchedHeld = 0;
+
+    /// <summary>A held value whose object's External ID equals an unmatched imported value through <c>lower()</c>.</summary>
+    private const int HeldReferenceValueAnswerRelatedHeld = 1;
+
+    /// <summary>An imported value no held value matches exactly.</summary>
+    private const int HeldReferenceValueAnswerUnmatchedIncoming = 2;
+
+    /// <summary>
+    /// The External ID of the object a held value was resolved to, read as <c>GetReferenceExternalIdsForCsosAsync</c> reads
+    /// it: its Secondary External ID's text, else its External ID's. <c>{0}</c> is the referenced object's id.
+    /// </summary>
+    private const string HeldReferenceExternalIdSql = """
+        (SELECT COALESCE(
+             (SELECT sec."StringValue" FROM "ConnectedSystemObjectAttributeValues" sec
+              WHERE sec."ConnectedSystemObjectId" = ref."Id" AND sec."AttributeId" = ref."SecondaryExternalIdAttributeId" LIMIT 1),
+             (SELECT pri."StringValue" FROM "ConnectedSystemObjectAttributeValues" pri
+              WHERE pri."ConnectedSystemObjectId" = ref."Id" AND pri."AttributeId" = ref."ExternalIdAttributeId" LIMIT 1))
+         FROM "ConnectedSystemObjects" ref WHERE ref."Id" = {0})
+        """;
+
+    /// <summary>
+    /// The statement behind <see cref="GetHeldReferenceValueAnswersAsync"/>: one row per thing left undecided.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A held value is matched exactly when the string it was imported as (which resolution keeps), or the External ID of
+    /// the object it was resolved to, is byte for byte one of the imported values. The string is compared first, over the
+    /// whole group; only the values it leaves (the members that left, and any renamed since they were imported) have their
+    /// object's External ID read, so a group whose members are unchanged costs no join to its members' objects. An
+    /// imported value is matched exactly the same two ways.
+    /// </para>
+    /// <para>
+    /// Every comparison is set-based whatever the planner estimates, because an estimate is easily wrong here (a
+    /// materialised step is costed at a handful of rows, and a directory that moved every user to another OU leaves every
+    /// member's kept DN unmatched): a nested loop over 450,000 members against 450,000 imported values would never finish.
+    /// A held value is tested against <c>@keys</c>, each imported value prefixed with its question's number, with
+    /// <c>= ANY</c>, which PostgreSQL answers from a hash of the array when the array is a constant: it is, because JIM
+    /// sends this statement unprepared, so it is planned with its parameters' values
+    /// (<c>HeldReferenceValueAnswerDatabaseTests</c> checks the plan shows the array, not a parameter). Each test sits in a
+    /// <c>CASE</c>, which the planner does not estimate the selectivity of, so it does not cost the array element by
+    /// element (measured at 200,000 values: about 95 ms of planning for one test left bare; 13 to 19 ms for the whole
+    /// statement with both wrapped).
+    /// The imported values left unmatched are an <c>EXCEPT</c>, which is hashed or sorted, never looped.
+    /// </para>
+    /// <para>
+    /// Every imported value left unmatched is looked up through the <c>lower("StringValue")</c> index for the objects whose
+    /// External ID it equals ignoring case, and the group's values naming those objects are returned as related: the
+    /// comparison matches a member to an imported value ignoring case through its object, so it needs them to tell a DN
+    /// whose case changed from a new member. The database's folding finds them; whether that folding can be trusted is the
+    /// caller's to decide (<see cref="HeldReferenceValueAnswer.IsCompleteIgnoringCase"/>).
+    /// </para>
+    /// </remarks>
+    internal static readonly string HeldReferenceValueAnswersSql = $"""
+        WITH question AS MATERIALIZED (
+            SELECT q.cso_id, q.attribute_id, q.ordinal::integer AS question
+            FROM unnest(@questionCsoIds, @questionAttributeIds) WITH ORDINALITY AS q(cso_id, attribute_id, ordinal)
+        ),
+        held_unmatched AS MATERIALIZED (
+            SELECT q.question, av."Id", av."UnresolvedReferenceValue", av."ReferenceValueId"
+            FROM question q
+            JOIN "ConnectedSystemObjectAttributeValues" av
+              ON av."ConnectedSystemObjectId" = q.cso_id AND av."AttributeId" = q.attribute_id
+            WHERE CASE WHEN av."UnresolvedReferenceValue" IS NULL THEN true
+                       ELSE NOT ((lpad(q.question::text, {HeldReferenceValueKeyQuestionWidth}, '0') || av."UnresolvedReferenceValue") = ANY(@keys)) END
+        ),
+        held_unmatched_named AS MATERIALIZED (
+            SELECT h.question, h."Id", h."UnresolvedReferenceValue", h."ReferenceValueId",
+                   {string.Format(System.Globalization.CultureInfo.InvariantCulture, HeldReferenceExternalIdSql, "h.\"ReferenceValueId\"")} AS external_id
+            FROM held_unmatched h
+        ),
+        incoming_unmatched AS MATERIALIZED (
+            SELECT left(k, {HeldReferenceValueKeyQuestionWidth})::integer AS question, substr(k, {HeldReferenceValueKeyQuestionWidth + 1}) AS value
+            FROM unnest(@keys) AS k
+            EXCEPT
+            SELECT q.question, av."UnresolvedReferenceValue"
+            FROM question q
+            JOIN "ConnectedSystemObjectAttributeValues" av
+              ON av."ConnectedSystemObjectId" = q.cso_id AND av."AttributeId" = q.attribute_id
+            WHERE av."UnresolvedReferenceValue" IS NOT NULL
+            EXCEPT
+            SELECT n.question, n.external_id FROM held_unmatched_named n WHERE n.external_id IS NOT NULL
+        )
+        SELECT {HeldReferenceValueAnswerUnmatchedHeld} AS kind, n.question, n."Id", n."UnresolvedReferenceValue", n."ReferenceValueId", n.external_id, NULL::text AS value
+        FROM held_unmatched_named n
+        WHERE CASE WHEN n.external_id IS NULL THEN true
+                   ELSE NOT ((lpad(n.question::text, {HeldReferenceValueKeyQuestionWidth}, '0') || n.external_id) = ANY(@keys)) END
+        UNION ALL
+        SELECT {HeldReferenceValueAnswerRelatedHeld}, u.question, av."Id", av."UnresolvedReferenceValue", av."ReferenceValueId",
+               {string.Format(System.Globalization.CultureInfo.InvariantCulture, HeldReferenceExternalIdSql, "av.\"ReferenceValueId\"")}, NULL::text
+        FROM incoming_unmatched u
+        JOIN question q ON q.question = u.question
+        CROSS JOIN LATERAL (
+            SELECT DISTINCT named."ConnectedSystemObjectId"
+            FROM "ConnectedSystemObjectAttributeValues" named
+            WHERE lower(named."StringValue") = lower(u.value) AND named."StringValue" IS NOT NULL
+            OFFSET 0) AS named
+        JOIN "ConnectedSystemObjectAttributeValues" av
+          ON av."ReferenceValueId" = named."ConnectedSystemObjectId"
+         AND av."ConnectedSystemObjectId" = q.cso_id AND av."AttributeId" = q.attribute_id
+        UNION ALL
+        SELECT {HeldReferenceValueAnswerUnmatchedIncoming}, u.question, NULL::uuid, NULL::text, NULL::uuid, NULL::text, u.value
+        FROM incoming_unmatched u
+        """;
+
+    /// <summary>
+    /// The width of the question number each imported value is prefixed with in <c>@keys</c>, zero-padded so the value
+    /// starts at a fixed place and nothing in it can be mistaken for part of the number.
+    /// </summary>
+    private const int HeldReferenceValueKeyQuestionWidth = 10;
+
+    /// <summary>
+    /// Sets <see cref="HeldReferenceValueAnswersSql"/> and its parameters on <paramref name="command"/>: the questions as
+    /// parallel arrays (object, attribute), and every imported value prefixed with the 1-based number of its question.
+    /// Exposed so the plan can be checked (<c>HeldReferenceValueAnswerDatabaseTests</c>).
+    /// </summary>
+    internal static void PrepareHeldReferenceValueAnswersCommand(NpgsqlCommand command, IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var keys = new string[questions.Sum(q => q.Values.Count)];
+        var next = 0;
+        for (var q = 0; q < questions.Count; q++)
+        {
+            var prefix = (q + 1).ToString(new string('0', HeldReferenceValueKeyQuestionWidth), System.Globalization.CultureInfo.InvariantCulture);
+            foreach (var value in questions[q].Values)
+                keys[next++] = prefix + value;
+        }
+
+        command.CommandText = HeldReferenceValueAnswersSql;
+        command.Parameters.Add(new NpgsqlParameter("questionCsoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = questions.Select(q => q.ConnectedSystemObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("questionAttributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = questions.Select(q => q.AttributeId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("keys", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text) { Value = keys });
+    }
+
+    /// <inheritdoc />
     public async Task<bool> DoesDatabaseFoldCaseLikeIdentifierKeyAsync()
     {
         var sample = IdentifierKey.FoldingCheckSample;

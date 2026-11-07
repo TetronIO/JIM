@@ -100,6 +100,13 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
+        => _inner.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds, excludedAttributeIds, includedValueIds);
+
+    public Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+        => _inner.GetHeldReferenceValueAnswersAsync(questions);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 
@@ -149,8 +156,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
         => _inner.GetReferenceExternalIdsAsync(csoId);
 
-    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
-        => _inner.GetReferenceExternalIdsForCsosAsync(csoIds);
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
+        => _inner.GetReferenceExternalIdsForCsosAsync(csoIds, excludedAttributeIds);
 
     public Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
         => _inner.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(metaverseObjectId);
