@@ -167,7 +167,10 @@ public class ImportPartiallyLoadedAttributeTests
         foreach (var value in unmatchedIncoming ?? [])
             answer.UnmatchedIncomingValues.Add(value);
 
-        group.PartiallyLoadedAttributes = new Dictionary<int, HeldReferenceValueAnswer> { [_member.Id] = answer };
+        group.PartiallyLoadedAttributes = new Dictionary<int, PartiallyLoadedAttribute>
+        {
+            [_member.Id] = new ImportPartiallyLoadedAttribute(_member.Id, _member.Name, answer)
+        };
         return group;
     }
 

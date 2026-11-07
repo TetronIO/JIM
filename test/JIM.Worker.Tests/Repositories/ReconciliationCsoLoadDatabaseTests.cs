@@ -354,6 +354,45 @@ public class ReconciliationCsoLoadDatabaseTests
     }
 
     /// <summary>
+    /// Loading a group for reconciliation with its member attribute probed (left out) never reads the membership. Every
+    /// statement the load runs is replayed under EXPLAIN ANALYZE and the rows read from the attribute values table counted:
+    /// a filter leaving the attribute out reads every member row of the group to discard it.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsCoreByIdsNoTrackingAsync_MemberAttributeProbed_ReadsNoMemberRowAsync()
+    {
+        const int members = 20_000;
+        var seeded = await LargeGroupImportSeed.SeedAsync(() => NewContext(), _connectionString, userCount: members, memberCount: members);
+
+        var recorder = new CommandRecordingInterceptor();
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .AddInterceptors(recorder)
+            .Options;
+        List<ConnectedSystemObject> loaded;
+        await using (var ctx = new JimDbContext(options))
+        {
+            loaded = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(seeded.SystemId,
+                [seeded.GroupCsoId], [seeded.MemberAttributeId]);
+            Assert.That(ctx.ChangeTracker.Entries().Count(), Is.Zero, "The load must not track what it reads");
+        }
+
+        var rowsRead = await PlanRowsRead.FromAsync(_connectionString, recorder.Commands, PlanRowsRead.AttributeValues);
+
+        var group = loaded.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(group.AttributeValues.Any(av => av.AttributeId == seeded.MemberAttributeId), Is.False, "The probed member values are not loaded");
+            Assert.That(group.AttributeValues, Has.Count.EqualTo(2), "The group's DN and GUID are");
+            Assert.That(group.AttributeValues.All(av => av.Attribute != null && ReferenceEquals(av.ConnectedSystemObject, group)), Is.True);
+            Assert.That(rowsRead, Is.LessThanOrEqualTo(10),
+                $"the load read {rowsRead:N0} attribute value rows for a group of {members:N0} members; it needs the group's 2 other values");
+        }
+    }
+
+    /// <summary>
     /// The database only narrows: for every change, the rows the probe returns include every row the .NET comparison
     /// matches over the full load. Covered: resolved rows by id, a row resolved to another object retaining a member's
     /// DN in capitals (which matches nothing, a resolved row naming its object by id), unresolved rows in other cases, and

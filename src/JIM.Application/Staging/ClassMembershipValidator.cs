@@ -47,19 +47,20 @@ public static class ClassMembershipValidator
         if (classesBeingAdded.Count == 0)
             return null;
 
-        // A requirement is satisfied either by a value this export writes or by one already on the object.
-        var satisfied = pendingExport.AttributeValueChanges
+        // A requirement is satisfied either by a value this export writes or by one already on the object. What the object
+        // holds is asked of it rather than read off its loaded values: export execution loads a large multi-valued
+        // reference attribute with only the values its changes name (#2816), and not loaded is not "not held".
+        var written = pendingExport.AttributeValueChanges
             .Where(HasAValue)
             .Select(change => change.Attribute?.Name)
-            .Concat((pendingExport.ConnectedSystemObject?.AttributeValues ?? [])
-                .Select(value => value.Attribute?.Name))
             .OfType<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var connectedSystemObject = pendingExport.ConnectedSystemObject;
 
         var missing = (objectType.Attributes ?? [])
             .Where(attribute => attribute.Required)
             .Where(attribute => attribute.ClassName != null && classesBeingAdded.Contains(attribute.ClassName))
-            .Where(attribute => !satisfied.Contains(attribute.Name))
+            .Where(attribute => !written.Contains(attribute.Name) && connectedSystemObject?.HoldsAnyValue(attribute.Name) != true)
             .Select(attribute => attribute.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)

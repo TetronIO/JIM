@@ -3121,8 +3121,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <inheritdoc />
     /// <remarks>
-    /// #2817: a filtered include, so the left-out values are never read: a Delta Import loads, of a group of 450,000
-    /// members that lost a few, only the few. Everything else is <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>.
+    /// #2817: the left-out values are never read: a Delta Import loads, of a group of 450,000 members that lost a few, only
+    /// the few. The other attributes are read by attribute-id ranges and the wanted values by id
+    /// (<see cref="GetAttributeValuesExcludingAsync"/>, shared with export's partial load, #2816); a filtered include read
+    /// every member row to discard it. Everything else is <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>.
     /// </remarks>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
         IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
@@ -3166,19 +3168,17 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         //
         // Split query stays: as a single query, every CSO's columns would repeat once per attribute
         // value row, which for a large group (tens of thousands of member values) is the costly shape.
+        //
+        // #2817: leaving attributes out (a Delta Import's large group, loaded with only the members the database left
+        // undecided) loads the objects without values, then their values by attribute-id ranges that skip the left-out
+        // attributes, plus the left-out values wanted by id (GetAttributeValuesExcludingAsync, shared with export's
+        // partial load, #2816). A filtered include read every member row of the group to throw it away.
+        var leavingAttributesOut = excludedAttributeIds is { Count: > 0 };
         var query = Repository.Database.ConnectedSystemObjects
             .AsNoTracking()
             .AsSplitQuery();
-        if (excludedAttributeIds is { Count: > 0 })
-        {
-            var excluded = excludedAttributeIds.ToList();
-            var included = (includedValueIds ?? []).ToList();
-            query = query.Include(cso => cso.AttributeValues.Where(av => !excluded.Contains(av.AttributeId) || included.Contains(av.Id)));
-        }
-        else
-        {
+        if (!leavingAttributesOut)
             query = query.Include(cso => cso.AttributeValues);
-        }
 
         var csos = await query
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
@@ -3186,6 +3186,17 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (csos.Count == 0)
             return csos;
+
+        if (leavingAttributesOut)
+        {
+            var csosById = csos.ToDictionary(cso => cso.Id);
+            var rows = await GetAttributeValuesExcludingAsync(csos.Select(cso => (cso.Id, excludedAttributeIds!)), includedValueIds ?? []);
+            foreach (var (value, cso) in rows.Select(row => (row.Value, csosById[row.ObjectId])))
+            {
+                value.ConnectedSystemObject = cso;
+                cso.AttributeValues.Add(value);
+            }
+        }
 
         var typeIds = csos.Select(cso => cso.TypeId).Distinct().ToList();
         var types = await Repository.Database.ConnectedSystemObjectTypes
@@ -3248,10 +3259,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// shared definition by hand would duplicate the entity mapping for a load that is now one row per value. Identity
     /// resolution has every value of an attribute share one definition instance.
     /// <para>
-    /// <paramref name="excludedAttributeIds"/> leaves out the values reconciliation probes instead of loading (#2669), a
-    /// filtered include, so a large group's member values are never read here: on a 500,000-user, 25,000-group run two
-    /// pages loaded 761,000 and 1.73 million of them. The caller excludes an attribute only for objects whose every change
-    /// on it the probe answers.
+    /// <paramref name="excludedAttributeIds"/> leaves out the values reconciliation probes instead of loading (#2669), so a
+    /// large group's member values are never loaded here: on a 500,000-user, 25,000-group run two pages loaded 761,000 and
+    /// 1.73 million of them. They are left out by attribute-id ranges (<see cref="GetAttributeValuesExcludingAsync"/>), so
+    /// they are not read either: the filtered include this replaced read every member row to discard it. The caller
+    /// excludes an attribute only for objects whose every change on it the probe answers.
     /// </para>
     /// </remarks>
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
@@ -3265,23 +3277,36 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery();
 
-        if (excludedAttributeIds is { Count: > 0 })
+        if (excludedAttributeIds is not { Count: > 0 })
         {
-            var excluded = excludedAttributeIds.ToList();
-            query = query
-                .Include(cso => cso.AttributeValues.Where(av => !excluded.Contains(av.AttributeId)))
-                    .ThenInclude(av => av.Attribute);
-        }
-        else
-        {
-            query = query
+            return await query
                 .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.Attribute);
+                    .ThenInclude(av => av.Attribute)
+                .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+                .ToListAsync();
         }
 
-        return await query
+        // The probed attributes left out by attribute-id ranges rather than a filter (GetAttributeValuesExcludingAsync, shared
+        // with the export and Delta Import partial loads, #2816, #2817): a filtered include read every member row of the
+        // group to discard it. The values join their objects and one instance of each attribute definition, as the
+        // identity-resolved include joined them.
+        var csos = await query
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
+        if (csos.Count == 0)
+            return csos;
+
+        var csosById = csos.ToDictionary(cso => cso.Id);
+        var rows = await GetAttributeValuesExcludingAsync(csos.Select(cso => (cso.Id, excludedAttributeIds)), []);
+        var attributes = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+        foreach (var (value, attribute, cso) in rows.Select(row => (row.Value, row.Attribute, csosById[row.ObjectId])))
+        {
+            value.Attribute = attributes.TryGetValue(attribute.Id, out var shared) ? shared : attributes[attribute.Id] = attribute;
+            value.ConnectedSystemObject = cso;
+            cso.AttributeValues.Add(value);
+        }
+
+        return csos;
     }
 
     /// <summary>
@@ -4337,6 +4362,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(CreateConnectedSystemObjectAsync));
         // A created object is pending synchronisation (#2092), written with the row in the same INSERT.
         connectedSystemObject.SynchronisationPending = true;
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
@@ -4350,6 +4376,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded(connectedSystemObjects, nameof(CreateConnectedSystemObjectsAsync));
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -4413,6 +4440,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectAsync));
         // Use UpdateDetachedSafe to avoid graph traversal. DbSet.Update() traverses the entire
         // entity graph, which can discover and re-mark entities that were already deleted by
         // preceding batch operations (e.g., obsolete CSOs deleted by FlushObsoleteCsoOperationsAsync).
@@ -4449,6 +4477,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
         List<Guid>? pendingRemovalIds = null)
     {
+        // No EnsureWhollyLoaded (#2816, #2817): this writes the objects' own rows and the values and removals it is handed by id,
+        // never the value sets the objects were loaded with, so an object loaded in part (a Delta Import's group) is saved here.
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -4531,6 +4561,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
     {
+        // Saves the object itself through EF, unlike the batch overload below, which only inserts the values it is given.
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
         // Explicitly mark new attribute values as Added so they are persisted.
         // Use Entry().State instead of DbSet.Add() to avoid graph traversal that causes
         // identity conflicts after ClearChangeTracker().
@@ -5576,48 +5608,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.PendingExports
             .Where(pe => pendingExportIds.Contains(pe.Id))
             .Select(pe => pe.Id)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Loads Pending Exports by id for execution (#2813): the one load export execution uses, for a batch run
-    /// sequentially, a batch re-loaded on a parallel worker's own context, and a chunk of the deferred pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The Include chain is everything execution reads: each change's attribute (reference resolution, the Connectors);
-    /// the object's type (LdapConnectorExport's object class fallback, and the type it gives the placeholder changes it
-    /// synthesises); and the object's attribute values WITH their attributes. The last is load-bearing:
-    /// LdapConnectorExport counts a group's current members by <c>av.Attribute.Name</c>, so a value without its
-    /// attribute counts as no member, and removing one member of a populated group would inject the placeholder member.
-    /// The parallel reload once left it out and was right only by the change tracker fixing up the attributes the
-    /// batch's changes had loaded.
-    /// </para>
-    /// <para>
-    /// Untracked, whatever the context's default: everything execution writes is raw SQL, so tracking bought nothing
-    /// but cost, a change tracker entry and snapshot for every member value of every group in the batch, scanned again
-    /// by every detach. With identity resolution, so the graph holds one instance of each attribute and type however
-    /// many values share it, as the tracked reload did, rather than one per row.
-    /// </para>
-    /// </remarks>
-    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-    {
-        if (pendingExportIds.Count == 0)
-            return [];
-
-        return await Repository.Database.PendingExports
-            .AsNoTrackingWithIdentityResolution()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(pe => pendingExportIds.Contains(pe.Id))
-            .OrderBy(pe => pe.CreatedAt)
-            .ThenBy(pe => pe.Id)
             .ToListAsync();
     }
 

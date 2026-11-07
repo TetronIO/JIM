@@ -29,7 +29,7 @@ namespace JIM.InMemoryData;
 /// logic against the same <c>ISyncRepository</c> contract used in production.
 /// </para>
 /// </summary>
-public class SyncRepository : ISyncRepository
+public partial class SyncRepository : ISyncRepository
 {
     #region Storage
 
@@ -1205,6 +1205,7 @@ public class SyncRepository : ISyncRepository
     {
         // InMemory implementation does not need previouslyCommittedCsoIds — there are no FK
         // constraints or batch isolation. The parameter is accepted for interface compatibility.
+        ConnectedSystemObject.EnsureWhollyLoaded(connectedSystemObjects, nameof(CreateConnectedSystemObjectsAsync));
         foreach (var cso in connectedSystemObjects)
         {
             if (cso.Id == Guid.Empty)
@@ -1269,6 +1270,8 @@ public class SyncRepository : ISyncRepository
         // later release of the caller's own AttributeValues (a memory-bounding step some callers
         // take after this call returns) silently empty the store's copy too, since they'd be the
         // same object. Only genuinely new IDs adopt the incoming instance directly.
+        // No EnsureWhollyLoaded (#2816, #2817): as in PostgreSQL, an object loaded in part is saved here, and WithValuesNotLoaded
+        // keeps every value of an attribute it did not load.
         foreach (var cso in connectedSystemObjects)
         {
             if (_csos.TryGetValue(cso.Id, out var stored) && !ReferenceEquals(stored, cso))
@@ -1297,6 +1300,12 @@ public class SyncRepository : ISyncRepository
             }
             else
             {
+                // Adopting an instance loaded in part would leave the store holding only what it loaded. One is only ever
+                // loaded from an object the store holds, as a separate instance, which the branch above merges.
+                if (cso.IsPartiallyLoaded)
+                    throw new PartiallyLoadedObjectException(
+                        $"{nameof(UpdateConnectedSystemObjectsAsync)} was handed Connected System Object {cso.Id}, loaded in part, as the store's own instance.");
+
                 cso.SynchronisationPending = true;
                 FixupCsoNavigationProperties(cso);
                 BumpRowVersion(cso);
@@ -1314,6 +1323,7 @@ public class SyncRepository : ISyncRepository
         // Apply PendingAttributeValueAdditions/Removals — in production this is done by
         // ConnectedSystemServer.ProcessConnectedSystemObjectAttributeValueChanges before
         // delegating to the repository. InMemoryData must do it here.
+        // No EnsureWhollyLoaded: the pending values are applied to the instance, and the overload below keeps what it did not load.
         foreach (var cso in connectedSystemObjects)
         {
             foreach (var addition in cso.PendingAttributeValueAdditions)
@@ -1491,7 +1501,7 @@ public class SyncRepository : ISyncRepository
 
         foreach (var (cso, newAvs) in updates)
         {
-            if (_csos.TryGetValue(cso.Id, out var stored))
+            if (_csos.TryGetValue(cso.Id, out var stored) || TryGetLeanOriginal(cso, out stored))
             {
                 // Since InMemoryData stores references (not copies), stored and cso may be the same object.
                 // Only add values that aren't already in the collection to avoid duplicates.
@@ -1539,10 +1549,11 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here.
-    /// Unlike the Postgres implementation, there is no separate persisted store to reconcile -
+    /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here for an object handed out
+    /// as stored. Unlike the Postgres implementation, there is no separate persisted store to reconcile -
     /// <see cref="_csos"/> IS the live graph, so <c>ExportExecutionServer</c> mutating
-    /// <see cref="ConnectedSystemObject.AttributeValues"/> directly (D10) is sufficient.
+    /// <see cref="ConnectedSystemObject.AttributeValues"/> directly (D10) is sufficient. An object handed out as a copy
+    /// loaded in part (#2816) is the exception: the delta is applied to the stored object behind it.
     /// SPEC-1082 D9: still nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
     /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for the affected CSOs directly on
     /// the live graph, so the in-memory fake honestly mirrors the Postgres implementation's
@@ -1556,6 +1567,7 @@ public class SyncRepository : ISyncRepository
             cso.ImportStateHash = null;
             cso.ImportStateFingerprint = null;
         }
+        ApplyExportedValuesToLeanOriginals(additions, removalValueIds, affectedCsoIds);
         return Task.CompletedTask;
     }
 
@@ -2366,7 +2378,7 @@ public class SyncRepository : ISyncRepository
         var written = new List<Guid>();
         foreach (var pe in pendingExports)
         {
-            _pendingExports[pe.Id] = pe;
+            StorePendingExport(pe);
             written.Add(pe.Id);
         }
 
@@ -2380,7 +2392,7 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
     {
         foreach (var pe in pendingExports)
-            _pendingExports[pe.Id] = pe;
+            StorePendingExport(pe);
         return Task.CompletedTask;
     }
 
@@ -3210,19 +3222,28 @@ public class SyncRepository : ISyncRepository
     #region Connected System Object — Singular Convenience Methods
 
     public Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
-        => CreateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+    {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(CreateConnectedSystemObjectAsync));
+        return CreateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+    }
 
     public virtual Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
-        => UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+    {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectAsync));
+        return UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { connectedSystemObject });
+    }
 
     public Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(
         ConnectedSystemObject connectedSystemObject,
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
-        => UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
+    {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
+        return UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
             new List<(ConnectedSystemObject, List<ConnectedSystemObjectAttributeValue>)>
             {
                 (connectedSystemObject, newAttributeValues)
             });
+    }
 
     #endregion
 
@@ -3712,7 +3733,7 @@ public class SyncRepository : ISyncRepository
         {
             pe.Status = PendingExportStatus.Executing;
             pe.LastAttemptedAt = now;
-            _pendingExports[pe.Id] = pe;
+            StorePendingExport(pe);
         }
         return Task.FromResult(now);
     }
@@ -3754,6 +3775,8 @@ public class SyncRepository : ISyncRepository
     /// or parallel, and for a chunk of the deferred pass. Virtual for test-support subclasses: the parallel export batch
     /// path re-loads Pending Exports by ID on a fresh per-batch context, and tests need to simulate that database
     /// isolation (returning last-persisted state rather than live in-memory references), or to see the loads made.
+    /// A large group's member attribute is loaded in part, as the database's load does (#2816): see
+    /// <see cref="LoadForExport"/>.
     /// </summary>
     public virtual Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
     {
@@ -3763,7 +3786,7 @@ public class SyncRepository : ISyncRepository
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .ToList();
-        return Task.FromResult(result);
+        return Task.FromResult(LoadForExport(result));
     }
 
     #endregion

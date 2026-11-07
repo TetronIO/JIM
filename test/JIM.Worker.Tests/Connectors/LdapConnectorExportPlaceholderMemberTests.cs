@@ -290,6 +290,33 @@ public class LdapConnectorExportPlaceholderMemberTests
     }
 
     [Test]
+    public void BuildModifyRequests_RemoveMembersOfAGroupLoadedInPart_CountsTheHeldMembersAndInjectsNoPlaceholderAsync()
+    {
+        // #2816: export execution loads a large group with only the members its changes name, beside how many it holds.
+        // The two loaded here are the two removed, so counting the loaded values would read the group as emptied.
+        var export = CreateOpenLdapExport();
+        var groupDn = "cn=testgroup,ou=groups,dc=test,dc=local";
+        string[] removed = ["cn=user1,ou=people,dc=test,dc=local", "cn=user2,ou=people,dc=test,dc=local"];
+        var pendingExport = CreateGroupOfNamesMemberRemovePendingExport(groupDn, membersToRemove: removed, currentMemberCount: 2);
+        pendingExport.ConnectedSystemObject!.PartiallyLoadedAttributes = new Dictionary<int, PartiallyLoadedAttribute>
+        {
+            [10] = new ExportPartiallyLoadedAttribute(10, "member", 4)
+        };
+
+        var requests = export.BuildModifyRequests(pendingExport, groupDn);
+
+        var allMods = requests.SelectMany(r =>
+            Enumerable.Range(0, r.Modifications.Count).Select(i => r.Modifications[i])).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(allMods.Any(m => m.Name.Equals("member", StringComparison.OrdinalIgnoreCase) && m.Operation == DirectoryAttributeOperation.Add),
+                Is.False, "the group holds at least four members, so removing two leaves it populated");
+            Assert.That(allMods.Count(m => m.Name.Equals("member", StringComparison.OrdinalIgnoreCase) && m.Operation == DirectoryAttributeOperation.Delete),
+                Is.GreaterThan(0), "the members are still removed");
+        }
+    }
+
+    [Test]
     public void BuildModifyRequests_RemoveLastMember_ActiveDirectory_DoesNotInjectPlaceholderAsync()
     {
         var export = CreateExport(directoryType: LdapDirectoryType.ActiveDirectory);

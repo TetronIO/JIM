@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Utilities;
@@ -97,6 +98,17 @@ public static class OptimisticExportApplyCalculator
             {
                 delta.SkippedChangeCount++;
                 continue;
+            }
+
+            // #2816: an Update or a RemoveAll replaces or clears the attribute's whole value set, so it needs every row the
+            // object holds; computed from an attribute loaded in part it would leave the rows not loaded recorded as held.
+            // The load loads any attribute such a change touches whole, so this is a fault, never a delta.
+            if (change.ChangeType is PendingExportAttributeChangeType.Update or PendingExportAttributeChangeType.RemoveAll &&
+                !cso.IsAttributeWhollyLoaded(change.AttributeId))
+            {
+                throw new PartiallyLoadedObjectException(
+                    $"Pending Export {pendingExportId} {change.ChangeType}s attribute '{change.Attribute.Name}' of Connected System Object {cso.Id}, " +
+                    "whose values were loaded in part; replacing or clearing the whole set cannot be recorded from part of it.");
             }
 
             if (!workingByAttribute.TryGetValue(change.AttributeId, out var existing))

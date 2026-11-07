@@ -191,3 +191,43 @@ public enum ReconciliationProbeFallbackReason
     /// </summary>
     NonAsciiValue = 3
 }
+
+/// <summary>
+/// Why export execution loads a large multi-valued reference attribute of an object whole rather than in part (#2816).
+/// Reported on the batch's load span, so a run can see how often, and why, a group's whole membership was read.
+/// </summary>
+public enum ExportValueLoadFallbackReason
+{
+    /// <summary>
+    /// A change replaces or clears the attribute's whole value set (an Update or a RemoveAll), so every value it holds
+    /// is needed to record what was written.
+    /// </summary>
+    WholeSetChange = 0,
+
+    /// <summary>
+    /// A change names a reference still awaiting resolution, which the deferred pass may resolve after the load, so what
+    /// it matches could change between the load and its use.
+    /// </summary>
+    UnresolvedReference = 1,
+
+    /// <summary>
+    /// A change on a case-insensitive attribute names no Connected System Object, so it matches resolved rows by their
+    /// distinguished name ignoring case, which no index answers.
+    /// </summary>
+    NamesNoObject = 2,
+
+    /// <summary>
+    /// The database's <c>lower()</c> does not fold case as JIM does, so nothing is compared ignoring case there.
+    /// </summary>
+    DatabaseFoldsCaseDifferently = 3,
+
+    /// <summary>
+    /// A value compared ignoring case is not ASCII, whose folding the database need not share.
+    /// </summary>
+    NonAsciiValue = 4,
+
+    /// <summary>
+    /// A change of a kind the planner does not know how to put as a question.
+    /// </summary>
+    UnrecognisedChangeType = 5
+}

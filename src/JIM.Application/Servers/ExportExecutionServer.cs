@@ -12,6 +12,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Exchange;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -1648,9 +1649,20 @@ public class ExportExecutionServer
 
         var batch = await repository.GetPendingExportsByIdsAsync(selected.Select(pe => pe.Id).ToList());
 
+        // How the objects' values were loaded (#2816): how many values, how many attributes were loaded in part, and how
+        // many large ones were loaded whole and why, so a slow load says whether a group's whole membership was read.
+        var objects = batch.Select(pe => pe.ConnectedSystemObject).OfType<ConnectedSystemObject>().DistinctBy(cso => cso.Id).ToList();
+        var fallbacks = objects
+            .SelectMany(cso => cso.LoadedWholeAttributes?.Values ?? [])
+            .GroupBy(reason => reason)
+            .OrderBy(group => group.Key.ToString(), StringComparer.Ordinal)
+            .ToList();
         span.SetTag("loadedCount", batch.Count)
             .SetTag("attributeValueChangeCount", batch.Sum(pe => pe.AttributeValueChanges.Count))
-            .SetTag("objectAttributeValueCount", batch.Sum(pe => pe.ConnectedSystemObject?.AttributeValues.Count ?? 0));
+            .SetTag("objectAttributeValueCount", objects.Sum(cso => cso.AttributeValues.Count))
+            .SetTag("trimmedAttributeCount", objects.Sum(cso => cso.PartiallyLoadedAttributes?.Count ?? 0))
+            .SetTag("fallbackAttributeCount", fallbacks.Sum(group => group.Count()))
+            .SetTag("fallbackReasons", string.Join(",", fallbacks.Select(group => $"{group.Key}={group.Count()}")));
 
         if (batch.Count < selected.Count)
         {
@@ -3785,7 +3797,11 @@ public class ExportExecutionServer
                         .Distinct());
                 }
 
-                calculateSpan.SetTag("additionCount", delta.Additions.Count)
+                // The values the calculation read (#2816): bounded by the changes where a group was loaded in part.
+                calculateSpan.SetTag("objectAttributeValueCount", successfulNonDeleteExports
+                        .Select(pe => pe.ConnectedSystemObject).OfType<ConnectedSystemObject>().DistinctBy(cso => cso.Id)
+                        .Sum(cso => cso.AttributeValues.Count))
+                    .SetTag("additionCount", delta.Additions.Count)
                     .SetTag("removalCount", delta.RemovalValueIds.Count)
                     .SetTag("affectedObjectCount", affectedCsoIds.Count)
                     .SetTag("skippedChangeCount", delta.SkippedChangeCount);
@@ -3845,6 +3861,16 @@ public class ExportExecutionServer
 
             var unrecordedExportIds = delta.UnrecordedChanges.Select(c => c.PendingExportId).ToHashSet();
             return successfulNonDeleteExports.Where(pe => unrecordedExportIds.Contains(pe.Id)).ToList();
+        }
+        catch (PartiallyLoadedObjectException ex)
+        {
+            // #2816: a fault in JIM, never a database blip: the load hands no whole-set change an attribute loaded in part.
+            // Contained like any other apply failure, since the export itself succeeded, but reported as the fault it is.
+            result.OptimisticApplyFailedCount += successfulNonDeleteExports.Count;
+            Log.Error(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply refused a change it could not record from an object " +
+                "loaded in part, for Connected System {ConnectedSystemId} ({Count} Pending Exports); nothing was recorded, and a confirming " +
+                "import will self-heal", successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
+            return successfulNonDeleteExports;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

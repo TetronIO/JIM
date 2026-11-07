@@ -919,6 +919,65 @@ public class OptimisticExportApplyCalculatorTests
 
     #endregion
 
+    #region Attribute loaded in part (#2816)
+
+    private static ConnectedSystemObject LoadedInPart(ConnectedSystemObject cso, int attributeId, int atLeast)
+    {
+        cso.PartiallyLoadedAttributes = new Dictionary<int, PartiallyLoadedAttribute>
+        {
+            [attributeId] = new ExportPartiallyLoadedAttribute(attributeId, "member", atLeast)
+        };
+        return cso;
+    }
+
+    [TestCase(PendingExportAttributeChangeType.Update, "CN=New,DC=test")]
+    [TestCase(PendingExportAttributeChangeType.Update, null)]
+    [TestCase(PendingExportAttributeChangeType.RemoveAll, null)]
+    public void CalculateDelta_WholeSetChangeOnAnAttributeLoadedInPart_Throws(PendingExportAttributeChangeType changeType, string? value)
+    {
+        // Replacing or clearing the set needs every row it holds; the load never hands such a change an attribute loaded
+        // in part, so meeting one is a fault, never a delta computed from the rows that happen to be loaded.
+        var cso = LoadedInPart(CreateCso(), 1, atLeast: 10);
+        AddCsoValue(cso, 1, AttributeDataType.Reference, unresolvedReferenceValue: "CN=Loaded,DC=test");
+        var change = CreateChange(1, AttributeDataType.Reference, changeType, stringValue: value);
+
+        Assert.That(() => OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]),
+            Throws.TypeOf<JIM.Models.Exceptions.PartiallyLoadedObjectException>());
+    }
+
+    [Test]
+    public void CalculateDelta_AddsAndRemovesOnAnAttributeLoadedInPart_UseTheLoadedRows()
+    {
+        var cso = LoadedInPart(CreateCso(), 1, atLeast: 10);
+        var held = AddResolvedReferenceValue(cso, Guid.NewGuid(), "CN=Held,DC=test");
+        var remove = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Remove, stringValue: "CN=Held,DC=test");
+        remove.ResolvedReferenceCsoId = held.ReferenceValueId;
+        var add = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=New,DC=test");
+        add.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, remove, add)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { held.Id }));
+            Assert.That(delta.Additions.Select(a => a.ReferenceValueId), Is.EqualTo(new[] { add.ResolvedReferenceCsoId }));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_UpdateOfAnotherAttributeOfAnObjectLoadedInPart_IsComputed()
+    {
+        var cso = LoadedInPart(CreateCso(), 1, atLeast: 10);
+        var old = AddCsoValue(cso, 2, AttributeDataType.Text, stringValue: "old");
+        var change = CreateChange(2, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "new");
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { old.Id }));
+    }
+
+    #endregion
+
     #region Helpers
 
     private static ConnectedSystemObject CreateCso()

@@ -692,6 +692,7 @@ internal sealed class SqlConnectorExport
             ?? throw new InvalidOperationException(
                 $"This Pending Export carries no Connected System Object, so JIM cannot tell which row of Object Type '{plan.Name}' it applies to.");
 
+        // lean-load-safe: the External ID, never loaded in part (#2816)
         var externalId = connectedSystemObject.AttributeValues.FirstOrDefault(value => value.AttributeId == connectedSystemObject.ExternalIdAttributeId)
             ?? throw new InvalidOperationException(
                 $"The Connected System Object has no external ID value, so JIM cannot tell which row of Object Type '{plan.Name}' to change.");
@@ -732,6 +733,7 @@ internal sealed class SqlConnectorExport
     /// </remarks>
     private object? ResolveAnchorPart(ConnectedSystemObject connectedSystemObject, string anchorColumn, SqlColumnType columnType, string part)
     {
+        // lean-load-safe: an anchor column, single-valued and so never loaded in part (#2816)
         var value = connectedSystemObject.AttributeValues
             .FirstOrDefault(candidate => string.Equals(candidate.Attribute.Name, anchorColumn, StringComparison.OrdinalIgnoreCase));
 
