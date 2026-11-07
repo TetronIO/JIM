@@ -13,9 +13,6 @@ using JIM.TestSupport;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Npgsql;
-using System.Data.Common;
-using System.Text.Json;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Repositories;
@@ -134,7 +131,7 @@ public class DeltaImportPartialLoadSaveDatabaseTests
         var seeded = await LargeGroupImportSeed.SeedAsync(NewContext, _connectionString, userCount: members, memberCount: members);
         Guid[] undecided = [LargeGroupImportSeed.MemberValueId(0), LargeGroupImportSeed.MemberValueId(1)];
 
-        var recorder = new CommandRecorder();
+        var recorder = new CommandRecordingInterceptor();
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
@@ -147,19 +144,7 @@ public class DeltaImportPartialLoadSaveDatabaseTests
                 [seeded.MemberAttributeId], undecided);
         }
 
-        var rowsRead = 0L;
-        await using (var connection = new NpgsqlConnection(_connectionString))
-        {
-            await connection.OpenAsync();
-            foreach (var (text, parameters) in recorder.Commands)
-            {
-                await using var explain = new NpgsqlCommand("EXPLAIN (ANALYZE, FORMAT JSON) " + text, connection);
-                foreach (var parameter in parameters)
-                    explain.Parameters.Add(parameter);
-                var plan = (string)(await explain.ExecuteScalarAsync())!;
-                rowsRead += RowsReadFrom(JsonDocument.Parse(plan).RootElement[0].GetProperty("Plan"), "ConnectedSystemObjectAttributeValues");
-            }
-        }
+        var rowsRead = await PlanRowsRead.FromAsync(_connectionString, recorder.Commands, PlanRowsRead.AttributeValues);
 
         var group = loaded.Single();
         using (Assert.EnterMultipleScope())
@@ -169,40 +154,6 @@ public class DeltaImportPartialLoadSaveDatabaseTests
             Assert.That(group.AttributeValues.All(v => v.Attribute != null && ReferenceEquals(v.ConnectedSystemObject, group)), Is.True);
             Assert.That(rowsRead, Is.LessThanOrEqualTo(10),
                 $"the load read {rowsRead:N0} attribute value rows for a group of {members:N0} members; it needs the 2 undecided members and the group's 2 other values");
-        }
-    }
-
-    /// <summary>
-    /// The rows a plan read from <paramref name="relation"/>: what each scan of it returned, and what it read and filtered
-    /// out, over all its loops.
-    /// </summary>
-    private static long RowsReadFrom(JsonElement node, string relation)
-    {
-        var rows = 0L;
-        if (node.TryGetProperty("Relation Name", out var name) && name.GetString() == relation)
-        {
-            var loops = node.GetProperty("Actual Loops").GetDouble();
-            double Per(string property) => node.TryGetProperty(property, out var value) ? value.GetDouble() : 0;
-            rows += (long)Math.Round(loops * (Per("Actual Rows") + Per("Rows Removed by Filter") + Per("Rows Removed by Index Recheck")));
-        }
-
-        if (node.TryGetProperty("Plans", out var children))
-            rows += children.EnumerateArray().Sum(child => RowsReadFrom(child, relation));
-        return rows;
-    }
-
-    /// <summary>
-    /// Records each command a context runs, with copies of its parameters, so each can be run again under EXPLAIN.
-    /// </summary>
-    private sealed class CommandRecorder : DbCommandInterceptor
-    {
-        public List<(string Text, List<NpgsqlParameter> Parameters)> Commands { get; } = [];
-
-        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
-        {
-            Commands.Add((command.CommandText, command.Parameters.Cast<NpgsqlParameter>().Select(p => p.Clone()).ToList()));
-            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 

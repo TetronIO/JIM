@@ -3259,10 +3259,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// shared definition by hand would duplicate the entity mapping for a load that is now one row per value. Identity
     /// resolution has every value of an attribute share one definition instance.
     /// <para>
-    /// <paramref name="excludedAttributeIds"/> leaves out the values reconciliation probes instead of loading (#2669), a
-    /// filtered include, so a large group's member values are never read here: on a 500,000-user, 25,000-group run two
-    /// pages loaded 761,000 and 1.73 million of them. The caller excludes an attribute only for objects whose every change
-    /// on it the probe answers.
+    /// <paramref name="excludedAttributeIds"/> leaves out the values reconciliation probes instead of loading (#2669), so a
+    /// large group's member values are never loaded here: on a 500,000-user, 25,000-group run two pages loaded 761,000 and
+    /// 1.73 million of them. They are left out by attribute-id ranges (<see cref="GetAttributeValuesExcludingAsync"/>), so
+    /// they are not read either: the filtered include this replaced read every member row to discard it. The caller
+    /// excludes an attribute only for objects whose every change on it the probe answers.
     /// </para>
     /// </remarks>
     public async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
@@ -3276,23 +3277,36 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery();
 
-        if (excludedAttributeIds is { Count: > 0 })
+        if (excludedAttributeIds is not { Count: > 0 })
         {
-            var excluded = excludedAttributeIds.ToList();
-            query = query
-                .Include(cso => cso.AttributeValues.Where(av => !excluded.Contains(av.AttributeId)))
-                    .ThenInclude(av => av.Attribute);
-        }
-        else
-        {
-            query = query
+            return await query
                 .Include(cso => cso.AttributeValues)
-                    .ThenInclude(av => av.Attribute);
+                    .ThenInclude(av => av.Attribute)
+                .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
+                .ToListAsync();
         }
 
-        return await query
+        // The probed attributes left out by attribute-id ranges rather than a filter (GetAttributeValuesExcludingAsync, shared
+        // with the export and Delta Import partial loads, #2816, #2817): a filtered include read every member row of the
+        // group to discard it. The values join their objects and one instance of each attribute definition, as the
+        // identity-resolved include joined them.
+        var csos = await query
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
+        if (csos.Count == 0)
+            return csos;
+
+        var csosById = csos.ToDictionary(cso => cso.Id);
+        var rows = await GetAttributeValuesExcludingAsync(csos.Select(cso => (cso.Id, excludedAttributeIds)), []);
+        var attributes = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+        foreach (var (value, attribute, cso) in rows.Select(row => (row.Value, row.Attribute, csosById[row.ObjectId])))
+        {
+            value.Attribute = attributes.TryGetValue(attribute.Id, out var shared) ? shared : attributes[attribute.Id] = attribute;
+            value.ConnectedSystemObject = cso;
+            cso.AttributeValues.Add(value);
+        }
+
+        return csos;
     }
 
     /// <summary>
