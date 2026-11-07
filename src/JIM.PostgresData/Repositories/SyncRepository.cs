@@ -146,6 +146,10 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds, excludedAttributeIds, includedValueIds);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 
@@ -188,8 +192,9 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
         => _repo.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
 
-    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
-        => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds);
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
+        => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds, excludedAttributeIds);
 
     // GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync is an owned raw SQL implementation in
     // SyncRepository.CsOperations.cs (worker hot path, #119).

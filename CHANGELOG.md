@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ An OpenLDAP Delta Import is no longer slowed by heavy writes to other suffixes on the same server, which cost it 12 seconds at 500,000 objects after an initial export to another suffix: it now looks for where to start among the selected partitions' changes first. (#2712)
 - ⚡ Exports to large groups are faster: recording the members a batch removed no longer grows with the number of member values it holds, and choosing each batch no longer reads its objects' values, steps that took 25 seconds of a 500,000-person leaver export. (#2813)
 - ⚡ Delta Imports of large Connected Systems start faster and use less memory: JIM now looks up only the objects each page returns, rather than first reading every object it holds, which took 3.6 seconds on every Delta Import at 500,000 objects. (#2705)
+- ⚡ Delta Imports of large groups whose membership changed are faster and use far less memory: the database compares the members with what the Connector returned, and JIM loads only those that changed, not every member, which took 2 seconds for a 200,000-member group. (#2817)
 
 ### Removed
 

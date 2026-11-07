@@ -771,6 +771,110 @@ public class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    /// <summary>
+    /// #2817: the whole load (through the overridable overload, so a spy counting loads sees this one too), each clone then
+    /// keeping, of the excluded attributes, only the included values. The store's own object keeps every value.
+    /// </summary>
+    public virtual async Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
+        IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
+    {
+        var excluded = excludedAttributeIds.ToHashSet();
+        var included = includedValueIds.ToHashSet();
+        var csos = await GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+        foreach (var cso in csos)
+        {
+            cso.AttributeValues = new ReferenceIndexedList<ConnectedSystemObjectAttributeValue>(cso.AttributeValues
+                .Where(av => !excluded.Contains(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0) || included.Contains(av.Id)));
+        }
+
+        return csos;
+    }
+
+    /// <summary>
+    /// #2817: the same answers as the SQL implementation: a held value is matched exactly by the string it keeps or by its
+    /// object's External ID, byte for byte (ordinal); an imported value the same two ways; and the held values related to an
+    /// unmatched imported value are those naming an object holding, under any attribute, text equal to it ignoring case
+    /// (folded as <see cref="IdentifierKey"/> folds, which is what this repository's database is taken to do: see
+    /// <see cref="DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/>).
+    /// </summary>
+    public virtual Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var duplicate = questions.GroupBy(q => (q.ConnectedSystemObjectId, q.AttributeId)).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new ArgumentException(
+                $"More than one held reference value question for attribute {duplicate.Key.AttributeId} of Connected System Object {duplicate.Key.ConnectedSystemObjectId}.",
+                nameof(questions));
+
+        var answers = new List<HeldReferenceValueAnswer>(questions.Count);
+        foreach (var question in questions)
+        {
+            var answer = new HeldReferenceValueAnswer(question);
+            answers.Add(answer);
+            if (!_csos.TryGetValue(question.ConnectedSystemObjectId, out var cso))
+                continue;
+
+            var incoming = question.Values.ToHashSet(StringComparer.Ordinal);
+            var held = cso.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == question.AttributeId).ToList();
+            var heldUnmatched = held
+                .Where(av => av.UnresolvedReferenceValue == null || !incoming.Contains(av.UnresolvedReferenceValue))
+                .Select(av => (Value: av, ReferenceId: StoredReferenceId(av), ExternalId: HeldReferenceExternalId(av)))
+                .ToList();
+
+            foreach (var (value, referenceId, externalId) in heldUnmatched.Where(h => h.ExternalId == null || !incoming.Contains(h.ExternalId)))
+            {
+                answer.UnmatchedValueIds.Add(value.Id);
+                if (referenceId.HasValue && externalId != null)
+                    answer.ReferencedExternalIds.TryAdd(referenceId.Value, externalId);
+            }
+
+            var heldStrings = held.Select(av => av.UnresolvedReferenceValue).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            var heldUnmatchedExternalIds = heldUnmatched.Select(h => h.ExternalId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            foreach (var value in question.Values.Where(v => !heldStrings.Contains(v) && !heldUnmatchedExternalIds.Contains(v)))
+            {
+                answer.UnmatchedIncomingValues.Add(value);
+                var folded = IdentifierKey.For(value, caseExact: false);
+                var namedObjectIds = _csos.Values
+                    .Where(o => o.AttributeValues.Any(av => av.StringValue != null && IdentifierKey.For(av.StringValue, caseExact: false) == folded))
+                    .Select(o => o.Id)
+                    .ToHashSet();
+                foreach (var related in held.Where(av => StoredReferenceId(av) is { } id && namedObjectIds.Contains(id)))
+                {
+                    var referenceId = StoredReferenceId(related)!.Value;
+                    if (HeldReferenceExternalId(related) is { } externalId)
+                        answer.ReferencedExternalIds.TryAdd(referenceId, externalId);
+                    if (answer.RelatedValues.TrueForAll(r => r.Id != related.Id))
+                        answer.RelatedValues.Add(new HeldReferenceValue(related.Id, related.UnresolvedReferenceValue, referenceId));
+                }
+            }
+        }
+
+        return Task.FromResult(answers);
+    }
+
+    /// <summary>The object a held value was resolved to, as its foreign key would store it.</summary>
+    private static Guid? StoredReferenceId(ConnectedSystemObjectAttributeValue value) =>
+        value.ReferenceValueId ?? (value.ReferenceValue is { Id: var id } && id != Guid.Empty ? id : null);
+
+    /// <summary>
+    /// The External ID of the object a held value was resolved to: its Secondary External ID's text, else its External
+    /// ID's, as the SQL implementation reads it.
+    /// </summary>
+    private string? HeldReferenceExternalId(ConnectedSystemObjectAttributeValue value)
+    {
+        if (StoredReferenceId(value) is not { } referenceId)
+            return null;
+
+        var referenced = _csos.TryGetValue(referenceId, out var stored) ? stored : value.ReferenceValue;
+        if (referenced == null)
+            return null;
+
+        string? TextOf(int? attributeId) => attributeId == null
+            ? null
+            : referenced.AttributeValues.FirstOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == attributeId)?.StringValue;
+
+        return TextOf(referenced.SecondaryExternalIdAttributeId) ?? TextOf(referenced.ExternalIdAttributeId);
+    }
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
         IReadOnlyCollection<int>? excludedAttributeIds = null)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
@@ -1057,7 +1161,8 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
+        IReadOnlyCollection<int>? excludedAttributeIds = null)
     {
         // Mirrors the production contract: every requested ID gets an entry, empty when the
         // CSO has no reference lookups.
@@ -1125,6 +1230,28 @@ public class SyncRepository : ISyncRepository
             await onBatchPersisted(connectedSystemObjects.Count);
     }
 
+    /// <summary>
+    /// #2817: the values an update leaves the stored object holding. An instance loaded whole holds them all already. One a
+    /// Delta Import loaded without most of a group's members holds only those it loaded, as changed, so the members it never
+    /// loaded (and so neither changed nor removed) are kept from the stored object: the PostgreSQL writer applies only the
+    /// additions and removals, and never touches a value it was not told to.
+    /// </summary>
+    private static ReferenceIndexedList<ConnectedSystemObjectAttributeValue> WithValuesNotLoaded(ConnectedSystemObject stored,
+        ConnectedSystemObject updated, List<Guid>? pendingRemovalIds)
+    {
+        if (updated.PartiallyLoadedAttributes is not { Count: > 0 } partiallyLoaded)
+            return updated.AttributeValues;
+
+        var updatedIds = updated.AttributeValues.Select(av => av.Id).ToHashSet();
+        var removedIds = (pendingRemovalIds ?? []).ToHashSet();
+        var merged = new ReferenceIndexedList<ConnectedSystemObjectAttributeValue>(updated.AttributeValues);
+        merged.AddRange(stored.AttributeValues.Where(av =>
+            partiallyLoaded.ContainsKey(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0)
+            && !updatedIds.Contains(av.Id)
+            && !removedIds.Contains(av.Id)));
+        return merged;
+    }
+
     public virtual Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
@@ -1160,7 +1287,7 @@ public class SyncRepository : ISyncRepository
                 stored.JoinMatchValue = cso.JoinMatchValue;
                 stored.ScopeReviewPending = cso.ScopeReviewPending;
                 stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
-                stored.AttributeValues = cso.AttributeValues;
+                stored.AttributeValues = WithValuesNotLoaded(stored, cso, pendingRemovalIds);
                 // An update is pending synchronisation (#2092): a constant, never the caller's value, as in production.
                 stored.SynchronisationPending = true;
                 cso.SynchronisationPending = true;
@@ -2670,7 +2797,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(new ActivityRpeiErrorCounts(totalWithErrors, totalRpeis, totalUnhandledErrors, totalObjectTypeChangeRefusals));
     }
 
-    public Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
+    public virtual Task PersistRpeiCsoChangesAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
         // The CSO changes are already in memory on the RPEI objects; only their values' unresolved reference marks are
         // set, as the production writer sets them.

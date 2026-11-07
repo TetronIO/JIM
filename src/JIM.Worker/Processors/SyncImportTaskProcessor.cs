@@ -2260,6 +2260,246 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// #2817: asks the database about the multi-valued references of this page's matched objects before they are loaded,
+    /// so each is loaded with only the values its comparison could still decide either way. Asks about an object only
+    /// where the page compares exactly one imported object with it, as an update; answers that cannot stand in for the
+    /// values they leave out (<see cref="HeldReferenceValueAnswer.IsCompleteIgnoringCase"/>) are dropped, and those
+    /// attributes are loaded whole.
+    /// </summary>
+    /// <returns>The answers to load by, by object and attribute.</returns>
+    private async Task<Dictionary<Guid, Dictionary<int, HeldReferenceValueAnswer>>> AskAboutHeldReferenceValuesAsync(CsoHydrationPageResult hydration,
+        Dictionary<ConnectedSystemImportObject, ConnectedSystemObjectType> matchedObjectTypes, HashSet<Guid> csoIdsToHydrate)
+    {
+        var answersByCsoId = new Dictionary<Guid, Dictionary<int, HeldReferenceValueAnswer>>();
+
+        // An object two import objects on the page are matched to is compared twice (or rejected as a repeat), each time
+        // with other values: it is loaded whole.
+        var comparedOnce = hydration.MatchedImportState
+            .GroupBy(m => m.Value.CsoId)
+            .Where(g => g.Count() == 1)
+            .Select(g => g.Single())
+            .Where(m => csoIdsToHydrate.Contains(m.Value.CsoId)
+                        && m.Key.ChangeType != ObjectChangeType.Deleted
+                        && m.Key.ErrorType is null or ConnectedSystemImportObjectError.NotSet or ConnectedSystemImportObjectError.AttributeValueError
+                        && !hydration.CrossTypeMatches.ContainsKey(m.Key)
+                        && matchedObjectTypes.ContainsKey(m.Key));
+
+        var questions = comparedOnce
+            .SelectMany(m => HeldReferenceValueQuestionsFor(m.Key, m.Value.CsoId, matchedObjectTypes[m.Key]))
+            .ToList();
+        if (questions.Count == 0)
+            return answersByCsoId;
+
+        using var span = Diagnostics.Sync.StartSpan("AskAboutHeldReferenceValues")
+            .SetTag("questionCount", questions.Count)
+            .SetTag("importedValueCount", questions.Sum(q => q.Values.Count));
+
+        var answers = await _syncRepo.GetHeldReferenceValueAnswersAsync(questions);
+
+        // The folding question is asked only when an answer depends on it: where every imported value was matched exactly,
+        // nothing is matched ignoring case.
+        if (answers.Any(a => a.UnmatchedIncomingValues.Count > 0))
+            _databaseFoldsCaseLikeIdentifierKey ??= await _syncRepo.DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
+        var databaseFolds = _databaseFoldsCaseLikeIdentifierKey ?? false;
+
+        var loadedWhole = 0;
+        foreach (var answer in answers)
+        {
+            if (!answer.IsCompleteIgnoringCase(databaseFolds))
+            {
+                loadedWhole++;
+                continue;
+            }
+
+            if (!answersByCsoId.TryGetValue(answer.Question.ConnectedSystemObjectId, out var byAttributeId))
+            {
+                byAttributeId = new Dictionary<int, HeldReferenceValueAnswer>();
+                answersByCsoId[answer.Question.ConnectedSystemObjectId] = byAttributeId;
+            }
+
+            byAttributeId[answer.Question.AttributeId] = answer;
+        }
+
+        span.SetTag("undecidedHeldValueCount", answers.Sum(a => a.UnmatchedValueIds.Count));
+        span.SetTag("relatedHeldValueCount", answers.Sum(a => a.RelatedValues.Count));
+        span.SetTag("undecidedImportedValueCount", answers.Sum(a => a.UnmatchedIncomingValues.Count));
+        span.SetTag("loadedWholeCount", loadedWhole);
+        span.SetSuccess();
+
+        if (loadedWhole > 0)
+            Log.Debug("AskAboutHeldReferenceValuesAsync: {LoadedWhole} of {Answers} multi-valued reference attribute(s) loaded whole: an imported value " +
+                "matched no held value exactly, and the database cannot be relied on to find what it matches ignoring case", loadedWhole, answers.Count);
+
+        return answersByCsoId;
+    }
+
+    /// <summary>
+    /// #2817: what a Delta Import asks the database about an object it is about to compare with <paramref name="importObject"/>:
+    /// one question per multi-valued reference attribute of <paramref name="objectType"/> the imported object carries values
+    /// for, with the values exactly as the comparison will read them (distinct ignoring case, first kept, as
+    /// <c>DeduplicateImportObjectAttributes</c> leaves them). Nothing about an attribute the Connector could not read a value
+    /// of (#2066), which the comparison leaves as it is; nothing about an imported object carrying an attribute twice, which
+    /// is rejected; and nothing about values PostgreSQL cannot hold as text (a NUL character, or half a surrogate pair),
+    /// which the comparison sees loaded whole as before.
+    /// </summary>
+    internal static List<HeldReferenceValueQuestion> HeldReferenceValueQuestionsFor(ConnectedSystemImportObject importObject, Guid csoId,
+        ConnectedSystemObjectType objectType)
+    {
+        var questions = new List<HeldReferenceValueQuestion>();
+        if (importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            return questions;
+
+        var unreadable = UnreadableAttributeNames(importObject);
+        foreach (var attribute in objectType.Attributes.Where(a =>
+                     a.Type == AttributeDataType.Reference && a.AttributePlurality == AttributePlurality.MultiValued && !unreadable.Contains(a.Name)))
+        {
+            var imported = importObject.Attributes.SingleOrDefault(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase));
+            if (imported is not { ReferenceValues.Count: > 0 })
+                continue;
+
+            var values = imported.ReferenceValues.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (values.Any(value => !CanBeHeldAsDatabaseText(value)))
+                continue;
+
+            questions.Add(new HeldReferenceValueQuestion(csoId, attribute.Id, values));
+        }
+
+        return questions;
+    }
+
+    /// <summary>Whether PostgreSQL can take the value as text: no NUL character, and no half of a surrogate pair.</summary>
+    private static bool CanBeHeldAsDatabaseText(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+            if (character == '\0')
+                return false;
+            if (char.IsHighSurrogate(character) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                i++;
+            else if (char.IsSurrogate(character))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// #2817: loads the objects a page compares, each with every value except, of an attribute <paramref name="answersByCsoId"/>
+    /// answers for it, those its answer settles; the answers go with the objects
+    /// (<see cref="ConnectedSystemObject.PartiallyLoadedAttributes"/>), and the comparison uses each such attribute only
+    /// with its answer. Fails rather than hand on an object whose loaded values are not exactly those its answer left
+    /// undecided, since the comparison would then read a value it did not load as one the object does not hold.
+    /// </summary>
+    internal static async Task<List<ConnectedSystemObject>> LoadConnectedSystemObjectsForComparisonAsync(ISyncRepository syncRepo, int connectedSystemId,
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyDictionary<Guid, Dictionary<int, HeldReferenceValueAnswer>> answersByCsoId)
+    {
+        var loaded = new List<ConnectedSystemObject>(csoIds.Count);
+
+        // Objects loaded alike in one call: those loaded whole, and those leaving out the same attributes.
+        var loadGroups = csoIds.GroupBy(id => answersByCsoId.TryGetValue(id, out var byAttributeId)
+            ? string.Join(",", byAttributeId.Keys.Order())
+            : string.Empty);
+        foreach (var loadGroup in loadGroups)
+        {
+            foreach (var chunk in loadGroup.Chunk(CsoHydrationChunkSize))
+            {
+                if (loadGroup.Key.Length == 0)
+                {
+                    loaded.AddRange(await syncRepo.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, chunk));
+                    continue;
+                }
+
+                var excludedAttributeIds = answersByCsoId[chunk[0]].Keys.ToList();
+                var includedValueIds = chunk.SelectMany(id => answersByCsoId[id].Values.SelectMany(a => a.UnmatchedValueIds)).ToList();
+                var csos = await syncRepo.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, chunk, excludedAttributeIds, includedValueIds);
+                foreach (var cso in csos)
+                {
+                    var answers = answersByCsoId[cso.Id];
+                    foreach (var (attributeId, answer) in answers)
+                    {
+                        var loadedValueIds = cso.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == attributeId)
+                            .Select(av => av.Id)
+                            .ToHashSet();
+                        if (!loadedValueIds.SetEquals(answer.UnmatchedValueIds))
+                            throw new InvalidOperationException(
+                                $"Connected System Object {cso.Id} was loaded with {loadedValueIds.Count} value(s) of attribute {attributeId}, where the database's " +
+                                $"answer left {answer.UnmatchedValueIds.Count} undecided. Its values changed between the two reads; the import stops rather than " +
+                                "compare values it did not load.");
+                    }
+
+                    cso.PartiallyLoadedAttributes = answers;
+                }
+
+                loaded.AddRange(csos);
+            }
+        }
+
+        return loaded;
+    }
+
+    /// <summary>
+    /// #2817: the External IDs of the objects each of <paramref name="csos"/> holds references to, for its comparison:
+    /// read from the database for every attribute loaded whole, and taken from the answer for an attribute loaded in part,
+    /// whose members' External IDs are the ones reading would cost. Every object has an entry.
+    /// </summary>
+    internal static async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForComparisonAsync(ISyncRepository syncRepo,
+        IReadOnlyCollection<ConnectedSystemObject> csos)
+    {
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>(csos.Count);
+        if (csos.Count == 0)
+            return result;
+
+        foreach (var lookupGroup in csos.GroupBy(cso => cso.PartiallyLoadedAttributes is { Count: > 0 } partial
+                     ? string.Join(",", partial.Keys.Order())
+                     : string.Empty))
+        {
+            var ids = lookupGroup.Select(cso => cso.Id).ToList();
+            var excluded = lookupGroup.First().PartiallyLoadedAttributes?.Keys.ToList();
+            foreach (var (csoId, externalIds) in await syncRepo.GetReferenceExternalIdsForCsosAsync(ids, excluded))
+                result[csoId] = externalIds;
+        }
+
+        foreach (var cso in csos.Where(c => c.PartiallyLoadedAttributes is { Count: > 0 }))
+        {
+            if (!result.TryGetValue(cso.Id, out var externalIds))
+            {
+                externalIds = new Dictionary<Guid, string>();
+                result[cso.Id] = externalIds;
+            }
+
+            foreach (var (referencedId, externalId) in cso.PartiallyLoadedAttributes!.Values.SelectMany(a => a.ReferencedExternalIds))
+                externalIds.TryAdd(referencedId, externalId);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// #2817: a later page's copy of an object takes the earlier copy's place on the instance the earlier page changed
+    /// (#2074), and is compared with what this page knows of it, never with what the earlier page's answer left loaded: of
+    /// every attribute either loaded in part, the instance takes this page's values and this page's answer.
+    /// </summary>
+    private static void TakeThisPagesViewOfPartiallyLoadedAttributes(ConnectedSystemObject held, IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage)
+    {
+        hydratedCsoPage.TryGetValue(held.Id, out var thisPage);
+        if (held.PartiallyLoadedAttributes == null && thisPage?.PartiallyLoadedAttributes == null)
+            return;
+
+        if (thisPage == null)
+            throw new InvalidOperationException(
+                $"Connected System Object {held.Id} was loaded in part by an earlier page and this page did not load it. The import stops rather than " +
+                "compare values it did not load.");
+
+        var attributeIds = (held.PartiallyLoadedAttributes?.Keys ?? []).Concat(thisPage.PartiallyLoadedAttributes?.Keys ?? []).ToHashSet();
+        held.AttributeValues.RemoveAll(av => attributeIds.Contains(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0));
+        held.AttributeValues.AddRange(thisPage.AttributeValues.Where(av => attributeIds.Contains(av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id ?? 0)));
+
+        held.PartiallyLoadedAttributes = thisPage.PartiallyLoadedAttributes;
+    }
+
+    /// <summary>
     /// Maximum number of CSO IDs to hydrate in a single <see cref="ISyncRepository.GetConnectedSystemObjectsByIdsAsync"/>
     /// call. Chunking keeps individual queries (and their parameter counts) bounded at very large page sizes.
     /// </summary>
@@ -2420,6 +2660,9 @@ public class SyncImportTaskProcessor
 
         var csoIdsToHydrate = new HashSet<Guid>();
 
+        // The Object Type each matched import object was matched under, for the questions a Delta Import asks (#2817).
+        var matchedObjectTypes = new Dictionary<ConnectedSystemImportObject, ConnectedSystemObjectType>();
+
         // Secondary external ID candidates for this page's import objects with NO primary match,
         // batched per object type so HydrateCsoAsync's Pending Provisioning confirmation (one query
         // per unmatched object before this fix) costs one query per type per page instead. Keyed by
@@ -2476,6 +2719,7 @@ public class SyncImportTaskProcessor
 
             var matchedEntry = entry.Value;
             result.MatchedImportState[importObject] = matchedEntry;
+            matchedObjectTypes[importObject] = csObjectType!;
 
             // Compute the incoming hash for every matched candidate on a Full Import (needed both
             // for the skip decision here and, in Verification Mode, for the post-diff comparison in
@@ -2517,12 +2761,14 @@ public class SyncImportTaskProcessor
 
         if (csoIdsToHydrate.Count > 0)
         {
-            foreach (var chunk in csoIdsToHydrate.Chunk(CsoHydrationChunkSize))
-            {
-                var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, chunk);
-                foreach (var cso in csos)
-                    result.HydratedCsos[cso.Id] = cso;
-            }
+            // #2817: a Delta Import asks the database about the multi-valued references of the objects it is about to
+            // compare, and loads of each only the values the answer leaves undecided.
+            var answersByCsoId = _connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport
+                ? await AskAboutHeldReferenceValuesAsync(result, matchedObjectTypes, csoIdsToHydrate)
+                : new Dictionary<Guid, Dictionary<int, HeldReferenceValueAnswer>>();
+
+            foreach (var cso in await LoadConnectedSystemObjectsForComparisonAsync(_syncRepo, _connectedSystem.Id, csoIdsToHydrate, answersByCsoId))
+                result.HydratedCsos[cso.Id] = cso;
         }
 
         span.SetTag("hydratedCsoCount", result.HydratedCsos.Count);
@@ -2766,9 +3012,10 @@ public class SyncImportTaskProcessor
         // existing CSO: 535K individual round trips at Scale500k25kGroups. Every hydrated CSO ID
         // is guaranteed a (possibly empty) entry, so only CSOs matched outside the hydrated page
         // fall back to the single-CSO query.
-        var pageReferenceExternalIds = hydratedCsoPage.Count > 0
-            ? await _syncRepo.GetReferenceExternalIdsForCsosAsync(hydratedCsoPage.Keys)
-            : new Dictionary<Guid, Dictionary<Guid, string>>();
+        // #2817: an attribute a Delta Import loaded in part has its members' External IDs from the answer it loaded them by.
+        Dictionary<Guid, Dictionary<Guid, string>> pageReferenceExternalIds;
+        using (Diagnostics.Sync.StartSpan("LoadReferenceExternalIds").SetTag("csoCount", hydratedCsoPage.Count))
+            pageReferenceExternalIds = await GetReferenceExternalIdsForComparisonAsync(_syncRepo, hydratedCsoPage.Values);
 
         // Find the External IDs this page returns more than once, and those an earlier page already returned, before
         // any object is processed (#2063). Every copy of an object repeated on this page is then rejected before
@@ -2994,6 +3241,10 @@ public class SyncImportTaskProcessor
                     // what was saved before the run, which knows nothing of the earlier page (#2074).
                     connectedSystemObject = supersededHeldCso
                         ?? await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage, hydrationResult);
+
+                    // #2817: the earlier page may have loaded it in part for its own values; this page compares it with its own.
+                    if (supersededHeldCso != null)
+                        TakeThisPagesViewOfPartiallyLoadedAttributes(supersededHeldCso, hydratedCsoPage);
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
@@ -3209,7 +3460,8 @@ public class SyncImportTaskProcessor
                         refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
 
                     // Calculate attribute changes before processing
-                    UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
+                    using (Diagnostics.Sync.StartSpan("CompareWithImportObject"))
+                        UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
 
                     // Check if there are any actual attribute changes
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
@@ -3424,7 +3676,10 @@ public class SyncImportTaskProcessor
     internal static void ReleaseHydratedAttributeValues(IEnumerable<ConnectedSystemObject> csoBatch)
     {
         foreach (var cso in csoBatch)
+        {
             cso.AttributeValues = new();
+            cso.PartiallyLoadedAttributes = null;
+        }
     }
 
     /// <summary>
@@ -4503,6 +4758,13 @@ public class SyncImportTaskProcessor
                          ?? connectedSystemObject.ExternalIdAttributeValue?.GuidValue?.ToString();
         DeduplicateImportObjectAttributes(connectedSystemImportObject, csoExternalId);
 
+        // #2817: an attribute loaded in part is compared only with the answer it was loaded by, and only for the values that
+        // answer was given about; anything else would read a value not loaded as one the object does not hold. Checked before
+        // anything is staged, so a refusal stages nothing.
+        var partiallyLoaded = connectedSystemObject.PartiallyLoadedAttributes;
+        if (partiallyLoaded is { Count: > 0 })
+            EnsureAnswersStandForThisComparison(connectedSystemImportObject, connectedSystemObject, connectedSystemObjectType, partiallyLoaded);
+
         // process known attributes (potential updates)
         // need to work with the fact that we have individual objects for multivalued attribute values.
         // An attribute the Connector found an unreadable value on is passed over (#2066): the source holds a value JIM
@@ -4676,6 +4938,14 @@ public class SyncImportTaskProcessor
                             "Existing CSO values: {ExistingCount}, Import values: {ImportCount}",
                             csoAttribute.Name, connectedSystemObject.Id, csoRefAttrValues.Count, importedObjectAttribute.ReferenceValues.Count);
 
+                        // #2817: loaded in part, the attribute holds only the values its answer left undecided; the answer
+                        // carries their objects' External IDs, and settles every other value by an exact match.
+                        HeldReferenceValueAnswer? heldAnswer = null;
+                        partiallyLoaded?.TryGetValue(csoAttribute.Id, out heldAnswer);
+                        var lookupForAttribute = heldAnswer == null
+                            ? referenceExternalIdLookup
+                            : WithAnsweredExternalIds(referenceExternalIdLookup, heldAnswer, csoRefAttrValues);
+
                         foreach (var existingRef in csoRefAttrValues.Take(3)) // Log first 3 for brevity
                         {
                             var refCsoId = existingRef.ReferenceValueId?.ToString() ?? "(null)";
@@ -4734,7 +5004,7 @@ public class SyncImportTaskProcessor
                         // Find CSO reference values that aren't in the import - mark for removal
                         var missingReferenceValues = csoRefAttrValues
                             .Where(av => (av.UnresolvedReferenceValue != null || av.ReferenceValue != null || av.ReferenceValueId.HasValue) &&
-                                        !CsoValueMatchesAnyImportRef(av, referenceExternalIdLookup, importRefsOrdinalSet, importRefsIgnoreCaseSet))
+                                        !CsoValueMatchesAnyImportRef(av, lookupForAttribute, importRefsOrdinalSet, importRefsIgnoreCaseSet))
                             .ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingReferenceValues);
 
@@ -4758,14 +5028,26 @@ public class SyncImportTaskProcessor
                             }
 
                             if (av.ReferenceValueId.HasValue &&
-                                referenceExternalIdLookup != null &&
-                                referenceExternalIdLookup.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId))
+                                lookupForAttribute != null &&
+                                lookupForAttribute.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId))
                                 csoResolvedRefExternalIdSet.Add(fallbackExternalId);
                         }
 
+                        // #2817: of the values not loaded, those the database related to an imported value no held value
+                        // matched exactly: the only ones that could match it ignoring case through their objects.
+                        foreach (var related in heldAnswer?.RelatedValues ?? [])
+                        {
+                            if (related.UnresolvedReferenceValue != null)
+                                csoUnresolvedRefSet.Add(related.UnresolvedReferenceValue);
+                            if (related.ReferenceValueId.HasValue && heldAnswer!.ReferencedExternalIds.TryGetValue(related.ReferenceValueId.Value, out var relatedExternalId))
+                                csoResolvedRefExternalIdSet.Add(relatedExternalId);
+                        }
+
                         // Find imported reference values that aren't on the CSO - mark for addition
+                        // (#2817: an imported value a held value matched exactly is held, loaded or not, so is never added.)
                         var newReferenceValues = importedObjectAttribute.ReferenceValues
-                            .Where(importRef => !csoUnresolvedRefSet.Contains(importRef) && !csoResolvedRefExternalIdSet.Contains(importRef))
+                            .Where(importRef => (heldAnswer == null || heldAnswer.UnmatchedIncomingValues.Contains(importRef))
+                                                && !csoUnresolvedRefSet.Contains(importRef) && !csoResolvedRefExternalIdSet.Contains(importRef))
                             .ToList();
 
                         // Resolved references are matched via the SQL dictionary by design (#917):
@@ -4773,12 +5055,12 @@ public class SyncImportTaskProcessor
                         // navigation with a populated ReferenceValueId is the expected shape, not a
                         // materialisation failure. The problem case is a resolved reference the
                         // dictionary has no entry for; that would cause a spurious removal/re-add.
-                        if (referenceExternalIdLookup != null)
+                        if (lookupForAttribute != null)
                         {
                             var unmatchableCount = csoRefAttrValues.Count(av =>
                                 av.ReferenceValueId.HasValue &&
                                 av.ReferenceValue == null &&
-                                !referenceExternalIdLookup.ContainsKey(av.ReferenceValueId.Value));
+                                !lookupForAttribute.ContainsKey(av.ReferenceValueId.Value));
                             if (unmatchableCount > 0)
                             {
                                 Log.Warning("UpdateConnectedSystemObjectFromImportObject: {UnmatchableCount} of {TotalCount} resolved reference values " +
@@ -4862,6 +5144,58 @@ public class SyncImportTaskProcessor
                 connectedSystemObject.PendingAttributeValueRemovals.AddRange(attributeValuesToDelete);
             }
         }
+    }
+
+    /// <summary>
+    /// #2817: refuses a comparison an answer cannot stand in for. Every attribute loaded in part must be a reference
+    /// attribute the imported object carries, with an answer given about this object and about exactly the values the
+    /// comparison reads (distinct ignoring case, in the Connector's order, as deduplication leaves them). Otherwise a value
+    /// never loaded would read as one the object does not hold: an imported value it holds would be added again, or, for an
+    /// attribute the import does not carry, only the loaded values would be removed and the rest left behind.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">An attribute loaded in part cannot be compared with this imported object.</exception>
+    private static void EnsureAnswersStandForThisComparison(ConnectedSystemImportObject importObject, ConnectedSystemObject cso,
+        ConnectedSystemObjectType objectType, IReadOnlyDictionary<int, HeldReferenceValueAnswer> partiallyLoaded)
+    {
+        foreach (var (attributeId, answer) in partiallyLoaded)
+        {
+            var attribute = objectType.Attributes.SingleOrDefault(a => a.Id == attributeId);
+            var imported = attribute == null
+                ? null
+                : importObject.Attributes.SingleOrDefault(a => a.Name.Equals(attribute.Name, StringComparison.OrdinalIgnoreCase));
+            var reason =
+                attribute is not { Type: AttributeDataType.Reference } ? "it is not a reference attribute of the object's type"
+                : answer.Question.ConnectedSystemObjectId != cso.Id ? $"its answer was given about Connected System Object {answer.Question.ConnectedSystemObjectId}"
+                : answer.Question.AttributeId != attributeId ? $"its answer was given about attribute {answer.Question.AttributeId}"
+                : imported == null ? "the imported object does not carry it"
+                : UnreadableAttributeNames(importObject).Contains(attribute.Name) ? "the Connector could not read one of its imported values"
+                : !imported.ReferenceValues.SequenceEqual(answer.Question.Values, StringComparer.Ordinal) ? "its answer was given about other imported values"
+                : null;
+            if (reason != null)
+                throw new InvalidOperationException(
+                    $"Connected System Object {cso.Id} was loaded without most of the values of attribute {attributeId}, and cannot be compared with this " +
+                    $"imported object because {reason}. The import stops rather than read a value it did not load as one the object does not hold.");
+        }
+    }
+
+    /// <summary>
+    /// #2817: the External IDs a partly loaded reference attribute is compared through: its answer's, for the values it
+    /// loaded and those the database related to an imported value, and otherwise the page's.
+    /// </summary>
+    private static Dictionary<Guid, string> WithAnsweredExternalIds(IReadOnlyDictionary<Guid, string>? pageLookup, HeldReferenceValueAnswer answer,
+        IEnumerable<ConnectedSystemObjectAttributeValue> loadedValues)
+    {
+        var lookup = new Dictionary<Guid, string>(answer.ReferencedExternalIds);
+        if (pageLookup == null)
+            return lookup;
+
+        foreach (var referenceId in loadedValues.Select(av => av.ReferenceValueId).OfType<Guid>())
+        {
+            if (pageLookup.TryGetValue(referenceId, out var externalId))
+                lookup.TryAdd(referenceId, externalId);
+        }
+
+        return lookup;
     }
 
     /// <summary>
