@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Staging;
 
 namespace JIM.Utilities;
 
@@ -27,6 +28,48 @@ public static class CsoLookupKey
     /// </summary>
     public static string For(int connectedSystemId, int attributeId, string valueKey) =>
         $"cso:{connectedSystemId}:{attributeId}:{valueKey}";
+
+    /// <summary>
+    /// #2705: whether the database can be asked for every stored value a key names, rather than the whole lookup being
+    /// loaded for it. Always for a case-exact attribute, whose keys are the values themselves. Ignoring case, only for a
+    /// key in ASCII: the database folds with <c>lower()</c>, which agrees with <see cref="IdentifierKey"/> on every value
+    /// that folds to an ASCII key (given <see cref="DependsOnDatabaseFolding"/>, #2669), and on nothing else for certain
+    /// (PostgreSQL lowers U+A7CB where .NET does not, and a C collation folds ASCII only).
+    /// </summary>
+    public static bool CanBeLookedUpInDatabase(bool caseExact, string valueKey) =>
+        caseExact || System.Text.Ascii.IsValid(valueKey);
+
+    /// <summary>
+    /// #2705: whether a key ignoring case is found in the database only where <c>lower()</c> folds as JIM does
+    /// (<c>ISyncRepository.DoesDatabaseFoldCaseLikeIdentifierKeyAsync</c>). Every database folds ASCII, so an ASCII key
+    /// depends on it only where it holds a letter that a character outside ASCII also folds to (today <c>i</c>, from the
+    /// dotted capital I, and <c>k</c>, from the Kelvin sign): a stored value spelt with that character keys the same, and
+    /// a database that does not fold it would not find it. A GUID or a number never does, so a Delta Import anchored on
+    /// one looks up page by page on any database.
+    /// </summary>
+    public static bool DependsOnDatabaseFolding(bool caseExact, string valueKey) =>
+        !caseExact && valueKey.AsSpan().ContainsAny(LettersFoldedFromOutsideAscii.Value);
+
+    private static readonly Lazy<System.Buffers.SearchValues<char>> LettersFoldedFromOutsideAscii = new(() =>
+        System.Buffers.SearchValues.Create(IdentifierKey.For(string.Concat(IdentifierKey.NonAsciiCharactersFoldedToAscii), caseExact: false)));
+
+    /// <summary>
+    /// #2705: refuses a set of probes any one of which the database cannot be asked about
+    /// (<see cref="CanBeLookedUpInDatabase"/>), so a lookup by External ID never answers "no such object" for a key it
+    /// could not search for properly.
+    /// </summary>
+    /// <exception cref="ArgumentException">A probe's attribute ignores case and its key has characters outside ASCII.</exception>
+    public static void EnsureCanBeLookedUpInDatabase(IEnumerable<CsoExternalIdProbe> probes)
+    {
+        var unanswerable = probes
+            .Where(probe => !CanBeLookedUpInDatabase(probe.CaseExact, probe.ValueKey))
+            .Select(probe => (CsoExternalIdProbe?)probe)
+            .FirstOrDefault();
+        if (unanswerable is { } probe)
+            throw new ArgumentException(
+                $"An External ID of attribute {probe.AttributeId}, which ignores case, has characters outside ASCII, so only the whole External ID lookup can answer for it.",
+                nameof(probes));
+    }
 
     /// <summary>
     /// The comparable form of an anchor value, from whichever value column is populated, or null when none is.

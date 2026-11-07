@@ -94,6 +94,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
         => _inner.GetAllCsoImportStateLookupAsync(connectedSystemId);
 
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes)
+        => _inner.GetCsoImportStateLookupByExternalIdsAsync(connectedSystemId, probes);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 

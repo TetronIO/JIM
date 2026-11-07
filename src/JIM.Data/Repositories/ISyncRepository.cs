@@ -198,6 +198,22 @@ public interface ISyncRepository
     Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
 
     /// <summary>
+    /// #2705: the entries <see cref="GetAllCsoImportStateLookupAsync"/> would hold for just the given External IDs, keyed
+    /// the same way, so a Delta Import can look up the handful of objects a page returns instead of loading every object
+    /// JIM holds. A key absent from the result names no object, exactly as one absent from the whole lookup does. See
+    /// <c>IConnectedSystemRepository</c> for how each value is matched.
+    /// </summary>
+    /// <remarks>
+    /// A probe whose attribute ignores case must carry an ASCII key (<c>CsoLookupKey.CanBeLookedUpInDatabase</c>), and,
+    /// where the key holds a letter a character outside ASCII folds to (<c>CsoLookupKey.DependsOnDatabaseFolding</c>), the
+    /// caller must have confirmed <see cref="DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/>: only then does the database's
+    /// folding agree with JIM's for every stored value the key could name. Any other probe needs
+    /// <see cref="GetAllCsoImportStateLookupAsync"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A probe ignoring case carries a key outside ASCII.</exception>
+    Task<Dictionary<string, CsoImportStateLookupEntry>> GetCsoImportStateLookupByExternalIdsAsync(int connectedSystemId, IReadOnlyCollection<CsoExternalIdProbe> probes);
+
+    /// <summary>
     /// SPEC-1082 D6: the ONLY code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
     /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
     /// strictly after the batch's attribute-value writes for the given CSOs have committed

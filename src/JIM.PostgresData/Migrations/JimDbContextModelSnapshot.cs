@@ -3799,6 +3799,22 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")
                         .HasFilter("\"DateTimeValue\" IS NOT NULL");
 
+                    b.HasIndex("AttributeId", "DecimalValue")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DecimalValue")
+                        .HasFilter("\"DecimalValue\" IS NOT NULL");
+
+                    b.HasIndex("AttributeId", "GuidValue")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_GuidValue")
+                        .HasFilter("\"GuidValue\" IS NOT NULL");
+
+                    b.HasIndex("AttributeId", "IntValue")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_IntValue")
+                        .HasFilter("\"IntValue\" IS NOT NULL");
+
+                    b.HasIndex("AttributeId", "LongValue")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_LongValue")
+                        .HasFilter("\"LongValue\" IS NOT NULL");
+
                     b.HasIndex("AttributeId", "StringValue")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
                         .HasFilter("\"StringValue\" IS NOT NULL");

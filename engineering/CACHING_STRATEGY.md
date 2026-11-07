@@ -22,12 +22,12 @@ When the Worker imports objects from a Connected System, it must decide for each
 
 | Step | Data | Lifetime | Today |
 |---|---|---|---|
-| **Lookup** (external ID to CSO ID) | ~200 bytes per entry | One import run | In-memory dictionary, one bulk query per run |
+| **Lookup** (external ID to CSO ID) | ~200 bytes per entry | One import run (Full Import); one page (Delta Import) | In-memory dictionary: one bulk query per Full Import run, one set-based query per Delta Import page |
 | **Hydration** (CSO ID to full entity graph) | ~20 to 40 KB per entry | One page | Batch-loaded per page of imported objects |
 
 ### Lookup
 
-At the start of an import against a non-empty Connected System, `SyncImportTaskProcessor.PerformImportAsync` loads every CSO's external ID state into a per-run dictionary with one query (`ISyncRepository.GetAllCsoImportStateLookupAsync`). Each CSO has one entry, keyed by:
+At the start of a Full Import against a non-empty Connected System, `SyncImportTaskProcessor.PerformImportAsync` loads every CSO's external ID state into a per-run dictionary with one query (`ISyncRepository.GetAllCsoImportStateLookupAsync`). Each CSO has one entry, keyed by:
 
 - its **primary** external ID, for CSOs that have been imported; or
 - its **secondary** external ID (for example a distinguished name), for Pending Provisioning CSOs whose primary ID the target system has not yet assigned.
@@ -36,13 +36,17 @@ Keys are built by `JIM.Utilities.CsoLookupKey`: `cso:{connectedSystemId}:{attrib
 
 For each imported object, `LookupCsoByExternalId` answers from the dictionary in O(1).
 
+A Delta Import looks up only the external IDs each page returns (#2705): `PrepareCsoExternalIdLookupForPageAsync` collects every key the page's consumers will ask for (each object under its own Object Type, an untyped deletion under every Object Type, and, where external IDs are unique across Object Types, the other types' keys for each object not found under its own), and `ISyncRepository.GetCsoImportStateLookupByExternalIdsAsync` answers them in one set-based statement per page, through the `(AttributeId, value)` indexes of each value column (`IX_ConnectedSystemObjectAttributeValues_AttributeId_*`, and the lowered-text index backed by the `ST_ConnectedSystemObjectAttributeValues_LowerStringValue` expression statistics). The rows are keyed in .NET exactly as the whole lookup keys them, so the answer for each key is the whole lookup's. `CsoImportStateLookup` throws if a consumer asks for a key the page did not look up, rather than read it as a new object. Nothing an import creates is saved before its last page, so a page's database answer matches what the whole lookup, loaded before the first page, would have held; an earlier page's copy of an object is found through the run's earlier-page copies (#2074).
+
+A Delta Import loads the whole lookup instead, once and for the rest of the run, when the Connector read every object in scope, when a key ignoring case falls outside ASCII (or depends on folding the database does not do as JIM does, `CsoLookupKey.DependsOnDatabaseFolding`), or when it has looked up more than 1,000 external IDs and more than half the objects the Connected System held at the start. Measured at 500,000 objects: the whole lookup takes about 6 s; a page lookup about 3 ms for one external ID and 15 ms for 1,000.
+
 ### Hydration
 
 `HydrateCsoPageAsync` batch-loads the full entity graph of every CSO a page matched, once per page rather than once per object (#988). It also resolves, one query per object type per page, the secondary external ID of every imported object with no primary match, which is how a confirming import finds the Pending Provisioning CSO it confirms. A per-object query remains only for values the page batch cannot resolve (no secondary external ID attribute, a non-Text secondary ID, or more than one CSO sharing the value).
 
 ### Empty Connected System
 
-If the Connected System has no CSOs when the import starts (`_csIsEmpty`), the pre-fetch, every lookup and the secondary fallback are skipped: every imported object is guaranteed to be new.
+If the Connected System has no CSOs when the import starts (`_csIsEmpty`), the whole and per-page lookups, every probe and the secondary fallback are skipped: every imported object is guaranteed to be new.
 
 ## Other per-run caches
 
@@ -65,7 +69,10 @@ If the Connected System has no CSOs when the import starts (`_csIsEmpty`), the p
 | File | Purpose |
 |---|---|
 | `src/JIM.Utilities/CsoLookupKey.cs` | Lookup key format and case-exact-aware value folding |
-| `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` | `GetAllCsoImportStateLookupAsync`: the per-run bulk lookup query |
+| `src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs` | `GetAllCsoImportStateLookupAsync`: the per-run bulk lookup query; `GetCsoImportStateLookupByExternalIdsAsync`: the Delta Import per-page lookup |
+| `src/JIM.Models/Staging/CsoImportStateLookup.cs` | The lookup, holding every object or only the keys looked up for a page |
 | `src/JIM.Worker/Processors/SyncImportTaskProcessor.cs` | Per-run lookup dictionary, `LookupCsoByExternalId`, `HydrateCsoPageAsync` and the secondary external ID fallback |
 | `test/JIM.Worker.Tests/Synchronisation/ImportBatchPrefetchTests.cs` | Lookup and hydration behaviour |
 | `test/JIM.Worker.Tests/Repositories/CaseExactIdentifierLookupDatabaseTests.cs` | Case-exact keying against real PostgreSQL |
+| `test/JIM.Worker.Tests/Repositories/CsoImportStateLookupByExternalIdsDatabaseTests.cs` | Per-page lookup parity with the whole lookup, and its plan, against real PostgreSQL |
+| `test/JIM.Worker.Tests/Workflows/DeltaImportExternalIdLookupTests.cs` | When a Delta Import looks up per page and when it loads the whole lookup |

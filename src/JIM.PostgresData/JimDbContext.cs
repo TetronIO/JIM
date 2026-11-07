@@ -1178,6 +1178,31 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
             .HasFilter("\"StringValue\" IS NOT NULL");
 
+        // Composite indexes on (AttributeId, <typed value>) for the External ID data types other than text (#2705). A Delta
+        // Import looks up only the External IDs each page returns, one statement per page, and must find each through an
+        // index keyed on the value sought; without these a GUID anchor (a directory's objectGUID or entryUUID) or a numeric
+        // one reads every attribute value of the Connected System, which costs what loading every External ID did. Partial
+        // (value IS NOT NULL), like the text and date indexes, so each holds only the values of its own type.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.GuidValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_GuidValue")
+            .HasFilter("\"GuidValue\" IS NOT NULL");
+
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.IntValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_IntValue")
+            .HasFilter("\"IntValue\" IS NOT NULL");
+
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.LongValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_LongValue")
+            .HasFilter("\"LongValue\" IS NOT NULL");
+
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.DecimalValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DecimalValue")
+            .HasFilter("\"DecimalValue\" IS NOT NULL");
+
         // Composite index on (AttributeId, DateTimeValue) — the Temporal Scope Reconciler's candidate
         // pre-filter (issue #892) selects CSOs whose date attribute value falls in a boundary-crossing
         // range for a known AttributeId, e.g. WHERE AttributeId = @dateAttr AND DateTimeValue >= @lo
