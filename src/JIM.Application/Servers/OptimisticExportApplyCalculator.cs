@@ -107,7 +107,8 @@ public static class OptimisticExportApplyCalculator
 
             if (!indexByAttribute.TryGetValue(change.AttributeId, out var index))
             {
-                index = BuildAttributeIndex(change.Attribute.Type, existing, change.Attribute.DateTimeResolution);
+                index = BuildAttributeIndex(change.Attribute.Type, existing, change.Attribute.DateTimeResolution,
+                    AttributeValueComparison.ComparerFor(change.Attribute));
                 indexByAttribute[change.AttributeId] = index;
             }
 
@@ -318,7 +319,27 @@ public static class OptimisticExportApplyCalculator
     {
         public required AttributeDataType AttributeType { get; init; }
         public Dictionary<string, List<ConnectedSystemObjectAttributeValue>>? TextValues { get; init; }
-        public Dictionary<string, List<ConnectedSystemObjectAttributeValue>>? ReferenceValues { get; init; }
+        /// <summary>
+        /// Resolved reference rows by the object they name (<see cref="ConnectedSystemObjectAttributeValue.ReferenceValueId"/>).
+        /// </summary>
+        public Dictionary<Guid, List<ConnectedSystemObjectAttributeValue>>? ReferenceRowsByObjectId { get; init; }
+
+        /// <summary>
+        /// Unresolved reference rows by their text, compared by <see cref="ReferenceComparer"/>.
+        /// </summary>
+        public Dictionary<string, List<ConnectedSystemObjectAttributeValue>>? UnresolvedReferenceRowsByText { get; init; }
+
+        /// <summary>
+        /// Resolved reference rows by the text they keep, compared by <see cref="ReferenceComparer"/>: only a change naming
+        /// no object finds a resolved row by its text (<see cref="SyncEngine.ReferenceRowMatches"/>).
+        /// </summary>
+        public Dictionary<string, List<ConnectedSystemObjectAttributeValue>>? ResolvedReferenceRowsByText { get; init; }
+
+        /// <summary>
+        /// How the reference text dictionaries compare text: as the attribute of the change that built the index does
+        /// (<see cref="AttributeValueComparison.ComparerFor"/>).
+        /// </summary>
+        public StringComparer? ReferenceComparer { get; init; }
         public Dictionary<int, List<ConnectedSystemObjectAttributeValue>>? NumberValues { get; init; }
         public Dictionary<long, List<ConnectedSystemObjectAttributeValue>>? LongNumberValues { get; init; }
         public Dictionary<decimal, List<ConnectedSystemObjectAttributeValue>>? DecimalValues { get; init; }
@@ -338,12 +359,29 @@ public static class OptimisticExportApplyCalculator
     /// Key derivation mirrors <see cref="SyncEngine.ValueExistsOnCso"/>'s switch exactly, per data
     /// type: DateTime keys on its canonical key (<see cref="DateTimeAttributeValue.Key"/>, #2153, so neither Kind
     /// nor a sub-microsecond part is significant - mirrors the reconciliation's <c>DateTimeTicksValues</c>); Reference
-    /// keys on the CSO row's <see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>
-    /// (both of a change's UnresolvedReferenceValue and StringValue probe against that one field -
-    /// see <see cref="FindMatchesInIndex"/>).
+    /// keys as <see cref="SyncEngine.ReferenceRowMatches"/> matches (#2803): a resolved row by the object it names and by
+    /// the text it keeps, an unresolved row by its text, text compared as <paramref name="referenceComparer"/> says
+    /// (see <see cref="FindMatchingReferenceValuesInIndex"/>).
     /// </summary>
-    private static CalculatorAttributeIndex BuildAttributeIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> existing, DateTimeResolution? dateTimeResolution)
+    private static CalculatorAttributeIndex BuildAttributeIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> existing,
+        DateTimeResolution? dateTimeResolution, StringComparer referenceComparer)
     {
+        if (attrType == AttributeDataType.Reference)
+        {
+            var referenceIndex = new CalculatorAttributeIndex
+            {
+                AttributeType = attrType,
+                ReferenceComparer = referenceComparer,
+                ReferenceRowsByObjectId = [],
+                UnresolvedReferenceRowsByText = new Dictionary<string, List<ConnectedSystemObjectAttributeValue>>(referenceComparer),
+                ResolvedReferenceRowsByText = new Dictionary<string, List<ConnectedSystemObjectAttributeValue>>(referenceComparer)
+            };
+            foreach (var value in existing)
+                AddToIndex(referenceIndex, value);
+
+            return referenceIndex;
+        }
+
         return attrType switch
         {
             AttributeDataType.Text => new CalculatorAttributeIndex
@@ -352,15 +390,6 @@ public static class OptimisticExportApplyCalculator
                 TextValues = existing
                     .Where(v => v.StringValue != null)
                     .GroupBy(v => v.StringValue!, StringComparer.Ordinal)
-                    .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal)
-            },
-
-            AttributeDataType.Reference => new CalculatorAttributeIndex
-            {
-                AttributeType = attrType,
-                ReferenceValues = existing
-                    .Where(v => v.UnresolvedReferenceValue != null)
-                    .GroupBy(v => v.UnresolvedReferenceValue!, StringComparer.Ordinal)
                     .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal)
             },
 
@@ -436,7 +465,8 @@ public static class OptimisticExportApplyCalculator
                 if (value.StringValue != null) AddToKeyedIndex(index.TextValues!, value.StringValue, value);
                 break;
             case AttributeDataType.Reference:
-                if (value.UnresolvedReferenceValue != null) AddToKeyedIndex(index.ReferenceValues!, value.UnresolvedReferenceValue, value);
+                if (value.ReferenceValueId.HasValue) AddToKeyedIndex(index.ReferenceRowsByObjectId!, value.ReferenceValueId.Value, value);
+                if (value.UnresolvedReferenceValue != null) AddToKeyedIndex(ReferenceTextIndexFor(index, value), value.UnresolvedReferenceValue, value);
                 break;
             case AttributeDataType.Number:
                 if (value.IntValue.HasValue) AddToKeyedIndex(index.NumberValues!, value.IntValue.Value, value);
@@ -485,7 +515,8 @@ public static class OptimisticExportApplyCalculator
                 if (value.StringValue != null) RemoveFromKeyedIndex(index.TextValues!, value.StringValue, value);
                 break;
             case AttributeDataType.Reference:
-                if (value.UnresolvedReferenceValue != null) RemoveFromKeyedIndex(index.ReferenceValues!, value.UnresolvedReferenceValue, value);
+                if (value.ReferenceValueId.HasValue) RemoveFromKeyedIndex(index.ReferenceRowsByObjectId!, value.ReferenceValueId.Value, value);
+                if (value.UnresolvedReferenceValue != null) RemoveFromKeyedIndex(ReferenceTextIndexFor(index, value), value.UnresolvedReferenceValue, value);
                 break;
             case AttributeDataType.Number:
                 if (value.IntValue.HasValue) RemoveFromKeyedIndex(index.NumberValues!, value.IntValue.Value, value);
@@ -529,7 +560,9 @@ public static class OptimisticExportApplyCalculator
     private static void ClearIndex(CalculatorAttributeIndex index)
     {
         index.TextValues?.Clear();
-        index.ReferenceValues?.Clear();
+        index.ReferenceRowsByObjectId?.Clear();
+        index.UnresolvedReferenceRowsByText?.Clear();
+        index.ResolvedReferenceRowsByText?.Clear();
         index.NumberValues?.Clear();
         index.LongNumberValues?.Clear();
         index.DecimalValues?.Clear();
@@ -541,8 +574,8 @@ public static class OptimisticExportApplyCalculator
     /// <summary>
     /// Finds the CSO attribute value row(s) matching a Pending Export attribute change's value via
     /// the per-attribute index, mirroring <see cref="SyncEngine.ValueExistsOnCso"/>'s per-type
-    /// switch exactly (same comparisons, same Binary <c>SequenceEqual</c>, same Reference dual-field
-    /// match). Serves both existence checks (<see cref="ApplyAdd"/>/<see cref="ApplyUpdate"/>, via
+    /// switch exactly (same comparisons, same Binary <c>SequenceEqual</c>, the same Reference rule,
+    /// <see cref="SyncEngine.ReferenceRowMatches"/>). Serves both existence checks (<see cref="ApplyAdd"/>/<see cref="ApplyUpdate"/>, via
     /// <c>.Count &gt; 0</c> - equivalent to <c>ValueExistsOnCso</c> for every data type, since its
     /// own per-type arms are exactly <c>hasValue &amp;&amp; csoValues.Any(match)</c>, the same
     /// predicate a dictionary lookup here applies) and match-finding
@@ -594,6 +627,10 @@ public static class OptimisticExportApplyCalculator
                     : [];
 
             case AttributeDataType.Reference:
+                // Text compared as another attribute compares it: the index cannot answer, so the rule answers row by row.
+                if (!ReferenceEquals(index.ReferenceComparer, AttributeValueComparison.ComparerFor(change.Attribute)))
+                    return existing.Where(row => SyncEngine.ReferenceRowMatches(row, change)).ToList();
+
                 return FindMatchingReferenceValuesInIndex(index, change);
 
             default:
@@ -602,29 +639,55 @@ public static class OptimisticExportApplyCalculator
     }
 
     /// <summary>
-    /// Mirrors the pre-#1079-perf-fix dual probe exactly: try <c>UnresolvedReferenceValue</c> first
-    /// and only fall back to <c>StringValue</c> if that probe found nothing (not merely if it was
-    /// empty). This is a deliberately different shape to <see cref="SyncEngine.ValueExistsOnCso"/>'s
-    /// independent OR of the two probes, but always agrees with it on existence (true/false): for
-    /// every combination of "probe has a non-empty value" x "probe finds a match", the two are
-    /// equivalent - the OR is true exactly when this dual probe finds at least one row, since
-    /// whichever probe finds nothing falls through here (or is skipped by the OR) while whichever
-    /// finds something makes both true.
+    /// Every row <see cref="SyncEngine.ReferenceRowMatches"/> matches with the change (#2803), the rule reconciliation
+    /// confirms the change by, so what is recorded here is what the confirming import would agree the target holds: a
+    /// change naming an object (<c>ResolvedReferenceCsoId</c>, stamped by export resolution) finds a resolved row by that
+    /// object alone and an unresolved row by either of its strings; a change naming no object finds any row by either
+    /// string. A resolved row naming another object is never matched by the text it keeps, however that text compares.
     /// </summary>
     private static List<ConnectedSystemObjectAttributeValue> FindMatchingReferenceValuesInIndex(
         CalculatorAttributeIndex index,
         PendingExportAttributeValueChange change)
     {
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue) &&
-            index.ReferenceValues!.TryGetValue(change.UnresolvedReferenceValue, out var byUnresolved) &&
-            byUnresolved.Count > 0)
-            return byUnresolved.ToList();
+        var matches = new List<ConnectedSystemObjectAttributeValue>();
+        var seen = new HashSet<ConnectedSystemObjectAttributeValue>(ReferenceEqualityComparer.Instance);
 
-        if (!string.IsNullOrEmpty(change.StringValue))
-            return index.ReferenceValues!.TryGetValue(change.StringValue, out var byString) ? byString.ToList() : [];
+        void Collect(List<ConnectedSystemObjectAttributeValue>? rows)
+        {
+            if (rows == null)
+                return;
 
-        return [];
+            matches.AddRange(rows.Where(seen.Add));
+        }
+
+        void CollectByText(Dictionary<string, List<ConnectedSystemObjectAttributeValue>> rowsByText, string? text)
+        {
+            if (!string.IsNullOrEmpty(text))
+                Collect(rowsByText.GetValueOrDefault(text));
+        }
+
+        if (change.ResolvedReferenceCsoId is { } objectId)
+        {
+            Collect(index.ReferenceRowsByObjectId!.GetValueOrDefault(objectId));
+        }
+        else
+        {
+            CollectByText(index.ResolvedReferenceRowsByText!, change.UnresolvedReferenceValue);
+            CollectByText(index.ResolvedReferenceRowsByText!, change.StringValue);
+        }
+
+        CollectByText(index.UnresolvedReferenceRowsByText!, change.UnresolvedReferenceValue);
+        CollectByText(index.UnresolvedReferenceRowsByText!, change.StringValue);
+        return matches;
     }
+
+    /// <summary>
+    /// The text dictionary a reference row is kept in: resolved rows apart from unresolved ones, since only a change naming
+    /// no object finds a resolved row by its text.
+    /// </summary>
+    private static Dictionary<string, List<ConnectedSystemObjectAttributeValue>> ReferenceTextIndexFor(
+        CalculatorAttributeIndex index, ConnectedSystemObjectAttributeValue value) =>
+        value.ReferenceValueId.HasValue ? index.ResolvedReferenceRowsByText! : index.UnresolvedReferenceRowsByText!;
 
     /// <summary>
     /// Reports a change whose value could not be recorded as its attribute's type (#2183), naming the type whose column

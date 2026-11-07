@@ -498,6 +498,134 @@ public class OptimisticExportApplyCalculatorTests
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
     }
 
+    // A reference is matched by the rule reconciliation confirms it by (#2803): a resolved row by the object it names
+    // alone, an unresolved row by its distinguished name ignoring case unless the attribute is case-exact.
+
+    [Test]
+    public void CalculateDelta_ReferenceAdd_RowResolvedToAnotherObjectWithTheSameDn_RecordsTheMember()
+    {
+        var cso = CreateCso();
+        var otherObjectsRow = AddResolvedReferenceValue(cso, Guid.NewGuid(), "CN=User1,DC=test");
+        var memberId = Guid.NewGuid();
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User1,DC=test");
+        change.ResolvedReferenceCsoId = memberId;
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions.Select(v => v.ReferenceValueId), Is.EqualTo(new Guid?[] { memberId }),
+                "the row names another object, so the member exported is recorded");
+            Assert.That(delta.RemovalValueIds, Does.Not.Contain(otherObjectsRow.Id));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceRemove_RowResolvedToAnotherObjectWithTheSameDn_KeepsThatRow()
+    {
+        var cso = CreateCso();
+        AddResolvedReferenceValue(cso, Guid.NewGuid(), "CN=User1,DC=test");
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Remove, stringValue: "CN=User1,DC=test");
+        change.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.RemovalValueIds, Is.Empty, "the row names another object, which the removal did not name");
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceAdd_RowResolvedToTheSameObjectWithItsDnInAnotherCase_NoOp()
+    {
+        var cso = CreateCso();
+        var memberId = Guid.NewGuid();
+        AddResolvedReferenceValue(cso, memberId, "cn=user1,dc=TEST");
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User1,DC=test");
+        change.ResolvedReferenceCsoId = memberId;
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty, "the member is already held, by the object it names");
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceAdd_UnresolvedRowWithTheDnInAnotherCase_NoOp()
+    {
+        var cso = CreateCso();
+        AddCsoValue(cso, 1, AttributeDataType.Reference, unresolvedReferenceValue: "cn=user3,dc=TEST");
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User3,DC=test");
+        change.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.Additions, Is.Empty, "a distinguished name names its entry whatever its case");
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+        }
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceRemove_UnresolvedRowWithTheDnInAnotherCase_RemovesIt()
+    {
+        var cso = CreateCso();
+        var held = AddCsoValue(cso, 1, AttributeDataType.Reference, unresolvedReferenceValue: "cn=user3,dc=TEST");
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Remove, stringValue: "CN=User3,DC=test");
+        change.ResolvedReferenceCsoId = Guid.NewGuid();
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { held.Id }));
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceAdd_CaseExactAttributeUnresolvedRowWithTheDnInAnotherCase_RecordsTheMember()
+    {
+        var cso = CreateCso();
+        AddCsoValue(cso, 1, AttributeDataType.Reference, unresolvedReferenceValue: "cn=user3,dc=TEST");
+        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User3,DC=test");
+        change.Attribute.CaseExact = true;
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso, change)]);
+
+        Assert.That(delta.Additions.Select(v => v.UnresolvedReferenceValue), Is.EqualTo(new[] { "CN=User3,DC=test" }),
+            "a case-exact attribute compares distinguished names exactly");
+    }
+
+    [Test]
+    public void CalculateDelta_ReferenceChangesInOneBatch_IndexFollowsMutations()
+    {
+        var cso = CreateCso();
+        var memberId = Guid.NewGuid();
+        var held = AddResolvedReferenceValue(cso, memberId, "CN=User1,DC=test");
+        PendingExportAttributeValueChange Change(PendingExportAttributeChangeType operation, string dn)
+        {
+            var change = CreateChange(1, AttributeDataType.Reference, operation, stringValue: dn);
+            change.ResolvedReferenceCsoId = memberId;
+            return change;
+        }
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([CreatePendingExport(cso,
+            Change(PendingExportAttributeChangeType.Remove, "cn=user1,dc=test"),
+            Change(PendingExportAttributeChangeType.Add, "CN=User1,DC=test"),
+            Change(PendingExportAttributeChangeType.Add, "cn=USER1,dc=test"))]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(delta.RemovalValueIds, Is.EqualTo(new[] { held.Id }));
+            Assert.That(delta.Additions.Select(v => v.ReferenceValueId), Is.EqualTo(new Guid?[] { memberId }),
+                "the second Add finds the member the first recorded");
+            Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+        }
+    }
+
     #endregion
 
     #region Delete Pending Export skip (D6)
@@ -827,6 +955,13 @@ public class OptimisticExportApplyCalculatorTests
             UnresolvedReferenceValue = unresolvedReferenceValue
         };
         cso.AttributeValues.Add(value);
+        return value;
+    }
+
+    private static ConnectedSystemObjectAttributeValue AddResolvedReferenceValue(ConnectedSystemObject cso, Guid referencedCsoId, string dn)
+    {
+        var value = AddCsoValue(cso, 1, AttributeDataType.Reference, unresolvedReferenceValue: dn);
+        value.ReferenceValueId = referencedCsoId;
         return value;
     }
 

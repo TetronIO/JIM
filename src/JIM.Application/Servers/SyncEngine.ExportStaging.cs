@@ -792,9 +792,9 @@ public partial class SyncEngine
                     }
 
                     // No-net-change detection for direct attribute mappings
-                    // Reference attributes: Pending Export stores MVO GUIDs in UnresolvedReferenceValue,
-                    // CSO stores resolved references via ReferenceValue.MetaverseObjectId. The ValuesMatch
-                    // method now compares these properly by extracting the MVO ID from both representations.
+                    // Reference attributes: the change names the referenced MVO by its id in UnresolvedReferenceValue,
+                    // and a resolved CSO value is matched by the MVO its referenced CSO is joined to, never by its DN
+                    // (ReferenceValueMatches, #2803).
                     if (canDetectNoNetChange)
                     {
                         var targetCsoId = existingCso!.Id;
@@ -1504,10 +1504,11 @@ public partial class SyncEngine
     /// Used for multi-valued attribute comparison (Add/Remove operations).
     /// </summary>
     /// <remarks>
-    /// Reference attributes (like group members) may have their DNs stored in different fields:
-    /// - Pending Exports from sync store resolved DNs in StringValue
-    /// - CSO values from AD import store DNs in UnresolvedReferenceValue
-    /// This method handles cross-field comparison for these cases.
+    /// A reference is compared by <see cref="ReferenceValueMatches"/>, the rule reconciliation confirms it by (#2803). A
+    /// change is a reference when it carries an unresolved reference, names the object export resolution resolved it to,
+    /// or carries text against a held value holding a reference's text: a reference recall stages the distinguished name
+    /// it captured as text (#908), and the target keeps a reference's distinguished name in
+    /// <c>UnresolvedReferenceValue</c>, resolved or not.
     /// <para>
     /// <see cref="HeldAttributeValues"/> answers the same question by lookup, keyed exactly as this method decides, so a
     /// change to this method needs the same change there; <c>HeldAttributeValuesDifferentialTests</c> fails until the two
@@ -1518,42 +1519,10 @@ public partial class SyncEngine
         PendingExportAttributeValueChange pendingChange,
         ConnectedSystemObjectAttributeValue existingValue)
     {
-        // For reference attributes, the Pending Export stores an MVO GUID in UnresolvedReferenceValue,
-        // while the CSO stores a resolved reference to another CSO (which has a MetaverseObjectId).
-        // Compare using the MVO ID that both ultimately represent.
-        var pendingHasUnresolvedRef = !string.IsNullOrEmpty(pendingChange.UnresolvedReferenceValue);
-
-        if (pendingHasUnresolvedRef)
+        if (!string.IsNullOrEmpty(pendingChange.UnresolvedReferenceValue) || pendingChange.ResolvedReferenceCsoId.HasValue ||
+            (pendingChange.StringValue != null && existingValue.UnresolvedReferenceValue != null))
         {
-            // Pending Export has an MVO GUID - compare with the MVO that the existing CSO reference points to
-            var existingReferencedMvoId = existingValue.ReferenceValue?.MetaverseObjectId;
-            if (existingReferencedMvoId.HasValue &&
-                Guid.TryParse(pendingChange.UnresolvedReferenceValue, out var pendingMvoId))
-            {
-                return pendingMvoId == existingReferencedMvoId.Value;
-            }
-
-            // Fallback: compare as DN strings if the Pending Export has a resolved DN
-            // (This handles cases where the Pending Export was created from an already-resolved reference)
-            var existingDn = existingValue.UnresolvedReferenceValue;
-            if (existingDn != null)
-            {
-                // DNs are case-insensitive in LDAP
-                return IdentifierKey.AreSame(pendingChange.UnresolvedReferenceValue, existingDn, caseExact: false);
-            }
-
-            // No match possible - CSO doesn't have this reference
-            return false;
-        }
-
-        // Cross-field reference comparison (see remarks): a pre-resolved Pending Export change stores
-        // the reference value (for example a DN) in StringValue, while an imported CSO reference keeps
-        // the raw reference string in UnresolvedReferenceValue. This is the only comparison possible
-        // when the referenced object's Metaverse Object has been deleted (reference recall, #908), as
-        // the CSO-side navigation no longer resolves to a Metaverse Object. DNs are case-insensitive.
-        if (pendingChange.StringValue != null && existingValue.UnresolvedReferenceValue != null)
-        {
-            return IdentifierKey.AreSame(pendingChange.StringValue, existingValue.UnresolvedReferenceValue, caseExact: false);
+            return ReferenceValueMatches(pendingChange, existingValue);
         }
 
         // Compare based on which value type is set
@@ -1620,6 +1589,41 @@ public partial class SyncEngine
         // Both null/empty - consider them matching
         return true;
     }
+
+    /// <summary>
+    /// Whether a held reference row holds the reference a change names, by the rule reconciliation confirms it by
+    /// (<see cref="ReferenceRowMatches"/>, #2803): a resolved row is matched by the object it names alone, never by its
+    /// distinguished name, an unresolved row by its distinguished name (ignoring case unless the attribute is case-exact),
+    /// and a change naming no object matches any row by its distinguished name.
+    /// </summary>
+    /// <remarks>
+    /// Export staging adds the one way of naming an object that reconciliation never sees: a change staged before export
+    /// resolution names the referenced Metaverse Object by its id (<see cref="NamedMetaverseObjectId"/>). A resolved row
+    /// whose object is joined to a Metaverse Object matches it by that id; a resolved row whose object is joined to none
+    /// names some other object and does not match; an unresolved row is compared by text as the rule says.
+    /// </remarks>
+    internal static bool ReferenceValueMatches(PendingExportAttributeValueChange change, ConnectedSystemObjectAttributeValue row)
+    {
+        if (!change.ResolvedReferenceCsoId.HasValue && NamedMetaverseObjectId(change) is { } metaverseObjectId)
+        {
+            if (row.ReferenceValue?.MetaverseObjectId is { } rowMetaverseObjectId)
+                return rowMetaverseObjectId == metaverseObjectId;
+
+            if (row.ReferenceValueId.HasValue)
+                return false;
+        }
+
+        return ReferenceRowMatches(row, change);
+    }
+
+    /// <summary>
+    /// The Metaverse Object a change staged before export resolution names: its unresolved reference, when that is a
+    /// Metaverse Object id. Null for a change naming its reference by text, or resolved at export.
+    /// </summary>
+    internal static Guid? NamedMetaverseObjectId(PendingExportAttributeValueChange change) =>
+        !string.IsNullOrEmpty(change.UnresolvedReferenceValue) && Guid.TryParse(change.UnresolvedReferenceValue, out var metaverseObjectId)
+            ? metaverseObjectId
+            : null;
 
     /// <summary>
     /// Compares a Pending Export attribute value change against a single existing CSO attribute value

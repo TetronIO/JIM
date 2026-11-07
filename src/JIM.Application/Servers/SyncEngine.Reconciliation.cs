@@ -775,9 +775,12 @@ public partial class SyncEngine
     /// One rule for every path, so they cannot disagree: the full load (<see cref="ValueExistsOnCso"/>), the per-attribute
     /// index (<see cref="ValueExistsInIndex"/>) and probed values, whose questions are shaped by it
     /// (<see cref="PlanReconciliationProbes"/>). It also keeps the probe exact without a lowered index over resolved rows:
-    /// only unresolved rows are ever matched by a string ignoring case for a change that names an object.
+    /// only unresolved rows are ever matched by a string ignoring case for a change that names an object. Export staging's
+    /// no-net-change check (<see cref="ReferenceValueMatches"/>) and optimistic export apply
+    /// (<see cref="OptimisticExportApplyCalculator"/>) apply it too (#2803), so a reference staging finds already held is
+    /// the one reconciliation would confirm.
     /// </remarks>
-    private static bool ReferenceRowMatches(ConnectedSystemObjectAttributeValue row, PendingExportAttributeValueChange change)
+    internal static bool ReferenceRowMatches(ConnectedSystemObjectAttributeValue row, PendingExportAttributeValueChange change)
     {
         if (row.ReferenceValueId.HasValue && change.ResolvedReferenceCsoId.HasValue)
             return row.ReferenceValueId == change.ResolvedReferenceCsoId;
