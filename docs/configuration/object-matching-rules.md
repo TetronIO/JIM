@@ -153,7 +153,7 @@ warning stream from [`Switch-JIMMatchingMode`](../powershell/object-matching-rul
 ## :material-eye-outline: Previewing a behaviour change
 
 The five behaviour toggles are the settings whose consequences are hardest to picture, because none of them names a
-population. Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning
+population. Disabling a rule reads like pausing it, and for the values only that rule contributes it is: they are kept, ready for the rule to be enabled again. Values another rule also contributes pass to that rule at the next synchronisation. Turning
 **Provision To Connected System** on reads like granting a capability and is Connected System Object creation at scale. Turning
 **Enforce State** off reads like relaxing a constraint and is a standing decision to let a target system diverge.
 

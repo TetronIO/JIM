@@ -16,7 +16,7 @@ namespace JIM.Application.Servers.Preview;
 /// did not cover): whether the rule runs at all, which way it runs, and what it is allowed to create or correct.
 ///
 /// These are the settings whose consequences are hardest to picture, because none of them names a population.
-/// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns. Turning Provision To
+/// Disabling a rule reads like pausing it, yet every attribute another rule also contributes changes hands. Turning Provision To
 /// Connected System on reads like granting a capability and is Connected System Object creation at scale. Turning Enforce State
 /// off reads like relaxing a constraint and is a standing decision to let a target system diverge. So the
 /// preview's whole job here is to put a count and a list of objects against each.
@@ -96,8 +96,9 @@ public class SyncRuleBehaviourTogglePreviewAdapter : IConfigurationChangePreview
                       "begins flowing its Attribute Flow mappings, and whatever it projects or provisions starts " +
                       "being created."
                     : "Disabling this Synchronisation Rule stops it contributing on the next synchronisation. " +
-                      "Attribute values it currently owns pass to another contributor, or are cleared where it " +
-                      "was the only one, and it stops projecting and provisioning.",
+                      "Attribute values it currently owns pass to another contributor where there is one, and are " +
+                      "kept, ready for the rule to be enabled again, where it was the only one. It stops projecting " +
+                      "and provisioning.",
                 nameof(SyncRule.Enabled)));
         }
 

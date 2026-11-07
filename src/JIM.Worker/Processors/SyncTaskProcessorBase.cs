@@ -2394,9 +2394,9 @@ public abstract class SyncTaskProcessorBase
             _pendingReferenceAttributeProcessing.Add((connectedSystemObject, inboundSyncRules));
 
             // Orphaned-contribution recall (#1533): a value this system contributed via an Attribute Flow
-            // mapping that no longer exists (deleted), or that is disabled (mapping or whole rule), has
-            // nothing asserting it any more. Full Synchronisation's re-evaluation treats it like the
-            // disabled-rule case: stage its removal here, AFTER the live mappings have flowed (so a mapping
+            // mapping that no longer exists (deleted) has nothing asserting it any more, so stage its removal
+            // here. A disabled mapping or rule is dormant, not gone, and its sole contributions are kept
+            // (#1537; see RecallOrphanedContributions). Staged AFTER the live mappings have flowed (so a mapping
             // that re-flowed or took over the attribute is seen as its owner), and BEFORE the withdrawal
             // re-election below, which then hands the attribute to the next surviving contributor or lets it
             // clear as a NoContributor outcome.

@@ -123,6 +123,9 @@ Object Matching Rule { #object-matching-rule }
 Obsoletion { #obsoletion }
 :   The process of marking a Connected System Object as no longer existing in its source system. Obsoletion is detected during import when an object that was previously present is no longer returned by the Connected System.
 
+Out-of-Scope Action { #out-of-scope-action }
+:   What an import Synchronisation Rule does when a joined Connected System Object leaves its scope. **Disconnect from Metaverse** (the default) breaks the join and withdraws the values the object contributed; **Remain joined** keeps the join and stops values flowing from it. A join an export rule made is never broken this way; only the values are withdrawn. See [Scoping Criteria](../configuration/scoping-criteria.md#what-happens-to-each-object-a-synchronisation-visits).
+
 Partition { #partition }
 :   A logical division within a Connected System. Partitions allow JIM to scope imports and exports to specific segments of a directory or data source, such as the naming contexts an LDAP directory hosts; organisational units within a partition are Containers.
 
@@ -148,7 +151,7 @@ Schedule { #schedule }
 :   An automated sequence of ordered steps, such as Run Profile executions, that JIM runs on a cron trigger or on demand. Steps run sequentially or in parallel, and each run is recorded as a Schedule Execution. See [Schedules](../configuration/schedules.md).
 
 Scoping { #scoping }
-:   The Scoping Criteria that decide which objects a Synchronisation Rule applies to. An object outside the criteria is left alone by that rule, whatever its Attribute Flows and Object Matching Rules say. Configured per Synchronisation Rule as a filter over the object's attributes.
+:   The Scoping Criteria that decide which objects a Synchronisation Rule applies to. While an object is outside them, the rule flows nothing for it; when a joined object leaves them, the rule's Out-of-Scope Action (import rules) or Deprovisioning Action (export rules) decides what happens next. Configured per Synchronisation Rule as a filter over the object's attributes.
 
 SCIM endpoint { #scim-endpoint }
 :   The address an identity provider pushes Users and Groups to, over SCIM 2.0, with a key JIM gives it. Each Connected System that uses the JIM SCIM 2.0 Service Provider Connector has its own, shown on its **SCIM** tab; JIM keeps what arrives and imports it on the Connected System's Schedule. See [JIM SCIM 2.0 Service Provider Connector](../connectors/jim-scim-service-provider-connector.md).

@@ -58,6 +58,7 @@
         @{ Anchor = 'null-is-a-value'; Home = 'concepts/attribute-priority.md'; TitleCase = $false }
         @{ Anchor = 'object-matching-rule'; Home = 'configuration/object-matching-rules.md'; TitleCase = $true }
         @{ Anchor = 'obsoletion'; Home = 'configuration/connector-space.md'; TitleCase = $false }
+        @{ Anchor = 'out-of-scope-action'; Home = 'configuration/scoping-criteria.md'; TitleCase = $true }
         @{ Anchor = 'partition'; Home = 'configuration/partitions-and-containers.md'; TitleCase = $false }
         @{ Anchor = 'password-synchronisation'; Home = 'concepts/passwords.md'; TitleCase = $true }
         @{ Anchor = 'pending-export'; Home = 'configuration/connected-systems.md'; TitleCase = $true }

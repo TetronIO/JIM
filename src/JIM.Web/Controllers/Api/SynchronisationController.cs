@@ -4177,7 +4177,7 @@ public class SynchronisationController(
     /// would be left free to drift from what JIM holds, along with each of their inverses.
     ///
     /// These are the settings whose consequences are hardest to picture, because none of them names a population.
-    /// Disabling a rule reads like pausing it and is closer to withdrawing every value it owns; turning
+    /// Disabling a rule reads like pausing it, yet every attribute another rule also contributes changes hands; turning
     /// `provisionToConnectedSystem` on reads like granting a capability and is Connected System Object creation at scale.
     ///
     /// Every omitted toggle is taken from the stored rule, exactly as the update endpoint does, so a caller
