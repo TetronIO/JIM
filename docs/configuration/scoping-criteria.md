@@ -63,9 +63,9 @@ This is how the [JML lifecycle](../concepts/jml-lifecycle.md) acts on a status c
 
 **Import rules** can share a Connected System Object Type: one rule per business area, for example, each with its own scope or Attribute Flows. Where two of them flow the same Metaverse Attribute for an object, [Attribute Priority](../concepts/attribute-priority.md) decides which value it keeps.
 
-**Export rules: manage each target object with one rule.** For each Metaverse Object Type, use one export rule per Object Type in a Connected System. Where different people need different values, such as a different `title` format for contractors, vary them with an [expression](../concepts/expressions.md) in that one rule rather than adding a second rule. Two export rules covering the same objects can fail the synchronisation, or deprovision an account the other rule manages.
+**Export rules: manage each target object with one rule.** Use one export rule for each Metaverse Object Type you provision to a Connected System Object Type. Where different people need different values, such as a different `title` format for contractors, vary them with an [expression](../concepts/expressions.md) in that one rule rather than adding a second rule. A second export rule into the same Connected System Object Type fails in one of two ways. When both rules cover the same identity, the synchronisation fails. When their scopes never overlap, one rule can deprovision an account the other provisioned: as a joiner's account is created, or when a person moves from one rule's scope to the other's.
 
-Rules from different Metaverse Object Types can target the same Object Type, because each Metaverse Object has one type, so no object is ever in scope of both: people and groups can both be provisioned as mail contacts, each by its own rule.
+Rules from different Metaverse Object Types can target the same Connected System Object Type, because each Metaverse Object has one type, so no object is ever in scope of both: people and groups can both be provisioned as mail contacts, each by its own rule.
 
 Later releases allow several export rules for one object: first rules that write different attributes, then rules that write the same attribute, with a precedence between them.
 
