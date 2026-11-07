@@ -857,15 +857,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    public Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
-        => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
+        => _repo.ConnectedSystems.GetExecutableExportBatchSummaryAsync(connectedSystemId, take, afterCreatedAt, afterId, excludedChangeTypes);
 
     public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.GetRemainingDeferredExportIdsAsync(connectedSystemId, afterCreatedAt, afterId);
-
-    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-        => _repo.ConnectedSystems.GetDeferredExportsByIdsAsync(pendingExportIds);
 
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
         => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
@@ -879,7 +876,7 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> RecoverStrandedExecutingPendingExportsAsync()
         => _repo.ConnectedSystems.RecoverStrandedExecutingPendingExportsAsync();
 
-    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
         => HideQueued(await _repo.ConnectedSystems.GetPendingExportsByIdsAsync(pendingExportIds));
 
     #endregion

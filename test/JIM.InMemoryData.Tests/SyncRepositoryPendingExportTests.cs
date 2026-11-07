@@ -470,10 +470,10 @@ public class SyncRepositoryPendingExportTests
 
     #endregion
 
-    #region GetExecutableExportBatchAsync excludedChangeTypes (Run Profile Safeguards, #1618)
+    #region GetExecutableExportBatchSummaryAsync excludedChangeTypes (Run Profile Safeguards, #1618)
 
     [Test]
-    public async Task GetExecutableExportBatchAsync_ExcludedChangeTypes_OmitsThoseTypesFromTheBatchAsync()
+    public async Task GetExecutableExportBatchSummaryAsync_ExcludedChangeTypes_OmitsThoseTypesFromTheBatchAsync()
     {
         var create = CreatePe();
         create.ChangeType = PendingExportChangeType.Create;
@@ -491,14 +491,14 @@ public class SyncRepositoryPendingExportTests
         delete.CreatedAt = DateTime.UtcNow;
         _repo.SeedPendingExport(delete);
 
-        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+        var result = await _repo.GetExecutableExportBatchSummaryAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
             excludedChangeTypes: [PendingExportChangeType.Create, PendingExportChangeType.Delete]);
 
         Assert.That(result.Select(pe => pe.Id), Is.EquivalentTo(new[] { update.Id }));
     }
 
     [Test]
-    public async Task GetExecutableExportBatchAsync_NoExcludedChangeTypes_ReturnsEveryTypeAsync()
+    public async Task GetExecutableExportBatchSummaryAsync_NoExcludedChangeTypes_ReturnsEveryTypeAsync()
     {
         var create = CreatePe();
         create.ChangeType = PendingExportChangeType.Create;
@@ -508,26 +508,26 @@ public class SyncRepositoryPendingExportTests
         delete.ChangeType = PendingExportChangeType.Delete;
         _repo.SeedPendingExport(delete);
 
-        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null);
+        var result = await _repo.GetExecutableExportBatchSummaryAsync(CsId, take: 10, afterCreatedAt: null, afterId: null);
 
         Assert.That(result, Has.Count.EqualTo(2), "omitting excludedChangeTypes must exclude nothing, matching the pre-#1618 signature's behaviour");
     }
 
     [Test]
-    public async Task GetExecutableExportBatchAsync_EmptyExcludedChangeTypes_ExcludesNothingAsync()
+    public async Task GetExecutableExportBatchSummaryAsync_EmptyExcludedChangeTypes_ExcludesNothingAsync()
     {
         var create = CreatePe();
         create.ChangeType = PendingExportChangeType.Create;
         _repo.SeedPendingExport(create);
 
-        var result = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+        var result = await _repo.GetExecutableExportBatchSummaryAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
             excludedChangeTypes: []);
 
         Assert.That(result, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public async Task GetExecutableExportBatchAsync_ExcludedTypeAlongsideKeysetPaging_CursorStillAdvancesCorrectlyAsync()
+    public async Task GetExecutableExportBatchSummaryAsync_ExcludedTypeAlongsideKeysetPaging_CursorStillAdvancesCorrectlyAsync()
     {
         var baseTime = DateTime.UtcNow.AddMinutes(-10);
 
@@ -543,7 +543,7 @@ public class SyncRepositoryPendingExportTests
         _repo.SeedPendingExport(allowedUpdate);
 
         // First page: excluding Create must skip straight to the Update, not stop at the excluded row.
-        var firstPage = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
+        var firstPage = await _repo.GetExecutableExportBatchSummaryAsync(CsId, take: 10, afterCreatedAt: null, afterId: null,
             excludedChangeTypes: [PendingExportChangeType.Create]);
 
         Assert.That(firstPage.Select(pe => pe.Id), Is.EquivalentTo(new[] { allowedUpdate.Id }));
@@ -551,7 +551,7 @@ public class SyncRepositoryPendingExportTests
         // Paging strictly after the Update's own cursor must find nothing further, including no
         // re-read of the excluded Create.
         var lastRow = firstPage[0];
-        var secondPage = await _repo.GetExecutableExportBatchAsync(CsId, take: 10, afterCreatedAt: lastRow.CreatedAt, afterId: lastRow.Id,
+        var secondPage = await _repo.GetExecutableExportBatchSummaryAsync(CsId, take: 10, afterCreatedAt: lastRow.CreatedAt, afterId: lastRow.Id,
             excludedChangeTypes: [PendingExportChangeType.Create]);
 
         Assert.That(secondPage, Is.Empty);

@@ -3447,7 +3447,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    public virtual Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null)
     {
         // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
@@ -3472,6 +3472,7 @@ public class SyncRepository : ISyncRepository
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .Take(take)
+            .Select(ExecutableExportSummary.Of)
             .ToList();
         return Task.FromResult(result);
     }
@@ -3499,21 +3500,6 @@ public class SyncRepository : ISyncRepository
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id)
             .Select(pe => pe.Id)
-            .ToList();
-        return Task.FromResult(result);
-    }
-
-    /// <summary>
-    /// Loads one chunk of the deferred export pass by id, in (CreatedAt, Id) order. Virtual so a test can see the chunks
-    /// the pass takes.
-    /// </summary>
-    public virtual Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-    {
-        var result = pendingExportIds
-            .Where(_pendingExports.ContainsKey)
-            .Select(id => _pendingExports[id])
-            .OrderBy(pe => pe.CreatedAt)
-            .ThenBy(pe => pe.Id)
             .ToList();
         return Task.FromResult(result);
     }
@@ -3612,14 +3598,19 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(recovered);
     }
 
-    // Virtual for test-support subclasses: the parallel export batch path re-loads Pending
-    // Exports by ID on a fresh per-batch context, and tests need to simulate that database
-    // isolation (returning last-persisted state rather than live in-memory references).
-    public virtual Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    /// <summary>
+    /// Loads Pending Exports by id, in (CreatedAt, Id) order: the one load export execution uses for a batch, sequential
+    /// or parallel, and for a chunk of the deferred pass. Virtual for test-support subclasses: the parallel export batch
+    /// path re-loads Pending Exports by ID on a fresh per-batch context, and tests need to simulate that database
+    /// isolation (returning last-persisted state rather than live in-memory references), or to see the loads made.
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
     {
         var result = pendingExportIds
-            .Where(id => _pendingExports.ContainsKey(id))
+            .Where(_pendingExports.ContainsKey)
             .Select(id => _pendingExports[id])
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
             .ToList();
         return Task.FromResult(result);
     }

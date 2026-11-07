@@ -23,7 +23,7 @@ namespace JIM.Application.Services;
 /// files): every hook point still calls <see cref="Reserve"/> before attempting anything, so a
 /// withheld type is dropped wherever it is met, and the paging query is additionally told to exclude
 /// it outright so it is never read into a batch at all (see
-/// <see cref="Data.Repositories.ISyncRepository.GetExecutableExportBatchAsync"/>'s
+/// <see cref="Data.Repositories.ISyncRepository.GetExecutableExportBatchSummaryAsync"/>'s
 /// <c>excludedChangeTypes</c>).
 /// </remarks>
 public sealed class ExportChangeLimitLedger

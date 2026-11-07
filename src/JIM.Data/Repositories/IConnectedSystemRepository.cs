@@ -249,8 +249,8 @@ public interface IConnectedSystemRepository
     /// <param name="excludedChangeTypes">Run Profile Safeguards (#1618): change types withheld for the
     /// whole run. Excluded at the database level so paging never reads, and never has to skip past,
     /// rows this run will not attempt; null or empty excludes nothing.</param>
-    /// <returns>Untracked Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
+    /// <returns>The batch's summaries, in (CreatedAt, Id) order; no Pending Export or object is materialised (#2813).</returns>
+    public Task<List<ExecutableExportSummary>> GetExecutableExportBatchSummaryAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId,
         IReadOnlyCollection<PendingExportChangeType>? excludedChangeTypes = null);
 
     /// <summary>
@@ -258,8 +258,8 @@ public interface IConnectedSystemRepository
     /// after the given keyset cursor, in a single query, by id only. Used to fast-path the export
     /// batch-collection loop once a batch is discovered to be made up entirely of deferred exports
     /// (issue #985); the deferred pass then loads them a chunk at a time with
-    /// <see cref="GetDeferredExportsByIdsAsync"/>. Same keyset predicate and eligibility as
-    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
+    /// <see cref="GetPendingExportsByIdsAsync"/>. Same keyset predicate and eligibility as
+    /// <see cref="GetExecutableExportBatchSummaryAsync"/>, restricted to HasUnresolvedReferences exports,
     /// with no page size limit.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to read exports for.</param>
@@ -269,19 +269,11 @@ public interface IConnectedSystemRepository
     public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
-    /// Loads one chunk of the deferred export pass: the given Pending Exports, untracked, in
-    /// (CreatedAt, Id) order, with the graph reference resolution and the Connector read (each
-    /// change's attribute; the object, its type, and its attribute values with their attributes).
-    /// An id with no row is left out.
-    /// </summary>
-    public Task<List<PendingExport>> GetDeferredExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
-
-    /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
     /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
     /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
     /// not prove the rest of the queue is deferred too. Same filtering semantics and keyset
-    /// predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred
+    /// predicate as <see cref="GetExecutableExportBatchSummaryAsync"/>, restricted to non-deferred
     /// exports; implemented as an existence check (no Includes, no entity materialisation).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to probe.</param>
@@ -291,19 +283,22 @@ public interface IConnectedSystemRepository
     public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
-    /// Retrieves Pending Exports by their IDs with all necessary includes for export processing.
-    /// Used by parallel batch processing where each batch re-loads its entities from its own DbContext.
-    /// </summary>
-    /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
-    /// <returns>Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    /// <summary>
     /// Returns which of the supplied Pending Export ids still exist. A Pending Export is deleted once
     /// it has been exported, so a caller holding historical ids needs this to tell live rows from gone
     /// ones without materialising any of them.
     /// </summary>
     public Task<List<Guid>> GetExistingPendingExportIdsAsync(IList<Guid> pendingExportIds);
 
-    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);
+    /// <summary>
+    /// Loads Pending Exports by id for execution (#2813): the one load of an export's graph that export execution
+    /// uses, sequential, parallel and deferred alike. Untracked, with identity resolution so the graph shares one
+    /// instance of each attribute and type, in (CreatedAt, Id) order. Loads each change's attribute, and the object with
+    /// its type (the LDAP Connector's object class fallback and placeholder modifications) and its attribute values
+    /// with their attributes (what the Connectors and optimistic apply read, including the LDAP Connector's placeholder
+    /// member check). An id with no row is left out.
+    /// </summary>
+    /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
+    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 
     /// <summary>
     /// Retrieves the count of how many Pending Export objects there are for a particular Connected System.
