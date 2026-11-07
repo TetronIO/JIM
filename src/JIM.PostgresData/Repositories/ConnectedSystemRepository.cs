@@ -3121,8 +3121,10 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <inheritdoc />
     /// <remarks>
-    /// #2817: a filtered include, so the left-out values are never read: a Delta Import loads, of a group of 450,000
-    /// members that lost a few, only the few. Everything else is <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>.
+    /// #2817: the left-out values are never read: a Delta Import loads, of a group of 450,000 members that lost a few, only
+    /// the few. The other attributes are read by attribute-id ranges and the wanted values by id
+    /// (<see cref="GetAttributeValuesExcludingAsync"/>, shared with export's partial load, #2816); a filtered include read
+    /// every member row to discard it. Everything else is <see cref="GetConnectedSystemObjectsByIdsAsync(int, IEnumerable{Guid})"/>.
     /// </remarks>
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
         IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
@@ -3166,19 +3168,17 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         //
         // Split query stays: as a single query, every CSO's columns would repeat once per attribute
         // value row, which for a large group (tens of thousands of member values) is the costly shape.
+        //
+        // #2817: leaving attributes out (a Delta Import's large group, loaded with only the members the database left
+        // undecided) loads the objects without values, then their values by attribute-id ranges that skip the left-out
+        // attributes, plus the left-out values wanted by id (GetAttributeValuesExcludingAsync, shared with export's
+        // partial load, #2816). A filtered include read every member row of the group to throw it away.
+        var leavingAttributesOut = excludedAttributeIds is { Count: > 0 };
         var query = Repository.Database.ConnectedSystemObjects
             .AsNoTracking()
             .AsSplitQuery();
-        if (excludedAttributeIds is { Count: > 0 })
-        {
-            var excluded = excludedAttributeIds.ToList();
-            var included = (includedValueIds ?? []).ToList();
-            query = query.Include(cso => cso.AttributeValues.Where(av => !excluded.Contains(av.AttributeId) || included.Contains(av.Id)));
-        }
-        else
-        {
+        if (!leavingAttributesOut)
             query = query.Include(cso => cso.AttributeValues);
-        }
 
         var csos = await query
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
@@ -3186,6 +3186,17 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
         if (csos.Count == 0)
             return csos;
+
+        if (leavingAttributesOut)
+        {
+            var csosById = csos.ToDictionary(cso => cso.Id);
+            var rows = await GetAttributeValuesExcludingAsync(csos.Select(cso => (cso.Id, excludedAttributeIds!)), includedValueIds ?? []);
+            foreach (var (value, cso) in rows.Select(row => (row.Value, csosById[row.ObjectId])))
+            {
+                value.ConnectedSystemObject = cso;
+                cso.AttributeValues.Add(value);
+            }
+        }
 
         var typeIds = csos.Select(cso => cso.TypeId).Distinct().ToList();
         var types = await Repository.Database.ConnectedSystemObjectTypes

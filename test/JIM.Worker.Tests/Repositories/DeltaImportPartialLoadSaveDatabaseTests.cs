@@ -13,6 +13,9 @@ using JIM.TestSupport;
 using JIM.Worker.Processors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
+using System.Data.Common;
+using System.Text.Json;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.Repositories;
@@ -115,6 +118,91 @@ public class DeltaImportPartialLoadSaveDatabaseTests
                 "every member it did not load (users 2 to 7) is held exactly as it was, and only users 0 and 1 are gone");
             Assert.That(after.Where(v => before.All(b => b.Id != v.Id)).Select(v => v.UnresolvedReferenceValue),
                 Is.EqualTo(new[] { LargeGroupImportSeed.UserDn(9) }), "user 9 is added");
+        }
+    }
+
+    /// <summary>
+    /// Loading a group with its member attribute left out reads only the member rows it is asked for, never the rest of the
+    /// membership. Every statement the load runs is captured and run again under EXPLAIN ANALYZE, and the rows read from the
+    /// attribute values table (returned, or read and filtered out) are counted: a filter leaving the attribute out reads
+    /// every member row of the group to discard it.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsByIdsAsync_LeavingTheMemberAttributeOut_ReadsOnlyTheMemberRowsAskedForAsync()
+    {
+        const int members = 20_000;
+        var seeded = await LargeGroupImportSeed.SeedAsync(NewContext, _connectionString, userCount: members, memberCount: members);
+        Guid[] undecided = [LargeGroupImportSeed.MemberValueId(0), LargeGroupImportSeed.MemberValueId(1)];
+
+        var recorder = new CommandRecorder();
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .AddInterceptors(recorder)
+            .Options;
+        List<ConnectedSystemObject> loaded;
+        await using (var ctx = new JimDbContext(options))
+        {
+            loaded = await new PostgresDataRepository(ctx).Sync.GetConnectedSystemObjectsByIdsAsync(seeded.SystemId, [seeded.GroupCsoId],
+                [seeded.MemberAttributeId], undecided);
+        }
+
+        var rowsRead = 0L;
+        await using (var connection = new NpgsqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            foreach (var (text, parameters) in recorder.Commands)
+            {
+                await using var explain = new NpgsqlCommand("EXPLAIN (ANALYZE, FORMAT JSON) " + text, connection);
+                foreach (var parameter in parameters)
+                    explain.Parameters.Add(parameter);
+                var plan = (string)(await explain.ExecuteScalarAsync())!;
+                rowsRead += RowsReadFrom(JsonDocument.Parse(plan).RootElement[0].GetProperty("Plan"), "ConnectedSystemObjectAttributeValues");
+            }
+        }
+
+        var group = loaded.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(group.AttributeValues.Where(v => v.AttributeId == seeded.MemberAttributeId).Select(v => v.Id), Is.EquivalentTo(undecided));
+            Assert.That(group.AttributeValues.Count(v => v.AttributeId != seeded.MemberAttributeId), Is.EqualTo(2), "the group's DN and GUID");
+            Assert.That(group.AttributeValues.All(v => v.Attribute != null && ReferenceEquals(v.ConnectedSystemObject, group)), Is.True);
+            Assert.That(rowsRead, Is.LessThanOrEqualTo(10),
+                $"the load read {rowsRead:N0} attribute value rows for a group of {members:N0} members; it needs the 2 undecided members and the group's 2 other values");
+        }
+    }
+
+    /// <summary>
+    /// The rows a plan read from <paramref name="relation"/>: what each scan of it returned, and what it read and filtered
+    /// out, over all its loops.
+    /// </summary>
+    private static long RowsReadFrom(JsonElement node, string relation)
+    {
+        var rows = 0L;
+        if (node.TryGetProperty("Relation Name", out var name) && name.GetString() == relation)
+        {
+            var loops = node.GetProperty("Actual Loops").GetDouble();
+            double Per(string property) => node.TryGetProperty(property, out var value) ? value.GetDouble() : 0;
+            rows += (long)Math.Round(loops * (Per("Actual Rows") + Per("Rows Removed by Filter") + Per("Rows Removed by Index Recheck")));
+        }
+
+        if (node.TryGetProperty("Plans", out var children))
+            rows += children.EnumerateArray().Sum(child => RowsReadFrom(child, relation));
+        return rows;
+    }
+
+    /// <summary>
+    /// Records each command a context runs, with copies of its parameters, so each can be run again under EXPLAIN.
+    /// </summary>
+    private sealed class CommandRecorder : DbCommandInterceptor
+    {
+        public List<(string Text, List<NpgsqlParameter> Parameters)> Commands { get; } = [];
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Commands.Add((command.CommandText, command.Parameters.Cast<NpgsqlParameter>().Select(p => p.Clone()).ToList()));
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 

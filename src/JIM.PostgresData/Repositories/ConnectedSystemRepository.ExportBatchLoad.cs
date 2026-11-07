@@ -196,53 +196,19 @@ public partial class ConnectedSystemRepository
     }
 
     /// <summary>
-    /// The statement behind <see cref="LoadObjectValuesAsync"/>: each object's values whose attribute id falls in one of
-    /// its ranges (every id but its trimmed attributes'), each range an index range scan on (object, attribute), and the
-    /// trimmed attributes' candidate rows by id. The two arms are disjoint: a candidate row's attribute is trimmed, so no
-    /// range holds it.
-    /// </summary>
-    internal const string ExportObjectValuesSql =
-        @"SELECT v.*
-          FROM unnest(@rangeObjectIds, @rangeLows, @rangeHighs) AS r(object_id, low, high)
-          JOIN ""ConnectedSystemObjectAttributeValues"" AS v
-            ON v.""ConnectedSystemObjectId"" = r.object_id
-           AND v.""AttributeId"" BETWEEN r.low AND r.high
-          UNION ALL
-          SELECT v.*
-          FROM ""ConnectedSystemObjectAttributeValues"" AS v
-          WHERE v.""Id"" = ANY(@candidateValueIds)";
-
-    /// <summary>
-    /// Loads the objects' values (all but the trimmed attributes', and the trimmed attributes' candidate rows), each with
-    /// its attribute and its object, and records on each object how its values were loaded. An attribute the batch's
-    /// changes loaded is the same instance here; one only a value names is joined to the object's Object Type, as the
-    /// whole load's identity resolution joined it.
+    /// Loads the objects' values (all but the trimmed attributes', and the trimmed attributes' candidate rows, through
+    /// <see cref="GetAttributeValuesExcludingAsync"/>), each with its attribute and its object, and records on each object how
+    /// its values were loaded. An attribute the batch's changes loaded is the same instance here; one only a value names is
+    /// joined to the object's Object Type, as the whole load's identity resolution joined it.
     /// </summary>
     private async Task LoadObjectValuesAsync(List<PendingExport> exports, List<ConnectedSystemObject> objects,
         Dictionary<Guid, ExportValueLoad> loads, HashSet<Guid> candidateValueIds)
     {
-        var ranges = objects
-            .SelectMany(cso => AttributeIdRangesExcluding(loads.TryGetValue(cso.Id, out var load)
-                    ? load.PartiallyLoadedAttributes.Keys.OrderBy(id => id).ToList()
-                    : [])
-                .Select(range => (ObjectId: cso.Id, range.Low, range.High)))
-            .ToList();
-
-        var rows = await Repository.Database.ConnectedSystemObjectAttributeValues
-            .FromSqlRaw(ExportObjectValuesSql,
-                new NpgsqlParameter("rangeObjectIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = ranges.Select(r => r.ObjectId).ToArray() },
-                new NpgsqlParameter("rangeLows", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = ranges.Select(r => r.Low).ToArray() },
-                new NpgsqlParameter("rangeHighs", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = ranges.Select(r => r.High).ToArray() },
-                new NpgsqlParameter("candidateValueIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid) { Value = candidateValueIds.ToArray() })
-            .AsNoTrackingWithIdentityResolution()
-            .Select(value => new
-            {
-                ObjectId = EF.Property<Guid>(value, "ConnectedSystemObjectId"),
-                Value = value,
-                value.Attribute,
-                AttributeTypeId = value.Attribute.ConnectedSystemObjectType.Id
-            })
-            .ToListAsync();
+        var rows = await GetAttributeValuesExcludingAsync(
+            objects.Select(cso => (cso.Id, loads.TryGetValue(cso.Id, out var load)
+                ? (IReadOnlyCollection<int>)load.PartiallyLoadedAttributes.Keys.ToList()
+                : [])),
+            candidateValueIds);
 
         var attributes = exports
             .SelectMany(pe => pe.AttributeValueChanges)
@@ -252,7 +218,7 @@ public partial class ConnectedSystemRepository
             .ToDictionary(attribute => attribute.Id);
         var objectsById = objects.ToDictionary(cso => cso.Id);
 
-        foreach (var (row, cso) in rows.OrderBy(r => r.Value.Id).Select(r => (r, objectsById[r.ObjectId])))
+        foreach (var (row, cso) in rows.Select(r => (r, objectsById[r.ObjectId])))
         {
             if (!attributes.TryGetValue(row.Attribute.Id, out var attribute))
             {
@@ -273,22 +239,5 @@ public partial class ConnectedSystemRepository
 
         foreach (var (objectId, load) in loads)
             load.ApplyTo(objectsById[objectId]);
-    }
-
-    /// <summary>
-    /// The inclusive ranges of attribute id that cover every id but <paramref name="excludedSortedIds"/>.
-    /// </summary>
-    internal static IEnumerable<(int Low, int High)> AttributeIdRangesExcluding(IReadOnlyList<int> excludedSortedIds)
-    {
-        long low = int.MinValue;
-        foreach (var excluded in excludedSortedIds)
-        {
-            if (excluded - 1L >= low)
-                yield return ((int)low, excluded - 1);
-            low = excluded + 1L;
-        }
-
-        if (low <= int.MaxValue)
-            yield return ((int)low, int.MaxValue);
     }
 }
