@@ -315,7 +315,8 @@ public interface IConnectedSystemRepository
     /// instance of each attribute and type, in (CreatedAt, Id) order. Loads each change's attribute, and the object with
     /// its type (the LDAP Connector's object class fallback and placeholder modifications) and its attribute values
     /// with their attributes (what the Connectors and optimistic apply read, including the LDAP Connector's placeholder
-    /// member check). An id with no row is left out.
+    /// member check). An id with no row is left out. A large group's member attribute is loaded in part (#2816): see
+    /// <c>ISyncRepository.GetPendingExportsByIdsAsync</c>.
     /// </summary>
     /// <param name="pendingExportIds">The IDs of Pending Exports to load.</param>
     public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);

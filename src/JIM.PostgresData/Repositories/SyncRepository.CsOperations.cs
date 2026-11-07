@@ -96,6 +96,7 @@ public partial class SyncRepository
     /// </summary>
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, HashSet<Guid>? previouslyCommittedCsoIds = null)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded(connectedSystemObjects, nameof(CreateConnectedSystemObjectsAsync));
         if (connectedSystemObjects.Count == 0)
             return;
 

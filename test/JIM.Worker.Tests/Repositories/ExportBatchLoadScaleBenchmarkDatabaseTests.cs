@@ -20,7 +20,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// <summary>
 /// Measures what export execution pays to load and apply one large group's Pending Export (#2816): a group holding
 /// 200,000 resolved members and an Update removing 1,000 of them, as a leaver step stages it. Explicit, because it seeds
-/// about 400,000 rows and exists to be read, not to guard; the numbers go to the test output.
+/// about 400,000 rows and exists to be read, not to guard; the numbers go to the test output. Compares the load as it
+/// was before #2816 (every value of the object) with the lean load that replaced it.
 /// </summary>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -69,110 +70,63 @@ public class ExportBatchLoadScaleBenchmarkDatabaseTests
     {
         var seeded = await SeedAsync();
 
-        var loadTimes = new List<long>();
-        var calculateTimes = new List<long>();
-        var leanTimes = new List<long>();
-        var leanCalculateTimes = new List<double>();
-        int loadedValues = 0, removals = 0, leanRows = 0;
+        var (wholeLoad, wholeCalculate, leanLoad, leanCalculate) = (new List<double>(), new List<double>(), new List<double>(), new List<double>());
+        int wholeValues = 0, leanValues = 0;
         for (var run = 0; run < Runs; run++)
         {
-            await using var ctx = NewContext();
-            var repository = new PostgresDataRepository(ctx);
-
+            List<PendingExport> whole, lean;
             var stopwatch = Stopwatch.StartNew();
-            var batch = await repository.Sync.GetPendingExportsByIdsAsync([seeded.ExportId]);
-            loadTimes.Add(stopwatch.ElapsedMilliseconds);
-            loadedValues = batch.Sum(pe => pe.ConnectedSystemObject!.AttributeValues.Count);
+            await using (var ctx = NewContext())
+                whole = await LoadWholeAsTheLoadDidBefore2816Async(ctx, seeded.ExportId);
+            wholeLoad.Add(stopwatch.Elapsed.TotalMilliseconds);
+            wholeValues = whole.Sum(pe => pe.ConnectedSystemObject!.AttributeValues.Count);
 
             stopwatch.Restart();
-            var delta = OptimisticExportApplyCalculator.CalculateDelta(batch);
-            calculateTimes.Add(stopwatch.ElapsedMilliseconds);
-            removals = delta.RemovalValueIds.Count;
+            var wholeDelta = OptimisticExportApplyCalculator.CalculateDelta(whole);
+            wholeCalculate.Add(stopwatch.Elapsed.TotalMilliseconds);
 
-            // The same calculation over the object as a lean load would hand it over: its values outside the member
-            // attribute and the member rows the changes name.
-            var named = seeded.RemovedUserIds.ToHashSet();
-            var full = batch.Single();
-            var leanObject = new ConnectedSystemObject
-            {
-                Id = full.ConnectedSystemObject!.Id,
-                AttributeValues = new(full.ConnectedSystemObject.AttributeValues
-                    .Where(av => av.AttributeId != seeded.MemberAttributeId || (av.ReferenceValueId is { } id && named.Contains(id))))
-            };
-            var leanExport = new PendingExport
-            {
-                Id = full.Id, ChangeType = full.ChangeType, ConnectedSystemObject = leanObject,
-                AttributeValueChanges = full.AttributeValueChanges
-            };
             stopwatch.Restart();
-            var leanDelta = OptimisticExportApplyCalculator.CalculateDelta([leanExport]);
-            leanCalculateTimes.Add(stopwatch.Elapsed.TotalMilliseconds);
-            Assert.That(leanDelta.RemovalValueIds, Is.EquivalentTo(delta.RemovalValueIds), "the lean object yields the same removals");
+            await using (var ctx = NewContext())
+                lean = await new PostgresDataRepository(ctx).Sync.GetPendingExportsByIdsAsync([seeded.ExportId]);
+            leanLoad.Add(stopwatch.Elapsed.TotalMilliseconds);
+            leanValues = lean.Sum(pe => pe.ConnectedSystemObject!.AttributeValues.Count);
 
-            // What a lean load would read instead: the object's values other than the member attribute, the member rows the
-            // changes name, and the member count.
             stopwatch.Restart();
-            leanRows = await ProjectLeanLoadAsync(seeded);
-            leanTimes.Add(stopwatch.ElapsedMilliseconds);
+            var leanDelta = OptimisticExportApplyCalculator.CalculateDelta(lean);
+            leanCalculate.Add(stopwatch.Elapsed.TotalMilliseconds);
+
+            Assert.That(leanDelta.RemovalValueIds, Is.EquivalentTo(wholeDelta.RemovalValueIds), "the lean load yields the same removals");
+            Assert.That(wholeDelta.RemovalValueIds, Has.Count.EqualTo(RemovalCount), "every removed member is held, so each is removed");
         }
 
+        static string Times(IEnumerable<double> times) => string.Join(", ", times.Select(t => t.ToString("0.0")));
         TestContext.Out.WriteLine($"Group of {MemberCount:N0} members, Update removing {RemovalCount:N0} ({Runs} runs, first run cold):");
-        TestContext.Out.WriteLine($"  GetPendingExportsByIdsAsync: {string.Join(", ", loadTimes)} ms; {loadedValues:N0} values loaded");
-        TestContext.Out.WriteLine($"  OptimisticExportApplyCalculator.CalculateDelta: {string.Join(", ", calculateTimes)} ms; {removals:N0} removals");
-        TestContext.Out.WriteLine($"  CalculateDelta over the lean object: {string.Join(", ", leanCalculateTimes.Select(t => t.ToString("0.0")))} ms");
-        TestContext.Out.WriteLine($"  Lean load projection (raw SQL): {string.Join(", ", leanTimes)} ms; {leanRows:N0} rows");
+        TestContext.Out.WriteLine($"  Whole load (as before #2816): {Times(wholeLoad)} ms; {wholeValues:N0} values loaded");
+        TestContext.Out.WriteLine($"  CalculateDelta over it: {Times(wholeCalculate)} ms");
+        TestContext.Out.WriteLine($"  GetPendingExportsByIdsAsync (lean, #2816): {Times(leanLoad)} ms; {leanValues:N0} values loaded");
+        TestContext.Out.WriteLine($"  CalculateDelta over it: {Times(leanCalculate)} ms");
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(loadedValues, Is.EqualTo(MemberCount + 1), "the full load reads every member and the group's DN");
-            Assert.That(removals, Is.EqualTo(RemovalCount), "every removed member is held, so each is removed");
+            Assert.That(wholeValues, Is.EqualTo(MemberCount + 1), "the whole load reads every member and the group's DN");
+            Assert.That(leanValues, Is.EqualTo(RemovalCount + 1), "the lean load reads the removed members and the group's DN");
         }
     }
 
     private sealed record Seeded(Guid GroupId, Guid ExportId, int MemberAttributeId, Guid[] RemovedUserIds);
 
     /// <summary>
-    /// The three statements a lean load would run for the seeded export, timed together: every value of the group outside
-    /// the member attribute, the member rows naming the removed users, and the group's member count.
+    /// The batch as the load read it before #2816: every value of the object, with its attribute.
     /// </summary>
-    private async Task<int> ProjectLeanLoadAsync(Seeded seeded)
-    {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-        var rows = 0;
-
-        await using (var command = new NpgsqlCommand(
-            @"SELECT * FROM ""ConnectedSystemObjectAttributeValues"" WHERE ""ConnectedSystemObjectId"" = @id AND ""AttributeId"" <> @attr", connection))
-        {
-            command.Parameters.AddWithValue("id", seeded.GroupId);
-            command.Parameters.AddWithValue("attr", seeded.MemberAttributeId);
-            await using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                rows++;
-        }
-
-        await using (var command = new NpgsqlCommand(
-            @"SELECT * FROM ""ConnectedSystemObjectAttributeValues""
-              WHERE ""ReferenceValueId"" = ANY(@refs) AND ""ConnectedSystemObjectId"" = @id AND ""AttributeId"" = @attr", connection))
-        {
-            command.Parameters.AddWithValue("refs", seeded.RemovedUserIds);
-            command.Parameters.AddWithValue("id", seeded.GroupId);
-            command.Parameters.AddWithValue("attr", seeded.MemberAttributeId);
-            await using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                rows++;
-        }
-
-        await using (var command = new NpgsqlCommand(
-            @"SELECT count(*) FROM ""ConnectedSystemObjectAttributeValues"" WHERE ""ConnectedSystemObjectId"" = @id AND ""AttributeId"" = @attr", connection))
-        {
-            command.Parameters.AddWithValue("id", seeded.GroupId);
-            command.Parameters.AddWithValue("attr", seeded.MemberAttributeId);
-            rows += (await command.ExecuteScalarAsync()) is long ? 1 : 0;
-        }
-
-        return rows;
-    }
+    private static Task<List<PendingExport>> LoadWholeAsTheLoadDidBefore2816Async(JimDbContext context, Guid exportId) =>
+        context.PendingExports
+            .AsNoTrackingWithIdentityResolution()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges).ThenInclude(avc => avc.Attribute)
+            .Include(pe => pe.ConnectedSystemObject).ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject).ThenInclude(cso => cso!.AttributeValues).ThenInclude(av => av.Attribute)
+            .Where(pe => pe.Id == exportId)
+            .ToListAsync();
 
     /// <summary>
     /// Seeds a groupOfNames whose members are user objects, each held as a resolved reference that keeps the user's DN

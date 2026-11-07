@@ -481,6 +481,7 @@ internal sealed class ScimConnectorExport
         if (!_discovery.Capabilities.SupportsETag)
             return null;
 
+        // lean-load-safe: meta.version, a text attribute, never loaded in part (#2816)
         return pendingExport.ConnectedSystemObject?.AttributeValues
             .FirstOrDefault(v => string.Equals(v.Attribute?.Name, ScimCommonAttributes.MetaVersion, StringComparison.OrdinalIgnoreCase))
             ?.StringValue;

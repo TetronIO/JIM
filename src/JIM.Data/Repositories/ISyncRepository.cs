@@ -2135,6 +2135,12 @@ public interface ISyncRepository
     /// deferred pass alike, so no path can be handed a graph another path's Connector reads differently. Untracked, in
     /// (CreatedAt, Id) order, with each change's attribute, and the object with its type and its attribute values
     /// with their attributes. An id with no row is left out.
+    /// <para>
+    /// A large multi-valued reference attribute (a group's members) is loaded in part (#2816): with only the values the
+    /// batch's changes could match, beside how many it holds (<c>ConnectedSystemObject.PartiallyLoadedAttributes</c>; read through
+    /// <c>HeldValueCount</c>, <c>HoldsAnyValue</c> and <c>HeldValuesOf</c>). Such an object is never saved back. An
+    /// attribute a change replaces or clears, or that its changes could empty, is loaded whole.
+    /// </para>
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds);
 

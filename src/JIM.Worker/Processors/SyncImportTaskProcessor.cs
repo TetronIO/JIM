@@ -2429,7 +2429,8 @@ public class SyncImportTaskProcessor
                                 "compare values it did not load.");
                     }
 
-                    cso.PartiallyLoadedAttributes = answers;
+                    cso.PartiallyLoadedAttributes = answers.ToDictionary(pair => pair.Key,
+                        pair => (PartiallyLoadedAttribute)new ImportPartiallyLoadedAttribute(pair.Key, AttributeNameOf(cso, pair.Key), pair.Value));
                 }
 
                 loaded.AddRange(csos);
@@ -2469,12 +2470,42 @@ public class SyncImportTaskProcessor
                 result[cso.Id] = externalIds;
             }
 
-            foreach (var (referencedId, externalId) in cso.PartiallyLoadedAttributes!.Values.SelectMany(a => a.ReferencedExternalIds))
+            foreach (var (referencedId, externalId) in ImportAnswersOf(cso)!.Values.SelectMany(a => a.ReferencedExternalIds))
                 externalIds.TryAdd(referencedId, externalId);
         }
 
         return result;
     }
+
+    /// <summary>
+    /// #2817: the answers a Delta Import loaded an object's attributes in part by, by attribute id; null for an object loaded
+    /// whole. Throws for an attribute loaded in part any other way (#2816's export load): only an answer can stand in for the
+    /// values the comparison did not load.
+    /// </summary>
+    internal static IReadOnlyDictionary<int, HeldReferenceValueAnswer>? ImportAnswersOf(ConnectedSystemObject cso)
+    {
+        if (cso.PartiallyLoadedAttributes is not { Count: > 0 } partiallyLoaded)
+            return null;
+
+        var notAnswered = partiallyLoaded.Values.FirstOrDefault(attribute => attribute is not ImportPartiallyLoadedAttribute);
+        if (notAnswered != null)
+            throw new InvalidOperationException(
+                $"Connected System Object {cso.Id}'s '{notAnswered.AttributeName}' values were loaded in part {notAnswered.Describe()}, not by a " +
+                "Delta Import's answer. The import stops rather than compare values it did not load.");
+
+        return partiallyLoaded.ToDictionary(pair => pair.Key, pair => ((ImportPartiallyLoadedAttribute)pair.Value).Answer);
+    }
+
+    /// <summary>
+    /// #2817: the name of an attribute an object holds, from its Object Type, for <see cref="ImportPartiallyLoadedAttribute"/>.
+    /// Throws where the Object Type does not name it: an attribute loaded in part must be known by name, or a reader asking by
+    /// name would read its loaded values as all it holds.
+    /// </summary>
+    private static string AttributeNameOf(ConnectedSystemObject cso, int attributeId) =>
+        cso.Type?.Attributes?.FirstOrDefault(attribute => attribute.Id == attributeId)?.Name
+        ?? throw new InvalidOperationException(
+            $"Connected System Object {cso.Id} was loaded without most of the values of attribute {attributeId}, which its Object Type does not name. " +
+            "The import stops rather than compare values it did not load.");
 
     /// <summary>
     /// #2817: a later page's copy of an object takes the earlier copy's place on the instance the earlier page changed
@@ -4761,7 +4792,7 @@ public class SyncImportTaskProcessor
         // #2817: an attribute loaded in part is compared only with the answer it was loaded by, and only for the values that
         // answer was given about; anything else would read a value not loaded as one the object does not hold. Checked before
         // anything is staged, so a refusal stages nothing.
-        var partiallyLoaded = connectedSystemObject.PartiallyLoadedAttributes;
+        var partiallyLoaded = ImportAnswersOf(connectedSystemObject);
         if (partiallyLoaded is { Count: > 0 })
             EnsureAnswersStandForThisComparison(connectedSystemImportObject, connectedSystemObject, connectedSystemObjectType, partiallyLoaded);
 

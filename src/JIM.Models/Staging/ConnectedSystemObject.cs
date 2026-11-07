@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 namespace JIM.Models.Staging;
 
@@ -265,15 +266,125 @@ public class ConnectedSystemObject
     public List<ConnectedSystemObjectAttributeValue> PendingAttributeValueRemovals { get; set; } = new();
 
     /// <summary>
-    /// #2817: the multi-valued reference attributes this instance was loaded without most of the values of, each with the
-    /// database's answer that says which of its values were loaded and why the rest were not needed. Null for an instance
-    /// loaded whole, which is every instance outside a Delta Import's comparison. A Delta Import compares an attribute named
-    /// here only with its answer, and refuses to compare it at all without one, so a value it did not load can never read
-    /// as one the object does not hold.
+    /// The attributes this instance was loaded without all the values of, by attribute id, each saying what the object is
+    /// known to hold of it; null (or empty) for an instance loaded whole. Two paths load an object in part: export
+    /// execution, a large group's members with only those its changes name (#2816, <see cref="ExportPartiallyLoadedAttribute"/>),
+    /// and a Delta Import, with only the members the database's comparison left undecided (#2817,
+    /// <see cref="ImportPartiallyLoadedAttribute"/>).
+    /// <para>
+    /// Such an attribute is read through <see cref="HeldValueCount"/>, <see cref="HoldsAnyValue"/> and
+    /// <see cref="HeldValuesOf"/>, never from <see cref="AttributeValues"/> as though it were whole. Such an object is saved
+    /// only by the repository methods that write its row and the values and removals they are handed by id; every method that
+    /// writes its value set from <see cref="AttributeValues"/>, or hands it to a change tracker, refuses it
+    /// (<see cref="EnsureWhollyLoaded"/>).
+    /// </para>
     /// </summary>
     [NotMapped]
     [JsonIgnore]
-    public IReadOnlyDictionary<int, HeldReferenceValueAnswer>? PartiallyLoadedAttributes { get; set; }
+    public IReadOnlyDictionary<int, PartiallyLoadedAttribute>? PartiallyLoadedAttributes { get; set; }
+
+    /// <summary>
+    /// Diagnostics (#2816): the attributes large enough for export execution to load in part that it loaded whole instead,
+    /// by attribute id, with the reason. Their values are all loaded. Null when there were none.
+    /// </summary>
+    [NotMapped]
+    [JsonIgnore]
+    public IReadOnlyDictionary<int, ExportValueLoadFallbackReason>? LoadedWholeAttributes { get; set; }
+
+    /// <summary>
+    /// Whether any attribute of this object was loaded in part (see <see cref="PartiallyLoadedAttributes"/>).
+    /// </summary>
+    [NotMapped]
+    [JsonIgnore]
+    public bool IsPartiallyLoaded => PartiallyLoadedAttributes is { Count: > 0 };
+
+    /// <summary>
+    /// Whether every value this object holds of the attribute is in <see cref="AttributeValues"/>.
+    /// </summary>
+    public bool IsAttributeWhollyLoaded(int attributeId) => PartiallyLoadedAttributes?.ContainsKey(attributeId) != true;
+
+    /// <summary>
+    /// How many values this object holds of the attributes so named (ignoring case, as a Connector names them). Counted
+    /// from the loaded values for an attribute loaded whole, as it always was. For one export execution loaded in part, the
+    /// count held, which is at least the load's cap and so above anything the export that loaded it could remove. An
+    /// attribute a Delta Import loaded in part has no known count: asking throws
+    /// <see cref="Exceptions.PartiallyLoadedObjectException"/>.
+    /// </summary>
+    public int HeldValueCount(string attributeName)
+    {
+        var partial = PartiallyLoadedAttributesNamed(attributeName);
+        var uncounted = partial.FirstOrDefault(attribute => attribute.AtLeastValueCount == null);
+        if (uncounted != null)
+        {
+            throw new Exceptions.PartiallyLoadedObjectException(
+                $"Connected System Object {Id}'s '{attributeName}' values were loaded in part, and how many it holds is not known " +
+                $"({uncounted.Describe()}).");
+        }
+
+        var partialIds = partial.Select(attribute => attribute.AttributeId).ToHashSet();
+        return partial.Sum(attribute => attribute.AtLeastValueCount!.Value)
+               + AttributeValues.Count(value => IsNamed(value, attributeName) && !partialIds.Contains(value.AttributeId));
+    }
+
+    /// <summary>
+    /// Whether this object holds any value of the attributes so named (ignoring case). A missing value never reads as not
+    /// held where it was simply not loaded: an attribute loaded in part answers from what it is known to hold.
+    /// </summary>
+    public bool HoldsAnyValue(string attributeName)
+    {
+        var partial = PartiallyLoadedAttributesNamed(attributeName);
+        var partialIds = partial.Select(attribute => attribute.AttributeId).ToHashSet();
+        return partial.Any(attribute => attribute.HoldsAnyValue)
+               || AttributeValues.Any(value => IsNamed(value, attributeName) && !partialIds.Contains(value.AttributeId));
+    }
+
+    /// <summary>
+    /// Every value this object holds of the attributes so named (ignoring case). Throws
+    /// <see cref="Exceptions.PartiallyLoadedObjectException"/> for an attribute loaded in part, whose loaded values are not
+    /// all it holds.
+    /// </summary>
+    public IReadOnlyList<ConnectedSystemObjectAttributeValue> HeldValuesOf(string attributeName)
+    {
+        var partial = PartiallyLoadedAttributesNamed(attributeName);
+        if (partial.Count > 0)
+        {
+            throw new Exceptions.PartiallyLoadedObjectException(
+                $"Connected System Object {Id}'s '{attributeName}' values were loaded in part ({partial[0].Describe()}), " +
+                "so they cannot be read as its whole value set.");
+        }
+
+        return AttributeValues.Where(value => IsNamed(value, attributeName)).ToList();
+    }
+
+    /// <summary>
+    /// Throws <see cref="Exceptions.PartiallyLoadedObjectException"/> when any of <paramref name="connectedSystemObjects"/>
+    /// was loaded in part. Called by every repository method that writes an object's value set from its
+    /// <see cref="AttributeValues"/>, or hands the object to a change tracker that might: it would drop, or write again,
+    /// values the object did not load. Methods that write only the object's row and the values and removals they are handed
+    /// by id do not call it; they are how an object loaded in part is saved.
+    /// </summary>
+    /// <param name="connectedSystemObjects">The objects about to be persisted.</param>
+    /// <param name="operation">The method persisting them, named in the message.</param>
+    public static void EnsureWhollyLoaded(IEnumerable<ConnectedSystemObject> connectedSystemObjects, string operation)
+    {
+        var partial = connectedSystemObjects.FirstOrDefault(cso => cso.IsPartiallyLoaded);
+        if (partial == null)
+            return;
+
+        var attributes = string.Join(", ", partial.PartiallyLoadedAttributes!.Values.Select(a => $"'{a.AttributeName}' ({a.Describe()})"));
+        throw new Exceptions.PartiallyLoadedObjectException(
+            $"{operation} was handed Connected System Object {partial.Id}, whose {attributes} values were loaded in part. " +
+            "It writes the object's value set as loaded, which would drop the values it did not load; an object loaded in part is " +
+            "saved only by its row and the values and removals handed over by id.");
+    }
+
+    private List<PartiallyLoadedAttribute> PartiallyLoadedAttributesNamed(string attributeName) =>
+        PartiallyLoadedAttributes?.Values
+            .Where(attribute => string.Equals(attribute.AttributeName, attributeName, StringComparison.OrdinalIgnoreCase))
+            .ToList() ?? [];
+
+    private static bool IsNamed(ConnectedSystemObjectAttributeValue value, string attributeName) =>
+        value.Attribute?.Name.Equals(attributeName, StringComparison.OrdinalIgnoreCase) == true;
 
     [NotMapped]
     public ConnectedSystemObjectAttributeValue? ExternalIdAttributeValue

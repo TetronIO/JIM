@@ -68,6 +68,22 @@ public class ClassMembershipValidatorTests
         Assert.That(ClassMembershipValidator.Check(pendingExport, connectedSystem), Is.Null);
     }
 
+    [Test]
+    public void Check_WhenTheRequiredAttributeWasLoadedInPartWithNoValueLoaded_Permits()
+    {
+        // #2816: export execution loads a large multi-valued reference attribute with only the values its changes name, so
+        // an object can hold the required attribute with none of its values loaded. Not loaded is not "not held".
+        var connectedSystem = ConnectedSystemWith(RequiredPosixAttributes("uidNumber", "gidNumber"));
+        var pendingExport = PendingExportAdding("posixAccount", writing: ("uidNumber", "5001"));
+        var gidNumber = connectedSystem.ObjectTypes!.Single().Attributes!.Single(a => a.Name == "gidNumber");
+        pendingExport.ConnectedSystemObject!.PartiallyLoadedAttributes = new Dictionary<int, PartiallyLoadedAttribute>
+        {
+            [gidNumber.Id] = new ExportPartiallyLoadedAttribute(gidNumber.Id, "gidNumber", 2)
+        };
+
+        Assert.That(ClassMembershipValidator.Check(pendingExport, connectedSystem), Is.Null);
+    }
+
     /// <summary>
     /// A change that removes the value cannot be what satisfies the requirement.
     /// </summary>

@@ -3551,6 +3551,74 @@ public class ExportExecutionTests
         }
     }
 
+    /// <summary>
+    /// #2816: a large group losing a few members is handed to the Connector with only the members its changes name,
+    /// beside how many it holds, and optimistic apply records the removals on the stored object, which keeps every other
+    /// member.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_LargeGroupLosingMembers_HandsOverOnlyTheNamedMembersAndRecordsTheRemovalsAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var groupType = new ConnectedSystemObjectType { Id = 9001, Name = "groupOfNames", ConnectedSystem = targetSystem, ConnectedSystemId = targetSystem.Id };
+        var member = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9002, Name = "member", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = groupType
+        };
+        groupType.Attributes = [member];
+        SyncRepo.SeedObjectType(groupType);
+
+        var group = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, Type = groupType, TypeId = groupType.Id, Status = ConnectedSystemObjectStatus.Normal
+        };
+        var members = Enumerable.Range(0, 20).Select(i => new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), Attribute = member, AttributeId = member.Id, ReferenceValueId = Guid.NewGuid(),
+            UnresolvedReferenceValue = $"cn=user{i},ou=people,dc=glitterband,dc=local", ConnectedSystemObject = group
+        }).ToList();
+        group.AttributeValues.AddRange(members);
+        SyncRepo.SeedConnectedSystemObject(group);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, ConnectedSystem = targetSystem, ConnectedSystemObject = group,
+            ConnectedSystemObjectId = group.Id, Status = PendingExportStatus.Pending, ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new(members.Take(2).Select(removed => new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Remove, AttributeId = member.Id, Attribute = member,
+                StringValue = removed.UnresolvedReferenceValue, ResolvedReferenceCsoId = removed.ReferenceValueId,
+                Status = PendingExportAttributeChangeStatus.Pending
+            }))
+        };
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var handedOver = new List<(int Loaded, int Held)>();
+        var connector = new Mock<IConnector>();
+        connector.Setup(c => c.Name).Returns("Test Connector");
+        connector.As<IConnectorExportUsingCalls>()
+            .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                handedOver.AddRange(exports.Select(pe => (
+                    pe.ConnectedSystemObject!.AttributeValues.Count(av => av.AttributeId == member.Id),
+                    pe.ConnectedSystemObject.HeldValueCount("member"))));
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(handedOver, Is.EqualTo(new[] { (2, 4) }), "the two named members are loaded; at least four are held");
+            Assert.That(result.SuccessCount, Is.EqualTo(1));
+            Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(1));
+            Assert.That(group.AttributeValues, Is.EquivalentTo(members.Skip(2)), "the stored group keeps every other member and loses the two");
+        }
+    }
+
     private static Mock<IConnector> CreateSucceedingCallsConnector()
     {
         var mockConnector = new Mock<IConnector>();

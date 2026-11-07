@@ -4337,6 +4337,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(CreateConnectedSystemObjectAsync));
         // A created object is pending synchronisation (#2092), written with the row in the same INSERT.
         connectedSystemObject.SynchronisationPending = true;
         Repository.Database.ConnectedSystemObjects.Add(connectedSystemObject);
@@ -4350,6 +4351,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task CreateConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects, Func<int, Task>? onBatchPersisted)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded(connectedSystemObjects, nameof(CreateConnectedSystemObjectsAsync));
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -4413,6 +4415,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
 
     public async Task UpdateConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectAsync));
         // Use UpdateDetachedSafe to avoid graph traversal. DbSet.Update() traverses the entire
         // entity graph, which can discover and re-mark entities that were already deleted by
         // preceding batch operations (e.g., obsolete CSOs deleted by FlushObsoleteCsoOperationsAsync).
@@ -4449,6 +4452,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
         List<Guid>? pendingRemovalIds = null)
     {
+        // No EnsureWhollyLoaded (#2816, #2817): this writes the objects' own rows and the values and removals it is handed by id,
+        // never the value sets the objects were loaded with, so an object loaded in part (a Delta Import's group) is saved here.
         if (connectedSystemObjects.Count == 0)
             return;
 
@@ -4531,6 +4536,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     public async Task UpdateConnectedSystemObjectWithNewAttributeValuesAsync(ConnectedSystemObject connectedSystemObject, List<ConnectedSystemObjectAttributeValue> newAttributeValues)
     {
+        // Saves the object itself through EF, unlike the batch overload below, which only inserts the values it is given.
+        ConnectedSystemObject.EnsureWhollyLoaded([connectedSystemObject], nameof(UpdateConnectedSystemObjectWithNewAttributeValuesAsync));
         // Explicitly mark new attribute values as Added so they are persisted.
         // Use Entry().State instead of DbSet.Add() to avoid graph traversal that causes
         // identity conflicts after ClearChangeTracker().
@@ -5576,48 +5583,6 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.PendingExports
             .Where(pe => pendingExportIds.Contains(pe.Id))
             .Select(pe => pe.Id)
-            .ToListAsync();
-    }
-
-    /// <summary>
-    /// Loads Pending Exports by id for execution (#2813): the one load export execution uses, for a batch run
-    /// sequentially, a batch re-loaded on a parallel worker's own context, and a chunk of the deferred pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The Include chain is everything execution reads: each change's attribute (reference resolution, the Connectors);
-    /// the object's type (LdapConnectorExport's object class fallback, and the type it gives the placeholder changes it
-    /// synthesises); and the object's attribute values WITH their attributes. The last is load-bearing:
-    /// LdapConnectorExport counts a group's current members by <c>av.Attribute.Name</c>, so a value without its
-    /// attribute counts as no member, and removing one member of a populated group would inject the placeholder member.
-    /// The parallel reload once left it out and was right only by the change tracker fixing up the attributes the
-    /// batch's changes had loaded.
-    /// </para>
-    /// <para>
-    /// Untracked, whatever the context's default: everything execution writes is raw SQL, so tracking bought nothing
-    /// but cost, a change tracker entry and snapshot for every member value of every group in the batch, scanned again
-    /// by every detach. With identity resolution, so the graph holds one instance of each attribute and type however
-    /// many values share it, as the tracked reload did, rather than one per row.
-    /// </para>
-    /// </remarks>
-    public async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
-    {
-        if (pendingExportIds.Count == 0)
-            return [];
-
-        return await Repository.Database.PendingExports
-            .AsNoTrackingWithIdentityResolution()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(pe => pendingExportIds.Contains(pe.Id))
-            .OrderBy(pe => pe.CreatedAt)
-            .ThenBy(pe => pe.Id)
             .ToListAsync();
     }
 

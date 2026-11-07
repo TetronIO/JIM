@@ -2600,10 +2600,12 @@ internal class LdapConnectorExport
         if (cso != null)
         {
             Log.Verbose("GetDistinguishedNameForUpdate: CSO {CsoId} - SecondaryExternalIdAttributeId={SecondaryAttrId}, AttributeValues.Count={AttrCount}",
-                cso.Id, cso.SecondaryExternalIdAttributeId, cso.AttributeValues?.Count ?? 0);
+                cso.Id, cso.SecondaryExternalIdAttributeId, cso.AttributeValues?.Count ?? 0); // lean-load-safe: a count of the loaded values, for the log only
 
+            // lean-load-safe: the Secondary External ID, never loaded in part (#2816)
             if (cso.SecondaryExternalIdAttributeId.HasValue && cso.AttributeValues != null)
             {
+                // lean-load-safe: the Secondary External ID, never loaded in part (#2816)
                 var matchingAttrValues = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value)
                     .ToList();
@@ -2853,33 +2855,24 @@ internal class LdapConnectorExport
     }
 
     /// <summary>
-    /// Gets the number of current member values on the CSO for the specified member attribute.
+    /// Gets the number of current member values on the CSO for the specified member attribute. Read through
+    /// <see cref="ConnectedSystemObject.HeldValueCount"/> (#2816): export execution loads a large group with only the
+    /// members its changes name, beside how many it holds, so the loaded values alone would undercount it.
     /// </summary>
-    private static int GetCurrentMemberCount(PendingExport pendingExport, string memberAttrName)
-    {
-        var cso = pendingExport.ConnectedSystemObject;
-        if (cso?.AttributeValues == null)
-            return 0;
-
-        return cso.AttributeValues.Count(av =>
-            av.Attribute?.Name.Equals(memberAttrName, StringComparison.OrdinalIgnoreCase) == true);
-    }
+    private static int GetCurrentMemberCount(PendingExport pendingExport, string memberAttrName) =>
+        pendingExport.ConnectedSystemObject?.HeldValueCount(memberAttrName) ?? 0;
 
     /// <summary>
-    /// Checks whether the group's only current member is the placeholder DN.
+    /// Checks whether the group's only current member is the placeholder DN. A group holding a single member is never
+    /// loaded in part (#2816), so its one value is read as held.
     /// </summary>
     private bool GroupHasOnlyPlaceholderMember(PendingExport pendingExport, string memberAttrName)
     {
         var cso = pendingExport.ConnectedSystemObject;
-        if (cso?.AttributeValues == null)
+        if (cso == null || cso.HeldValueCount(memberAttrName) != 1)
             return false;
 
-        var memberValues = cso.AttributeValues
-            .Where(av => av.Attribute?.Name.Equals(memberAttrName, StringComparison.OrdinalIgnoreCase) == true)
-            .ToList();
-
-        if (memberValues.Count != 1)
-            return false;
+        var memberValues = cso.HeldValuesOf(memberAttrName);
 
         var memberDn = memberValues[0].UnresolvedReferenceValue ?? memberValues[0].StringValue;
         return _placeholderMemberDn.Equals(memberDn, StringComparison.OrdinalIgnoreCase);
