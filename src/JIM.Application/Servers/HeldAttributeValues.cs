@@ -21,20 +21,22 @@ namespace JIM.Application.Servers;
 /// change's own fields, in a fixed order, which gives three kinds of question, each with its own lookup:
 /// </para>
 /// <list type="bullet">
-/// <item>A change carrying an unresolved reference (a Metaverse Object id, or a reference's text) asks after a reference:
-/// a held value naming a Metaverse Object answers by that object's id when the change's reference is an id, and any other
-/// held value by its unresolved reference's text, ignoring case.</item>
+/// <item>A change carrying an unresolved reference, or naming the object export resolution resolved it to, asks after a
+/// reference by <see cref="SyncEngine.ReferenceValueMatches"/> (#2803): a change naming an object finds a resolved value by
+/// that object alone and an unresolved one by its text; a change naming a Metaverse Object finds a value whose object is
+/// joined to that Metaverse Object, and an unresolved one by its text; a change naming neither finds any value by its
+/// text.</item>
 /// <item>A change carrying text asks after that text: a held value with an unresolved reference compares it with that
-/// reference ignoring case (a distinguished name staged as text), and any other compares it with its own text, as the
-/// attribute compares text.</item>
+/// reference (a distinguished name staged as text), and any other compares it with its own text, as the attribute compares
+/// text.</item>
 /// <item>Any other change asks after its first field holding a value, in the order number, long number, decimal, date,
 /// boolean, GUID, binary, then an empty unresolved reference: a held value without text matches when its own first such
 /// field is the same one and holds the same value (a date at the attribute's resolution), and a change holding nothing
 /// matches a held value holding nothing.</item>
 /// </list>
 /// <para>
-/// Text and dates compare by the change's attribute, so those two lookups are built for the attribute of the first change
-/// that asks; a later change whose attribute compares differently is answered by the scan instead, which is never wrong.
+/// Text, references' text and dates compare by the change's attribute, so those lookups are built for the attribute of the
+/// first change that asks; a later change whose attribute compares differently is answered by the scan instead, which is never wrong.
 /// Each lookup is built on its first question, from one pass over the values, so a question never asked costs nothing and
 /// nothing is read that the scan would not read. An instance belongs to one evaluation: it copies the values it is given,
 /// and a later change to what the object holds is never seen by it.
@@ -44,8 +46,6 @@ internal sealed class HeldAttributeValues
 {
     private readonly List<ConnectedSystemObjectAttributeValue> _values;
 
-    // Every held unresolved reference, ignoring case: the reference text a change's text or non-id reference matches.
-    private HashSet<string>? _unresolvedReferences;
     private ReferenceLookup? _references;
     private TextLookup? _text;
     private TypedLookup? _typed;
@@ -72,8 +72,8 @@ internal sealed class HeldAttributeValues
         if (_values.Count == 0)
             return false;
 
-        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue))
-            return HoldsReference(change.UnresolvedReferenceValue);
+        if (!string.IsNullOrEmpty(change.UnresolvedReferenceValue) || change.ResolvedReferenceCsoId.HasValue)
+            return HoldsReference(change);
 
         if (change.StringValue != null)
             return HoldsText(change, change.StringValue);
@@ -81,31 +81,48 @@ internal sealed class HeldAttributeValues
         return HoldsTyped(change);
     }
 
-    private HashSet<string> UnresolvedReferences => _unresolvedReferences ??= _values
-        .Where(value => value.UnresolvedReferenceValue != null)
-        .Select(value => value.UnresolvedReferenceValue!)
-        .ToHashSet(IdentifierKey.Comparer(caseExact: false));
-
-    private bool HoldsReference(string reference)
+    private bool HoldsReference(PendingExportAttributeValueChange change)
     {
-        // Only a reference that is a Metaverse Object id can match a held value by the object it names; any other
-        // matches by text alone, against every held value's unresolved reference.
-        if (!Guid.TryParse(reference, out var metaverseObjectId))
-            return UnresolvedReferences.Contains(reference);
+        var references = ReferencesComparedAs(change);
+        if (references == null)
+            return Scan(change);
 
-        _references ??= ReferenceLookup.Build(_values);
-        return _references.MetaverseObjectIds.Contains(metaverseObjectId) ||
-               _references.UnresolvedWithoutMetaverseObject.Contains(reference);
+        // As SyncEngine.ReferenceValueMatches decides: by the object the change names, else by the Metaverse Object it
+        // names, else by its text alone; each also by text, among the held values that way of naming compares by text.
+        if (change.ResolvedReferenceCsoId is { } objectId)
+            return references.ReferencedObjectIds.Contains(objectId) || HoldsReferenceText(references.TextOfUnresolved, change);
+
+        if (SyncEngine.NamedMetaverseObjectId(change) is { } metaverseObjectId)
+            return references.MetaverseObjectIds.Contains(metaverseObjectId) || HoldsReferenceText(references.TextOfUnplaced, change);
+
+        return HoldsReferenceText(references.TextOfAll, change);
     }
+
+    private static bool HoldsReferenceText(HashSet<string> heldText, PendingExportAttributeValueChange change) =>
+        (!string.IsNullOrEmpty(change.UnresolvedReferenceValue) && heldText.Contains(change.UnresolvedReferenceValue)) ||
+        (!string.IsNullOrEmpty(change.StringValue) && heldText.Contains(change.StringValue));
 
     private bool HoldsText(PendingExportAttributeValueChange change, string text)
     {
+        var references = ReferencesComparedAs(change);
         var comparer = AttributeValueComparison.ComparerFor(change.Attribute);
         _text ??= TextLookup.Build(_values, comparer);
-        if (!ReferenceEquals(_text.Comparer, comparer))
+        if (references == null || !ReferenceEquals(_text.Comparer, comparer))
             return Scan(change);
 
-        return UnresolvedReferences.Contains(text) || _text.TextWithoutUnresolvedReference.Contains(text);
+        // Text names no object, so it finds a held reference by its text, resolved or not.
+        return (text.Length > 0 && references.TextOfAll.Contains(text)) || _text.TextWithoutUnresolvedReference.Contains(text);
+    }
+
+    /// <summary>
+    /// The held references, their text compared as the change's attribute compares it; null when they were gathered for an
+    /// attribute that compares differently, which the scan then answers.
+    /// </summary>
+    private ReferenceLookup? ReferencesComparedAs(PendingExportAttributeValueChange change)
+    {
+        var comparer = AttributeValueComparison.ComparerFor(change.Attribute);
+        _references ??= ReferenceLookup.Build(_values, comparer);
+        return ReferenceEquals(_references.Comparer, comparer) ? _references : null;
     }
 
     private bool HoldsTyped(PendingExportAttributeValueChange change)
@@ -122,25 +139,60 @@ internal sealed class HeldAttributeValues
     private bool Scan(PendingExportAttributeValueChange change) => _values.Exists(value => SyncEngine.ValuesMatch(change, value));
 
     /// <summary>
-    /// The held values a change carrying a Metaverse Object id is matched against: by the Metaverse Object a held value's
-    /// referenced Connected System Object is joined to, else by its unresolved reference's text.
+    /// The held references, each way <see cref="SyncEngine.ReferenceValueMatches"/> may find one: by the object a resolved
+    /// value names, by the Metaverse Object that object is joined to, and by text among the values each way of naming
+    /// compares by text.
     /// </summary>
     private sealed class ReferenceLookup
     {
+        private ReferenceLookup(StringComparer comparer)
+        {
+            Comparer = comparer;
+            TextOfAll = new HashSet<string>(comparer);
+            TextOfUnresolved = new HashSet<string>(comparer);
+            TextOfUnplaced = new HashSet<string>(comparer);
+        }
+
+        public StringComparer Comparer { get; }
+
+        /// <summary>The objects resolved values name: what a change naming an object is found by.</summary>
+        public HashSet<Guid> ReferencedObjectIds { get; } = [];
+
+        /// <summary>The Metaverse Objects those objects are joined to: what a change naming a Metaverse Object is found by.</summary>
         public HashSet<Guid> MetaverseObjectIds { get; } = [];
 
-        public HashSet<string> UnresolvedWithoutMetaverseObject { get; } = new(IdentifierKey.Comparer(caseExact: false));
+        /// <summary>Every held reference's text: what a change naming no object is found by.</summary>
+        public HashSet<string> TextOfAll { get; }
 
-        public static ReferenceLookup Build(List<ConnectedSystemObjectAttributeValue> values)
+        /// <summary>The text of the values resolved to no object, which a change naming an object is also found by.</summary>
+        public HashSet<string> TextOfUnresolved { get; }
+
+        /// <summary>The text of the values neither resolved nor joined through to a Metaverse Object, which a change naming a
+        /// Metaverse Object is also found by.</summary>
+        public HashSet<string> TextOfUnplaced { get; }
+
+        public static ReferenceLookup Build(List<ConnectedSystemObjectAttributeValue> values, StringComparer comparer)
         {
-            var lookup = new ReferenceLookup();
+            var lookup = new ReferenceLookup(comparer);
             foreach (var value in values)
             {
+                if (value.ReferenceValueId.HasValue)
+                    lookup.ReferencedObjectIds.Add(value.ReferenceValueId.Value);
+
                 var metaverseObjectId = value.ReferenceValue?.MetaverseObjectId;
                 if (metaverseObjectId.HasValue)
                     lookup.MetaverseObjectIds.Add(metaverseObjectId.Value);
-                else if (value.UnresolvedReferenceValue != null)
-                    lookup.UnresolvedWithoutMetaverseObject.Add(value.UnresolvedReferenceValue);
+
+                if (value.UnresolvedReferenceValue == null)
+                    continue;
+
+                lookup.TextOfAll.Add(value.UnresolvedReferenceValue);
+                if (value.ReferenceValueId.HasValue)
+                    continue;
+
+                lookup.TextOfUnresolved.Add(value.UnresolvedReferenceValue);
+                if (!metaverseObjectId.HasValue)
+                    lookup.TextOfUnplaced.Add(value.UnresolvedReferenceValue);
             }
 
             return lookup;

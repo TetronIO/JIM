@@ -37,6 +37,14 @@ public class HeldAttributeValuesDifferentialTests
         Guid.Parse("6f1c1b8e-6f0a-4a57-9c1e-2b1d9f0a0003")
     ];
 
+    // The objects held references are resolved to, and that a change resolved at export names (#2803).
+    private static readonly Guid[] ReferencedObjectIds =
+    [
+        Guid.Parse("3a7d2c41-58b0-4e6f-9d21-0c4b5e6f0001"),
+        Guid.Parse("3a7d2c41-58b0-4e6f-9d21-0c4b5e6f0002"),
+        Guid.Parse("3a7d2c41-58b0-4e6f-9d21-0c4b5e6f0003")
+    ];
+
     // Text the generator draws for text and unresolved references alike: distinguished names differing only in case,
     // the Turkish capital dotted I that identifier comparison folds, text differing only in case, empty and blank
     // text, and Metaverse Object ids written the ways Guid.TryParse accepts.
@@ -96,6 +104,7 @@ public class HeldAttributeValuesDifferentialTests
     /// </summary>
     private enum ProbeKind
     {
+        ReferenceByObject,
         ReferenceById,
         ReferenceByText,
         Text,
@@ -133,7 +142,7 @@ public class HeldAttributeValuesDifferentialTests
                 var attribute = random.Next(4) == 0 ? Attributes[random.Next(Attributes.Length)] : setAttribute;
                 var (kind, value) = ChangeValue(random);
                 var asking = (AttributeValueComparison.ComparerFor(attribute), attribute?.DateTimeResolution);
-                if (kind is not (ProbeKind.ReferenceById or ProbeKind.ReferenceByText))
+                if (kind is not (ProbeKind.ReferenceByObject or ProbeKind.ReferenceById or ProbeKind.ReferenceByText))
                 {
                     firstAskedBy ??= asking;
                     if (!ReferenceEquals(firstAskedBy.Value.Comparer, asking.Item1) || firstAskedBy.Value.Resolution != asking.Item2)
@@ -253,6 +262,7 @@ public class HeldAttributeValuesDifferentialTests
         public Guid? GuidValue { get; init; }
         public byte[]? ByteValue { get; init; }
         public string? UnresolvedReferenceValue { get; init; }
+        public Guid? ResolvedReferenceCsoId { get; init; }
     }
 
     private static PendingExportAttributeValueChange Change(GeneratedValue value, ConnectedSystemObjectTypeAttribute? attribute, PendingExportAttributeChangeType changeType) => new()
@@ -269,7 +279,8 @@ public class HeldAttributeValuesDifferentialTests
         BoolValue = value.BoolValue,
         GuidValue = value.GuidValue,
         ByteValue = value.ByteValue,
-        UnresolvedReferenceValue = value.UnresolvedReferenceValue
+        UnresolvedReferenceValue = value.UnresolvedReferenceValue,
+        ResolvedReferenceCsoId = value.ResolvedReferenceCsoId
     };
 
     /// <summary>
@@ -296,7 +307,9 @@ public class HeldAttributeValuesDifferentialTests
                 ProbeKind.EmptyUnresolvedReference => string.Empty,
                 _ => extras && random.Next(4) == 0 ? string.Empty : null
             },
-            StringValue = primary == ProbeKind.Text ? Pick(random, Texts) : Maybe(() => Pick(random, Texts)),
+            // A change resolved at export names its object and carries the distinguished name it resolved to as text.
+            ResolvedReferenceCsoId = primary == ProbeKind.ReferenceByObject ? Pick(random, ReferencedObjectIds) : null,
+            StringValue = primary is ProbeKind.Text or ProbeKind.ReferenceByObject ? Pick(random, Texts) : Maybe(() => Pick(random, Texts)),
             IntValue = primary == ProbeKind.Number ? Pick(random, Numbers) : MaybeValue(() => Pick(random, Numbers)),
             LongValue = primary == ProbeKind.LongNumber ? Pick(random, LongNumbers) : MaybeValue(() => Pick(random, LongNumbers)),
             DecimalValue = primary == ProbeKind.Decimal ? Pick(random, Decimals) : MaybeValue(() => Pick(random, Decimals)),
@@ -322,8 +335,8 @@ public class HeldAttributeValuesDifferentialTests
         var referenceValue = random.Next(3) switch
         {
             0 => null,
-            1 => new ConnectedSystemObject { Id = Guid.NewGuid() },
-            _ => new ConnectedSystemObject { Id = Guid.NewGuid(), MetaverseObjectId = Pick(random, MetaverseObjectIds) }
+            1 => new ConnectedSystemObject { Id = Pick(random, ReferencedObjectIds) },
+            _ => new ConnectedSystemObject { Id = Pick(random, ReferencedObjectIds), MetaverseObjectId = Pick(random, MetaverseObjectIds) }
         };
 
         return new ConnectedSystemObjectAttributeValue
@@ -346,6 +359,8 @@ public class HeldAttributeValuesDifferentialTests
 
     private static ProbeKind KindOf(GeneratedValue value)
     {
+        if (value.ResolvedReferenceCsoId.HasValue)
+            return ProbeKind.ReferenceByObject;
         if (!string.IsNullOrEmpty(value.UnresolvedReferenceValue))
             return Guid.TryParse(value.UnresolvedReferenceValue, out _) ? ProbeKind.ReferenceById : ProbeKind.ReferenceByText;
         if (value.StringValue != null)
@@ -402,11 +417,13 @@ public class HeldAttributeValuesDifferentialTests
 
     private static string Describe(PendingExportAttributeValueChange change) =>
         Describe(change.StringValue, change.IntValue, change.LongValue, change.DecimalValue, change.DateTimeValue, change.BoolValue,
-            change.GuidValue, change.ByteValue, change.UnresolvedReferenceValue, referencedMetaverseObjectId: null, hasReference: false);
+            change.GuidValue, change.ByteValue, change.UnresolvedReferenceValue, referencedMetaverseObjectId: null, hasReference: false) +
+        (change.ResolvedReferenceCsoId is { } objectId ? $" names {objectId}" : "");
 
     private static string Describe(ConnectedSystemObjectAttributeValue value) =>
         Describe(value.StringValue, value.IntValue, value.LongValue, value.DecimalValue, value.DateTimeValue, value.BoolValue,
-            value.GuidValue, value.ByteValue, value.UnresolvedReferenceValue, value.ReferenceValue?.MetaverseObjectId, value.ReferenceValue != null);
+            value.GuidValue, value.ByteValue, value.UnresolvedReferenceValue, value.ReferenceValue?.MetaverseObjectId, value.ReferenceValue != null) +
+        (value.ReferenceValueId is { } objectId ? $" resolved to {objectId}" : "");
 
     private static string Describe(string? text, int? number, long? longNumber, decimal? decimalNumber, DateTime? date, bool? flag,
         Guid? guid, byte[]? bytes, string? unresolved, Guid? referencedMetaverseObjectId, bool hasReference)
