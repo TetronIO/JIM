@@ -64,7 +64,7 @@ public static class TermDefinitions
 
         [Term.Scoping] = new Entry(
             "Scoping",
-            "The Scoping Criteria that decide which objects a Synchronisation Rule applies to. An object outside the criteria is left alone by that rule, whatever its Attribute Flows and Object Matching Rules say.",
+            "The Scoping Criteria that decide which objects a Synchronisation Rule applies to. While an object is outside them, the rule flows nothing for it; when a joined object leaves them, the rule's Out-of-Scope Action (import rules) or Deprovisioning Action (export rules) decides what happens next.",
             "scoping"),
 
         [Term.ContainerScope] = new Entry(

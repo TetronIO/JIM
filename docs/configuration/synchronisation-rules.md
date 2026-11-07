@@ -80,7 +80,7 @@ A change made in the Connected System is not drift when it can flow back in: tha
 
 ## :material-filter-outline: Scoping criteria
 
-Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers where scope is checked, what happens to objects in and out of scope, how criteria are evaluated, relative dates, and previewing a scope change.
+Scoping criteria decide which objects a rule applies to: only objects that match are processed. [Scoping Criteria](scoping-criteria.md) covers where scope is checked, what happens to objects in and out of scope, [several rules for the same objects](scoping-criteria.md#several-rules-for-the-same-objects), how criteria are evaluated, relative dates, and previewing a scope change.
 
 ## :material-vector-link: Object Matching Rules
 
