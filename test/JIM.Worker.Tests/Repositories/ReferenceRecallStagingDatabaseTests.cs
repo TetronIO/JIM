@@ -374,95 +374,91 @@ public class ReferenceRecallStagingDatabaseTests
             "The summaries load must return its connection to the pool");
     }
 
+    private sealed record SeededLeaver(Guid MemberMvoId, Guid MemberCsoId, Guid GroupMvoId, Guid GroupCsoId, int SystemId, int MemberAttributeId);
+
     /// <summary>
-    /// End-to-end fast path on a tracking context that holds the referencing group's CSO and its
-    /// existing Pending Export: capture, set-based delete, stage, then SaveChangesAsync must not
-    /// throw (the delete-then-create persistence must leave no poisoned tracked instances), and
-    /// the staged export must carry the pre-resolved removal.
+    /// Seeds a target system holding a leaver's provisioned user and a group whose member row is resolved to it (keeping
+    /// its DN, as resolution leaves it), with the group's export rule flowing Static Members to member; optionally with an
+    /// unexported Update Pending Export already on the group's object.
     /// </summary>
-    [Test]
-    public async Task StageReferenceRecallExports_FastPathOnTrackingContext_StagesRemovalAndSaveChangesSucceedsAsync()
+    private async Task<SeededLeaver> SeedLeaverInGroupAsync(string memberDn, bool withExistingPendingExport)
     {
-        // Seed: source-of-truth graph for one group referencing one member, with an existing
-        // unexported Update Pending Export on the group's CSO.
-        const string memberDn = "uid=lena.leaver,ou=People,dc=glitterband,dc=local";
-        Guid memberMvoId, groupMvoId, groupCsoId;
-        int systemId;
-        await using (var seed = NewContext())
+        await using var seed = NewContext();
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Glitterband LDAP", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "GROUP", ConnectedSystem = system, Selected = true };
+        var memberAttr = new ConnectedSystemObjectTypeAttribute
         {
-            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
-            var system = new ConnectedSystem { Name = "Glitterband LDAP", ConnectorDefinition = connectorDefinition };
-            var csType = new ConnectedSystemObjectType { Name = "GROUP", ConnectedSystem = system, Selected = true };
-            var memberAttr = new ConnectedSystemObjectTypeAttribute
-            {
-                Name = "member", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
-                AttributePlurality = AttributePlurality.MultiValued, Selected = true
-            };
-            var dnAttr = new ConnectedSystemObjectTypeAttribute
-            {
-                Name = "distinguishedName", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text,
-                AttributePlurality = AttributePlurality.SingleValued, IsSecondaryExternalId = true, Selected = true
-            };
-            csType.Attributes.Add(memberAttr);
-            csType.Attributes.Add(dnAttr);
+            Name = "member", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued, Selected = true
+        };
+        var dnAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName", ConnectedSystemObjectType = csType, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, IsSecondaryExternalId = true, Selected = true
+        };
+        csType.Attributes.Add(memberAttr);
+        csType.Attributes.Add(dnAttr);
 
-            var mvMemberAttr = new MetaverseAttribute
-            {
-                Name = "Static Members", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued
-            };
-            var mvGroupType = new MetaverseObjectType { Name = "Group", PluralName = "Groups", BuiltIn = true };
-            mvGroupType.Attributes.Add(mvMemberAttr);
-            var mvPersonType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
-            seed.AddRange(connectorDefinition, system, csType, mvGroupType, mvPersonType);
-            await seed.SaveChangesAsync();
+        var mvMemberAttr = new MetaverseAttribute
+        {
+            Name = "Static Members", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.MultiValued
+        };
+        var mvGroupType = new MetaverseObjectType { Name = "Group", PluralName = "Groups", BuiltIn = true };
+        mvGroupType.Attributes.Add(mvMemberAttr);
+        var mvPersonType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+        seed.AddRange(connectorDefinition, system, csType, mvGroupType, mvPersonType);
+        await seed.SaveChangesAsync();
 
-            var exportRule = new SyncRule
-            {
-                Name = "Group Export",
-                Enabled = true,
-                Direction = SyncRuleDirection.Export,
-                ConnectedSystemId = system.Id,
-                MetaverseObjectTypeId = mvGroupType.Id,
-                ConnectedSystemObjectTypeId = csType.Id
-            };
-            exportRule.AttributeFlowRules.Add(new SyncRuleMapping
-            {
-                TargetConnectedSystemAttribute = memberAttr,
-                Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvMemberAttr } }
-            });
-            seed.Add(exportRule);
+        var exportRule = new SyncRule
+        {
+            Name = "Group Export",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = system.Id,
+            MetaverseObjectTypeId = mvGroupType.Id,
+            ConnectedSystemObjectTypeId = csType.Id
+        };
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            TargetConnectedSystemAttribute = memberAttr,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvMemberAttr } }
+        });
+        seed.Add(exportRule);
 
-            var memberMvo = new MetaverseObject { Type = mvPersonType };
-            var memberCso = new ConnectedSystemObject
-            {
-                Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
-                MetaverseObject = memberMvo, JoinType = ConnectedSystemObjectJoinType.Provisioned,
-                DateJoined = DateTime.UtcNow
-            };
-            memberCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-            {
-                Id = Guid.NewGuid(), ConnectedSystemObject = memberCso, Attribute = dnAttr, StringValue = memberDn
-            });
+        var memberMvo = new MetaverseObject { Type = mvPersonType };
+        var memberCso = new ConnectedSystemObject
+        {
+            Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObject = memberMvo, JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            DateJoined = DateTime.UtcNow
+        };
+        memberCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = memberCso, Attribute = dnAttr, StringValue = memberDn
+        });
 
-            var groupMvo = new MetaverseObject { Type = mvGroupType, CachedDisplayName = "Team Alpha" };
-            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-            {
-                Id = Guid.NewGuid(), MetaverseObject = groupMvo, Attribute = mvMemberAttr, ReferenceValue = memberMvo
-            });
-            var groupCso = new ConnectedSystemObject
-            {
-                Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
-                MetaverseObject = groupMvo, JoinType = ConnectedSystemObjectJoinType.Provisioned,
-                DateJoined = DateTime.UtcNow
-            };
-            groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-            {
-                Id = Guid.NewGuid(), ConnectedSystemObject = groupCso, Attribute = memberAttr,
-                ReferenceValue = memberCso, UnresolvedReferenceValue = memberDn
-            });
-            seed.AddRange(memberMvo, memberCso, groupMvo, groupCso);
-            await seed.SaveChangesAsync();
+        var groupMvo = new MetaverseObject { Type = mvGroupType, CachedDisplayName = "Team Alpha" };
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), MetaverseObject = groupMvo, Attribute = mvMemberAttr, ReferenceValue = memberMvo
+        });
+        var groupCso = new ConnectedSystemObject
+        {
+            Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal,
+            MetaverseObject = groupMvo, JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            DateJoined = DateTime.UtcNow
+        };
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), ConnectedSystemObject = groupCso, Attribute = memberAttr,
+            ReferenceValue = memberCso, UnresolvedReferenceValue = memberDn
+        });
+        seed.AddRange(memberMvo, memberCso, groupMvo, groupCso);
+        await seed.SaveChangesAsync();
 
+        if (withExistingPendingExport)
+        {
             var existingPendingExport = new PendingExport
             {
                 Id = Guid.NewGuid(),
@@ -475,12 +471,25 @@ public class ReferenceRecallStagingDatabaseTests
             };
             seed.Add(existingPendingExport);
             await seed.SaveChangesAsync();
-
-            memberMvoId = memberMvo.Id;
-            groupMvoId = groupMvo.Id;
-            groupCsoId = groupCso.Id;
-            systemId = system.Id;
         }
+
+        return new SeededLeaver(memberMvo.Id, memberCso.Id, groupMvo.Id, groupCso.Id, system.Id, memberAttr.Id);
+    }
+
+    /// <summary>
+    /// End-to-end fast path on a tracking context that holds the referencing group's CSO and its
+    /// existing Pending Export: capture, set-based delete, stage, then SaveChangesAsync must not
+    /// throw (the delete-then-create persistence must leave no poisoned tracked instances), and
+    /// the staged export must carry the pre-resolved removal.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_FastPathOnTrackingContext_StagesRemovalAndSaveChangesSucceedsAsync()
+    {
+        // Seed: source-of-truth graph for one group referencing one member, with an existing
+        // unexported Update Pending Export on the group's CSO.
+        const string memberDn = "uid=lena.leaver,ou=People,dc=glitterband,dc=local";
+        var seeded = await SeedLeaverInGroupAsync(memberDn, withExistingPendingExport: true);
+        var (memberMvoId, groupMvoId, groupCsoId, systemId) = (seeded.MemberMvoId, seeded.GroupMvoId, seeded.GroupCsoId, seeded.SystemId);
 
         // Act on a single tracking context, mirroring the worker's long-lived run context.
         await using var ctx = NewContext();
@@ -535,6 +544,106 @@ public class ReferenceRecallStagingDatabaseTests
             Assert.That(withdrawal, Is.EqualTo((0, 0)), "nothing is withdrawn");
             Assert.That(await afterWithdrawal.PendingExportAttributeValueChanges.AnyAsync(c => c.Id == change.Id), Is.True,
                 "the removal is still queued");
+        }
+    }
+
+    /// <summary>
+    /// The leaver step's confirming Delta Import, end to end against PostgreSQL (#2809): recall stages the group's removal
+    /// naming the leaver's object, it persists that way, and once sent, the page's reconciliation puts the group's
+    /// case-insensitive member attribute to the database as a question instead of loading its members. The probe's verdict
+    /// matches the full load's at each point the import can find the group in: the leaver still a member (resolved row),
+    /// the leaver's object deleted while the group still lists the DN (the row left unresolved), and the leaver gone.
+    /// </summary>
+    [Test]
+    public async Task ReconcilePendingExports_LeaverRecallRemoval_ProbesTheGroupWithTheFullLoadsVerdictAsync()
+    {
+        const string memberDn = "uid=lena.leaver,ou=People,dc=glitterband,dc=local";
+        var seeded = await SeedLeaverInGroupAsync(memberDn, withExistingPendingExport: false);
+
+        // The leaver synchronisation: capture, delete the leaver's Metaverse Object, stage recall.
+        await using (var syncContext = NewContext())
+        {
+            var syncRepository = new PostgresDataRepository(syncContext);
+            using var jim = new JimApplication(syncRepository, syncRepository: syncRepository.Sync);
+            var memberMvo = await syncContext.MetaverseObjects.SingleAsync(m => m.Id == seeded.MemberMvoId);
+            var recallContext = await jim.ExportEvaluation.CaptureReferenceRecallContextAsync([seeded.MemberMvoId]);
+            await syncRepository.Sync.DeleteMetaverseObjectsAsync([memberMvo]);
+            var staged = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, [seeded.MemberMvoId]);
+            Assert.That(staged.PendingExportsStaged, Is.EqualTo(1));
+        }
+
+        // The confirming import's reconciliation, as it loads the system's Pending Exports, with the removal as the export
+        // leaves it: sent and awaiting confirmation.
+        async Task<(ReconciliationProbePlan Plan, bool OverFullConfirmed, bool OverProbeConfirmed)> ReconcileAsync()
+        {
+            await using var ctx = NewContext();
+            var repository = new PostgresDataRepository(ctx);
+            async Task<PendingExport> SentExportAsync()
+            {
+                var pendingExport = (await repository.Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(seeded.SystemId))[seeded.GroupCsoId];
+                pendingExport.Status = PendingExportStatus.Exported;
+                foreach (var change in pendingExport.AttributeValueChanges)
+                    change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+                return pendingExport;
+            }
+
+            var engine = new JIM.Application.Servers.SyncEngine();
+            var fullLoad = (await repository.Sync.GetConnectedSystemObjectsByIdsNoTrackingAsync(seeded.SystemId, [seeded.GroupCsoId])).Single();
+            var overFull = new PendingExportReconciliationResult();
+            engine.ReconcileCsoAgainstPendingExport(fullLoad, await SentExportAsync(), overFull);
+
+            var probedExport = await SentExportAsync();
+            var plan = JIM.Application.Servers.SyncEngine.PlanReconciliationProbes([probedExport],
+                await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync());
+            var answers = await repository.Sync.GetReconciliationProbeValuesAsync(plan.Questions);
+            var probedLoad = (await repository.Sync.GetConnectedSystemObjectsCoreByIdsNoTrackingAsync(seeded.SystemId, [seeded.GroupCsoId],
+                answers.Select(a => a.AttributeId).ToList())).Single();
+            var overProbe = new PendingExportReconciliationResult();
+            engine.ReconcileCsoAgainstPendingExport(probedLoad, probedExport, overProbe,
+                probedValuesByAttributeId: answers.ToDictionary(a => a.AttributeId));
+
+            return (plan, overFull.ConfirmedChanges.Count == 1, overProbe.ConfirmedChanges.Count == 1);
+        }
+
+        await using (var readContext = NewContext())
+        {
+            var removal = (await new PostgresDataRepository(readContext).Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(seeded.SystemId))
+                [seeded.GroupCsoId].AttributeValueChanges.Single();
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(removal.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove));
+                Assert.That(removal.StringValue, Is.EqualTo(memberDn));
+                Assert.That(removal.ResolvedReferenceCsoId, Is.EqualTo(seeded.MemberCsoId), "Persisted naming the leaver's object");
+            }
+        }
+
+        var stillMember = await ReconcileAsync();
+
+        // The leaver's object is deleted (its deprovisioning confirmed) while the group still lists the DN: the row is left
+        // unresolved, keeping the DN.
+        await using (var deleteContext = NewContext())
+            await new PostgresDataRepository(deleteContext).Sync.DeleteConnectedSystemObjectsByIdsAsync([seeded.MemberCsoId]);
+        var listedAfterDeletion = await ReconcileAsync();
+
+        // The import shows the leaver gone from the group.
+        await using (var importContext = NewContext())
+            await importContext.ConnectedSystemObjectAttributeValues
+                .Where(av => av.ConnectedSystemObject.Id == seeded.GroupCsoId && av.AttributeId == seeded.MemberAttributeId)
+                .ExecuteDeleteAsync();
+        var gone = await ReconcileAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            foreach (var (label, outcome) in new[] { ("still a member", stillMember), ("listed after deletion", listedAfterDeletion), ("gone", gone) })
+            {
+                Assert.That(outcome.Plan.FullLoadPairCount, Is.Zero, $"{label}: the group's members are not loaded");
+                Assert.That(outcome.Plan.Questions, Has.Count.EqualTo(1), label);
+                Assert.That(outcome.OverProbeConfirmed, Is.EqualTo(outcome.OverFullConfirmed), $"{label}: the probe's verdict is the full load's");
+            }
+
+            Assert.That(stillMember.OverFullConfirmed, Is.False, "Still a member: not confirmed");
+            Assert.That(listedAfterDeletion.OverFullConfirmed, Is.False, "Still listed by DN: not confirmed");
+            Assert.That(gone.OverFullConfirmed, Is.True, "Gone: confirmed");
         }
     }
 }

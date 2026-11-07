@@ -19,4 +19,10 @@ public sealed class ReconciliationProbePlan
     /// are loaded in full instead: for diagnostics.
     /// </summary>
     public required int FullLoadPairCount { get; init; }
+
+    /// <summary>
+    /// <see cref="FullLoadPairCount"/> broken down by why each pair could not be put as a question: for diagnostics.
+    /// </summary>
+    public IReadOnlyDictionary<ReconciliationProbeFallbackReason, int> FullLoadPairCountsByReason { get; init; } =
+        new Dictionary<ReconciliationProbeFallbackReason, int>();
 }

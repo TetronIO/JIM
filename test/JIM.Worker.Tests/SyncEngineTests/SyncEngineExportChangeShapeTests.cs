@@ -189,7 +189,7 @@ public class SyncEngineExportChangeShapeTests
             SourcePlurality = AttributePlurality.MultiValued
         };
 
-        var change = _engine.DecideRecallRemovalChange(flow, "CN=Departed,OU=Staff,DC=example,DC=com");
+        var change = _engine.DecideRecallRemovalChange(flow, new ResolvedRecallReference(Guid.NewGuid(), "CN=Departed,OU=Staff,DC=example,DC=com"));
 
         Assert.That(change, Is.Not.Null);
         using (Assert.EnterMultipleScope())
@@ -209,7 +209,7 @@ public class SyncEngineExportChangeShapeTests
             SourcePlurality = AttributePlurality.MultiValued
         };
 
-        var change = _engine.DecideRecallRemovalChange(flow, "CN=Departed,OU=Staff,DC=example,DC=com");
+        var change = _engine.DecideRecallRemovalChange(flow, new ResolvedRecallReference(Guid.NewGuid(), "CN=Departed,OU=Staff,DC=example,DC=com"));
 
         using (Assert.EnterMultipleScope())
         {

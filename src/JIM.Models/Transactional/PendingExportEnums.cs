@@ -162,3 +162,32 @@ public enum UnresolvedReferenceReason
     /// </summary>
     NotInTargetSystem = 2
 }
+
+/// <summary>
+/// Why Pending Export reconciliation loads a multi-valued reference attribute of an object in full rather than asking the
+/// database about it (#2669, #2809). Reported in the import's log, so a run can see why a page fell back.
+/// </summary>
+public enum ReconciliationProbeFallbackReason
+{
+    /// <summary>
+    /// The attribute is read beyond the verdict (a naming attribute, an External ID or a Secondary External ID), or its
+    /// definition is not loaded.
+    /// </summary>
+    IdentifierOrNamingAttribute = 0,
+
+    /// <summary>
+    /// A change on a case-insensitive attribute names no Connected System Object, so it matches resolved rows by their
+    /// distinguished name ignoring case, which no index answers.
+    /// </summary>
+    NamesNoObject = 1,
+
+    /// <summary>
+    /// The database's <c>lower()</c> does not fold case as JIM does, so nothing is compared ignoring case there.
+    /// </summary>
+    DatabaseFoldsCaseDifferently = 2,
+
+    /// <summary>
+    /// A value compared ignoring case is not ASCII, whose folding the database need not share.
+    /// </summary>
+    NonAsciiValue = 3
+}

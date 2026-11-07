@@ -20,17 +20,18 @@ public class ReferenceRecallContext
     public List<MvoReferenceRecallCandidate> Candidates { get; init; } = [];
 
     /// <summary>
-    /// Per deleted Metaverse Object: the resolved reference value for each Connected System it
-    /// was joined to, keyed deletedMvoId -> (connectedSystemId -> value). The value is the
-    /// secondary external ID (for example the DN for LDAP) when available, else the primary
-    /// external ID: the same preference order export execution uses when resolving references.
-    /// Used to pre-resolve membership-removal changes at staging time, because the normal
-    /// export-time resolution path cannot resolve a Metaverse Object that no longer exists.
+    /// Per deleted Metaverse Object: its resolved reference in each Connected System it was joined
+    /// to, keyed deletedMvoId -> (connectedSystemId -> reference). The reference names the joined
+    /// Connected System Object and the value written for it: the secondary external ID (for
+    /// example the DN for LDAP) when available, else the primary external ID, the same preference
+    /// order export execution uses when resolving references. Used to pre-resolve
+    /// membership-removal changes at staging time, because the normal export-time resolution path
+    /// cannot resolve a Metaverse Object that no longer exists.
     /// </summary>
-    public Dictionary<Guid, Dictionary<int, string>> ResolvedReferenceValuesBySystem { get; init; } = [];
+    public Dictionary<Guid, Dictionary<int, ResolvedRecallReference>> ResolvedReferencesBySystem { get; init; } = [];
 
     /// <summary>
-    /// The entries of <see cref="ResolvedReferenceValuesBySystem"/> whose anchor attribute is case-exact, as
+    /// The entries of <see cref="ResolvedReferencesBySystem"/> whose anchor attribute is case-exact, as
     /// (deletedMvoId, connectedSystemId). A target's reference value names the deleted object only in that exact case;
     /// every other value names it in any case (#2051).
     /// </summary>

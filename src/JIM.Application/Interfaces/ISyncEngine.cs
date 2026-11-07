@@ -432,21 +432,22 @@ public interface ISyncEngine
         IExpressionEvaluator? expressionEvaluator = null,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
         List<PendingExportAttributeValueChange>? noNetChangeSkipped = null);
 
     /// <summary>
     /// Decides the removal change a reference recall stages for one matched target row (#908/#1003). The shape
     /// follows the target attribute's plurality (#2182): where both source and target are multi-valued, a Remove
-    /// carrying the resolved value, or null when that value cannot be resolved (nothing can be staged; the
-    /// orchestrator counts it as dropped); everywhere else a null-clearing Update.
+    /// carrying the resolved value and naming the departing member's Connected System Object (#2809), or null when that
+    /// value cannot be resolved (nothing can be staged; the orchestrator counts it as dropped); everywhere else a
+    /// null-clearing Update.
     /// </summary>
     /// <param name="flow">The direct reference flow whose target attribute still holds the deleted value.</param>
-    /// <param name="resolvedRemovalValue">The deleted object's resolved value in the flow's target system, or null.</param>
+    /// <param name="removal">The deleted object's resolved reference in the flow's target system, or null.</param>
     PendingExportAttributeValueChange? DecideRecallRemovalChange(
         ReferenceRecallDirectFlow flow,
-        string? resolvedRemovalValue);
+        ResolvedRecallReference? removal);
 
     /// <summary>
     /// Decides how recall changes combine with the Pending Export already attached to the target CSO (#1003):

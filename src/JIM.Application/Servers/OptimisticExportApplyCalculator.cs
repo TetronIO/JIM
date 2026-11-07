@@ -641,8 +641,8 @@ public static class OptimisticExportApplyCalculator
     /// <summary>
     /// Every row <see cref="SyncEngine.ReferenceRowMatches"/> matches with the change (#2803), the rule reconciliation
     /// confirms the change by, so what is recorded here is what the confirming import would agree the target holds: a
-    /// change naming an object (<c>ResolvedReferenceCsoId</c>, stamped by export resolution) finds a resolved row by that
-    /// object alone and an unresolved row by either of its strings; a change naming no object finds any row by either
+    /// change naming an object (<c>ResolvedReferenceCsoId</c>, stamped by export resolution or by reference recall) finds
+    /// a resolved row by that object alone and an unresolved row by either of its strings; a change naming no object finds any row by either
     /// string. A resolved row naming another object is never matched by the text it keeps, however that text compares.
     /// </summary>
     private static List<ConnectedSystemObjectAttributeValue> FindMatchingReferenceValuesInIndex(

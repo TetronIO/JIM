@@ -452,10 +452,11 @@ public partial class SyncEngine
     /// instead of Add changes. Everywhere else the target is sent one Update carrying the value that survives, so a
     /// removed value is never it, and an attribute left with none gets a null-clearing Update (#2182).</param>
     /// <param name="mvAttributeDictionary">Optional pre-built MVO attribute dictionary for expression evaluation.</param>
-    /// <param name="preResolvedReferenceValues">Optional map of referenced Metaverse Object ID to the resolved
-    /// target value for this export rule's Connected System (reference recall, #908). When a reference points
-    /// at an object in this map, the change is staged with the resolved value instead of an unresolved
-    /// Metaverse Object ID, because export-time resolution cannot resolve a deleted object.</param>
+    /// <param name="preResolvedReferenceValues">Optional map of referenced Metaverse Object ID to its resolved
+    /// reference in this export rule's Connected System (reference recall, #908). When a reference points
+    /// at an object in this map, the change is staged with the resolved value, naming the Connected System Object
+    /// it was captured from (#2809), instead of an unresolved Metaverse Object ID, because export-time resolution
+    /// cannot resolve a deleted object.</param>
     /// <param name="noNetChangeSkipped">Optional collector for the changes skipped because the Connected System
     /// Object already holds the value (#1443). The value a change was skipped for IS the target's current state for
     /// that attribute, and it is the only thing that can put an old-to-new pair on a configuration change preview:
@@ -474,7 +475,7 @@ public partial class SyncEngine
         IExpressionEvaluator? expressionEvaluator = null,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedReferenceValues = null,
         List<AttributeFlowError>? flowErrors = null,
         List<PendingExportAttributeValueChange>? noNetChangeSkipped = null)
     {
@@ -770,9 +771,13 @@ public partial class SyncEngine
                                     continue;
                                 }
                                 if (preResolvedReferenceValues != null &&
-                                    preResolvedReferenceValues.TryGetValue(referencedMvoId.Value, out var preResolvedValue))
+                                    preResolvedReferenceValues.TryGetValue(referencedMvoId.Value, out var preResolvedReference))
                                 {
-                                    attributeChange.StringValue = preResolvedValue;
+                                    // Named by the object it was captured from too, as export resolution would name it
+                                    // (#2809): no-net-change detection and reconciliation then match a resolved row by
+                                    // that object, and only an unresolved one by the DN.
+                                    attributeChange.StringValue = preResolvedReference.Value;
+                                    attributeChange.ResolvedReferenceCsoId = preResolvedReference.ConnectedSystemObjectId;
                                 }
                                 else
                                 {
