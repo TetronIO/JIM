@@ -1,6 +1,6 @@
 # PostgreSQL Tuning Measured Against JIM's Own Workloads
 
-- **Status:** Doing (Phase 0 not started)
+- **Status:** Doing (Phase 0 complete: results on #2834)
 - **Issue:** [#2834](https://github.com/TetronIO/JIM/issues/2834)
 - **Related:**
   - [#2669](https://github.com/TetronIO/JIM/issues/2669), the leaver-step measurements whose span breakdowns show where synchronisation time goes.
@@ -50,7 +50,7 @@ There are three configurations, and they differ:
 
 The measurements run on the development host: about 62 GB of memory, and a Docker data drive (a QLC NVMe drive) with known write-stall waves under sustained heavy writes. Settings that change how much is written, or when, may look more decisive here than on a customer's storage. Every result records the host's disk wait alongside it, and a result that hinges on the disk is marked as such.
 
-## Phase 0: where the time goes
+## Phase 0: where the time goes ✅
 
 One Scale500k25kGroups run of Scenario 8, with no setting changed, instrumented to answer, for each Run Profile step:
 - for what share of the step's wall time PostgreSQL had at least one active query from JIM;

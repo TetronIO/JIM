@@ -19,9 +19,12 @@
     - host.tsv: once a second, host CPU (user, system, idle, iowait, steal) and blocks read and written, from vmstat.
     - disks.tsv: every -SnapshotSeconds, each block device's cumulative reads, writes and milliseconds spent doing
       I/O, from /proc/diskstats. Successive rows give each disk's utilisation.
-    - stats/<time>.json: every -SnapshotSeconds, the cumulative pg_stat_statements (top 300 statements by total
-      time), pg_stat_wal, pg_stat_io and checkpointer figures. Differences between snapshots give each window's
-      statements, WAL and checkpoints.
+    - stats/<time>.json: every -SnapshotSeconds, the cumulative pg_stat_statements counters (top 300 statements by
+      total time, by queryid, with toplevel and JIT time), pg_stat_wal, pg_stat_io and checkpointer figures.
+      Differences between snapshots give each window's statements, WAL and checkpoints. Nested statements
+      (toplevel false; mostly foreign-key checks) are already inside their parent's time, so leave them out of totals.
+    - statements.tsv: once, at the end, each queryid's text. Kept out of the snapshots because reading every text
+      each time cost seconds of database time per snapshot.
 
     It runs until -StopFile exists, or until no process matching -WhileProcess is running. Start it detached once
     the database is up; it creates pg_stat_statements if the extension is missing (the development compose override
@@ -34,7 +37,7 @@
     The database container. Defaults to jim.database.
 
 .PARAMETER SnapshotSeconds
-    How often to take the cumulative statistics snapshots. Defaults to 30.
+    How often to take the cumulative statistics snapshots. Defaults to 60.
 
 .PARAMETER StopFile
     Stop when this file exists.
@@ -51,7 +54,7 @@ param(
 
     [string]$DatabaseContainer = 'jim.database',
 
-    [int]$SnapshotSeconds = 30,
+    [int]$SnapshotSeconds = 60,
 
     [string]$StopFile,
 
@@ -75,7 +78,11 @@ function Invoke-DatabaseQuery([string]$Sql) {
 function Test-ShouldContinue {
     if ($StopFile -and (Test-Path $StopFile)) { return $false }
     if ($WhileProcess) {
-        $running = Get-Process | Where-Object { $_.CommandLine -and $_.CommandLine -match $WhileProcess -and $_.Id -ne $PID }
+        # Leave out every copy of this script (its own launcher carries -WhileProcess in its command line too, so
+        # without this it waits on itself for ever).
+        $running = Get-Process | Where-Object {
+            $_.CommandLine -and $_.CommandLine -match $WhileProcess -and $_.CommandLine -notmatch 'Watch-DatabaseActivity' -and $_.Id -ne $PID
+        }
         if (-not $running) { return $false }
     }
     return $true
@@ -131,10 +138,10 @@ $snapshotSql = @'
 SELECT json_build_object(
   'time', to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS'),
   'statements', (SELECT coalesce(json_agg(s), '[]') FROM (
-      SELECT queryid, calls, round(total_exec_time::numeric, 1) AS total_ms, round(mean_exec_time::numeric, 2) AS mean_ms,
+      SELECT queryid, toplevel, calls, round(total_exec_time::numeric, 1) AS total_ms, round(mean_exec_time::numeric, 2) AS mean_ms,
              rows, shared_blks_hit, shared_blks_read, shared_blks_written, temp_blks_written, wal_bytes,
-             left(regexp_replace(query, '\s+', ' ', 'g'), 300) AS query
-      FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 300) s),
+             round((jit_generation_time + jit_inlining_time + jit_optimization_time + jit_emission_time)::numeric, 1) AS jit_ms
+      FROM pg_stat_statements(showtext => false) ORDER BY total_exec_time DESC LIMIT 300) s),
   'wal', (SELECT row_to_json(w) FROM pg_stat_wal w),
   'checkpointer', (SELECT row_to_json(c) FROM pg_stat_checkpointer c),
   'io', (SELECT json_agg(i) FROM pg_stat_io i WHERE reads > 0 OR writes > 0 OR extends > 0 OR fsyncs > 0))
@@ -164,6 +171,9 @@ finally {
     # The shells' children (docker exec, vmstat) outlive Stop-Process on the shell; end them by their own command lines.
     Get-Process | Where-Object { $_.CommandLine -and ($_.CommandLine -match [regex]::Escape($activitySqlPath) -or $_.CommandLine -match [regex]::Escape($hostPath) -or $_.CommandLine -match "^vmstat -n -t -w 1") } |
         ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+    # The statement texts, once.
+    Invoke-DatabaseQuery "\copy (SELECT queryid, toplevel, left(regexp_replace(query, '\s+', ' ', 'g'), 300) FROM pg_stat_statements) TO STDOUT" |
+        Set-Content -Path (Join-Path $OutputDirectory 'statements.tsv')
     # Ending the sampler's own sessions ends the in-container psql, which a stopped docker exec client can leave behind.
     Invoke-DatabaseQuery "SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity WHERE application_name = 'jim-activity-sampler' AND pid <> pg_backend_pid()" | Out-Null
 }
