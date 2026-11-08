@@ -117,7 +117,7 @@ function Wait-Database {
     }
 }
 
-function Connect-Jim {
+function Connect-JimForReplay {
     $apiKey = (Get-Content (Join-Path $repoRoot 'test/integration/.api-key') -Raw).Trim()
     Import-Module (Join-Path $repoRoot 'src/JIM.PowerShell/JIM.psd1') -Force
     $deadline = (Get-Date).AddMinutes(10)
@@ -159,7 +159,7 @@ SELECT (SELECT wal_bytes FROM pg_stat_wal),
 }
 
 if ($Action -eq 'Snapshot') {
-    Connect-Jim
+    Connect-JimForReplay
     foreach ($spec in $PrepareRunProfile) {
         $outcome = Invoke-RunProfile (Resolve-RunProfile $spec)
         Write-Host "  $spec`: $([math]::Round($outcome.Seconds, 1)) s, status $($outcome.Status), $($outcome.Objects) objects"
@@ -222,7 +222,7 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
 
     # 3. JIM, the sampler, and the timed Run Profiles.
     docker compose @composeArgs start @applicationServices | Out-Null
-    Connect-Jim
+    Connect-JimForReplay
     $runProfiles = @($ReplayRunProfile | ForEach-Object { Resolve-RunProfile $_ })
     $samplerDirectory = Join-Path $OutputDirectory ("{0}-{1}-{2}" -f $started.ToString('yyyyMMdd_HHmmss'), $Label, $iteration)
     $stopFile = "$samplerDirectory.stop"
