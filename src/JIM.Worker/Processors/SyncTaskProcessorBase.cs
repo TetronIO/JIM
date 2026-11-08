@@ -4560,20 +4560,11 @@ public abstract class SyncTaskProcessorBase
                     QueueMvoForUpdate(mvo);
                 }
 
-                // Queue for export evaluation (reference changes may trigger exports)
-                // Include all reference attributes as changed, with removals tracked separately
-                // Note: Check both ReferenceValue (navigation) and ReferenceValueId (FK) as navigation may not be loaded
-                var currentRefAttributes = mvo.AttributeValues
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList();
-                var removedRefAttributesFiltered = refRemovedAttributes?
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList() ?? [];
-
-                var changedRefAttributes = currentRefAttributes
-                    .Concat(removedRefAttributesFiltered)
-                    .Cast<MetaverseObjectAttributeValue>()
-                    .ToList();
+                // Queue for export evaluation: the references this pass added, then those it removed, exactly as the
+                // first pass queues its other changes. Only the members that changed are staged (#2832); a Create
+                // still provisions the whole set (SyncEngine.ComputeAttributeValueChanges), and a member missing from
+                // the target is repaired by drift detection, not re-asserted as a side effect of another change.
+                var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
                 if (changedRefAttributes.Count > 0)
                 {
                     MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
@@ -4590,6 +4581,20 @@ public abstract class SyncTaskProcessorBase
 
         return totalChanges;
     }
+
+    /// <summary>
+    /// The reference values a reference pass queues for export evaluation: those it added, then those it removed, each
+    /// naming an object (the navigation, or the scalar foreign key where the navigation is not loaded). Only what changed
+    /// (#2832): queuing every reference the Metaverse Object holds made export staging re-assert a group's whole
+    /// membership whenever one member changed, re-adding a member removed from the target by hand even with Enforce
+    /// State off, and loading the target group whole to filter that re-assertion.
+    /// </summary>
+    private static List<MetaverseObjectAttributeValue> ChangedReferenceValues(
+        IEnumerable<MetaverseObjectAttributeValue> added,
+        IEnumerable<MetaverseObjectAttributeValue> removed) =>
+        added.Concat(removed)
+            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+            .ToList();
 
     /// <summary>
     /// Resolves cross-page reference attributes after all pages have been processed.
@@ -4901,15 +4906,8 @@ public abstract class SyncTaskProcessorBase
                         // Queue for persistence and export evaluation
                         QueueMvoForUpdate(mvo);
 
-                        var changedRefAttributes = mvo.AttributeValues
-                            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                            .Cast<MetaverseObjectAttributeValue>()
-                            .ToList();
-
-                        if (refRemovedAttributes != null)
-                        {
-                            changedRefAttributes.AddRange(refRemovedAttributes);
-                        }
+                        // Only the references this step changed (#2832), as on the page; see ProcessDeferredReferenceAttributes.
+                        var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
 
                         if (changedRefAttributes.Count > 0)
                         {
@@ -5154,14 +5152,14 @@ public abstract class SyncTaskProcessorBase
         // Refresh the per-page portion of the export evaluation cache for only this page's MVOs.
         // This loads target CSOs and their attribute values for no-net-change detection, scoped to
         // just the MVOs being evaluated — avoiding the previous approach of loading ALL target CSOs
-        // upfront which consumed multiple GB at 100K+ objects.
+        // upfront which consumed multiple GB at 100K+ objects. A target group's member attribute is
+        // loaded only for the members this page's changes add or remove (#2832).
         if (_exportEvaluationCache != null)
         {
-            var mvoIdsForExport = _pendingExportEvaluations
-                .Select(x => x.Mvo.Id)
-                .Where(id => id != Guid.Empty)
-                .Distinct();
-            await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+            var evaluationsForCache = _pendingExportEvaluations
+                .Select(x => (x.Mvo, (IReadOnlyCollection<MetaverseObjectAttributeValue>)x.ChangedAttributes))
+                .ToList();
+            await _syncServer.RefreshExportEvaluationCacheForEvaluationsAsync(_exportEvaluationCache, evaluationsForCache);
 
             if (prefetchPendingExports)
             {

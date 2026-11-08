@@ -70,7 +70,7 @@ The next synchronisation of any Connected System reviews each marked object agai
 Some changes deliberately mark nothing:
 
 - **Disabling a rule, or switching provisioning off**<br /> The rule stops acting from then on; nothing it already created is deprovisioned.
-- **Renaming a rule, or editing its Attribute Flow**<br /> Neither can move an object into or out of scope. A changed export Attribute Flow reaches existing objects at the target system's next Full Synchronisation, which corrects every object to the new configuration while the rule [enforces state](synchronisation-rules.md#export-outbound) (the default). With Enforce State off, each object picks the change up the next time one of its values changes.
+- **Renaming a rule, or editing its Attribute Flow**<br /> Neither can move an object into or out of scope. A changed export Attribute Flow reaches existing objects at the target system's next Full Synchronisation, which corrects every object to the new configuration while the rule [enforces state](synchronisation-rules.md#export-outbound) (the default). With Enforce State off, an object picks the change up only as its values change: an expression mapping is evaluated again whenever any of the object's values changes, and a direct mapping only when its own source does, exporting just the values that changed.
 
 A synchronisation marks objects for the same review itself when it disconnects one from a Connected System an export rule provisions to, so an account deleted directly in the target system is provisioned again by that run (see [Projection and provisioning](synchronisation-rules.md#projection-and-provisioning)).
 

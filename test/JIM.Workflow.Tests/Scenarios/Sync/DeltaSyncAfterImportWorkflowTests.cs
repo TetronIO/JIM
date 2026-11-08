@@ -300,6 +300,15 @@ public class DeltaSyncAfterImportWorkflowTests
         Assert.That(afterDeltaSync.PendingExportCount, Is.GreaterThan(0),
             "Pending Export should be created after member removal");
 
+        // Exactly the member removed, and nothing re-asserted for the member that stayed (#2832).
+        var memberChanges = afterDeltaSync.PendingExports
+            .SelectMany(pe => pe.AttributeValueChanges)
+            .Where(av => av.AttributeInfo?.Name == "member")
+            .Select(av => av.ChangeType)
+            .ToList();
+        Assert.That(memberChanges, Is.EqualTo(new[] { PendingExportAttributeChangeType.Remove }),
+            "the Pending Export carries only the removed member");
+
         Console.WriteLine("=== Test Complete: Delta sync correctly processed group membership removal ===");
     }
 

@@ -54,6 +54,14 @@ public class ExportEvaluationCache
     public ILookup<(Guid CsoId, int AttributeId), ConnectedSystemObjectAttributeValue> CsoAttributeValues { get; set; }
 
     /// <summary>
+    /// Per-page: the multi-valued reference attributes <see cref="CsoAttributeValues"/> holds only in part (#2832), each
+    /// with the Metaverse Objects whose membership its values were loaded to answer. A member change naming any other
+    /// object, or a change needing the whole set, cannot be answered from them, and export evaluation fails rather than
+    /// judge one. Empty when every value was loaded. Rebuilt each page.
+    /// </summary>
+    public Dictionary<(Guid CsoId, int AttributeId), IReadOnlySet<Guid>> PartiallyLoadedCsoAttributeValues { get; set; } = [];
+
+    /// <summary>
     /// Per-page: which of the page's target Connected System Objects have a Pending Export persisted by an earlier
     /// run or page. No-net-change detection reads it to decide whether an object whose evaluation needs nothing
     /// might still carry a queued change that evaluation has just made stale, so only those objects cost a database

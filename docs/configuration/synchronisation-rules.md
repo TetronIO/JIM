@@ -74,7 +74,9 @@ An export rule:
 - Flows attribute values from the Metaverse Object to the Connected System Object
 - Creates Pending Exports for any changes
 
-When **Enforce State** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
+A Pending Export carries only what changed. When a group gains or loses members, JIM exports those members alone, not the group's whole membership; a Connected System Object that JIM is creating gets every value.
+
+When **Enforce State** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object. With Enforce State off, a value changed externally is exported again only when that value itself changes in the Metaverse: a member removed from a group directly in the Connected System stays removed, however often the group's other members change.
 
 A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
 

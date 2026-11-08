@@ -176,7 +176,7 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Three-layer sync architecture (v0.7.1)**<br /> Sync decisions are split across `ISyncEngine` (pure domain logic: projection, Attribute Flow, deletion rules, export confirmation), `ISyncServer` (orchestration: matching, scoping, drift detection, export evaluation), and `ISyncRepository` (dedicated data access: bulk CSO/MVO writes, Pending Exports, RPEIs). This separation enables deterministic unit testing of business logic without I/O.
 
-- **Two-pass Attribute Flow**<br /> Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page.
+- **Two-pass Attribute Flow**<br /> Scalar attributes are processed first (pass 1 via `ISyncEngine.FlowInboundAttributes`), then reference attributes are deferred to a second pass after all CSOs in the page have MVOs. This ensures group member references can resolve to MVOs that were created later in the same page. The reference pass, and the cross-page step after it, queue for export evaluation only the references they added and removed (#2832); a Create still stages every value the MVO holds (`SyncEngine.ComputeAttributeValueChanges`), and a member missing from the target is repaired by drift detection, never re-asserted as a side effect of another membership change.
 
 - **Batch persistence**<br /> MVO creates/updates, Pending Exports, and CSO deletions are all batched per-page via `ISyncRepository` bulk operations to reduce database round trips. This is critical for performance at scale. Page-sized writes use PostgreSQL COPY on the EF connection, inside the page's transaction, so each page's write stays atomic.
 
@@ -214,7 +214,7 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Keyset paging (#1858)**<br /> Full and Delta Synchronisation both page CSOs by a keyset cursor on `Id`, one per Object Type (#2492). For Delta Synchronisation this is a correctness requirement: each page boundary deletes that page's obsolete CSOs, so OFFSET paging over the shrinking modified-since set skipped every other page.
 
-- **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large Connected Systems.
+- **Per-page cache loading**<br /> The export evaluation cache is loaded per-page and cleared at page boundaries. This keeps memory consumption bounded regardless of total CSO count, preventing out-of-memory conditions on large Connected Systems. A target group's member attribute is loaded only with the values naming the members the page's changes add or remove (`ExportEvaluationMemberLoadPlanner`, #2832), where every mapping into it is a direct multi-valued reference flow; every other value is loaded whole. Export evaluation fails rather than judge any other change against such an attribute (`ExportEvaluationServer.EnsureJudgedByLoadedValues`).
 
 - **Data integrity validation (v0.9.0, #465)**<br /> Metaverse attribute operations are validated for data integrity before being applied. This prevents silent corruption from malformed attribute values reaching the metaverse.
 
