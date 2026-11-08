@@ -390,6 +390,46 @@ public class ObjectMatchingServer
     }
 
     /// <summary>
+    /// Whether the in-scope import Synchronisation Rules that matched a Connected System Object found different Metaverse
+    /// Objects (#2823), and if so the message and candidates to report. Null when they all found the same one.
+    /// </summary>
+    /// <param name="matches">What each rule found, in name order.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static ImportRuleDisagreement? DescribeImportRuleDisagreement(IReadOnlyList<ImportRuleMatch> matches, bool previewing = false)
+    {
+        var distinct = matches.DistinctBy(m => m.Match.MetaverseObject.Id).ToList();
+        if (distinct.Count < 2)
+            return null;
+
+        var found = string.Join("; ", matches.Select(m =>
+            $"'{m.SyncRule.Name}' matches {m.Match.MetaverseObject.NameOrId} on {m.Match.Rule.DescribeComparison()} (\"{m.Match.MatchedValue}\")"));
+        var outcome = previewing ? "a synchronisation would neither join nor project it" : "it was neither joined nor projected";
+        var message = $"This object's import Synchronisation Rules match {distinct.Count} different Metaverse Objects: {found}. " +
+                      $"JIM does not choose between them, so {outcome}. Correct the data, or the rules' Object Matching Rules, " +
+                      "so that they identify one Metaverse Object.";
+
+        var candidates = distinct
+            .OrderBy(m => m.Match.MetaverseObject.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(m => m.Match.MetaverseObject.Id)
+            .Take(ActivityRunProfileExecutionItemMatchCandidate.MaxRecorded)
+            .Select((m, ordinal) => new ActivityRunProfileExecutionItemMatchCandidate
+            {
+                CandidateKind = MatchCandidateKind.MetaverseObject,
+                CandidateId = m.Match.MetaverseObject.Id,
+                DisplayNameSnapshot = m.Match.MetaverseObject.Name,
+                TypeNameSnapshot = m.Match.MetaverseObject.Type?.Name,
+                MatchedValue = m.Match.MatchedValue,
+                ObjectMatchingRuleId = m.Match.Rule.Id == 0 ? null : m.Match.Rule.Id,
+                ObjectMatchingRuleDescriptionSnapshot = m.Match.Rule.DescribeComparison(),
+                Ordinal = ordinal,
+                CandidateTotal = distinct.Count
+            })
+            .ToList();
+
+        return new ImportRuleDisagreement(message, candidates);
+    }
+
+    /// <summary>
     /// The error an ambiguous match before provisioning records (#2052): how many existing Connected System Objects the
     /// Metaverse Object matched in the target, on what, and why that stops it. The candidates travel separately.
     /// </summary>

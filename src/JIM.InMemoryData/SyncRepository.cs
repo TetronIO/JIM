@@ -2922,6 +2922,8 @@ public partial class SyncRepository : ISyncRepository
         var rules = _syncRules.Values
             .Where(r => r.ConnectedSystemId == connectedSystemId)
             .Where(r => includeDisabled || r.Enabled)
+            .OrderBy(r => r.Name)
+            .ThenBy(r => r.Id)
             .ToList();
         return Task.FromResult(rules);
     }

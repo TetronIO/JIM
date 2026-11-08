@@ -86,4 +86,55 @@ public class SyncEngineProjectionTests
 
         Assert.That(decision.ShouldProject, Is.False);
     }
+
+    // #2823: projection does not depend on the order the rules load in.
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void EvaluateProjection_TwoRulesIntoOneType_ProjectsNamingTheFirstByName(bool reverse)
+    {
+        var person = new MetaverseObjectType { Id = 10, Name = "Person" };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1 };
+        var a = ProjectingRule(1, "Rule A", person);
+        var b = ProjectingRule(2, "Rule B", person);
+
+        var decision = _engine.EvaluateProjection(cso, reverse ? [b, a] : [a, b]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldProject, Is.True);
+            Assert.That(decision.IsConflict, Is.False);
+            Assert.That(decision.MetaverseObjectType, Is.SameAs(person));
+            Assert.That(decision.ProjectionSyncRule, Is.SameAs(a));
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void EvaluateProjection_TwoRulesIntoDifferentTypes_ReturnsAConflictNamingBoth(bool reverse)
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1 };
+        var a = ProjectingRule(1, "Rule A", new MetaverseObjectType { Id = 10, Name = "Person" });
+        var b = ProjectingRule(2, "Rule B", new MetaverseObjectType { Id = 11, Name = "Contact" });
+
+        var decision = _engine.EvaluateProjection(cso, reverse ? [b, a] : [a, b]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(decision.ShouldProject, Is.False);
+            Assert.That(decision.IsConflict, Is.True);
+            Assert.That(decision.ConflictingRules, Is.EqualTo(new[] { a, b }), "listed by name");
+        }
+    }
+
+    private static SyncRule ProjectingRule(int id, string name, MetaverseObjectType type) => new()
+    {
+        Id = id,
+        Name = name,
+        Direction = SyncRuleDirection.Import,
+        ProjectToMetaverse = true,
+        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1 },
+        MetaverseObjectType = type,
+        MetaverseObjectTypeId = type.Id
+    };
 }

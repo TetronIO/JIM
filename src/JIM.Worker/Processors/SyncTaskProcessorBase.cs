@@ -1923,14 +1923,6 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import Synchronisation Rule.
-    /// If multiple import Synchronisation Rules exist for this CSO type, the first one's setting is used.
-    /// Uses pre-loaded Synchronisation Rules to avoid database round trips.
-    /// </summary>
-    protected InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
-        => _syncEngine.DetermineOutOfScopeAction(connectedSystemObject, activeSyncRules);
-
-    /// <summary>
     /// Processes the MVO deletion rule when a connector is disconnected.
     /// Handles three deletion rules:
     /// - Manual: No automatic deletion
@@ -7080,51 +7072,56 @@ public abstract class SyncTaskProcessorBase
     protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
-        var attemptedMatching = false;
 
-        // Enumerate import Synchronisation Rules for this CSO type to attempt matching.
-        foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+        // Every in-scope import rule for this type is evaluated, in name order (#2823): rules load in no defined order, so
+        // stopping at the first match would let the load order choose between identities the rules disagree on.
+        var importSyncRules = SyncEngine.InNameOrder(activeSyncRules
+                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+            .ToList();
+
+        // Simple mode: matching belongs to the Object Type, not the rule, so it is evaluated once. The join names the first
+        // rule by name, or no rule when the type has none (joining needs no empty import rule).
+        if (isSimpleMode)
         {
-            attemptedMatching = true;
+            var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
+            if (matchingRules.Count == 0)
+                return (false, null, null, null);
 
-            // Resolve matching rules based on mode
-            var matchingRules = isSimpleMode
-                ? GetSimpleModeMatchingRules(connectedSystemObject.TypeId)
-                : importSyncRule.ObjectMatchingRules.ToList();
+            var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+            return match == null
+                ? (false, null, null, null)
+                : await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRules.FirstOrDefault(), match);
+        }
 
+        var matches = new List<ImportRuleMatch>();
+        foreach (var importSyncRule in importSyncRules)
+        {
+            var matchingRules = importSyncRule.ObjectMatchingRules.ToList();
             if (matchingRules.Count == 0)
                 continue;
 
-            // For advanced mode, set MetaverseObjectType on each rule from the Synchronisation Rule
-            if (!isSimpleMode)
-            {
-                foreach (var rule in matchingRules)
-                    rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
-            }
+            // Each rule's Object Matching Rules search the rule's own Metaverse Object Type.
+            foreach (var rule in matchingRules)
+                rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
 
             var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-            if (match == null)
-                continue;
-
-            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule, match);
+            if (match != null)
+                matches.Add(new ImportRuleMatch(importSyncRule, match));
         }
 
-        // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
-        // This enables simple mode joining without requiring empty import Synchronisation Rules.
-        if (!attemptedMatching && isSimpleMode)
-        {
-            var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
-            if (matchingRules.Count > 0)
+        if (matches.Count == 0)
+            return (false, null, null, null);
+
+        // Rules that find different Metaverse Objects: JIM never chooses between them, so nothing is joined or projected.
+        var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches);
+        if (disagreement != null)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.Message)
             {
-                var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-                // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
-                if (match != null)
-                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null, match);
-            }
-        }
+                MatchCandidates = disagreement.Candidates
+            };
 
-        // No join could be established.
-        return (false, null, null, null);
+        // They agree: the join names the first matching rule by name.
+        return await EstablishJoinAsync(connectedSystemObject, matches[0].Match.MetaverseObject, matches[0].SyncRule, matches[0].Match);
     }
 
     /// <summary>
@@ -7235,7 +7232,7 @@ public abstract class SyncTaskProcessorBase
                 $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
         }
 
-        // Establish join! First rule to match, wins.
+        // Establish the join. Every in-scope rule that matched found this Metaverse Object (#2823).
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
         // Which Object Matching Rule found the match, and on what value (#2052), so the join can be explained.
@@ -7282,18 +7279,25 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to create a Metaverse Object from the Connected System Object using the first Synchronisation Rule for the object type that has Projection enabled.
+    /// Attempts to create a Metaverse Object from the Connected System Object when an in-scope Synchronisation Rule for the
+    /// object type has Projection enabled. Every projecting rule takes part (#2823): see <see cref="ISyncEngine.EvaluateProjection"/>.
     /// </summary>
     /// <param name="activeSyncRules">The active Synchronisation Rules that contain projection and Attribute Flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <param name="projectionSyncRule">Set to the Synchronisation Rule that caused the projection when one occurred, for sync outcome attribution (#1085); null otherwise.</param>
     /// <returns>True if projection occurred, false otherwise.</returns>
-    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Synchronisation Rule.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown if a Synchronisation Rule attempts to use a Function as a source.</exception>
+    /// <exception cref="SyncJoinException">Thrown when projecting rules disagree on the Metaverse Object Type.</exception>
     protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, out SyncRule? projectionSyncRule)
     {
         var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
         projectionSyncRule = decision.ShouldProject ? decision.ProjectionSyncRule : null;
+
+        // In-scope rules disagree on what kind of object this is (#2823): JIM does not guess, so the object is reported
+        // and nothing is projected. It is retried on the next synchronisation, once the rules agree.
+        if (decision.IsConflict)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict,
+                SyncEngine.DescribeProjectionTypeConflict(decision.ConflictingRules));
+
         if (!decision.ShouldProject)
             return false;
 
@@ -7812,13 +7816,12 @@ public abstract class SyncTaskProcessorBase
             return MetaverseObjectChangeResult.NoChanges();
         }
 
-        // Find the first import Synchronisation Rule with scoping criteria: it both supplies the
-        // InboundOutOfScopeAction (or the default, Disconnect, when none exists) and is attributed as
-        // the scoping rule on the DisconnectedOutOfScope outcome (#1085). The CSO fell out of scope of
-        // ALL import rules with scoping criteria, so when several exist the attribution is the
-        // deterministic first applicable rule; the same rule whose action governs the disconnect.
-        var scopingSyncRule = importSyncRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
-        var inboundOutOfScopeAction = scopingSyncRule?.InboundOutOfScopeAction ?? default;
+        // The object has left every import rule for its type (an unscoped rule never lets it go), so the rules that lost
+        // it decide, and Remain Joined wins (#2823). The deciding rule is attributed on the outcome (#1085), and the
+        // decision reads the same whichever order the rules load in.
+        var decision = _syncEngine.DecideLastScopeExit(connectedSystemObject, importSyncRules);
+        var scopingSyncRule = decision.DecidingRule;
+        var inboundOutOfScopeAction = decision.Action;
 
         // Synchronisation Rules are isolated (#2021): a join an export rule made is that export rule's, and only its own
         // scope ends it. Leaving the import rules' scope withdraws only what they brought in.

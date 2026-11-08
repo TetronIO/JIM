@@ -7684,7 +7684,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
-        var query = Repository.Database.SyncRules
+        IQueryable<SyncRule> query = Repository.Database.SyncRules
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
@@ -7725,7 +7725,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.MetaverseObjectType)
-            .Where(sr => sr.ConnectedSystemId == connectedSystemId);
+            .Where(sr => sr.ConnectedSystemId == connectedSystemId)
+            // A fixed order, as the all-rules overload has (#2823). Synchronisation does not rely on it (every decision that
+            // names a rule orders them itself), but anything listing these rules then reads the same way every time.
+            .OrderBy(sr => sr.Name)
+            .ThenBy(sr => sr.Id);
 
         if (!includeDisabledSyncRules)
             query = query.Where(sr => sr.Enabled);

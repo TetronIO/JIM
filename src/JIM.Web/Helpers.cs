@@ -386,6 +386,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
+            // In-scope import rules would project the object into different Metaverse Object Types (#2823).
+            [ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",

@@ -320,5 +320,13 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// rule may manage it, so nothing is staged for any of those rules on this object; its other Connected Systems and the
     /// rest of the run are unaffected. The message names the rules; give them scopes that never overlap, or combine them.
     /// </summary>
-    ExportRuleOverlap
+    ExportRuleOverlap,
+
+    /// <summary>
+    /// Two or more in-scope import Synchronisation Rules would project the Connected System Object, into different
+    /// Metaverse Object Types (#2823). JIM never guesses what kind of object it is, so nothing is projected; the message
+    /// names each rule and the type it projects into. Give the rules scopes that never overlap, or have them project into
+    /// one type.
+    /// </summary>
+    ProjectionTypeConflict
 }

@@ -550,6 +550,48 @@ public class ObjectMatchingPreviewAdapterTests
         }
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task EvaluateDeltasAsync_AdvancedModeRulesWouldMatchDifferentIdentities_ReportsAmbiguityAsync(bool reverse)
+    {
+        // #2823: in Advanced mode every in-scope import rule's matching is evaluated on its own, as the run does. Today
+        // "HR Import" finds Alice on Employee ID. The proposal gives "HR Import (mail)" a rule on mail, which finds Bob,
+        // so the two rules disagree and the run would neither join nor project the object, whichever order they load in.
+        // Merging both rules' matching into one list would stop at Alice and say nothing changes.
+        _connectedSystem.ObjectMatchingRuleMode = ObjectMatchingRuleMode.SyncRule;
+        var mailRule = new SyncRule
+        {
+            Id = ImportRuleId + 1,
+            Name = "HR Import (mail)",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            ConnectedSystemObjectType = _csoType,
+            MetaverseObjectTypeId = MvoTypeId,
+            MetaverseObjectType = _mvoType,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true
+        };
+        var employeeIdRule = StoredRule();
+        employeeIdRule.ConnectedSystemObjectTypeId = null;
+        employeeIdRule.SyncRuleId = ImportRuleId;
+        _importRule.ObjectMatchingRules = [employeeIdRule];
+        _syncRules = reverse ? [mailRule, _importRule] : [_importRule, mailRule];
+        _csos = [UnjoinedCso("E1", "alice@example.com")];
+
+        var proposal = ProposalWith(
+            ObjectMatchingRuleProposal.FromRule(employeeIdRule),
+            MailRuleProposal() with { ConnectedSystemObjectTypeId = null, SyncRuleId = mailRule.Id });
+        var deltas = await _adapter.EvaluateDeltasAsync(Context(proposal), CancellationToken.None).ToListAsync();
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.SingleOrDefault()?.TransitionType,
+                Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.WouldMatchAmbiguously));
+            Assert.That(deltas.SingleOrDefault()?.MatchCandidates?.Select(c => c.CandidateId),
+                Is.EquivalentTo(new[] { _alice.Id, _bob.Id }), "both identities are listed");
+        }
+    }
+
     [Test]
     public async Task CreateImpactCounterAsync_FedItsOwnDeltas_CountsAsCountImpactAsyncDoesAsync()
     {
