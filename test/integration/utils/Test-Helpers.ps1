@@ -6219,3 +6219,24 @@ function Get-PostgresSettingTag {
     if (-not $Setting -or $Setting.Count -eq 0) { return '' }
     '-db-' + (($Setting.Keys | Sort-Object | ForEach-Object { "${_}_$($Setting[$_])" }) -join '-')
 }
+
+function Get-JimDatabaseProfile {
+    <#
+    .SYNOPSIS
+        The PostgreSQL settings the integration runner gives a template (the JIM_DB_* variables that
+        docker-compose.override.yml reads). Every value is $null for templates that keep the dev defaults.
+    .DESCRIPTION
+        Shared by Run-IntegrationTests.ps1 and the PostgreSQL tuning replay (#2834), so a replay runs on
+        exactly the settings a full run would. See the runner for why the Scale profiles look as they do.
+    #>
+    param([string]$Template)
+
+    switch -Wildcard ($Template) {
+        "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+        "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+        "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+        "Scale200k*" { @{ SharedBuffers = "2GB"; EffectiveCache = "4GB";  ShmSize = "3gb";  MaxWal = "8GB";  MinWal = "1GB"; MaintenanceWorkMem = "512MB"; WorkMem = "32MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+        "Scale100k*" { @{ SharedBuffers = "1GB"; EffectiveCache = "2GB";  ShmSize = "1536mb"; MaxWal = "6GB"; MinWal = "512MB"; MaintenanceWorkMem = "256MB"; WorkMem = "16MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+        default      { @{ SharedBuffers = $null; EffectiveCache = $null; ShmSize = $null; MaxWal = $null; MinWal = $null; MaintenanceWorkMem = $null; WorkMem = $null; WalBuffers = $null; CheckpointTimeout = $null; WalCompression = $null } }
+    }
+}

@@ -2077,3 +2077,16 @@ Describe 'Get-PostgresSettingTag' {
             Should -Be '-db-jit_off-random_page_cost_1.1-work_mem_256MB'
     }
 }
+
+Describe 'Get-JimDatabaseProfile' {
+    It 'gives the Scale500k templates the 4 GB profile' {
+        $profile = Get-JimDatabaseProfile -Template 'Scale500k25kGroups'
+        $profile.SharedBuffers | Should -Be '4GB'
+        $profile.MaxWal | Should -Be '16GB'
+    }
+
+    It 'leaves small templates on the dev defaults' {
+        $profile = Get-JimDatabaseProfile -Template 'Nano'
+        $profile.Values | Where-Object { $_ } | Should -BeNullOrEmpty
+    }
+}

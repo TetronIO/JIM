@@ -2994,14 +2994,7 @@ Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "
 # -FullMatrix tier imports 500,000 rows into JIM, which is exactly the load the Scale500k profile was
 # sized for; the default profile would checkpoint-storm through it just as it did for the CSV template.
 $jimDbProfileTemplate = if ($FullMatrix -and $scenarioNumber -eq 16) { "Scale500k65Groups" } else { $Template }
-$jimDbProfile = switch -Wildcard ($jimDbProfileTemplate) {
-    "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
-    "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
-    "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
-    "Scale200k*" { @{ SharedBuffers = "2GB"; EffectiveCache = "4GB";  ShmSize = "3gb";  MaxWal = "8GB";  MinWal = "1GB"; MaintenanceWorkMem = "512MB"; WorkMem = "32MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
-    "Scale100k*" { @{ SharedBuffers = "1GB"; EffectiveCache = "2GB";  ShmSize = "1536mb"; MaxWal = "6GB"; MinWal = "512MB"; MaintenanceWorkMem = "256MB"; WorkMem = "16MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
-    default      { @{ SharedBuffers = $null; EffectiveCache = $null; ShmSize = $null; MaxWal = $null; MinWal = $null; MaintenanceWorkMem = $null; WorkMem = $null; WalBuffers = $null; CheckpointTimeout = $null; WalCompression = $null } }
-}
+$jimDbProfile = Get-JimDatabaseProfile -Template $jimDbProfileTemplate
 # Always assign (clearing to $null removes the variable), so a Scale run in this shell
 # cannot leak its profile into a later small-template run; compose then falls back to
 # the dev defaults in docker-compose.override.yml. Mirrors OPENLDAP_PRIMARY_MEMORY below.
