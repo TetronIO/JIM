@@ -1917,7 +1917,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
@@ -1926,6 +1926,24 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         Guid? afterId = null,
         int? objectTypeId = null,
         DateTime? createdOnOrAfter = null)
+        => GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId,
+            createdOnOrAfter, valueLoadPlan: null);
+
+    /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?)"/>,
+    /// leaving out of each object the attributes <paramref name="valueLoadPlan"/> allows (#2818; see
+    /// <see cref="LoadModifiedPageLeavingAttributesOutAsync"/>). Null loads every object whole, exactly as before.
+    /// </summary>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize,
+        int? knownTotalCount,
+        Guid? afterId,
+        int? objectTypeId,
+        DateTime? createdOnOrAfter,
+        SynchronisationValueLoadPlan? valueLoadPlan)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1957,18 +1975,25 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
-        var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
-            .AsTracking()
-            .Include(cso => cso.Type)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
-                         (cso.SynchronisationPending ||
-                          cso.DerivedInputChangePending ||
-                          cso.ScopeReviewPending ||
-                          cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
-            .OrderBy(cso => cso.Id);
+        // The selection is built with and without the values (#2818): a page that leaves attributes out reads its objects
+        // first, then their values.
+        IQueryable<ConnectedSystemObject> Selection(bool withValues)
+        {
+            IQueryable<ConnectedSystemObject> query = Repository.Database.ConnectedSystemObjects
+                .AsTracking()
+                .Include(cso => cso.Type);
+            if (withValues)
+                query = query.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute);
+
+            return ApplySyncPageFilters(query
+                .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                             (cso.SynchronisationPending ||
+                              cso.DerivedInputChangePending ||
+                              cso.ScopeReviewPending ||
+                              cso.Created > modifiedSince ||
+                              (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
+                .OrderBy(cso => cso.Id);
+        }
 
         // Get count with lightweight query (no includes)
         // Use caller-provided count when available, otherwise query the database.
@@ -1987,16 +2012,22 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // native uuid comparison, matching the ORDER BY above.
         var offset = (page - 1) * pageSize;
         var afterIdValue = afterId ?? Guid.Empty;
-        var pagedCsoQuery = afterId.HasValue
-            ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
-            : csoQuery.Skip(offset).Take(pageSize);
+        IQueryable<ConnectedSystemObject> Paged(bool withValues) => afterId.HasValue
+            ? Selection(withValues).Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
+            : Selection(withValues).Skip(offset).Take(pageSize);
 
         // The Delta Synchronisation's counterpart of the Full Synchronisation's Cso.Page.LoadWithAttributeValues: a
         // modified group brings its whole membership with it (#2669).
         List<ConnectedSystemObject> results;
         using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadModifiedWithAttributeValues"))
         {
-            results = await pagedCsoQuery.ToListAsync();
+            // #2818: a type the plan leaves attributes out of is loaded in steps; every other page exactly as before.
+            var leavesAttributesOut = valueLoadPlan is { LeavesNothingOut: false } &&
+                                      (!objectTypeId.HasValue || valueLoadPlan.AttributesByObjectTypeId.ContainsKey(objectTypeId.Value)) &&
+                                      Repository.Database.Database.IsRelational();
+            results = leavesAttributesOut
+                ? await LoadModifiedPageLeavingAttributesOutAsync(Paged(withValues: false), valueLoadPlan!, loadSpan)
+                : await Paged(withValues: true).ToListAsync();
             loadSpan?.SetTag("csoCount", results.Count);
             loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
         }

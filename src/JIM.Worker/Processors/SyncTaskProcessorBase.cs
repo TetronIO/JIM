@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
 using JIM.Application.Utilities;
 using JIM.Models.Expressions;
@@ -377,6 +378,22 @@ public abstract class SyncTaskProcessorBase
 
     // Expression evaluator for expression-based Synchronisation Rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
+
+    /// <summary>
+    /// Test hook (#2818): the threshold a Delta Synchronisation's page load leaves a group's member attribute out at, in
+    /// place of <see cref="SynchronisationValueLoadPlan.DefaultMinimumHeldValueCount"/>; <see cref="int.MaxValue"/> leaves
+    /// nothing out. Null in production.
+    /// </summary>
+    internal int? SynchronisationValueLoadThresholdForTests { get; set; }
+
+    /// <summary>
+    /// Test hook (#2818): how many objects this run's page loads left an attribute out of, and how many questions Drift
+    /// Detection asked the database about them.
+    /// </summary>
+    internal (int LeftOutObjects, int DriftQuestions) SynchronisationValueLoadCountsForTests => (_leftOutObjectCount, _driftHeldReferenceQuestionCount);
+
+    private int _leftOutObjectCount;
+    private int _driftHeldReferenceQuestionCount;
 
     /// <summary>
     /// Test hook: invoked after each CSO is processed in Pass 2.
@@ -7697,8 +7714,11 @@ public abstract class SyncTaskProcessorBase
                 continue;
             }
 
-            // Need to load CSO attributes for scoping evaluation if not already loaded
-            if (csoWithAttributes.AttributeValues.Count == 0)
+            // Need to load CSO attributes for scoping evaluation if not already loaded. Not an object a Delta
+            // Synchronisation left an attribute out of (#2818): its other values are all loaded, so none means it holds
+            // none, and no Scoping Criterion reads the attribute left out (SynchronisationValueLoadPlanner). Reloading it
+            // would replace its loaded values with untracked ones that include the values it was loaded without.
+            if (csoWithAttributes.AttributeValues.Count == 0 && !connectedSystemObject.IsPartiallyLoaded)
             {
                 var fullCso = await _syncRepo.GetConnectedSystemObjectWithAttributeValuesAsync(_connectedSystem.Id, connectedSystemObject.Id);
                 if (fullCso != null)
@@ -8270,6 +8290,7 @@ public abstract class SyncTaskProcessorBase
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
             var heldPendingExports = await GetPendingExportsHoldingChangesAsync();
+            var heldReferenceAnswers = await AskDriftHeldReferenceQuestionsAsync();
 
             // Which enforcing rules cover an object can depend on its connections (#2021, #2820): read them once for the
             // batch, and only when a rule has a connection criterion.
@@ -8283,10 +8304,104 @@ public abstract class SyncTaskProcessorBase
                 : await _syncServer.ReadExportConnectionsAsync(driftMvoIds, _driftDetectionExportRules);
 
             foreach (var (cso, mvo) in _pendingDriftEvaluations)
-                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), connections);
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), heldReferenceAnswers.GetValueOrDefault(cso.Id), connections);
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// #2818: asks the database Drift Detection's questions about the queued objects this page loaded with an attribute left
+    /// out, in one round trip, and returns the answers by object. Asked here, after the page's Metaverse Objects and joins
+    /// are saved and immediately before drift is evaluated, so the expected values are the Metaverse Object's as drift reads
+    /// it, and the held values resolve through the joins as the page has left them (the page load left out only objects
+    /// referencing none of the page's own objects, the only ones whose joins the page changes). No query when the page left
+    /// nothing out.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>> AskDriftHeldReferenceQuestionsAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0 || !_pendingDriftEvaluations.Exists(p => p.Cso.IsPartiallyLoaded))
+            return new Dictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>();
+
+        var questions = _pendingDriftEvaluations
+            .Where(pending => pending.Cso.IsPartiallyLoaded)
+            .SelectMany(pending => DriftDetectionService.PlanHeldReferenceQuestions(pending.Cso, pending.Mvo, _driftDetectionExportRules))
+            .DistinctBy(question => (question.ConnectedSystemObjectId, question.AttributeId, question.SourceMetaverseAttributeId))
+            .ToList();
+        if (questions.Count == 0)
+            return new Dictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>();
+
+        using var span = Diagnostics.Sync.StartSpan("CompareHeldReferenceValues")
+            .SetTag("questionCount", questions.Count)
+            .SetTag("expectedValueCount", questions.Sum(q => q.ExpectedValues.Count));
+
+        var answers = await _syncRepo.GetDriftHeldReferenceAnswersAsync(questions);
+        _driftHeldReferenceQuestionCount += questions.Count;
+
+        span.SetTag("heldValueCount", answers.Sum(a => a.HeldValueCount));
+        span.SetTag("heldNotExpectedCount", answers.Sum(a => a.HeldNotExpected.Count));
+        span.SetTag("expectedNotHeldCount", answers.Sum(a => a.ExpectedNotHeld.Count));
+        span.SetTag("differingCount", answers.Count(a => a.Differs));
+        span.SetSuccess();
+
+        Log.Debug("AskDriftHeldReferenceQuestionsAsync: compared {QuestionCount} attribute(s) in the database: {HeldCount} value(s) held, " +
+            "{NotExpected} held but not expected, {NotHeld} expected but not held",
+            questions.Count, answers.Sum(a => a.HeldValueCount), answers.Sum(a => a.HeldNotExpected.Count), answers.Sum(a => a.ExpectedNotHeld.Count));
+
+        return answers
+            .GroupBy(answer => answer.Question.ConnectedSystemObjectId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<DriftHeldReferenceAnswer>)g.ToList());
+    }
+
+    /// <summary>
+    /// #2818: the run's plan for which attributes a Delta Synchronisation's page load may leave out of an object, where
+    /// Drift Detection is their only reader (<see cref="SynchronisationValueLoadPlanner"/>). Logs what it leaves out and,
+    /// for each attribute Drift Detection compares that it keeps whole, why.
+    /// </summary>
+    protected SynchronisationValueLoadPlan PlanSynchronisationValueLoad(List<SyncRule> activeSyncRules)
+    {
+        using var span = Diagnostics.Sync.StartSpan("PlanSynchronisationValueLoad");
+        var threshold = SynchronisationValueLoadThresholdForTests ?? SynchronisationValueLoadPlan.DefaultMinimumHeldValueCount;
+        if (threshold == int.MaxValue)
+        {
+            span.SetTag("plannedAttributeCount", 0);
+            span.SetSuccess();
+            return SynchronisationValueLoadPlan.None;
+        }
+
+        var objectTypes = _objectTypes ?? [];
+        var (plan, fallbacks) = SynchronisationValueLoadPlanner.Plan(objectTypes, activeSyncRules, threshold);
+        var typeNames = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        string TypeName(int id) => LogSanitiser.Sanitise(typeNames.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
+
+        foreach (var (typeId, attributes) in plan.AttributesByObjectTypeId)
+        {
+            Log.Information("PlanSynchronisationValueLoad: {ObjectType}'s {Attributes} are compared by Drift Detection alone, so an object holding at least " +
+                "{Threshold} of their values is loaded without them and compared in the database",
+                TypeName(typeId), string.Join(", ", attributes.Select(a => LogSanitiser.Sanitise(a.Name))), threshold);
+        }
+
+        foreach (var fallback in fallbacks)
+        {
+            Log.Information("PlanSynchronisationValueLoad: {ObjectType}'s {Attribute} is loaded whole: {Reason}",
+                TypeName(fallback.ObjectTypeId), LogSanitiser.Sanitise(fallback.AttributeName), fallback.Reason);
+        }
+
+        span.SetTag("plannedAttributeCount", plan.AttributesByObjectTypeId.Values.Sum(a => a.Count));
+        span.SetTag("configurationFallbackCount", fallbacks.Count);
+        span.SetTag("configurationFallbackReasons", string.Join(",", fallbacks.Select(f => f.Reason).Distinct()));
+        span.SetSuccess();
+        return plan;
+    }
+
+    /// <summary>
+    /// #2818: counts the page's objects loaded with an attribute left out, on the run and on the page load's span.
+    /// </summary>
+    protected void CountLeftOutObjects(IReadOnlyCollection<ConnectedSystemObject> page, OperationSpan loadSpan)
+    {
+        var leftOut = page.Count(cso => cso.IsPartiallyLoaded);
+        _leftOutObjectCount += leftOut;
+        loadSpan.SetTag("leftOutObjectCount", leftOut);
     }
 
     /// <summary>
@@ -8375,8 +8490,11 @@ public abstract class SyncTaskProcessorBase
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
     /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
     /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
+    /// <param name="heldReferenceAnswers">The database's answers for the attributes the page load left out of the object
+    /// (#2818); null for an object loaded whole.</param>
+    /// <param name="connections">The batch's connections, for an enforcing rule scoped by connection (#2021, #2820).</param>
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null,
-        MetaverseObjectConnections? connections = null)
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null, MetaverseObjectConnections? connections = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -8406,6 +8524,7 @@ public abstract class SyncTaskProcessorBase
                 _importMappingCache,
                 _attributePriorityContext,
                 _uniqueValueResolveOptions,
+                heldReferenceAnswers,
                 connections);
         }
         catch (ScopingCriterionFailedException scopingEx)

@@ -1431,7 +1431,7 @@ public class SyncPreviewServer
         try
         {
             drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, context.Cache.Connections);
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections);
         }
         catch (ScopingCriterionFailedException scopingEx)
         {
