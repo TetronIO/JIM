@@ -1,6 +1,6 @@
 # PostgreSQL Tuning Measured Against JIM's Own Workloads
 
-- **Status:** Doing (Phase 0 complete: results on #2834; Phase 1 under way)
+- **Status:** Doing (Phases 0 and 1 complete: results on #2834; Phase 2 under way)
 - **Issue:** [#2834](https://github.com/TetronIO/JIM/issues/2834)
 - **Related:**
   - [#2669](https://github.com/TetronIO/JIM/issues/2669), the leaver-step measurements whose span breakdowns show where synchronisation time goes.
@@ -68,22 +68,22 @@ One Scale500k25kGroups run of Scenario 8, with no setting changed, instrumented 
 
 The sampler is a PowerShell script under `test/integration/utils/`, started and stopped by the runner like the `docker stats` job, so later phases and later runs reuse it.
 
-## Phase 1: a repeatable, cheaper benchmark
+## Phase 1: a repeatable, cheaper benchmark ✅
 
 A full Scale500k25kGroups run takes about 65 minutes, and its step times vary from run to run by a second or two. Twenty settings measured that way would cost a day of machine time, and still blur small effects.
 
 Phase 0 decided what to replay. The later steps (joiners, movers, leavers) take about 6 minutes and 70 seconds of database time, in steps of 2 to 24 seconds: too little to measure settings on. The database's real work is in the initial load, and the Source Full Synchronisation alone is 17 minutes of it. That step has all three effects worth sweeping: JIT on the page-load query, `work_mem` spills, and 36 GB of WAL with checkpoints.
 
-1. **Snapshot after the Full Imports.** `test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Snapshot` runs both directories' scoped Full Imports on a stack the runner set up with `-SetupOnly`, then copies the database inside PostgreSQL (`CREATE DATABASE ... TEMPLATE`). Synchronisation never touches the directories, so only the database needs restoring.
-2. **Replay both Full Synchronisations** (about 20 minutes). `-Action Replay` recreates the database container with the runner's profile plus any settings, restores a fresh copy of the snapshot, runs the Source and Target Full Synchronisations, samples the database throughout, and appends each Run Profile's time to `results.tsv`, with the replay's WAL, checkpoints, temporary files and JIT time.
+1. **Snapshot after the Full Imports.** `test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Snapshot` runs both directories' scoped Full Imports on a stack the runner set up with `-SetupOnly`, then stops the database cleanly and copies its whole Docker volume. Synchronisation never touches the directories, so only the database needs restoring. A copy inside PostgreSQL (`CREATE DATABASE ... TEMPLATE`) does not work: it starts the per-table modification counters at zero, so autovacuum never analyses, the plans change and JIT stops firing. A clean shutdown saves those counters with the data, so the volume copy keeps them; for the same reason the replay never calls `pg_stat_reset()`.
+2. **Replay both Full Synchronisations** (about 20 minutes). `-Action Replay` restores the snapshot volume, recreates the database container with the runner's profile plus any settings, runs the Source and Target Full Synchronisations, samples the database throughout, and appends each Run Profile's time to `results.tsv`, with the replay's WAL, checkpoints, temporary files and JIT time.
 3. **A way to pass any PostgreSQL setting to a run.** The override appends `${JIM_DB_EXTRA_ARGS}` to the database's command line; the runner's `-DatabaseSetting @{ jit = 'off'; work_mem = '256MB' }` and the replay set it. Settings on the command line override `ALTER SYSTEM`, so this is the only reliable way in.
-4. **Settle the baseline.** Replay three times with the integration override's settings, and three times with the customer file's parallel-query settings added. This gives the run-to-run spread every later result is judged against, and decides which configuration to use as the baseline.
+4. **Settle the baseline.** Replay three times with the integration override's settings, and three times with the customer file's parallel-query settings added. This gives the run-to-run spread every later result is judged against, and decides which configuration to use as the baseline. **Result:** the spread is about 1.6% on the Source Full Synchronisation, so a setting must move it by about 2% to count; the parallel-query settings made no difference, so the integration profile stays the baseline. The replay matches the full run's Target step (67 s) and JIT time; its Source step is about 11% faster than Phase 0's, which does not affect comparisons between settings.
 
 The Export and the later steps are not replayed; Phase 3's full runs check every setting there.
 
 ## Phase 2: one setting at a time, well beyond the formula
 
-Each row is replayed at least twice, more where the effect is inside the baseline's spread. Phase 0's findings decide the order and may drop rows.
+Each row is replayed at least twice, more where the effect is inside the baseline's spread. Phase 0's findings decide the order and may drop rows. The first sweep runs three rounds of single-setting replays, rotating the order each round with a baseline in every round so drift cannot favour one setting: `jit` off, `work_mem` 256 MB, `max_wal_size` 64 GB, `wal_compression` off, `wal_buffers` 64 MB, `synchronous_commit` off, and one check of `shared_buffers` at 16 GB. Parallel workers are dropped from the replay (Phase 1 showed no effect on the Full Synchronisations) and left to Phase 3's full runs.
 
 | Setting | Values to try | What it should show |
 |---|---|---|
