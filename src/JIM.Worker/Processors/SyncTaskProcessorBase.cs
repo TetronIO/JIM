@@ -345,6 +345,10 @@ public abstract class SyncTaskProcessorBase
     // _mvoIdToRpei. The export scope review reads it to keep an item only for an object it actually changed.
     private readonly HashSet<Guid> _mvoIdsChangedByExportEvaluation = [];
 
+    // Overlaps already given an ExportRuleOverlap item this run, per Metaverse Object and Connected System (#2820). Export
+    // evaluation and drift detection can both find the same overlap; the administrator needs one item for it, not one per path.
+    private readonly HashSet<(Guid MvoId, int ConnectedSystemId)> _exportRuleOverlapsReported = [];
+
     // Queueing provenance (#1223) for Delete Pending Exports a scope exit staged or reused. Those are persisted
     // as they are staged, ahead of the page flush, so their queueing item is written by a fix-up in
     // FlushPendingExportOperationsAsync rather than with the row.
@@ -3676,6 +3680,12 @@ public abstract class SyncTaskProcessorBase
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
+            // Create error RPEIs where two or more export Synchronisation Rules cover the object in one Connected System
+            // and Object Type (#2820). Nothing was staged for any of them on this object; reported per object rather than
+            // failing the page, so every other object on it still synchronises.
+            foreach (var overlap in result.RuleOverlaps.Where(overlap => _exportRuleOverlapsReported.Add((mvo.Id, overlap.ConnectedSystemId))))
+                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(mvo, overlap));
+
             // Create error RPEIs where export matching could not settle on an existing Connected System Object before
             // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
             // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
@@ -4155,6 +4165,22 @@ public abstract class SyncTaskProcessorBase
             "System Object per Connected System, so nothing was staged for this Rule. Either narrow the Scoping Criteria so that no " +
             "Metaverse Object satisfies two outbound Synchronisation Rules targeting this Connected System, or give the exported " +
             "Object Types their own Connected System over the same target.";
+        return rpei;
+    }
+
+    /// <summary>
+    /// Builds the Run Profile Execution Item reporting that two or more export Synchronisation Rules cover a Metaverse
+    /// Object in one Connected System and Object Type (#2820), on the Metaverse Object, naming the rules and the fix.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildExportRuleOverlapRpei(MetaverseObject mvo, ExportRuleOverlap overlap)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.ConnectedSystemObjectId = overlap.ExistingConnectedSystemObjectId;
+        rpei.ErrorMessage = overlap.DescribeForAdministrator();
         return rpei;
     }
 
@@ -8103,8 +8129,19 @@ public abstract class SyncTaskProcessorBase
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
             var heldPendingExports = await GetPendingExportsHoldingChangesAsync();
 
+            // Which enforcing rules cover an object can depend on its connections (#2021, #2820): read them once for the
+            // batch, and only when a rule has a connection criterion.
+            var driftMvoIds = _pendingDriftEvaluations
+                .Select(pending => (pending.Mvo ?? pending.Cso.MetaverseObject)?.Id ?? Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+            var connections = driftMvoIds.Count == 0 || _driftDetectionExportRules == null
+                ? null
+                : await _syncServer.ReadExportConnectionsAsync(driftMvoIds, _driftDetectionExportRules);
+
             foreach (var (cso, mvo) in _pendingDriftEvaluations)
-                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), connections);
         }
 
         _pendingDriftEvaluations.Clear();
@@ -8196,7 +8233,8 @@ public abstract class SyncTaskProcessorBase
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
     /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
     /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
-    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null)
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null,
+        MetaverseObjectConnections? connections = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -8225,7 +8263,24 @@ public abstract class SyncTaskProcessorBase
                 _driftDetectionExportRules,
                 _importMappingCache,
                 _attributePriorityContext,
-                _uniqueValueResolveOptions);
+                _uniqueValueResolveOptions,
+                connections);
+        }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // Several enforcing rules apply and one's scope could not be decided for this object (#2820): which rule may
+            // correct it is unknown, so nothing is corrected and the object is reported, as export staging reports it.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + scopingEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("EvaluateDriftAndEnforceState: Enforcing rule scope for CSO {CsoId} could not be decided: {Message}",
+                cso.Id, LogSanitiser.Sanitise(scopingEx.Message));
+            span.SetSuccess();
+            return;
         }
         catch (SyncExpressionEvaluationException expressionEx)
         {
@@ -8274,6 +8329,16 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ErrorType = errorType;
             errorRpei.ErrorMessage = errorMessage;
             _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        // Two or more enforcing rules cover the object (#2820): nothing was corrected. Reported once per object and system per run,
+        // since export evaluation reports the same overlap when the object's exports are evaluated.
+        if (result.RuleOverlap != null)
+        {
+            if (_exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
+                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
+            span.SetSuccess();
+            return;
         }
 
         if (heldPendingExport != null)

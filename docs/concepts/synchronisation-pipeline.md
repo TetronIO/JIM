@@ -128,7 +128,7 @@ Export sends Pending Exports from the Connector Space to the target Connected Sy
 1. JIM reads the Pending Exports for the Connected System.
 2. For each one, the Connector sends the change to the external system.
 3. A successful export is confirmed, usually by the next import, and its Pending Export is cleared.
-4. A failed export stays a Pending Export, with its error recorded on the run's Activity, and is attempted again at every export run until the cause is fixed; [Troubleshooting Synchronisation](../administration/troubleshooting-synchronisation.md#operation-failed-export-failed) explains each error.
+4. A failed export stays a Pending Export, with its error recorded on the run's Activity, and is attempted again at every export run until the cause is fixed; [Troubleshooting Synchronisation](../administration/troubleshooting-exports.md#operation-failed-export-failed) explains each error.
 5. The run's Activity records how many changes were exported.
 
 ### Batching and Parallelism

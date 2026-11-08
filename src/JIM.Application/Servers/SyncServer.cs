@@ -449,8 +449,12 @@ public class SyncServer : ISyncServer
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments);
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        MetaverseObjectConnections? connections = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments, connections);
+
+    public Task<MetaverseObjectConnections?> ReadExportConnectionsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IEnumerable<SyncRule> exportRules)
+        => _exportEval.ReadConnectionsAsync(metaverseObjectIds, exportRules);
 
     #endregion
 

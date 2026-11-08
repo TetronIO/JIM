@@ -177,12 +177,21 @@ public class SyncRule : IAuditable, IValidated
     public IReadOnlyList<string> ScopingSaveWarnings => ScopingWarningsOf(ObjectScopingCriteriaGroups).Distinct(StringComparer.Ordinal).ToList();
 
     /// <summary>
-    /// Every warning the save that returned this instance raised: <see cref="AttributeFlowSaveWarnings"/>, then
-    /// <see cref="ScopingSaveWarnings"/>, each once. The one list the portal and the REST API report, so neither says
-    /// more or less than the other.
+    /// The warnings the save that returned this instance raised about the rule as a whole rather than one of its Attribute
+    /// Flows or Scoping Criteria: another enabled export rule targeting the same objects (#2820). Transient: never
+    /// persisted, and empty on every ordinary read.
     /// </summary>
     [NotMapped]
-    public IReadOnlyList<string> SaveWarnings => AttributeFlowSaveWarnings.Concat(ScopingSaveWarnings).Distinct(StringComparer.Ordinal).ToList();
+    public List<string> RuleSaveWarnings { get; } = [];
+
+    /// <summary>
+    /// Every warning the save that returned this instance raised: <see cref="RuleSaveWarnings"/>, then
+    /// <see cref="AttributeFlowSaveWarnings"/>, then <see cref="ScopingSaveWarnings"/>, each once. The one list the portal
+    /// and the REST API report, so neither says more or less than the other.
+    /// </summary>
+    [NotMapped]
+    public IReadOnlyList<string> SaveWarnings =>
+        RuleSaveWarnings.Concat(AttributeFlowSaveWarnings).Concat(ScopingSaveWarnings).Distinct(StringComparer.Ordinal).ToList();
 
     private static IEnumerable<string> ScopingWarningsOf(IEnumerable<SyncRuleScopingCriteriaGroup> groups) =>
         groups.SelectMany(group => group.Criteria.SelectMany(criterion => criterion.SaveWarnings).Concat(ScopingWarningsOf(group.ChildGroups)));

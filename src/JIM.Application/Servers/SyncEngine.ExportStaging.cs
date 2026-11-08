@@ -192,6 +192,53 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Finds the groups of export Synchronisation Rules that all have the Metaverse Object in scope for the same Connected
+    /// System and Connected System Object Type (#2820). A Metaverse Object holds one Connected System Object there and only
+    /// one rule may manage it, so every rule in such a group is held back for this object and the overlap is reported.
+    /// Rules targeting different Object Types in one system are not an overlap here: that is the Object Type conflict
+    /// (#1331), decided per rule.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object being evaluated.</param>
+    /// <param name="inScopeExportRules">The enabled export rules that have the Metaverse Object in scope, in evaluation order.</param>
+    /// <param name="existingCsoInSystem">Returns the Connected System Object the Metaverse Object holds in a Connected System, if any.</param>
+    /// <returns>One overlap per group of two or more rules; empty when every rule stands alone.</returns>
+    internal static List<ExportRuleOverlap> FindExportRuleOverlaps(
+        MetaverseObject mvo,
+        IReadOnlyList<SyncRule> inScopeExportRules,
+        Func<int, ConnectedSystemObject?> existingCsoInSystem)
+    {
+        return inScopeExportRules
+            .GroupBy(rule => (rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
+            .Where(group => group.Count() > 1)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new ExportRuleOverlap
+                {
+                    MetaverseObjectId = mvo.Id,
+                    ConnectedSystemId = first.ConnectedSystemId,
+                    ConnectedSystemName = first.ConnectedSystem?.Name ?? first.ConnectedSystemId.ToString(CultureInfo.InvariantCulture),
+                    ObjectTypeName = first.ConnectedSystemObjectType?.Name ?? first.ConnectedSystemObjectTypeId.ToString(CultureInfo.InvariantCulture),
+                    SyncRuleNames = group.Select(rule => rule.Name).ToList(),
+                    ExistingConnectedSystemObjectId = existingCsoInSystem(first.ConnectedSystemId)?.Id
+                };
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The export rules that stand alone for this Metaverse Object: each in-scope rule that no other in-scope rule shares a
+    /// Connected System and Object Type with. Only these may stage anything for the object; the rest are reported by
+    /// <see cref="FindExportRuleOverlaps"/>.
+    /// </summary>
+    internal static List<SyncRule> StandaloneExportRules(IReadOnlyList<SyncRule> inScopeExportRules) =>
+        inScopeExportRules
+            .Where(rule => inScopeExportRules.Count(other =>
+                other.ConnectedSystemId == rule.ConnectedSystemId &&
+                other.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId) == 1)
+            .ToList();
+
+    /// <summary>
     /// Checks whether any of the changed MVO attributes are relevant to the given export rule: a changed
     /// attribute is relevant when it is a direct source for one of the rule's Attribute Flow mappings, and an
     /// expression-based mapping may depend on any attribute, so any change is conservatively relevant to it.

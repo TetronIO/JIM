@@ -69,7 +69,8 @@ public class DriftDetectionService
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null)
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        MetaverseObjectConnections? connections = null)
     {
         var result = new DriftDetectionResult();
 
@@ -114,6 +115,26 @@ public class DriftDetectionService
                        r.ConnectedSystemObjectTypeId == cso.TypeId &&
                        r.MetaverseObjectTypeId == targetMvo.Type.Id)
             .ToList();
+
+        // Several enforcing rules for one Connected System and Object Type (#2820): only the rules that have the object in
+        // scope may enforce anything on it, and if two still do, neither may, since only one rule may manage an object.
+        // With a single enforcing rule nothing changes: it enforces as it always has.
+        if (applicableExportRules.Count > 1)
+        {
+            applicableExportRules = applicableExportRules
+                .Where(rule => _jim.ScopingEvaluation.IsMvoInScopeForExportRule(targetMvo, rule, connections: connections))
+                .ToList();
+
+            var overlap = SyncEngine.FindExportRuleOverlaps(targetMvo, applicableExportRules, _ => cso).FirstOrDefault();
+            if (overlap != null)
+            {
+                Log.Warning("EvaluateDrift: CSO {CsoId} is covered by {RuleCount} export rules with Enforce State in Connected System {SystemId} " +
+                    "({Rules}); only one rule may manage an object, so no drift was corrected.",
+                    cso.Id, overlap.SyncRuleNames.Count, cso.ConnectedSystemId, LogSanitiser.Sanitise(string.Join(", ", overlap.SyncRuleNames)));
+                result.RuleOverlap = overlap;
+                return result;
+            }
+        }
 
         if (applicableExportRules.Count == 0)
         {
