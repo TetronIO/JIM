@@ -323,7 +323,7 @@ if ${SAMBA_BIN}/samba-tool group listmembers "Domain Admins" 2>/dev/null | grep 
     exit 1
 fi
 rm -f /tmp/jim-probe-add.ldif /tmp/jim-probe-mod.ldif /tmp/jim-probe-outside.ldif
-echo "  Delegation verified (create, write, set password, read permissions, delete, read tombstones; no access outside)"
+echo "  Delegation verified (create, write, set password, read permissions, delete, contacts, read tombstones; no access outside)"
 
 # Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."
