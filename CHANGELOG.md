@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A group membership change now exports only the members added or removed. A member removed from the target group by hand is no longer re-added by the group's next change; with Enforce State on, drift correction puts it back. A new group is still created with every member. (#2832)
 - 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon, and if it still doesn't fit, its Initiated By chips show just their tag (KEY, SCH, JIM and so on). On the Schedules tab each Schedule's Trigger and last Outcome show just their icon. Hovering a chip shows its full detail, including the exact count.
 - 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
 - 🔄 On Active Directory, the attributes only Exchange may set (`homeMDB`, `msExchRecipientTypeDetails` and five more) are discovered read-only, so no Attribute Flow can write them: written directly, they create no mailbox. They are still imported. (#2755)
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An object leaving one import Synchronisation Rule's scope while another still covers it now gives up that rule's values under **Disconnect from Metaverse**; they no longer outrank the rules still covering it. The join stays, recorded as **Left scope, join kept**. (#2821)
+- 🐛 When a Metaverse Object's reference resolves only after the rest of a synchronisation, and a Synchronisation Rule takes over the unchanged value, which rule contributed it is now saved. Attribute Priority could otherwise treat the previous contributor as the owner. (#2831)
 - 🐛 A Schedule's description on the Operations page's Schedules tab no longer wraps over many lines in a narrow window; it follows the name on one line, with the full text on hover.
 - 🐛 A long Connected System or Run Profile name no longer wraps a row of the Operations page's Completed list over several lines; it stays on one line, with the full name on hover. A Schedule's row in the Queued and In Progress lists now lines up with the table: its step rail starts under Run Profile and runs to the row's actions, so its step names are no longer cut short.
 - 🐛 A cleared or deleted Connected System now reads correctly in the Operations page's Completed list: the system under Connected System, the operation under Run Profile, and, for a clear, the Connected System Objects and Pending Exports it removed as its outcomes. It previously showed the system's name under Run Profile and no outcomes.
@@ -97,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Delta Imports of large Connected Systems start faster and use less memory: JIM now looks up only the objects each page returns, rather than first reading every object it holds, which took 3.6 seconds on every Delta Import at 500,000 objects. (#2705)
 - ⚡ Delta Imports of large groups whose membership changed are faster and use far less memory: the database compares the members with what the Connector returned, and JIM loads only those that changed, not every member, which took 2 seconds for a 200,000-member group. (#2817)
 - ⚡ Exporting changes to large groups is faster: each batch now reads only the members its changes name, beside a count of the rest, so loading and recording a batch no longer grows with group size (2.8 seconds to 50 ms for one 200,000-member group). (#2816)
+- ⚡ Synchronisation no longer rewrites Metaverse Objects it left unchanged, or re-reads all their values to do so (every member of a large group); it writes only the objects it changed. (#2831)
 
 ### Removed
 

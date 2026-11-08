@@ -1996,6 +1996,17 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// The target Connected System Objects' attribute values for export evaluation's no-net-change detection, as
+    /// <see cref="GetCsoAttributeValuesByCsoIdsAsync"/> loads them, except that each attribute a member question names is
+    /// loaded in part (#2832): only the values that could name one of its Metaverse Objects, as a member joined to one, or
+    /// unresolved with that object's id as its text. Every other value is loaded whole.
+    /// </summary>
+    /// <param name="csoIds">The target Connected System Objects.</param>
+    /// <param name="memberQuestions">The attributes to load in part; at most one per object and attribute.</param>
+    Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions);
+
+    /// <summary>
     /// Gets a single CSO joined to a specific MVO within a Connected System.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>

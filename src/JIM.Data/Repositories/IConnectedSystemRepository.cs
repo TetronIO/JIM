@@ -785,6 +785,13 @@ public interface IConnectedSystemRepository
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// As <see cref="GetCsoAttributeValuesByCsoIdsAsync"/>, with each attribute a member question names loaded in part
+    /// (#2832). See <c>ISyncRepository.GetCsoAttributeValuesForExportEvaluationAsync</c>.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions);
+
+    /// <summary>
     /// Export matching's lookup (#2052): for a single Object Matching Rule, finds every unjoined,
     /// Normal-status Connected System Object of the given type in the given Connected System whose named
     /// attribute equals one of the given values. Used both for one Metaverse Object's values and to

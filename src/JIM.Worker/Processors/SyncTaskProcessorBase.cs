@@ -2237,6 +2237,15 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Whether a joined Metaverse Object must still be written by the page flush although this pass staged no value
+    /// addition or removal for it (#2831): a value whose provenance Attribute Flow took over in place (#1292), which only
+    /// the batch update stores, or a generation still unresolved, which must reach the page flush's integrity guard (it
+    /// fails the page) rather than be dropped silently by skipping the write.
+    /// </summary>
+    private static bool RequiresWriteWithoutStagedChanges(MetaverseObject mvo) =>
+        mvo.HasPendingProvenanceChanges || mvo.PendingGeneratedValues.Count > 0;
+
+    /// <summary>
     /// Copies deletion-marker scalars (see <see cref="ClearMvoDeletionMarkers"/>) from one Metaverse Object
     /// instance to another, only when the source carries them and the destination does not. Used by
     /// <see cref="QueueMvoForUpdate"/>'s tripwire consolidation to preserve a grace-period deletion recorded
@@ -2676,11 +2685,18 @@ public abstract class SyncTaskProcessorBase
                 // New MVO - queue for batch create
                 _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
-            else
+            else if (attributesAdded > 0 || attributesRemoved > 0 || wasJoined
+                     || RequiresWriteWithoutStagedChanges(connectedSystemObject.MetaverseObject))
             {
-                // Existing MVO - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO obsoleted
-                // earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
+                // Existing MVO this pass changed - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO
+                // obsoleted earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
                 // same MVO for a grace-period deletion marker (SamePageJoinConflict).
+                //
+                // An object this pass left as it was is not queued (#2831): the batch update re-reads every value it
+                // holds (every member of a large group) and rewrites its row to the values it already has. A join is
+                // queued even with no value staged, because cancelling a scheduled deletion (EstablishJoinAsync) clears
+                // the deletion markers on the row and nothing else writes them. A reference value that changes later
+                // in the page queues the object from the deferred reference pass.
                 QueueMvoForUpdate(connectedSystemObject.MetaverseObject);
             }
 
@@ -4332,6 +4348,10 @@ public abstract class SyncTaskProcessorBase
             }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
 
+            // The taken-over provenance is stored now; a later pass over the same instance must not write it again.
+            foreach (var mvo in _pendingMvoUpdates)
+                mvo.HasPendingProvenanceChanges = false;
+
             if (refFixups.Count > 0)
                 using (Diagnostics.Sync.StartSpan("FixupMvoReferenceValueIds"))
                 {
@@ -4646,24 +4666,21 @@ public abstract class SyncTaskProcessorBase
                     QueueMvoForUpdate(mvo);
                 }
 
-                // Queue for export evaluation (reference changes may trigger exports)
-                // Include all reference attributes as changed, with removals tracked separately
-                // Note: Check both ReferenceValue (navigation) and ReferenceValueId (FK) as navigation may not be loaded
-                var currentRefAttributes = mvo.AttributeValues
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList();
-                var removedRefAttributesFiltered = refRemovedAttributes?
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList() ?? [];
-
-                var changedRefAttributes = currentRefAttributes
-                    .Concat(removedRefAttributesFiltered)
-                    .Cast<MetaverseObjectAttributeValue>()
-                    .ToList();
+                // Queue for export evaluation: the references this pass added, then those it removed, exactly as the
+                // first pass queues its other changes. Only the members that changed are staged (#2832); a Create
+                // still provisions the whole set (SyncEngine.ComputeAttributeValueChanges), and a member missing from
+                // the target is repaired by drift detection, not re-asserted as a side effect of another change.
+                var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
                 if (changedRefAttributes.Count > 0)
                 {
                     MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                 }
+            }
+            else if (mvo.Id != Guid.Empty && RequiresWriteWithoutStagedChanges(mvo))
+            {
+                // A reference this pass re-flowed unchanged but took the provenance of (#1292). The scalar pass has
+                // already decided whether to write the object, without knowing about it (#2831).
+                QueueMvoForUpdate(mvo);
             }
         }
 
@@ -4676,6 +4693,20 @@ public abstract class SyncTaskProcessorBase
 
         return totalChanges;
     }
+
+    /// <summary>
+    /// The reference values a reference pass queues for export evaluation: those it added, then those it removed, each
+    /// naming an object (the navigation, or the scalar foreign key where the navigation is not loaded). Only what changed
+    /// (#2832): queuing every reference the Metaverse Object holds made export staging re-assert a group's whole
+    /// membership whenever one member changed, re-adding a member removed from the target by hand even with Enforce
+    /// State off, and loading the target group whole to filter that re-assertion.
+    /// </summary>
+    private static List<MetaverseObjectAttributeValue> ChangedReferenceValues(
+        IEnumerable<MetaverseObjectAttributeValue> added,
+        IEnumerable<MetaverseObjectAttributeValue> removed) =>
+        added.Concat(removed)
+            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+            .ToList();
 
     /// <summary>
     /// Resolves cross-page reference attributes after all pages have been processed.
@@ -4987,20 +5018,20 @@ public abstract class SyncTaskProcessorBase
                         // Queue for persistence and export evaluation
                         QueueMvoForUpdate(mvo);
 
-                        var changedRefAttributes = mvo.AttributeValues
-                            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                            .Cast<MetaverseObjectAttributeValue>()
-                            .ToList();
-
-                        if (refRemovedAttributes != null)
-                        {
-                            changedRefAttributes.AddRange(refRemovedAttributes);
-                        }
+                        // Only the references this step changed (#2832), as on the page; see ProcessDeferredReferenceAttributes.
+                        var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
 
                         if (changedRefAttributes.Count > 0)
                         {
                             MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                         }
+                    }
+                    else if (RequiresWriteWithoutStagedChanges(mvo))
+                    {
+                        // A reference that resolved here to the object already named, whose provenance this pass took over
+                        // (#1292). Nothing was staged, and the page this object came from was written before the reference
+                        // could resolve, so only this write stores the stamp (#2831).
+                        QueueMvoForUpdate(mvo);
                     }
                 }
 
@@ -5240,14 +5271,14 @@ public abstract class SyncTaskProcessorBase
         // Refresh the per-page portion of the export evaluation cache for only this page's MVOs.
         // This loads target CSOs and their attribute values for no-net-change detection, scoped to
         // just the MVOs being evaluated — avoiding the previous approach of loading ALL target CSOs
-        // upfront which consumed multiple GB at 100K+ objects.
+        // upfront which consumed multiple GB at 100K+ objects. A target group's member attribute is
+        // loaded only for the members this page's changes add or remove (#2832).
         if (_exportEvaluationCache != null)
         {
-            var mvoIdsForExport = _pendingExportEvaluations
-                .Select(x => x.Mvo.Id)
-                .Where(id => id != Guid.Empty)
-                .Distinct();
-            await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+            var evaluationsForCache = _pendingExportEvaluations
+                .Select(x => (x.Mvo, (IReadOnlyCollection<MetaverseObjectAttributeValue>)x.ChangedAttributes))
+                .ToList();
+            await _syncServer.RefreshExportEvaluationCacheForEvaluationsAsync(_exportEvaluationCache, evaluationsForCache);
 
             if (prefetchPendingExports)
             {

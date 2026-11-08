@@ -4304,7 +4304,8 @@ public class ExportEvaluationTests
         // block clears a genuinely populated instance, not one that was already empty.
         var mockSyncServer = new Mock<ISyncServer>();
         mockSyncServer
-            .Setup(s => s.RefreshExportEvaluationCacheForPageAsync(It.IsAny<ExportEvaluationCache>(), It.IsAny<IEnumerable<Guid>>()))
+            .Setup(s => s.RefreshExportEvaluationCacheForEvaluationsAsync(It.IsAny<ExportEvaluationCache>(),
+                It.IsAny<IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)>>()))
             .Returns(Task.CompletedTask);
         mockSyncServer
             .Setup(s => s.PrefetchExportMatchCandidatesForPageAsync(It.IsAny<ExportEvaluationCache>(), It.IsAny<IReadOnlyCollection<MetaverseObject>>()))

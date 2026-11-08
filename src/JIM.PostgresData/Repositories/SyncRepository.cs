@@ -753,6 +753,10 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
 
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions)
+        => _repo.ConnectedSystems.GetCsoAttributeValuesForExportEvaluationAsync(csoIds, memberQuestions);
+
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);
 

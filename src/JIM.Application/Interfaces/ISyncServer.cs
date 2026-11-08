@@ -257,6 +257,15 @@ public interface ISyncServer
     Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds);
 
     /// <summary>
+    /// Rebuilds the per-page portions of the export evaluation cache for a synchronisation page's export evaluations,
+    /// loading a target group's member attribute only for the members the page's changes add or remove, where nothing
+    /// else could ask about it (#2832).
+    /// </summary>
+    Task RefreshExportEvaluationCacheForEvaluationsAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)> evaluations);
+
+    /// <summary>
     /// Prefetches export-matching candidates for a whole page of Metaverse Objects in one batch query per
     /// Object Matching Rule group, instead of the one-database-round-trip-per-object cost export matching
     /// otherwise pays for every provisioning verdict. Populates

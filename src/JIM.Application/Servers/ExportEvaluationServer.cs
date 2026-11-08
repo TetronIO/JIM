@@ -124,11 +124,38 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="cache">The cache to refresh (rules and target system IDs are preserved).</param>
     /// <param name="mvoIds">MVO IDs from the current page's Pending Export evaluations.</param>
-    public async Task RefreshExportEvaluationCacheForPageAsync(
+    public Task RefreshExportEvaluationCacheForPageAsync(
         ExportEvaluationCache cache,
         IEnumerable<Guid> mvoIds)
+        => RefreshExportEvaluationCacheAsync(cache, mvoIds.ToList(), evaluations: null);
+
+    /// <summary>
+    /// Rebuilds the per-page portions of the export evaluation cache for a synchronisation page's export evaluations,
+    /// loading each target group's member attribute only in part where the page's changes allow it (#2832).
+    /// </summary>
+    /// <remarks>
+    /// A membership change stages only the members that changed, so no-net-change detection needs to know only whether
+    /// the target holds those. <see cref="ExportEvaluationMemberLoadPlanner"/> decides which multi-valued reference
+    /// attributes can be loaded with just those members' values; every other value is loaded whole, as
+    /// <see cref="RefreshExportEvaluationCacheForPageAsync"/> loads it. The attributes loaded in part are recorded on
+    /// <see cref="ExportEvaluationCache.PartiallyLoadedCsoAttributeValues"/>, and export evaluation fails rather than
+    /// answer any other question from them.
+    /// </remarks>
+    /// <param name="cache">The cache to refresh (rules and target system IDs are preserved).</param>
+    /// <param name="evaluations">The page's export evaluations: each Metaverse Object with the values it changed.</param>
+    public Task RefreshExportEvaluationCacheForEvaluationsAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)> evaluations)
+        => RefreshExportEvaluationCacheAsync(cache,
+            evaluations.Select(e => e.Mvo.Id).Where(id => id != Guid.Empty).Distinct().ToList(),
+            evaluations);
+
+    private async Task RefreshExportEvaluationCacheAsync(
+        ExportEvaluationCache cache,
+        List<Guid> mvoIdList,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)>? evaluations)
     {
-        var mvoIdList = mvoIds.ToList();
+        cache.PartiallyLoadedCsoAttributeValues = [];
 
         // Connection criteria (#2021) read which named Object Types each object is joined to: one statement per page,
         // and none at all when no export rule has such a criterion.
@@ -153,7 +180,24 @@ public class ExportEvaluationServer
         var targetCsoIds = cache.CsoLookup.Values.Select(cso => cso.Id).ToList();
         if (targetCsoIds.Count > 0)
         {
-            var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
+            var memberQuestions = evaluations == null ? [] : ExportEvaluationMemberLoadPlanner.Plan(cache, evaluations);
+            List<ConnectedSystemObjectAttributeValue> csoAttributeValues;
+            using (var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("LoadExportEvaluationCsoValues"))
+            {
+                loadSpan.SetTag("csoCount", targetCsoIds.Count);
+                loadSpan.SetTag("partialAttributeCount", memberQuestions.Count);
+                loadSpan.SetTag("askedMemberCount", memberQuestions.Sum(q => q.MetaverseObjectIds.Count));
+
+                csoAttributeValues = memberQuestions.Count == 0
+                    ? await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds)
+                    : await SyncRepo.GetCsoAttributeValuesForExportEvaluationAsync(targetCsoIds, memberQuestions);
+
+                loadSpan.SetTag("valueCount", csoAttributeValues.Count);
+                loadSpan.SetSuccess();
+            }
+
+            cache.PartiallyLoadedCsoAttributeValues = memberQuestions.ToDictionary(
+                q => (q.ConnectedSystemObjectId, q.AttributeId), q => q.MetaverseObjectIds);
             cache.CsoAttributeValues = csoAttributeValues
                 .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
             cache.CsoIdsWithPersistedPendingExports = await SyncRepo.GetConnectedSystemObjectIdsWithPendingExportsAsync(targetCsoIds);
@@ -2575,6 +2619,37 @@ public class ExportEvaluationServer
         return SyncEngine.StandaloneExportRules(inScopeExportRules);
     }
 
+    /// <summary>
+    /// The fault guard for a member attribute loaded in part (#2832): every change no-net-change detection judged against
+    /// such an attribute must be an Add or Remove naming one of the Metaverse Objects its values were loaded for, the only
+    /// question they answer exactly. Anything else would be judged against an incomplete set, so evaluation stops rather
+    /// than stage, or drop, a change on a wrong answer. The planner never produces that case
+    /// (<see cref="ExportEvaluationMemberLoadPlanner"/>); this catches a future path that would.
+    /// </summary>
+    internal static void EnsureJudgedByLoadedValues(ExportEvaluationCache cache, Guid csoId, IEnumerable<PendingExportAttributeValueChange> judged)
+    {
+        if (cache.PartiallyLoadedCsoAttributeValues.Count == 0)
+            return;
+
+        foreach (var change in judged)
+        {
+            if (!cache.PartiallyLoadedCsoAttributeValues.TryGetValue((csoId, change.AttributeId), out var loadedFor))
+                continue;
+
+            var answerable = change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Remove &&
+                             !change.ResolvedReferenceCsoId.HasValue &&
+                             SyncEngine.NamedMetaverseObjectId(change) is { } named &&
+                             loadedFor.Contains(named);
+            if (!answerable)
+            {
+                throw new InvalidOperationException(
+                    $"Export evaluation judged a {change.ChangeType} change to attribute {change.AttributeId} of Connected System Object {csoId} " +
+                    "against values loaded only for the members this page changes. Judged against an incomplete set, it could be staged or " +
+                    "dropped wrongly, so the evaluation stops instead.");
+            }
+        }
+    }
+
     internal static ExportObjectTypeConflict? DetectObjectTypeConflict(
         MetaverseObject mvo,
         SyncRule exportRule,
@@ -2795,6 +2870,10 @@ public class ExportEvaluationServer
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
             attrSpan.SetSuccess();
         }
+
+        // Every change no-net-change detection judged must be one the cache's values could answer (#2832).
+        if (changeType != PendingExportChangeType.Create && existingCso != null)
+            EnsureJudgedByLoadedValues(cache, existingCso.Id, attributeChanges.Concat(alreadyCurrentChanges));
 
         if (attributeChanges.Count == 0 && changeType == PendingExportChangeType.Update)
         {
