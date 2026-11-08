@@ -3966,14 +3966,10 @@ if ($SetupOnly) {
     Write-Section "Performance Summary"
     Write-Host "${CYAN}Stage Timings:${NC}"
 
-    $sortedTimings = $timings.GetEnumerator() | Sort-Object Name
-    $totalSeconds = 0
-    foreach ($timing in $sortedTimings) {
-        $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
-        $totalSeconds += $seconds
-        $bar = "█" * [math]::Max(0, [math]::Min(50, [math]::Floor($seconds / 2)))
-        Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
-    }
+    $sortedTimings = [ordered]@{}
+    foreach ($timing in $timings.GetEnumerator() | Sort-Object Name) { $sortedTimings[$timing.Name] = $timing.Value }
+    $totalSeconds = [math]::Round(($timings.Values | Measure-Object -Property TotalSeconds -Sum).Sum, 1)
+    Write-TimingChart -Timings $sortedTimings
 
     Write-Host ""
     Write-Host "${CYAN}Total Duration: ${NC}$($duration.ToString('hh\:mm\:ss')) (${totalSeconds}s)"
@@ -4877,15 +4873,10 @@ Write-Section "Performance Summary"
 Write-Host "${CYAN}Stage Timings:${NC}"
 
 # Sort timings by key (which has stage number prefix)
-$sortedTimings = $timings.GetEnumerator() | Sort-Object Name
-
-$totalSeconds = 0
-foreach ($timing in $sortedTimings) {
-    $seconds = [math]::Round($timing.Value.TotalSeconds, 1)
-    $totalSeconds += $seconds
-    $bar = "█" * [math]::Max(0, [math]::Min(50, [math]::Floor($seconds / 2)))
-    Write-Host ("  {0,-25} {1,6}s  {2}" -f $timing.Name, $seconds, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Green" })
-}
+$sortedTimings = [ordered]@{}
+foreach ($timing in $timings.GetEnumerator() | Sort-Object Name) { $sortedTimings[$timing.Name] = $timing.Value }
+$totalSeconds = [math]::Round(($timings.Values | Measure-Object -Property TotalSeconds -Sum).Sum, 1)
+Write-TimingChart -Timings $sortedTimings
 
 Write-Host ""
 Write-Host "${GRAY}Note: '5. Run Tests' breakdown shown in 'Performance Breakdown (Test Steps)' section above${NC}"

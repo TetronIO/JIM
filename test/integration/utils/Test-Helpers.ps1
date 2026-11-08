@@ -6073,3 +6073,107 @@ function Wait-ForInitialPasswordDelivery {
         Start-Sleep -Seconds 1
     }
 }
+
+function Format-TimingDuration {
+    <#
+    .SYNOPSIS
+        Formats a duration for a timing chart: "0.2s", "1m 11s" or "3h 06m 33s".
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [double]$Seconds
+    )
+
+    if ($Seconds -lt 60) {
+        return "{0}s" -f [math]::Round($Seconds, 1)
+    }
+    $whole = [math]::Round($Seconds)
+    $hours = [math]::Floor($whole / 3600)
+    $minutes = [math]::Floor(($whole % 3600) / 60)
+    $remainder = $whole % 60
+    if ($hours -gt 0) {
+        return "{0}h {1:00}m {2:00}s" -f $hours, $minutes, $remainder
+    }
+    return "{0}m {1}s" -f $minutes, $remainder
+}
+
+function Get-TimingChartRow {
+    <#
+    .SYNOPSIS
+        Builds the rows of a horizontal bar chart of durations, each bar in proportion to the longest.
+
+    .DESCRIPTION
+        Bars are drawn in eighths of a character, so a stage a fraction of the longest still shows its
+        true length, and any stage that took time gets at least a sliver. Rows keep the order of
+        -Timings. Each row carries Name, Seconds, Duration (formatted), Share (percent of the total) and
+        Bar.
+
+    .PARAMETER Timings
+        An ordered dictionary of name to TimeSpan.
+
+    .PARAMETER BarWidth
+        The width, in characters, of the longest bar.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary]$Timings,
+
+        [int]$BarWidth = 40
+    )
+
+    $partials = @('', '▏', '▎', '▍', '▌', '▋', '▊', '▉')
+    $entries = @($Timings.GetEnumerator())
+    $maxSeconds = ($entries | ForEach-Object { $_.Value.TotalSeconds } | Measure-Object -Maximum).Maximum
+    $totalSeconds = ($entries | ForEach-Object { $_.Value.TotalSeconds } | Measure-Object -Sum).Sum
+
+    foreach ($entry in $entries) {
+        $seconds = $entry.Value.TotalSeconds
+        $bar = ''
+        if ($seconds -gt 0 -and $maxSeconds -gt 0) {
+            $eighths = [math]::Max(1, [int][math]::Round($seconds / $maxSeconds * $BarWidth * 8))
+            $bar = ('█' * [math]::Floor($eighths / 8)) + $partials[$eighths % 8]
+        }
+        [PSCustomObject]@{
+            Name     = [string]$entry.Key
+            Seconds  = $seconds
+            Duration = Format-TimingDuration -Seconds $seconds
+            Share    = if ($totalSeconds -gt 0) { [math]::Round($seconds / $totalSeconds * 100) } else { 0 }
+            Bar      = $bar
+        }
+    }
+}
+
+function Write-TimingChart {
+    <#
+    .SYNOPSIS
+        Writes a horizontal bar chart of durations, with every column sized to fit its longest value.
+
+    .PARAMETER Timings
+        An ordered dictionary of name to TimeSpan, in the order to show them.
+
+    .PARAMETER Indent
+        Leading spaces for each row.
+
+    .PARAMETER BarWidth
+        The width, in characters, of the longest bar.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary]$Timings,
+
+        [string]$Indent = '  ',
+
+        [int]$BarWidth = 40
+    )
+
+    $rows = @(Get-TimingChartRow -Timings $Timings -BarWidth $BarWidth)
+    if ($rows.Count -eq 0) { return }
+
+    $nameWidth = ($rows | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
+    $durationWidth = ($rows | ForEach-Object { $_.Duration.Length } | Measure-Object -Maximum).Maximum
+    foreach ($row in $rows) {
+        $colour = if ($row.Seconds -gt 60) { 'Yellow' } elseif ($row.Seconds -gt 30) { 'Cyan' } else { 'Green' }
+        $line = "{0}{1}  {2}  {3,4}  {4}" -f $Indent, $row.Name.PadRight($nameWidth), $row.Duration.PadLeft($durationWidth), "$($row.Share)%", $row.Bar
+        Write-Host $line -ForegroundColor $colour
+    }
+}
