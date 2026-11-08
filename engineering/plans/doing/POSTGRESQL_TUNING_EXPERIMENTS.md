@@ -1,6 +1,6 @@
 # PostgreSQL Tuning Measured Against JIM's Own Workloads
 
-- **Status:** Doing (Phase 0 complete: results on #2834)
+- **Status:** Doing (Phase 0 complete: results on #2834; Phase 1 under way)
 - **Issue:** [#2834](https://github.com/TetronIO/JIM/issues/2834)
 - **Related:**
   - [#2669](https://github.com/TetronIO/JIM/issues/2669), the leaver-step measurements whose span breakdowns show where synchronisation time goes.
@@ -70,11 +70,16 @@ The sampler is a PowerShell script under `test/integration/utils/`, started and 
 
 ## Phase 1: a repeatable, cheaper benchmark
 
-A full Scale500k25kGroups run takes about 65 minutes, mostly in the initial load, and its step times vary from run to run by a second or two. Twenty settings measured that way would cost a day of machine time, and still blur small effects.
+A full Scale500k25kGroups run takes about 65 minutes, and its step times vary from run to run by a second or two. Twenty settings measured that way would cost a day of machine time, and still blur small effects.
 
-1. **Snapshot after the initial load.** Stop the stack once the 500k initial synchronisation has finished, and copy the database volume and the OpenLDAP data volume. Each experiment restores both and replays the same later steps (joiner, mover and leaver cohorts, plus a Full Synchronisation), about 20 to 30 minutes.
-2. **A way to pass any PostgreSQL setting to a run.** The override appends `${JIM_DB_EXTRA_ARGS}` to the database's command line, and the runner sets it from a new parameter (`-DatabaseSetting @{ jit = 'off'; work_mem = '256MB' }`). Settings on the command line override `ALTER SYSTEM`, so this is the only reliable way in.
-3. **Settle the baseline.** Replay three times with the integration override's settings, and three times with the customer file's parallel-query settings added. This gives the run-to-run spread every later result is judged against, and decides which configuration to use as the baseline.
+Phase 0 decided what to replay. The later steps (joiners, movers, leavers) take about 6 minutes and 70 seconds of database time, in steps of 2 to 24 seconds: too little to measure settings on. The database's real work is in the initial load, and the Source Full Synchronisation alone is 17 minutes of it. That step has all three effects worth sweeping: JIT on the page-load query, `work_mem` spills, and 36 GB of WAL with checkpoints.
+
+1. **Snapshot after the Full Imports.** `test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Snapshot` runs both directories' scoped Full Imports on a stack the runner set up with `-SetupOnly`, then copies the database inside PostgreSQL (`CREATE DATABASE ... TEMPLATE`). Synchronisation never touches the directories, so only the database needs restoring.
+2. **Replay both Full Synchronisations** (about 20 minutes). `-Action Replay` recreates the database container with the runner's profile plus any settings, restores a fresh copy of the snapshot, runs the Source and Target Full Synchronisations, samples the database throughout, and appends each Run Profile's time to `results.tsv`, with the replay's WAL, checkpoints, temporary files and JIT time.
+3. **A way to pass any PostgreSQL setting to a run.** The override appends `${JIM_DB_EXTRA_ARGS}` to the database's command line; the runner's `-DatabaseSetting @{ jit = 'off'; work_mem = '256MB' }` and the replay set it. Settings on the command line override `ALTER SYSTEM`, so this is the only reliable way in.
+4. **Settle the baseline.** Replay three times with the integration override's settings, and three times with the customer file's parallel-query settings added. This gives the run-to-run spread every later result is judged against, and decides which configuration to use as the baseline.
+
+The Export and the later steps are not replayed; Phase 3's full runs check every setting there.
 
 ## Phase 2: one setting at a time, well beyond the formula
 
@@ -124,6 +129,6 @@ The capped-memory runs (testing lower host-memory minimums with the Worker's mem
 |---|---|
 | The host's disk stalls make write-related settings look better or worse than they are | Record disk wait with every result; repeat any result that hinges on the disk |
 | Run-to-run spread hides small effects | Phase 1's repeated baseline; replays at least twice per setting |
-| The replay misses effects on the initial load | Phase 3 confirms on full runs |
+| The replay covers only the Full Synchronisations | Phase 3 confirms every setting on full runs, Export and later steps included |
 | A setting crashes the database or the host | Expected and recorded; the snapshot makes recovery a restore |
-| Snapshots take disk space | One pair of volume copies at 500k, kept until Phase 3 ends |
+| Snapshots take disk space | One copy of the 500k database inside the database volume, kept until Phase 3 ends |
