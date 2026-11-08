@@ -310,16 +310,38 @@ function Test-LabAclGrant {
     return $false
 }
 
+function Get-LabAceKey {
+    <#
+    .SYNOPSIS
+        A key that two access control entries share when they grant the same thing: type, flags (in any order),
+        rights mask, object types and trustee. Used to tell whether a DACL already holds a delegated entry.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        $Ace
+    )
+
+    $flagTokens = @()
+    for ($i = 0; ($i + 1) -lt $Ace.Flags.Length; $i += 2) { $flagTokens += $Ace.Flags.Substring($i, 2).ToUpperInvariant() }
+    $flags = ($flagTokens | Sort-Object) -join ''
+    return '{0}|{1}|{2}|{3}|{4}|{5}' -f $Ace.Type.ToUpperInvariant(), $flags, $Ace.Mask, $Ace.ObjectType.ToLowerInvariant(),
+        $Ace.InheritedObjectType.ToLowerInvariant(), $Ace.Sid.ToUpperInvariant()
+}
+
 function Merge-LabDelegationSddl {
     <#
     .SYNOPSIS
-        Adds the delegated entries to an existing DACL, unless the trustee is already in it.
+        Adds to an existing DACL the delegated entries it does not already hold.
 
     .DESCRIPTION
-        The same rule jim-delegate.sh applies: a container that already names the trustee is left alone, so
-        the delegation can be applied for every container a scenario creates without accumulating duplicates.
-        New entries are inserted after the existing explicit entries and before the inherited ones, which
-        keeps the DACL in canonical order; the entries themselves are copied through as written.
+        Compares entry by entry (type, flags, rights mask, object types and trustee), not by whether the
+        trustee appears at all, so re-applying a delegation file that has gained entries adds just those
+        (#2774), and re-applying an unchanged one adds nothing and accumulates no duplicates. Rights are
+        compared as a mask, because Windows reads them back in its own order. New entries are inserted
+        after the existing explicit entries and before the inherited ones, which keeps the DACL in canonical
+        order; the entries themselves are copied through as written.
 
         Returns the existing SDDL unchanged when there is nothing to do, so callers can compare.
     #>
@@ -330,15 +352,8 @@ function Merge-LabDelegationSddl {
         [string]$ExistingSddl,
 
         [Parameter(Mandatory)]
-        [string]$DelegationSddl,
-
-        [Parameter(Mandatory)]
-        [string]$TrusteeSid
+        [string]$DelegationSddl
     )
-
-    if (Test-LabSddlContainsSid -Sddl $ExistingSddl -Sid $TrusteeSid) {
-        return $ExistingSddl
-    }
 
     $split = Split-LabSddlComponent -Sddl $ExistingSddl
     $dacl = $split.Components | Where-Object { $_.Kind -eq 'D' } | Select-Object -First 1
@@ -347,9 +362,16 @@ function Merge-LabDelegationSddl {
     }
 
     $existingAces = @(Get-LabDaclAce -Sddl $ExistingSddl)
-    $newAces = @(Get-LabDaclAce -Sddl $DelegationSddl)
-    if ($newAces.Count -eq 0) {
+    $delegatedAces = @(Get-LabDaclAce -Sddl $DelegationSddl)
+    if ($delegatedAces.Count -eq 0) {
         throw 'The delegation holds no access control entries.'
+    }
+
+    $held = @{}
+    foreach ($ace in $existingAces | Where-Object { -not $_.Inherited }) { $held[(Get-LabAceKey -Ace $ace)] = $true }
+    $newAces = @($delegatedAces | Where-Object { -not $held.ContainsKey((Get-LabAceKey -Ace $_)) })
+    if ($newAces.Count -eq 0) {
+        return $ExistingSddl
     }
 
     # The DACL component is "D:" + flags + entries; keep the flags, rebuild the entries.
@@ -4256,10 +4278,11 @@ function Grant-LabContainerDelegation {
 
     .DESCRIPTION
         The single implementation the Configure phase and Grant-LabDelegation.ps1 both use. Renders the
-        SDDL for the JIM Connectors group, and adds the entries to the container's DACL unless the group is
-        already in it (idempotent, as jim-delegate.sh is). Reads the DACL back afterwards and throws if the
-        group is still absent, so a delegation that did not apply fails here rather than as an access error
-        hours later.
+        SDDL for the JIM Connectors group, and adds to the container's DACL whichever of its entries the DACL
+        does not already hold (Merge-LabDelegationSddl). Re-applying is therefore idempotent, and a re-apply
+        after the delegation file gains entries adds them (#2774) rather than stopping at a group that is
+        already named. Reads the DACL back afterwards and throws if any entry is still missing, so a
+        delegation that did not apply fails here rather than as an access error hours later.
 
         Returns { ContainerDn, Outcome = Delegated | AlreadyPresent, TrusteeSid }.
     #>
@@ -4292,17 +4315,18 @@ function Grant-LabContainerDelegation {
     $access = [System.Security.AccessControl.AccessControlSections]::Access
     $acl = Get-Acl -Path $path -ErrorAction Stop
     $existing = $acl.GetSecurityDescriptorSddlForm($access)
-    if (Test-LabSddlContainsSid -Sddl $existing -Sid $sid) {
+    $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl
+    if ($merged -ceq $existing) {
         return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'AlreadyPresent'; TrusteeSid = $sid }
     }
 
-    $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl -TrusteeSid $sid
     $acl.SetSecurityDescriptorSddlForm($merged, $access)
     Set-Acl -Path $path -AclObject $acl -ErrorAction Stop
 
+    # Every delegated entry must now be held: merging again over what was read back must change nothing.
     $after = (Get-Acl -Path $path -ErrorAction Stop).GetSecurityDescriptorSddlForm($access)
-    if (-not (Test-LabSddlContainsSid -Sddl $after -Sid $sid)) {
-        throw "The delegation was written to '$ContainerDn' but reading it back does not show the '$GroupName' group."
+    if ((Merge-LabDelegationSddl -ExistingSddl $after -DelegationSddl $sddl) -cne $after) {
+        throw "The delegation was written to '$ContainerDn' but reading it back does not show every entry for the '$GroupName' group."
     }
     return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'Delegated'; TrusteeSid = $sid }
 }
