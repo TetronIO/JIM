@@ -218,7 +218,7 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
     # 2. A fresh copy of the snapshot, and clean statistics.
     Invoke-Sql "DROP DATABASE IF EXISTS jim WITH (FORCE)" -Database postgres | Out-Null
     Invoke-Sql "CREATE DATABASE jim TEMPLATE $SnapshotDatabase STRATEGY FILE_COPY" -Database postgres | Out-Null
-    Invoke-Sql "CHECKPOINT; SELECT pg_stat_statements_reset(); SELECT pg_stat_reset_shared('wal'); SELECT pg_stat_reset_shared('checkpointer'); SELECT pg_stat_reset_shared('io'); SELECT pg_stat_reset();" | Out-Null
+    Invoke-Sql "CREATE EXTENSION IF NOT EXISTS pg_stat_statements; CHECKPOINT; SELECT pg_stat_statements_reset(); SELECT pg_stat_reset_shared('wal'); SELECT pg_stat_reset_shared('checkpointer'); SELECT pg_stat_reset_shared('io'); SELECT pg_stat_reset();" | Out-Null
 
     # 3. JIM, the sampler, and the timed Run Profiles.
     docker compose @composeArgs start @applicationServices | Out-Null
