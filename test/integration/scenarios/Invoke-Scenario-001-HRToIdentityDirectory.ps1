@@ -2398,35 +2398,9 @@ try {
         Write-Host "  Performance Breakdown (Test Steps)" -ForegroundColor Cyan
         Write-Host "$("=" * 65)" -ForegroundColor Cyan
         Write-Host ""
-        $totalTestTime = 0
-        $maxSeconds = ($stepTimings.Values | Measure-Object -Property TotalSeconds -Maximum).Maximum
-        foreach ($timing in $stepTimings.GetEnumerator() | Sort-Object Name) {
-            $seconds = $timing.Value.TotalSeconds
-            $totalTestTime += $seconds
-
-            # Format time appropriately based on magnitude
-            $timeDisplay = if ($seconds -lt 1) {
-                "{0,6}ms" -f [math]::Round($seconds * 1000)
-            } elseif ($seconds -lt 60) {
-                "{0,6}s" -f [math]::Round($seconds, 1)
-            } elseif ($seconds -lt 3600) {
-                $mins = [math]::Floor($seconds / 60)
-                $secs = [math]::Round($seconds % 60)
-                "{0}m {1}s" -f $mins, $secs
-            } else {
-                $hours = [math]::Floor($seconds / 3600)
-                $mins = [math]::Floor(($seconds % 3600) / 60)
-                "{0}h {1}m" -f $hours, $mins
-            }
-
-            # Scale bar relative to max time, with reasonable max width
-            $barWidth = if ($maxSeconds -gt 0) {
-                [math]::Min(50, [math]::Floor(($seconds / $maxSeconds) * 50))
-            } else { 0 }
-            $bar = "█" * $barWidth
-
-            Write-Host ("  {0,-20} {1,8}  {2}" -f $timing.Name, $timeDisplay, $bar) -ForegroundColor $(if ($seconds -gt 60) { "Yellow" } elseif ($seconds -gt 30) { "Cyan" } else { "Gray" })
-        }
+        $sortedStepTimings = [ordered]@{}
+        foreach ($timing in $stepTimings.GetEnumerator() | Sort-Object Name) { $sortedStepTimings[$timing.Name] = $timing.Value }
+        Write-TimingChart -Timings $sortedStepTimings
         $scenarioDuration = (Get-Date) - $scenarioStartTime
         $totalSeconds = $scenarioDuration.TotalSeconds
         $totalDisplay = if ($totalSeconds -lt 60) {
