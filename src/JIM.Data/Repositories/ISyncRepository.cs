@@ -108,7 +108,11 @@ public interface ISyncRepository
     /// Type.</param>
     /// <param name="createdOnOrAfter">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to
     /// objects created at or after this instant.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="valueLoadPlan">#2818: the attributes the page may leave out of an object, where Drift Detection is
+    /// their only reader on the page. An object it leaves one out of carries it in
+    /// <see cref="ConnectedSystemObject.PartiallyLoadedAttributes"/> (<see cref="SynchronisationPartiallyLoadedAttribute"/>);
+    /// every other object is loaded whole. Null loads every object whole.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null);
 
     /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
@@ -253,6 +257,16 @@ public interface ISyncRepository
     /// <param name="questions">At most one per object and attribute.</param>
     /// <returns>One answer per question, in the questions' order.</returns>
     Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions);
+
+    /// <summary>
+    /// #2818: answers Drift Detection's questions about attributes a Delta Synchronisation loaded without their values: for
+    /// each, which Metaverse Objects the held values resolve to that are not expected, which expected ones none resolves
+    /// to, and how the values are held (<see cref="DriftHeldReferenceAnswer"/>), comparing every value in the database and
+    /// returning only those the two sides disagree on. One round trip, reading one snapshot.
+    /// </summary>
+    /// <param name="questions">The questions, from <c>DriftDetectionService.PlanHeldReferenceQuestions</c>.</param>
+    /// <returns>One answer per question, in the questions' order.</returns>
+    Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions);
 
     /// <summary>
     /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a

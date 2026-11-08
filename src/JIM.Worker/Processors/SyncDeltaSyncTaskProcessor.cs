@@ -162,6 +162,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
+        // #2818: a large group's member attribute whose only reader is Drift Detection is loaded without its values, and
+        // Drift Detection compares it in the database. Only the modified-object pages are loaded by the plan; a type
+        // processed in full is loaded whole, as a Full Synchronisation loads it.
+        var valueLoadPlan = PlanSynchronisationValueLoad(activeSyncRules);
+
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
@@ -230,7 +235,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 ? _syncRepo.GetConnectedSystemObjectsAsync(
                     _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter)
                 : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan),
             "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
 
         try
@@ -242,9 +247,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 _syncRepo.SetAutoDetectChangesEnabled(false);
 
                 PagedResultSet<ConnectedSystemObject>? csoPagedResult;
-                using (Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
+                using (var loadSpan = Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
                 {
                     csoPagedResult = await csoPager.NextPageAsync();
+                    if (csoPagedResult != null)
+                        CountLeftOutObjects(csoPagedResult.Results, loadSpan);
                 }
 
                 if (csoPagedResult == null)
