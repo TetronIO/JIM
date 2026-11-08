@@ -2284,6 +2284,55 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private record ReferenceExternalIdBatchRow(Guid ConnectedSystemObjectId, Guid ReferenceValueId, string? ExternalId);
 
+    /// <summary>
+    /// The statement behind <see cref="GetReferenceExternalIdsForCsosAsync"/>, exposed so its plan can be checked
+    /// (<c>DeltaImportPartialLoadSaveDatabaseTests</c>).
+    /// </summary>
+    /// <remarks>
+    /// Each object's values are read by attribute id range, every id but those it leaves out, as
+    /// <see cref="AttributeValuesByRangesSql"/> reads them and for the same reason (#2836): a filter leaving an attribute
+    /// out (<c>NOT (AttributeId = ANY(...))</c>) cannot bound the index scan on (object, attribute), so PostgreSQL read
+    /// every member of a group whose member attribute a Delta Import's answer had settled, only to discard it. At 500,000
+    /// users that cost the confirming Delta Import 4.7 s for groups in which nothing was left undecided.
+    /// </remarks>
+    internal const string ReferenceExternalIdsForCsosSql =
+        """
+        SELECT av."ConnectedSystemObjectId",
+               av."ReferenceValueId",
+               COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+        FROM unnest(@rangeObjectIds, @rangeLows, @rangeHighs) AS r(object_id, low, high)
+        JOIN "ConnectedSystemObjectAttributeValues" av
+            ON av."ConnectedSystemObjectId" = r.object_id
+           AND av."AttributeId" BETWEEN r.low AND r.high
+        JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+        LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+            ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+           AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+        LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+            ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+           AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+        WHERE av."ReferenceValueId" IS NOT NULL
+        """;
+
+    /// <summary>
+    /// The parameters of <see cref="ReferenceExternalIdsForCsosSql"/>: each object with the ranges of attribute id covering
+    /// every id but <paramref name="excludedAttributeIds"/>.
+    /// </summary>
+    internal static NpgsqlParameter[] ReferenceExternalIdsForCsosParameters(IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<int> excludedAttributeIds)
+    {
+        var ranges = AttributeIdRangesExcluding(excludedAttributeIds.Distinct().Order().ToList()).ToList();
+        var objects = csoIds.Distinct().ToList();
+        return
+        [
+            new NpgsqlParameter("rangeObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                { Value = objects.SelectMany(id => ranges.Select(_ => id)).ToArray() },
+            new NpgsqlParameter("rangeLows", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                { Value = objects.SelectMany(_ => ranges.Select(range => range.Low)).ToArray() },
+            new NpgsqlParameter("rangeHighs", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                { Value = objects.SelectMany(_ => ranges.Select(range => range.High)).ToArray() }
+        ];
+    }
+
     /// <inheritdoc/>
     public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
         IReadOnlyCollection<int>? excludedAttributeIds = null)
@@ -2297,26 +2346,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // (535K single-CSO round trips measured at Scale500k25kGroups, 2026-07-20). An excluded attribute's references
         // are left out (#2817): a Delta Import that loaded a group's members only in part has their External IDs from the
         // answer it loaded them by, and reading every member's here is the cost it exists to avoid.
-        var excluded = excludedAttributeIds?.ToArray() ?? [];
         var rows = await Repository.Database.Database
-            .SqlQueryRaw<ReferenceExternalIdBatchRow>(
-                """
-                SELECT av."ConnectedSystemObjectId",
-                       av."ReferenceValueId",
-                       COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
-                FROM "ConnectedSystemObjectAttributeValues" av
-                JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-                LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
-                    ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
-                   AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
-                LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
-                    ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
-                   AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
-                WHERE av."ConnectedSystemObjectId" = ANY({0})
-                  AND av."ReferenceValueId" IS NOT NULL
-                  AND NOT (av."AttributeId" = ANY({1}))
-                """,
-                csoIds.ToArray(), excluded)
+            .SqlQueryRaw<ReferenceExternalIdBatchRow>(ReferenceExternalIdsForCsosSql,
+                ReferenceExternalIdsForCsosParameters(csoIds, excludedAttributeIds ?? []).Cast<object>().ToArray())
             .ToListAsync();
 
         // Every requested ID gets an entry (empty when the CSO has no resolved references) so

@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Exporting changes to large groups is faster: each batch now reads only the members its changes name, beside a count of the rest, so loading and recording a batch no longer grows with group size (2.8 seconds to 50 ms for one 200,000-member group). (#2816)
 - ⚡ Synchronisation no longer rewrites Metaverse Objects it left unchanged, or re-reads all their values to do so (every member of a large group); it writes only the objects it changed. (#2831)
 - ⚡ Directory Delta Imports that report deletions are faster: each deleted object is looked up only under the Object Types JIM holds objects of, and a large delta reads every object once rather than paying more than that page by page, saving 6 seconds at 500,000 objects. (#2835)
+- ⚡ A Delta Import confirming an export spends far less on large groups already up to date: it recognises a group held exactly as imported without comparing member by member, and no longer reads members it has settled. (#2836)
 
 ### Removed
 

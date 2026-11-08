@@ -269,6 +269,18 @@ public interface ISyncRepository
     Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions);
 
     /// <summary>
+    /// #2836: which of <paramref name="questions"/> name an attribute the object holds exactly as imported: every value
+    /// it holds keeps, byte for byte, the string of a different one of the question's values, and every one of those
+    /// values is kept. For such a question <see cref="GetHeldReferenceValueAnswersAsync"/> would leave nothing undecided
+    /// (its answer would be empty), so it need not be asked; any other question is left to it. Cheaper than asking, since
+    /// it sends no imported value to the database: a confirming Delta Import, after an export whose optimistic apply
+    /// already wrote the change, finds every group current and would otherwise pay to compare every member.
+    /// </summary>
+    /// <param name="questions">At most one per object and attribute.</param>
+    /// <returns>The object and attribute of each question held exactly as imported.</returns>
+    Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions);
+
+    /// <summary>
     /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
     /// reference value, the referenced Connected System Object. Pending Export reconciliation reads the lighter
     /// <see cref="GetConnectedSystemObjectsCoreByIdsNoTrackingAsync"/> instead.

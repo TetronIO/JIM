@@ -874,6 +874,27 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(answers);
     }
 
+    /// <summary>
+    /// #2836: as the SQL implementation decides it: every held value of the attribute keeps, byte for byte (ordinal), the
+    /// string of a different imported value, and none of the imported values is left over. A question repeating a value
+    /// is left to be asked, as it is there.
+    /// </summary>
+    public virtual Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var heldAsImported = new HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>();
+        foreach (var question in questions.Where(q => q.Values.Count > 0 && _csos.ContainsKey(q.ConnectedSystemObjectId)
+                     && q.Values.Distinct(StringComparer.Ordinal).Count() == q.Values.Count))
+        {
+            var remaining = question.Values.ToHashSet(StringComparer.Ordinal);
+            var held = _csos[question.ConnectedSystemObjectId].AttributeValues
+                .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == question.AttributeId);
+            if (held.All(av => av.UnresolvedReferenceValue != null && remaining.Remove(av.UnresolvedReferenceValue)) && remaining.Count == 0)
+                heldAsImported.Add((question.ConnectedSystemObjectId, question.AttributeId));
+        }
+
+        return Task.FromResult(heldAsImported);
+    }
+
     /// <summary>The object a held value was resolved to, as its foreign key would store it.</summary>
     private static Guid? StoredReferenceId(ConnectedSystemObjectAttributeValue value) =>
         value.ReferenceValueId ?? (value.ReferenceValue is { Id: var id } && id != Guid.Empty ? id : null);
