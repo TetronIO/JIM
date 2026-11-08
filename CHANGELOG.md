@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 A group membership change now exports only the members added or removed. A member removed from the target group by hand is no longer re-added by the group's next change; with Enforce State on, drift correction puts it back. A new group is still created with every member. (#2832)
 - 🔄 The Activity list and the Operations page fit narrower windows: when a table's columns no longer fit, its outcome chips show just their icon, and if it still doesn't fit, its Initiated By chips show just their tag (KEY, SCH, JIM and so on). On the Schedules tab each Schedule's Trigger and last Outcome show just their icon. Hovering a chip shows its full detail, including the exact count.
 - 🔄 A Connector can now warn about a Connected System's settings without refusing them: the settings save, and the warning shows beneath them in the portal, in the REST API's new `settingWarnings` on the update response, and as a PowerShell warning from `Set-JIMConnectedSystem`. (#2021)
 - 🔄 On Active Directory, the attributes only Exchange may set (`homeMDB`, `msExchRecipientTypeDetails` and five more) are discovered read-only, so no Attribute Flow can write them: written directly, they create no mailbox. They are still imported. (#2755)

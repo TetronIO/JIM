@@ -649,17 +649,14 @@ public partial class SyncEngine
                     IEnumerable<MetaverseObjectAttributeValue> mvoValues;
                     if (isCreateOperation)
                     {
-                        // Exclude asserted-null markers (#91): a NullValue row carries no value and must be
-                        // invisible to export sourcing exactly as an absent row (the attribute reads as cleared).
-                        var changedValues = changedAttributes
-                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
-                            .ToList();
-
-                        // Fall back to the MVO's current attribute values (excluding asserted-null markers,
-                        // #91) when nothing relevant changed.
-                        mvoValues = changedValues.Count > 0
-                            ? changedValues
-                            : mvo.AttributeValues.Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
+                        // A Create provisions the whole object, so it carries every value the Metaverse Object holds,
+                        // whatever this pass changed (#2832): synchronisation queues only the values that changed, and
+                        // a group provisioned because one member was added must still be created with all of them.
+                        // This pass's changed values come first, its removals among them, so an unsent Create rebuilt
+                        // from the change still supersedes the Add it carried for a departed member; each value the
+                        // Metaverse Object holds is then added once. Asserted-null markers (#91) carry no value and
+                        // are invisible here exactly as an absent row.
+                        mvoValues = WholeSetForCreate(mvo, source.MetaverseAttribute.Id, changedAttributes);
                     }
                     else
                     {
@@ -838,6 +835,25 @@ public partial class SyncEngine
 
             return isRemoval ? PendingExportAttributeChangeType.Remove : PendingExportAttributeChangeType.Add;
         }
+    }
+
+    /// <summary>
+    /// The values a Create stages for a multi-valued source flowing to a multi-valued target (#2832): this pass's changed
+    /// values for the attribute (its removals among them), then every other value the Metaverse Object holds for it, each
+    /// once. A value that is both changed and held is the same row, so it is matched by identity.
+    /// </summary>
+    private static List<MetaverseObjectAttributeValue> WholeSetForCreate(
+        MetaverseObject mvo,
+        int sourceAttributeId,
+        List<MetaverseObjectAttributeValue> changedAttributes)
+    {
+        var values = changedAttributes
+            .Where(av => av.AttributeId == sourceAttributeId && !av.NullValue)
+            .ToList();
+        var staged = new HashSet<MetaverseObjectAttributeValue>(values, ReferenceEqualityComparer.Instance);
+
+        values.AddRange(mvo.AttributeValues.Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && staged.Add(av)));
+        return values;
     }
 
     /// <summary>

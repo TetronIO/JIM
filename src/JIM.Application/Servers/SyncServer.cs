@@ -463,6 +463,11 @@ public class SyncServer : ISyncServer
     public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
         => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
 
+    public Task RefreshExportEvaluationCacheForEvaluationsAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)> evaluations)
+        => _exportEval.RefreshExportEvaluationCacheForEvaluationsAsync(cache, evaluations);
+
     public Task PrefetchExportMatchCandidatesForPageAsync(ExportEvaluationCache cache, IReadOnlyCollection<MetaverseObject> metaverseObjects)
         => _exportEval.PrefetchExportMatchCandidatesForPageAsync(cache, metaverseObjects);
 

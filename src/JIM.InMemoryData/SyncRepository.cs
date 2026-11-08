@@ -3460,6 +3460,46 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Same answers as the SQL implementation (#2832): every value of the objects, except that an attribute a member
+    /// question names keeps only the values that could name one of its Metaverse Objects, as a member joined to one, or
+    /// unresolved with that object's id as its text, ignoring case.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions)
+    {
+        var questions = memberQuestions.ToDictionary(q => (q.ConnectedSystemObjectId, q.AttributeId));
+        var ids = csoIds.ToHashSet();
+        var result = new List<ConnectedSystemObjectAttributeValue>();
+
+        foreach (var cso in _csos.Values.Where(cso => ids.Contains(cso.Id) && cso.AttributeValues != null))
+        {
+            foreach (var av in cso.AttributeValues)
+            {
+                if (questions.TryGetValue((cso.Id, av.AttributeId), out var question) && !CouldNameOneOf(av, question.MetaverseObjectIds))
+                    continue;
+
+                // Each value carries its object and its referenced object, as the SQL implementation's includes give them.
+                av.ConnectedSystemObject ??= cso;
+                if (av.ReferenceValue == null && av.ReferenceValueId is { } referencedObjectId && _csos.TryGetValue(referencedObjectId, out var referencedObject))
+                    av.ReferenceValue = referencedObject;
+                result.Add(av);
+            }
+        }
+
+        return Task.FromResult(result);
+
+        bool CouldNameOneOf(ConnectedSystemObjectAttributeValue av, IReadOnlySet<Guid> metaverseObjectIds)
+        {
+            var referenced = av.ReferenceValue ?? (av.ReferenceValueId is { } referencedId && _csos.TryGetValue(referencedId, out var found) ? found : null);
+            if (referenced?.MetaverseObjectId is { } joinedTo && metaverseObjectIds.Contains(joinedTo))
+                return true;
+
+            return !av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null &&
+                   metaverseObjectIds.Any(id => string.Equals(av.UnresolvedReferenceValue, id.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
     {
         var ids = csoIds.ToHashSet();

@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Workflow.Tests.Harness;
@@ -873,6 +874,250 @@ public class DriftDetectionWorkflowTests
 
     #endregion
 
+    #region A membership change stages only the changed members (#2832)
+
+    /// <summary>
+    /// A member removed from the target group by hand is not re-added as a side effect of an unrelated membership change
+    /// when Enforce State is off (#2832). Export staging used to re-assert every current member whenever any member
+    /// changed, which quietly undid the target-side removal; it now stages only the members that changed.
+    /// </summary>
+    [Test]
+    public async Task MembershipChange_MemberRemovedFromTargetByHandWithEnforceStateOff_IsNotReAddedAsync()
+    {
+        await SetUpEntitlementDriftDetectionScenarioAsync(enforceState: false);
+        var users = NewUsers("User1", "User2", "User3", "User4");
+        var groupGuid = Guid.NewGuid();
+        await ProvisionGroupToTargetAsync(users, groupGuid, "User1", "User2", "User3");
+
+        SimulateMembershipDrift(groupGuid, users["User2"], addMember: false);
+
+        // An unrelated change at the source: User1 leaves and User4 joins.
+        await ImportAndSyncSourceMembershipAsync(users, groupGuid, "User2", "User3", "User4");
+
+        Assert.That(TargetGroupMemberChanges(groupGuid), Is.EquivalentTo(new[]
+        {
+            (PendingExportAttributeChangeType.Add, MetaverseObjectIdOf(users["User4"])),
+            (PendingExportAttributeChangeType.Remove, MetaverseObjectIdOf(users["User1"]))
+        }), "only the members that changed are staged; User2, removed at the target by hand, is not re-added");
+    }
+
+    /// <summary>
+    /// With Enforce State on, the hand-removed member is still repaired, by drift detection on the target's own
+    /// synchronisation rather than as a side effect of the source's membership change (#2832).
+    /// </summary>
+    [Test]
+    public async Task MembershipChange_MemberRemovedFromTargetByHandWithEnforceStateOn_IsReAddedByDriftDetectionAsync()
+    {
+        await SetUpEntitlementDriftDetectionScenarioAsync(enforceState: true);
+        var users = NewUsers("User1", "User2", "User3", "User4");
+        var groupGuid = Guid.NewGuid();
+        await ProvisionGroupToTargetAsync(users, groupGuid, "User1", "User2", "User3");
+
+        SimulateMembershipDrift(groupGuid, users["User2"], addMember: false);
+        await ImportAndSyncSourceMembershipAsync(users, groupGuid, "User2", "User3", "User4");
+
+        var user2 = MetaverseObjectIdOf(users["User2"]);
+        Assert.That(TargetGroupMemberChanges(groupGuid).Select(c => c.Member), Does.Not.Contain(user2),
+            "precondition: the source's membership change does not re-add User2 itself");
+
+        await _harness.ExecuteFullSyncAsync("Target");
+
+        Assert.That(TargetGroupMemberChanges(groupGuid), Does.Contain((PendingExportAttributeChangeType.Add, user2)),
+            "drift detection on the target's synchronisation re-adds the member removed there by hand");
+    }
+
+    /// <summary>
+    /// A group whose target object is gone is re-provisioned with its whole membership, even when the change that
+    /// re-provisions it is a single member's addition (#2832): a Create carries every member the Metaverse Object holds.
+    /// </summary>
+    [Test]
+    public async Task MembershipChange_TargetGroupGone_ReProvisionsWithEveryMemberAsync()
+    {
+        await SetUpEntitlementDriftDetectionScenarioAsync(enforceState: false);
+        var users = NewUsers("User1", "User2", "User3", "User4");
+        var groupGuid = Guid.NewGuid();
+        await ProvisionGroupToTargetAsync(users, groupGuid, "User1", "User2", "User3");
+
+        var targetGroup = TargetGroupCso(groupGuid);
+        targetGroup.MetaverseObject?.ConnectedSystemObjects.Remove(targetGroup);
+        _harness.SyncRepo.RemoveConnectedSystemObject(targetGroup);
+
+        await ImportAndSyncSourceMembershipAsync(users, groupGuid, "User1", "User2", "User3", "User4");
+
+        var groupExport = TargetGroupPendingExport(groupGuid);
+        Assert.That(groupExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create), "precondition: the group is provisioned again");
+        Assert.That(MemberChangesOf(groupExport), Is.EquivalentTo(
+            new[] { "User1", "User2", "User3", "User4" }.Select(name => (PendingExportAttributeChangeType.Add, MetaverseObjectIdOf(users[name])))),
+            "a Create provisions the whole membership, not only the member whose addition raised it");
+    }
+
+    /// <summary>
+    /// A group entering an export rule's scope is provisioned with its whole membership, even when a member's addition
+    /// arrives in the same synchronisation as the change that brings it into scope (#2832).
+    /// </summary>
+    [Test]
+    public async Task MembershipChange_GroupEntersScopeWithAMemberAdded_ProvisionsWithEveryMemberAsync()
+    {
+        var groupExportRule = await SetUpEntitlementDriftDetectionScenarioAsync(enforceState: false);
+        var mvGroupCn = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "cn" && a.MetaverseObjectTypes.Any(t => t.Name == "Group"));
+        groupExportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Type = SearchGroupType.All,
+            Criteria = [new SyncRuleScopingCriteria { MetaverseAttribute = mvGroupCn, MetaverseAttributeId = mvGroupCn.Id, ComparisonType = SearchComparisonType.Equals, StringValue = "Provisioned" }]
+        });
+
+        var users = NewUsers("User1", "User2", "User3", "User4");
+        var groupGuid = Guid.NewGuid();
+        _harness.GetConnector("Source").QueueImportObjects([.. users.Select(u => CreateUserImportObject(u.Value, u.Key)), GroupImportObject(groupGuid, "Parked", "User1", "User2", "User3")]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+        await _harness.ExecuteExportAsync("Target");
+        ClearPendingExports();
+        var targetSystemId = _harness.GetConnectedSystem("Target").Id;
+        var groupMvoId = MetaverseObjectIdOf(groupGuid);
+        Assert.That(_harness.SyncRepo.ConnectedSystemObjects.Values.Any(c => c.ConnectedSystemId == targetSystemId && c.MetaverseObjectId == groupMvoId),
+            Is.False, "precondition: the group is out of scope and not provisioned");
+
+        // Renamed into scope, and given a fourth member, in one synchronisation.
+        _harness.GetConnector("Source").QueueImportObjects([.. users.Select(u => CreateUserImportObject(u.Value, u.Key)), GroupImportObject(groupGuid, "Provisioned", "User1", "User2", "User3", "User4")]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+
+        var groupExport = TargetGroupPendingExport(groupGuid);
+        Assert.That(groupExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create), "precondition: the group is provisioned on entering scope");
+        Assert.That(MemberChangesOf(groupExport), Is.EquivalentTo(
+            new[] { "User1", "User2", "User3", "User4" }.Select(name => (PendingExportAttributeChangeType.Add, MetaverseObjectIdOf(users[name])))),
+            "a Create provisions the whole membership, not only the member whose addition arrived with the scope change");
+    }
+
+    /// <summary>
+    /// No-net-change detection for a membership change asks only about the members that changed, so the target group's
+    /// member attribute is loaded only for those (#2832): never the whole membership. Every other attribute is loaded
+    /// whole, as before.
+    /// </summary>
+    [Test]
+    public async Task ExportEvaluationCache_MembershipChange_LoadsOnlyTheChangedMembersOfTheTargetGroupAsync()
+    {
+        await SetUpEntitlementDriftDetectionScenarioAsync(enforceState: false);
+        var users = NewUsers("User1", "User2", "User3", "User4");
+        var groupGuid = Guid.NewGuid();
+        await ProvisionGroupToTargetAsync(users, groupGuid, "User1", "User2", "User3");
+
+        var targetGroup = TargetGroupCso(groupGuid);
+        var memberAttribute = targetGroup.Type.Attributes.Single(a => a.Name == "member");
+        var cnAttribute = targetGroup.Type.Attributes.Single(a => a.Name == "cn");
+        var groupMvo = _harness.SyncRepo.MetaverseObjects[MetaverseObjectIdOf(groupGuid)];
+        var mvMember = groupMvo.AttributeValues.First(av => av.Attribute?.Name == "member").Attribute;
+
+        // User4 joins and User1 leaves: the changes the synchronisation queues for export evaluation.
+        var added = new MetaverseObjectAttributeValue { AttributeId = mvMember.Id, Attribute = mvMember, ReferenceValueId = MetaverseObjectIdOf(users["User4"]) };
+        var removed = groupMvo.AttributeValues.Single(av => av.AttributeId == mvMember.Id && av.ReferenceValueId == MetaverseObjectIdOf(users["User1"]));
+
+        var cache = await _harness.Jim.ExportEvaluation.BuildExportEvaluationCacheAsync();
+        await _harness.Jim.ExportEvaluation.RefreshExportEvaluationCacheForEvaluationsAsync(cache, [(groupMvo, [added, removed])]);
+
+        // The members each loaded row names. The harness's export records each member twice (the value it applied, by
+        // object id, and the one this fixture records, by navigation), so the rows are compared by member, not counted.
+        var heldMembers = cache.CsoAttributeValues[(targetGroup.Id, memberAttribute.Id)]
+            .Select(av => (av.ReferenceValue ?? _harness.SyncRepo.ConnectedSystemObjects[av.ReferenceValueId!.Value]).MetaverseObjectId)
+            .ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(heldMembers, Is.Not.Empty.And.All.EqualTo(MetaverseObjectIdOf(users["User1"])),
+                "only the held members the changes name are loaded: User1 (removed); User4 is not held, and User2 and User3 are not asked about");
+            Assert.That(targetGroup.AttributeValues.Count(av => av.AttributeId == memberAttribute.Id), Is.GreaterThan(heldMembers.Count),
+                "precondition: the group holds members the load left out");
+            Assert.That(cache.CsoAttributeValues[(targetGroup.Id, cnAttribute.Id)].Count(), Is.EqualTo(1), "every other attribute is loaded whole");
+            Assert.That(cache.PartiallyLoadedCsoAttributeValues.Keys, Is.EqualTo(new[] { (targetGroup.Id, memberAttribute.Id) }),
+                "the member attribute is recorded as loaded in part");
+        }
+    }
+
+    private static Dictionary<string, Guid> NewUsers(params string[] names) => names.ToDictionary(name => name, _ => Guid.NewGuid());
+
+    private static ConnectedSystemImportObject GroupImportObject(Guid groupGuid, string cn, params string[] memberNames) => new()
+    {
+        ChangeType = ObjectChangeType.NotSet,
+        ObjectType = "Group",
+        Attributes =
+        [
+            new() { Name = "objectGUID", GuidValues = [groupGuid] },
+            new() { Name = "distinguishedName", StringValues = [$"CN={cn},OU=Groups,DC=source,DC=local"] },
+            new() { Name = "cn", StringValues = [cn] },
+            new() { Name = "member", ReferenceValues = [.. memberNames.Select(name => $"CN={name},OU=Users,DC=source,DC=local")] }
+        ]
+    };
+
+    /// <summary>
+    /// Imports the users and a group holding <paramref name="memberNames"/> from the source, synchronises, exports to the
+    /// target and records the target as holding what was exported, leaving no Pending Export.
+    /// </summary>
+    private async Task ProvisionGroupToTargetAsync(Dictionary<string, Guid> users, Guid groupGuid, params string[] memberNames)
+    {
+        _harness.GetConnector("Source").QueueImportObjects(
+            [.. users.Select(u => CreateUserImportObject(u.Value, u.Key)), GroupImportObject(groupGuid, "TestGroup", memberNames)]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+
+        var pendingExportData = CapturePendingExportData();
+        await _harness.ExecuteExportAsync("Target");
+        PopulateEntitlementCsoAttributeValuesFromCapturedData(pendingExportData);
+        ClearPendingExports();
+
+        Assert.That(TargetGroupCso(groupGuid).AttributeValues.Count(av => av.ReferenceValue != null), Is.EqualTo(memberNames.Length),
+            "precondition: the target group holds the members it was provisioned with");
+    }
+
+    /// <summary>
+    /// Imports the group from the source holding <paramref name="memberNames"/>, then synchronises the source.
+    /// </summary>
+    private async Task ImportAndSyncSourceMembershipAsync(Dictionary<string, Guid> users, Guid groupGuid, params string[] memberNames)
+    {
+        _harness.GetConnector("Source").QueueImportObjects(
+            [.. users.Select(u => CreateUserImportObject(u.Value, u.Key)), GroupImportObject(groupGuid, "TestGroup", memberNames)]);
+        await _harness.ExecuteFullImportAsync("Source");
+        await _harness.ExecuteFullSyncAsync("Source");
+    }
+
+    private Guid MetaverseObjectIdOf(Guid sourceObjectGuid)
+    {
+        var sourceSystem = _harness.GetConnectedSystem("Source");
+        return _harness.SyncRepo.ConnectedSystemObjects.Values
+            .Single(cso => cso.ConnectedSystemId == sourceSystem.Id &&
+                           cso.AttributeValues.Any(av => av.AttributeId == cso.ExternalIdAttributeId && av.GuidValue == sourceObjectGuid))
+            .MetaverseObjectId!.Value;
+    }
+
+    private ConnectedSystemObject TargetGroupCso(Guid groupGuid)
+    {
+        var targetSystem = _harness.GetConnectedSystem("Target");
+        var groupMvoId = MetaverseObjectIdOf(groupGuid);
+        return _harness.SyncRepo.ConnectedSystemObjects.Values
+            .Single(cso => cso.ConnectedSystemId == targetSystem.Id && cso.MetaverseObjectId == groupMvoId);
+    }
+
+    private PendingExport TargetGroupPendingExport(Guid groupGuid)
+    {
+        var targetGroupId = TargetGroupCso(groupGuid).Id;
+        return _harness.SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == targetGroupId);
+    }
+
+    private List<(PendingExportAttributeChangeType ChangeType, Guid Member)> TargetGroupMemberChanges(Guid groupGuid)
+    {
+        var targetGroupId = TargetGroupCso(groupGuid).Id;
+        return _harness.SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId == targetGroupId)
+            .SelectMany(MemberChangesOf)
+            .ToList();
+    }
+
+    private static IEnumerable<(PendingExportAttributeChangeType ChangeType, Guid Member)> MemberChangesOf(PendingExport pendingExport) =>
+        pendingExport.AttributeValueChanges
+            .Where(change => change.Attribute?.Name == "member")
+            .Select(change => (change.ChangeType, Guid.Parse(change.UnresolvedReferenceValue!)));
+
+    #endregion
+
     #region Setup Helpers
 
     private async Task SetUpDriftDetectionScenarioAsync(bool enforceState)
@@ -1413,7 +1658,8 @@ public class DriftDetectionWorkflowTests
     /// Sets up the entitlement scenario with Source (import) and Target (export) systems
     /// for testing drift detection with multi-valued reference attributes (group membership).
     /// </summary>
-    private async Task SetUpEntitlementDriftDetectionScenarioAsync(bool enforceState)
+    /// <returns>The Target Group export rule, for a test that scopes it.</returns>
+    private async Task<SyncRule> SetUpEntitlementDriftDetectionScenarioAsync(bool enforceState)
     {
         // Create Source system (LDAP-like)
         await _harness.CreateConnectedSystemAsync("Source");
@@ -1511,7 +1757,7 @@ public class DriftDetectionWorkflowTests
                 .WithAttributeFlow(mvPersonCn, targetUserCn)
                 .WithExpressionFlow("\"CN=\" + mv[\"cn\"] + \",OU=Users,DC=target,DC=local\"", targetUserDn));
 
-        await _harness.CreateSyncRuleAsync(
+        return await _harness.CreateSyncRuleAsync(
             "Target Group Export",
             "Target",
             "Group",
