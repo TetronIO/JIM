@@ -243,6 +243,13 @@ Describe 'Test-LabSddlContainsSid, Test-LabAclGrant and Merge-LabDelegationSddl'
     }
 }
 
+Describe 'Get-LabDelegatedContainerDn' {
+    It 'names the containers JIM is delegated over, under the given domain' {
+        Get-LabDelegatedContainerDn -DomainDn 'DC=panoply,DC=local' |
+            Should -Be @('OU=Corp,DC=panoply,DC=local', 'OU=TestUsers,DC=panoply,DC=local', 'OU=TestGroups,DC=panoply,DC=local')
+    }
+}
+
 Describe 'Get-LabCheckpointName' {
     It 'names the baseline checkpoint' {
         Get-LabCheckpointName -Baseline | Should -Be 'baseline'

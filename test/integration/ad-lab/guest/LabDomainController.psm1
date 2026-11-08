@@ -4271,6 +4271,56 @@ function Get-LabGroupSid {
     return $group.SID.Value
 }
 
+function Get-LabDelegatedContainerDn {
+    <#
+    .SYNOPSIS
+        The containers JIM is delegated over in a lab domain: OU=Corp (and everything below it), OU=TestUsers and
+        OU=TestGroups. One list, so the Configure phase, its verification and a checkpoint restore agree.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern('^DC=.+')]
+        [string]$DomainDn
+    )
+
+    return @("OU=Corp,$DomainDn", "OU=TestUsers,$DomainDn", "OU=TestGroups,$DomainDn")
+}
+
+function Sync-LabDelegation {
+    <#
+    .SYNOPSIS
+        Brings JIM's delegation on this domain controller in line with the delegation file: every delegated
+        container (Get-LabDelegatedContainerDn) holds every entry, and the group can read Deleted Objects.
+
+    .DESCRIPTION
+        Runs in the guest. Restore-LabDomainController.ps1 calls it after every checkpoint revert, so a checkpoint
+        taken before the delegation file gained entries still comes back with all of them (#2774), without
+        rebuilding the checkpoint. Idempotent: entries already held are left alone. Returns the outcome of each
+        grant (Grant-LabContainerDelegation and Grant-LabTombstoneRead).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AclPath,
+
+        [ValidatePattern('^[A-Za-z0-9 ._-]+$')]
+        [string]$GroupName = 'JIM Connectors'
+    )
+
+    Assert-LabWindows -Feature 'Applying the delegation'
+    Import-Module ActiveDirectory -ErrorAction Stop
+
+    $domain = Get-ADDomain
+    $outcomes = New-Object System.Collections.Generic.List[object]
+    foreach ($container in Get-LabDelegatedContainerDn -DomainDn $domain.DistinguishedName) {
+        $outcomes.Add((Grant-LabContainerDelegation -ContainerDn $container -AclPath $AclPath -GroupName $GroupName))
+    }
+    $outcomes.Add((Grant-LabTombstoneRead -NetBiosName $domain.NetBIOSName -GroupName $GroupName))
+    return $outcomes.ToArray()
+}
+
 function Grant-LabContainerDelegation {
     <#
     .SYNOPSIS
@@ -4924,7 +4974,7 @@ Export-ModuleMember -Function @(
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabCheckpoint', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
-    'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
+    'Get-LabGroupSid', 'Get-LabDelegatedContainerDn', 'Sync-LabDelegation', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
     'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange',

@@ -12,7 +12,8 @@
     443) on the AD FS server, as the role in the VM's Notes says. Fails if the checkpoint does not exist, or the
     timeout passes. On a domain controller it then makes sure, through PowerShell Direct, that a previous password
     stops working as soon as it changes (OldPasswordAllowedPeriod=0, as the Configure phase sets), whatever the
-    checkpoint was taken with.
+    checkpoint was taken with, and brings JIM's delegation in line with jim-ad-delegation.acl from this checkout
+    (Sync-LabDelegation), so a checkpoint taken before the file gained entries still comes back with all of them.
 
     The AD FS server is a member of dc-primary's domain, so the two are reverted together: dc-primary first, then
     adfs-primary, each to its own baseline.
@@ -134,6 +135,23 @@ try {
         # controllers only: it is a directory setting.
         if ($meta.Role -eq 'DomainController' -and (Invoke-Command -VMName $Name -Credential $credential -ScriptBlock ${function:Set-LabOldPasswordAllowedPeriod})) {
             Write-Progress-Line "Stopped the previous password working after a change in $Name (OldPasswordAllowedPeriod=0)"
+        }
+
+        # Likewise JIM's delegation (#2774): a checkpoint taken before the delegation file gained entries would bring
+        # the domain controller back without them. The module and the file are copied in from this checkout first,
+        # so the guest applies exactly this version; entries already held are left alone.
+        if ($meta.Role -eq 'DomainController') {
+            $layout = Resolve-LabLayout -ScriptRoot $PSScriptRoot
+            $guestRoot = 'C:\jim-ad-lab'
+            Copy-LabAssetToGuest -VMName $Name -Credential $credential -Destination $guestRoot -Path @($layout.ModulePath, $layout.DelegationAclPath)
+            $outcomes = @(Invoke-Command -VMName $Name -Credential $credential -ArgumentList (Join-Path $guestRoot 'LabDomainController.psm1'), (Join-Path $guestRoot 'jim-ad-delegation.acl') -ScriptBlock {
+                    param($module, $acl)
+                    Import-Module $module -Force
+                    Sync-LabDelegation -AclPath $acl
+                })
+            foreach ($outcome in $outcomes | Where-Object { $_.Outcome -ne 'AlreadyPresent' }) {
+                Write-Progress-Line "Brought JIM's delegation up to date on $($outcome.ContainerDn) in $Name"
+            }
         }
     }
     else {

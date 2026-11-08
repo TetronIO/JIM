@@ -29,7 +29,7 @@ history 24, minimum age 1 day, maximum age 42 days), which `Configure` sets itse
 write them, both on the domain and in the Default Domain Policy, where Exchange `/PrepareAD` can leave the starting values
 for Group Policy to write back later (#2412). `Verify` checks both. One registry value departs from the Windows default: `OldPasswordAllowedPeriod` is 0, so a previous
 password stops working as soon as it changes rather than for 5 minutes after, as on Samba (#2287). `Configure` sets it,
-`Verify` checks it, and `Restore-LabDomainController.ps1` applies it again after every checkpoint revert.
+`Verify` checks it, and `Restore-LabDomainController.ps1` applies it again after every checkpoint revert. The restore also brings JIM's delegation in line with `jim-ad-delegation.acl` from the checkout (`Sync-LabDelegation`), adding any entry a checkpoint predates, so a change to the delegation file reaches the lab at the next revert without rebuilding a checkpoint.
 
 Each forest also carries the **full Exchange organisation**, as an Exchange customer's forest does: Exchange's schema
 (all of its classes and attributes, `extensionAttribute1`-`15` among them), an organisation named after the forest
