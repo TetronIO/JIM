@@ -120,6 +120,15 @@ public interface ISyncEngine
         AttributePriorityContext priorityContext);
 
     /// <summary>
+    /// Stages for removal the values the departed import Synchronisation Rules still hold on the Connected System
+    /// Object's Metaverse Object (#2821): rules the object has left while another rule still covers it, found by
+    /// <c>SyncEngine.GetDepartedImportRules</c>. Call after the covering rules have flowed and before the withdrawal
+    /// re-election. Only values stamped with both this Connected System and a departed rule are touched.
+    /// </summary>
+    /// <returns>The values staged for removal, empty if none.</returns>
+    List<MetaverseObjectAttributeValue> WithdrawDepartedRuleContributions(ConnectedSystemObject cso, IReadOnlyCollection<int> departedSyncRuleIds);
+
+    /// <summary>
     /// Recalls Metaverse Object attribute values whose contributing Attribute Flow mapping has been DELETED
     /// (#1533): the value's provenance names this Connected System and a Synchronisation Rule, but the priority
     /// contributor cache holds neither a live import mapping from that rule targeting the attribute nor a dormant
