@@ -31,6 +31,10 @@ public sealed class AttributePriorityContext
     // Only a mapping row that is genuinely GONE orphans its values.
     private readonly HashSet<(int ObjectTypeId, int AttributeId, int SyncRuleId)> _dormantContributors = new();
 
+    // The Synchronisation Rules whose values hold no attribute against the rules covering the object being flowed: those it
+    // has just left (#2821). Set only for the length of one object's inbound flow.
+    private HashSet<int>? _disregardedIncumbentSyncRuleIds;
+
     /// <summary>
     /// Whether "Null is a value" assertions are honoured (asserted-null <c>NullValue</c> marker rows are written and
     /// block lower-priority fall-through). This is gated on the <c>NullValue</c> read-query filter being in place,
@@ -137,6 +141,25 @@ public sealed class AttributePriorityContext
         _contributorsByAttribute.TryGetValue((objectTypeId, attributeId), out var list) ? list : [];
 
     /// <summary>
+    /// Treats values stamped by the given Synchronisation Rules as having no incumbent, until
+    /// <see cref="EndDisregardingIncumbents"/>, for one object's inbound Attribute Flow (#2821). The object has left
+    /// those rules' scope, so their values must not hold an attribute against the rules that still cover it: a rule
+    /// with a different value replaces the old one, and one with the same value takes its provenance over. Whatever the
+    /// departed rules still hold once the covering rules have flowed is then withdrawn by the caller.
+    /// </summary>
+    public void BeginDisregardingIncumbents(IEnumerable<int> syncRuleIds)
+    {
+        ArgumentNullException.ThrowIfNull(syncRuleIds);
+        _disregardedIncumbentSyncRuleIds = syncRuleIds.ToHashSet();
+    }
+
+    /// <summary>
+    /// Ends <see cref="BeginDisregardingIncumbents"/>. Call it in a <c>finally</c>, because the context is shared by
+    /// every object a run processes.
+    /// </summary>
+    public void EndDisregardingIncumbents() => _disregardedIncumbentSyncRuleIds = null;
+
+    /// <summary>
     /// Decides whether an incoming contribution should be applied to a Metaverse Object attribute, given the rule
     /// that currently owns the attribute's value (the incumbent, by <c>ContributedBySyncRuleId</c>). Returns true
     /// when the incoming mapping wins or is the same rule updating itself, or when there is no comparable incumbent
@@ -151,6 +174,11 @@ public sealed class AttributePriorityContext
             return true;
 
         if (incumbentSyncRuleId.Value == incoming.SyncRuleId)
+            return true;
+
+        // A rule the object has just left has no opinion on it any more (#2821), so its value does not hold the
+        // attribute against the rules that still cover the object.
+        if (_disregardedIncumbentSyncRuleIds?.Contains(incumbentSyncRuleId.Value) == true)
             return true;
 
         var incumbent = GetContributor(objectTypeId, attributeId, incumbentSyncRuleId.Value);

@@ -989,9 +989,24 @@ public class SyncPreviewServer
         List<(ActivityRunProfileExecutionItemSyncOutcomeType OutcomeType, string AttributeName, string Value)> generatedValueOutcomes = [];
         var originalMetaverseObject = cso.MetaverseObject;
         var objectFailed = false;
+        List<DepartedImportRule> departedRules = [];
         try
         {
             cso.MetaverseObject = workingMvo;
+
+            // Rules the object has left while another still covers it (#2821), exactly as the run finds them: only for
+            // an object already joined, and never where another object from this system shares the Metaverse Object.
+            if (cso.MetaverseObjectId.HasValue)
+            {
+                departedRules = SyncEngine.GetDepartedImportRules(cso, importRules, inScopeRules);
+                if (departedRules.Count > 0 &&
+                    (await guardedRepository.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(cso.MetaverseObjectId.Value))
+                        .Count(id => id == cso.ConnectedSystemId) > 1)
+                    departedRules = [];
+            }
+
+            if (departedRules.Count > 0)
+                context.PriorityContext.BeginDisregardingIncumbents(departedRules.Select(rule => rule.SyncRuleId));
             foreach (var rule in inScopeRules)
             {
                 try
@@ -1032,6 +1047,13 @@ public class SyncPreviewServer
                     objectFailed = true;
                     break;
                 }
+            }
+
+            if (departedRules.Count > 0)
+            {
+                context.PriorityContext.EndDisregardingIncumbents();
+                if (!objectFailed)
+                    _syncEngine.WithdrawDepartedRuleContributions(cso, departedRules.Select(rule => rule.SyncRuleId).ToList());
             }
 
             // The orphaned-contribution recall and the withdrawal re-election (#1899), between the ordinary pass and the
@@ -1088,8 +1110,10 @@ public class SyncPreviewServer
         finally
         {
             // The CSO instance may be shared (an in-memory repository hands out its stored instance);
-            // the working object is the preview's alone, so the only mutation to undo is this link.
+            // the working object is the preview's alone, so the only mutation to undo is this link (and the priority
+            // gate's disregard of departed rules, should anything escape between its beginning and its end).
             cso.MetaverseObject = originalMetaverseObject;
+            context.PriorityContext.EndDisregardingIncumbents();
         }
 
         // The run fails an object whose inbound Expression throws, or whose input is missing under Fail the object, and
@@ -1205,6 +1229,22 @@ public class SyncPreviewServer
                 CopyWouldJoinMatch(root, inbound);
             result.OutcomeTree.Add(root);
 
+            // A rule the object left while another still covers it (#2821), first beneath the root, where the worker's
+            // root builder records it: naming the rule, with the count of values it had contributed.
+            foreach (var departed in departedRules)
+            {
+                root.Children.Add(new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                    TargetEntityId = root.TargetEntityId,
+                    TargetEntityDescription = root.TargetEntityDescription,
+                    DetailCount = departed.ContributedValueCount,
+                    SyncRuleId = departed.SyncRuleId,
+                    SyncRuleName = departed.SyncRuleName,
+                    Ordinal = root.Children.Count
+                });
+            }
+
             // Unique Value Generation (#242): a GeneratedValueAssigned child per
             // resolved attribute, mirroring exactly where the worker records them: a child of the root
             // (alongside, not nested inside, the Attribute Flow child), never gated to a tracking level,
@@ -1271,6 +1311,37 @@ public class SyncPreviewServer
         }
         else
         {
+            // A scope exit that moved only provenance (#2821): the covering rules wrote the very values the departed
+            // rule held, so nothing flowed, but the run still records the exit as an item of its own, a retained-join
+            // root naming the first rule the object left with any further one beneath it.
+            if (departedRules.Count > 0)
+            {
+                var scopeExitRoot = new SyncOutcomeNode
+                {
+                    OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                    TargetEntityId = workingMvo.Id != Guid.Empty ? workingMvo.Id : null,
+                    TargetEntityDescription = ObjectNaming.FirstPresent(workingMvo.Name),
+                    DetailCount = departedRules[0].ContributedValueCount,
+                    SyncRuleId = departedRules[0].SyncRuleId,
+                    SyncRuleName = departedRules[0].SyncRuleName,
+                    Ordinal = result.OutcomeTree.Count
+                };
+                foreach (var departed in departedRules.Skip(1))
+                {
+                    scopeExitRoot.Children.Add(new SyncOutcomeNode
+                    {
+                        OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                        TargetEntityId = scopeExitRoot.TargetEntityId,
+                        TargetEntityDescription = scopeExitRoot.TargetEntityDescription,
+                        DetailCount = departed.ContributedValueCount,
+                        SyncRuleId = departed.SyncRuleId,
+                        SyncRuleName = departed.SyncRuleName,
+                        Ordinal = scopeExitRoot.Children.Count
+                    });
+                }
+                result.OutcomeTree.Add(scopeExitRoot);
+            }
+
             BuildOutboundOutcomeNodes(result.OutcomeTree, outbound, context.SystemNames);
         }
 
@@ -2704,8 +2775,9 @@ public class SyncPreviewServer
     /// <summary>
     /// A preview-owned copy of a Metaverse Object, so Attribute Flow and the pending-change application
     /// mutate the preview's state and never a shared instance (an in-memory repository hands out its
-    /// stored objects; a database read is already detached). Value instances are shared, not copied:
-    /// the flow adds and removes list entries but never mutates a value in place.
+    /// stored objects; a database read is already detached). Value instances are copied too: Attribute Flow
+    /// stamps provenance on a value it leaves in place (a rule taking over a value another rule held, #2821),
+    /// and a shared instance would carry that stamp back into the stored object.
     /// </summary>
     private static MetaverseObject CloneForPreview(MetaverseObject mvo)
     {
@@ -2716,8 +2788,7 @@ public class SyncPreviewServer
             Origin = mvo.Origin,
             CachedDisplayName = mvo.CachedDisplayName
         };
-        foreach (var attributeValue in mvo.AttributeValues)
-            clone.AttributeValues.Add(attributeValue);
+        clone.AttributeValues.AddRange(mvo.AttributeValues.Select(attributeValue => attributeValue.CopyFor(clone)));
         return clone;
     }
 

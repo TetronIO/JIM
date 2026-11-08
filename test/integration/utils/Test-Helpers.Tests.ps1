@@ -1963,3 +1963,78 @@ Describe 'Import Activity reads' {
         }
     }
 }
+
+Describe 'Get-TimingChartRow' {
+    BeforeAll {
+        # The figures from a Scale1m60kGroups run whose chart drew Start Services and Run Tests at the same
+        # length and Build at a third of it: bars were seconds / 2 characters, capped at 50.
+        $script:stages = [ordered]@{
+            '1. Reset'          = [TimeSpan]::FromSeconds(0.2)
+            '2. Build'          = [TimeSpan]::FromSeconds(71)
+            '3. Start Services' = [TimeSpan]::FromSeconds(1759.9)
+            '4. Wait'           = [TimeSpan]::FromSeconds(6.1)
+            '5. Run Tests'      = [TimeSpan]::FromSeconds(11192.6)
+            '6. Capture'        = [TimeSpan]::Zero
+        }
+        function Get-BarEighths([string]$Bar) {
+            $partials = ' ▏▎▍▌▋▊▉'
+            $eighths = 0
+            foreach ($character in $Bar.ToCharArray()) {
+                if ($character -eq '█') { $eighths += 8 } else { $eighths += $partials.IndexOf($character) }
+            }
+            $eighths
+        }
+    }
+
+    It 'draws the longest stage at the full width' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        $longest = $rows | Where-Object Name -eq '5. Run Tests'
+        $longest.Bar | Should -Be ('█' * 40)
+    }
+
+    It 'draws every other stage in proportion to the longest' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        foreach ($row in $rows | Where-Object Seconds -gt 0) {
+            $expectedEighths = $row.Seconds / 11192.6 * 40 * 8
+            [math]::Abs((Get-BarEighths $row.Bar) - $expectedEighths) | Should -BeLessOrEqual 1 -Because "$($row.Name) took $($row.Seconds)s"
+        }
+    }
+
+    It 'gives a stage that took some time a visible bar, however short' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        ($rows | Where-Object Name -eq '1. Reset').Bar | Should -Not -BeNullOrEmpty
+    }
+
+    It 'draws no bar for a stage that took no time' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        ($rows | Where-Object Name -eq '6. Capture').Bar | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the stages in the order given' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        $rows.Name | Should -Be @($script:stages.Keys)
+    }
+
+    It 'gives each stage its share of the total' {
+        $rows = Get-TimingChartRow -Timings $script:stages -BarWidth 40
+        $total = ($script:stages.Values | Measure-Object -Property TotalSeconds -Sum).Sum
+        ($rows | Where-Object Name -eq '5. Run Tests').Share | Should -Be ([math]::Round(11192.6 / $total * 100))
+    }
+
+    It 'draws nothing when every stage took no time' {
+        $rows = Get-TimingChartRow -Timings ([ordered]@{ 'a' = [TimeSpan]::Zero; 'b' = [TimeSpan]::Zero }) -BarWidth 40
+        $rows.Bar | Where-Object { $_ } | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Format-TimingDuration' {
+    It 'shows <Seconds> seconds as <Expected>' -ForEach @(
+        @{ Seconds = 0.2; Expected = '0.2s' }
+        @{ Seconds = 59.94; Expected = '59.9s' }
+        @{ Seconds = 71; Expected = '1m 11s' }
+        @{ Seconds = 1759.9; Expected = '29m 20s' }
+        @{ Seconds = 11192.6; Expected = '3h 06m 33s' }
+    ) {
+        Format-TimingDuration -Seconds $Seconds | Should -Be $Expected
+    }
+}

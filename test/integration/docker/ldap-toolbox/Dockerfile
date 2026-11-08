@@ -51,10 +51,11 @@ RUN apt-get update \
 # an administrator's workstation: it resolves the domain controllers' and the AD FS server's names (extra_hosts) and
 # reaches jim.web on the Docker network, which the runner itself cannot. Connect-JIM and the portal sign-in run in it
 # with JIM's own PowerShell module. Pinned to a release and its SHA-256 (the digest GitHub publishes for the asset),
-# unlike the apt packages above, because it is downloaded rather than taken from the distribution.
+# unlike the apt packages above, because it is downloaded rather than taken from the distribution. The download
+# retries: a GitHub release asset answering 504 for half an hour failed every lab scenario built after it (8 November).
 ARG POWERSHELL_VERSION=7.6.7
 ARG POWERSHELL_SHA256=6896f9e3a6b0a354bf470835a96da76d2f801cd50dcf047ad7c4563bf93bf431
-RUN curl -fsSL -o /tmp/powershell.tar.gz \
+RUN curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 --retry-max-time 600 -o /tmp/powershell.tar.gz \
         "https://github.com/PowerShell/PowerShell/releases/download/v${POWERSHELL_VERSION}/powershell-${POWERSHELL_VERSION}-linux-x64.tar.gz" \
     && echo "${POWERSHELL_SHA256}  /tmp/powershell.tar.gz" | sha256sum -c - \
     && mkdir -p /opt/microsoft/powershell/7 \
