@@ -220,7 +220,8 @@ public interface ISyncServer
     /// Returns corrective Pending Exports (not yet persisted) when drift is detected.
     /// <paramref name="generatedValueAssignments"/> is the run's Unique Value Generation cache, already prefetched
     /// for this Connected System Object: a generated export Attribute Flow's expected value is its export-mode
-    /// assignment, read from there without a query (#242).
+    /// assignment, read from there without a query (#242). <paramref name="heldReferenceAnswers"/> answers the attributes
+    /// a Delta Synchronisation loaded without their values (#2818), from the database.
     /// </summary>
     DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
@@ -228,7 +229,8 @@ public interface ISyncServer
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null);
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null);
 
     #endregion
 

@@ -136,7 +136,49 @@ public class DeltaSyncLargeGroupLoadBenchmarkDatabaseTests
             leanMvoMs.Add(stopwatch.ElapsedMilliseconds);
         }
 
+        // As built: the page load leaving the members out (the default threshold), and the database's answer to Drift
+        // Detection's question, asked with the expected values read from the Metaverse Object the load brought, as the run
+        // asks it.
+        var builtLoadMs = new List<long>();
+        var builtCompareMs = new List<long>();
+        var builtCsoValues = 0;
+        var builtMvoValues = 0;
+        DriftHeldReferenceAnswer? builtAnswer = null;
+        for (var run = 0; run < Runs; run++)
+        {
+            await using var ctx = NewContext();
+            var repository = new PostgresDataRepository(ctx);
+            var member = await ctx.ConnectedSystemAttributes.AsNoTracking().SingleAsync(a => a.Id == _memberAttributeId);
+            var plan = new SynchronisationValueLoadPlan(new Dictionary<int, IReadOnlyList<ConnectedSystemObjectTypeAttribute>> { [_groupTypeId] = [member] },
+                SynchronisationValueLoadPlan.DefaultMinimumHeldValueCount);
+
+            var stopwatch = Stopwatch.StartNew();
+            var page = await repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
+                _systemId, modifiedSince, 1, 500, knownTotalCount: 1, afterId: Guid.Empty, objectTypeId: _groupTypeId, valueLoadPlan: plan);
+            stopwatch.Stop();
+            builtLoadMs.Add(stopwatch.ElapsedMilliseconds);
+
+            var group = page.Results.Single();
+            Assert.That(group.IsPartiallyLoaded, Is.True, "the group is loaded without its members");
+            builtCsoValues = group.AttributeValues.Count;
+            builtMvoValues = group.MetaverseObject!.AttributeValues.Count;
+            var expected = group.MetaverseObject.AttributeValues
+                .Where(v => v.AttributeId == _staticMembersAttributeId && !v.NullValue && v.ReferenceValueId.HasValue)
+                .Select(v => v.ReferenceValueId!.Value).Distinct().ToList();
+
+            stopwatch.Restart();
+            builtAnswer = (await repository.Sync.GetDriftHeldReferenceAnswersAsync(
+                [new DriftHeldReferenceQuestion(group.Id, _memberAttributeId, _staticMembersAttributeId, expected)])).Single();
+            stopwatch.Stop();
+            builtCompareMs.Add(stopwatch.ElapsedMilliseconds);
+        }
+
         TestContext.Out.WriteLine($"#2818 benchmark: group of {Members:N0} members, {Departed:N0} departed (CSO holds {Members - Departed:N0}, MVO {Members:N0}).");
+        TestContext.Out.WriteLine($"  As built, page load leaving the members out: {string.Join(", ", builtLoadMs)} ms; {builtCsoValues:N0} CSO values, " +
+                                  $"{builtMvoValues:N0} MVO values materialised.");
+        TestContext.Out.WriteLine($"  As built, Drift Detection's question answered in the database: {string.Join(", ", builtCompareMs)} ms; " +
+                                  $"{builtAnswer!.HeldValueCount:N0} held, {builtAnswer.HeldNotExpected.Count:N0} held but not expected, " +
+                                  $"{builtAnswer.ExpectedNotHeld.Count:N0} expected but not held.");
         TestContext.Out.WriteLine($"  Whole page load (GetConnectedSystemObjectsModifiedSinceAsync): {string.Join(", ", wholeLoadMs)} ms; " +
                                   $"{loadedCsoValues:N0} CSO values, {loadedMvoValues:N0} MVO values materialised.");
         TestContext.Out.WriteLine($"  Set-based comparison in the database: {string.Join(", ", compareMs)} ms; counted {csoCount:N0} CSO members, " +
@@ -150,6 +192,8 @@ public class DeltaSyncLargeGroupLoadBenchmarkDatabaseTests
             Assert.That(mvoCount, Is.EqualTo(Members));
             Assert.That(csoDisagreeing, Is.Empty, "every member the object holds is one the Metaverse Object holds");
             Assert.That(mvoDisagreeing, Has.Length.EqualTo(Departed), "exactly the departed members are the Metaverse Object's alone");
+            Assert.That(builtAnswer.HeldNotExpected, Is.Empty, "as built: no member the group holds is unexpected");
+            Assert.That(builtAnswer.ExpectedNotHeld, Has.Count.EqualTo(Departed), "as built: exactly the departed members are expected and not held");
         }
     }
 

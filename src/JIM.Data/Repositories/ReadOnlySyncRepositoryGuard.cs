@@ -57,8 +57,8 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
         => _inner.GetReferencedObjectTypeIdsAsync(attributeIds);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null)
+        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -106,6 +106,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
 
     public Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
         => _inner.GetHeldReferenceValueAnswersAsync(questions);
+
+    public Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions)
+        => _inner.GetDriftHeldReferenceAnswersAsync(questions);
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);

@@ -437,9 +437,15 @@ public partial class SyncRepository : ISyncRepository
         return csos;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="valueLoadPlan"/> is not applied (#2818): the store hands out its own instances, which a page must
+    /// not lose values from, so every object is loaded whole, which is always correct. The comparison it stands in for is
+    /// answered here all the same (<see cref="GetDriftHeldReferenceAnswersAsync"/>).
+    /// </remarks>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
-        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null)
     {
         var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
             .Where(c => IsModifiedSince(c, modifiedSince));
@@ -788,6 +794,23 @@ public partial class SyncRepository : ISyncRepository
         }
 
         return csos;
+    }
+
+    /// <summary>
+    /// #2818: each answer worked out from the stored values, as <see cref="DriftHeldReferenceAnswer.Compute"/> works it out:
+    /// a held value resolves to the Metaverse Object its referenced object is joined to now.
+    /// </summary>
+    public virtual Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions)
+    {
+        var answers = questions.Select(question =>
+        {
+            var held = _csos.TryGetValue(question.ConnectedSystemObjectId, out var cso)
+                ? cso.AttributeValues.Where(value => value.AttributeId == question.AttributeId).OrderBy(value => value.Id).ToList()
+                : [];
+            return DriftHeldReferenceAnswer.Compute(question, held, value =>
+                value.ReferenceValueId is { } referencedId && _csos.TryGetValue(referencedId, out var referenced) ? referenced.MetaverseObjectId : null);
+        }).ToList();
+        return Task.FromResult(answers);
     }
 
     /// <summary>

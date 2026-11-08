@@ -1349,6 +1349,21 @@ public interface IConnectedSystemRepository
         DateTime? createdOnOrAfter = null);
 
     /// <summary>
+    /// #2818: as the overload above, leaving out of each object the attributes <paramref name="valueLoadPlan"/> allows; see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>. Null loads every object whole.
+    /// </summary>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize,
+        int? knownTotalCount,
+        Guid? afterId,
+        int? objectTypeId,
+        DateTime? createdOnOrAfter,
+        SynchronisationValueLoadPlan? valueLoadPlan);
+
+    /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
     /// Used for delta synchronisation statistics.
     /// Returns count of CSOs where Created > modifiedSince OR LastUpdated > modifiedSince.

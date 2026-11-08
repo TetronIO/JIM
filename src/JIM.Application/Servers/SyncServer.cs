@@ -449,8 +449,9 @@ public class SyncServer : ISyncServer
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments);
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments, heldReferenceAnswers);
 
     #endregion
 

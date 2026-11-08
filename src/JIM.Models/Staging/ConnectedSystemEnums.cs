@@ -622,3 +622,48 @@ public enum ConnectorCatalogueObjectKind
     /// <summary>A query, described by the columns it would return.</summary>
     Statement
 }
+
+/// <summary>
+/// Why a Delta Synchronisation loads a multi-valued reference attribute whole rather than without its values (#2818),
+/// where Drift Detection compares it. The configuration reasons are logged once per run; the per-object reasons are
+/// counted on the page load's span.
+/// </summary>
+public enum SynchronisationValueLoadFallbackReason
+{
+    /// <summary>An import Attribute Flow mapping reads the attribute directly.</summary>
+    ReadByImportAttributeFlow = 0,
+
+    /// <summary>An import mapping's Expression reads the attribute, or reaches attributes by a computed name.</summary>
+    ReadByImportExpression = 1,
+
+    /// <summary>A Scoping Criterion of an import Synchronisation Rule reads the attribute.</summary>
+    ReadByScopingCriterion = 2,
+
+    /// <summary>An Object Matching Rule reads the attribute.</summary>
+    ReadByObjectMatchingRule = 3,
+
+    /// <summary>An Enforce State export mapping works the attribute out with an Expression, which reads the values held.</summary>
+    ReadByDriftExpression = 4,
+
+    /// <summary>An Enforce State export mapping generates the attribute's value (Unique Value Generation).</summary>
+    ReadByGeneratedValueDrift = 5,
+
+    /// <summary>An Enforce State export mapping exports a Metaverse attribute that does not hold references to it.</summary>
+    ExpectedValuesNotReferences = 6,
+
+    /// <summary>The object holds fewer values of the attribute than the plan's threshold.</summary>
+    BelowThreshold = 7,
+
+    /// <summary>The object is not joined to a Metaverse Object, so Drift Detection does not compare it.</summary>
+    NotJoined = 8,
+
+    /// <summary>The object is not in the Normal state (Obsolete, or awaiting provisioning).</summary>
+    NotNormal = 9,
+
+    /// <summary>Another object on the page is joined to the same Metaverse Object.</summary>
+    SharesMetaverseObject = 10,
+
+    /// <summary>A value of the attribute references an object on the same page, whose join the page can change before Drift
+    /// Detection compares it.</summary>
+    ReferencesObjectOnPage = 11
+}
