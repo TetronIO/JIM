@@ -303,6 +303,43 @@ public class SyncRuleScopingPreviewAdapterTests
             Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
     }
 
+    [Test]
+    public async Task EvaluateDeltasAsync_JoinedObjectLeavesTheRuleWhileASiblingCoversIt_ReportsTheScopeExitWithoutADisconnectionAsync()
+    {
+        // Each rule's Out-of-Scope Action applies when the object leaves that rule (#2821): under Disconnect the values
+        // this rule contributed are handed to the rules that still cover the object, and the join stays. A real change
+        // to what the Metaverse Object holds, so it is counted, but never as a disconnection.
+        GivenRuleScopedToSales(_rule);
+        GivenRuleFlowsDepartment();
+        GivenCatchAllSibling();
+        GivenJoinedCso("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+        }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_JoinedObjectLeavesARemainJoinedRuleWhileASiblingCoversIt_ReportsNothingAsync()
+    {
+        // Remain Joined keeps the departed rule's values (#2821), so with the join kept too nothing changes.
+        GivenRuleScopedToSales(_rule);
+        GivenRuleFlowsDepartment();
+        _rule.InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined;
+        GivenCatchAllSibling();
+        GivenJoinedCso("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        Assert.That(deltas, Is.Empty);
+    }
+
     // ── Downstream ───────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
@@ -682,6 +719,27 @@ public class SyncRuleScopingPreviewAdapterTests
         _rule.Direction = SyncRuleDirection.Export;
         _rule.Name = "Directory Export";
     }
+
+    private void GivenRuleFlowsDepartment() =>
+        _rule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 1,
+            SyncRuleId = RuleId,
+            TargetMetaverseAttribute = _mvoDeptAttribute,
+            TargetMetaverseAttributeId = MvoDeptAttributeId
+        });
+
+    private void GivenCatchAllSibling() =>
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Catch-all Import",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true
+        });
 
     private ConnectedSystemObject GivenJoinedCso(string department)
     {

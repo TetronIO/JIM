@@ -7,7 +7,7 @@ audience: evaluator
 
 # Product Roadmap
 
-JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
+JIM has completed **pre-release stabilisation**. The core identity lifecycle (Import, Sync, Export and Schedule) is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 1,000,000-user scale (1,000,000 users and 60,000 groups synchronised cross-domain across two directories, with groups of up to 1,000,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and integration test coverage across its synchronisation scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
 ```jim-diagram
 archetype: flow

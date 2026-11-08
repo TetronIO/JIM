@@ -34,10 +34,12 @@ namespace JIM.Application.Servers.Preview;
 /// - **Downstream**, through the shared deletion-eligibility evaluator: which identities the departures would
 ///   leave eligible for deletion.
 ///
-/// The honesty that matters most here is negative. An import rule's scope exit only bites when the object is out
-/// of scope of EVERY import rule carrying criteria, because a criteria-less rule is in scope for everything. Beside
-/// such a sibling, narrowing this rule disconnects nobody at all, and a preview that counted departures would be a
-/// confident number about a change that does nothing.
+/// The honesty that matters most here is negative. An import rule's scope exit only disconnects when the object is
+/// out of scope of EVERY import rule carrying criteria, because a criteria-less rule is in scope for everything.
+/// Beside such a sibling, narrowing this rule disconnects nobody at all, and a preview that counted disconnections
+/// would be a confident number about a change that does nothing. What does happen there (#2821) is reported as a
+/// plain scope exit: under Disconnect the rule's contributed values are handed to the rules that still cover the
+/// object, and the join stays.
 /// </summary>
 public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 {
@@ -124,9 +126,11 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                 findings.Add(new PreviewValidationFinding(
                     PreviewValidationSeverity.Warning,
                     $"Import Synchronisation Rule '{unscopedSibling.Name}' covers this object type with no Scoping " +
-                    "Criteria, so every object is in scope of it whatever this rule says. No object can leave scope " +
-                    "while that rule stands, so narrowing this rule's criteria disconnects nothing; the counts below " +
-                    "report only what would newly enter scope.",
+                    "Criteria, so every object stays joined whatever this rule says: narrowing this rule's criteria " +
+                    "disconnects nothing. An object that leaves this rule's scope stops receiving its Attribute Flow; " +
+                    (rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect
+                        ? "under its Out-of-Scope Action, Disconnect, the values this rule contributed are handed to the rules that still cover the object."
+                        : "under its Out-of-Scope Action, Remain Joined, the values this rule contributed stay as they are."),
                     nameof(SyncRule.ObjectScopingCriteriaGroups)));
             }
         }
@@ -312,7 +316,19 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
             && (answer.Failure != null || answer.InScope));
 
         if (stillCoveredElsewhere)
-            return null;
+        {
+            // Each rule's Out-of-Scope Action applies when the object leaves that rule (#2821). Under Disconnect, with
+            // the Object Type recalling contributed values, what this rule contributed is handed to the rules that still
+            // cover the object and the join stays: a scope exit, never a disconnection. Remain Joined keeps the values,
+            // and a rule that flows nothing into the Metaverse has none to hand over, so for those nothing changes.
+            var valuesHandedOver = cso.MetaverseObjectId.HasValue
+                && rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect
+                && cso.Type is { RemoveContributedAttributesOnObsoletion: true }
+                && rule.AttributeFlowRules.Any(mapping => mapping.TargetMetaverseAttributeId.HasValue || mapping.TargetMetaverseAttribute != null);
+            return valuesHandedOver
+                ? ScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldFallOutOfScope, rule, cso, InScopeValue, OutOfScopeValue)
+                : null;
+        }
 
         if (!cso.MetaverseObjectId.HasValue)
         {

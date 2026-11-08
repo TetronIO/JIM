@@ -374,6 +374,92 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The import Synchronisation Rules a joined Connected System Object has left while at least one other rule still
+    /// covers it, and whose contributed values must therefore give way (#2821). Scope is per rule (#1199), so each rule's
+    /// own Out-of-Scope Action applies when the object leaves that rule: a rule counts only if it has Scoping Criteria,
+    /// the object is out of them, its action is Disconnect, the Object Type recalls contributed values, and the
+    /// Metaverse Object still holds a value stamped with that rule. Remain Joined keeps a departed rule's values, so
+    /// such a rule never counts.
+    /// <para>
+    /// Called before the covering rules flow: their contributions then disregard these rules as incumbents
+    /// (<see cref="AttributePriorityContext.BeginDisregardingIncumbents"/>), and
+    /// <see cref="WithdrawDepartedRuleContributions"/> withdraws what the departed rules still hold afterwards.
+    /// </para>
+    /// </summary>
+    public static List<DepartedImportRule> GetDepartedImportRules(
+        ConnectedSystemObject cso,
+        IEnumerable<SyncRule> importSyncRules,
+        IEnumerable<SyncRule> inScopeImportRules)
+    {
+        ArgumentNullException.ThrowIfNull(cso);
+        ArgumentNullException.ThrowIfNull(importSyncRules);
+        ArgumentNullException.ThrowIfNull(inScopeImportRules);
+
+        var mvo = cso.MetaverseObject;
+        if (mvo == null || cso.Type is not { RemoveContributedAttributesOnObsoletion: true })
+            return [];
+
+        var inScopeRuleIds = inScopeImportRules.Select(rule => rule.Id).ToHashSet();
+        var candidates = importSyncRules
+            .Where(rule => rule.ObjectScopingCriteriaGroups.Count > 0 &&
+                           !inScopeRuleIds.Contains(rule.Id) &&
+                           rule.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
+            .ToList();
+        if (candidates.Count == 0)
+            return [];
+
+        var valueCountsByRule = mvo.AttributeValues
+            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId && av.ContributedBySyncRuleId.HasValue)
+            .GroupBy(av => av.ContributedBySyncRuleId!.Value)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        return candidates
+            .Where(rule => valueCountsByRule.ContainsKey(rule.Id))
+            .Select(rule => new DepartedImportRule
+            {
+                SyncRuleId = rule.Id,
+                SyncRuleName = rule.Name,
+                ContributedValueCount = valueCountsByRule[rule.Id]
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Stages for removal the values the departed import Synchronisation Rules still hold on the Connected System
+    /// Object's Metaverse Object (#2821): those no covering rule replaced or took over while it flowed. Only values
+    /// stamped with both this Connected System and a departed rule are touched, so another rule's values, and another
+    /// system's, are left alone. Call after the covering rules have flowed and before the withdrawal re-election, which
+    /// then hands each emptied attribute to the next contributor from another system, or lets it clear.
+    /// </summary>
+    /// <returns>The values staged for removal, empty if none.</returns>
+    public List<MetaverseObjectAttributeValue> WithdrawDepartedRuleContributions(
+        ConnectedSystemObject cso,
+        IReadOnlyCollection<int> departedSyncRuleIds)
+    {
+        ArgumentNullException.ThrowIfNull(cso);
+        ArgumentNullException.ThrowIfNull(departedSyncRuleIds);
+
+        var mvo = cso.MetaverseObject;
+        if (mvo == null || departedSyncRuleIds.Count == 0)
+            return [];
+
+        var withdrawn = mvo.AttributeValues
+            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId &&
+                         av.ContributedBySyncRuleId is int ruleId && departedSyncRuleIds.Contains(ruleId) &&
+                         !mvo.PendingAttributeValueRemovals.Contains(av))
+            .ToList();
+        if (withdrawn.Count == 0)
+            return withdrawn;
+
+        mvo.PendingAttributeValueRemovals.AddRange(withdrawn);
+        Log.Information("WithdrawDepartedRuleContributions: CSO {CsoId} left the scope of Synchronisation Rule(s) {SyncRuleIds} while another " +
+            "rule still covers it; withdrew {Count} value(s) no covering rule replaced from MVO {MvoId}. Attribute ids: {AttributeIds}.",
+            cso.Id, string.Join(", ", departedSyncRuleIds), withdrawn.Count, mvo.Id, string.Join(", ", withdrawn.Select(av => av.AttributeId).Distinct()));
+
+        return withdrawn;
+    }
+
+    /// <summary>
     /// Recalls Metaverse Object attribute values whose contributing Attribute Flow mapping has been DELETED
     /// (#1533). A value's provenance (<c>ContributedBySystemId</c> + <c>ContributedBySyncRuleId</c>) names the
     /// mapping's rule; when the priority contributor cache holds neither a live import mapping from that rule

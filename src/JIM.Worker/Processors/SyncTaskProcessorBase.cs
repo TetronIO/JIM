@@ -2374,16 +2374,49 @@ public abstract class SyncTaskProcessorBase
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
+            // Rules the object has left while another still covers it (#2821): each rule's own Out-of-Scope Action applies
+            // when the object leaves that rule, so a Disconnect rule's values are withdrawn and the join stays. A join or
+            // projection made in this pass has nothing of this system's to withdraw yet.
+            var departedRules = wasJoined || wasProjected
+                ? []
+                : SyncEngine.GetDepartedImportRules(connectedSystemObject, importSyncRules, inScopeImportRules);
+            if (departedRules.Count > 0 && await IsAnotherObjectFromThisSystemJoinedAsync(connectedSystemObject.MetaverseObject))
+            {
+                // A value records the rule and system that contributed it, not the object: with another object from this
+                // system joined to the same Metaverse Object, the departed rule's values may be that object's, so they
+                // are left alone, as the out-of-every-rule path leaves them (#2021).
+                Log.Debug("ProcessMetaverseObjectChangesAsync: CSO {CsoId} left the scope of {Count} import rule(s), but another object from " +
+                    "this Connected System is joined to MVO {MvoId}, so their values cannot be told apart and are left as they are.",
+                    connectedSystemObject.Id, departedRules.Count, connectedSystemObject.MetaverseObject.Id);
+                departedRules = [];
+            }
+
             var attributeFlowErrors = new List<AttributeFlowError>();
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
-                foreach (var inboundSyncRule in inboundSyncRules)
+                // While the covering rules flow, the departed rules' values hold no attribute against them, so a different
+                // value replaces the departed one and the same value takes its provenance over.
+                if (departedRules.Count > 0)
+                    _attributePriorityContext?.BeginDisregardingIncumbents(departedRules.Select(rule => rule.SyncRuleId));
+                try
                 {
-                    // evaluate inbound Attribute Flow Rules, skipping reference attributes
-                    attributeFlowErrors.AddRange(
-                        ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
+                    foreach (var inboundSyncRule in inboundSyncRules)
+                    {
+                        // evaluate inbound Attribute Flow Rules, skipping reference attributes
+                        attributeFlowErrors.AddRange(
+                            ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
+                    }
+                }
+                finally
+                {
+                    if (departedRules.Count > 0)
+                        _attributePriorityContext?.EndDisregardingIncumbents();
                 }
             }
+
+            // What the departed rules still hold once the covering rules have flowed is withdrawn here, before the
+            // withdrawal re-election below hands each emptied attribute to the next contributor or lets it clear.
+            _syncEngine.WithdrawDepartedRuleContributions(connectedSystemObject, departedRules.Select(rule => rule.SyncRuleId).ToList());
 
             // Create error RPEIs for MVA->SVA violations (#435): a multi-valued source with more than one value
             // targeting a single-valued attribute. The attribute does not flow; the object's other attributes do.
@@ -2530,6 +2563,20 @@ public abstract class SyncTaskProcessorBase
                             syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null,
                             joinMatch: changeType == ObjectChangeType.Joined ? joinMatch : null);
 
+                        // A rule the object left while another still covers it (#2821): the scope exit explains why its
+                        // values changed, so it is recorded at every tracking level, naming the rule, with the count of
+                        // values it had contributed. The join stays, so the outcome is the retained-join one.
+                        foreach (var departed in departedRules)
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                                targetEntityId: mvoId,
+                                targetEntityDescription: mvoDescription,
+                                detailCount: departed.ContributedValueCount,
+                                syncRuleId: departed.SyncRuleId,
+                                syncRuleName: departed.SyncRuleName);
+                        }
+
                         // Unique Value Generation (#242, Phase 2 work package G): one GeneratedValueAssigned
                         // child per resolved attribute. Not gated to Detailed mode: a
                         // generated value is as much an audit signal as the MvoDeletionCancelled case below.
@@ -2597,6 +2644,14 @@ public abstract class SyncTaskProcessorBase
                             _deferredMvoRpeiMappings.Add((connectedSystemObject.MetaverseObject, rpei));
                     }
                 }
+                else if (departedRules.Count > 0)
+                {
+                    // The object left a rule while another still covers it, and the covering rules wrote the very values
+                    // the departed rule held (#2821): only who contributed them moved, so nothing above was staged. The
+                    // scope exit is still an outcome and is never silent, so it gets an item of its own, as a scope exit
+                    // that keeps its join does.
+                    RecordDepartedImportRulesWithoutValueChanges(connectedSystemObject, departedRules);
+                }
             }
 
             // Apply pending attribute value changes to the MVO
@@ -2659,6 +2714,11 @@ public abstract class SyncTaskProcessorBase
             if (attributesAdded > 0 || attributesRemoved > 0)
             {
                 return MetaverseObjectChangeResult.AttributeFlow(attributesAdded, attributesRemoved);
+            }
+            if (departedRules.Count > 0)
+            {
+                // The item recorded above for a scope exit that moved provenance only (#2821).
+                return MetaverseObjectChangeResult.OutOfScopeRetainJoin();
             }
         }
 
@@ -7774,6 +7834,57 @@ public abstract class SyncTaskProcessorBase
                     preservedNoSourceAttributeCount: recall.PreservedNoSourceAttributeCount,
                     generatedValueOutcomes: recall.GeneratedValueOutcomes);
         }
+    }
+
+    /// <summary>
+    /// Records an item for a Connected System Object that left one or more import Synchronisation Rules while another rule
+    /// still covers it, where the covering rules wrote the very values the departed rules held, so only provenance moved
+    /// and no attribute change was staged (#2821). The scope exit is an outcome in its own right: a retained-join root
+    /// naming the first departed rule, with any further departed rule beneath it, each counting the values it had
+    /// contributed. Recorded at every tracking level but None, as the retained-join outcome always is.
+    /// </summary>
+    private void RecordDepartedImportRulesWithoutValueChanges(ConnectedSystemObject connectedSystemObject, IReadOnlyList<DepartedImportRule> departedRules)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ConnectedSystemObject = connectedSystemObject;
+        rpei.ConnectedSystemObjectId = connectedSystemObject.Id;
+        rpei.ObjectChangeType = ObjectChangeType.OutOfScopeRetainJoin;
+        _activity.RunProfileExecutionItems.Add(rpei);
+
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        var mvo = connectedSystemObject.MetaverseObject!;
+        var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
+        var mvoDescription = ObjectNaming.FirstPresent(mvo.Name);
+        var first = departedRules[0];
+        var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+            targetEntityId: mvoId,
+            targetEntityDescription: mvoDescription,
+            detailCount: first.ContributedValueCount,
+            syncRuleId: first.SyncRuleId,
+            syncRuleName: first.SyncRuleName);
+        foreach (var departed in departedRules.Skip(1))
+        {
+            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.OutOfScopeRetainJoin,
+                targetEntityId: mvoId,
+                targetEntityDescription: mvoDescription,
+                detailCount: departed.ContributedValueCount,
+                syncRuleId: departed.SyncRuleId,
+                syncRuleName: departed.SyncRuleName);
+        }
+    }
+
+    /// <summary>
+    /// Whether more than one object from this Connected System is joined to the Metaverse Object. A contributed value
+    /// records its rule and system, not the object, so with two such objects a value cannot be traced to the one leaving
+    /// a rule's scope, and nothing is withdrawn on its account (#2021, #2821).
+    /// </summary>
+    private async Task<bool> IsAnotherObjectFromThisSystemJoinedAsync(MetaverseObject mvo)
+    {
+        var joinedConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvo.Id);
+        return joinedConnectedSystemIds.Count(id => id == _connectedSystem.Id) > 1;
     }
 
     /// <summary>
