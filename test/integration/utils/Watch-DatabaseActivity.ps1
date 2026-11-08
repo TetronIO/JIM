@@ -122,7 +122,7 @@ $activityProcess = Start-ShellPipeline (
 $hostPath = Join-Path $OutputDirectory 'host.tsv'
 "time`trun`tblocked`tblocks_in`tblocks_out`tuser`tsystem`tidle`tiowait`tsteal" | Set-Content -Path $hostPath
 $vmstatProcess = Start-ShellPipeline (
-    'vmstat -n -t -w 1 | awk -v OFS="\t" ''NR==2 { for (i = 1; i <= NF; i++) col[$i] = i } NR>2 { print $(NF-1)"T"$NF, $col["r"], $col["b"], $col["bi"], $col["bo"], $col["us"], $col["sy"], $col["id"], $col["wa"], $col["st"]; fflush() }'' >> "HOST_PATH"'.Replace('HOST_PATH', $hostPath))
+    'stdbuf -oL vmstat -n -t -w 1 | awk -v OFS="\t" ''NR==2 { for (i = 1; i <= NF; i++) col[$i] = i } NR>2 { print $(NF-1)"T"$NF, $col["r"], $col["b"], $col["bi"], $col["bo"], $col["us"], $col["sy"], $col["id"], $col["wa"], $col["st"]; fflush() }'' >> "HOST_PATH"'.Replace('HOST_PATH', $hostPath))
 
 $disksPath = Join-Path $OutputDirectory 'disks.tsv'
 "time`tdevice`treads_completed`tsectors_read`twrites_completed`tsectors_written`tio_ms`tweighted_io_ms" | Set-Content -Path $disksPath
