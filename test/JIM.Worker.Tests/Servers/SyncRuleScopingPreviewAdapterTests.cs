@@ -435,6 +435,38 @@ public class SyncRuleScopingPreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingWhileASiblingExportRuleCoversTheIdentity_ReportsAScopeExitWithoutDeprovisioningAsync()
+    {
+        // Another export rule on the same system and Object Type still covers the identity, so it takes the account over
+        // and nothing is deleted (#2822); the edited rule's change is a scope exit only.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Catch-all Export",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true
+        });
+        GivenMvoWithTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport)
+                    .And.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+        }
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_ExportNarrowedToPeopleWithAnHrAccount_DecidesFromEachIdentitysJoinsAsync()
     {
         // A connection criterion (#2021) reads the joins the stream already carries: the identity joined to an HR account

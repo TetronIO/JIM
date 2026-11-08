@@ -3974,6 +3974,14 @@ public abstract class SyncTaskProcessorBase
                 _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
                 await ReportPendingExportChangeWithdrawalsAsync(mvo.Id, objectItem, exportOutcomeParent, result.Withdrawals);
             }
+
+            // A covering export rule took an account over when the object left the scope of the rule that managed it (#2822):
+            // the join now names the covering rule, which is a change this evaluation made, and is recorded.
+            if (result.HandOvers.Count > 0)
+            {
+                _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
+                ReportExportRuleHandOvers(mvo.Id, objectItem, exportOutcomeParent, result.HandOvers);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data.
@@ -4159,6 +4167,49 @@ public abstract class SyncTaskProcessorBase
                     syncRuleId: disconnection.SyncRuleId,
                     syncRuleName: disconnection.SyncRuleName);
             }
+        }
+    }
+
+    /// <summary>
+    /// Records each export rule hand-over (#2822) on the object's execution item: the account stayed, and the rule that
+    /// still covers the object now manages it.
+    /// </summary>
+    private void ReportExportRuleHandOvers(
+        Guid mvoId,
+        ActivityRunProfileExecutionItem? item,
+        ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
+        IReadOnlyList<ExportRuleHandOver> handOvers)
+    {
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        if (item == null)
+        {
+            // A hand-over follows a scope change, which registers the object's item; say so rather than lose the record.
+            Log.Warning("ReportExportRuleHandOvers: No execution item registered for Metaverse Object {MvoId}; {Count} hand-over(s) " +
+                "to another export rule were made but cannot be recorded on the Activity", mvoId, handOvers.Count);
+            return;
+        }
+
+        foreach (var handOver in handOvers)
+        {
+            var systemName = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+                .SelectMany(rules => rules)
+                .FirstOrDefault(rule => rule.Id == handOver.CoveringSyncRuleId)?.ConnectedSystem?.Name;
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null)
+                SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                    targetEntityId: handOver.ConnectedSystemObjectId,
+                    targetEntityDescription: systemName,
+                    detailMessage: handOver.DescribeForAdministrator(),
+                    syncRuleId: handOver.CoveringSyncRuleId,
+                    syncRuleName: handOver.CoveringSyncRuleName);
+            else
+                SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                    targetEntityId: handOver.ConnectedSystemObjectId,
+                    targetEntityDescription: systemName,
+                    detailMessage: handOver.DescribeForAdministrator(),
+                    syncRuleId: handOver.CoveringSyncRuleId,
+                    syncRuleName: handOver.CoveringSyncRuleName);
         }
     }
 

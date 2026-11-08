@@ -242,6 +242,14 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         // depending on when each is reached (relative date criteria resolve against it).
         var asAt = DateTime.UtcNow;
 
+        // The other enabled export rules on the same system and Object Type: one still covering an identity takes its
+        // account over when it leaves this rule's scope, so this rule's action never reaches it (#2822).
+        var siblingExportRules = (await _application.ConnectedSystems.GetSyncRulesAsync(rule.ConnectedSystemId, includeDisabledSyncRules: false))
+            .Where(sibling => sibling.Id != rule.Id && sibling.Direction == SyncRuleDirection.Export &&
+                              sibling.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId &&
+                              sibling.MetaverseObjectTypeId == rule.MetaverseObjectTypeId)
+            .ToList();
+
         var batch = new List<ConnectedSystemObject>(MetaverseObjectBatchSize);
         await foreach (var cso in _application.ConnectedSystems
             .StreamJoinedConnectedSystemObjects(rule.ConnectedSystemId, csoTypeId)
@@ -253,12 +261,12 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             if (batch.Count < MetaverseObjectBatchSize)
                 continue;
 
-            foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
+            foreach (var delta in await ClassifyOutboundBatchAsync(rule, siblingExportRules, batch, proposedRule, oldValue, newValue, asAt))
                 yield return delta;
             batch.Clear();
         }
 
-        foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
+        foreach (var delta in await ClassifyOutboundBatchAsync(rule, siblingExportRules, batch, proposedRule, oldValue, newValue, asAt))
             yield return delta;
     }
 
@@ -268,7 +276,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     /// </summary>
     /// <param name="proposedRule">A stand-in carrying the proposed action, for the engine to decide each scope exit's
     /// fate against.</param>
-    private async Task<List<PreviewDelta>> ClassifyOutboundBatchAsync(SyncRule rule,
+    private async Task<List<PreviewDelta>> ClassifyOutboundBatchAsync(SyncRule rule, List<SyncRule> siblingExportRules,
         List<ConnectedSystemObject> batch, SyncRule proposedRule,
         string oldValue, string newValue, DateTime asAt)
     {
@@ -284,7 +292,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             .ToDictionary(mvo => mvo.Id);
 
         // The batch's connections, for a connection criterion (#2021): one read, and none when the rule has no such criterion.
-        var connections = await _application.ExportEvaluation.ReadConnectionsAsync(metaverseObjectIds, [rule]);
+        var connections = await _application.ExportEvaluation.ReadConnectionsAsync(metaverseObjectIds, [rule, .. siblingExportRules]);
 
         // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
         // apply per Metaverse Object Type, so its scope exits are decided elsewhere. Null-state does not flow
@@ -321,6 +329,14 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             }
             else
             {
+                // Another export rule still covers the identity, so it takes the account over and nothing is deprovisioned
+                // (#2822). A sibling whose scope cannot be decided stops the run for the object, which deprovisions nothing
+                // either.
+                if (siblingExportRules.Any(sibling => PreviewScopeAnswer.Decide(() =>
+                        _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
+                        (answer.Undecided || answer.InScope)))
+                    continue;
+
                 var fate = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id)).Action;
 
                 // A Delete already sent goes ahead whichever action the rule carries, so the proposal changes nothing.

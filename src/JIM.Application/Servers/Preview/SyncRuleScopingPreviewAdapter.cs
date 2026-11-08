@@ -393,6 +393,14 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         // object by attribute name, so the names are supplied from the type's schema when either scope needs them.
         var metaverseAttributesById = PreviewMetaverseObjectAttributes.WhenReadByName(standIn, rule);
 
+        // The other enabled export rules on the same system and Object Type: an identity one of them still covers keeps its
+        // account when it leaves this rule's scope, because that rule takes it over (#2822).
+        var siblingExportRules = (await _application.ConnectedSystems.GetSyncRulesAsync(rule.ConnectedSystemId, includeDisabledSyncRules: false))
+            .Where(sibling => sibling.Id != rule.Id && sibling.Direction == SyncRuleDirection.Export &&
+                              sibling.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId &&
+                              sibling.MetaverseObjectTypeId == rule.MetaverseObjectTypeId)
+            .ToList();
+
         await foreach (var mvo in _application.Metaverse
             .StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId)
             .WithCancellation(cancellationToken))
@@ -436,6 +444,17 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                         ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
                         : ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope;
                     yield return MetaverseScopeDelta(exit, rule, mvo, null, InScopeValue, OutOfScopeValue);
+                    continue;
+                }
+
+                // Covered by another export rule: it takes the account over, so this is a scope exit and nothing more. A
+                // sibling whose scope cannot be decided leaves the account untouched too.
+                if (siblingExportRules.Any(sibling => Decide(() =>
+                        _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
+                        (answer.Failure != null || answer.InScope)))
+                {
+                    yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope,
+                        rule, mvo, targetObject, InScopeValue, OutOfScopeValue);
                     continue;
                 }
 

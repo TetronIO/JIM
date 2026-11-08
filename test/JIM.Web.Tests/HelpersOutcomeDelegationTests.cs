@@ -231,7 +231,8 @@ public class HelpersOutcomeDelegationTests
             [ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected] = Icons.Material.Filled.LinkOff,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldNotChange] = Icons.Material.Filled.CheckCircleOutline,
             [ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail] = Icons.Material.Filled.ErrorOutline,
-            [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = Icons.Material.Filled.PlaylistRemove
+            [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] = Icons.Material.Filled.PlaylistRemove,
+            [ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule] = Icons.Material.Filled.SwapHoriz
         };
 
         Assert.That(expectedIcons.Keys, Is.EquivalentTo(Enum.GetValues<ActivityRunProfileExecutionItemSyncOutcomeType>()),
