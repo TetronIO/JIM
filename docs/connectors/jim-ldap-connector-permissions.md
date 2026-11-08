@@ -69,15 +69,17 @@ On Windows, apply them with `dsacls` against the container's DN, naming the dele
 dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;user"
 dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;group"
 dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:T /G "CORP\JIM Connectors:CCDC;contact"
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;user"
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;group"
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;organizationalUnit"
+dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:RPWPLCLORCSDDT;;contact"
 dsacls "OU=Corp,DC=corp,DC=local" /I:S /G "CORP\JIM Connectors:CA;Reset Password;user"
 ```
 
-Leave the `organizationalUnit` lines out unless **Create containers as needed?** is switched on.
+Leave the `organizationalUnit` lines out unless **Create containers as needed?** is switched on, and the `contact` lines out unless JIM provisions contacts, such as Exchange mail contacts. Without them, an export that creates a contact fails as access denied.
 
-The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon".
+The Delegation of Control wizard is the other route to the same place: run it on the container and grant the group "Create, delete and manage user accounts", "Create, delete and manage groups", and "Reset user passwords and force password change at next logon". The wizard has no common task for contacts, so where JIM provisions them add a custom task for contact objects that lets the group create and delete them in this folder, with Read and Write over them.
 
 Then grant read over the Deleted Objects container, which is where a Delta Import finds deletions and which no delegation on an OU reaches. Its permissions are protected from inheritance and its owner is SYSTEM, so take ownership first:
 

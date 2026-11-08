@@ -66,12 +66,12 @@ Describe 'ConvertTo-LabDelegationSddl' {
         $sddl | Should -Be '(A;;LC;;;S-1-5-21-5)(A;;RP;;;S-1-5-21-5)'
     }
 
-    It 'renders the real delegation file as seven entries with no whitespace and no leftover token' {
+    It 'renders the real delegation file as nine entries with no whitespace and no leftover token' {
         $sddl = ConvertTo-LabDelegationSddl -AclPath $script:AclPath -TrusteeSid $script:TrusteeSid
         $sddl | Should -Not -Match '\s'
         $sddl | Should -Not -Match '__JIM_TRUSTEE_SID__'
         $sddl | Should -Not -Match '#'
-        ([regex]::Matches($sddl, '\(OA;')).Count | Should -Be 7
+        ([regex]::Matches($sddl, '\(OA;')).Count | Should -Be 9
         $sddl | Should -Match ([regex]::Escape($script:TrusteeSid))
         $sddl | Should -BeLike '(OA;CI;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2;;*'
     }
@@ -173,8 +173,8 @@ Describe 'Test-LabSddlContainsSid, Test-LabAclGrant and Merge-LabDelegationSddl'
     It 'adds every delegated entry and keeps the existing ones' {
         $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
         $aces = @(Get-LabDaclAce -Sddl $merged)
-        $aces.Count | Should -Be (3 + 7)
-        (@($aces | Where-Object { $_.Sid -eq $script:TrusteeSid })).Count | Should -Be 7
+        $aces.Count | Should -Be (3 + 9)
+        (@($aces | Where-Object { $_.Sid -eq $script:TrusteeSid })).Count | Should -Be 9
     }
 
     It 'keeps the DACL flags and copies the entries through as written' {
