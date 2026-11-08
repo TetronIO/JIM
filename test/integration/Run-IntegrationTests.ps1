@@ -84,6 +84,14 @@
     services are ready. This reduces database writes during large test runs.
     Change tracking is enabled by default.
 
+.PARAMETER DatabaseSetting
+    Extra PostgreSQL settings for this run, as a hashtable, for tuning experiments (#2834):
+    -DatabaseSetting @{ jit = 'off'; work_mem = '256MB' }. They go last on the database's command line,
+    so they override the per-template profile, the development defaults and ALTER SYSTEM. Names must be
+    PostgreSQL setting names and values plain words (letters, digits and . _ : -). The run's
+    performance results carry a -db-... tag, so they are never compared with the untuned baseline.
+    Single directory type only.
+
 .PARAMETER ContinueOnFailure
     When running multiple scenarios (-Scenario All or -DirectoryType All), keep
     running subsequent scenarios after one fails instead of aborting immediately.
@@ -296,6 +304,10 @@ param(
     # per mode. Has no effect on Samba AD runs (always durable).
     [Parameter(Mandatory=$false)]
     [switch]$DurableDirectoryWrites,
+
+    # Extra PostgreSQL settings for tuning experiments (#2834), e.g. @{ jit = 'off'; work_mem = '256MB' }.
+    [Parameter(Mandatory=$false)]
+    [hashtable]$DatabaseSetting,
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
@@ -1608,6 +1620,23 @@ if ($Parallel) {
     }
 }
 
+# -DatabaseSetting (#2834): check the settings before anything touches Docker, so a typo fails in a second
+# rather than after the build.
+if ($DatabaseSetting -and $DatabaseSetting.Count -gt 0) {
+    $databaseSettingRefusal = $null
+    if ($DirectoryType -eq "All") {
+        $databaseSettingRefusal = "-DatabaseSetting is for tuning runs against one directory type; it cannot be combined with -DirectoryType All."
+    }
+    else {
+        try { $null = ConvertTo-PostgresSettingArgument -Setting $DatabaseSetting }
+        catch { $databaseSettingRefusal = "-DatabaseSetting: $($_.Exception.Message)" }
+    }
+    if ($databaseSettingRefusal) {
+        Write-Host "${RED}ERROR: $databaseSettingRefusal${NC}"
+        exit 1
+    }
+}
+
 if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
     $directoryTypesToRun = @(Get-ContainerDirectoryType)
@@ -2419,6 +2448,9 @@ if ($Scenario -eq "All") {
     if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
     if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
     if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+    if ($DatabaseSetting -and $DatabaseSetting.Count -gt 0) {
+        $rerunParts += "-DatabaseSetting @{ " + (($DatabaseSetting.Keys | Sort-Object | ForEach-Object { "$_ = '$($DatabaseSetting[$_])'" }) -join '; ') + " }"
+    }
     if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
     Write-Host "  $($rerunParts -join ' ')"
     Write-Host ""
@@ -2552,6 +2584,9 @@ $env:OPENLDAP_FAST_WRITES = if ($DurableDirectoryWrites) { 'no' } else { 'yes' }
 # Performance baselines are per durability mode: fast-write and durable runs have very
 # different export wall-clocks, so comparing across modes would mislead.
 $script:PerfModeSuffix = if ($DurableDirectoryWrites) { "-durable" } else { "" }
+# A run with -DatabaseSetting is a tuning experiment (#2834): tag its results so it is never taken for, or
+# compared with, a run on the standard settings.
+$script:PerfModeSuffix += Get-PostgresSettingTag -Setting $DatabaseSetting
 
 # Metrics streaming status.
 # Hydrate JIM_BENCH_* from .env into the process env when not already set,
@@ -2980,6 +3015,13 @@ $env:JIM_DB_WORK_MEM             = $jimDbProfile.WorkMem
 $env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
 $env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
 $env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
+# -DatabaseSetting goes last on the database's command line (docker-compose.override.yml), so it overrides
+# the profile above. Always assigned, like the profile, so nothing leaks into a later run in this shell.
+$env:JIM_DB_EXTRA_ARGS = ConvertTo-PostgresSettingArgument -Setting $DatabaseSetting
+if (-not $env:JIM_DB_EXTRA_ARGS) { $env:JIM_DB_EXTRA_ARGS = $null }
+if ($env:JIM_DB_EXTRA_ARGS) {
+    Write-Host "  PostgreSQL extra settings (-DatabaseSetting): $($env:JIM_DB_EXTRA_ARGS)" -ForegroundColor Yellow
+}
 if ($jimDbProfile.SharedBuffers) {
     Write-Host "  PostgreSQL scaled for $jimDbProfileTemplate profile: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
 }
@@ -4439,7 +4481,8 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     # Find most recent previous baseline (excluding current run)
     $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
         Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
-        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        # Same mode and settings only: a durable or tuned (-db-...) run shares this prefix but must not be the baseline.
+        Where-Object { $_.Name -match ('^' + [regex]::Escape("$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-") + '\d{4}-\d{2}-\d{2}_\d{6}\.json$') } |
         Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
@@ -4738,7 +4781,8 @@ else {
     # Find most recent previous baseline (excluding current run)
     $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-*.json" |
         Where-Object { $_.Name -ne "$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-$timestamp.json" } |
-        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
+        # Same mode and settings only: a durable or tuned (-db-...) run shares this prefix but must not be the baseline.
+        Where-Object { $_.Name -match ('^' + [regex]::Escape("$Scenario-$Template$($script:ResultNameTag)$($script:PerfModeSuffix)-") + '\d{4}-\d{2}-\d{2}_\d{6}\.json$') } |
         Where-Object { $script:ResultNameTag -ne "" -or $_.Name -notmatch $script:LaneResultNamePattern } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
@@ -4939,6 +4983,9 @@ if ($PSBoundParameters.ContainsKey('ExportConcurrency')) { $rerunParts += "-Expo
 if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) { $rerunParts += "-MaxExportParallelism $MaxExportParallelism" }
 if ($TimeoutSeconds -ne 180) { $rerunParts += "-TimeoutSeconds $TimeoutSeconds" }
 if ($CaptureMetrics) { $rerunParts += "-CaptureMetrics" }
+if ($DatabaseSetting -and $DatabaseSetting.Count -gt 0) {
+    $rerunParts += "-DatabaseSetting @{ " + (($DatabaseSetting.Keys | Sort-Object | ForEach-Object { "$_ = '$($DatabaseSetting[$_])'" }) -join '; ') + " }"
+}
 if ($IgnoreSnapshots) { $rerunParts += "-IgnoreSnapshots" }
 if ($isScenario11) {
     if ($Quick)      { $rerunParts += "-Quick" }

@@ -6177,3 +6177,45 @@ function Write-TimingChart {
         Write-Host $line -ForegroundColor $colour
     }
 }
+
+function ConvertTo-PostgresSettingArgument {
+    <#
+    .SYNOPSIS
+        Turns PostgreSQL settings into the database container's extra command-line arguments.
+    .DESCRIPTION
+        For -DatabaseSetting on the runner (#2834). docker-compose.override.yml appends JIM_DB_EXTRA_ARGS to
+        the database's command line, where a setting overrides both the defaults and ALTER SYSTEM. Names and
+        values are checked strictly, because the result is split into words on a command line: anything that
+        is not a plain setting name, or a value of letters, digits and . _ : -, is refused.
+    .OUTPUTS
+        '-c name=value' pairs separated by spaces, sorted by name; empty for no settings.
+    #>
+    param([hashtable]$Setting)
+
+    if (-not $Setting -or $Setting.Count -eq 0) { return '' }
+    $arguments = foreach ($name in ($Setting.Keys | Sort-Object)) {
+        $value = [string]$Setting[$name]
+        if ($name -cnotmatch '^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$') {
+            throw "'$name' is not a PostgreSQL setting name."
+        }
+        if ($value -notmatch '^[A-Za-z0-9._:-]+$') {
+            throw "The value '$value' for $name is not allowed: use letters, digits and . _ : - only."
+        }
+        "-c $name=$value"
+    }
+    $arguments -join ' '
+}
+
+function Get-PostgresSettingTag {
+    <#
+    .SYNOPSIS
+        Names a run's PostgreSQL settings for its result file names, so tuned runs are never compared with
+        the baseline (#2834).
+    .OUTPUTS
+        '-db-name_value-name_value', sorted by name; empty for no settings.
+    #>
+    param([hashtable]$Setting)
+
+    if (-not $Setting -or $Setting.Count -eq 0) { return '' }
+    '-db-' + (($Setting.Keys | Sort-Object | ForEach-Object { "${_}_$($Setting[$_])" }) -join '-')
+}

@@ -2038,3 +2038,42 @@ Describe 'Format-TimingDuration' {
         Format-TimingDuration -Seconds $Seconds | Should -Be $Expected
     }
 }
+
+Describe 'ConvertTo-PostgresSettingArgument' {
+    It 'returns nothing for no settings' {
+        ConvertTo-PostgresSettingArgument -Setting @{} | Should -Be ''
+        ConvertTo-PostgresSettingArgument -Setting $null | Should -Be ''
+    }
+
+    It 'turns each setting into a -c argument, sorted by name' {
+        ConvertTo-PostgresSettingArgument -Setting @{ work_mem = '256MB'; jit = 'off' } | Should -Be '-c jit=off -c work_mem=256MB'
+    }
+
+    It 'accepts dotted names and values with units, decimals and colons' {
+        ConvertTo-PostgresSettingArgument -Setting @{ 'pg_stat_statements.track' = 'top'; random_page_cost = '1.1'; checkpoint_timeout = '30min' } |
+            Should -Be '-c checkpoint_timeout=30min -c pg_stat_statements.track=top -c random_page_cost=1.1'
+    }
+
+    It 'refuses a name that is not a PostgreSQL setting name' -TestCases @(
+        @{ Name = 'work mem' }, @{ Name = 'jit;rm' }, @{ Name = '-c' }, @{ Name = 'Jit' }
+    ) {
+        { ConvertTo-PostgresSettingArgument -Setting @{ $Name = 'off' } } | Should -Throw "*$Name*"
+    }
+
+    It 'refuses a value that would break the command line' -TestCases @(
+        @{ Value = '256 MB' }, @{ Value = "off'" }, @{ Value = 'off -c fsync=off' }, @{ Value = '$(id)' }, @{ Value = '' }
+    ) {
+        { ConvertTo-PostgresSettingArgument -Setting @{ work_mem = $Value } } | Should -Throw '*work_mem*'
+    }
+}
+
+Describe 'Get-PostgresSettingTag' {
+    It 'returns nothing for no settings' {
+        Get-PostgresSettingTag -Setting @{} | Should -Be ''
+    }
+
+    It 'names the settings in a form safe for a file name, sorted by name' {
+        Get-PostgresSettingTag -Setting @{ work_mem = '256MB'; jit = 'off'; random_page_cost = '1.1' } |
+            Should -Be '-db-jit_off-random_page_cost_1.1-work_mem_256MB'
+    }
+}
