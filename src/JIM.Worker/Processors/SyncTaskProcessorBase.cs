@@ -5000,6 +5000,13 @@ public abstract class SyncTaskProcessorBase
                             MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                         }
                     }
+                    else if (RequiresWriteWithoutStagedChanges(mvo))
+                    {
+                        // A reference that resolved here to the object already named, whose provenance this pass took over
+                        // (#1292). Nothing was staged, and the page this object came from was written before the reference
+                        // could resolve, so only this write stores the stamp (#2831).
+                        QueueMvoForUpdate(mvo);
+                    }
                 }
 
                 // The target objects' existing Pending Exports are deliberately left in place for the

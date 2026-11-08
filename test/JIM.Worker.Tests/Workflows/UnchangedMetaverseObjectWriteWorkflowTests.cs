@@ -129,49 +129,67 @@ public class UnchangedMetaverseObjectWriteWorkflowTests : WorkflowTestBase
     [Test]
     public async Task FullSync_ReferenceUnchangedButProvenanceTakenOver_StillWritesTheMetaverseObjectAsync()
     {
-        var hrSystem = await CreateConnectedSystemAsync("HR Source");
-        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
-        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
-        var managerAttr = new ConnectedSystemObjectTypeAttribute { Name = "Manager", Type = AttributeDataType.Reference, Selected = true };
-        var hrType = await CreateCsoTypeAsync(hrSystem.Id, "HrUser", [externalIdAttr, displayNameAttr, managerAttr]);
+        var fixture = await ArrangeManagerFixtureAsync();
+        await RunFullSyncAsync(fixture.System);
 
-        var mvType = await CreateMvObjectTypeAsync("Person");
-        var mvManagerAttr = new MetaverseAttribute
-        {
-            Name = "Manager", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued,
-            MetaverseObjectTypes = [mvType], PredefinedSearchAttributes = []
-        };
-        DbContext.MetaverseAttributes.Add(mvManagerAttr);
-        await DbContext.SaveChangesAsync();
-        mvType.Attributes.Add(mvManagerAttr);
-
-        var importRule = await CreateImportSyncRuleAsync(hrSystem.Id, hrType, mvType, "HR Import");
-        importRule.AttributeFlowRules.Add(DirectMapping(importRule, mvType.Attributes.First(a => a.Name == "DisplayName"), displayNameAttr));
-        importRule.AttributeFlowRules.Add(DirectMapping(importRule, mvManagerAttr, managerAttr));
-        await DbContext.SaveChangesAsync();
-
-        var maryCso = await CreateCsoAsync(hrSystem.Id, hrType, "Mary Manager");
-        var johnCso = await CreateCsoAsync(hrSystem.Id, hrType, "John Smith");
-        johnCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
-        {
-            AttributeId = managerAttr.Id, Attribute = managerAttr, ReferenceValueId = maryCso.Id, ReferenceValue = maryCso,
-            ConnectedSystemObject = johnCso
-        });
-        await RunFullSyncAsync(hrSystem);
-
-        var johnMvoId = (await ReloadEntityAsync(johnCso)).MetaverseObjectId!.Value;
-        var managerValue = SyncRepo.MetaverseObjects[johnMvoId].AttributeValues.Single(av => av.AttributeId == mvManagerAttr.Id);
+        var johnMvoId = SyncRepo.ConnectedSystemObjects[fixture.John.Id].MetaverseObjectId!.Value;
+        var managerValue = SyncRepo.MetaverseObjects[johnMvoId].AttributeValues.Single(av => av.AttributeId == fixture.MvManagerAttr.Id);
         managerValue.ContributedBySyncRuleId = null;
         managerValue.ContributedBySystemId = null;
         _spySyncRepo.BatchMvoUpdateIds.Clear();
 
-        await RunFullSyncAsync(hrSystem);
+        await RunFullSyncAsync(fixture.System);
 
         using (Assert.EnterMultipleScope())
         {
             Assert.That(_spySyncRepo.BatchMvoUpdateIds, Is.EqualTo(new[] { johnMvoId }),
                 "the object whose reference provenance was taken over is written; the manager's object is not");
-            Assert.That(managerValue.ContributedBySyncRuleId, Is.EqualTo(importRule.Id), "the live rule takes the reference over");
+            Assert.That(managerValue.ContributedBySyncRuleId, Is.EqualTo(fixture.Rule.Id), "the live rule takes the reference over");
+        }
+    }
+
+    /// <summary>
+    /// As above, but the reference only resolves in the cross-page reference pass, after every page has been written. John
+    /// (first page) names Mary (a later page), who is not joined when John's page loads and joins her existing Metaverse
+    /// Object again on her own page, so John's reference is deferred. It then resolves to the object John's Metaverse
+    /// Object already names, staging nothing and taking over only the stale stamp. The cross-page pass queued an object
+    /// only for an addition or removal, so that stamp was never stored.
+    /// </summary>
+    [Test]
+    public async Task FullSync_ReferenceProvenanceTakenOverInCrossPagePass_WritesTheMetaverseObjectAsync()
+    {
+        var fixture = await ArrangeManagerFixtureAsync();
+        await SetSyncPageSizeAsync(1);
+        await RunFullSyncAsync(fixture.System);
+
+        var mary = SyncRepo.ConnectedSystemObjects[fixture.Mary.Id];
+        var maryMvo = mary.MetaverseObject!;
+        var johnMvoId = SyncRepo.ConnectedSystemObjects[fixture.John.Id].MetaverseObjectId!.Value;
+        var managerValue = SyncRepo.MetaverseObjects[johnMvoId].AttributeValues.Single(av => av.AttributeId == fixture.MvManagerAttr.Id);
+        Assert.That(managerValue.ReferenceValueId ?? managerValue.ReferenceValue?.Id, Is.EqualTo(maryMvo.Id),
+            "precondition: John's Metaverse Object names Mary's as his manager");
+
+        // Mary is not joined as the next run's pages load (as after a disconnection), and the rule's stamp on John's manager
+        // value is gone (as a deleted rule's ON DELETE SET NULL leaves it).
+        maryMvo.ConnectedSystemObjects.Remove(mary);
+        mary.MetaverseObject = null;
+        mary.MetaverseObjectId = null;
+        mary.ClearJoinRecord();
+        managerValue.ContributedBySyncRuleId = null;
+        managerValue.ContributedBySystemId = null;
+        _spySyncRepo.BatchMvoUpdateIds.Clear();
+
+        var (_, processor) = await RunFullSyncWithProcessorAsync(fixture.System);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(processor.CrossPageReferenceObjectCount, Is.EqualTo(1), "precondition: John's reference went to the cross-page pass");
+            Assert.That(mary.MetaverseObjectId, Is.EqualTo(maryMvo.Id), "precondition: Mary joined her Metaverse Object again");
+            Assert.That(managerValue.ReferenceValueId ?? managerValue.ReferenceValue?.Id, Is.EqualTo(maryMvo.Id),
+                "precondition: the reference resolved to the object already named, so nothing was staged");
+            Assert.That(managerValue.ContributedBySyncRuleId, Is.EqualTo(fixture.Rule.Id), "the cross-page pass takes the reference over");
+            Assert.That(_spySyncRepo.BatchMvoUpdateIds, Does.Contain(johnMvoId),
+                "and writes John's Metaverse Object, so the takeover is stored");
         }
     }
 
@@ -246,13 +264,90 @@ public class UnchangedMetaverseObjectWriteWorkflowTests : WorkflowTestBase
         Sources = { new SyncRuleMappingSource { Order = 0, ConnectedSystemAttribute = source, ConnectedSystemAttributeId = source.Id } }
     };
 
-    private async Task<Activity> RunFullSyncAsync(ConnectedSystem system)
+    private sealed record ManagerFixture(ConnectedSystem System, SyncRule Rule, MetaverseAttribute MvManagerAttr,
+        ConnectedSystemObject John, ConnectedSystemObject Mary);
+
+    /// <summary>
+    /// An HR system whose import rule projects each person, joins on employee id, and flows display name, employee id and
+    /// manager. John (the lower id, so the first page when pages hold one object) names Mary as his manager.
+    /// </summary>
+    private async Task<ManagerFixture> ArrangeManagerFixtureAsync()
+    {
+        var system = await CreateConnectedSystemAsync("HR Source");
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var employeeIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "EmployeeId", Type = AttributeDataType.Text, Selected = true };
+        var managerAttr = new ConnectedSystemObjectTypeAttribute { Name = "Manager", Type = AttributeDataType.Reference, Selected = true };
+        var hrType = await CreateCsoTypeAsync(system.Id, "HrUser", [externalIdAttr, displayNameAttr, employeeIdAttr, managerAttr]);
+
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvManagerAttr = new MetaverseAttribute
+        {
+            Name = "Manager", Type = AttributeDataType.Reference, AttributePlurality = AttributePlurality.SingleValued,
+            MetaverseObjectTypes = [mvType], PredefinedSearchAttributes = []
+        };
+        DbContext.MetaverseAttributes.Add(mvManagerAttr);
+        await DbContext.SaveChangesAsync();
+        mvType.Attributes.Add(mvManagerAttr);
+        var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
+
+        var rule = await CreateImportSyncRuleAsync(system.Id, hrType, mvType, "HR Import");
+        rule.AttributeFlowRules.Add(DirectMapping(rule, mvType.Attributes.First(a => a.Name == "DisplayName"), displayNameAttr));
+        rule.AttributeFlowRules.Add(DirectMapping(rule, mvEmployeeIdAttr, employeeIdAttr));
+        rule.AttributeFlowRules.Add(DirectMapping(rule, mvManagerAttr, managerAttr));
+        rule.ObjectMatchingRules.Add(new ObjectMatchingRule
+        {
+            SyncRule = rule, SyncRuleId = rule.Id, Order = 0, CaseSensitive = true,
+            TargetMetaverseAttribute = mvEmployeeIdAttr, TargetMetaverseAttributeId = mvEmployeeIdAttr.Id,
+            Sources = { new ObjectMatchingRuleSource { Order = 0, ConnectedSystemAttribute = employeeIdAttr, ConnectedSystemAttributeId = employeeIdAttr.Id } }
+        });
+        await DbContext.SaveChangesAsync();
+
+        var john = SeedCso(system.Id, hrType, new Guid("00000000-0000-0000-0000-000000000001"), "John Smith", "E1");
+        var mary = SeedCso(system.Id, hrType, new Guid("00000000-0000-0000-0000-000000000002"), "Mary Manager", "E2");
+        john.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = managerAttr.Id, Attribute = managerAttr, ReferenceValueId = mary.Id, ReferenceValue = mary,
+            ConnectedSystemObject = john
+        });
+        return new ManagerFixture(system, rule, mvManagerAttr, john, mary);
+    }
+
+    private ConnectedSystemObject SeedCso(int systemId, ConnectedSystemObjectType type, Guid id, string displayName, string employeeId)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = id, ConnectedSystemId = systemId, TypeId = type.Id, Type = type,
+            ConnectedSystem = SyncRepo.ConnectedSystems[systemId], Created = DateTime.UtcNow.AddMinutes(-10)
+        };
+        var externalIdAttr = type.Attributes.First(a => a.IsExternalId);
+        var displayNameAttr = type.Attributes.First(a => a.Name == "DisplayName");
+        var employeeIdAttr = type.Attributes.First(a => a.Name == "EmployeeId");
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            { Id = Guid.NewGuid(), AttributeId = externalIdAttr.Id, Attribute = externalIdAttr, GuidValue = Guid.NewGuid(), ConnectedSystemObject = cso });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            { Id = Guid.NewGuid(), AttributeId = displayNameAttr.Id, Attribute = displayNameAttr, StringValue = displayName, ConnectedSystemObject = cso });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            { Id = Guid.NewGuid(), AttributeId = employeeIdAttr.Id, Attribute = employeeIdAttr, StringValue = employeeId, ConnectedSystemObject = cso });
+        SyncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    private async Task SetSyncPageSizeAsync(int pageSize)
+    {
+        DbContext.ServiceSettingItems.First(s => s.Key == Constants.SettingKeys.SyncPageSize).Value = pageSize.ToString();
+        await DbContext.SaveChangesAsync();
+    }
+
+    private async Task<Activity> RunFullSyncAsync(ConnectedSystem system) => (await RunFullSyncWithProcessorAsync(system)).Activity;
+
+    private async Task<(Activity Activity, SyncFullSyncTaskProcessor Processor)> RunFullSyncWithProcessorAsync(ConnectedSystem system)
     {
         var profile = await CreateRunProfileAsync(system.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(system.Id, profile, ConnectedSystemRunType.FullSynchronisation);
-        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, system, profile, activity, new CancellationTokenSource())
-            .PerformFullSyncAsync();
-        return activity;
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, system, profile, activity, new CancellationTokenSource());
+        await processor.PerformFullSyncAsync();
+        return (activity, processor);
     }
 
     /// <summary>Records which Metaverse Objects reach the page flush's batch update.</summary>
