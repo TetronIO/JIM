@@ -403,6 +403,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = "Dates Merged",
             // Raised while evaluating exports, before anything is sent; the rest of the object still exports.
             [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = "Credential Not Exported",
+            // Raised while evaluating exports: two or more export rules cover the object in one Connected System (#2820).
+            [ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap] = "Export Rules Overlap",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",

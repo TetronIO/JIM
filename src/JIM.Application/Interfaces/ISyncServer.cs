@@ -230,7 +230,15 @@ public interface ISyncServer
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
         UniqueValueResolveOptions? generatedValueAssignments = null,
-        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null);
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null,
+        MetaverseObjectConnections? connections = null);
+
+    /// <summary>
+    /// The Metaverse Objects' connections to the Object Types the export rules' connection criteria name (#2021), read
+    /// in one statement; null, with nothing read, when no rule has a connection criterion. Drift detection passes them
+    /// to <see cref="EvaluateDrift"/> so it can decide which enforcing rules cover an object (#2820).
+    /// </summary>
+    Task<MetaverseObjectConnections?> ReadExportConnectionsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IEnumerable<SyncRule> exportRules);
 
     #endregion
 

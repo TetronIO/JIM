@@ -1431,7 +1431,19 @@ public class SyncPreviewServer
         try
         {
             drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections);
+        }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // Several enforcing rules apply and one's scope could not be decided (#2820): the run corrects nothing and
+            // records the failure, so the preview says the same.
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ScopingCriterionFailed,
+                Detail = DriftNotCheckedPreviewPrefix + scopingEx.Message,
+                ConnectedSystemId = context.ConnectedSystemId
+            });
+            return 0;
         }
         catch (SyncExpressionEvaluationException expressionEx)
         {
@@ -1470,6 +1482,14 @@ public class SyncPreviewServer
                 AttributeName = flowError.TargetAttributeName
             };
         }));
+
+        // Two or more enforcing rules cover the object (#2820): the run corrects nothing and records the overlap once,
+        // however many of its paths find it.
+        if (drift.RuleOverlap != null)
+        {
+            AddExportRuleOverlapError(result, drift.RuleOverlap);
+            return 0;
+        }
 
         if (!drift.HasDrift)
             return 0;
@@ -2777,9 +2797,31 @@ public class SyncPreviewServer
     /// exports and the create/update/delete counters have one definition,
     /// <see cref="ExportEvaluationPreviewResult"/>), and reports the participating rules.
     /// </summary>
+    /// <summary>
+    /// Adds an <see cref="SyncPreviewMessageCode.ExportRuleOverlap"/> error, once per Connected System: export evaluation
+    /// and drift detection can both find one overlap, and the run records one item for it (#2820).
+    /// </summary>
+    private static void AddExportRuleOverlapError(SyncPreviewResult result, ExportRuleOverlap overlap)
+    {
+        if (result.Errors.Exists(e => e.Code == SyncPreviewMessageCode.ExportRuleOverlap && e.ConnectedSystemId == overlap.ConnectedSystemId))
+            return;
+
+        result.Errors.Add(new SyncPreviewMessage
+        {
+            Code = SyncPreviewMessageCode.ExportRuleOverlap,
+            Detail = overlap.DescribeForAdministrator(),
+            ConnectedSystemId = overlap.ConnectedSystemId
+        });
+    }
+
     private static void ComposeOutbound(SyncPreviewResult result, OutboundPreviewResult outbound)
     {
         result.OutboundDecisions = outbound;
+
+        // Two or more export rules cover the object in one Connected System (#2820): the run stages nothing for them and
+        // records the overlap, so the preview reports it and has no entry for those rules to propose.
+        foreach (var overlap in outbound.RuleOverlaps)
+            AddExportRuleOverlapError(result, overlap);
 
         foreach (var entry in outbound.Entries)
         {

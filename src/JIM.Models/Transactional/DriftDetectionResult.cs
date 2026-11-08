@@ -34,6 +34,13 @@ public class DriftDetectionResult
     /// correction is staged for an attribute with an error; the caller records each one on a Run Profile Execution Item.
     /// </summary>
     public List<AttributeFlowError> AttributeFlowErrors { get; } = [];
+
+    /// <summary>
+    /// Set when two or more export rules with Enforce State have the object in scope for its Connected System and Object
+    /// Type (#2820). Only one rule may manage the object, so nothing is corrected; the caller reports it as an
+    /// ExportRuleOverlap RPEI.
+    /// </summary>
+    public ExportRuleOverlap? RuleOverlap { get; set; }
 }
 
 /// <summary>

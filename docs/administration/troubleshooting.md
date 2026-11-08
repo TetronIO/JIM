@@ -8,7 +8,7 @@ validated: v0.17.0
 
 # Troubleshooting
 
-This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md).
+This page covers installing, starting and signing in to JIM. For a synchronisation that goes wrong (a run that ends with a warning or an error, or an object that will not join, import or export), see [Troubleshooting Synchronisation](troubleshooting-synchronisation.md), and for an export a Connected System refuses or never confirms, [Troubleshooting Exports](troubleshooting-exports.md).
 
 ```jim-diagram
 archetype: decision

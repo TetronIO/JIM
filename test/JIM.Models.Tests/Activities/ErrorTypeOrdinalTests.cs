@@ -83,7 +83,9 @@ public class ErrorTypeOrdinalTests
         [ActivityRunProfileExecutionItemErrorType.ConcurrencyConflict] = 39,
 
         // An export Attribute Flow targets a credential attribute such as password, which is never exported (#2091).
-        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 40
+        [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = 40,
+        // Two export Synchronisation Rules cover one object in one Connected System and Object Type (#2820).
+        [ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap] = 41
     };
 
     [Test]

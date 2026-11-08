@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -42,6 +43,9 @@ public class AttributePriorityOrderTests
 
         _mockRepository.Setup(r => r.ConfigurationTests).Returns(TestUtilities.CreateEmptyConfigurationTestRepository());
         _mockCsRepo = new Mock<IConnectedSystemRepository>();
+        // Saving an export rule reads the other export rules for its Metaverse Object Type (#2820's overlap warning).
+        _mockCsRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(() => new List<SyncRuleHeader>());
         _mockActivityRepo = new Mock<IActivityRepository>();
 
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockCsRepo.Object);

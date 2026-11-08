@@ -72,7 +72,11 @@ public enum SyncPreviewMessageCode
     DatesCollapseAtTargetResolution,
     /// <summary>An export Attribute Flow targets a credential attribute such as <c>password</c> (#2091); the real sync
     /// would stage nothing for it and record a CredentialAttributeNotExported item. The detail names the attribute.</summary>
-    CredentialAttributeNotExported
+    CredentialAttributeNotExported,
+    /// <summary>Two or more enabled export Synchronisation Rules have the Metaverse Object in scope for the same Connected
+    /// System and Connected System Object Type (#2820); the real sync would stage nothing for any of them, correct no drift
+    /// for them, and record an ExportRuleOverlap item naming the rules. The detail names the rules.</summary>
+    ExportRuleOverlap
 }
 
 /// <summary>

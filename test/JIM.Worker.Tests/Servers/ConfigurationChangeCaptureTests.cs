@@ -14,6 +14,7 @@ using JIM.Models.Security;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -44,6 +45,9 @@ public class ConfigurationChangeCaptureTests
         _activityRepo = new Mock<IActivityRepository>();
         _settingsRepo = new Mock<IServiceSettingsRepository>();
         _csRepo = new Mock<IConnectedSystemRepository>();
+        // Saving an export rule reads the other export rules for its Metaverse Object Type (#2820's overlap warning).
+        _csRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(() => new List<SyncRuleHeader>());
         _repo.Setup(r => r.Activity).Returns(_activityRepo.Object);
         _repo.Setup(r => r.ServiceSettings).Returns(_settingsRepo.Object);
         _repo.Setup(r => r.ConnectedSystems).Returns(_csRepo.Object);

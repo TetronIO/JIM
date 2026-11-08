@@ -23,6 +23,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Web.Api.Tests;
 
@@ -50,6 +51,9 @@ public class SynchronisationControllerInitialPasswordTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
+        // Saving an export rule reads the other export rules for its Metaverse Object Type (#2820's overlap warning).
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(() => new List<SyncRuleHeader>());
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
 
