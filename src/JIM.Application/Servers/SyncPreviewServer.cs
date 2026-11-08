@@ -2997,6 +2997,23 @@ public class SyncPreviewServer
                 });
             }
         }
+
+        // Accounts another export rule would take over as the object leaves the rule that manages them (#2822). The run
+        // records each after what it stages for the object, so they follow the entries.
+        foreach (var handOver in outbound.HandOvers)
+        {
+            connectedSystemNames.TryGetValue(handOver.ConnectedSystemId, out var systemName);
+            siblings.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                TargetEntityId = handOver.ConnectedSystemObjectId,
+                TargetEntityDescription = systemName,
+                SyncRuleId = handOver.CoveringSyncRuleId,
+                SyncRuleName = handOver.CoveringSyncRuleName,
+                DetailMessage = handOver.DescribeForAdministrator(),
+                Ordinal = siblings.Count
+            });
+        }
     }
 
     /// <summary>

@@ -71,13 +71,12 @@ public class StalePendingDeleteCancellationTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Same-page exclusion pin (issue #1018): when a Metaverse Object goes OUT of scope for one export
-    /// rule during the page while a second export rule on the SAME target system still has it in scope,
-    /// the Delete Pending Export staged by the scope-out must survive the page flush. The in-scope
-    /// evaluation of the unconditional rule must not cancel a deprovision staged in the same page.
+    /// When a Metaverse Object goes out of scope for one export rule while a second export rule on the same target system
+    /// and Object Type still has it in scope, the account is not deprovisioned: the covering rule takes it over (#2822).
+    /// This reverses the #1018 pin, which asserted the Delete survived the page flush.
     /// </summary>
     [Test]
-    public async Task FullSync_SamePageScopeOutWithSecondInScopeRuleOnSameSystem_KeepsDeletePendingExportAsync()
+    public async Task FullSync_SamePageScopeOutWithSecondInScopeRuleOnSameSystem_HandsTheAccountOverAndStagesNoDeleteAsync()
     {
         var scenario = await ArrangeScopedExportScenarioAsync();
 
@@ -91,9 +90,9 @@ public class StalePendingDeleteCancellationTests : WorkflowTestBase
         await RunSourceFullSyncAsync(scenario.SourceSystem, "Scope Out Full Sync");
 
         var deletes = GetPendingDeletePendingExportsFor(scenario.TargetCso.Id);
-        Assert.That(deletes, Has.Count.EqualTo(1),
-            "A Delete Pending Export staged by a same-page scope-out must survive the page flush even " +
-            "when another export rule for the same system still has the Metaverse Object in scope (#1018).");
+        Assert.That(deletes, Is.Empty,
+            "Another export rule for the same system and Object Type still has the Metaverse Object in scope, so it takes " +
+            "the account over and nothing deletes it (#2822).");
     }
 
     /// <summary>

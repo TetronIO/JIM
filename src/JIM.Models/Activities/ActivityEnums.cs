@@ -452,7 +452,16 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// {value built from it} is already held by {where}". Recorded beside the value finally generated, or the failure
     /// to find one.
     /// </summary>
-    GeneratedValueCandidatesSkipped
+    GeneratedValueCandidatesSkipped,
+
+    /// <summary>
+    /// The Metaverse Object left an export Synchronisation Rule's scope while another enabled export rule on the same
+    /// Connected System and Object Type still covers it (#2822): that rule took the account over instead of it being
+    /// deprovisioned. Its join is now recorded against the covering rule, whose Attribute Flows apply from here on. The
+    /// detail message names both rules. Recorded on the object's item beside any Update the covering rule stages; it queues
+    /// nothing itself.
+    /// </summary>
+    HandedToAnotherExportRule
 }
 
 /// <summary>

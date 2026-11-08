@@ -188,6 +188,18 @@ public class ConnectedSystemObject
     }
 
     /// <summary>
+    /// Records that another export Synchronisation Rule has taken this object over (#2822): its Metaverse Object left the
+    /// scope of the rule that managed it while <paramref name="syncRule"/> still covers it. Only the responsible rule
+    /// changes; how and when the object was joined stay as they were.
+    /// </summary>
+    /// <param name="syncRule">The export Synchronisation Rule that now manages the object.</param>
+    public void RecordJoinAdoption(SyncRule syncRule)
+    {
+        JoinSyncRuleId = syncRule.Id > 0 ? syncRule.Id : null;
+        JoinSyncRuleName = syncRule.Name;
+    }
+
+    /// <summary>
     /// Clears the join record when the object stops being joined (#348).
     /// </summary>
     public void ClearJoinRecord()

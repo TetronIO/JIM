@@ -630,6 +630,8 @@ public static class CausalityModelBuilder
                 or ActivityRunProfileExecutionItemSyncOutcomeType.TargetDisconnected
                 // Changes withdrawn from a target system's Pending Export (#2001): the object it names is there too.
                 or ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn
+                // An account another export rule took over (#2822): the object it names is in the target system.
+                or ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule
                 or ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.ExportConfirmed

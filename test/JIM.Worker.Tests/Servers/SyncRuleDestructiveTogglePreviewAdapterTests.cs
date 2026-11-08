@@ -528,6 +528,31 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
     }
 
     [Test]
+    public async Task EvaluateDeltasAsync_OutboundToggleOverAnIdentityASiblingExportRuleCovers_ReportsNoImminentDeprovisioningAsync()
+    {
+        // Out of the edited rule's scope but covered by another export rule on the same system and Object Type: that rule
+        // manages the account, so the next synchronisation deprovisions nothing whatever this rule's action says (#2822).
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Catch-all Export",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true
+        });
+        var covered = GivenJoinedCso("Engineering");
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        Assert.That(deltas.Where(d => d.ConnectedSystemObjectId == covered.Id &&
+                                      d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport), Is.Empty);
+    }
+
+    [Test]
     public async Task EvaluateDeltasAsync_OutboundDeleteToDisconnect_ImminentDeletionBecomesDisconnectionAsync()
     {
         GivenExportRule();

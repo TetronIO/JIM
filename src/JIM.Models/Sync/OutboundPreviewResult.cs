@@ -22,6 +22,12 @@ public class OutboundPreviewResult
     public List<ExportRuleOverlap> RuleOverlaps { get; init; } = [];
 
     /// <summary>
+    /// Connected System Objects a covering export Synchronisation Rule would take over when the Metaverse Object leaves the
+    /// scope of the rule that manages them (#2822). A real evaluation deprovisions none of them.
+    /// </summary>
+    public List<ExportRuleHandOver> HandOvers { get; init; } = [];
+
+    /// <summary>
     /// How many of the requested Metaverse Objects were evaluated.
     /// </summary>
     public int EvaluatedMetaverseObjectCount { get; set; }

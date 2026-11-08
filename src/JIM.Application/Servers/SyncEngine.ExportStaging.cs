@@ -231,6 +231,52 @@ public partial class SyncEngine
     /// Connected System and Object Type with. Only these may stage anything for the object; the rest are reported by
     /// <see cref="FindExportRuleOverlaps"/>.
     /// </summary>
+    /// <summary>
+    /// The export Synchronisation Rule that still covers a Metaverse Object leaving <paramref name="departingRule"/>'s scope
+    /// (#2822): another in-scope rule on the same Connected System and Connected System Object Type. While one exists, the
+    /// departing rule deprovisions nothing; the covering rule manages the object. Several covering rules are an overlap,
+    /// which #2820 reports, and still leave the object covered.
+    /// </summary>
+    internal static SyncRule? FindCoveringExportRule(SyncRule departingRule, IReadOnlyList<SyncRule> inScopeExportRules) =>
+        inScopeExportRules.FirstOrDefault(rule => rule.Id != departingRule.Id &&
+                                                  rule.ConnectedSystemId == departingRule.ConnectedSystemId &&
+                                                  rule.ConnectedSystemObjectTypeId == departingRule.ConnectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Whether <paramref name="coveringRule"/> takes over the Metaverse Object's Connected System Object (#2822): the object
+    /// is joined to it and of the rule's Object Type, an export rule made the join (provisioning or export matching), and
+    /// the rule recorded as managing it is another export rule on the same system and type that no longer covers the
+    /// Metaverse Object. A join an import rule made, or one recording no rule, is never re-pointed.
+    /// </summary>
+    /// <returns>The hand-over, or null when the object stays with the rule that manages it.</returns>
+    internal static ExportRuleHandOver? FindExportRuleHandOver(MetaverseObject mvo, SyncRule coveringRule, ConnectedSystemObject? existingCso,
+        IReadOnlyList<SyncRule> exportRules, IReadOnlyList<SyncRule> inScopeExportRules)
+    {
+        if (existingCso is not { JoinSyncRuleId: { } managingRuleId } ||
+            existingCso.MetaverseObjectId != mvo.Id ||
+            existingCso.TypeId != coveringRule.ConnectedSystemObjectTypeId ||
+            managingRuleId == coveringRule.Id ||
+            existingCso.JoinMethod is not (ConnectedSystemObjectJoinMethod.Provisioning or ConnectedSystemObjectJoinMethod.ExportMatching))
+            return null;
+
+        var departedRule = exportRules.FirstOrDefault(rule => rule.Id == managingRuleId &&
+                                                              rule.ConnectedSystemId == coveringRule.ConnectedSystemId &&
+                                                              rule.ConnectedSystemObjectTypeId == coveringRule.ConnectedSystemObjectTypeId);
+        if (departedRule == null || inScopeExportRules.Any(rule => rule.Id == departedRule.Id))
+            return null;
+
+        return new ExportRuleHandOver
+        {
+            ConnectedSystemObjectId = existingCso.Id,
+            MetaverseObjectId = mvo.Id,
+            ConnectedSystemId = coveringRule.ConnectedSystemId,
+            DepartedSyncRuleId = departedRule.Id,
+            DepartedSyncRuleName = departedRule.Name,
+            CoveringSyncRuleId = coveringRule.Id,
+            CoveringSyncRuleName = coveringRule.Name
+        };
+    }
+
     internal static List<SyncRule> StandaloneExportRules(IReadOnlyList<SyncRule> inScopeExportRules) =>
         inScopeExportRules
             .Where(rule => inScopeExportRules.Count(other =>
