@@ -347,6 +347,9 @@ public partial class SyncEngine
             // reading as theirs (#2472).
             surviving.ContributedByKind = ValueContributorKind.SynchronisationRule;
             surviving.ContributedByClaimType = null;
+
+            // Nothing is staged for this change, so the object must say it has one or the page flush will not write it (#2831).
+            mvo.HasPendingProvenanceChanges = true;
         }
     }
 
