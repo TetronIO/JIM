@@ -2233,6 +2233,15 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Whether a joined Metaverse Object must still be written by the page flush although this pass staged no value
+    /// addition or removal for it (#2831): a value whose provenance Attribute Flow took over in place (#1292), which only
+    /// the batch update stores, or a generation still unresolved, which must reach the page flush's integrity guard (it
+    /// fails the page) rather than be dropped silently by skipping the write.
+    /// </summary>
+    private static bool RequiresWriteWithoutStagedChanges(MetaverseObject mvo) =>
+        mvo.HasPendingProvenanceChanges || mvo.PendingGeneratedValues.Count > 0;
+
+    /// <summary>
     /// Copies deletion-marker scalars (see <see cref="ClearMvoDeletionMarkers"/>) from one Metaverse Object
     /// instance to another, only when the source carries them and the destination does not. Used by
     /// <see cref="QueueMvoForUpdate"/>'s tripwire consolidation to preserve a grace-period deletion recorded
@@ -2672,11 +2681,18 @@ public abstract class SyncTaskProcessorBase
                 // New MVO - queue for batch create
                 _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
-            else
+            else if (attributesAdded > 0 || attributesRemoved > 0 || wasJoined
+                     || RequiresWriteWithoutStagedChanges(connectedSystemObject.MetaverseObject))
             {
-                // Existing MVO - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO obsoleted
-                // earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
+                // Existing MVO this pass changed - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO
+                // obsoleted earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
                 // same MVO for a grace-period deletion marker (SamePageJoinConflict).
+                //
+                // An object this pass left as it was is not queued (#2831): the batch update re-reads every value it
+                // holds (every member of a large group) and rewrites its row to the values it already has. A join is
+                // queued even with no value staged, because cancelling a scheduled deletion (EstablishJoinAsync) clears
+                // the deletion markers on the row and nothing else writes them. A reference value that changes later
+                // in the page queues the object from the deferred reference pass.
                 QueueMvoForUpdate(connectedSystemObject.MetaverseObject);
             }
 
@@ -4306,6 +4322,10 @@ public abstract class SyncTaskProcessorBase
             }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
 
+            // The taken-over provenance is stored now; a later pass over the same instance must not write it again.
+            foreach (var mvo in _pendingMvoUpdates)
+                mvo.HasPendingProvenanceChanges = false;
+
             if (refFixups.Count > 0)
                 using (Diagnostics.Sync.StartSpan("FixupMvoReferenceValueIds"))
                 {
@@ -4629,6 +4649,12 @@ public abstract class SyncTaskProcessorBase
                 {
                     MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                 }
+            }
+            else if (mvo.Id != Guid.Empty && RequiresWriteWithoutStagedChanges(mvo))
+            {
+                // A reference this pass re-flowed unchanged but took the provenance of (#1292). The scalar pass has
+                // already decided whether to write the object, without knowing about it (#2831).
+                QueueMvoForUpdate(mvo);
             }
         }
 
