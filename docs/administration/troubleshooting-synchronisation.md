@@ -61,9 +61,9 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## :material-vector-link: **Ambiguous Match**: `This object matches ... Metaverse Objects on ...`
 
-**What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person.
+**What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person. The same error, with the message `This object's import Synchronisation Rules match ... different Metaverse Objects: ...`, means two import Synchronisation Rules for the object's type each found one Metaverse Object, but not the same one; the message names each rule and what it found.
 
-**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
+**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes. Where two rules disagree, change one rule's Object Matching Rules, or its scope, so that every rule that covers the object finds the same person.
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation processes every object of its Object Type. The object's execution item records a join or a projection.
 
@@ -114,6 +114,14 @@ The same message names creates or updates when those are what the limit holds ba
 **How to fix.** Give the rules Scoping Criteria that never overlap, or combine them into one rule; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects and records no Export Rules Overlap item.
+
+## :material-shape-plus-outline: **Projection Type Conflict**: `More than one import Synchronisation Rule would project this object, into different Metaverse Object Types: ...`
+
+**What it means.** Two or more enabled import Synchronisation Rules have this Connected System Object in scope, nothing matched it, and the rules would project it into different Metaverse Object Types. JIM does not choose what kind of object it is, so it projected nothing; the object stays unjoined. The message names each rule and the type it projects into.
+
+**How to fix.** Give the rules Scoping Criteria that never cover the same object, or have them project into one Metaverse Object Type; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
+
+**Check.** After the next synchronisation, the object's execution item records a projection.
 
 ## :material-filter-remove-outline: **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
 

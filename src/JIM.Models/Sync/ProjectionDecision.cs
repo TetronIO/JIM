@@ -29,6 +29,18 @@ public readonly struct ProjectionDecision
     public SyncRule? ProjectionSyncRule { get; init; }
 
     /// <summary>
+    /// Whether in-scope projecting rules disagree on the Metaverse Object Type (#2823): nothing is projected, and the
+    /// object is reported with a Projection Type Conflict naming <see cref="ConflictingRules"/>.
+    /// </summary>
+    public bool IsConflict { get; init; }
+
+    /// <summary>
+    /// The projecting rules that disagree on the Metaverse Object Type, by name, when <see cref="IsConflict"/> is true;
+    /// otherwise empty.
+    /// </summary>
+    public IReadOnlyList<SyncRule> ConflictingRules { get; init; }
+
+    /// <summary>
     /// Creates a decision indicating a new MVO should be projected.
     /// </summary>
     /// <param name="mvoType">The Metaverse Object Type for the new MVO.</param>
@@ -37,11 +49,23 @@ public readonly struct ProjectionDecision
     {
         ShouldProject = true,
         MetaverseObjectType = mvoType,
-        ProjectionSyncRule = projectionSyncRule
+        ProjectionSyncRule = projectionSyncRule,
+        ConflictingRules = []
     };
 
     /// <summary>
     /// Creates a decision indicating no projection should occur.
     /// </summary>
-    public static ProjectionDecision NoProjection() => new() { ShouldProject = false };
+    public static ProjectionDecision NoProjection() => new() { ShouldProject = false, ConflictingRules = [] };
+
+    /// <summary>
+    /// Creates a decision indicating projecting rules disagree on the Metaverse Object Type, so nothing is projected.
+    /// </summary>
+    /// <param name="conflictingRules">The projecting rules, by name.</param>
+    public static ProjectionDecision Conflict(IReadOnlyList<SyncRule> conflictingRules) => new()
+    {
+        ShouldProject = false,
+        IsConflict = true,
+        ConflictingRules = conflictingRules
+    };
 }

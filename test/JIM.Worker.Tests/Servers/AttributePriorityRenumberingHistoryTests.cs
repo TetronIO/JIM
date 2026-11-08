@@ -10,6 +10,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Logic.DTOs;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
@@ -95,6 +96,8 @@ public class AttributePriorityRenumberingHistoryTests
             .Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        // Saving a rule reads the other rules' headers for its save warnings (#2820, #2823).
+        _csRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>())).ReturnsAsync(() => new List<SyncRuleHeader>());
         _csRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
         _csRepo.Setup(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);

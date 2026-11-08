@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 An object leaving one import Synchronisation Rule's scope while another still covers it now gives up that rule's values under **Disconnect from Metaverse**; they no longer outrank the rules still covering it. The join stays, recorded as **Left scope, join kept**. (#2821)
+- 🐛 Several import Synchronisation Rules for one Object Type no longer depend on rule order: disagreeing rules report an Ambiguous Match or a new Projection Type Conflict, and an object leaving them all stays joined if a rule that held it says **Remain joined**. (#2823)
 - 🐛 When a Metaverse Object's reference resolves only after the rest of a synchronisation, and a Synchronisation Rule takes over the unchanged value, which rule contributed it is now saved. Attribute Priority could otherwise treat the previous contributor as the owner. (#2831)
 - 🐛 A Schedule's description on the Operations page's Schedules tab no longer wraps over many lines in a narrow window; it follows the name on one line, with the full text on hover.
 - 🐛 A long Connected System or Run Profile name no longer wraps a row of the Operations page's Completed list over several lines; it stays on one line, with the full name on hover. A Schedule's row in the Queued and In Progress lists now lines up with the table: its step rail starts under Run Profile and runs to the row's actions, so its step names are no longer cut short.

@@ -29,7 +29,8 @@ public interface ISyncEngine
 {
     /// <summary>
     /// Evaluates whether a new MVO should be projected for a CSO.
-    /// Called when the CSO did not join an existing MVO.
+    /// Called when the CSO did not join an existing MVO. Every projecting rule takes part (#2823): one Metaverse Object
+    /// Type projects once, attributed to the first rule by name; different types are a conflict and project nothing.
     /// </summary>
     /// <param name="cso">The CSO to evaluate for projection.</param>
     /// <param name="activeSyncRules">Active Synchronisation Rules for the Connected System.</param>
@@ -210,14 +211,25 @@ public interface ISyncEngine
     void ApplyPendingAttributeChanges(MetaverseObject mvo);
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction for a CSO based on applicable import Synchronisation Rules.
+    /// Determines the InboundOutOfScopeAction for a CSO deleted from its Connected System, which has left every enabled
+    /// import Synchronisation Rule for its type at once: <see cref="DecideLastScopeExit"/> over those rules (#2823).
     /// </summary>
     /// <param name="cso">The CSO to evaluate.</param>
     /// <param name="activeSyncRules">Active Synchronisation Rules for the Connected System.</param>
-    /// <returns>The out-of-scope action from the first matching import Synchronisation Rule, or Disconnect as default.</returns>
+    /// <returns>Remain Joined when a rule that held the object says so; otherwise Disconnect, also when no import rule applies.</returns>
     InboundOutOfScopeAction DetermineOutOfScopeAction(
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules);
+
+    /// <summary>
+    /// Decides what happens to a joined Connected System Object's join when it leaves every import Synchronisation Rule
+    /// in <paramref name="lostImportRules"/> (#2823): the rules that lost it decide, and Remain Joined wins.
+    /// </summary>
+    /// <param name="cso">The Connected System Object, with its Metaverse Object loaded where it is joined.</param>
+    /// <param name="lostImportRules">The import rules for its Object Type that no longer cover it.</param>
+    LastScopeExitDecision DecideLastScopeExit(
+        ConnectedSystemObject cso,
+        IReadOnlyList<SyncRule> lostImportRules);
 
     /// <summary>
     /// Reconciles a Connected System Object against a pre-loaded Pending Export.
