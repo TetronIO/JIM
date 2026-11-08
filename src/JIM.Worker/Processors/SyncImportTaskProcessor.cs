@@ -94,6 +94,25 @@ public class SyncImportTaskProcessor
     /// <summary>#2705: how many External IDs this run has looked up page by page, for <see cref="ReasonToLoadEveryCsoExternalIdAsync"/>.</summary>
     private int _externalIdsLookedUpThisRun;
 
+    /// <summary>#2835: how many objects the pages looked up page by page returned, for projecting the run's lookups.</summary>
+    private int _objectsLookedUpThisRun;
+
+    /// <summary>
+    /// #2835: how many objects the Connector said this run would hand over, where it said
+    /// (<see cref="IConnectorProgress.ReportExpectedObjectCountAsync"/>), so a Delta Import can project its page lookups
+    /// over the run from its first page.
+    /// </summary>
+    private int? _connectorExpectedObjectCount;
+
+    /// <summary>
+    /// #2835: on a Delta Import, the Object Types that held at least one object when the run started. Only these can
+    /// answer an External ID, since the lookup reflects what was saved before the run, so a deletion the Connector reported
+    /// without its Object Type, and the cross-type check (#2049), are looked up under these alone: an OpenLDAP schema
+    /// declares about a hundred Object Types, each with entryUUID as its External ID, while the objects use two. Null on
+    /// any other run, where every Object Type is asked about.
+    /// </summary>
+    private IReadOnlySet<int>? _objectTypeIdsHeldAtStart;
+
     /// <summary>
     /// #2705: whether the database's <c>lower()</c> folds as JIM does (<see cref="ISyncRepository.DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/>),
     /// asked once per run on the first page that looks up a value ignoring case.
@@ -101,10 +120,24 @@ public class SyncImportTaskProcessor
     private bool? _databaseFoldsCaseLikeIdentifierKey;
 
     /// <summary>
-    /// #2705: below this many External IDs looked up in a run, the per-page lookup never gives way to loading every one:
-    /// either costs a few tens of milliseconds, whatever the Connected System holds.
+    /// #2705: below this many External IDs looked up in a run (projected over the run where the Connector says how many
+    /// objects it holds), the per-page lookup never gives way to loading every one: either costs a few tens of
+    /// milliseconds, whatever the Connected System holds.
     /// </summary>
     private const int ExternalIdsLookedUpBeforeLoadingEveryOneIsConsidered = 1_000;
+
+    /// <summary>
+    /// #2835: what looking up one External ID page by page costs, in microseconds. Measured at 500,000 objects on the
+    /// leaver's Delta Import (#2835): 5,937 ms for 266,580 External IDs sent, 22 microseconds each; #2705 measured 15.
+    /// </summary>
+    private const double MicrosecondsPerExternalIdLookedUp = 20;
+
+    /// <summary>
+    /// #2835: what loading every object's External ID costs, in microseconds per object JIM holds. Measured at 525,000
+    /// objects: 3,030 ms, 5.8 microseconds each. With <see cref="MicrosecondsPerExternalIdLookedUp"/>, page lookups cost
+    /// more than one load once a run looks up External IDs for more than 30% of the objects JIM holds.
+    /// </summary>
+    private const double MicrosecondsPerObjectLoaded = 6;
 
     /// <summary>
     /// SPEC-1082 D5: object type schema fingerprints, computed once per object type per run and
@@ -383,8 +416,9 @@ public class SyncImportTaskProcessor
             // A Delta Import returns only what changed, often one or two objects, so it looks up only the External IDs each
             // page returns (#2705) rather than loading every object JIM holds: at 525,000 objects that load took 3.6 s on
             // every Delta Import, and held the whole lookup in memory for the run.
-            Log.Information("PerformImportAsync: Delta Import of Connected System {ConnectedSystemId}, which holds {CsoCount} CSOs. Looking up External IDs page by page.",
-                _connectedSystem.Id, csoCountAtStart);
+            _objectTypeIdsHeldAtStart = await _syncRepo.GetConnectedSystemObjectTypeIdsInUseAsync(_connectedSystem.Id);
+            Log.Information("PerformImportAsync: Delta Import of Connected System {ConnectedSystemId}, which holds {CsoCount} CSOs of {ObjectTypeCount} Object Type(s). Looking up External IDs page by page.",
+                _connectedSystem.Id, csoCountAtStart, _objectTypeIdsHeldAtStart.Count);
         }
         else
         {
@@ -453,6 +487,7 @@ public class SyncImportTaskProcessor
         async Task ReportExpectedObjectCountAsync(int count)
         {
             expectedObjectCount = count;
+            _connectorExpectedObjectCount = count;
             ApplyFetchCountingWindow();
             await _syncRepo.UpdateActivityAsync(_activity);
         }
@@ -3028,12 +3063,10 @@ public class SyncImportTaskProcessor
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
         // and skip-eligibility for this page's candidates.
-        // #2705: look up the External IDs this page returns, before anything below asks whether JIM holds an object.
-        await PrepareCsoExternalIdLookupForPageAsync(connectedSystemImportResult);
-
-        // #1066: a deletion the Connector reported without its Object Type takes the type of the object its External ID
-        // names, before anything below files objects by type.
-        TypeUntypedDeletions(connectedSystemImportResult, crossPageSeenExternalIds);
+        // #2705: look up the External IDs this page returns, before anything below asks whether JIM holds an object. #1066:
+        // on the way, a deletion the Connector reported without its Object Type takes the type of the object its External
+        // ID names, before anything below files objects by type.
+        await PrepareCsoExternalIdLookupForPageAsync(connectedSystemImportResult, crossPageSeenExternalIds);
 
         var hydrationResult = await HydrateCsoPageAsync(connectedSystemImportResult);
         var hydratedCsoPage = hydrationResult.HydratedCsos;
@@ -3840,6 +3873,11 @@ public class SyncImportTaskProcessor
 
         var externalIdAttribute = connectedSystemObjectType.Attributes.First(a => a.IsExternalId);
         var lookupKey = LookupKey(ExternalIdProbe(connectedSystemImportObject, externalIdAttribute, externalIdAttribute));
+
+        // #2835: an Object Type that held nothing when the run started holds nothing the lookup knows, so it is not asked.
+        if (!HeldObjectsAtStart(connectedSystemObjectType))
+            return null;
+
         return _csoExternalIdLookup.TryGetValue(lookupKey, out var entry) ? entry : null;
     }
 
@@ -3901,40 +3939,56 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// #2705: on a Delta Import, looks up the External IDs this page returns, before anything asks whether JIM holds an
     /// object for one, and makes the result the lookup for the page. Asks for exactly what the lookup's consumers ask for,
-    /// through the same keys (<see cref="ExternalIdProbe"/>): each object's External ID under its own Object Type
-    /// (<see cref="LookupCsoImportStateByExternalId"/>), under every Object Type for a deletion reported without one
-    /// (<see cref="NamesKnownObject"/>), and, where External IDs name one object across every Object Type, under the
-    /// others for each object not found under its own (<see cref="FindHeldUnderAnotherObjectType"/>). Should a consumer
-    /// ever ask for something else, the lookup throws rather than answer "no such object" (<see cref="CsoImportStateLookup"/>).
+    /// through the same keys (<see cref="ExternalIdProbe"/>), in two passes either side of typing the page's untyped
+    /// deletions (<see cref="TypeUntypedDeletions"/>, #1066), which this runs on every path: first each object's External
+    /// ID under its own Object Type (<see cref="LookupCsoImportStateByExternalId"/>), and a deletion reported without one
+    /// under each Object Type holding objects (<see cref="NamesKnownObject"/>); then, where External IDs name one object
+    /// across every Object Type, for each object now typed and not found under its own, under the other Object Types
+    /// holding objects (<see cref="FindHeldUnderAnotherObjectType"/>), leaving out any key the first pass looked up. Should
+    /// a consumer ever ask for something else, the lookup throws rather than answer "no such object"
+    /// (<see cref="CsoImportStateLookup"/>).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Nothing the run creates is saved before its last page, so the database answers each page as the whole lookup,
     /// loaded before the first page, would have. Loads every object instead, once and for the rest of the run, when the
     /// page shows that is cheaper or the only exact answer (<see cref="ReasonToLoadEveryCsoExternalIdAsync"/>), or when the
     /// Connector read every object in scope, which returns every object JIM holds to be looked up.
+    /// </para>
+    /// <para>
+    /// #2835: the cross-type pass once ran before the deletions were typed, so for each untyped deletion it collected
+    /// every other Object Type's key for every Object Type the deletion was not found under: the same keys as the first
+    /// pass, sent to the database a second time, and never asked for, since a deletion found under one Object Type is
+    /// matched there. With OpenLDAP's schema that was 2 x 94 keys for each deletion.
+    /// </para>
     /// </remarks>
-    private async Task PrepareCsoExternalIdLookupForPageAsync(ConnectedSystemImportResult page)
+    private async Task PrepareCsoExternalIdLookupForPageAsync(ConnectedSystemImportResult page, HashSet<string>? earlierPageKeys)
     {
         if (_csIsEmpty || _connectedSystem.ObjectTypes == null || _csoExternalIdLookup is { HoldsEveryObject: true })
+        {
+            TypeUntypedDeletions(page, earlierPageKeys);
             return;
+        }
 
         if (_connectorReadEveryObject == true)
         {
             await LoadEveryCsoExternalIdAsync("the Connector read every object in scope, so every object is looked up");
+            TypeUntypedDeletions(page, earlierPageKeys);
             return;
         }
 
         using var span = Diagnostics.Sync.StartSpan("LookUpCsoExternalIds").SetTag("pageObjectCount", page.ImportObjects.Count);
         var lookup = CsoImportStateLookup.ForLookedUpKeys(CsoLookupKey.Comparer);
         _csoExternalIdLookup = lookup;
+        _objectsLookedUpThisRun += page.ImportObjects.Count;
 
         try
         {
-            if (!await LookUpCsoExternalIdsAsync(lookup, CollectOwnTypeExternalIdProbes(page)))
-                return;
+            var pageLookupInUse = await LookUpCsoExternalIdsAsync(lookup, CollectOwnTypeExternalIdProbes(page), span);
+            TypeUntypedDeletions(page, earlierPageKeys);
 
-            if (_connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
-                await LookUpCsoExternalIdsAsync(lookup, CollectCrossTypeExternalIdProbes(page, lookup));
+            if (pageLookupInUse && _connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes)
+                await LookUpCsoExternalIdsAsync(lookup, CollectCrossTypeExternalIdProbes(page, lookup), span);
         }
         finally
         {
@@ -3949,13 +4003,14 @@ public class SyncImportTaskProcessor
     /// <see cref="ReasonToLoadEveryCsoExternalIdAsync"/> gives a reason, loads every External ID instead.
     /// </summary>
     /// <returns>False when every External ID was loaded instead, so the page's lookup is no longer the one in use.</returns>
-    private async Task<bool> LookUpCsoExternalIdsAsync(CsoImportStateLookup lookup, Dictionary<string, CsoExternalIdProbe> probes)
+    private async Task<bool> LookUpCsoExternalIdsAsync(CsoImportStateLookup lookup, Dictionary<string, CsoExternalIdProbe> probes, OperationSpan span)
     {
         if (probes.Count == 0)
             return true;
 
-        if (await ReasonToLoadEveryCsoExternalIdAsync(probes.Values) is { } reason)
+        if (await ReasonToLoadEveryCsoExternalIdAsync(probes.Values, span) is { } reason)
         {
+            span.SetTag("switchReason", reason);
             await LoadEveryCsoExternalIdAsync(reason);
             return false;
         }
@@ -3978,15 +4033,19 @@ public class SyncImportTaskProcessor
     /// <see cref="CsoLookupKey.DependsOnDatabaseFolding"/>). Anything else would risk reading an object JIM holds as new.
     /// </para>
     /// <para>
-    /// Cost: measured at 500,000 objects, each External ID looked up costs about what loading one object does (12 to 16
-    /// microseconds against 12 to 14), and a number can be looked up in up to four columns. Once a run has looked up more
-    /// External IDs than half the objects JIM held when it started, the rest of the run is cheaper on one load of them all,
-    /// which bounds a Delta Import returning most objects without saying it read them all (a bulk change at the source) at
-    /// roughly what a Full Import's load costs. Below <see cref="ExternalIdsLookedUpBeforeLoadingEveryOneIsConsidered"/>
-    /// either way costs a few tens of milliseconds, so the page lookup is kept.
+    /// Cost (#2835): one load of every object costs about <see cref="MicrosecondsPerObjectLoaded"/> per object JIM held
+    /// when the run started, and each External ID looked up page by page about <see cref="MicrosecondsPerExternalIdLookedUp"/>,
+    /// so page lookups for more than 30% of the objects held cost more than the load. The run's page lookups are projected:
+    /// where the Connector said how many objects it would hand over, from the External IDs per object so far, which
+    /// decides on the first page; otherwise as what has been looked up so far, this set included. Once the projection costs
+    /// more than one load, the run loads every object for the rest of its pages, so page lookups never cost more than
+    /// that one load would. #2705's rule (more than half the objects held) let the 500,000-object leaver spend 5.9 s on
+    /// page lookups before its 3.0 s load. Below <see cref="ExternalIdsLookedUpBeforeLoadingEveryOneIsConsidered"/>
+    /// projected either way costs a few tens of milliseconds, so the page lookup is kept: a delta of a handful of objects
+    /// never loads a large Connected System.
     /// </para>
     /// </remarks>
-    private async Task<string?> ReasonToLoadEveryCsoExternalIdAsync(IReadOnlyCollection<CsoExternalIdProbe> probes)
+    private async Task<string?> ReasonToLoadEveryCsoExternalIdAsync(IReadOnlyCollection<CsoExternalIdProbe> probes, OperationSpan span)
     {
         if (probes.Any(probe => !CsoLookupKey.CanBeLookedUpInDatabase(probe.CaseExact, probe.ValueKey)))
             return "an External ID compared ignoring case has characters outside ASCII, which only JIM's own comparison matches exactly";
@@ -3999,27 +4058,54 @@ public class SyncImportTaskProcessor
         }
 
         var lookedUp = _externalIdsLookedUpThisRun + probes.Count;
-        if (lookedUp > ExternalIdsLookedUpBeforeLoadingEveryOneIsConsidered && lookedUp > _csoCountAtStart / 2)
-            return $"this run would have looked up {lookedUp:N0} External IDs, more than half of the {_csoCountAtStart:N0} objects JIM holds, and one load of them all costs less";
+        var expected = _connectorExpectedObjectCount is { } stated && stated > _objectsLookedUpThisRun && _objectsLookedUpThisRun > 0 ? stated : (int?)null;
+        var projected = expected is { } objects ? (long)Math.Ceiling((double)lookedUp / _objectsLookedUpThisRun * objects) : lookedUp;
+        var projectedMs = projected * MicrosecondsPerExternalIdLookedUp / 1_000;
+        var wholeLoadMs = _csoCountAtStart * MicrosecondsPerObjectLoaded / 1_000;
+        span.SetTag("projectedExternalIdCount", projected)
+            .SetTag("projectedLookupCostMs", Math.Round(projectedMs))
+            .SetTag("wholeLoadCostMs", Math.Round(wholeLoadMs));
 
-        return null;
+        if (projected <= ExternalIdsLookedUpBeforeLoadingEveryOneIsConsidered || projectedMs <= wholeLoadMs)
+            return null;
+
+        return expected is { } expectedObjects
+            ? $"the Connector expects {expectedObjects:N0} objects, so this run would look up about {projected:N0} External IDs page by page (about {projectedMs:N0} ms), more than one load of the {_csoCountAtStart:N0} objects JIM holds (about {wholeLoadMs:N0} ms)"
+            : $"this run would have looked up {lookedUp:N0} External IDs page by page (about {projectedMs:N0} ms), more than one load of the {_csoCountAtStart:N0} objects JIM holds (about {wholeLoadMs:N0} ms)";
     }
 
     /// <summary>
     /// #2705: the Object Types whose External ID an import object's could be: the one it arrived as, or, for a deletion the
     /// Connector reported without one where External IDs name one object across every Object Type, each Object Type
-    /// <see cref="TypeUntypedDeletions"/> could give it. Empty for anything the lookup is never asked about.
+    /// holding objects that <see cref="TypeUntypedDeletions"/> could find it under (#2835). Empty for anything the lookup
+    /// is never asked about.
     /// </summary>
     private IEnumerable<ConnectedSystemObjectType> ObjectTypesToLookUpUnder(ConnectedSystemImportObject importObject)
     {
-        var typesWithExternalId = _connectedSystem.ObjectTypes!.Where(t => t.Attributes.Any(a => a.IsExternalId));
         if (!string.IsNullOrEmpty(importObject.ObjectType))
-            return typesWithExternalId.Where(t => t.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            return ObjectTypesArrivedAs(importObject).Where(HeldObjectsAtStart);
 
         return importObject.ChangeType == ObjectChangeType.Deleted && _connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes
-            ? typesWithExternalId
+            ? ObjectTypesWithExternalId().Where(HeldObjectsAtStart)
             : [];
     }
+
+    private IEnumerable<ConnectedSystemObjectType> ObjectTypesWithExternalId() =>
+        _connectedSystem.ObjectTypes!.Where(t => t.Attributes.Any(a => a.IsExternalId));
+
+    /// <summary>#2705: the Object Type with an External ID that an import object arrived as, if any.</summary>
+    private IEnumerable<ConnectedSystemObjectType> ObjectTypesArrivedAs(ConnectedSystemImportObject importObject) =>
+        string.IsNullOrEmpty(importObject.ObjectType)
+            ? []
+            : ObjectTypesWithExternalId().Where(t => t.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// #2835: whether an Object Type could hold an object the External ID lookup knows: it held at least one when the run
+    /// started (<see cref="_objectTypeIdsHeldAtStart"/>), or the run did not ask. One of no such type is never looked up,
+    /// and never asked about, since the answer is already known to be none.
+    /// </summary>
+    private bool HeldObjectsAtStart(ConnectedSystemObjectType objectType) =>
+        _objectTypeIdsHeldAtStart?.Contains(objectType.Id) ?? true;
 
     /// <summary>
     /// #2705: every External ID the page's objects name under the Object Types they could be
@@ -4041,26 +4127,32 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// #2705: for each of the page's objects not found under an Object Type it could be, its External ID under every other
-    /// Object Type, as <see cref="FindHeldUnderAnotherObjectType"/> asks for it. In ordinary running that is only the
-    /// page's new objects.
+    /// #2705: for each of the page's objects with an Object Type and not found under it, its External ID under every other
+    /// Object Type holding objects, as <see cref="FindHeldUnderAnotherObjectType"/> asks for it, leaving out keys the page
+    /// has already looked up. In ordinary running that is only the page's new objects. Runs once the page's untyped
+    /// deletions are typed (#2835): a deletion still without one is never asked about under another Object Type.
     /// </summary>
     private Dictionary<string, CsoExternalIdProbe> CollectCrossTypeExternalIdProbes(ConnectedSystemImportResult page, CsoImportStateLookup lookup)
     {
         var probes = new Dictionary<string, CsoExternalIdProbe>(CsoLookupKey.Comparer);
         foreach (var importObject in page.ImportObjects)
         {
-            foreach (var objectType in ObjectTypesToLookUpUnder(importObject))
+            foreach (var objectType in ObjectTypesArrivedAs(importObject))
             {
+                // Found under its own Object Type exactly as LookupCsoImportStateByExternalId answers: never, for one that
+                // held nothing when the run started.
                 var externalIdAttribute = objectType.Attributes.First(a => a.IsExternalId);
-                if (TryExternalIdProbe(importObject, externalIdAttribute, externalIdAttribute) is not { } own || lookup.ContainsKey(LookupKey(own)))
+                if (TryExternalIdProbe(importObject, externalIdAttribute, externalIdAttribute) is not { } own ||
+                    (HeldObjectsAtStart(objectType) && lookup.ContainsKey(LookupKey(own))))
                     continue;
 
-                foreach (var target in GetCrossTypeProbeTargets(objectType, externalIdAttribute))
-                {
-                    if (TryExternalIdProbe(importObject, externalIdAttribute, target.ExternalIdAttribute) is { } probe)
-                        probes.TryAdd(LookupKey(probe), probe);
-                }
+                var targetProbes = GetCrossTypeProbeTargets(objectType, externalIdAttribute)
+                    .Select(target => TryExternalIdProbe(importObject, externalIdAttribute, target.ExternalIdAttribute))
+                    .OfType<CsoExternalIdProbe>()
+                    .Select(probe => (Key: LookupKey(probe), Probe: probe))
+                    .Where(keyed => !lookup.WasLookedUp(keyed.Key));
+                foreach (var (key, probe) in targetProbes)
+                    probes.TryAdd(key, probe);
             }
         }
 
@@ -4368,9 +4460,15 @@ public class SyncImportTaskProcessor
 
         try
         {
-            if (!_csIsEmpty && _csoExternalIdLookup != null &&
-                _csoExternalIdLookup.ContainsKey(LookupKey(ExternalIdProbe(deletion, externalIdAttribute, externalIdAttribute))))
-                return true;
+            if (!_csIsEmpty && _csoExternalIdLookup != null)
+            {
+                // The key is built whatever the Object Type, so a value that cannot be an External ID names nothing of it
+                // (below). #2835: one of an Object Type that held nothing when the run started was never looked up, and
+                // names nothing JIM holds.
+                var lookupKey = LookupKey(ExternalIdProbe(deletion, externalIdAttribute, externalIdAttribute));
+                if (HeldObjectsAtStart(objectType) && _csoExternalIdLookup.ContainsKey(lookupKey))
+                    return true;
+            }
         }
         catch (Exception ex) when (ex is ExternalIdAttributeNotSingleValuedException or ExternalIdAttributeValueMissingException or InvalidDataException)
         {
@@ -4467,8 +4565,10 @@ public class SyncImportTaskProcessor
         if (_crossTypeProbeTargets.TryGetValue(objectType.Id, out var targets))
             return targets;
 
+        // #2835: on a Delta Import, only the Object Types holding objects when the run started (HeldObjectsAtStart): no
+        // other can be holding this one.
         targets = (_connectedSystem.ObjectTypes ?? [])
-            .Where(other => other.Id != objectType.Id)
+            .Where(other => other.Id != objectType.Id && HeldObjectsAtStart(other))
             .SelectMany(other => other.Attributes
                 .Where(attribute => attribute.IsExternalId && attribute.Type == externalIdAttribute.Type)
                 .Select(attribute => (ObjectType: other, ExternalIdAttribute: attribute)))

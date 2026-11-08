@@ -84,6 +84,12 @@ public sealed class CsoImportStateLookup
     }
 
     /// <summary>
+    /// Whether the lookup can answer for a key: it was looked up (found or not), or the lookup holds every object. Unlike
+    /// <see cref="TryGetValue"/>, never throws, so a later pass over the same page can ask only for what is still missing.
+    /// </summary>
+    public bool WasLookedUp(string key) => _lookedUpKeys == null || _lookedUpKeys.Contains(key);
+
+    /// <summary>
     /// The object a key names, if JIM holds one.
     /// </summary>
     /// <exception cref="InvalidOperationException">The key was not looked up, so the lookup cannot say whether JIM holds
