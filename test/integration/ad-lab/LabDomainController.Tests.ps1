@@ -66,12 +66,12 @@ Describe 'ConvertTo-LabDelegationSddl' {
         $sddl | Should -Be '(A;;LC;;;S-1-5-21-5)(A;;RP;;;S-1-5-21-5)'
     }
 
-    It 'renders the real delegation file as seven entries with no whitespace and no leftover token' {
+    It 'renders the real delegation file as nine entries with no whitespace and no leftover token' {
         $sddl = ConvertTo-LabDelegationSddl -AclPath $script:AclPath -TrusteeSid $script:TrusteeSid
         $sddl | Should -Not -Match '\s'
         $sddl | Should -Not -Match '__JIM_TRUSTEE_SID__'
         $sddl | Should -Not -Match '#'
-        ([regex]::Matches($sddl, '\(OA;')).Count | Should -Be 7
+        ([regex]::Matches($sddl, '\(OA;')).Count | Should -Be 9
         $sddl | Should -Match ([regex]::Escape($script:TrusteeSid))
         $sddl | Should -BeLike '(OA;CI;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2;;*'
     }
@@ -171,20 +171,20 @@ Describe 'Test-LabSddlContainsSid, Test-LabAclGrant and Merge-LabDelegationSddl'
     }
 
     It 'adds every delegated entry and keeps the existing ones' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
+        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation
         $aces = @(Get-LabDaclAce -Sddl $merged)
-        $aces.Count | Should -Be (3 + 7)
-        (@($aces | Where-Object { $_.Sid -eq $script:TrusteeSid })).Count | Should -Be 7
+        $aces.Count | Should -Be (3 + 9)
+        (@($aces | Where-Object { $_.Sid -eq $script:TrusteeSid })).Count | Should -Be 9
     }
 
     It 'keeps the DACL flags and copies the entries through as written' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
+        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation
         $merged | Should -BeLike 'D:AI(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;DA)(OA;CI;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2;;*'
         $merged | Should -BeLike '*(A;ID;LC;;;AU)(A;ID;RP;;;AU)'
     }
 
     It 'places the new explicit entries ahead of the inherited ones, keeping the DACL canonical' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
+        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation
         $inheritedSeen = $false
         foreach ($ace in (Get-LabDaclAce -Sddl $merged)) {
             if ($ace.Inherited) { $inheritedSeen = $true }
@@ -194,7 +194,7 @@ Describe 'Test-LabSddlContainsSid, Test-LabAclGrant and Merge-LabDelegationSddl'
     }
 
     It 'preserves the object type and inherited object type of an object entry' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
+        $merged = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation
         $reset = @(Get-LabDaclAce -Sddl $merged | Where-Object { $_.ObjectType -eq '00299570-246d-11d0-a768-00aa006e0529' })
         $reset.Count | Should -Be 1
         $reset[0].InheritedObjectType | Should -Be 'bf967aba-0de6-11d0-a285-00aa003049e2'
@@ -202,23 +202,51 @@ Describe 'Test-LabSddlContainsSid, Test-LabAclGrant and Merge-LabDelegationSddl'
     }
 
     It 'is idempotent: a second merge returns the descriptor untouched' {
-        $once = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
-        $twice = Merge-LabDelegationSddl -ExistingSddl $once -DelegationSddl $script:Delegation -TrusteeSid $script:TrusteeSid
+        $once = Merge-LabDelegationSddl -ExistingSddl $script:Existing -DelegationSddl $script:Delegation
+        $twice = Merge-LabDelegationSddl -ExistingSddl $once -DelegationSddl $script:Delegation
         $twice | Should -BeExactly $once
     }
 
+    It 'adds only the entries an earlier delegation lacks, so a re-apply picks up entries added to the file (#2774)' {
+        $earlier = "(OA;CI;CCDC;bf967aba-0de6-11d0-a285-00aa003049e2;;$($script:TrusteeSid))"
+        $existing = "D:AI(A;;GA;;;DA)$earlier(A;ID;LC;;;AU)"
+        $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $script:Delegation
+        $mine = @(Get-LabDaclAce -Sddl $merged | Where-Object { $_.Sid -eq $script:TrusteeSid })
+        $mine.Count | Should -Be 9 -Because 'the one entry already there is kept once and the other eight are added'
+        @($mine | Where-Object { $_.InheritedObjectType -eq '' -and $_.ObjectType -eq '5cb41ed0-0e4c-11d0-a286-00aa003049e2' }).Count | Should -Be 1
+        $merged | Should -BeLike 'D:AI(A;;GA;;;DA)*(A;ID;LC;;;AU)'
+    }
+
+    It 'treats an entry Windows read back with its rights in another order as already present' {
+        # Windows writes rights in its own canonical order, so an entry read back from a domain controller need
+        # not match the file's text. RPWPLCLORCSDDT reads back as LCRPWPLOSDRCDT, say; it is the same entry.
+        $readBack = (Get-LabDaclAce -Sddl $script:Delegation | ForEach-Object {
+                $_.Text -replace 'RPWPLCLORCSDDT', 'LCRPWPLOSDRCDT'
+            }) -join ''
+        $existing = "D:AI(A;;GA;;;DA)$readBack(A;ID;LC;;;AU)"
+        $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $script:Delegation
+        $merged | Should -BeExactly $existing
+    }
+
     It 'appends after the explicit entries when the DACL has no inherited ones' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl 'D:(A;;GA;;;DA)' -DelegationSddl '(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)' -TrusteeSid 'S-1-5-21-1-2-3-1105'
+        $merged = Merge-LabDelegationSddl -ExistingSddl 'D:(A;;GA;;;DA)' -DelegationSddl '(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)'
         $merged | Should -Be 'D:(A;;GA;;;DA)(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)'
     }
 
     It 'keeps the owner, group and SACL components either side of the DACL' {
-        $merged = Merge-LabDelegationSddl -ExistingSddl 'O:BAG:BAD:PAI(A;;GA;;;BA)(A;ID;LC;;;AU)S:AI(AU;SA;GA;;;WD)' -DelegationSddl '(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)' -TrusteeSid 'S-1-5-21-1-2-3-1105'
+        $merged = Merge-LabDelegationSddl -ExistingSddl 'O:BAG:BAD:PAI(A;;GA;;;BA)(A;ID;LC;;;AU)S:AI(AU;SA;GA;;;WD)' -DelegationSddl '(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)'
         $merged | Should -Be 'O:BAG:BAD:PAI(A;;GA;;;BA)(A;;LCRPRC;;;S-1-5-21-1-2-3-1105)(A;ID;LC;;;AU)S:AI(AU;SA;GA;;;WD)'
     }
 
     It 'throws when there is no DACL to add to' {
-        { Merge-LabDelegationSddl -ExistingSddl 'O:BAG:BA' -DelegationSddl '(A;;LC;;;S-1-5-21-1)' -TrusteeSid 'S-1-5-21-1' } | Should -Throw '*DACL*'
+        { Merge-LabDelegationSddl -ExistingSddl 'O:BAG:BA' -DelegationSddl '(A;;LC;;;S-1-5-21-1)' } | Should -Throw '*DACL*'
+    }
+}
+
+Describe 'Get-LabDelegatedContainerDn' {
+    It 'names the containers JIM is delegated over, under the given domain' {
+        Get-LabDelegatedContainerDn -DomainDn 'DC=panoply,DC=local' |
+            Should -Be @('OU=Corp,DC=panoply,DC=local', 'OU=TestUsers,DC=panoply,DC=local', 'OU=TestGroups,DC=panoply,DC=local')
     }
 }
 
