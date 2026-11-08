@@ -12,15 +12,22 @@
     replays just that work from a snapshot, so each setting costs about 20 minutes instead of 65.
 
     -Action Snapshot runs the -PrepareRunProfile Run Profiles (by default both directories' scoped Full
-    Imports) against a stack the runner has set up with -SetupOnly, then copies the database to
-    -SnapshotDatabase with CREATE DATABASE ... TEMPLATE. The copy lives inside PostgreSQL's own volume, so it
-    survives restarting the database with other settings.
+    Imports) against a stack the runner has set up with -SetupOnly, shuts the database down cleanly, and
+    copies its whole volume to -SnapshotVolume.
+
+    The copy is of the volume, not a CREATE DATABASE ... TEMPLATE copy, on purpose. PostgreSQL saves its
+    per-table activity counters at a clean shutdown and reloads them at startup; a template copy starts them
+    at zero. Those counters are what autovacuum uses to decide when to analyse a table, so without them the
+    tables just imported are never re-analysed during the replay, the planner works from different
+    statistics than a full run does, and the replay runs different plans (in the first attempt, no JIT on
+    the page-load query that a full run JIT-compiles every time).
 
     -Action Replay, -Repeat times:
-      1. stops the Worker, web and Scheduler, and recreates the database container with the template's
+      1. stops the Worker, web, Scheduler and database, and recreates the database container with the template's
          runner profile plus -DatabaseSetting (the same JIM_DB_* and JIM_DB_EXTRA_ARGS variables the runner
          sets), then checks PostgreSQL reports every -DatabaseSetting as set on its command line;
-      2. replaces the jim database with a fresh copy of the snapshot, checkpoints, and resets the statistics;
+      2. before starting it, restores the database volume from the snapshot; after, resets pg_stat_statements
+         and the WAL, I/O and checkpointer statistics (never the per-table counters, for the reason above);
       3. starts JIM again, starts Watch-DatabaseActivity.ps1, and runs each -ReplayRunProfile in turn;
       4. appends one row per Run Profile to results.tsv in -OutputDirectory: its time, status, and the
          database's WAL, checkpoints, temporary files and JIT time across the whole replay.
@@ -51,8 +58,8 @@
 .PARAMETER OutputDirectory
     Where results.tsv and the sampler output go. Defaults to ~/jim-orchestration/2834-phase1.
 
-.PARAMETER SnapshotDatabase
-    The database holding the snapshot. Defaults to jim_tuning_snapshot.
+.PARAMETER SnapshotVolume
+    The Docker volume holding the snapshot. Defaults to the lane's database volume name plus -tuning-snapshot.
 
 .PARAMETER PrepareRunProfile
     Snapshot only: Run Profiles to run before taking the snapshot, each 'Connected System|Run Profile'.
@@ -79,8 +86,8 @@ param(
 
     [string]$OutputDirectory = (Join-Path $HOME 'jim-orchestration/2834-phase1'),
 
-    [ValidatePattern('^[a-z_][a-z0-9_]*$')]
-    [string]$SnapshotDatabase = 'jim_tuning_snapshot',
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_.-]*$')]
+    [string]$SnapshotVolume,
 
     [string[]]$PrepareRunProfile = @('Yellowstone APAC|Full Import (Scoped)', 'Glitterband EMEA|Full Import (Scoped)'),
 
@@ -98,6 +105,8 @@ if (-not (Test-Path (Join-Path $repoRoot 'docker-compose.override.yml'))) {
 $lane = Get-IntegrationLane
 $composeArgs = Get-JimComposeArgs
 $databaseContainer = $lane.DatabaseContainer
+$databaseVolume = $lane.DbVolume
+if (-not $SnapshotVolume) { $SnapshotVolume = "$databaseVolume-tuning-snapshot" }
 $applicationServices = @('jim.worker', 'jim.web', 'jim.scheduler')
 $null = New-Item -ItemType Directory -Force -Path $OutputDirectory
 
@@ -115,6 +124,22 @@ function Wait-Database {
         if ((Get-Date) -gt $deadline) { throw "$databaseContainer did not become ready within 5 minutes." }
         Start-Sleep -Seconds 2
     }
+}
+
+function Stop-Database {
+    # A clean shutdown, or PostgreSQL discards its activity counters on the next start (crash recovery). Fast
+    # shutdown checkpoints first, which can take a while with a large shared_buffers, hence the long timeout.
+    docker compose @composeArgs stop -t 600 jim.database 2>&1 | Out-Null
+    $exitCode = docker inspect $databaseContainer --format '{{.State.ExitCode}}'
+    if ($exitCode -ne '0') { throw "$databaseContainer did not shut down cleanly (exit code $exitCode)." }
+}
+
+function Copy-DatabaseVolume([string]$From, [string]$To) {
+    # The database's own image does the copy: it is always present, unlike the harness's busybox.
+    $image = docker inspect $databaseContainer --format '{{.Config.Image}}'
+    docker volume create $To | Out-Null
+    $output = docker run --rm --user 0 --entrypoint sh -v "${From}:/from:ro" -v "${To}:/to" $image -c 'find /to -mindepth 1 -delete && cp -a /from/. /to/' 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Copying volume $From to $To failed: $output" }
 }
 
 function Connect-JimForReplay {
@@ -166,19 +191,21 @@ if ($Action -eq 'Snapshot') {
         if ($outcome.Status -notin 2, 3) { throw "$spec did not complete (status $($outcome.Status)); no snapshot taken." }
     }
     docker compose @composeArgs stop @applicationServices | Out-Null
-    Invoke-Sql "DROP DATABASE IF EXISTS $SnapshotDatabase WITH (FORCE)" -Database postgres | Out-Null
-    Invoke-Sql "CREATE DATABASE $SnapshotDatabase TEMPLATE jim STRATEGY FILE_COPY" -Database postgres | Out-Null
+    Stop-Database
+    Copy-DatabaseVolume -From $databaseVolume -To $SnapshotVolume
+    docker compose @composeArgs start jim.database | Out-Null
+    Wait-Database
     docker compose @composeArgs start @applicationServices | Out-Null
-    $size = Invoke-Sql "SELECT pg_size_pretty(pg_database_size('$SnapshotDatabase'))" -Database postgres
-    Write-Host "Snapshot $SnapshotDatabase taken ($size)."
+    $size = docker run --rm --entrypoint du -v "${SnapshotVolume}:/snap:ro" (docker inspect $databaseContainer --format '{{.Config.Image}}') -sh /snap
+    Write-Host "Snapshot taken in volume $SnapshotVolume ($(($size -split '\s+')[0]))."
     return
 }
 
 # Replay
 $settingArguments = ConvertTo-PostgresSettingArgument -Setting $DatabaseSetting
 if (-not $Label) { $Label = if ($settingArguments) { (Get-PostgresSettingTag -Setting $DatabaseSetting).Substring(4) } else { 'baseline' } }
-$exists = Invoke-Sql "SELECT count(*) FROM pg_database WHERE datname = '$SnapshotDatabase'" -Database postgres
-if ($exists -ne '1') { throw "There is no snapshot database $SnapshotDatabase; take one with -Action Snapshot first." }
+docker volume inspect $SnapshotVolume 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "There is no snapshot volume $SnapshotVolume; take one with -Action Snapshot first." }
 
 $resultsPath = Join-Path $OutputDirectory 'results.tsv'
 if (-not (Test-Path $resultsPath)) {
@@ -191,8 +218,10 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
     $started = (Get-Date).ToUniversalTime()
     Write-Host "Replay '$Label' $iteration of $Repeat ($started UTC)"
 
-    # 1. The database, on the runner's profile for the template plus the experiment's settings.
+    # 1. The database, restored from the snapshot, on the runner's profile for the template plus the experiment's settings.
     docker compose @composeArgs stop @applicationServices | Out-Null
+    Stop-Database
+    Copy-DatabaseVolume -From $SnapshotVolume -To $databaseVolume
     $env:JIM_DB_SHARED_BUFFERS = $databaseProfile.SharedBuffers
     $env:JIM_DB_EFFECTIVE_CACHE_SIZE = $databaseProfile.EffectiveCache
     $env:JIM_DB_SHM_SIZE = $databaseProfile.ShmSize
@@ -215,10 +244,9 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
         Write-Host "  $name = $value"
     }
 
-    # 2. A fresh copy of the snapshot, and clean statistics.
-    Invoke-Sql "DROP DATABASE IF EXISTS jim WITH (FORCE)" -Database postgres | Out-Null
-    Invoke-Sql "CREATE DATABASE jim TEMPLATE $SnapshotDatabase STRATEGY FILE_COPY" -Database postgres | Out-Null
-    Invoke-Sql "CREATE EXTENSION IF NOT EXISTS pg_stat_statements; CHECKPOINT; SELECT pg_stat_statements_reset(); SELECT pg_stat_reset_shared('wal'); SELECT pg_stat_reset_shared('checkpointer'); SELECT pg_stat_reset_shared('io'); SELECT pg_stat_reset();" | Out-Null
+    # 2. Clean statement, WAL, I/O and checkpointer statistics. Not pg_stat_reset(): it would clear the
+    #    per-table counters autovacuum relies on, which is what the volume snapshot exists to keep.
+    Invoke-Sql "CREATE EXTENSION IF NOT EXISTS pg_stat_statements; SELECT pg_stat_statements_reset(); SELECT pg_stat_reset_shared('wal'); SELECT pg_stat_reset_shared('checkpointer'); SELECT pg_stat_reset_shared('io');" | Out-Null
 
     # 3. JIM, the sampler, and the timed Run Profiles.
     docker compose @composeArgs start @applicationServices | Out-Null
