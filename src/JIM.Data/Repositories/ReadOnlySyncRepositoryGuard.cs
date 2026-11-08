@@ -110,6 +110,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions)
         => _inner.GetDriftHeldReferenceAnswersAsync(questions);
 
+    public Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+        => _inner.GetReferenceAttributesHeldAsImportedAsync(questions);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _inner.GetConnectedSystemObjectsByIdsNoTrackingAsync(connectedSystemId, csoIds);
 

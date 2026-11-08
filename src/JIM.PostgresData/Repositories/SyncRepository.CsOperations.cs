@@ -2170,6 +2170,113 @@ public partial class SyncRepository
         return answers;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Raw Npgsql, once per page of a Delta Import (#2836), before <see cref="GetHeldReferenceValueAnswersAsync"/>. The
+    /// database counts each attribute's values through the (object, attribute) index and returns the strings of only those
+    /// holding as many values as the question carries; the Worker compares them with the question's values, removing each
+    /// held string from a set of them and stopping at the first that is not there (not imported, or held twice). An
+    /// attribute is held as imported when nothing failed and the set is empty: the held strings and the imported values are
+    /// then the same set, each string held once.
+    /// </para>
+    /// <para>
+    /// That is exactly when the answer would be empty. Every held value is matched exactly by the string it keeps, so none
+    /// is undecided, and every imported value is one of those strings, so none is undecided either and none has related
+    /// values. The comparison is ordinal on the strings as read, which is byte equality on the stored text: the database is
+    /// UTF-8, and its text equality, which the answer uses, is byte equality under its deterministic collation.
+    /// </para>
+    /// <para>
+    /// Nothing imported is sent, which is what makes it cheaper than asking: a group of 200,000 members held as imported
+    /// costs a count and a read of its member strings (measured at about 170 ms), where asking cost about 450 ms in the
+    /// database alone. A group whose count differs costs only the count. A question carrying a value twice, or none, is never
+    /// named: its count cannot match, and it is left to be asked.
+    /// </para>
+    /// </remarks>
+    public async Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var heldAsImported = new HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>();
+        var asked = questions.Where(q => q.Values.Count > 0).ToList();
+        if (asked.Count == 0)
+            return heldAsImported;
+
+        var duplicate = asked.GroupBy(q => (q.ConnectedSystemObjectId, q.AttributeId)).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate != null)
+            throw new ArgumentException(
+                $"More than one held reference value question for attribute {duplicate.Key.AttributeId} of Connected System Object {duplicate.Key.ConnectedSystemObjectId}.",
+                nameof(questions));
+
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+        await using var command = new NpgsqlCommand
+        {
+            Connection = connection,
+            Transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction()
+        };
+        PrepareReferenceAttributesHeldAsImportedCommand(command, asked);
+
+        // Per question (1-based, as the statement numbers them): the imported values not yet matched by a held string,
+        // built when its first row arrives; and whether a held string failed to match.
+        var remaining = new HashSet<string>?[asked.Count];
+        var failed = new bool[asked.Count];
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+            {
+                var index = reader.GetInt32(0) - 1;
+                if (failed[index])
+                    continue;
+
+                var unmatched = remaining[index] ??= asked[index].Values.ToHashSet(StringComparer.Ordinal);
+                failed[index] = reader.IsDBNull(1) || !unmatched.Remove(reader.GetString(1));
+            }
+        }
+
+        for (var index = 0; index < asked.Count; index++)
+        {
+            if (remaining[index] is { Count: 0 } && !failed[index])
+                heldAsImported.Add((asked[index].ConnectedSystemObjectId, asked[index].AttributeId));
+        }
+
+        return heldAsImported;
+    }
+
+    /// <summary>
+    /// The statement behind <see cref="GetReferenceAttributesHeldAsImportedAsync"/>: the question number and string of
+    /// every value of each attribute holding exactly as many values as its question carries, and nothing for any other.
+    /// </summary>
+    internal const string ReferenceAttributesHeldAsImportedSql = """
+        WITH question AS MATERIALIZED (
+            SELECT q.cso_id, q.attribute_id, q.value_count, q.ordinal::integer AS question
+            FROM unnest(@questionCsoIds, @questionAttributeIds, @questionValueCounts) WITH ORDINALITY AS q(cso_id, attribute_id, value_count, ordinal)
+        ),
+        candidate AS MATERIALIZED (
+            SELECT q.question, q.cso_id, q.attribute_id
+            FROM question q
+            WHERE (SELECT count(*) FROM "ConnectedSystemObjectAttributeValues" counted
+                   WHERE counted."ConnectedSystemObjectId" = q.cso_id AND counted."AttributeId" = q.attribute_id) = q.value_count
+        )
+        SELECT c.question, av."UnresolvedReferenceValue"
+        FROM candidate c
+        JOIN "ConnectedSystemObjectAttributeValues" av
+          ON av."ConnectedSystemObjectId" = c.cso_id AND av."AttributeId" = c.attribute_id
+        """;
+
+    /// <summary>
+    /// Sets <see cref="ReferenceAttributesHeldAsImportedSql"/> and its parameters on <paramref name="command"/>: the
+    /// questions as parallel arrays (object, attribute, how many values each carries). Exposed so the plan can be checked.
+    /// </summary>
+    internal static void PrepareReferenceAttributesHeldAsImportedCommand(NpgsqlCommand command, IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        command.CommandText = ReferenceAttributesHeldAsImportedSql;
+        command.Parameters.Add(new NpgsqlParameter("questionCsoIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+            { Value = questions.Select(q => q.ConnectedSystemObjectId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("questionAttributeIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+            { Value = questions.Select(q => q.AttributeId).ToArray() });
+        command.Parameters.Add(new NpgsqlParameter("questionValueCounts", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Bigint)
+            { Value = questions.Select(q => (long)q.Values.Count).ToArray() });
+    }
+
     /// <summary>A held value no imported value matches exactly.</summary>
     private const int HeldReferenceValueAnswerUnmatchedHeld = 0;
 

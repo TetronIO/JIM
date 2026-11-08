@@ -2329,7 +2329,18 @@ public class SyncImportTaskProcessor
             .SetTag("questionCount", questions.Count)
             .SetTag("importedValueCount", questions.Sum(q => q.Values.Count));
 
-        var answers = await _syncRepo.GetHeldReferenceValueAnswersAsync(questions);
+        // #2836: an attribute held exactly as imported would be answered with nothing undecided, so it is answered so
+        // without asking: a confirming Delta Import, after an export whose optimistic apply already wrote the change, finds
+        // every group current, and asking would compare every member only to learn that nothing changed.
+        HashSet<(Guid ConnectedSystemObjectId, int AttributeId)> heldAsImported;
+        using (Diagnostics.Sync.StartSpan("FindAttributesHeldAsImported"))
+            heldAsImported = await _syncRepo.GetReferenceAttributesHeldAsImportedAsync(questions);
+        var toAsk = questions.Where(q => !heldAsImported.Contains((q.ConnectedSystemObjectId, q.AttributeId))).ToList();
+
+        var answers = toAsk.Count == 0 ? [] : await _syncRepo.GetHeldReferenceValueAnswersAsync(toAsk);
+        answers.AddRange(questions.Where(q => heldAsImported.Contains((q.ConnectedSystemObjectId, q.AttributeId)))
+            .Select(q => new HeldReferenceValueAnswer(q)));
+        span.SetTag("heldAsImportedCount", questions.Count - toAsk.Count);
 
         // The folding question is asked only when an answer depends on it: where every imported value was matched exactly,
         // nothing is matched ignoring case.
