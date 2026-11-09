@@ -249,27 +249,33 @@ flowchart TD
 
 ## Two-Phase CSO Persistence (#427)
 
-When the CSO create batch is large enough (>= parallelism x 50), `CreateConnectedSystemObjectsAsync` partitions the work across N parallel database connections. A two-phase write ensures that cross-partition FK references (e.g., a CSO in partition A referencing a CSO in partition B) succeed without post-hoc fixup.
+When the CSO create batch writes enough rows (CSOs plus their attribute values, at least `ParallelBatchWriter.MinimumRowsForParallelWrite`; #2872), `CreateConnectedSystemObjectsAsync` partitions the work across N parallel database connections. The threshold counts rows, not objects, and does not scale with the core count: it used to be `objects >= parallelism x 50`, so the larger the host the less it wrote in parallel. A phased write ensures that cross-partition FK references (e.g., a CSO in partition A referencing a CSO in partition B) succeed without post-hoc fixup.
 
-For small batches, all CSOs and attribute values are written on a single connection in one transaction.
+For small batches, and whenever the caller holds a transaction on its context, all CSOs and attribute values are written on a single connection in one transaction.
 
 ```mermaid
 flowchart TD
     Start([CreateConnectedSystemObjectsAsync]) --> PreGen[Pre-generate GUIDs<br/>for all CSOs and attribute values]
     PreGen --> FixupFK[Fixup ReferenceValueId FKs<br/>within this batch +<br/>previously committed batches]
-    FixupFK --> SizeCheck{Batch size >=<br/>parallelism x 50?}
+    FixupFK --> SizeCheck{CSOs + values >=<br/>row threshold, and<br/>no caller transaction?}
 
-    SizeCheck -->|No| SingleConn[Write all CSOs + attributes<br/>on single EF connection]
+    SizeCheck -->|No| SingleConn[Write all CSOs + attributes<br/>on single EF connection<br/>in one transaction]
     SingleConn --> Done([Done])
 
     SizeCheck -->|Yes| Partition[Partition CSOs across<br/>N parallel connections]
     Partition --> Phase1[Phase 1: INSERT CSO rows<br/>across all partitions<br/>Each partition commits independently]
     Phase1 --> Phase1Done[All CSO rows now visible<br/>to all transactions]
-    Phase1Done --> Phase2[Phase 2: INSERT attribute values<br/>across all partitions<br/>ReferenceValueId FKs can target<br/>any CSO in this or prior batches]
-    Phase2 --> Done
+    Phase1Done --> Phase2[Phase 2: INSERT attribute values<br/>partitioned by value row, not by CSO<br/>ReferenceValueId FKs can target<br/>any CSO in this or prior batches]
+    Phase2 --> Phase3[Phase 3: mark every CSO<br/>synchronisation-pending]
+    Phase3 --> Done
+    Phase1 -->|Any phase fails| Remove[Delete the CSO rows this call committed<br/>values go with them by cascade<br/>then rethrow]
+    Phase2 -->|Any phase fails| Remove
+    Phase3 -->|Any phase fails| Remove
 ```
 
-**Why two phases?** Without the split, a CSO in partition A could have an attribute referencing a CSO in partition B. If both partitions write concurrently in one transaction, partition A's FK INSERT would fail because partition B's CSO row isn't committed yet. Phase 1 commits all CSO rows first, making them globally visible; Phase 2 then writes attribute values with full FK visibility.
+**Why phases?** Without the split, a CSO in partition A could have an attribute referencing a CSO in partition B. If both partitions write concurrently in one transaction, partition A's FK INSERT would fail because partition B's CSO row isn't committed yet. Phase 1 commits all CSO rows first, making them globally visible; Phase 2 then writes attribute values with full FK visibility. The values are partitioned by row rather than by CSO, so a large group's members spread across every connection instead of landing on one (#2872); because one CSO's values may then commit on several connections, the synchronisation-pending mark (#2092) is written in Phase 3, once every value has committed.
+
+**Failure.** The phases commit separately, so the parallel write is not one transaction. A failure in any phase deletes the CSO rows the call committed (only those: a CSO id that already existed failed its own partition and is left alone) before the failure propagates, so the import finds nothing of the batch, as after the single-connection rollback. Only a process crash between a commit and that removal can leave CSOs without their values. The Metaverse Object and Run Profile Execution Item bulk writers follow the same gate and the same removal on failure.
 
 ## Confirming Import - Pending Export Reconciliation
 
@@ -329,7 +335,7 @@ flowchart TD
 
 - **Parallel LDAP connections (#72)**<br /> OpenLDAP/Generic directories use connection-scoped RFC 2696 paging cookies, so each container+objectType combo gets its own `LdapConnection`. Concurrency is capped by the Import Concurrency setting (default 4, max 8). AD directories are unaffected; they multiplex paged searches on a single connection. When the connection factory is unavailable or concurrency is 1, the connector falls back to sequential single-connection processing.
 
-- **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Small batches (< parallelism x 50) bypass this and write on a single connection. Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
+- **Two-phase parallel write (#427)**<br /> CSO persistence splits INSERT into two committed phases (CSO rows first, then attribute values) so that cross-partition FK references (ReferenceValueId pointing to a CSO on a different parallel connection) succeed without post-hoc fixup. Batches writing fewer rows (CSOs plus values) than `ParallelBatchWriter.MinimumRowsForParallelWrite` bypass this and write on a single connection (#2872). Write parallelism defaults to `Environment.ProcessorCount` (minimum 2) and is tuneable via `JIM_WRITE_PARALLELISM`.
 
 - **Partition-scoped imports (#353)**<br /> Run Profiles can target a specific partition via `GetTargetPartitions()`. When set, only containers within that partition are imported; otherwise all selected partitions are included. This applies to both the import data collection and deletion detection scope. Deletion detection is scoped to the target partition, so CSOs in other partitions are not incorrectly marked as obsolete. A CSO's Partition is where its Connector places it (`IConnectorPartitionPlacement`, #2723; the LDAP Connector by distinguished name), not the Run Profile that first read it, so that scope holds every object in the Partition, including those an unscoped run created or JIM provisioned; see `engineering/developer/connectors.md` > Saying which Partition an object is in.
 

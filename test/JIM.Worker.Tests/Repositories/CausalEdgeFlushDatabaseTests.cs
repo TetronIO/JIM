@@ -103,7 +103,7 @@ public class CausalEdgeFlushDatabaseTests
     }
 
     /// <summary>
-    /// The parallel COPY path, which engages once the batch crosses parallelism * 50 items. This is the path
+    /// The parallel COPY path, which engages once the batch writes the threshold number of rows. This is the path
     /// a real deletion cascade takes, so an edge insert wired only into the small-batch path would lose
     /// provenance precisely when it is most needed.
     /// </summary>
