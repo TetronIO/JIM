@@ -205,7 +205,8 @@ function Invoke-ConfirmingImport {
 }
 
 function Get-ExchangeQueueSummary {
-    return (Get-JIMPendingExchangeChange -ConnectedSystemId $config.LDAPSystemId -Summary)
+    # The whole queue's counts; PANOPLY is the only Connected System here that queues Exchange changes.
+    return (Get-JIMPendingExchangeChange -Summary)
 }
 
 function Wait-ForExchangeQueueToSettle {
