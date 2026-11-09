@@ -204,6 +204,30 @@ public partial class SyncRepository
             new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
     }
 
+    /// <inheritdoc />
+    public async Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(int connectedSystemId)
+    {
+        // The complement of GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync, asked once per import before the
+        // Connector reads anything. Led by the same partial index on the flag, so where nothing awaits Exchange the probe
+        // reads an empty index. A read-side projection, so exempt from the bulk column list rule.
+        const string sql = """
+            SELECT DISTINCT pe."ConnectedSystemObjectId"
+            FROM "PendingExportAttributeValueChanges" avc
+            JOIN "PendingExports" pe ON pe."Id" = avc."PendingExportId"
+            WHERE avc."AwaitsExchange"
+              AND avc."Status" = @awaitingConfirmation
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND pe."ConnectedSystemObjectId" IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM "PendingExchangeChanges" pec
+                  WHERE pec."ConnectedSystemObjectId" = pe."ConnectedSystemObjectId")
+            """;
+
+        return await ReadGuidSetAsync(sql,
+            new NpgsqlParameter("awaitingConfirmation", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation },
+            new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+    }
+
     // ---- Delivery (Phase 5) ----------------------------------------------------------------------------------------
     // Modelled on the Password Synchronisation queue's delivery statements (SyncRepository.PasswordOperations.cs), with
     // the Exchange queue's own status ordinals. Every write a lane makes is guarded on the row still being Delivering

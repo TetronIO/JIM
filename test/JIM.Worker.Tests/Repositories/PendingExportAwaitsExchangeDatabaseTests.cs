@@ -205,6 +205,40 @@ public class PendingExportAwaitsExchangeDatabaseTests
     }
 
     /// <summary>
+    /// The complement, read before an import's Connector reads anything: only holds whose object still has a change on the
+    /// Exchange queue, in any status; not a hold with nothing left to wait for, a change no longer awaiting confirmation,
+    /// an unflagged change, or a hold on another Connected System.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync_MixedObjects_ReturnsOnlyHoldsWithAQueuedChangeAsync()
+    {
+        var s = await SeedAsync(connectedSystemObjectCount: 4);
+        var other = await SeedAsync(systemName: "Other Directory");
+        var stillQueued = WithHeldChange(NewPendingExport(s.SystemId, s.CsoIds[0], s.AttributeId), s.AttributeId);
+        var nothingLeftToWaitFor = WithHeldChange(NewPendingExport(s.SystemId, s.CsoIds[1], s.AttributeId), s.AttributeId);
+        var noLongerAwaitingConfirmation = NewPendingExport(s.SystemId, s.CsoIds[2], s.AttributeId);
+        noLongerAwaitingConfirmation.AttributeValueChanges[0].AwaitsExchange = true;
+        noLongerAwaitingConfirmation.AttributeValueChanges[0].Status = PendingExportAttributeChangeStatus.ExportedNotConfirmed;
+        var unflagged = NewPendingExport(s.SystemId, s.CsoIds[3], s.AttributeId);
+        var onAnotherSystem = WithHeldChange(NewPendingExport(other.SystemId, other.CsoIds[0], other.AttributeId), other.AttributeId);
+        await using (var write = NewContext())
+        {
+            var sync = new PostgresDataRepository(write).Sync;
+            await sync.CreatePendingExportsAsync([stillQueued, nothingLeftToWaitFor, noLongerAwaitingConfirmation, unflagged, onAnotherSystem]);
+            await sync.StageExchangeChangesAsync([
+                Queued(s.SystemId, s.CsoIds[0], PendingExchangeChangeStatus.Parked),
+                Queued(s.SystemId, s.CsoIds[2], PendingExchangeChangeStatus.Pending),
+                Queued(s.SystemId, s.CsoIds[3], PendingExchangeChangeStatus.Pending),
+                Queued(other.SystemId, other.CsoIds[0], PendingExchangeChangeStatus.Pending)]);
+        }
+
+        await using var read = NewContext();
+        var held = await new PostgresDataRepository(read).Sync.GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(s.SystemId);
+
+        Assert.That(held, Is.EquivalentTo(new[] { s.CsoIds[0] }));
+    }
+
+    /// <summary>
     /// Deleting the object sets its queued change's account to null rather than deleting the row (the lane withdraws
     /// it). That must not strand a hold elsewhere, and the row, naming no account, holds nothing.
     /// </summary>
