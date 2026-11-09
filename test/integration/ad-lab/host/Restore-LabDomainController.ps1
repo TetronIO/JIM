@@ -3,8 +3,8 @@
 
 <#
 .SYNOPSIS
-    Reverts a lab VM (a domain controller or the AD FS server) to a named checkpoint, starts it, and waits until it is
-    usable.
+    Reverts a lab VM (a domain controller, the AD FS server or an Exchange server) to a named checkpoint, starts it,
+    and waits until it is usable.
 
 .DESCRIPTION
     Applies the named production checkpoint, starts the VM if it is stopped, then waits until the guest answers
@@ -16,7 +16,11 @@
     (Sync-LabDelegation), so a checkpoint taken before the file gained entries still comes back with all of them.
 
     The AD FS server is a member of dc-primary's domain, so the two are reverted together: dc-primary first, then
-    adfs-primary, each to its own baseline.
+    adfs-primary, each to its own baseline. An Exchange server is reverted after its domain controller in the same
+    way, and no port proves it ready (443 answers minutes before Exchange does): through PowerShell Direct it waits
+    until Exchange Remote PowerShell answers, as JIM connects (Kerberos over HTTP), and every role's required services
+    run (Get-LabExchangeReadinessProbe, Test-LabExchangeReady). That can only be asked through PowerShell Direct, so
+    an Exchange server needs JIM_AD_LAB_ADMIN_PASSWORD, and its default timeout is 1800 seconds.
 
     A revert is a restore from backup as far as the directory is concerned: the domain controller boots fresh,
     the clock comes from the host, and it renews its invocationId, so a Delta Import watermark taken before the
@@ -34,7 +38,7 @@
     The checkpoint to apply: baseline, or populated-<template>-<hash>.
 
 .PARAMETER TimeoutSeconds
-    How long to wait for the guest and LDAPS after the revert. Default 600.
+    How long to wait for the guest and its service after the revert. Default 600, or 1800 for an Exchange server.
 
 .PARAMETER AsJson
     Print a small JSON object describing the outcome instead of text.
@@ -89,8 +93,24 @@ try {
         throw "'$Name' was not created by this lab (its Notes carry no lab marker); refusing to touch it."
     }
     $meta = ConvertFrom-LabVmNote -Notes $vm.Notes
-    $port = Get-LabReadinessPort -Role $meta.Role
-    $service = if ($meta.Role -eq 'DomainController') { 'LDAPS' } else { 'HTTPS' }
+    $isExchange = $meta.Role -eq 'ExchangeServer'
+    if ($isExchange) {
+        $port = $null
+        $service = 'Exchange Remote PowerShell'
+        if (-not $PSBoundParameters.ContainsKey('TimeoutSeconds')) { $TimeoutSeconds = 1800 }
+        # Checked before the revert, so a missing password changes nothing.
+        if ($null -eq (Resolve-LabSecret -EnvironmentVariable 'JIM_AD_LAB_ADMIN_PASSWORD' -Optional)) {
+            throw "'$Name' is an Exchange server, whose readiness can only be read through PowerShell Direct, and JIM_AD_LAB_ADMIN_PASSWORD is not set."
+        }
+        $exchangeModule = Join-Path (Split-Path -Parent $labModule) 'LabExchangeServer.psm1'
+        if (-not (Test-Path -LiteralPath $exchangeModule)) { throw "Cannot find LabExchangeServer.psm1 beside $labModule." }
+        Import-Module $exchangeModule -Force
+        $exchangeInfo = Get-LabExchangeServerInfo -Domain $meta.Domain -NetBiosName $meta.NetBiosName -ServerName $meta.ComputerName
+    }
+    else {
+        $port = Get-LabReadinessPort -Role $meta.Role
+        $service = if ($meta.Role -eq 'DomainController') { 'LDAPS' } else { 'HTTPS' }
+    }
 
     $snapshots = @(Get-VMSnapshot -VMName $Name -Name $Checkpoint -ErrorAction SilentlyContinue)
     if ($snapshots.Count -eq 0) {
@@ -115,20 +135,28 @@ try {
         $null = Wait-LabGuestReady -VMName $Name -Credential @($credential) -TimeoutSeconds $TimeoutSeconds
         $method = 'PowerShell Direct'
 
-        # The service answers a little after the guest does; check from inside, where routing cannot get in the way.
-        # AD FS binds HTTPS to its federation service name, not to the loopback address, but the TCP listener
-        # (http.sys) accepts on every address, which is all this checks.
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-        $listening = $false
-        while ((-not $listening) -and ((Get-Date) -lt $deadline)) {
-            $listening = [bool](Invoke-Command -VMName $Name -Credential $credential -ArgumentList $port -ScriptBlock {
-                    param($port)
-                    $client = New-Object System.Net.Sockets.TcpClient
-                    try { $client.Connect('127.0.0.1', $port); $client.Connected } catch { $false } finally { $client.Close() }
-                })
-            if (-not $listening) { Start-Sleep -Seconds 5 }
+        if ($isExchange) {
+            # Exchange's services start minutes after the guest does. Ask Exchange itself, from inside, as JIM connects.
+            $remaining = [int][math]::Max(0, ($deadline - (Get-Date)).TotalSeconds)
+            $verdict = Wait-LabExchangeReady -VMName $Name -Credential $credential -ManagementUri $exchangeInfo.ManagementUri -TimeoutSeconds $remaining
+            Write-Progress-Line "Exchange in $Name is ready: $($verdict.Detail)"
         }
-        if (-not $listening) { throw "$service ($port) did not accept a connection in '$Name' within $TimeoutSeconds seconds." }
+        else {
+            # The service answers a little after the guest does; check from inside, where routing cannot get in the way.
+            # AD FS binds HTTPS to its federation service name, not to the loopback address, but the TCP listener
+            # (http.sys) accepts on every address, which is all this checks.
+            $listening = $false
+            while ((-not $listening) -and ((Get-Date) -lt $deadline)) {
+                $listening = [bool](Invoke-Command -VMName $Name -Credential $credential -ArgumentList $port -ScriptBlock {
+                        param($port)
+                        $client = New-Object System.Net.Sockets.TcpClient
+                        try { $client.Connect('127.0.0.1', $port); $client.Connected } catch { $false } finally { $client.Close() }
+                    })
+                if (-not $listening) { Start-Sleep -Seconds 5 }
+            }
+            if (-not $listening) { throw "$service ($port) did not accept a connection in '$Name' within $TimeoutSeconds seconds." }
+        }
 
         # The Configure phase sets this, but a checkpoint taken before it did would bring the 5 minute default back,
         # so it is applied after every revert too (#2287). It is one registry value and needs no restart. Domain

@@ -539,6 +539,92 @@ Describe 'Get-DirectoryConfig -DirectoryType ActiveDirectory' {
     }
 }
 
+Describe 'Get-ActiveDirectoryLabExchangeConfig' {
+    BeforeEach {
+        $script:ExchangeVariables = foreach ($key in 'PRIMARY', 'SOURCE') { foreach ($part in 'ADDRESS', 'HOST', 'VM') { "JIM_AD_LAB_EXCHANGE_${key}_$part" } }
+        foreach ($name in $script:ExchangeVariables) { [System.Environment]::SetEnvironmentVariable($name, $null) }
+        $env:JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS = '192.0.2.31'
+        $env:JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS = '192.0.2.32'
+    }
+    AfterEach {
+        foreach ($name in $script:ExchangeVariables) { [System.Environment]::SetEnvironmentVariable($name, $null) }
+    }
+
+    It 'describes exchange-primary as ex1.panoply.local, paired with Primary, reverted to baseline' {
+        $config = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary
+
+        $config | Should -BeOfType [hashtable]
+        $config.DirectoryType | Should -Be 'ActiveDirectoryExchange'
+        $config.Instance | Should -Be 'ExchangePrimary'
+        $config.Host | Should -Be 'ex1.panoply.local'
+        $config.Address | Should -Be '192.0.2.31'
+        $config.VmName | Should -Be 'exchange-primary'
+        $config.DomainControllerInstance | Should -Be 'Primary'
+        $config.CheckpointBaseline | Should -Be 'baseline'
+    }
+
+    It 'gives the databases the lab builds: the one Exchange distributes to, and the one it is excluded from' {
+        $config = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary
+
+        $config.DistributionDatabase | Should -Be 'MDB01'
+        $config.ExcludedDatabase | Should -Be 'MDB02'
+        $config.ContactOuDn | Should -Be 'OU=GALSync,OU=Corp,DC=panoply,DC=local'
+    }
+
+    It 'describes exchange-source as ex1.resurgam.local, paired with Source' {
+        $config = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangeSource
+
+        $config.Host | Should -Be 'ex1.resurgam.local'
+        $config.Address | Should -Be '192.0.2.32'
+        $config.VmName | Should -Be 'exchange-source'
+        $config.DomainControllerInstance | Should -Be 'Source'
+        $config.ContactOuDn | Should -Be 'OU=GALSync,OU=Corp,DC=resurgam,DC=local'
+    }
+
+    It 'takes the host and VM name from the environment, so the monthly rebuild can point it at the candidate' {
+        $env:JIM_AD_LAB_EXCHANGE_PRIMARY_HOST = 'mbx1.panoply.local'
+        $env:JIM_AD_LAB_EXCHANGE_PRIMARY_VM = 'exchange-primary-candidate'
+
+        $config = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary
+
+        $config.Host | Should -Be 'mbx1.panoply.local'
+        $config.VmName | Should -Be 'exchange-primary-candidate'
+    }
+
+    It 'throws naming the variable when the address is unset' {
+        [System.Environment]::SetEnvironmentVariable('JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS', $null)
+
+        { Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary } | Should -Throw '*JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS*'
+    }
+
+    It 'refuses an instance that is not an Exchange server' {
+        { Get-ActiveDirectoryLabExchangeConfig -Instance Primary } | Should -Throw
+    }
+}
+
+Describe 'Get-ActiveDirectoryLabVmName' {
+    BeforeEach {
+        $script:VmVariables = 'JIM_AD_LAB_TARGET_VM', 'JIM_AD_LAB_ADFS_PRIMARY_VM', 'JIM_AD_LAB_EXCHANGE_PRIMARY_VM', 'JIM_AD_LAB_EXCHANGE_SOURCE_VM'
+        foreach ($name in $script:VmVariables) { [System.Environment]::SetEnvironmentVariable($name, $null) }
+    }
+    AfterEach {
+        foreach ($name in $script:VmVariables) { [System.Environment]::SetEnvironmentVariable($name, $null) }
+    }
+
+    It 'gives each machine''s default name, needing no address, so a machine can be stopped without being configured' {
+        Get-ActiveDirectoryLabVmName -Instance Target | Should -Be 'dc-target'
+        Get-ActiveDirectoryLabVmName -Instance AdfsPrimary | Should -Be 'adfs-primary'
+        Get-ActiveDirectoryLabVmName -Instance ExchangePrimary | Should -Be 'exchange-primary'
+        Get-ActiveDirectoryLabVmName -Instance ExchangeSource | Should -Be 'exchange-source'
+    }
+
+    It 'takes the name from the environment when it is set' {
+        $env:JIM_AD_LAB_EXCHANGE_SOURCE_VM = 'exchange-source-candidate'
+
+        Get-ActiveDirectoryLabVmName -Instance ExchangeSource | Should -Be 'exchange-source-candidate'
+    }
+}
+
 Describe 'Get-ActiveDirectoryLabFederationConfig' {
     BeforeEach {
         foreach ($name in 'JIM_AD_LAB_ADFS_PRIMARY_ADDRESS', 'JIM_AD_LAB_ADFS_PRIMARY_HOST', 'JIM_AD_LAB_ADFS_PRIMARY_VM') {

@@ -27,9 +27,22 @@
 
 Set-StrictMode -Version Latest
 
-# The instances the lab has, in the order they are reverted and reported. AdfsPrimary, the AD FS server, comes after
-# the domain controller its baseline pairs with (test/integration/ad-lab/README.md, The AD FS server).
-$script:AdLabInstanceOrder = @('Primary', 'Source', 'Target', 'AdfsPrimary')
+# The instances the lab has, in the order they are reverted and reported. AdfsPrimary, the AD FS server, and the
+# Exchange servers come after the domain controllers their baselines pair with (test/integration/ad-lab/README.md, The
+# AD FS server, The Exchange servers): ExchangePrimary with Primary, ExchangeSource with Source.
+$script:AdLabInstanceOrder = @('Primary', 'Source', 'Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')
+
+# The domain controllers, which every directory step (LDAPS readiness, certificates, population, builds) is about.
+$script:AdLabDomainControllers = @('Primary', 'Source', 'Target')
+
+# The scenarios that provision Exchange recipients, and the Exchange servers each one uses (#2021). Only these revert
+# an Exchange server: each needs 12 GB of static memory and takes minutes to start, and every other scenario has them
+# stopped (Get-ActiveDirectoryLabPowerPlan).
+$script:AdLabExchangeScenarios = @{ 34 = @('ExchangePrimary') }
+
+# The machines that can be stopped to make room. The host has room for one Exchange server beside everything else;
+# with both running, dc-target and adfs-primary are stopped (test/integration/ad-lab/README.md, The Exchange servers).
+$script:AdLabStoppable = @('Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')
 
 # The scenarios that sign in through the lab's AD FS server. Only these revert it (it takes minutes: AD FS is a
 # delayed-start service) and start JIM with it as the identity provider.
@@ -142,7 +155,132 @@ function Get-ActiveDirectoryLabInstance {
     if (Test-ActiveDirectoryLabFederationScenario -ScenarioNumber $ScenarioNumber) {
         return [string[]]@('Primary', 'AdfsPrimary')
     }
+    if ($null -ne $ScenarioNumber -and $script:AdLabExchangeScenarios.ContainsKey([int]$ScenarioNumber)) {
+        $exchange = @($script:AdLabExchangeScenarios[[int]$ScenarioNumber])
+        $domainControllers = @('Primary') + @(if ($exchange -contains 'ExchangeSource') { 'Source' })
+        return [string[]]@($script:AdLabInstanceOrder | Where-Object { $_ -in ($domainControllers + $exchange) })
+    }
     return [string[]]@('Primary')
+}
+
+function Test-ActiveDirectoryLabDomainController {
+    <#
+    .SYNOPSIS
+        Whether a lab instance is a domain controller (Primary, Source or Target), rather than the AD FS server or an
+        Exchange server. Only the domain controllers are directories: LDAPS readiness, certificates, population and
+        the build report are about them alone.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Instance
+    )
+
+    return ($Instance -in $script:AdLabDomainControllers)
+}
+
+function Get-ActiveDirectoryLabPowerPlan {
+    <#
+    .SYNOPSIS
+        The VMs to stop before a scenario's machines are reverted, in the order to stop them.
+
+    .DESCRIPTION
+        The host has room for one Exchange server beside everything else; with both running, dc-target and
+        adfs-primary have to be off (test/integration/ad-lab/README.md, The Exchange servers). So before every
+        scenario, every Exchange server it does not use is stopped, and when it uses both, dc-target and the AD FS
+        server are too. Decided from the scenario alone, never from what is running, so a run that crashed with an
+        Exchange server up cannot starve the next scenario. A machine the scenario uses is never stopped. A machine
+        stopped here is reverted, and so started, by the next scenario that needs it.
+
+    .PARAMETER Instance
+        The instances the scenario uses (Get-ActiveDirectoryLabInstance).
+
+    .PARAMETER VmName
+        A hashtable of instance name to VM name for the stoppable machines (Target, AdfsPrimary, ExchangePrimary,
+        ExchangeSource); Get-ActiveDirectoryLabVmName gives them.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [string[]]$Instance,
+
+        [Parameter(Mandatory=$true)]
+        [hashtable]$VmName
+    )
+
+    $bothExchange = ($Instance -contains 'ExchangePrimary') -and ($Instance -contains 'ExchangeSource')
+    $stop = foreach ($candidate in $script:AdLabStoppable) {
+        if ($Instance -contains $candidate) { continue }
+        if ($candidate -like 'Exchange*' -or $bothExchange) { [string]$VmName[$candidate] }
+    }
+    return [string[]]@($stop)
+}
+
+function Set-ActiveDirectoryLabExchangeReachability {
+    <#
+    .SYNOPSIS
+        Makes a lab Exchange server unreachable for JIM, or reachable again, through the control plane, and returns
+        Set-LabExchangeReachability.ps1's outcome (name, state, detail, elapsedSeconds).
+
+    .DESCRIPTION
+        For the Exchange recipient scenario's unreachable step (PRD Scenario 5): Unreachable stops IIS on the server,
+        and Reachable starts it and waits until Exchange Remote PowerShell answers again. A failure is not caught: a
+        scenario must not carry on believing Exchange is in a state it could not be put in.
+
+    .PARAMETER VmName
+        The Exchange server's VM.
+
+    .PARAMETER State
+        Unreachable or Reachable.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'A test harness step against the disposable lab; the next revert undoes it.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$VmName,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Unreachable', 'Reachable')]
+        [string]$State
+    )
+
+    # Reachable waits up to 600 s in the guest for Exchange to answer; the control plane's own limit has to outlast it.
+    $json = Invoke-LabControl -Script 'Set-LabExchangeReachability.ps1' -Arguments @('-Name', $VmName, '-State', $State, '-AsJson') -TimeoutSeconds 900
+    return (ConvertFrom-Json -InputObject ([string]$json))
+}
+
+function Invoke-ActiveDirectoryLabPowerPlan {
+    <#
+    .SYNOPSIS
+        Stops each VM in a power plan (Get-ActiveDirectoryLabPowerPlan) through the control plane, in order.
+
+    .DESCRIPTION
+        Runs Stop-LabMachine.ps1 -Name <vm> on the hypervisor host for each, which shuts the guest down (turning it off
+        if it has not stopped in time) and does nothing to a VM that is already off or not built. A failure is not
+        caught: a scenario must not start an Exchange server on a host that could not make room for it.
+
+    .PARAMETER VmName
+        The VMs to stop.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'Operator-facing progress in the runner, coloured like the runner''s own output.')]
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [string[]]$VmName
+    )
+
+    foreach ($name in $VmName) {
+        $json = Invoke-LabControl -Script 'Stop-LabMachine.ps1' -Arguments @('-Name', $name, '-AsJson')
+        $outcome = try { [string](ConvertFrom-Json -InputObject ([string]$json)).outcome } catch { 'unknown' }
+        if ($outcome -notin 'AlreadyOff', 'Absent') {
+            Write-Host "  Stopped $name to make room ($outcome)" -ForegroundColor DarkGray
+        }
+    }
 }
 
 function Get-ActiveDirectoryLabCheckpointName {
@@ -259,7 +397,7 @@ function Select-ActiveDirectoryLabCheckpoint {
     [OutputType([hashtable])]
     param(
         [Parameter(Mandatory=$true)]
-        [ValidateSet('Primary', 'Source', 'Target', 'AdfsPrimary')]
+        [ValidateSet('Primary', 'Source', 'Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')]
         [string]$Instance,
 
         [Parameter(Mandatory=$false)]
@@ -381,7 +519,11 @@ function Get-ActiveDirectoryLabState {
         $state = ConvertFrom-LabDomainControllerJson -Json $json
 
         if ($state.CheckpointNames -cnotcontains $baseline) {
-            $kind, $buildScript = if ($instance -eq 'AdfsPrimary') { 'AD FS server', 'New-LabFederationServer.ps1' } else { 'domain controller', 'New-LabDomainController.ps1' }
+            $kind, $buildScript = switch -Wildcard ($instance) {
+                'AdfsPrimary' { 'AD FS server', 'New-LabFederationServer.ps1' }
+                'Exchange*' { 'Exchange server', 'New-LabExchangeServer.ps1' }
+                default { 'domain controller', 'New-LabDomainController.ps1' }
+            }
             throw "The lab $kind '$vmName' has no '$baseline' checkpoint (it has: $(if ($state.CheckpointNames.Count -gt 0) { $state.CheckpointNames -join ', ' } else { 'none' })). Every reset reverts to it, so the machine has to be built first: see test/integration/ad-lab/README.md ($buildScript)."
         }
 
@@ -471,7 +613,15 @@ function Invoke-ActiveDirectoryLabRestore {
 
     foreach ($entry in $Plan) {
         Write-Host "  Reverting $($entry.VmName) to checkpoint '$($entry.Checkpoint)'..." -ForegroundColor DarkGray
-        Invoke-LabControl -Script 'Restore-LabDomainController.ps1' -Arguments @('-Name', $entry.VmName, '-Checkpoint', $entry.Checkpoint) | Out-Null
+        $arguments = @('-Name', $entry.VmName, '-Checkpoint', $entry.Checkpoint)
+        if ([string]$entry.Instance -like 'Exchange*') {
+            # Exchange's services start minutes after boot, and the restore waits for them (up to 1800 s) before
+            # answering; the control plane's own 900 s default would cut it off first.
+            Invoke-LabControl -Script 'Restore-LabDomainController.ps1' -Arguments $arguments -TimeoutSeconds 2400 | Out-Null
+        }
+        else {
+            Invoke-LabControl -Script 'Restore-LabDomainController.ps1' -Arguments $arguments | Out-Null
+        }
     }
 }
 
