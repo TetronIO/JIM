@@ -231,11 +231,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // modified-only Delta Synchronisation defers.
         var processedInFull = _objectTypeIdsToProcessInFull;
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
                 ? _syncRepo.GetConnectedSystemObjectsAsync(
-                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter)
+                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds)
                 : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan),
+                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds),
+            // The sweep's ids come from the selection its loads use, the modified-since one (#2861).
+            (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsModifiedSinceAsync(
+                _connectedSystem.Id, lastSyncTimestamp, pageSize, afterId, createdOnOrAfter),
             "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
 
         try
@@ -413,9 +416,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         }
         finally
         {
-            // Not every load reaches a page's own tracker clear (#2598): the pager's closing sweep can load pages it hands
-            // nothing out of, and an exception in Pass 1 or 2 leaves the page before its flush. What they loaded holds
-            // Connected System Objects tracked over untracked Metaverse Objects, so it goes before detection is restored.
+            // Not every load reaches a page's own tracker clear (#2598): an exception in Pass 1 or 2 leaves the page before
+            // its flush, and the pager drops any object a sweep load returns that was already handed out (since #2861 the
+            // sweep asks for none). What they loaded holds Connected System Objects tracked over untracked Metaverse
+            // Objects, so it goes before detection is restored.
             ClearPageTrackingState();
             _syncRepo.SetAutoDetectChangesEnabled(true);
         }

@@ -21,13 +21,14 @@ namespace JIM.Worker.Tests.Workflows;
 /// <c>LoadCsoPage</c> span wraps) walking a connector space whose objects were all created within the closing sweep's
 /// five-minute clock-skew margin of the run's start, as an initial load's Full Import followed straight away by its Full
 /// Synchronisation leaves them. It times the type walks, then the single <c>NextPageAsync</c> call that runs the closing
-/// sweep, and counts the page loads the sweep makes.
+/// sweep, and counts the id reads and page loads the sweep makes.
 /// </summary>
 /// <remarks>
 /// The walk clears the change tracker after every page, as the Full Synchronisation does at its page boundary. The sweep
-/// loads all its pages inside one <c>NextPageAsync</c> call, so nothing clears between them, exactly as in the run. The
-/// same walk is then repeated with the creation floor after the objects' creation, which is the sweep the margin was
-/// designed for. Explicit: it seeds about 1.6 million rows.
+/// runs inside one <c>NextPageAsync</c> call, so nothing clears between its pages, exactly as in the run. The same walk is
+/// then repeated with the creation floor after the objects' creation, which is the sweep the margin was designed for.
+/// Before #2861 the sweep loaded every object in the margin whole and dropped it: at this size 202 loads, 23.0 s, and
+/// 1,600,013 entities left tracked. Explicit: it seeds about 1.6 million rows.
 /// </remarks>
 [TestFixture]
 [Category("RequiresPostgres")]
@@ -70,7 +71,7 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
     }
 
     [Test]
-    public async Task NextPageAsync_EveryObjectCreatedInsideTheSweepMargin_ReportsSweepReloadingTheWholeConnectorSpaceAsync()
+    public async Task NextPageAsync_EveryObjectCreatedInsideTheSweepMargin_ReportsTheSweepsCostAsync()
     {
         // The run started now, so the floor is five minutes back, as CreateTypeOrderedPagerAsync sets it; every object was
         // created inside it (the initial load's case).
@@ -88,9 +89,12 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
         {
             Assert.That(inside.HandedOut, Is.EqualTo(Users + 1), "the walks hand every object out once");
             Assert.That(outside.HandedOut, Is.EqualTo(Users + 1), "the walks hand every object out once");
-            Assert.That(inside.SweepLoads, Is.EqualTo(inside.WalkLoads - 1),
-                "the sweep reloads every page the walks loaded (less the walks' two empty end-of-type loads, plus its own empty one)");
-            Assert.That(outside.SweepLoads, Is.EqualTo(1), "with nothing inside the margin, the sweep is one empty load");
+            Assert.That(inside.SweepIdReads, Is.EqualTo(inside.WalkLoads - 1),
+                "the sweep reads the id of every object the walks loaded (in one page fewer: the walks end each of two types on an empty load, the sweep once)");
+            Assert.That(inside.SweepLoads, Is.Zero, "every object in the margin was handed out by the walks, so the sweep loads none of them");
+            Assert.That(inside.SweepTracked, Is.Zero, "and leaves nothing tracked");
+            Assert.That(outside.SweepIdReads, Is.EqualTo(1), "with nothing inside the margin, the sweep is one empty id read");
+            Assert.That(outside.SweepLoads, Is.Zero, "and loads nothing");
         }
     }
 
@@ -99,21 +103,28 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
         TestContext.Out.WriteLine($"  {label}:");
         TestContext.Out.WriteLine($"    Type walks: {result.WalkLoads:N0} loads, {result.WalkMs:N0} ms, {result.HandedOut:N0} objects handed out " +
                                   $"(max page {result.MaxWalkPageMs:N0} ms).");
-        TestContext.Out.WriteLine($"    Closing sweep (one NextPageAsync call): {result.SweepLoads:N0} loads, {result.SweepMs:N0} ms, " +
-                                  $"{result.SweepTracked:N0} entities left tracked at its end.");
+        TestContext.Out.WriteLine($"    Closing sweep (one NextPageAsync call): {result.SweepIdReads:N0} id reads, {result.SweepLoads:N0} loads, " +
+                                  $"{result.SweepMs:N0} ms, {result.SweepTracked:N0} entities left tracked at its end.");
     }
 
-    private sealed record WalkResult(int WalkLoads, long WalkMs, long MaxWalkPageMs, int HandedOut, int SweepLoads, long SweepMs, int SweepTracked);
+    private sealed record WalkResult(int WalkLoads, long WalkMs, long MaxWalkPageMs, int HandedOut, int SweepIdReads, int SweepLoads, long SweepMs,
+        int SweepTracked);
 
     private async Task<WalkResult> WalkAsync(DateTime createdFloor)
     {
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
         var loads = 0;
-        var pager = new TypeOrderedCsoPager((afterId, objectTypeId, createdOnOrAfter) =>
+        var idReads = 0;
+        var pager = new TypeOrderedCsoPager((afterId, objectTypeId, createdOnOrAfter, onlyIds) =>
             {
                 loads++;
-                return repository.Sync.GetConnectedSystemObjectsAsync(_systemId, 1, PageSize, Users + 1, afterId, objectTypeId, createdOnOrAfter);
+                return repository.Sync.GetConnectedSystemObjectsAsync(_systemId, 1, PageSize, Users + 1, afterId, objectTypeId, createdOnOrAfter, onlyIds);
+            },
+            (afterId, createdOnOrAfter) =>
+            {
+                idReads++;
+                return repository.Sync.GetConnectedSystemObjectIdsAsync(_systemId, PageSize, afterId, createdOnOrAfter);
             },
             [_userTypeId, _groupTypeId], createdFloor);
 
@@ -133,7 +144,8 @@ public class FullSyncClosingSweepBenchmarkDatabaseTests
                 var walkEndLoads = loadsBefore + 1;
                 var tracked = ctx.ChangeTracker.Entries().Count();
                 Assert.That(page, Is.Null, "nothing was created during the walk, so the sweep hands nothing out");
-                return new WalkResult(walkEndLoads, walkMs, maxWalkPageMs, handedOut, loads - walkEndLoads, stopwatch.ElapsedMilliseconds, tracked);
+                return new WalkResult(walkEndLoads, walkMs, maxWalkPageMs, handedOut, idReads, loads - walkEndLoads, stopwatch.ElapsedMilliseconds,
+                    tracked);
             }
 
             walkMs += stopwatch.ElapsedMilliseconds;

@@ -405,7 +405,7 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
-        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (afterId.HasValue)
         {
@@ -414,7 +414,7 @@ public partial class SyncRepository : ISyncRepository
             // used for both the ordering and the filter, so the cursor chain is self-consistent
             // within this provider, mirroring the production contract.
             var afterIdValue = afterId.Value;
-            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
                 .OrderBy(c => c.Id)
                 .Where(c => c.Id.CompareTo(afterIdValue) > 0)
                 .ToList();
@@ -423,23 +423,43 @@ public partial class SyncRepository : ISyncRepository
             return Task.FromResult(keysetResult);
         }
 
-        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         return Task.FromResult(BuildPagedResult(all, page, pageSize));
     }
 
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => Task.FromResult(SweepIdPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), null, createdOnOrAfter), pageSize, afterId));
+
     /// <summary>
-    /// The page loaders' optional Object Type and creation-floor filters (#2492), as the production loaders apply them.
+    /// A closing sweep's id page (#2861), ordered and cursored as the keyset page loaders are.
+    /// </summary>
+    private static List<Guid> SweepIdPage(IEnumerable<ConnectedSystemObject> selection, int pageSize, Guid afterId)
+        => selection
+            .OrderBy(c => c.Id)
+            .Where(c => c.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(c => c.Id)
+            .ToList();
+
+    /// <summary>
+    /// The page loaders' optional Object Type, creation-floor (#2492) and id (#2861) filters, as the production loaders
+    /// apply them.
     /// </summary>
     private static IEnumerable<ConnectedSystemObject> ApplySyncPageFilters(
-        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter)
+        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         // Tests often build objects with only the Type navigation set, so match on either.
         if (objectTypeId.HasValue)
             csos = csos.Where(c => c.TypeId == objectTypeId.Value || c.Type?.Id == objectTypeId.Value);
         if (createdOnOrAfter.HasValue)
             csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
+        if (onlyIds != null)
+        {
+            var ids = onlyIds.ToHashSet();
+            csos = csos.Where(c => ids.Contains(c.Id));
+        }
         return csos;
     }
 
@@ -451,9 +471,10 @@ public partial class SyncRepository : ISyncRepository
     /// </remarks>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
-        int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null)
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
-        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .Where(c => IsModifiedSince(c, modifiedSince));
 
         if (afterId.HasValue)
@@ -475,6 +496,11 @@ public partial class SyncRepository : ISyncRepository
             .ToList();
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter)
+        => Task.FromResult(SweepIdPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), null, createdOnOrAfter)
+            .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId));
 
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
     {

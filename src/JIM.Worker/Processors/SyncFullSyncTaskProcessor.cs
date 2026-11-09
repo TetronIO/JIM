@@ -185,11 +185,13 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         //
         // Each type pages until a page comes back empty, not to the count taken at the start (#2092): objects created
         // while the run is in flight would otherwise push the original tail past a page budget fixed before they
-        // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked.
+        // arrived. A closing sweep then picks up objects created mid-run behind a type that had already been walked: it reads
+        // its selection as ids and loads only those the walks did not hand out (#2861).
         // The count is the progress estimate only, and ObjectsProcessed may exceed it.
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, fullSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectsAsync(
-                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => _syncRepo.GetConnectedSystemObjectsAsync(
+                _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds),
+            (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsAsync(_connectedSystem.Id, pageSize, afterId, createdOnOrAfter),
             "Full Synchronisation", observeUndeclaredReferenceTargets: true);
 
         try
@@ -413,9 +415,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         }
         finally
         {
-            // Not every load reaches a page's own tracker clear (#2598): the pager's closing sweep can load pages it hands
-            // nothing out of, and an exception in Pass 1 or 2 leaves the page before its flush. What they loaded holds
-            // Connected System Objects tracked over untracked Metaverse Objects, so it goes before detection is restored.
+            // Not every load reaches a page's own tracker clear (#2598): an exception in Pass 1 or 2 leaves the page before
+            // its flush, and the pager drops any object a sweep load returns that was already handed out (since #2861 the
+            // sweep asks for none). What they loaded holds Connected System Objects tracked over untracked Metaverse
+            // Objects, so it goes before detection is restored.
             ClearPageTrackingState();
             _syncRepo.SetAutoDetectChangesEnabled(true);
         }

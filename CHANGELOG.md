@@ -108,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ An import confirming exports to large groups is faster: each membership change is checked against a lookup of the members the import returned rather than all of them, which took 285 seconds for one page with a 500,000-member group. (#2850)
 - ⚡ Exports record the changes they write once references resolve as each batch finishes, as they do the rest, instead of holding them in memory and writing them all at the end, which took 21 seconds at the end of a 500,000-person initial export. (#2852)
 - ⚡ Exports record each batch's results faster: JIM now marks the changes it sent in one statement and rewrites only those whose values changed, instead of every change, cutting a 200,000-member group's from 10 seconds to under 3. (#2851)
+- ⚡ The first Full Synchronisation after an initial Full Import is faster: its last step, which looks for objects created while it ran, no longer loads every object again only to set it aside, which took 90 seconds at 500,000 objects. (#2861)
 
 ### Removed
 

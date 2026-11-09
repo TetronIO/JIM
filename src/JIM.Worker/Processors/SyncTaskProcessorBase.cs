@@ -8253,7 +8253,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// How far before the run's start the closing sweep of <see cref="TypeOrderedCsoPager"/> reaches, so an object a
     /// writer stamped with a clock a little behind this run's is still swept. Objects inside the margin that a type walk
-    /// already handed out are not handed out again, so a generous margin costs only a slightly larger sweep query.
+    /// already handed out are not handed out or loaded again (#2861), so a generous margin costs only a larger read of the
+    /// sweep's ids: after an initial Full Import, every id in the Connector Space.
     /// </summary>
     private static readonly TimeSpan TypeOrderedSweepClockSkewMargin = TimeSpan.FromMinutes(5);
 
@@ -8266,6 +8267,8 @@ public abstract class SyncTaskProcessorBase
     /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
     /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
     /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="loadSweepIds">The repository read of the closing sweep's selection for this run kind, ids only: the
+    /// selection <paramref name="loadPage"/> makes for the sweep (#2861).</param>
     /// <param name="runKind">The run kind, for the log line.</param>
     /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
     /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
@@ -8273,8 +8276,8 @@ public abstract class SyncTaskProcessorBase
     /// LDAP's <c>member</c> and <c>manager</c> collapse people and groups into one id-ordered group. A Delta
     /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
     protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
-        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
-        bool observeUndeclaredReferenceTargets)
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage,
+        TypeOrderedCsoPager.SweepIdLoader loadSweepIds, string runKind, bool observeUndeclaredReferenceTargets)
     {
         // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
         // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
@@ -8305,7 +8308,7 @@ public abstract class SyncTaskProcessorBase
         if (order.TypeIds.Count == 0)
         {
             Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
-            _csoPager = new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
             return _csoPager;
         }
 
@@ -8318,7 +8321,7 @@ public abstract class SyncTaskProcessorBase
                 runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
         }
 
-        _csoPager = new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+        _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
         return _csoPager;
     }
 

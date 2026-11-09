@@ -950,8 +950,10 @@ public class LeaverCohortCostDatabaseTests
         await using var ctx = NewPageContext(null);
         var repository = new PostgresDataRepository(ctx);
         var pager = new TypeOrderedCsoPager(
-            (afterId, objectTypeId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
-                seeded.SystemId, seeded.Watermark, 1, SyncPageSize, 1, afterId, objectTypeId, createdOnOrAfter),
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(
+                seeded.SystemId, seeded.Watermark, 1, SyncPageSize, 1, afterId, objectTypeId, createdOnOrAfter, onlyIds: onlyIds),
+            (afterId, createdOnOrAfter) => repository.Sync.GetConnectedSystemObjectIdsModifiedSinceAsync(
+                seeded.SystemId, seeded.Watermark, SyncPageSize, afterId, createdOnOrAfter),
             [seeded.UserTypeId, seeded.GroupTypeId],
             seeded.Watermark);
 

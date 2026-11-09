@@ -1777,7 +1777,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int? knownTotalCount = null,
         Guid? afterId = null,
         int? objectTypeId = null,
-        DateTime? createdOnOrAfter = null)
+        DateTime? createdOnOrAfter = null,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1786,8 +1787,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 2000)
-            pageSize = 2000;
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
 
         // Use caller-provided count when available (e.g. full sync already counted at start),
         // otherwise query the database. Eliminates redundant COUNT(*) at scale.
@@ -1811,7 +1812,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
+            .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(cso => cso.Id)
             .AsQueryable();
 
@@ -1856,6 +1857,40 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.Results.Clear();
         return pagedResultSet;
 
+    }
+
+    /// <summary>
+    /// The closing sweep's id page for a Full Synchronisation (#2861): the selection <see cref="GetConnectedSystemObjectsAsync"/>
+    /// makes for the sweep, ids only. See <see cref="ISyncRepository.GetConnectedSystemObjectIdsAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => LoadSweepIdPageAsync(ApplySyncPageFilters(
+            Repository.Database.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == connectedSystemId), null, createdOnOrAfter), pageSize, afterId);
+
+    /// <summary>
+    /// One keyset page of a closing sweep's selection, ids only (#2861): ordered, cursored and capped exactly as the page
+    /// loaders are, so the ids are the objects the matching page load would have returned, without loading their values,
+    /// reference targets or Metaverse Objects, and without tracking anything. A projection onto the key, in EF so the
+    /// selection is the very expression the page loader filters with rather than a second copy of it in SQL.
+    /// </summary>
+    private static async Task<List<Guid>> LoadSweepIdPageAsync(IQueryable<ConnectedSystemObject> selection, int pageSize, Guid afterId)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        // The page load that follows must be able to return every id this page holds.
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
+
+        using var span = ActivitySource.StartActivity("Cso.Page.LoadSweepIds");
+        var ids = await selection
+            .OrderBy(cso => cso.Id)
+            .Where(cso => cso.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+        span?.SetTag("idCount", ids.Count);
+        return ids;
     }
 
     /// <summary>
@@ -1943,7 +1978,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         Guid? afterId,
         int? objectTypeId,
         DateTime? createdOnOrAfter,
-        SynchronisationValueLoadPlan? valueLoadPlan)
+        SynchronisationValueLoadPlan? valueLoadPlan,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1952,13 +1988,13 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 2000)
-            pageSize = 2000;
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
 
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check the three marks AND Created/LastUpdated because:
+        // WhereModifiedSince checks the three marks AND Created/LastUpdated because:
         // - SynchronisationPending (#2092): set by every writer with the change it announces and cleared only by the
         //   synchronisation that processed the object, under the row version its load read. This is what makes the
         //   selection commit-order safe: a change committed while a run was in flight carries a timestamp below the
@@ -1985,13 +2021,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             if (withValues)
                 query = query.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute);
 
-            return ApplySyncPageFilters(query
-                .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
-                             (cso.SynchronisationPending ||
-                              cso.DerivedInputChangePending ||
-                              cso.ScopeReviewPending ||
-                              cso.Created > modifiedSince ||
-                              (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
+            return ApplySyncPageFilters(WhereModifiedSince(query, connectedSystemId, modifiedSince), objectTypeId, createdOnOrAfter, onlyIds)
                 .OrderBy(cso => cso.Id);
         }
 
@@ -2062,13 +2092,44 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// The closing sweep's id page for a Delta Synchronisation (#2861): the selection
+    /// <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?, SynchronisationValueLoadPlan?, IReadOnlyCollection{Guid}?)"/>
+    /// makes for the sweep, ids only. See <see cref="ISyncRepository.GetConnectedSystemObjectIdsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter)
+        => LoadSweepIdPageAsync(ApplySyncPageFilters(
+            WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), null, createdOnOrAfter), pageSize, afterId);
+
+    /// <summary>
+    /// The Delta Synchronisation's selection: this Connected System's objects carrying any of the three marks, or created
+    /// or updated after <paramref name="modifiedSince"/>. Shared by its page load and its closing sweep's id page (#2861),
+    /// so the two cannot select differently.
+    /// </summary>
+    private static IQueryable<ConnectedSystemObject> WhereModifiedSince(IQueryable<ConnectedSystemObject> query, int connectedSystemId,
+        DateTime modifiedSince)
+        => query.Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                              (cso.SynchronisationPending ||
+                               cso.DerivedInputChangePending ||
+                               cso.ScopeReviewPending ||
+                               cso.Created > modifiedSince ||
+                               (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+
+    /// <summary>
+    /// The page loaders cap a page at this many objects, to avoid increasing latency unnecessarily; a closing sweep's id
+    /// page is capped the same, so the load that follows it can return every id it holds (#2861).
+    /// </summary>
+    private const int MaxSyncPageSize = 2000;
+
+    /// <summary>
     /// The optional filters both synchronisation page loaders share (#2492): one Object Type, so a run can page through
     /// types in dependency order (served by <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>, which keeps
-    /// the keyset cursor O(pageSize) within the type), and a creation floor, for the closing sweep that picks up
-    /// objects created while the run was in flight.
+    /// the keyset cursor O(pageSize) within the type); a creation floor, for the closing sweep that picks up objects
+    /// created while the run was in flight; and a set of ids, so the sweep loads only those of an id page the type walks
+    /// did not hand out (#2861).
     /// </summary>
     private static IQueryable<ConnectedSystemObject> ApplySyncPageFilters(
-        IQueryable<ConnectedSystemObject> query, int? objectTypeId, DateTime? createdOnOrAfter)
+        IQueryable<ConnectedSystemObject> query, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (objectTypeId.HasValue)
         {
@@ -2080,6 +2141,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         {
             var createdFloor = createdOnOrAfter.Value;
             query = query.Where(cso => cso.Created >= createdFloor);
+        }
+
+        if (onlyIds != null)
+        {
+            var ids = onlyIds.ToArray();
+            query = query.Where(cso => ids.Contains(cso.Id));
         }
 
         return query;

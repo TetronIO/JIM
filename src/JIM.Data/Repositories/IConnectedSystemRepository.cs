@@ -1286,7 +1286,14 @@ public interface IConnectedSystemRepository
         CancellationToken cancellationToken = default);
     /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
     /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="onlyIds">Keyset callers only: restricts the page to these objects; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The ids of the objects <see cref="GetConnectedSystemObjectsAsync"/> selects for a closing sweep, without loading
+    /// any (#2861); see <see cref="ISyncRepository.GetConnectedSystemObjectIdsAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -1368,7 +1375,16 @@ public interface IConnectedSystemRepository
         Guid? afterId,
         int? objectTypeId,
         DateTime? createdOnOrAfter,
-        SynchronisationValueLoadPlan? valueLoadPlan);
+        SynchronisationValueLoadPlan? valueLoadPlan,
+        IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The ids of the objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?)"/>
+    /// selects for a closing sweep, without loading any (#2861); see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectIdsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.
