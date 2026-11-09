@@ -90,7 +90,20 @@ public interface ISyncRepository
     /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
     /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
     /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="onlyIds">When provided, restricts the page further to these objects: the closing sweep loads only the
+    /// objects of an id page (<see cref="GetConnectedSystemObjectIdsAsync"/>) that the type walks did not hand out
+    /// (#2861). Every other filter, the ordering and the load are unchanged, so an object comes back exactly as the page
+    /// would have loaded it.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The closing sweep's id page (#2861): the ids of the objects <see cref="GetConnectedSystemObjectsAsync"/> selects for
+    /// the sweep (this Connected System's, created at or after <paramref name="createdOnOrAfter"/>, sorting after
+    /// <paramref name="afterId"/>), at most <paramref name="pageSize"/> of them, in the page load's order, without loading
+    /// any. The sweep then loads in full, through <c>onlyIds</c>, only those the type walks did not hand out: after an
+    /// initial load, none of them.
+    /// </summary>
+    Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -112,7 +125,16 @@ public interface ISyncRepository
     /// their only reader on the page. An object it leaves one out of carries it in
     /// <see cref="ConnectedSystemObject.PartiallyLoadedAttributes"/> (<see cref="SynchronisationPartiallyLoadedAttribute"/>);
     /// every other object is loaded whole. Null loads every object whole.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null);
+    /// <param name="onlyIds">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to these objects, for
+    /// the closing sweep (#2861).</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The Delta Synchronisation's closing sweep id page (#2861): as <see cref="GetConnectedSystemObjectIdsAsync"/>, over
+    /// the objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync"/> selects (modified since
+    /// <paramref name="modifiedSince"/> or marked, and created at or after <paramref name="createdOnOrAfter"/>).
+    /// </summary>
+    Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered

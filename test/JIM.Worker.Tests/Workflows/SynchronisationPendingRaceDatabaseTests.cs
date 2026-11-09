@@ -245,6 +245,12 @@ public class SynchronisationPendingRaceDatabaseTests
         {
             var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(jim), syncRepository,
                 system, runProfile, activity, new CancellationTokenSource());
+            processor.OnConnectedSystemObjectProcessedInPass2 = cso =>
+            {
+                processed.Add(cso.Id);
+                if (onObjectProcessed != null)
+                    onObjectProcessed(processed).GetAwaiter().GetResult();
+            };
             await processor.PerformFullSyncAsync();
         }
         else
@@ -316,6 +322,130 @@ public class SynchronisationPendingRaceDatabaseTests
 
         Assert.That(await MetaverseDisplayNameAsync(3), Is.EqualTo("Renamed 3"), "the run processed every changed object");
     }
+
+    #region Closing sweep loads only what the type walks did not hand out (#2861)
+
+    /// <summary>
+    /// Counts the closing sweep's object loads: the page loads that carry a creation floor. <paramref name="createdFloorArgument"/>
+    /// is the position of the page loader's <c>createdOnOrAfter</c> argument.
+    /// </summary>
+    private static Func<ISyncRepository, ISyncRepository> CountSweepLoads(string pageLoader, int createdFloorArgument, Action onSweepLoad) =>
+        inner => InterceptingSyncRepositoryProxy.Create(inner, pageLoader, args =>
+        {
+            if (args[createdFloorArgument] != null)
+                onSweepLoad();
+        });
+
+    /// <summary>
+    /// An initial load (#2861): the Full Import creates every object moments before the Full Synchronisation, inside the
+    /// closing sweep's clock-skew margin. The type walks hand every object out, so the sweep has nothing to hand out; it
+    /// used to load the whole Connector Space again, every value with it, and drop it (90 s at 500,000 objects).
+    /// </summary>
+    [Test]
+    public async Task FullSync_EveryObjectCreatedInsideTheSweepMargin_SweepLoadsNoneOfThemAgainAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1, 2, 3, 4, 5);
+        var sweepLoads = 0;
+
+        var run = await RunAsync(ConnectedSystemRunType.FullSynchronisation, wrapRepository: CountSweepLoads(
+            nameof(ISyncRepository.GetConnectedSystemObjectsAsync), createdFloorArgument: 6, () => sweepLoads++));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ProcessedIds, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }.Select(IdOf)), "the type walk processes every object once, in id order");
+            Assert.That(sweepLoads, Is.Zero, "the sweep must not load objects the type walk already handed out");
+            Assert.That(await MetaverseDisplayNameAsync(5), Is.EqualTo("Name 5"), "the run projected and flowed every object");
+        }
+    }
+
+    /// <summary>
+    /// The Delta Synchronisation counterpart of the test above: its type walk hands out every changed object created since
+    /// the run's floor, so its closing sweep must not load them again either.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_EveryChangedObjectCreatedInsideTheSweepMargin_SweepLoadsNoneOfThemAgainAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1, 2, 3, 4, 5);
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+        foreach (var n in new[] { 1, 2, 3, 4, 5 })
+            await ImportDisplayNameChangeAsync(n, $"Renamed {n}", DateTime.UtcNow);
+        var sweepLoads = 0;
+
+        var run = await RunAsync(ConnectedSystemRunType.DeltaSynchronisation, wrapRepository: CountSweepLoads(
+            nameof(ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync), createdFloorArgument: 7, () => sweepLoads++));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ProcessedIds, Is.EqualTo(new[] { 1, 2, 3, 4, 5 }.Select(IdOf)), "the type walk processes every changed object once");
+            Assert.That(sweepLoads, Is.Zero, "the sweep must not load objects the type walk already handed out");
+            Assert.That(await MetaverseDisplayNameAsync(5), Is.EqualTo("Renamed 5"), "the run flowed every change");
+        }
+    }
+
+    /// <summary>
+    /// The sweep's purpose, kept (#2861): an object an import creates mid-run behind the type walk's cursor, among
+    /// objects the walk already handed out from inside the margin, is handed out by the sweep, once, after every walked
+    /// object, and synchronised. The sweep loads that one object and nothing else.
+    /// </summary>
+    [Test]
+    public async Task FullSync_ObjectCreatedMidRunBehindTheTypeWalk_IsSweptOnceAndSynchronisedAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 2, 3, 4, 5, 6);
+        var sweepLoads = 0;
+        var injected = false;
+
+        var run = await RunAsync(ConnectedSystemRunType.FullSynchronisation, async processed =>
+            {
+                if (injected)
+                    return;
+                injected = true;
+                // Object 1 sorts below the walk's cursor, which has already passed object 2.
+                await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1);
+            },
+            CountSweepLoads(nameof(ISyncRepository.GetConnectedSystemObjectsAsync), createdFloorArgument: 6, () => sweepLoads++));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ProcessedIds, Is.EqualTo(new[] { 2, 3, 4, 5, 6, 1 }.Select(IdOf)),
+                "the walk hands out the objects it can see, then the sweep hands out the one created behind it");
+            Assert.That(await MetaverseDisplayNameAsync(1), Is.EqualTo("Name 1"), "the swept object is synchronised");
+            Assert.That(sweepLoads, Is.EqualTo(1), "the sweep loads only the page holding the object the walk missed");
+        }
+    }
+
+    /// <summary>
+    /// The Delta Synchronisation counterpart of the test above: an object created mid-run behind the walk is selected by
+    /// the modified-since predicate, and the sweep hands it out after every changed object the walk handed out.
+    /// </summary>
+    [Test]
+    public async Task DeltaSync_ObjectCreatedMidRunBehindTheTypeWalk_IsSweptOnceAndSynchronisedAsync()
+    {
+        await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 2, 3, 4, 5, 6);
+        await RunAsync(ConnectedSystemRunType.FullSynchronisation);
+        foreach (var n in new[] { 2, 3, 4, 5, 6 })
+            await ImportDisplayNameChangeAsync(n, $"Renamed {n}", DateTime.UtcNow);
+        var sweepLoads = 0;
+        var injected = false;
+
+        var run = await RunAsync(ConnectedSystemRunType.DeltaSynchronisation, async processed =>
+            {
+                if (injected)
+                    return;
+                injected = true;
+                await CreateObjectsCreatedAtAsync(DateTime.UtcNow, 1);
+            },
+            CountSweepLoads(nameof(ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync), createdFloorArgument: 7, () => sweepLoads++));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(run.ProcessedIds, Is.EqualTo(new[] { 2, 3, 4, 5, 6, 1 }.Select(IdOf)),
+                "the walk hands out the changed objects, then the sweep hands out the one created behind it");
+            Assert.That(await MetaverseDisplayNameAsync(1), Is.EqualTo("Name 1"), "the swept object is synchronised");
+            Assert.That(sweepLoads, Is.EqualTo(1), "the sweep loads only the page holding the object the walk missed");
+        }
+    }
+
+    #endregion
 
     /// <summary>
     /// (a) A joined object the run has already processed: the import's change commits after the object's page was

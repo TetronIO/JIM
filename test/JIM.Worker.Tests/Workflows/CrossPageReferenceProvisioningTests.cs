@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Servers;
+using JIM.Application.Utilities;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -142,6 +144,71 @@ public class CrossPageReferenceProvisioningTests : WorkflowTestBase
             Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ConnectedSystemId == target.Id), Is.EqualTo(6),
                 "Four users and two groups are provisioned.");
         }
+    }
+
+    /// <summary>
+    /// Characterises how the change snapshot of a staged export names a member that is being provisioned on the same page
+    /// (#2861): the member's target object is not stored yet, so the snapshot takes its name from the objects the page has
+    /// collected for creation, and records it as a stub naming the object by display text rather than the Metaverse
+    /// Object id the reference was staged with.
+    /// </summary>
+    [Test]
+    public async Task FullSync_GroupWhoseNestedGroupIsProvisionedOnTheSamePage_SnapshotNamesTheNestedGroupByItsTargetObjectAsync()
+    {
+        await SetSyncPageSizeAsync(10);
+        var (source, target, _, groupType, groupMemberAttr, targetGroupType, _, _) = await BuildDirectoriesAsync();
+
+        // Beta sorts first, so it is projected and its provisioning collected before Alpha, which contains it, is processed.
+        var nested = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000001"), "Team Beta");
+        var group = SeedSourceCso(source.Id, groupType, new Guid("00000000-0000-0000-0000-000000000002"), "Team Alpha");
+        group.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = groupMemberAttr.Id, Attribute = groupMemberAttr,
+            ReferenceValueId = nested.Id, ReferenceValue = nested, ConnectedSystemObject = group
+        });
+
+        var reloadedSource = await ReloadEntityAsync(source);
+        var profile = await CreateRunProfileAsync(reloadedSource.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var activity = await CreateActivityAsync(reloadedSource.Id, profile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloadedSource, profile, activity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+
+        var nestedTarget = SyncRepo.ConnectedSystemObjects.Values
+            .Single(c => c.ConnectedSystemId == target.Id && c.TypeId == targetGroupType.Id && c.MetaverseObjectId == nested.MetaverseObjectId);
+        var memberValues = AllOutcomes(activity)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
+            .SelectMany(o => o.ConnectedSystemObjectChange?.AttributeChanges ?? [])
+            .Where(a => a.AttributeName == "Member")
+            .SelectMany(a => a.ValueChanges)
+            .ToList();
+
+        Assert.That(memberValues, Has.Count.EqualTo(1), "Alpha's Create carries its one member");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(SyncRepo.ConnectedSystemObjectLookupsByMetaverseObjectId.Where(l => l.ConnectedSystemId == target.Id),
+                Is.Empty, "the name comes from the objects the page collected, without looking anything up");
+            Assert.That(memberValues[0].StringValue, Is.EqualTo(ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(nestedTarget)),
+                "the member is named by the target object being provisioned for it");
+            Assert.That(memberValues[0].StringValue, Is.Not.EqualTo(nested.MetaverseObjectId!.Value.ToString()),
+                "not by the Metaverse Object id the reference was staged with");
+            Assert.That(memberValues[0].IsPendingExportStub, Is.True);
+        }
+    }
+
+    /// <summary>Every outcome the run recorded, roots and descendants, once each.</summary>
+    private static List<ActivityRunProfileExecutionItemSyncOutcome> AllOutcomes(Activity activity)
+    {
+        var seen = new HashSet<ActivityRunProfileExecutionItemSyncOutcome>(ReferenceEqualityComparer.Instance);
+        var pending = new Stack<ActivityRunProfileExecutionItemSyncOutcome>(activity.RunProfileExecutionItems.SelectMany(i => i.SyncOutcomes));
+        while (pending.Count > 0)
+        {
+            var outcome = pending.Pop();
+            if (!seen.Add(outcome))
+                continue;
+            foreach (var child in outcome.Children)
+                pending.Push(child);
+        }
+        return seen.ToList();
     }
 
     /// <summary>

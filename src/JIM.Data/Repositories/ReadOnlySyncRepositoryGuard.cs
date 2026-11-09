@@ -48,8 +48,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<IReadOnlyList<long>> GetConfigurationChangeSynchronisationIdsAwaitingAsync(int connectedSystemId)
         => _inner.GetConfigurationChangeSynchronisationIdsAwaitingAsync(connectedSystemId);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null)
+        => _inner.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, onlyIds);
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => _inner.GetConnectedSystemObjectIdsAsync(connectedSystemId, pageSize, afterId, createdOnOrAfter);
 
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
         => _inner.GetConnectedSystemObjectTypeIdsInUseAsync(connectedSystemId);
@@ -57,8 +60,11 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task<Dictionary<int, IReadOnlySet<int>>> GetReferencedObjectTypeIdsAsync(IReadOnlyCollection<int> attributeIds)
         => _inner.GetReferencedObjectTypeIdsAsync(attributeIds);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null)
-        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? onlyIds = null)
+        => _inner.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds);
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => _inner.GetConnectedSystemObjectIdsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, createdOnOrAfter);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _inner.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
