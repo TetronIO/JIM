@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using JIM.Models.Core;
@@ -77,21 +78,20 @@ public partial class SyncRepository
             }
         }
 
+        var attributeValueRows = ParallelBatchWriter.FlattenValueRows(metaverseObjects, mvo => mvo.Id, mvo => mvo.AttributeValues);
+
         using (MvoActivitySource.StartActivity("Mvo.Create.BulkWrite"))
         {
-            var parallelism = ParallelBatchWriter.GetWriteParallelism();
-            var connectionString = _connectionStringForParallelWrites;
-
-            // For small batches (under parallelism threshold), use the main EF connection directly.
-            // The parallel overhead (opening N connections, partitioning) isn't worthwhile for small writes.
-            if (metaverseObjects.Count < parallelism * 50 || connectionString == null)
+            if (!ShouldWriteInParallel(metaverseObjects.Count + attributeValueRows.Count))
             {
-                await CreateMvosOnSingleConnectionAsync(metaverseObjects);
+                await CreateMvosOnSingleConnectionAsync(metaverseObjects, attributeValueRows);
             }
             else
             {
-                Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs across {Parallelism} parallel connections",
-                    metaverseObjects.Count, parallelism);
+                var parallelism = WriteParallelism;
+                var connectionString = ConnectionStringForParallelWrites;
+                Log.Information("CreateMetaverseObjectsBulkAsync: Writing {Count} MVOs and {ValueCount} attribute values across {Parallelism} parallel connections",
+                    metaverseObjects.Count, attributeValueRows.Count, parallelism);
 
                 // Two-phase write: MVO rows first, then attribute value rows.
                 //
@@ -104,38 +104,56 @@ public partial class SyncRepository
                 // Phase 1 commits all MVO rows across all partitions, guaranteeing every MVO exists
                 // in the database. Phase 2 then inserts attribute values — all ReferenceValueId FKs
                 // are satisfied regardless of which partition the referenced MVO was in.
-
-                // Phase 1: Insert all MVO rows across parallel connections.
-                await ParallelBatchWriter.ExecuteAsync(
-                    metaverseObjects,
-                    parallelism,
-                    connectionString,
-                    async (connection, partition) =>
-                    {
-                        await using var transaction = await connection!.BeginTransactionAsync();
-                        await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
-                        await transaction.CommitAsync();
-                    });
-
-                // Phase 2: Insert all attribute value rows across parallel connections.
-                // Re-partition by attribute values (not by MVO) for balanced distribution,
-                // especially when one MVO has disproportionately many values (e.g., large groups).
-                var allAttributeValues = metaverseObjects
-                    .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
-                    .ToList();
-
-                if (allAttributeValues.Count > 0)
+                //
+                // The phases commit separately, so unlike the single-connection path the write is not one
+                // transaction. A failure in either phase therefore removes every row the call committed before it
+                // propagates (#2872): the caller is told the create failed, and must find nothing of it, exactly as
+                // when the single-connection transaction rolls back. Otherwise the objects survive with some or none
+                // of their values and joined to nothing, and the next run projects the same objects again beside them.
+                var committedMvoIds = new ConcurrentQueue<Guid>();
+                var written = false;
+                try
                 {
+                    // Phase 1: Insert all MVO rows across parallel connections.
                     await ParallelBatchWriter.ExecuteAsync(
-                        allAttributeValues,
+                        metaverseObjects,
                         parallelism,
                         connectionString,
                         async (connection, partition) =>
                         {
                             await using var transaction = await connection!.BeginTransactionAsync();
-                            await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, partition.ToList());
+                            await BulkInsertMvosOnConnectionAsync(connection, transaction, partition);
+                            await transaction.CommitAsync();
+                            foreach (var mvo in partition)
+                                committedMvoIds.Enqueue(mvo.Id);
+                        });
+
+                    // Phase 2: Insert all attribute value rows across parallel connections, partitioned by value row
+                    // rather than by MVO, so one large group spreads across every connection.
+                    await ParallelBatchWriter.ExecuteAsync(
+                        attributeValueRows,
+                        parallelism,
+                        connectionString,
+                        async (connection, partition) =>
+                        {
+                            await using var transaction = await connection!.BeginTransactionAsync();
+                            await BulkInsertMvoAttributeValuesOnConnectionAsync(connection, transaction, partition);
                             await transaction.CommitAsync();
                         });
+
+                    written = true;
+                }
+                finally
+                {
+                    // Only the rows this call committed: an id that was already in the table failed its partition's
+                    // insert, so it is not in the list, and the object that already held it is left alone. Their values
+                    // go first, whichever phase-2 partition wrote them (see the removal for why not by cascade).
+                    if (!written && !committedMvoIds.IsEmpty)
+                        await RemoveRowsOfFailedParallelWriteAsync(connectionString!, nameof(CreateMetaverseObjectsBulkAsync),
+                        [
+                            new ParallelWriteRemoval("MetaverseObjectAttributeValues", "MetaverseObjectId", [.. committedMvoIds]),
+                            new ParallelWriteRemoval("MetaverseObjects", "Id", [.. committedMvoIds])
+                        ]);
                 }
             }
         }
@@ -153,7 +171,9 @@ public partial class SyncRepository
     /// COPY'd, so visible to this session, before attribute values are COPY'd, so a same-batch
     /// forward reference resolves without cross-partition isolation.
     /// </summary>
-    private async Task CreateMvosOnSingleConnectionAsync(List<MetaverseObject> metaverseObjects)
+    private async Task CreateMvosOnSingleConnectionAsync(
+        List<MetaverseObject> metaverseObjects,
+        IReadOnlyList<(Guid OwnerId, MetaverseObjectAttributeValue Value)> attributeValueRows)
     {
         var previousTimeout = _context.Database.GetCommandTimeout();
         _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
@@ -166,12 +186,8 @@ public partial class SyncRepository
 
         await BulkInsertMvosOnConnectionAsync(npgsqlConn, npgsqlTx, metaverseObjects);
 
-        var allAttributeValues = metaverseObjects
-            .SelectMany(mvo => mvo.AttributeValues.Select(av => (MvoId: mvo.Id, Value: av)))
-            .ToList();
-
-        if (allAttributeValues.Count > 0)
-            await BulkInsertMvoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, allAttributeValues);
+        if (attributeValueRows.Count > 0)
+            await BulkInsertMvoAttributeValuesOnConnectionAsync(npgsqlConn, npgsqlTx, attributeValueRows);
 
         await transaction.CommitAsync();
         _context.Database.SetCommandTimeout(previousTimeout);
@@ -262,7 +278,7 @@ public partial class SyncRepository
     private static async Task BulkInsertMvoAttributeValuesOnConnectionAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        List<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
+        IReadOnlyList<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
             $"""COPY "MetaverseObjectAttributeValues" ({BulkSqlHelpers.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) FROM STDIN (FORMAT binary)""");

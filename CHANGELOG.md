@@ -111,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ The first Full Synchronisation after an initial Full Import is faster: its last step, which looks for objects created while it ran, no longer loads every object again only to set it aside, which took 90 seconds at 500,000 objects. (#2861)
 - ⚡ Creating and updating Metaverse Objects is faster: of the eight indexes on attribute values, two that duplicated others are gone and six no longer index each value's empty columns, making writing values about a third faster with those indexes a tenth of their size. (#2864)
 - ⚡ Imports write Connected System Object attribute values with a little less work: the index on the objects that reference values point to no longer holds an entry for every value that is not a reference, making it a third smaller and an import's database writes about 5% smaller. (#2868)
+- ⚡ Synchronisation writes large groups faster on servers with many cores: a page is now spread across several database connections according to how many values it holds rather than how many objects, so a page of groups with 650,000 members, once written on one connection, is written about 30% faster. (#2872)
 
 ### Removed
 
