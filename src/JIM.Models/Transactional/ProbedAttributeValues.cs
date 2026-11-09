@@ -25,8 +25,9 @@ public sealed class ProbedAttributeValues
 
     /// <summary>
     /// Every stored row that could match one of <see cref="ProbedChangeIds"/>, possibly with others: a superset, which the
-    /// engine judges with the same comparison it applies to a full load. Each carries its id, object, attribute,
-    /// <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c>; nothing else is read.
+    /// engine judges with the same comparison it applies to a full load. Each carries its id, object, attribute id,
+    /// <c>ReferenceValueId</c> and <c>UnresolvedReferenceValue</c>, but no attribute definition (the engine compares by the
+    /// changes' attribute); nothing else is read.
     /// </summary>
     public required IReadOnlyList<ConnectedSystemObjectAttributeValue> CandidateValues { get; init; }
 
