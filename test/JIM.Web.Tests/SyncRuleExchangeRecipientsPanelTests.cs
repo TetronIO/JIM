@@ -131,7 +131,7 @@ public class SyncRuleExchangeRecipientsPanelTests : JimComponentTestContext
 
     private IRenderedComponent<SyncRuleExchangeRecipientsPanel> RenderPanel() =>
         Render<SyncRuleExchangeRecipientsPanel>(p => p
-            .Add(c => c.Flows, ExchangeRecipientFlows.For(_rule, featureEnabled: true)!)
+            .Add(c => c.Flows, ExchangeRecipientFlows.For(_rule)!)
             .Add(c => c.SyncRuleName, _rule.Name)
             .Add(c => c.OnSet, attribute => _set.Add(attribute))
             .Add(c => c.OnEdit, mapping => _edited.Add(mapping))

@@ -1,4 +1,3 @@
-@using JIM.Models.Core
 @using JIM.Models.Transactional.DTOs
 @inject IJimApplicationFactory JimFactory
 @inject ISnackbar Snackbar
@@ -8,15 +7,11 @@
 
 @* Retry for one queued Exchange change (#2021, Phase 6b), wherever the change already shows: an export item's follow-up,
    an account's Exchange Recipient panel, the change's own page. It retries the change it was given by its queue id, as
-   the signed-in administrator, and tells its host so the host can re-read where the change now stands. Offered only
-   while Exchange recipients are switched on, as every other way of retrying is. *@
-@if (_enabled)
-{
-    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Replay" Disabled="@_busy"
-               OnClick="RetryAsync" data-testid="jim-exchange-retry" aria-label="Retry this Exchange change">
-        @(Retrying ? "Retry now" : "Retry")
-    </MudButton>
-}
+   the signed-in administrator, and tells its host so the host can re-read where the change now stands. *@
+<MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Replay" Disabled="@_busy"
+           OnClick="RetryAsync" data-testid="jim-exchange-retry" aria-label="Retry this Exchange change">
+    @(Retrying ? "Retry now" : "Retry")
+</MudButton>
 
 @code {
     /// <summary>The queued change to retry: its id on the Exchange queue.</summary>
@@ -31,14 +26,7 @@
     [Parameter]
     public EventCallback OnRetried { get; set; }
 
-    private bool _enabled;
     private bool _busy;
-
-    protected override async Task OnInitializedAsync()
-    {
-        using var jim = JimFactory.Create();
-        _enabled = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
-    }
 
     private async Task RetryAsync()
     {

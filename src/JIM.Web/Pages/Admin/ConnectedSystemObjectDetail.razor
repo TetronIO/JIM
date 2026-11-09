@@ -653,9 +653,7 @@
             _pendingExportTotalCount = pendingExportResult.Value.ChangeCount;
         }
 
-        _exchangeRecipient = await jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key)
-            ? await jim.ExchangeDelivery.GetRecipientStateAsync(connectedSystemObjectId)
-            : null;
+        _exchangeRecipient = await jim.ExchangeDelivery.GetRecipientStateAsync(connectedSystemObjectId);
 
         // Derive which attributes are unmanaged via Initial Export Only mappings (#223)
         _unmanagedAttributeIds = await ComputeUnmanagedAttributeIdsAsync(jim);

@@ -1,7 +1,7 @@
 # Exchange Remote PowerShell Transport Spike
 
 - **Status:** Done
-- **Note:** Go decided 2026-11-03. The prototype became the transport for #2021 ([implementation plan](../doing/EXCHANGE_MAILBOX_PROVISIONING.md)), whose Phase 1 closed the open items; the last lab run (2026-11-04) is recorded under Spike Results.
+- **Note:** Go decided 2026-11-03. The prototype became the transport for #2021 ([implementation plan](EXCHANGE_MAILBOX_PROVISIONING.md)), whose Phase 1 closed the open items; the last lab run (2026-11-04) is recorded under Spike Results.
 - **Created:** 2026-10-21
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 
@@ -388,7 +388,7 @@ None was in the client. That is weak evidence: the stand-in and the client share
 - **A CI job for the harness.** The tests skip without it today.
 - **The 16 KB-chunk and large-payload cases.** Phase 1b tests them against Windows.
 
-**Where they went (2026-11-04):** both are #2021's Phase 1 ([implementation plan](../doing/EXCHANGE_MAILBOX_PROVISIONING.md)), with the go's own open items (`XDG_CACHE_HOME`, the Worker image's run and ticket renewal). The harness job (`remoting-harness-tests`) runs on every pull request that touches the library. The large-payload cases have harness tests and a read-only lab test, whose run is recorded above.
+**Where they went (2026-11-04):** both are #2021's Phase 1 ([implementation plan](EXCHANGE_MAILBOX_PROVISIONING.md)), with the go's own open items (`XDG_CACHE_HOME`, the Worker image's run and ticket renewal). The harness job (`remoting-harness-tests`) runs on every pull request that touches the library. The large-payload cases have harness tests and a read-only lab test, whose run is recorded above.
 
 ### Phase 0: prior-art survey (2026-10-21)
 

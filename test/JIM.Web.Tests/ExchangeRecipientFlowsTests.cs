@@ -25,7 +25,7 @@ public class ExchangeRecipientFlowsTests
     {
         var rule = ExportRule("user", ExchangeRecipientAttributes.All.Reverse().ToArray());
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true);
+        var flows = ExchangeRecipientFlows.For(rule);
 
         Assert.That(flows!.Rows.Select(r => r.Attribute.Name), Is.EqualTo(ExchangeRecipientAttributes.All));
     }
@@ -37,7 +37,7 @@ public class ExchangeRecipientFlowsTests
         var rule = ExportRule("group", ExchangeRecipientAttributes.RecipientType, ExchangeRecipientAttributes.Alias,
             ExchangeRecipientAttributes.PrimarySmtpAddress);
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true);
+        var flows = ExchangeRecipientFlows.For(rule);
 
         Assert.That(flows!.Rows.Select(r => r.Attribute.Name), Is.EqualTo(new[]
         {
@@ -51,20 +51,14 @@ public class ExchangeRecipientFlowsTests
         var rule = ExportRule("user", [.. ExchangeRecipientAttributes.All]);
         rule.Direction = SyncRuleDirection.Import;
 
-        Assert.That(ExchangeRecipientFlows.For(rule, featureEnabled: true), Is.Null);
-    }
-
-    [Test]
-    public void For_FeatureTurnedOff_IsNotShown()
-    {
-        Assert.That(ExchangeRecipientFlows.For(ExportRule("user", [.. ExchangeRecipientAttributes.All]), featureEnabled: false), Is.Null);
+        Assert.That(ExchangeRecipientFlows.For(rule), Is.Null);
     }
 
     [Test]
     public void For_ObjectTypeWithoutExchangeAttributes_IsNotShown()
     {
         // Schema discovery adds them only while the Connected System manages Exchange recipients.
-        Assert.That(ExchangeRecipientFlows.For(ExportRule("user"), featureEnabled: true), Is.Null);
+        Assert.That(ExchangeRecipientFlows.For(ExportRule("user")), Is.Null);
     }
 
     [Test]
@@ -72,7 +66,7 @@ public class ExchangeRecipientFlowsTests
     {
         var rule = new SyncRule { Direction = SyncRuleDirection.Export, ConnectedSystemObjectType = null! };
 
-        Assert.That(ExchangeRecipientFlows.For(rule, featureEnabled: true), Is.Null);
+        Assert.That(ExchangeRecipientFlows.For(rule), Is.Null);
     }
 
     [Test]
@@ -84,7 +78,7 @@ public class ExchangeRecipientFlowsTests
             Id = _nextId++, Name = ExchangeRecipientAttributes.Alias, Type = AttributeDataType.Text, IsConnectorDefined = false
         });
 
-        Assert.That(ExchangeRecipientFlows.For(rule, featureEnabled: true), Is.Null);
+        Assert.That(ExchangeRecipientFlows.For(rule), Is.Null);
     }
 
     [Test]
@@ -96,7 +90,7 @@ public class ExchangeRecipientFlowsTests
             Id = _nextId++, Name = "Some Other Connector Attribute", Type = AttributeDataType.Text, IsConnectorDefined = true
         });
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true);
+        var flows = ExchangeRecipientFlows.For(rule);
 
         Assert.That(flows!.Rows.Select(r => r.Attribute.Name), Is.EqualTo(new[] { ExchangeRecipientAttributes.RecipientType }));
     }
@@ -104,7 +98,7 @@ public class ExchangeRecipientFlowsTests
     [Test]
     public void For_NoFlowToAnyOfThem_IsNotSetUpAndEachRowSaysWhatHappensWithoutOne()
     {
-        var flows = ExchangeRecipientFlows.For(ExportRule("user", [.. ExchangeRecipientAttributes.All]), featureEnabled: true)!;
+        var flows = ExchangeRecipientFlows.For(ExportRule("user", [.. ExchangeRecipientAttributes.All]))!;
 
         using (Assert.EnterMultipleScope())
         {
@@ -127,7 +121,7 @@ public class ExchangeRecipientFlowsTests
         rule.AttributeFlowRules.Add(flow);
         rule.AttributeFlowRules.Add(new SyncRuleMapping { Id = 8, TargetConnectedSystemAttribute = DirectoryAttribute(rule, "displayName") });
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true)!;
+        var flows = ExchangeRecipientFlows.For(rule)!;
 
         using (Assert.EnterMultipleScope())
         {
@@ -146,7 +140,7 @@ public class ExchangeRecipientFlowsTests
         var flow = new SyncRuleMapping { TargetConnectedSystemAttributeId = database.Id };
         rule.AttributeFlowRules.Add(flow);
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true)!;
+        var flows = ExchangeRecipientFlows.For(rule)!;
 
         Assert.That(flows.Rows.Single(r => r.Attribute == database).Mapping, Is.SameAs(flow));
     }
@@ -159,7 +153,7 @@ public class ExchangeRecipientFlowsTests
         var flow = new SyncRuleMapping { Id = 9, TargetConnectedSystemAttribute = recipientType, Enabled = false };
         rule.AttributeFlowRules.Add(flow);
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true)!;
+        var flows = ExchangeRecipientFlows.For(rule)!;
 
         using (Assert.EnterMultipleScope())
         {
@@ -177,7 +171,7 @@ public class ExchangeRecipientFlowsTests
             .ToList();
         rule.AttributeFlowRules.AddRange(all);
 
-        var flows = ExchangeRecipientFlows.For(rule, featureEnabled: true)!;
+        var flows = ExchangeRecipientFlows.For(rule)!;
 
         Assert.That(flows.Flows, Is.EquivalentTo(all));
     }

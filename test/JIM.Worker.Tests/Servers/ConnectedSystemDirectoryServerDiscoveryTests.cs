@@ -151,16 +151,18 @@ public class ConnectedSystemDirectoryServerDiscoveryTests
     [Test]
     public async Task GetDirectoryServerDiscoveriesAsync_TargetSettingBehindAFlagThatIsOff_LeavesThatDiscoveryOutAsync()
     {
-        // Exchange server is behind the Exchange recipients flag (#2021): while it is off, the setting is never offered,
-        // so neither is its Discover action.
+        // A setting behind a flag that is off is never offered, so neither is its Discover action.
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         UseFeatureFlags(on: false);
-        _mockConnectedSystemRepo
-            .Setup(r => r.GetConnectedSystemCoreAsync(ConnectedSystemId, It.IsAny<bool>()))
-            .ReturnsAsync(CreateLdapConnectorConnectedSystem());
+        UseStubConnector(
+            new ConnectorDirectoryServerDiscovery("Preferred Server", "directory servers"),
+            new ConnectorDirectoryServerDiscovery("Mail Server", "mail servers"));
+        var connectedSystem = await _mockConnectedSystemRepo.Object.GetConnectedSystemCoreAsync(ConnectedSystemId, false);
+        connectedSystem!.ConnectorDefinition.Settings.Single(s => s.Name == "Mail Server").FeatureFlagKey = FeatureFlagCatalogueScope.InDevelopmentFlag.Key;
 
         var discoveries = await _jim.ConnectedSystems.GetDirectoryServerDiscoveriesAsync(ConnectedSystemId);
 
-        Assert.That(discoveries.Select(d => d.TargetSettingName), Is.EqualTo(new[] { "Preferred Domain Controller" }));
+        Assert.That(discoveries.Select(d => d.TargetSettingName), Is.EqualTo(new[] { "Preferred Server" }));
     }
 
     [Test]

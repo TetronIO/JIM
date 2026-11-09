@@ -1,9 +1,9 @@
 # Exchange Mailbox Provisioning: Implementation Plan
 
-- **Status:** Doing (Phases 1 to 7 complete; Phase 8, integration, compliance and flag removal, next)
+- **Status:** Done
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
-- **PRD:** [`engineering/prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/doing/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
-- **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../done/EXCHANGE_REMOTING_SPIKE.md)
+- **PRD:** [`engineering/prd/done/PRD_EXCHANGE_MAILBOX_PROVISIONING.md`](../../prd/done/PRD_EXCHANGE_MAILBOX_PROVISIONING.md) (locked; requirement numbers below are the PRD's)
+- **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](EXCHANGE_REMOTING_SPIKE.md)
 - **Created:** 2026-11-01
 
 ## Overview
@@ -288,7 +288,7 @@ Built ahead of the spike's go, against the capability interface rather than Exch
   - **Stop provisioning recipients** removes every Exchange flow, saved with the rule as every change on the tab is. Its confirmation says existing recipients are left as they are.
 - **Tests:** bUnit tests for the panel and the tab, controller tests, and display-model tests for the new outcomes.
 
-### Phase 7: GAL synchronisation (requirements 21 to 24)
+### Phase 7: GAL synchronisation (requirements 21 to 24) ✅
 
 Decided on 5 November 2026, after reconciling with the earlier GAL work (#944, closed as superseded; Scenario 003):
 
@@ -316,24 +316,30 @@ A general feature, not behind the flag.
 - **Groups:** a workflow test proves an export rule from people and one from groups, each scoped by a connection criterion, provisioning into the same `contact` Object Type. Scoping groups to mail-enabled ones and giving a group's contact its primary address are configuration, documented with GAL synchronisation in Phase 8.
 - **PRD amendment:** requirement 21 names groups; requirement 23 and Scenario 4 rely on rule isolation; decision 13 is superseded by decision 19; decisions 17 and 18 record "no Contact type" and the connection criterion.
 
-### Phase 8: Integration, compliance and flag removal (5 days, plus lab time)
+### Phase 8: Integration, compliance and flag removal (5 days, plus lab time) ✅
 
 Three pull requests, in order: 8a, the Exchange servers in the harness and Scenario 034; 8b, the GAL scenario; 8c, docs, compliance and the flag's removal, once both scenarios pass in the lab.
 
-- **8a (in review).** The harness had no way to run an Exchange server, so:
+- **8a.** The harness had no way to run an Exchange server, so:
   - **The revert waits for Exchange itself.** `Restore-LabDomainController.ps1` reverts an Exchange server and waits through PowerShell Direct until Remote PowerShell answers, as JIM connects, and every role's required services run. No port proves it ready.
   - **The runner stops what it cannot afford.** Before each scenario it stops the heavy machines that scenario does not use (`Stop-LabMachine.ps1`), decided from the scenario alone: Exchange servers not used, and, for a scenario using both, dc-target and adfs-primary.
   - **The unreachable step stops IIS.** `Set-LabExchangeReachability.ps1` stops or starts IIS on the server for Scenario 5. It cannot be done by saving a wrong Exchange server, because every settings save signs in to Exchange and refuses one that fails.
   - **Scenario 034** runs the PRD's Scenarios 1, 2, 3, 5, 7 and 8 and the matching acceptance criteria end to end. Group mail-enabling is left to the lab write suite (`LdapExchangeRecipientDeliveryLabTests`), which already proves every recipient type and both group cases at the Connector against the same server.
   - **Docs finding for 8c:** Scenario 001's `mail` flow and Exchange's Email Address Policy both write `mail`. They agree only when the flowed address is the one the policy gives, so the Exchange page has to say so.
 
-- **8b (in review): Scenario 003, GAL synchronisation.**
+- **8b: Scenario 003, GAL synchronisation.**
   - **What it proves:** each forest's mailboxes, and PANOPLY's mail-enabled group, become mail contacts in the other forest's `OU=GALSync`. Each contact carries the source address as its external address and an `X500:` proxy built from its Legacy Exchange DN. No contact is projected back, and each forest's own contact outside GALSync still is. A further cycle exports nothing, a rename reaches the contact, and a leaver's contact is deleted.
   - **Groups go one way, PANOPLY to RESURGAM.** The group is created out of band and made a mail-enabled group by JIM, so the group path (mail-enabling, then a contact for the group) is proven end to end. The reverse adds nothing the same rules do not already exercise.
   - **Configuration the scenario had to supply:**
     - Setup-001 has no LDAP import rule, so the scenario adds one per forest to bring back Legacy Exchange DN and Proxy Addresses.
     - `OU=GALSync` has to be selected on each Connected System, because an export outside the selected containers is refused.
     - The forest split keys on Employee Type, because `NotEquals` is not met when the attribute holds no value.
+
+- **8c: docs, compliance and the flag's removal.**
+  - **The flag is gone from every surface.** The Exchange settings, the Attribute Flow tab's Exchange panel, the Operations page's Exchange tab, an object's Exchange Recipient panel, Retry, `/api/v1/exchange`, export staging and the Exchange Delivery Service no longer read it. `Features.ExchangeRecipients` left the catalogue, so its stored row is pruned on the next seeding pass, and a setting definition still carrying the key loses it when the built-in Connectors are synchronised.
+  - **Service Health expects the Exchange Delivery Service.** `WorkerExchange` joined `ExpectedServices`, and the per-flag `FeatureFlaggedServices` mechanism it needed went with it: a Worker that never starts the Exchange lane reads as unhealthy, as one that never starts password delivery does.
+  - **The flagged-setting mechanism stays,** with its tests moved to the synthetic `Features.TestInDevelopment` flag, ready for the next Connector setting built behind one.
+  - **Docs:** the Exchange page, the GAL synchronisation how-to, the Recipient Management role on the permissions page, the two settings rows (COV-6) and the network requirements. **Compliance:** SC-8's Exchange exception moved from planned to in place. **Developer guide:** section 3g, with the remoting library's boundary.
 
 - **Scenarios:**
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.

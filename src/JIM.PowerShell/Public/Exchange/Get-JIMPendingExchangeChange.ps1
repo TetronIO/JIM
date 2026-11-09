@@ -27,9 +27,6 @@ function Get-JIMPendingExchangeChange {
         An Exchange change cannot be cancelled. To stop or correct one, change what is declared for the account (its
         source data or the Attribute Flow); the newer state replaces the queued change.
 
-        Exchange recipients are in development: this command answers only where the Exchange recipients feature is
-        turned on.
-
     .PARAMETER ConnectedSystemId
         Only changes for this Connected System.
 

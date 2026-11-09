@@ -94,7 +94,8 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     [Test]
     public async Task ServiceHealthBanner_EveryServiceRunning_RendersNothingAtAll()
     {
-        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.WorkerExchange, 2),
+            Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -108,7 +109,8 @@ public class ServiceHealthBannerTests : JimComponentTestContext
     [Test]
     public async Task ServiceHealthBanner_OverdueHeartbeat_RendersNothing()
     {
-        Arrange(Heartbeat(JimService.WorkerSync, 30), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 30), Heartbeat(JimService.WorkerDelivery, 2), Heartbeat(JimService.WorkerExchange, 2),
+            Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -121,7 +123,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
         // The Worker carries the Password Delivery Service (#1635), so a synchronisation loop that is alive beside
         // a delivery loop that never reported is a Worker half up: the banner names the half that is missing,
         // because the remedy (look at the Worker's log for the delivery service) differs from a Worker that is down.
-        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.Scheduler, 2));
+        Arrange(Heartbeat(JimService.WorkerSync, 2), Heartbeat(JimService.WorkerExchange, 2), Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();
 
@@ -178,6 +180,7 @@ public class ServiceHealthBannerTests : JimComponentTestContext
         Arrange(
             Heartbeat(JimService.WorkerSync, 2, "Full Import: Corporate Directory", 12 * 60),
             Heartbeat(JimService.WorkerDelivery, 2),
+            Heartbeat(JimService.WorkerExchange, 2),
             Heartbeat(JimService.Scheduler, 2));
 
         var cut = await RenderAndReadAsync();

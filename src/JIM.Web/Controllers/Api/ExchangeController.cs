@@ -17,8 +17,7 @@ namespace JIM.Web.Controllers.Api;
 /// retry over them.
 /// </summary>
 /// <remarks>
-/// #2021, Phase 6b. Behind the in-development <c>Features.ExchangeRecipients</c> flag: while it is off, every action
-/// answers 400 naming the feature. An Exchange change cannot be cancelled (PRD decision 16): a change is stopped or
+/// #2021, Phase 6b. An Exchange change cannot be cancelled (PRD decision 16): a change is stopped or
 /// corrected by changing what is declared for the account.
 /// </remarks>
 [Route("api/v{version:apiVersion}/exchange")]
@@ -57,7 +56,7 @@ public class ExchangeController(
     /// <param name="connectedSystemObjectId">Optional. Restrict to one account's change.</param>
     /// <param name="search">Optional. Free-text search over the Metaverse Object and Connected System names.</param>
     /// <response code="200">The requested window of the queue.</response>
-    /// <response code="400">An unparseable filter value, an unknown sort column, or the Exchange recipients feature is not enabled.</response>
+    /// <response code="400">An unparseable filter value or an unknown sort column.</response>
     /// <response code="404">No such Connected System.</response>
     [HttpGet("queue", Name = "GetPendingExchangeChanges")]
     [ProducesResponseType(typeof(PaginatedResponse<PendingExchangeChangeResponse>), StatusCodes.Status200OK)]
@@ -74,8 +73,6 @@ public class ExchangeController(
         [FromQuery] string? search = null)
     {
         ArgumentNullException.ThrowIfNull(pagination);
-        await _application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
-
         var sortBy = string.IsNullOrWhiteSpace(pagination.SortBy) ? "queued" : pagination.SortBy;
         if (!SortableColumns.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
         {
@@ -114,14 +111,11 @@ public class ExchangeController(
     /// Exchange delivery lane would attempt now.
     /// </remarks>
     /// <response code="200">The queue's counts by state.</response>
-    /// <response code="400">The Exchange recipients feature is not enabled.</response>
     [HttpGet("queue/summary", Name = "GetExchangeQueueSummary")]
     [ProducesResponseType(typeof(ExchangeQueueSummary), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetExchangeQueueSummaryAsync()
     {
-        await _application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
         return Ok(await _application.ExchangeDelivery.GetQueueSummaryAsync());
     }
 
@@ -141,7 +135,7 @@ public class ExchangeController(
     /// </remarks>
     /// <param name="request">Which changes to retry. Must name at least one criterion, or set `applyToAllChanges`.</param>
     /// <response code="200">How many changes were made due again. Zero is a valid outcome, not an error.</response>
-    /// <response code="400">The request names no changes or too many, or the Exchange recipients feature is not enabled.</response>
+    /// <response code="400">The request names no changes or too many.</response>
     /// <response code="404">No such Connected System.</response>
     [HttpPost("queue/retry", Name = "RetryPendingExchangeChanges")]
     [ProducesResponseType(typeof(ExchangeQueueActionResponse), StatusCodes.Status200OK)]
@@ -151,8 +145,6 @@ public class ExchangeController(
     public async Task<IActionResult> RetryPendingExchangeChangesAsync([FromBody] ExchangeQueueActionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        await _application.FeatureFlags.EnsureEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
-
         if (request.ConnectedSystemId.HasValue && await _application.ConnectedSystems.GetConnectedSystemCoreAsync(request.ConnectedSystemId.Value) == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System {request.ConnectedSystemId.Value} was not found."));
 

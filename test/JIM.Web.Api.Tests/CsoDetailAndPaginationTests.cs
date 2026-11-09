@@ -118,16 +118,6 @@ public class CsoDetailAndPaginationTests
         }
     }
 
-    [Test]
-    public async Task GetConnectedSystemObjectAsync_ExchangeRecipientsOff_SaysNothingAboutExchangeAsync()
-    {
-        var (csId, cso) = ArrangeObjectWithAQueuedMailbox();
-
-        var result = await _controller.GetConnectedSystemObjectAsync(csId, cso.Id) as OkObjectResult;
-
-        Assert.That((result?.Value as ConnectedSystemObjectDetailDto)?.ExchangeRecipient, Is.Null);
-    }
-
     private (int ConnectedSystemId, ConnectedSystemObject Cso) ArrangeObjectWithAQueuedMailbox()
     {
         const int csId = 1;

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ The LDAP Connector provisions on-premises Exchange mailboxes, mail users, mail contacts and mail-enabled groups that an export Synchronisation Rule declares, retrying while Exchange is unreachable; each change shows on the Operations page's Exchange tab. (#2021)
 - ✨ A built-in `Legacy Exchange DN` Metaverse Attribute for users and groups, mapped to `legacyExchangeDN`, from which an export Attribute Flow can build a mail contact's `X500:` proxy address. (#2021)
 - ✨ Saving a Synchronisation Rule now says when the change takes effect and, for an import rule, how many objects the next synchronisation will process and about how long that takes; the REST API and PowerShell report the same. (#2615)
 - ✨ The Connected System page lists changes awaiting synchronisation with **Run now**, and Activities say which run applied each change and why it processed a whole Object Type. (#2615)

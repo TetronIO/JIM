@@ -18,7 +18,7 @@
 
 @{
     // Recomputed on every render from the rule's own flows, so it can never disagree with the grid below it.
-    var exchangeRecipientFlows = ExchangeRecipientFlows.For(SyncRule, _exchangeRecipientsEnabled);
+    var exchangeRecipientFlows = ExchangeRecipientFlows.For(SyncRule);
 }
 @if (exchangeRecipientFlows != null)
 {
@@ -726,10 +726,6 @@
 
     private bool _addAttributeFlowRuleDialogVisible;
 
-    // Whether the ExchangeRecipients feature is on (#2021), read once: the Exchange recipients panel shows only while it is.
-    private bool _exchangeRecipientsEnabled;
-    private bool _exchangeRecipientsFlagRead;
-
     // Set when the Exchange recipients panel opened the dialog for one attribute: the target is chosen and stays fixed,
     // since the panel's row is that attribute. The ordinary Add and Edit clear it.
     private bool _targetFixedByExchangePanel;
@@ -1044,13 +1040,6 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (SyncRule.Direction == SyncRuleDirection.Export && !_exchangeRecipientsFlagRead)
-        {
-            _exchangeRecipientsFlagRead = true;
-            using var flags = JimFactory.Create();
-            _exchangeRecipientsEnabled = await flags.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
-        }
-
         if (SyncRule.Direction != SyncRuleDirection.Export || SyncRule.ConnectedSystemId <= 0 ||
             _passwordSynchronisationReadForConnectedSystemId == SyncRule.ConnectedSystemId)
             return;
@@ -2059,7 +2048,7 @@
     /// </summary>
     private async Task HandleStopExchangeRecipientsAsync()
     {
-        if (ExchangeRecipientFlows.For(SyncRule, _exchangeRecipientsEnabled) is not { } exchangeFlows)
+        if (ExchangeRecipientFlows.For(SyncRule) is not { } exchangeFlows)
             return;
 
         foreach (var flow in exchangeFlows.Flows)

@@ -41,7 +41,6 @@ public class ExchangeChangeStagingTests
     #region accessors
     private Mock<JimDbContext> MockJimDbContext { get; set; } = null!;
     private List<ConnectedSystem> ConnectedSystemsData { get; set; } = null!;
-    private List<ServiceSetting> ServiceSettingsData { get; set; } = null!;
     private JimApplication Jim { get; set; } = null!;
     private SyncRepository SyncRepo { get; set; } = null!;
     private int _nextAttributeId = 92100;
@@ -66,7 +65,6 @@ public class ExchangeChangeStagingTests
 
         MockJimDbContext = new Mock<JimDbContext>();
         // Tests run as though the feature had shipped (test/CLAUDE.md).
-        ServiceSettingsData = TestUtilities.SetUpFeatureFlagsEnabled(MockJimDbContext);
         TestUtilities.SetUpEmptyConnectedSystemGraphMocks(MockJimDbContext);
         MockJimDbContext.Setup(m => m.Activities).Returns(activities.BuildMockDbSet().Object);
         MockJimDbContext.Setup(m => m.ConnectedSystemAttributes).Returns(objectTypes.SelectMany(t => t.Attributes).ToList().BuildMockDbSet().Object);
@@ -260,27 +258,6 @@ public class ExchangeChangeStagingTests
         }
     }
 
-    /// <summary>
-    /// The feature is behind its flag (decision D11): with the flag off, an export stages nothing, and the export
-    /// itself is unaffected.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_FlagOff_StagesNothingAsync()
-    {
-        ServiceSettingsData.Single(s => s.Key == FeatureFlagCatalogue.ExchangeRecipients.Key).Value = "false";
-        Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
-            [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)]);
-
-        var result = await ExportAsync();
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(result.SuccessCount, Is.EqualTo(1));
-            Assert.That(SyncRepo.PendingExchangeChanges, Is.Empty);
-            Assert.That(ExchangeActivities(), Is.Empty);
-        }
-    }
-
     #endregion
 
     #region Awaiting Exchange (the confirming import's hold)
@@ -334,18 +311,6 @@ public class ExchangeChangeStagingTests
     {
         var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
             [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.None, rule)]);
-
-        await ExportAsync();
-
-        Assert.That(SyncRepo.PendingExports[account.Export.Id].AttributeValueChanges.Single().AwaitsExchange, Is.False);
-    }
-
-    [Test]
-    public async Task ExecuteExportsAsync_FlagOff_MarksNothingAsync()
-    {
-        ServiceSettingsData.Single(s => s.Key == FeatureFlagCatalogue.ExchangeRecipients.Key).Value = "false";
-        var account = Arrange("user", PendingExportChangeType.Create, changes: (type, rule) =>
-            [Change(type, ExchangeRecipientAttributes.RecipientType, ExchangeRecipientTypes.Mailbox, rule)]);
 
         await ExportAsync();
 

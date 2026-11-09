@@ -824,9 +824,7 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Object with ID {id} not found in Connected System {connectedSystemId}."));
 
         var dto = ConnectedSystemObjectDetailDto.FromDetailResult(result);
-        // In development (#2021): said nothing about while the flag is off, so production never shows it.
-        if (await _application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key)
-            && await _application.ExchangeDelivery.GetRecipientStateAsync(id) is { } recipient)
+        if (await _application.ExchangeDelivery.GetRecipientStateAsync(id) is { } recipient)
             dto.ExchangeRecipient = ExchangeRecipientStateDto.FromModel(recipient);
 
         return Ok(dto);

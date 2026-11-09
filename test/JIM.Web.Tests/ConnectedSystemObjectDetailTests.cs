@@ -53,8 +53,10 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
         var repository = new Mock<IRepository>();
         _connectedSystems = new Mock<IConnectedSystemRepository>();
         repository.Setup(r => r.ConnectedSystems).Returns(_connectedSystems.Object);
-        // Feature flags off: the page asks whether the in-development Exchange recipients panel is available (#2021).
         repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
+        // The page reads the object's Exchange recipient (#2021); this object has none.
+        var sync = new Mock<ISyncRepository>();
+        sync.Setup(r => r.GetExchangeDeliveryObjectsAsync(It.IsAny<IReadOnlyCollection<Guid>>())).ReturnsAsync([]);
 
         _connectedSystems
             .Setup(r => r.GetConnectedSystemHeaderAsync(ConnectedSystemId))
@@ -63,7 +65,7 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
         SetupAttributeValues([]);
         SetupPendingExport(changeCount: 0);
 
-        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object));
+        Services.AddSingleton<IJimApplicationFactory>(new FakeJimApplicationFactory(repository.Object, sync.Object));
     }
 
     [SetUp]
@@ -471,8 +473,8 @@ public class ConnectedSystemObjectDetailTests : JimComponentTestContext
         });
     }
 
-    private sealed class FakeJimApplicationFactory(IRepository repository) : IJimApplicationFactory
+    private sealed class FakeJimApplicationFactory(IRepository repository, ISyncRepository syncRepository) : IJimApplicationFactory
     {
-        public JimApplication Create() => new(repository);
+        public JimApplication Create() => new(repository, syncRepository);
     }
 }

@@ -395,6 +395,7 @@ public class SystemControllerTests
         var controller = BuildHealthController(
             Heartbeat(JimService.WorkerSync, now.AddSeconds(-2)),
             Heartbeat(JimService.WorkerDelivery, now.AddSeconds(-3)),
+            Heartbeat(JimService.WorkerExchange, now.AddSeconds(-3)),
             Heartbeat(JimService.Scheduler, now.AddSeconds(-4)));
 
         var result = await controller.GetServiceHealthAsync();
@@ -406,7 +407,7 @@ public class SystemControllerTests
         Assert.That(response.GeneratedAt, Is.EqualTo(now).Within(TimeSpan.FromSeconds(5)));
         Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[]
         {
-            JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler
+            JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler
         }));
         Assert.That(response.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Healthy));
         Assert.That(response.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.Heartbeating));
@@ -472,7 +473,7 @@ public class SystemControllerTests
 
         var response = (ServiceHealthResponse)((OkObjectResult)result).Value!;
         Assert.That(response.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
-        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler }));
+        Assert.That(response.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler }));
         Assert.That(response.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
         Assert.That(response.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
         Assert.That(response.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
@@ -486,6 +487,7 @@ public class SystemControllerTests
         var controller = BuildHealthController(
             Heartbeat(JimService.WorkerSync, now.AddSeconds(-2)),
             Heartbeat(JimService.WorkerDelivery, now.AddSeconds(-2)),
+            Heartbeat(JimService.WorkerExchange, now.AddSeconds(-2)),
             Heartbeat(JimService.Scheduler, now.AddSeconds(-30)));
 
         var result = await controller.GetServiceHealthAsync();
@@ -527,9 +529,9 @@ public class SystemControllerTests
         Assert.That(services[0].GetProperty("condition").GetString(), Is.EqualTo("Heartbeating"));
         Assert.That(services[1].GetProperty("service").GetString(), Is.EqualTo("WorkerDelivery"));
         Assert.That(services[1].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
-        Assert.That(services[2].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
-        Assert.That(services[2].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
-        Assert.That(services[2].GetProperty("condition").GetString(), Is.EqualTo("NeverStarted"));
+        Assert.That(services[3].GetProperty("service").GetString(), Is.EqualTo("Scheduler"));
+        Assert.That(services[3].GetProperty("status").GetString(), Is.EqualTo("Unhealthy"));
+        Assert.That(services[3].GetProperty("condition").GetString(), Is.EqualTo("NeverStarted"));
     }
 
     [Test]

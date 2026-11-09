@@ -15,11 +15,6 @@ namespace JIM.Worker.ExchangeDelivery;
 /// <summary>
 /// The Exchange Delivery Service's work against JIM proper (#2021): each call runs on a fresh <c>JimApplication</c>,
 /// as Worker tasks do, so no DbContext is shared between the loop, the heartbeat and the lanes running alongside.
-/// <para>
-/// While the <see cref="FeatureFlagCatalogue.ExchangeRecipients"/> flag is off the service does nothing that can be
-/// seen: it reports no work, runs no lane and writes no heartbeat, so it appears nowhere on the Operations page. It
-/// looks again on every iteration, so switching the flag on needs no restart.
-/// </para>
 /// </summary>
 internal sealed class JimExchangeDeliveryWork : IDeliveryWork
 {
@@ -38,13 +33,13 @@ internal sealed class JimExchangeDeliveryWork : IDeliveryWork
     public async Task<DeliveryQueueOutlook> GetOutlookAsync(DateTime asOf, CancellationToken cancellationToken)
     {
         using var jim = _jimFactory.Create();
-        return await IsSwitchedOnAsync(jim) ? await jim.ExchangeDelivery.GetDeliveryOutlookAsync(asOf) : new DeliveryQueueOutlook();
+        return await jim.ExchangeDelivery.GetDeliveryOutlookAsync(asOf);
     }
 
     public async Task<IReadOnlyList<int>> GetConnectedSystemIdsWithWorkDueAsync(DateTime asOf, CancellationToken cancellationToken)
     {
         using var jim = _jimFactory.Create();
-        return await IsSwitchedOnAsync(jim) ? await jim.ExchangeDelivery.GetConnectedSystemIdsWithWorkDueAsync(asOf) : [];
+        return await jim.ExchangeDelivery.GetConnectedSystemIdsWithWorkDueAsync(asOf);
     }
 
     public async Task<DeliveryLaneOutcome> RunLaneAsync(DeliveryLane lane, CancellationToken cancellationToken)
@@ -68,10 +63,6 @@ internal sealed class JimExchangeDeliveryWork : IDeliveryWork
     public async Task WriteHeartbeatAsync(string? currentWork, DateTime? currentWorkStartedAt, string? detail, CancellationToken cancellationToken)
     {
         using var jim = _jimFactory.Create();
-        if (await IsSwitchedOnAsync(jim))
-            await _heartbeat.WriteAsync(jim, currentWork, currentWorkStartedAt, detail, cancellationToken);
+        await _heartbeat.WriteAsync(jim, currentWork, currentWorkStartedAt, detail, cancellationToken);
     }
-
-    private static Task<bool> IsSwitchedOnAsync(JimApplication jim) =>
-        jim.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
 }

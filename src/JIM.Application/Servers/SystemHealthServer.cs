@@ -54,24 +54,16 @@ public class SystemHealthServer
     /// The services every deployment is expected to run, in the order they appear in a report. A service on this
     /// list with no heartbeat at all is reported as unhealthy ("never started"), which is the honest reading of a
     /// Worker that never came up. Password delivery is hosted in the Worker process (plan #1635, D3) and reports
-    /// separately, because a wedged synchronisation loop and a wedged password loop need different responses.
+    /// separately, because a wedged synchronisation loop and a wedged password loop need different responses; Exchange
+    /// delivery (#2021) is hosted and reported the same way, for the same reason.
     /// </summary>
     public static readonly JimService[] ExpectedServices =
     [
         JimService.WorkerSync,
         JimService.WorkerDelivery,
+        JimService.WorkerExchange,
         JimService.Scheduler
     ];
-
-    /// <summary>
-    /// Services a deployment runs only while a feature flag is on, keyed to that flag (#1781). Expected, like
-    /// <see cref="ExpectedServices"/>, while the flag is on; left out of the report entirely while it is off, heartbeat
-    /// or no heartbeat, so a switched-off feature never surfaces on the Operations page.
-    /// </summary>
-    public static readonly IReadOnlyDictionary<JimService, string> FeatureFlaggedServices = new Dictionary<JimService, string>
-    {
-        [JimService.WorkerExchange] = FeatureFlagCatalogue.ExchangeRecipients.Key
-    };
 
     /// <summary>
     /// The order services appear in a report: the Worker's services together, then the Scheduler. A service not
@@ -120,21 +112,9 @@ public class SystemHealthServer
         // Every expected service, plus any other service that has actually reported: a heartbeat from a service
         // this build did not expect (an upgraded Worker reporting a loop this portal predates, say) is still
         // information an administrator wants. The order is fixed (ReportOrder) so the display can rely on it.
-        var switchedOff = new HashSet<JimService>();
-        var switchedOn = new List<JimService>();
-        foreach (var (service, flagKey) in FeatureFlaggedServices)
-        {
-            if (await Application.FeatureFlags.IsEnabledAsync(flagKey))
-                switchedOn.Add(service);
-            else
-                switchedOff.Add(service);
-        }
-
         var services = ExpectedServices
-            .Concat(switchedOn)
             .Concat(newestByService.Keys)
             .Distinct()
-            .Where(service => !switchedOff.Contains(service))
             .OrderBy(service => Array.IndexOf(ReportOrder, service) is var position and >= 0 ? position : ReportOrder.Length)
             .ThenBy(service => (int)service)
             .Select(service => Derive(service, newestByService.GetValueOrDefault(service), asOf))

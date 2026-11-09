@@ -120,7 +120,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Metaverse Attributes](metaverse-attributes.md) | 11 | Manage attributes, bind them to Object Types, and set Attribute Priority |
 | [Password Synchronisation](password-synchronisation.md) | 4 | Set a Metaverse Object's password, and choose which Connected Systems receive synchronised passwords |
 | [Password Queue](password-queue.md) | 3 | List, retry and cancel queued password changes |
-| [Exchange Queue](exchange-queue.md) | 2 | List queued Exchange recipient changes, and retry the ones JIM has stopped trying (in development) |
+| [Exchange Queue](exchange-queue.md) | 2 | List queued Exchange recipient changes, and retry the ones JIM has stopped trying |
 | [Generated Values](generated-values.md) | 7 | List the values JIM generated and retired, read and restart a Sequence's counter, and decide on values a target rejected |
 | [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 9 | Automate synchronisation workflows with scheduled execution, and set what each Schedule and step does when a step fails |

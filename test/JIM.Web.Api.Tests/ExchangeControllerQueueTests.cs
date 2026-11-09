@@ -31,7 +31,7 @@ namespace JIM.Web.Api.Tests;
 
 /// <summary>
 /// The REST surface over the Exchange queue (#2021, Phase 6b): what is queued and where it stands, the summary, and the
-/// retry, behind the in-development <c>Features.ExchangeRecipients</c> flag.
+/// retry.
 /// </summary>
 [TestFixture]
 public class ExchangeControllerQueueTests
@@ -100,25 +100,6 @@ public class ExchangeControllerQueueTests
 
     [TearDown]
     public void TearDown() => _application?.Dispose();
-
-    // ---- The flag ---------------------------------------------------------------------------------------------------
-
-    [Test]
-    public void EveryEndpoint_FlagOff_IsRefusedNamingTheFeature()
-    {
-        _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
-        using var application = new JimApplication(_repository.Object, syncRepository: _syncRepo);
-        var controller = NewController(application);
-
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(async () => await controller.GetPendingExchangeChangesAsync(new PaginationRequest()),
-                Throws.InstanceOf<FeatureDisabledException>().With.Message.Contain("Exchange"));
-            Assert.That(async () => await controller.GetExchangeQueueSummaryAsync(), Throws.InstanceOf<FeatureDisabledException>());
-            Assert.That(async () => await controller.RetryPendingExchangeChangesAsync(new ExchangeQueueActionRequest { ApplyToAllChanges = true }),
-                Throws.InstanceOf<FeatureDisabledException>());
-        }
-    }
 
     // ---- The list ---------------------------------------------------------------------------------------------------
 
