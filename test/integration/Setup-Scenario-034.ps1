@@ -44,7 +44,7 @@
     Directory configuration hashtable from Get-DirectoryConfig (the Active Directory lab's Primary)
 
 .PARAMETER ExchangeConfig
-    The Exchange server's configuration (Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary)
+    The Exchange server's configuration. Defaults to Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary.
 
 .PARAMETER ExportConcurrency
     LDAP Connector export concurrency, passed through to Setup-Scenario-001.ps1
@@ -69,7 +69,7 @@ param(
     [Parameter(Mandatory=$true)]
     [hashtable]$DirectoryConfig,
 
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [hashtable]$ExchangeConfig,
 
     [Parameter(Mandatory=$false)]
@@ -84,6 +84,11 @@ $ErrorActionPreference = "Stop"
 $ConfirmPreference = 'None'
 
 . "$PSScriptRoot/utils/Test-Helpers.ps1"
+
+# The runner's -SetupOnly passes the standard parameters only, so the Exchange server defaults to the lab's own.
+if (-not $ExchangeConfig) {
+    $ExchangeConfig = Get-ActiveDirectoryLabExchangeConfig -Instance ExchangePrimary
+}
 
 if ($DirectoryConfig.UserObjectClass -ne "user") {
     throw "Scenario 034 needs Active Directory: Exchange recipients exist only there."

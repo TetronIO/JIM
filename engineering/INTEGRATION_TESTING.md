@@ -191,7 +191,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 |----------|-------------|-----------------|
 | `Scenario-001-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver); Initial Export Only attribute flows (#223) | samba-ad-primary / openldap-primary |
 | `Scenario-002-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary |
-| `Scenario-003-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary |
+| `Scenario-003-GALSYNC` | GAL synchronisation between PANOPLY and RESURGAM ([#2021](https://github.com/TetronIO/JIM/issues/2021)): each forest's mailboxes, and PANOPLY's mail-enabled group, become mail contacts in the other forest's OU=GALSync with the source address and an X500: proxy of its Legacy Exchange DN; none is projected back while each forest's own contact is; a further cycle exports nothing; a rename reaches the contact; a leaver's contact is deleted. Active Directory lab only; `-Template` is ignored (Nano) | Active Directory lab only (dc-primary, dc-source, exchange-primary, exchange-source) |
 | `Scenario-004-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary |
 | `Scenario-005-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary |
 | `Scenario-006-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary |
@@ -514,7 +514,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Scenario-001 HRToIdentityDirectory | OpenLDAP | Large / 100k | 21m / 3h | scales strongly |
 | Scenario-002 CrossDomainSync | Samba AD | any | ~1.5m | fixed |
 | Scenario-002 CrossDomainSync | OpenLDAP | any | ~1.5m | fixed |
-| Scenario-003 GALSYNC | n/a | n/a | stub, not implemented | n/a |
+| Scenario-003 GALSYNC | Active Directory lab | n/a | not yet measured | fixed (Nano) |
 | Scenario-004 DeletionRules | Samba AD | any | ~7m | fixed (grace-period waits) |
 | Scenario-004 DeletionRules | OpenLDAP | any | ~7m | fixed (grace-period waits) |
 | Scenario-005 MatchingRules | Samba AD | Medium / MediumLarge | ~2m | fixed (Nano data) |
@@ -689,34 +689,33 @@ Repository-level tests for the dual-path stats derivation logic (outcome-based v
 
 ---
 
-#### Scenario 003: Person Entity - GALSYNC (Global Address List Synchronisation)
+#### Scenario 003: GALSYNC (Global Address List synchronisation)
 
-**Purpose**: Validate exporting directory users to CSV for distribution/reporting.
+**Purpose**: Validate GAL synchronisation between two Exchange organisations ([#2021](https://github.com/TetronIO/JIM/issues/2021), PRD Scenario 4): each forest's recipients appear in the other forest's address book as mail contacts, with the X500 proxy that keeps replies to old messages working, and none comes back as a person.
 
-**Systems**:
-- Source: Panoply AD
-- Target: CSV (GAL export)
+**Systems** (Active Directory lab only):
+- Source: HR CSV
+- PANOPLY (dc-primary, exchange-primary): its people's mailboxes and a mail-enabled group; contacts for RESURGAM's people in `OU=GALSync,OU=Corp`
+- RESURGAM (dc-source, exchange-source): its people's mailboxes; contacts for PANOPLY's people and group in `OU=GALSync,OU=Corp`
+
+**Configuration**: `Setup-Scenario-003.ps1` composes `Setup-Scenario-034.ps1` (Scenario 001's substrate, managing Exchange recipients in PANOPLY) and adds the RESURGAM Connected System. Contact export rules are scoped by a connection criterion ("has an object of the other forest's user or group type") and Legacy Exchange DN HasValue, and flow Exchange Recipient Type MailContact, the source's address as the external address and the X500 proxy expression. Each forest's contact import rule projects its own contacts and is scoped away from `OU=GALSync` by `distinguishedName`.
 
 **Test Steps** (executed sequentially):
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **Export** | Users in AD -> exported to CSV with selected attributes only |
-| 2 | **Update** | User attributes modified in AD -> CSV updated |
-| 3 | **Delete** | User deleted in AD -> removed from CSV |
+| 1 | **Provision** | Mailboxes in both forests and a mail-enabled group in PANOPLY become mail contacts in the other forest, with the source address and X500 proxy |
+| 2 | **NoProjection** | No GAL contact is projected back as a person or group; each forest's own contact outside GALSync is projected exactly once |
+| 3 | **NoOp** | A further cycle exports nothing in either forest and stages no Exchange change |
+| 4 | **Update** | A change of name reaches the contact |
+| 5 | **Leaver** | A leaver's account and their contact in the other forest are deleted |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario-003-GALSYNC.ps1`
 
 **Execution Model**:
 
 ```powershell
-# Individual steps
-./Invoke-Scenario-003-GALSYNC.ps1 -Step Export -Template Small
-./Invoke-Scenario-003-GALSYNC.ps1 -Step Update -Template Small
-./Invoke-Scenario-003-GALSYNC.ps1 -Step Delete -Template Small
-
-# Run all steps sequentially
-./Invoke-Scenario-003-GALSYNC.ps1 -Step All -Template Small
+./test/integration/Run-IntegrationTests.ps1 -Scenario 3 -DirectoryType ActiveDirectory
 ```
 
 ---
@@ -2459,7 +2458,7 @@ JIM/
         ├── scenarios/
         │   ├── Invoke-Scenario-001-HRToIdentityDirectory.ps1        # HR CSV -> AD provisioning
         │   ├── Invoke-Scenario-002-CrossDomainSync.ps1              # APAC -> EMEA directory sync
-        │   ├── Invoke-Scenario-003-GALSYNC.ps1                      # AD -> CSV export (stub)
+        │   ├── Invoke-Scenario-003-GALSYNC.ps1                      # GAL synchronisation between PANOPLY and RESURGAM (Active Directory lab only)
         │   ├── Invoke-Scenario-004-DeletionRules.ps1                # Deletion rules testing
         │   ├── Invoke-Scenario-005-MatchingRules.ps1                # Matching rules testing
         │   ├── Invoke-Scenario-006-SchedulerService.ps1             # Scheduler service testing
@@ -2580,7 +2579,7 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 | PowerShell Module | ✅ Complete | Cmdlets cover every implemented scenario (1, 2, 4-32) |
 | Scenario 001 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
 | Scenario 002 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
-| Scenario 003 | ⏳ Pending | Stub script exists, not yet implemented |
+| Scenario 003 | ✅ Complete | GAL synchronisation through both lab Exchange servers: Provision, NoProjection, NoOp, Update, Leaver (Active Directory lab only) |
 | Scenario 004 | ✅ Complete | Deletion rules: 6 implemented tests (WhenLastConnector ± recall, AuthoritativeImmediate, AuthoritativeGracePeriod, Manual ± recall). InternalProtection deferred pending Internal MVO support. |
 | Scenario 005 | ✅ Complete | Matching rules: 5 tests passing (Projection, Join, DuplicatePrevention, JoinConflict, CaseSensitivity); MultipleRules run separately |
 | Scenario 006 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
@@ -2616,7 +2615,6 @@ The four `phase2` containers publish nothing to the host either: connect to Orac
 
 ### Remaining Work
 
-- **Scenario 003 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
 - **Entitlement Management** (both deferred scenarios) - blocked on Internal MVO design
 - **Multi-Source Aggregation and Performance Baselines** (unnumbered) - sequenced after the Scenario 016 matrix is green ([#170](https://github.com/TetronIO/JIM/issues/170))
 
