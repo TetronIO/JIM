@@ -376,6 +376,13 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records an export batch's results, writing only what they change (#2851); see
+    /// <see cref="ISyncRepository.UpdatePendingExportResultsAsync"/>.
+    /// </summary>
+    /// <param name="results">The batch's Pending Exports, and the changes it sent and revised.</param>
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results);
+
+    /// <summary>
     /// Writes what reference resolution changed, and nothing else: each Pending Export's
     /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
     /// ResolvedReferenceCsoId. One transaction; tracked copies of the rows written are detached.

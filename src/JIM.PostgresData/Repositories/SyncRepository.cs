@@ -376,6 +376,12 @@ public partial class SyncRepository : ISyncRepository
         return _repo.ConnectedSystems.UpdatePendingExportsAsync(exportList);
     }
 
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        ThrowIfAnyQueued(results.PendingExports.Select(pe => pe.Id), nameof(UpdatePendingExportResultsAsync));
+        return _repo.ConnectedSystems.UpdatePendingExportResultsAsync(results);
+    }
+
     public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
         IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
     {

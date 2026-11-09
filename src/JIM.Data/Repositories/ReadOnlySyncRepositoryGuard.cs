@@ -714,6 +714,9 @@ public sealed class ReadOnlySyncRepositoryGuard(ISyncRepository inner) : ISyncRe
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
         => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportsAsync));
 
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+        => throw new PreviewWriteAttemptedException(nameof(UpdatePendingExportResultsAsync));
+
     public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports, IReadOnlyCollection<PendingExportAttributeValueChange> resolvedChanges)
         => throw new PreviewWriteAttemptedException(nameof(PersistResolvedReferencesAsync));
 

@@ -5785,6 +5785,107 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Records an export batch's results, writing only what they change (#2851). <see cref="UpdatePendingExportsAsync"/>
+    /// writes every column of every change back through a VALUES list, ten parameters a row: 10 s for the 200,003 changes of
+    /// one 200,000-member group's Create, 181 worker-seconds over a 500,000-person initial export. Export changes none of a
+    /// change's values once a batch is loaded except by sending it (the sent mark), by a Connector replacing a value as it
+    /// writes, and by the batch's holds; so the sent mark is one set-based statement over the sent changes' ids, and only
+    /// the few changes revised besides are written as they stand. The Pending Export rows are written in full, as before.
+    /// </summary>
+    /// <remarks>
+    /// The changes are written before the Pending Exports, in one transaction, for the reasons
+    /// <see cref="BulkUpdatePendingExportsRawAsync"/> gives. The sent mark counts attempts on from what is stored, which
+    /// equals the batch's own count because the batch was loaded from the stored rows; every sent change must already hold
+    /// the mark in memory, so that what is stored and what the batch holds agree. A sent change whose row has gone is
+    /// logged and the rest recorded, as <see cref="UpdatePendingExportsAsync"/> records them: failing the write would record
+    /// changes already written to the Connected System as a failed attempt, and send them again.
+    /// </remarks>
+    public async Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        var exports = results.PendingExports.ToList();
+        if (exports.Count == 0)
+            return;
+
+        var sentIds = results.SentChanges.Select(c => c.Id).Distinct().ToArray();
+        var notMarked = results.SentChanges
+            .Where(c => c.Status != PendingExportAttributeChangeStatus.ExportedPendingConfirmation || c.LastExportedAt != results.SentAt)
+            .Select(c => c.Id)
+            .ToList();
+        if (notMarked.Count > 0)
+            throw new InvalidOperationException($"UpdatePendingExportResultsAsync: {notMarked.Count} change(s) handed over as sent do not hold the sent mark " +
+                $"(awaiting confirmation, sent at {results.SentAt:O}), so the database would not hold what the batch does: {string.Join(", ", notMarked.Take(10))}");
+        var revised = results.RevisedChanges.ToList();
+
+        // The sent mark's SET, from its named column list; a column added to the list without an assignment here fails.
+        var sentAssignments = new Dictionary<string, string>
+        {
+            ["Status"] = "@status",
+            ["ExportAttemptCount"] = @"t.""ExportAttemptCount"" + 1",
+            ["LastExportedAt"] = "@sentAt"
+        };
+        var sentSql = $"""
+            UPDATE "PendingExportAttributeValueChanges" AS t
+            SET {string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultSentUpdate.Select(c => $@"""{c}"" = {sentAssignments[c]}"))}
+            WHERE t."PendingExportId" = ANY(@exportIds) AND t."Id" = ANY(@ids)
+            """;
+        var revisionColumns = PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate;
+        var revisionSql = $"""
+            UPDATE "PendingExportAttributeValueChanges" AS t
+            SET {string.Join(", ", revisionColumns.Select(c => $@"""{c}"" = v.""{c}"""))}
+            FROM unnest(@ids, @values0, @values1, @values2) AS v("Id", {BulkSqlHelpers.ToQuotedList(revisionColumns)})
+            WHERE t."Id" = v."Id"
+            """;
+
+        await using (var ownTransaction = await BeginTransactionIfNoneAsync())
+        {
+            var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+            await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+            var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+            if (sentIds.Length > 0)
+            {
+                await using var command = new NpgsqlCommand(sentSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("status", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation });
+                command.Parameters.Add(new NpgsqlParameter("sentAt", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = results.SentAt });
+                command.Parameters.Add(new NpgsqlParameter("exportIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = exports.Select(pe => pe.Id).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = sentIds });
+                var marked = await command.ExecuteNonQueryAsync();
+                if (marked != sentIds.Length)
+                {
+                    Log.Error("UpdatePendingExportResultsAsync: Marked {Marked} of the {Sent} changes the batch sent to {ExportCount} Pending Export(s); " +
+                        "the rest no longer exist, so their result cannot be recorded. Pending Exports: {PendingExportIds}",
+                        marked, sentIds.Length, exports.Count, string.Join(", ", exports.Take(10).Select(pe => pe.Id)));
+                }
+            }
+
+            if (revised.Count > 0)
+            {
+                await using var command = new NpgsqlCommand(revisionSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = revised.Select(c => c.Id).ToArray() });
+                // Array order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate.
+                command.Parameters.Add(new NpgsqlParameter("values0", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+                    { Value = revised.Select(c => c.StringValue).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values1", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Boolean)
+                    { Value = revised.Select(c => c.AwaitsInitialPassword).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values2", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Boolean)
+                    { Value = revised.Select(c => c.AwaitsExchange).ToArray() });
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await BulkUpdatePendingExportRowsRawAsync(exports);
+
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
+
+        // The instances handed over already hold what was written; any tracked copy of these rows is detached, so no later
+        // save on the Worker's long-lived context writes the old values back.
+        DetachPendingExportGraphs(exports);
+    }
+
+    /// <summary>
     /// Writes what reference resolution changed and nothing else, so the deferred export pass can save a
     /// chunk's resolutions before its batches re-load them on their own contexts. Rewriting every
     /// column of every change through <see cref="UpdatePendingExportsAsync"/> took 112 seconds for
@@ -9949,7 +10050,14 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // ExportedPendingConfirmation changes and the PE is never confirmed/deleted, causing stale Create exports on
         // re-evaluation.
         await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
+        await BulkUpdatePendingExportRowsRawAsync(exports);
+    }
 
+    /// <summary>
+    /// Writes the Pending Export rows themselves, every export-result column (the changes are written by the caller, first).
+    /// </summary>
+    private async Task BulkUpdatePendingExportRowsRawAsync(List<PendingExport> exports)
+    {
         const int columnsPerRow = 10; // Id + 9 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 

@@ -367,8 +367,35 @@ public class BulkInsertColumnCompletenessTests
             "PendingExportAttributeValueChanges",
             PendingExportBulkColumns.PendingExportAttributeValueChanges,
             [PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate, PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate,
-             PendingExportBulkColumns.PendingExportAttributeValueChangesReferenceResolutionUpdate],
+             PendingExportBulkColumns.PendingExportAttributeValueChangesReferenceResolutionUpdate,
+             PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultSentUpdate,
+             PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate],
             PendingExportBulkColumns.PendingExportAttributeValueChangesUpdateExclusions);
+    }
+
+    /// <summary>
+    /// The export-result writer (#2851) writes a change row in two statements, the sent mark and the revisions, and leaves
+    /// the columns export never changes once a batch is loaded. Together they must account for exactly what the full
+    /// export-result update writes, each column once, so a column that update gains has to be placed in this writer too:
+    /// otherwise every export would stop persisting it with no error anywhere.
+    /// </summary>
+    [Test]
+    public void PendingExportAttributeValueChangeExportResultWriterColumns_AccountForEveryColumnTheFullUpdateWritesOnce()
+    {
+        string[][] parts =
+        [
+            PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultSentUpdate,
+            PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate,
+            PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUnwritten
+        ];
+
+        var all = parts.SelectMany(part => part).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(all, Is.Unique, "a column is placed in more than one part of the export-result writer");
+            Assert.That(all, Is.EquivalentTo(PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate),
+                "the export-result writer's sent, revision and unwritten lists must together be the full export-result update");
+        }
     }
 
     /// <summary>
