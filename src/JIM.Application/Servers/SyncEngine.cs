@@ -21,19 +21,49 @@ namespace JIM.Application.Servers;
 /// </summary>
 public partial class SyncEngine : ISyncEngine
 {
+    /// <summary>
+    /// Puts Synchronisation Rules in the one order every decision that names a rule reads them in (#2823): by name,
+    /// ignoring case, then by id. Rules load in no defined order, so a decision that takes "the first rule" must take it
+    /// from here, or two identical runs can differ.
+    /// </summary>
+    public static IEnumerable<SyncRule> InNameOrder(IEnumerable<SyncRule> rules) =>
+        rules.OrderBy(rule => rule.Name, StringComparer.OrdinalIgnoreCase).ThenBy(rule => rule.Id);
+
     /// <inheritdoc />
     public ProjectionDecision EvaluateProjection(
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules)
     {
-        var projectionSyncRule = activeSyncRules.FirstOrDefault(sr =>
-            sr.ProjectToMetaverse.HasValue && sr.ProjectToMetaverse.Value &&
-            sr.ConnectedSystemObjectType.Id == cso.TypeId);
+        // Every projecting rule takes part, in name order (#2823): the object projects once, and if the rules disagree
+        // on what kind of object it is, nothing is projected rather than the first rule loaded deciding.
+        var projectingRules = InNameOrder(activeSyncRules.Where(sr =>
+                sr.ProjectToMetaverse == true &&
+                sr.ConnectedSystemObjectType?.Id == cso.TypeId &&
+                sr.MetaverseObjectType != null))
+            .ToList();
 
-        if (projectionSyncRule == null)
+        if (projectingRules.Count == 0)
             return ProjectionDecision.NoProjection();
 
-        return ProjectionDecision.Project(projectionSyncRule.MetaverseObjectType!, projectionSyncRule);
+        if (projectingRules.Select(rule => rule.MetaverseObjectType!.Id).Distinct().Count() > 1)
+            return ProjectionDecision.Conflict(projectingRules);
+
+        return ProjectionDecision.Project(projectingRules[0].MetaverseObjectType!, projectingRules[0]);
+    }
+
+    /// <summary>
+    /// The message a Projection Type Conflict records (#2823): each projecting rule and the Metaverse Object Type it
+    /// projects into, and what to do about it.
+    /// </summary>
+    /// <param name="conflictingRules">The projecting rules, by name.</param>
+    /// <param name="previewing">Whether a preview is describing what a synchronisation would do.</param>
+    public static string DescribeProjectionTypeConflict(IReadOnlyList<SyncRule> conflictingRules, bool previewing = false)
+    {
+        var rules = string.Join(", ", conflictingRules.Select(rule => $"'{rule.Name}' projects it as {rule.MetaverseObjectType?.Name}"));
+        var outcome = previewing ? "a synchronisation would not project it" : "it was not projected";
+        return $"More than one import Synchronisation Rule would project this object, into different Metaverse Object Types: " +
+               $"{rules}. JIM does not choose what kind of object it is, so {outcome}. Give the rules Scoping Criteria that " +
+               "never cover the same object, or have them project into one Metaverse Object Type.";
     }
 
     /// <inheritdoc />
@@ -283,15 +313,41 @@ public partial class SyncEngine : ISyncEngine
         ConnectedSystemObject cso,
         IReadOnlyList<SyncRule> activeSyncRules)
     {
-        var importSyncRule = activeSyncRules.FirstOrDefault(sr =>
-            sr.Direction == SyncRuleDirection.Import &&
-            sr.Enabled &&
-            sr.ConnectedSystemObjectTypeId == cso.TypeId);
+        // An object deleted from its Connected System has left every import rule at once (#2823), so the same decision
+        // applies as for leaving the last rule's scope.
+        var importRules = activeSyncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.Enabled && sr.ConnectedSystemObjectTypeId == cso.TypeId)
+            .ToList();
+        return DecideLastScopeExit(cso, importRules).Action;
+    }
 
-        if (importSyncRule == null)
-            return InboundOutOfScopeAction.Disconnect;
+    /// <inheritdoc />
+    public LastScopeExitDecision DecideLastScopeExit(ConnectedSystemObject cso, IReadOnlyList<SyncRule> lostImportRules)
+    {
+        ArgumentNullException.ThrowIfNull(cso);
+        ArgumentNullException.ThrowIfNull(lostImportRules);
 
-        return importSyncRule.InboundOutOfScopeAction;
+        if (lostImportRules.Count == 0)
+            return new LastScopeExitDecision(InboundOutOfScopeAction.Disconnect, null);
+
+        // The rules that held the object: those whose values its Metaverse Object holds from this Connected System, and
+        // the rule that made its join. A rule that never held it has nothing to keep. Where nothing is recorded (a join
+        // made before rules were recorded, by a since-deleted rule, or by the Object Type's own matching), every rule
+        // counts.
+        var contributingRuleIds = cso.MetaverseObject?.AttributeValues
+            .Where(av => av.ContributedBySystemId == cso.ConnectedSystemId && av.ContributedBySyncRuleId.HasValue)
+            .Select(av => av.ContributedBySyncRuleId!.Value)
+            .ToHashSet() ?? [];
+        var heldBy = lostImportRules
+            .Where(rule => contributingRuleIds.Contains(rule.Id) || rule.Id == cso.JoinSyncRuleId)
+            .ToList();
+        var deciders = InNameOrder(heldBy.Count > 0 ? heldBy : lostImportRules).ToList();
+
+        // Remain Joined wins: one rule that holds the object as "once managed, always managed" keeps it, whichever order
+        // the rules load in.
+        var decidingRule = deciders.FirstOrDefault(rule => rule.InboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
+                           ?? deciders[0];
+        return new LastScopeExitDecision(decidingRule.InboundOutOfScopeAction, decidingRule);
     }
 
     /// <summary>

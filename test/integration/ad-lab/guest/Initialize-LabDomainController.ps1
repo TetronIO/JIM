@@ -705,7 +705,7 @@ function Invoke-ConfigurePhase {
 
     # The delegation, from the same file the Samba image and the connector documentation use, and the read over
     # Deleted Objects. The same functions Grant-LabDelegation.ps1 uses at run time.
-    foreach ($container in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
+    foreach ($container in Get-LabDelegatedContainerDn -DomainDn $base) {
         $outcome = Grant-LabContainerDelegation -ContainerDn $container -AclPath $aclPath
         if ($outcome.Outcome -eq 'Delegated') { Set-Changed "Delegated JIM's access over $container" }
     }
@@ -851,12 +851,15 @@ function Invoke-VerifyPhase {
     }
 
     Add-Check 'The delegation is on every managed container' {
+        # Every entry in the delegation file, not just the group (#2774): merging the file over what a container
+        # holds must change nothing.
         $sid = Get-LabGroupSid
+        $delegation = ConvertTo-LabDelegationSddl -AclPath (Join-Path $LabRoot 'jim-ad-delegation.acl') -TrusteeSid $sid
         $missing = @()
-        foreach ($dn in @("OU=Corp,$base", "OU=TestUsers,$base", "OU=TestGroups,$base")) {
+        foreach ($dn in Get-LabDelegatedContainerDn -DomainDn $base) {
             # -Path, escaped: Get-Acl -LiteralPath does not work on the AD: drive (see Get-LabAdProviderPath).
             $sddl = (Get-Acl -Path (Get-LabAdProviderPath -DistinguishedName $dn) -ErrorAction Stop).GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)
-            if (-not (Test-LabSddlContainsSid -Sddl $sddl -Sid $sid)) { $missing += $dn }
+            if ((Merge-LabDelegationSddl -ExistingSddl $sddl -DelegationSddl $delegation) -cne $sddl) { $missing += $dn }
         }
         [pscustomobject]@{ Passed = ($missing.Count -eq 0); Detail = ('missing on: ' + ($missing -join '; ')) }
     }

@@ -17,10 +17,12 @@ namespace JIM.Worker.Tests.Workflows;
 /// test can act part-way through a run, as an administrator cancelling it does. <paramref name="partitionWatermarksByPage"/>
 /// gives, page by page, the <see cref="ConnectedSystemImportResult.PartitionWatermarks"/> to return; this Connector does not
 /// implement <see cref="IConnectorPartitionWatermarks"/>, so any it returns are ones JIM never handed it (#2715).
+/// <paramref name="expectedObjectCount"/>, when given, is reported before the first page is returned, as a Connector that
+/// knows how many objects it is about to hand over states it (<see cref="IConnectorProgress.ReportExpectedObjectCountAsync"/>).
 /// </summary>
 internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject>> pages, string? firstPageWatermark = null,
     IReadOnlyList<bool>? completeReadByPage = null, Action<int>? beforePage = null,
-    IReadOnlyList<Dictionary<int, string?>?>? partitionWatermarksByPage = null) : IConnector, IConnectorImportUsingCalls
+    IReadOnlyList<Dictionary<int, string?>?>? partitionWatermarksByPage = null, int? expectedObjectCount = null) : IConnector, IConnectorImportUsingCalls
 {
     private int _nextPage;
 
@@ -32,7 +34,7 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
 
     public string? CloseImportConnection() => null;
 
-    public Task<ConnectedSystemImportResult> ImportAsync(
+    public async Task<ConnectedSystemImportResult> ImportAsync(
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile runProfile,
         List<ConnectedSystemPaginationToken> paginationTokens,
@@ -43,6 +45,8 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
     {
         var pageIndex = _nextPage++;
         beforePage?.Invoke(pageIndex);
+        if (pageIndex == 0 && expectedObjectCount is { } expected)
+            await progress.ReportExpectedObjectCountAsync(expected);
         var page = pages[pageIndex];
         var result = new ConnectedSystemImportResult
         {
@@ -53,6 +57,6 @@ internal sealed class PagedImportConnector(List<List<ConnectedSystemImportObject
         };
         if (_nextPage < pages.Count)
             result.PaginationTokens.Add(new ConnectedSystemPaginationToken("page", _nextPage.ToString()));
-        return Task.FromResult(result);
+        return result;
     }
 }

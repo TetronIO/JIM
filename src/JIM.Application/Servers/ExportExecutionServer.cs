@@ -1054,9 +1054,10 @@ public class ExportExecutionServer
                 if (deferredExportIds.Count > 0)
                 {
                     await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExportIds, result, options, changeLimitLedger,
-                        cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+                        cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
-                    // Drain any remaining deferred export items via callback
+                    // The deferred batches hand their items on as each completes (#2852); what is left is what the pass
+                    // records for exports it did not write, and the items of a failed batch nothing after it handed on.
                     if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
                     {
                         var deferredItems = result.ProcessedExportItems;
@@ -1126,10 +1127,10 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Hands on the execution items still held when the run stops early (#2083). The deferred pass's items are handed on
-    /// only once the pass ends, so a run cancelled or failing part-way through it would otherwise never record the items
-    /// of the batches it had already written, though their Pending Exports were. Never throws, so it cannot mask the
-    /// exception that is unwinding.
+    /// Hands on the execution items still held when the run stops early (#2083): those of a batch that failed when nothing
+    /// after it handed them on, and what the deferred pass records for the exports it did not write, which it hands on only
+    /// once it ends. Without this a run cancelled or failing part-way through would never record them. Never throws, so it
+    /// cannot mask the exception that is unwinding.
     /// </summary>
     private static async Task HandOnProcessedExportItemsAsync(
         ExportExecutionResult result,
@@ -1174,7 +1175,8 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepositoryScope>? repositoryFactory)
+        Func<ISyncRepositoryScope>? repositoryFactory,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
             && deferredExportIds.Count > options.BatchSize;
@@ -1386,7 +1388,9 @@ public class ExportExecutionServer
                 async () => (await TakeNextDeferredBatchAsync())?.Select(ExecutableExportSummary.Of).ToList(),
                 stopOnBatchFailure: false, result, options,
                 cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
+                processedExportsOffset: immediateProcessedCount,
+                batchCompletedCallback: batchCompletedCallback,
+                passTotal: passTotal,
                 unresolvedReferenceNotes: unresolvedReferenceNotes,
                 batchExecuted: count => Interlocked.Add(ref written, count),
                 passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
@@ -1396,7 +1400,8 @@ public class ExportExecutionServer
             await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, TakeNextDeferredBatchAsync, result, cancellationToken,
                 progressCallback, passTotal, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes,
                 batchExecuted: count => Interlocked.Add(ref written, count),
-                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten),
+                batchCompletedCallback: batchCompletedCallback);
         }
 
         result.DeferredCount += deferredWholeCount;
@@ -1532,6 +1537,8 @@ public class ExportExecutionServer
     /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
     /// <param name="passProcessedOffset">How many of the pass's exports it has finished with without writing them,
     /// counted towards its progress beside the batches written.</param>
+    /// <param name="batchCompletedCallback">Handed each batch's execution items once the batch is recorded (#2852), as
+    /// the first pass hands on its own; null leaves them on the result.</param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
@@ -1543,7 +1550,8 @@ public class ExportExecutionServer
         TimeSpan initialPasswordTimeToLive,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
-        Func<int>? passProcessedOffset = null)
+        Func<int>? passProcessedOffset = null,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -1616,6 +1624,17 @@ public class ExportExecutionServer
 
             processedCount += batch.Count;
             batchExecuted?.Invoke(batch.Count);
+
+            // The batch's items are handed on now, as the first pass hands on its own (#2852): held until the pass ended,
+            // every item of a large deferred pass, with each member change it carries, stayed in memory and was written
+            // in one go at the run's end. Outside the try above, as on the first pass: a failure recording them fails
+            // the run rather than being taken for a failed attempt at a batch whose results are already recorded.
+            if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+            {
+                var batchItems = result.ProcessedExportItems;
+                result.ProcessedExportItems = [];
+                await batchCompletedCallback(batchItems);
+            }
 
             // Reported once the batch is recorded, as the parallel path does: reported before it, the pass's last report
             // stopped a batch short of its total.
@@ -2164,13 +2183,15 @@ public class ExportExecutionServer
     /// </summary>
     /// <returns>
     /// Each export's retry state as it stood just before the mark (#2083): what an export the run never got to is put back
-    /// to, and what a failed attempt is counted from; and the time of the mark, which putting it back is guarded on (#2197).
+    /// to, and what a failed attempt is counted from; the time of the mark, which putting it back is guarded on (#2197); and
+    /// each change's value and holds before the Connector has the batch, which its results are written against (#2851).
     /// </returns>
     private static async Task<ExecutingBatchMark> MarkBatchAsExecutingAsync(List<PendingExport> batch, ISyncRepository repository)
     {
         var before = batch.ToDictionary(pe => pe.Id, PendingExportRetryState.Of);
+        var changesBefore = PendingExportAttributeValueChangeState.Snapshot(batch);
         var markedAt = await repository.MarkPendingExportsAsExecutingAsync(batch);
-        return new ExecutingBatchMark(before, markedAt);
+        return new ExecutingBatchMark(before, markedAt, changesBefore);
     }
 
     /// <summary>
@@ -2547,6 +2568,10 @@ public class ExportExecutionServer
         var notAttempted = new List<PendingExport>();
         var notAttemptedWithoutCancellation = 0;
 
+        // What the batch sent, all marked as sent at one time: what the export-result writer marks, and nothing else (#2851).
+        var sentAt = DateTime.UtcNow;
+        var sent = new HashSet<PendingExportAttributeValueChange>(ReferenceEqualityComparer.Instance);
+
         // The accounts whose enabled state an export in this batch wrote (#2064), as the Connector reported it: a
         // Create's staged first password is marked from it below, so delivering it leaves the enabled state to the
         // Attribute Flow.
@@ -2687,7 +2712,7 @@ public class ExportExecutionServer
             }
 
             // Update attribute change statuses to ExportedPendingConfirmation
-            UpdateAttributeChangeStatusesAfterExport(writtenChanges);
+            UpdateAttributeChangeStatusesAfterExport(writtenChanges, sentAt, sent);
 
             // Which of those the Connector wrote with an interim value until an Initial Password is delivered (#2039),
             // persisted with the statuses below so the confirming import holds rather than retries them.
@@ -2766,7 +2791,7 @@ public class ExportExecutionServer
         {
             if (csosToUpdate.Count > 0)
                 await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
-            await WritePendingExportsAsync(writtenNow, repository);
+            await WriteExportResultsAsync(writtenNow, sent, sentAt, executingMark, repository);
             if (transaction != null)
                 await transaction.CommitAsync();
         }
@@ -2782,6 +2807,8 @@ public class ExportExecutionServer
                     RecordCollision(export, rejection, writtenChanges, collision, result);
                 else
                     RecordFailedAttempt(export, rejection, writtenChanges, result);
+                // Every column of every change: remediation may have replaced the rejected value on the change carrying it,
+                // after the batch was sent, and the export-result writer records only what sending changes.
                 await WritePendingExportsAsync([export], repository);
             }
 
@@ -2805,7 +2832,7 @@ public class ExportExecutionServer
             }
 
             // Only now, with their Initial Passwords queued, do the held Creates stop counting as in flight (#2270).
-            await WritePendingExportsAsync(heldUntilStaged.ToList(), repository);
+            await WriteExportResultsAsync(heldUntilStaged.ToList(), sent, sentAt, executingMark, repository);
             heldUntilStaged.Clear();
 
             // #2021: beside the Initial Passwords, after the External IDs are recorded (the delivery lane finds the object
@@ -2844,7 +2871,7 @@ public class ExportExecutionServer
             // failure of this write is logged without hiding the one that brought the batch down.
             try
             {
-                await WritePendingExportsAsync(heldUntilStaged.ToList(), repository);
+                await WriteExportResultsAsync(heldUntilStaged.ToList(), sent, sentAt, executingMark, repository);
             }
             catch (Exception writeException) when (writeException is not OperationCanceledException)
             {
@@ -2950,6 +2977,55 @@ public class ExportExecutionServer
         {
             await repository.UpdatePendingExportsAsync(exports);
         }
+    }
+
+    /// <summary>
+    /// Records a batch's results for <paramref name="exports"/> through the export-result writer (#2851): every Pending
+    /// Export in full, the sent mark on exactly the changes the batch sent, and the changes revised besides. Writing every
+    /// column of every change back cost 10 s for one 200,000-member group's Create.
+    /// </summary>
+    private static async Task WriteExportResultsAsync(List<PendingExport> exports, IReadOnlySet<PendingExportAttributeValueChange> sent,
+        DateTime sentAt, ExecutingBatchMark executingMark, ISyncRepository repository)
+    {
+        if (exports.Count == 0)
+            return;
+
+        var results = ExportResultsFor(exports, sent, sentAt, executingMark.ChangesBefore);
+        using (Diagnostics.Diagnostics.Database.StartSpan("UpdatePendingExports")
+            .SetTag("count", exports.Count)
+            .SetTag("sentChangeCount", results.SentChanges.Count)
+            .SetTag("revisedChangeCount", results.RevisedChanges.Count))
+        {
+            await repository.UpdatePendingExportResultsAsync(results);
+        }
+    }
+
+    /// <summary>
+    /// What a batch's results change on <paramref name="exports"/> (#2851), from the decision the batch made rather than
+    /// re-derived in SQL: of their changes, those it marked sent (<see cref="UpdateAttributeChangeStatusesAfterExport(IEnumerable{PendingExportAttributeValueChange}, DateTime, ICollection{PendingExportAttributeValueChange}?)"/>,
+    /// over <see cref="WritableChanges"/>), and those whose value or holds differ from what they held when the batch was
+    /// marked Executing: a hold the batch set or cleared, or a value a Connector replaced as it wrote. A change the snapshot
+    /// does not hold is taken as revised, so it is written rather than assumed unchanged.
+    /// </summary>
+    /// <param name="exports">The batch's exports being recorded now; a batch records those held until their Initial Passwords
+    /// are staged separately, after the rest.</param>
+    /// <param name="sent">Every change the batch marked sent.</param>
+    /// <param name="sentAt">When the batch sent them.</param>
+    /// <param name="changesBefore">Each change's value and holds as the batch was marked Executing.</param>
+    internal static PendingExportResultWrite ExportResultsFor(IReadOnlyList<PendingExport> exports,
+        IReadOnlySet<PendingExportAttributeValueChange> sent, DateTime sentAt,
+        IReadOnlyDictionary<PendingExportAttributeValueChange, PendingExportAttributeValueChangeState> changesBefore)
+    {
+        var changes = exports.SelectMany(pe => pe.AttributeValueChanges).ToList();
+        return new PendingExportResultWrite
+        {
+            PendingExports = exports,
+            SentChanges = changes.Where(sent.Contains).ToList(),
+            SentAt = sentAt,
+            RevisedChanges = changes
+                .Where(change => !changesBefore.TryGetValue(change, out var before) || before != PendingExportAttributeValueChangeState.Of(change))
+                .ToList()
+        };
     }
 
     /// <summary>
@@ -3143,7 +3219,7 @@ public class ExportExecutionServer
     /// mismatch is reported, instead of being held for a password nobody will deliver.
     /// </para>
     /// </summary>
-    private static void MarkChangesAwaitingInitialPassword(
+    internal static void MarkChangesAwaitingInitialPassword(
         PendingExport export,
         List<PendingExportAttributeValueChange> writtenChanges,
         ConnectedSystemExportResult exportResult,
@@ -3463,7 +3539,7 @@ public class ExportExecutionServer
     /// <param name="writtenChanges">The changes the export wrote.</param>
     /// <param name="decision">What staging decided for the export's declared state, or null when it declared none, or
     /// the object could not be judged (nothing is queued then, so nothing would release a hold).</param>
-    private static void MarkChangesAwaitingExchange(List<PendingExportAttributeValueChange> writtenChanges, ExchangeRecipientDecision? decision)
+    internal static void MarkChangesAwaitingExchange(List<PendingExportAttributeValueChange> writtenChanges, ExchangeRecipientDecision? decision)
     {
         var heldForExchange = decision is { Kind: not ExchangeRecipientDecisionKind.NotARecipient };
         foreach (var change in writtenChanges)
@@ -4250,17 +4326,19 @@ public class ExportExecutionServer
     /// Changes with Pending or ExportedNotConfirmed status are transitioned to ExportedPendingConfirmation.
     /// </summary>
     private static void UpdateAttributeChangeStatusesAfterExport(PendingExport export) =>
-        UpdateAttributeChangeStatusesAfterExport(export.AttributeValueChanges);
+        UpdateAttributeChangeStatusesAfterExport(export.AttributeValueChanges, DateTime.UtcNow, sent: null);
 
     /// <summary>
     /// Marks the changes that were actually handed to the connector as awaiting confirmation. Passed the
     /// written subset explicitly (issue #1398) so a reference change left behind on a partial write is
     /// not marked as sent when it was not.
     /// </summary>
-    private static void UpdateAttributeChangeStatusesAfterExport(IEnumerable<PendingExportAttributeValueChange> writtenChanges)
+    /// <param name="sentAt">When the changes were sent; a batch marks all of its changes with one time (#2851).</param>
+    /// <param name="sent">Given each change marked, which is the decision the export-result writer records (#2851); a
+    /// change already awaiting confirmation is not marked again, so it is not given.</param>
+    internal static void UpdateAttributeChangeStatusesAfterExport(IEnumerable<PendingExportAttributeValueChange> writtenChanges,
+        DateTime sentAt, ICollection<PendingExportAttributeValueChange>? sent)
     {
-        var now = DateTime.UtcNow;
-
         foreach (var attrChange in writtenChanges)
         {
             // Only update changes that were pending or being retried
@@ -4269,7 +4347,8 @@ public class ExportExecutionServer
             {
                 attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
                 attrChange.ExportAttemptCount++;
-                attrChange.LastExportedAt = now;
+                attrChange.LastExportedAt = sentAt;
+                sent?.Add(attrChange);
 
                 Log.Debug("UpdateAttributeChangeStatusesAfterExport: Attribute {AttrId} status set to ExportedPendingConfirmation (attempt {Attempt})",
                     attrChange.AttributeId, attrChange.ExportAttemptCount);

@@ -183,6 +183,128 @@ public class KeysetCsoTypePagingDatabaseTests
     }
 
     /// <summary>
+    /// The closing sweep's id read selects exactly what the sweep's page load selects (#2861): page by page, the same ids
+    /// in the same order, across types, leaving out objects created before the floor.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectIdsAsync_EachPage_HoldsExactlyTheIdsTheSweepPageLoadReturnsAsync()
+    {
+        var seeded = await SeedAsync(people: 4, groups: 2);
+        var floor = DateTime.UtcNow.AddSeconds(1);
+        await using (var insert = NewContext())
+        {
+            var system = await insert.ConnectedSystems.SingleAsync(cs => cs.Id == seeded.SystemId);
+            var person = await insert.ConnectedSystemObjectTypes.Include(t => t.Attributes).SingleAsync(t => t.Id == seeded.PersonTypeId);
+            var group = await insert.ConnectedSystemObjectTypes.Include(t => t.Attributes).SingleAsync(t => t.Id == seeded.GroupTypeId);
+            AddObjects(insert, system, person, 4, floor);
+            AddObjects(insert, system, group, 3, floor.AddSeconds(5));
+            await insert.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        await AssertIdPagesMatchLoadedPagesAsync(
+            cursor => repository.Sync.GetConnectedSystemObjectIdsAsync(seeded.SystemId, 3, cursor, floor),
+            cursor => repository.Sync.GetConnectedSystemObjectsAsync(seeded.SystemId, 1, 3, knownTotalCount: 13, afterId: cursor, createdOnOrAfter: floor),
+            expectedCount: 7);
+    }
+
+    /// <summary>
+    /// The Delta Synchronisation's counterpart (#2861): the id read applies the modified-since selection as its page load
+    /// does, so an object created after the floor but before the watermark, carrying no mark, is in neither.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectIdsModifiedSinceAsync_EachPage_HoldsExactlyTheIdsTheSweepPageLoadReturnsAsync()
+    {
+        var seeded = await SeedAsync(people: 3, groups: 1);
+        var floor = DateTime.UtcNow.AddMinutes(-30);
+        var watermark = DateTime.UtcNow.AddMinutes(-10);
+        HashSet<Guid> unchanged, marked;
+        await using (var insert = NewContext())
+        {
+            var system = await insert.ConnectedSystems.SingleAsync(cs => cs.Id == seeded.SystemId);
+            var person = await insert.ConnectedSystemObjectTypes.Include(t => t.Attributes).SingleAsync(t => t.Id == seeded.PersonTypeId);
+            unchanged = AddObjects(insert, system, person, 3, floor.AddMinutes(5));
+            marked = AddObjects(insert, system, person, 2, floor.AddMinutes(5));
+            AddObjects(insert, system, person, 3, watermark.AddMinutes(5));
+            await insert.SaveChangesAsync();
+        }
+        await using (var mark = NewContext())
+            await mark.ConnectedSystemObjects.Where(c => marked.Contains(c.Id)).ExecuteUpdateAsync(s => s.SetProperty(c => c.SynchronisationPending, true));
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var swept = await AssertIdPagesMatchLoadedPagesAsync(
+            cursor => repository.Sync.GetConnectedSystemObjectIdsModifiedSinceAsync(seeded.SystemId, watermark, 2, cursor, floor),
+            cursor => repository.Sync.GetConnectedSystemObjectsModifiedSinceAsync(seeded.SystemId, watermark, 1, 2, knownTotalCount: 12, afterId: cursor,
+                createdOnOrAfter: floor),
+            // The four seeded just now, the two marked, and the three created after the watermark.
+            expectedCount: 9);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(swept, Is.SupersetOf(marked), "a marked object is selected");
+            Assert.That(swept.Intersect(unchanged), Is.Empty, "an unmarked object created before the watermark is not");
+        }
+    }
+
+    /// <summary>
+    /// The sweep's load of the ids no walk handed out (#2861) is the page load restricted to them: those objects only, in
+    /// id order, each loaded whole with its Object Type and values, as the unrestricted page loads them.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsAsync_OnlyIds_LoadsJustThoseObjectsWholeInIdOrderAsync()
+    {
+        var seeded = await SeedAsync(people: 5, groups: 3);
+        var wanted = seeded.PersonIds.Take(2).Concat(seeded.GroupIds.Take(1)).ToList();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var page = await repository.Sync.GetConnectedSystemObjectsAsync(seeded.SystemId, 1, 10, knownTotalCount: 8, afterId: Guid.Empty,
+            createdOnOrAfter: DateTime.UtcNow.AddHours(-1), onlyIds: wanted);
+        var unrestricted = await repository.Sync.GetConnectedSystemObjectsAsync(seeded.SystemId, 1, 10, knownTotalCount: 8, afterId: Guid.Empty,
+            createdOnOrAfter: DateTime.UtcNow.AddHours(-1));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.Results.Select(c => c.Id), Is.EqualTo(unrestricted.Results.Select(c => c.Id).Where(wanted.Contains)),
+                "the objects asked for, in the unrestricted page's order");
+            Assert.That(page.Results.All(c => c.Type != null && c.AttributeValues.Count == 1 && c.AttributeValues[0].Attribute != null), Is.True,
+                "each loaded whole");
+        }
+    }
+
+    /// <summary>
+    /// Walks an id read and a page load side by side from the same cursors, asserting each id page is the loaded page's
+    /// ids, and returns every id seen.
+    /// </summary>
+    private static async Task<List<Guid>> AssertIdPagesMatchLoadedPagesAsync(Func<Guid, Task<List<Guid>>> readIds,
+        Func<Guid, Task<JIM.Models.Utility.PagedResultSet<ConnectedSystemObject>>> loadPage, int expectedCount)
+    {
+        var seen = new List<Guid>();
+        var cursor = Guid.Empty;
+        for (var guard = 0; guard < 100; guard++)
+        {
+            var ids = await readIds(cursor);
+            var page = await loadPage(cursor);
+            Assert.That(ids, Is.EqualTo(page.Results.Select(c => c.Id)), $"page {guard + 1}: the id read and the page load differ");
+            if (ids.Count == 0)
+            {
+                Assert.That(seen, Has.Count.EqualTo(expectedCount));
+                return seen;
+            }
+            seen.AddRange(ids);
+            cursor = ids[^1];
+        }
+
+        Assert.Fail("Keyset walk did not terminate");
+        return seen;
+    }
+
+    /// <summary>
     /// The aggregate a Full Synchronisation runs before ordering (#2492): for each reference attribute asked about, the
     /// Object Types its stored values point at. An attribute holding no values comes back with an empty set, which
     /// is what lets the ordering drop it rather than assume it reaches every type.

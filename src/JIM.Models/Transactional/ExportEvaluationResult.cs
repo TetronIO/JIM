@@ -72,6 +72,20 @@ public class ExportEvaluationResult
     public List<ExportObjectTypeConflict> ObjectTypeConflicts { get; set; } = [];
 
     /// <summary>
+    /// Metaverse Objects that two or more enabled export Synchronisation Rules have in scope for the same Connected System
+    /// and Object Type (#2820). Nothing was staged for any of those rules on the object; the worker surfaces each as an
+    /// ExportRuleOverlap RPEI.
+    /// </summary>
+    public List<ExportRuleOverlap> RuleOverlaps { get; set; } = [];
+
+    /// <summary>
+    /// Connected System Objects a covering export Synchronisation Rule took over because the Metaverse Object left the scope
+    /// of the rule that managed them (#2822). Their joins were re-pointed and persisted during the evaluation; the worker
+    /// records each as a <c>HandedToAnotherExportRule</c> outcome.
+    /// </summary>
+    public List<ExportRuleHandOver> HandOvers { get; set; } = [];
+
+    /// <summary>
     /// Outbound Synchronisation Rules that could not provision the Metaverse Object because export matching could not
     /// settle on an existing Connected System Object to join instead (#2052): a rule's values found more than one, or
     /// a rule could not be worked out. Nothing was joined, provisioned or staged for those Rules; the worker surfaces

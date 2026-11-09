@@ -1880,6 +1880,9 @@ function Get-ActiveDirectoryLabRunContext {
         $configs[$instance] = if ($instance -eq 'AdfsPrimary') {
             Get-ActiveDirectoryLabFederationConfig
         }
+        elseif ($instance -like 'Exchange*') {
+            Get-ActiveDirectoryLabExchangeConfig -Instance $instance
+        }
         else {
             Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $instance
         }
@@ -1895,6 +1898,16 @@ function Invoke-ActiveDirectoryLabReset {
         [AllowNull()][Nullable[int]]$ScenarioNumber,
         [string]$Template
     )
+
+    # Make room first: stop the heavy machines this scenario does not use (the Exchange servers, and for a scenario
+    # using both of them, dc-target and the AD FS server). Decided from the scenario alone, so a run that crashed
+    # with an Exchange server up cannot starve this one.
+    $stoppable = @{}
+    foreach ($stoppableInstance in 'Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource') {
+        $stoppable[$stoppableInstance] = Get-ActiveDirectoryLabVmName -Instance $stoppableInstance
+    }
+    $powerPlan = @(Get-ActiveDirectoryLabPowerPlan -Instance @($Context.Configs.Keys) -VmName $stoppable)
+    Invoke-ActiveDirectoryLabPowerPlan -VmName $powerPlan
 
     $populateHash = Get-ActiveDirectoryLabPopulateHash -ScriptRoot $scriptRoot
     $plan = Get-ActiveDirectoryLabRestorePlan -State $Context.States -ScenarioNumber $ScenarioNumber -Template $Template -Hash $populateHash
@@ -2212,7 +2225,10 @@ if ($Scenario -eq "All") {
     $adLabGuestBuilds = $null
     if ($DirectoryType -eq "ActiveDirectory") {
         try {
-            $adSweepInstances = @($implementedScenarios | ForEach-Object { Get-ActiveDirectoryLabInstance -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) } | Sort-Object -Unique)
+            # The domain controllers only: the report is about their builds, and Get-DirectoryConfig knows no other
+            # instance (asking it for AdfsPrimary threw, which lost the whole report whenever Scenario 030 was in the sweep).
+            $adSweepInstances = @($implementedScenarios | ForEach-Object { Get-ActiveDirectoryLabInstance -ScenarioNumber (Get-IntegrationScenarioNumber -Scenario $_) } |
+                    Where-Object { Test-ActiveDirectoryLabDomainController -Instance $_ } | Sort-Object -Unique)
             $adSweepConfigs = @{}
             foreach ($adSweepInstance in $adSweepInstances) {
                 $adSweepConfigs[$adSweepInstance] = Get-DirectoryConfig -DirectoryType ActiveDirectory -Instance $adSweepInstance
@@ -2865,7 +2881,7 @@ if (-not $SkipReset) {
     # for Scenario 8's Source and Target the populated checkpoint when it is current. This only reverts and
     # starts them; the readiness check (Step 4) needs the LDAP toolbox, which Step 3 starts.
     if ($isActiveDirectoryRun) {
-        Write-Step "Reverting the Active Directory lab's domain controllers to their checkpoints..."
+        Write-Step "Reverting the Active Directory lab's machines to their checkpoints (an Exchange server takes minutes to start)..."
         try {
             $script:AdLabPlan = Invoke-ActiveDirectoryLabReset -Context $script:AdLabContext -ScenarioNumber $scenarioNumber -Template $Template
         }

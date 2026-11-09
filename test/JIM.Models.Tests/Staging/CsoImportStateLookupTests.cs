@@ -65,6 +65,26 @@ public class CsoImportStateLookupTests
         }
     }
 
+    /// <summary>
+    /// #2835: a page's second pass asks only for keys its first pass did not, so it can tell which those are without
+    /// asking for an answer (which throws for a key never looked up).
+    /// </summary>
+    [Test]
+    public void WasLookedUp_KeysLookedUpAndNot_SaysWhichWithoutThrowing()
+    {
+        var page = CsoImportStateLookup.ForLookedUpKeys(StringComparer.Ordinal);
+        page.Add(["held", "new"], new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.Ordinal) { ["held"] = Entry });
+        var every = CsoImportStateLookup.ForEveryObject(new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.Ordinal));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(page.WasLookedUp("held"), Is.True);
+            Assert.That(page.WasLookedUp("new"), Is.True, "Looked up and not found is still looked up");
+            Assert.That(page.WasLookedUp("never-looked-up"), Is.False);
+            Assert.That(every.WasLookedUp("anything"), Is.True, "Holding every object, every key is answered");
+        }
+    }
+
     [Test]
     public void Add_AnswerForAKeyNotAskedAbout_Throws()
     {

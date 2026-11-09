@@ -376,6 +376,13 @@ public interface IConnectedSystemRepository
     public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records an export batch's results, writing only what they change (#2851); see
+    /// <see cref="ISyncRepository.UpdatePendingExportResultsAsync"/>.
+    /// </summary>
+    /// <param name="results">The batch's Pending Exports, and the changes it sent and revised.</param>
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results);
+
+    /// <summary>
     /// Writes what reference resolution changed, and nothing else: each Pending Export's
     /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
     /// ResolvedReferenceCsoId. One transaction; tracked copies of the rows written are detached.
@@ -783,6 +790,13 @@ public interface IConnectedSystemRepository
     /// <param name="csoIds">The CSO IDs to load attribute values for.</param>
     /// <returns>A list of CSO attribute values with their Attribute navigation property populated.</returns>
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
+
+    /// <summary>
+    /// As <see cref="GetCsoAttributeValuesByCsoIdsAsync"/>, with each attribute a member question names loaded in part
+    /// (#2832). See <c>ISyncRepository.GetCsoAttributeValuesForExportEvaluationAsync</c>.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions);
 
     /// <summary>
     /// Export matching's lookup (#2052): for a single Object Matching Rule, finds every unjoined,
@@ -1272,7 +1286,14 @@ public interface IConnectedSystemRepository
         CancellationToken cancellationToken = default);
     /// <param name="objectTypeId">Keyset callers only: restricts the page to one Object Type; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
     /// <param name="createdOnOrAfter">Keyset callers only: restricts the page to objects created at or after this instant.</param>
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="onlyIds">Keyset callers only: restricts the page to these objects; see <see cref="ISyncRepository.GetConnectedSystemObjectsAsync"/>.</param>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The ids of the objects <see cref="GetConnectedSystemObjectsAsync"/> selects for a closing sweep, without loading
+    /// any (#2861); see <see cref="ISyncRepository.GetConnectedSystemObjectIdsAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -1340,6 +1361,30 @@ public interface IConnectedSystemRepository
         Guid? afterId = null,
         int? objectTypeId = null,
         DateTime? createdOnOrAfter = null);
+
+    /// <summary>
+    /// #2818: as the overload above, leaving out of each object the attributes <paramref name="valueLoadPlan"/> allows; see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectsModifiedSinceAsync"/>. Null loads every object whole.
+    /// </summary>
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize,
+        int? knownTotalCount,
+        Guid? afterId,
+        int? objectTypeId,
+        DateTime? createdOnOrAfter,
+        SynchronisationValueLoadPlan? valueLoadPlan,
+        IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The ids of the objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?)"/>
+    /// selects for a closing sweep, without loading any (#2861); see
+    /// <see cref="ISyncRepository.GetConnectedSystemObjectIdsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter);
 
     /// <summary>
     /// Returns the count of Connected System Objects for a particular Connected System that have been created or modified since a given timestamp.

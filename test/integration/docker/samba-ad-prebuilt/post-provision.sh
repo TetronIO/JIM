@@ -265,6 +265,37 @@ if ! jim_as_service_account ldbdel "${JIM_PROBE_DN}" > /dev/null; then
     exit 1
 fi
 
+# Contacts are JIM's to create too where it provisions them, Exchange mail contacts among them
+# (#2774): create one, write an attribute on it, and delete it, as svc-jim.
+JIM_CONTACT_PROBE_DN="CN=Delegation Contact Probe,OU=Users,OU=Corp,${DOMAIN_DC}"
+cat > /tmp/jim-contact-probe-add.ldif << EOF
+dn: ${JIM_CONTACT_PROBE_DN}
+changetype: add
+objectClass: contact
+displayName: Delegation Contact Probe
+EOF
+if ! jim_as_service_account ldbadd /tmp/jim-contact-probe-add.ldif > /dev/null; then
+    echo "ERROR: svc-jim could not create a contact in OU=Users,OU=Corp; the contact delegation did not apply" >&2
+    exit 1
+fi
+
+cat > /tmp/jim-contact-probe-mod.ldif << EOF
+dn: ${JIM_CONTACT_PROBE_DN}
+changetype: modify
+replace: mail
+mail: delegation.contact.probe@example.com
+EOF
+if ! jim_as_service_account ldbmodify /tmp/jim-contact-probe-mod.ldif > /dev/null; then
+    echo "ERROR: svc-jim could not write an attribute on a contact it created" >&2
+    exit 1
+fi
+
+if ! jim_as_service_account ldbdel "${JIM_CONTACT_PROBE_DN}" > /dev/null; then
+    echo "ERROR: svc-jim could not delete the contact it created" >&2
+    exit 1
+fi
+rm -f /tmp/jim-contact-probe-add.ldif /tmp/jim-contact-probe-mod.ldif
+
 # The delete just made a tombstone. A Delta Import finds it in the Deleted Objects container,
 # and an account without rights there is told nothing rather than refused, so this check is the
 # only thing standing between a silent delegation gap and deletions never being imported.
@@ -292,7 +323,7 @@ if ${SAMBA_BIN}/samba-tool group listmembers "Domain Admins" 2>/dev/null | grep 
     exit 1
 fi
 rm -f /tmp/jim-probe-add.ldif /tmp/jim-probe-mod.ldif /tmp/jim-probe-outside.ldif
-echo "  Delegation verified (create, write, set password, read permissions, delete, read tombstones; no access outside)"
+echo "  Delegation verified (create, write, set password, read permissions, delete, contacts, read tombstones; no access outside)"
 
 # Install SSH public key schema (optional, may already exist)
 echo "Checking SSH public key schema..."

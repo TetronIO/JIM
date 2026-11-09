@@ -162,6 +162,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // to avoid creating duplicate entity instances that conflict with EF Core's change tracker.
         _objectTypes = _connectedSystem.ObjectTypes!;
 
+        // #2818: a large group's member attribute whose only reader is Drift Detection is loaded without its values, and
+        // Drift Detection compares it in the database. Only the modified-object pages are loaded by the plan; a type
+        // processed in full is loaded whole, as a Full Synchronisation loads it.
+        var valueLoadPlan = PlanSynchronisationValueLoad(activeSyncRules);
+
         // Pre-load export evaluation cache
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
@@ -226,11 +231,14 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // modified-only Delta Synchronisation defers.
         var processedInFull = _objectTypeIdsToProcessInFull;
         var csoPager = await CreateTypeOrderedPagerAsync(activeSyncRules, deltaSyncStartedAt,
-            (afterId, objectTypeId, createdOnOrAfter) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
+            (afterId, objectTypeId, createdOnOrAfter, onlyIds) => objectTypeId.HasValue && processedInFull.Contains(objectTypeId.Value)
                 ? _syncRepo.GetConnectedSystemObjectsAsync(
-                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter)
+                    _connectedSystem.Id, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, onlyIds)
                 : _syncRepo.GetConnectedSystemObjectsModifiedSinceAsync(
-                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter),
+                    _connectedSystem.Id, lastSyncTimestamp, 1, pageSize, totalCsosToProcess, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds),
+            // The sweep's ids come from the selection its loads use, the modified-since one (#2861).
+            (afterId, createdOnOrAfter) => _syncRepo.GetConnectedSystemObjectIdsModifiedSinceAsync(
+                _connectedSystem.Id, lastSyncTimestamp, pageSize, afterId, createdOnOrAfter),
             "Delta Synchronisation", observeUndeclaredReferenceTargets: processedInFull.Count > 0);
 
         try
@@ -242,9 +250,11 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 _syncRepo.SetAutoDetectChangesEnabled(false);
 
                 PagedResultSet<ConnectedSystemObject>? csoPagedResult;
-                using (Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
+                using (var loadSpan = Diagnostics.Sync.StartSpan("LoadModifiedCsoPage"))
                 {
                     csoPagedResult = await csoPager.NextPageAsync();
+                    if (csoPagedResult != null)
+                        CountLeftOutObjects(csoPagedResult.Results, loadSpan);
                 }
 
                 if (csoPagedResult == null)
@@ -406,9 +416,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         }
         finally
         {
-            // Not every load reaches a page's own tracker clear (#2598): the pager's closing sweep can load pages it hands
-            // nothing out of, and an exception in Pass 1 or 2 leaves the page before its flush. What they loaded holds
-            // Connected System Objects tracked over untracked Metaverse Objects, so it goes before detection is restored.
+            // Not every load reaches a page's own tracker clear (#2598): an exception in Pass 1 or 2 leaves the page before
+            // its flush, and the pager drops any object a sweep load returns that was already handed out (since #2861 the
+            // sweep asks for none). What they loaded holds Connected System Objects tracked over untracked Metaverse
+            // Objects, so it goes before detection is restored.
             ClearPageTrackingState();
             _syncRepo.SetAutoDetectChangesEnabled(true);
         }

@@ -10,4 +10,9 @@ namespace JIM.Models.Transactional;
 /// </summary>
 /// <param name="StatesBefore">Each Pending Export's retry state just before the mark, by id.</param>
 /// <param name="MarkedAt">The <see cref="PendingExport.LastAttemptedAt"/> the mark wrote.</param>
-public sealed record ExecutingBatchMark(IReadOnlyDictionary<Guid, PendingExportRetryState> StatesBefore, DateTime MarkedAt);
+/// <param name="ChangesBefore">Each attribute change's value and holds just before the batch was sent, by instance, so the
+/// batch's results write only the changes that differ from them (#2851).</param>
+public sealed record ExecutingBatchMark(
+    IReadOnlyDictionary<Guid, PendingExportRetryState> StatesBefore,
+    DateTime MarkedAt,
+    IReadOnlyDictionary<PendingExportAttributeValueChange, PendingExportAttributeValueChangeState> ChangesBefore);

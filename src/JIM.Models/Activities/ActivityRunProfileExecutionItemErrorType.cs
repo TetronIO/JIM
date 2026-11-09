@@ -312,5 +312,21 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// System only through Password Synchronisation; the message names the attribute, never a value, and says to remove
     /// the Attribute Flow.
     /// </summary>
-    CredentialAttributeNotExported
+    CredentialAttributeNotExported,
+
+    /// <summary>
+    /// Two or more enabled export Synchronisation Rules have the Metaverse Object in scope for the same Connected System
+    /// and Connected System Object Type (#2820). A Metaverse Object holds one Connected System Object there, and only one
+    /// rule may manage it, so nothing is staged for any of those rules on this object; its other Connected Systems and the
+    /// rest of the run are unaffected. The message names the rules; give them scopes that never overlap, or combine them.
+    /// </summary>
+    ExportRuleOverlap,
+
+    /// <summary>
+    /// Two or more in-scope import Synchronisation Rules would project the Connected System Object, into different
+    /// Metaverse Object Types (#2823). JIM never guesses what kind of object it is, so nothing is projected; the message
+    /// names each rule and the type it projects into. Give the rules scopes that never overlap, or have them project into
+    /// one type.
+    /// </summary>
+    ProjectionTypeConflict
 }

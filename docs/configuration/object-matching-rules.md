@@ -121,7 +121,7 @@ Automation gets the same test of a saved rule through [`Test-JIMMatchingRule`](.
 Object matching can be configured at two levels:
 
 - **Simple mode**<br /> Configured at the Connected System level; the matching rules are shared across all Synchronisation Rules for that system. Easier to manage when matching is uniform.
-- **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System.
+- **Advanced mode**<br /> Configured per Synchronisation Rule, so each rule can match independently. Use this when different Synchronisation Rules need different matching strategies against the same Connected System. Every import rule with the object in scope is tried, each with its own rules: where they find the same Metaverse Object it joins, and where they find different ones the object is an Ambiguous Match and joins nothing.
 
 A Simple mode rule also names the **Metaverse Object Type** it searches. It has to: with no Synchronisation Rule
 behind it, nothing else says where to look, and a rule that does not say is skipped during synchronisation. An

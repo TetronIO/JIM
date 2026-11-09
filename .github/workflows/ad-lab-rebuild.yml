@@ -104,6 +104,10 @@ jobs:
       JIM_AD_LAB_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_SOURCE_ADDRESS }}
       JIM_AD_LAB_TARGET_ADDRESS: ${{ vars.JIM_AD_LAB_TARGET_ADDRESS }}
       JIM_AD_LAB_ADFS_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_ADFS_PRIMARY_ADDRESS }}
+      # The Exchange servers (#2021). Not in the check below: only the Exchange scenarios need them, and they fail
+      # naming the variable when it is unset, so a lab without an Exchange server still runs everything else.
+      JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS: ${{ vars.JIM_AD_LAB_EXCHANGE_PRIMARY_ADDRESS }}
+      JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS: ${{ vars.JIM_AD_LAB_EXCHANGE_SOURCE_ADDRESS }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0

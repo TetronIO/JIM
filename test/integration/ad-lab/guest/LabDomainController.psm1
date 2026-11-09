@@ -310,16 +310,38 @@ function Test-LabAclGrant {
     return $false
 }
 
+function Get-LabAceKey {
+    <#
+    .SYNOPSIS
+        A key that two access control entries share when they grant the same thing: type, flags (in any order),
+        rights mask, object types and trustee. Used to tell whether a DACL already holds a delegated entry.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        $Ace
+    )
+
+    $flagTokens = @()
+    for ($i = 0; ($i + 1) -lt $Ace.Flags.Length; $i += 2) { $flagTokens += $Ace.Flags.Substring($i, 2).ToUpperInvariant() }
+    $flags = ($flagTokens | Sort-Object) -join ''
+    return '{0}|{1}|{2}|{3}|{4}|{5}' -f $Ace.Type.ToUpperInvariant(), $flags, $Ace.Mask, $Ace.ObjectType.ToLowerInvariant(),
+        $Ace.InheritedObjectType.ToLowerInvariant(), $Ace.Sid.ToUpperInvariant()
+}
+
 function Merge-LabDelegationSddl {
     <#
     .SYNOPSIS
-        Adds the delegated entries to an existing DACL, unless the trustee is already in it.
+        Adds to an existing DACL the delegated entries it does not already hold.
 
     .DESCRIPTION
-        The same rule jim-delegate.sh applies: a container that already names the trustee is left alone, so
-        the delegation can be applied for every container a scenario creates without accumulating duplicates.
-        New entries are inserted after the existing explicit entries and before the inherited ones, which
-        keeps the DACL in canonical order; the entries themselves are copied through as written.
+        Compares entry by entry (type, flags, rights mask, object types and trustee), not by whether the
+        trustee appears at all, so re-applying a delegation file that has gained entries adds just those
+        (#2774), and re-applying an unchanged one adds nothing and accumulates no duplicates. Rights are
+        compared as a mask, because Windows reads them back in its own order. New entries are inserted
+        after the existing explicit entries and before the inherited ones, which keeps the DACL in canonical
+        order; the entries themselves are copied through as written.
 
         Returns the existing SDDL unchanged when there is nothing to do, so callers can compare.
     #>
@@ -330,15 +352,8 @@ function Merge-LabDelegationSddl {
         [string]$ExistingSddl,
 
         [Parameter(Mandatory)]
-        [string]$DelegationSddl,
-
-        [Parameter(Mandatory)]
-        [string]$TrusteeSid
+        [string]$DelegationSddl
     )
-
-    if (Test-LabSddlContainsSid -Sddl $ExistingSddl -Sid $TrusteeSid) {
-        return $ExistingSddl
-    }
 
     $split = Split-LabSddlComponent -Sddl $ExistingSddl
     $dacl = $split.Components | Where-Object { $_.Kind -eq 'D' } | Select-Object -First 1
@@ -347,9 +362,16 @@ function Merge-LabDelegationSddl {
     }
 
     $existingAces = @(Get-LabDaclAce -Sddl $ExistingSddl)
-    $newAces = @(Get-LabDaclAce -Sddl $DelegationSddl)
-    if ($newAces.Count -eq 0) {
+    $delegatedAces = @(Get-LabDaclAce -Sddl $DelegationSddl)
+    if ($delegatedAces.Count -eq 0) {
         throw 'The delegation holds no access control entries.'
+    }
+
+    $held = @{}
+    foreach ($ace in $existingAces | Where-Object { -not $_.Inherited }) { $held[(Get-LabAceKey -Ace $ace)] = $true }
+    $newAces = @($delegatedAces | Where-Object { -not $held.ContainsKey((Get-LabAceKey -Ace $_)) })
+    if ($newAces.Count -eq 0) {
+        return $ExistingSddl
     }
 
     # The DACL component is "D:" + flags + entries; keep the flags, rebuild the entries.
@@ -658,7 +680,9 @@ function Get-LabReadinessPort {
     .SYNOPSIS
         The TCP port that proves a lab VM of a given role is serving after a revert: LDAPS on a domain controller,
         HTTPS on a federation server. An Exchange server is refused: its port 443 answers minutes before Remote
-        PowerShell and Exchange's services do, so a port is no proof it is ready.
+        PowerShell and Exchange's services do, so a port is no proof it is ready. Restore-LabDomainController.ps1
+        asks Exchange itself instead (Get-LabExchangeReadinessProbe and Test-LabExchangeReady, in
+        LabExchangeServer.psm1).
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -669,7 +693,7 @@ function Get-LabReadinessPort {
     )
 
     if ($Role -eq 'ExchangeServer') {
-        throw "No port proves an Exchange server ready: 443 answers minutes before Remote PowerShell does. Its readiness after a revert is defined with the runner's Exchange support (#2412)."
+        throw "No port proves an Exchange server ready: 443 answers minutes before Remote PowerShell does. Ask Exchange itself (Get-LabExchangeReadinessProbe, then Test-LabExchangeReady)."
     }
     if ($Role -eq 'FederationServer') {
         return 443
@@ -4249,6 +4273,56 @@ function Get-LabGroupSid {
     return $group.SID.Value
 }
 
+function Get-LabDelegatedContainerDn {
+    <#
+    .SYNOPSIS
+        The containers JIM is delegated over in a lab domain: OU=Corp (and everything below it), OU=TestUsers and
+        OU=TestGroups. One list, so the Configure phase, its verification and a checkpoint restore agree.
+    #>
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter(Mandatory)]
+        [ValidatePattern('^DC=.+')]
+        [string]$DomainDn
+    )
+
+    return @("OU=Corp,$DomainDn", "OU=TestUsers,$DomainDn", "OU=TestGroups,$DomainDn")
+}
+
+function Sync-LabDelegation {
+    <#
+    .SYNOPSIS
+        Brings JIM's delegation on this domain controller in line with the delegation file: every delegated
+        container (Get-LabDelegatedContainerDn) holds every entry, and the group can read Deleted Objects.
+
+    .DESCRIPTION
+        Runs in the guest. Restore-LabDomainController.ps1 calls it after every checkpoint revert, so a checkpoint
+        taken before the delegation file gained entries still comes back with all of them (#2774), without
+        rebuilding the checkpoint. Idempotent: entries already held are left alone. Returns the outcome of each
+        grant (Grant-LabContainerDelegation and Grant-LabTombstoneRead).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$AclPath,
+
+        [ValidatePattern('^[A-Za-z0-9 ._-]+$')]
+        [string]$GroupName = 'JIM Connectors'
+    )
+
+    Assert-LabWindows -Feature 'Applying the delegation'
+    Import-Module ActiveDirectory -ErrorAction Stop
+
+    $domain = Get-ADDomain
+    $outcomes = New-Object System.Collections.Generic.List[object]
+    foreach ($container in Get-LabDelegatedContainerDn -DomainDn $domain.DistinguishedName) {
+        $outcomes.Add((Grant-LabContainerDelegation -ContainerDn $container -AclPath $AclPath -GroupName $GroupName))
+    }
+    $outcomes.Add((Grant-LabTombstoneRead -NetBiosName $domain.NetBIOSName -GroupName $GroupName))
+    return $outcomes.ToArray()
+}
+
 function Grant-LabContainerDelegation {
     <#
     .SYNOPSIS
@@ -4256,10 +4330,11 @@ function Grant-LabContainerDelegation {
 
     .DESCRIPTION
         The single implementation the Configure phase and Grant-LabDelegation.ps1 both use. Renders the
-        SDDL for the JIM Connectors group, and adds the entries to the container's DACL unless the group is
-        already in it (idempotent, as jim-delegate.sh is). Reads the DACL back afterwards and throws if the
-        group is still absent, so a delegation that did not apply fails here rather than as an access error
-        hours later.
+        SDDL for the JIM Connectors group, and adds to the container's DACL whichever of its entries the DACL
+        does not already hold (Merge-LabDelegationSddl). Re-applying is therefore idempotent, and a re-apply
+        after the delegation file gains entries adds them (#2774) rather than stopping at a group that is
+        already named. Reads the DACL back afterwards and throws if any entry is still missing, so a
+        delegation that did not apply fails here rather than as an access error hours later.
 
         Returns { ContainerDn, Outcome = Delegated | AlreadyPresent, TrusteeSid }.
     #>
@@ -4292,17 +4367,18 @@ function Grant-LabContainerDelegation {
     $access = [System.Security.AccessControl.AccessControlSections]::Access
     $acl = Get-Acl -Path $path -ErrorAction Stop
     $existing = $acl.GetSecurityDescriptorSddlForm($access)
-    if (Test-LabSddlContainsSid -Sddl $existing -Sid $sid) {
+    $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl
+    if ($merged -ceq $existing) {
         return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'AlreadyPresent'; TrusteeSid = $sid }
     }
 
-    $merged = Merge-LabDelegationSddl -ExistingSddl $existing -DelegationSddl $sddl -TrusteeSid $sid
     $acl.SetSecurityDescriptorSddlForm($merged, $access)
     Set-Acl -Path $path -AclObject $acl -ErrorAction Stop
 
+    # Every delegated entry must now be held: merging again over what was read back must change nothing.
     $after = (Get-Acl -Path $path -ErrorAction Stop).GetSecurityDescriptorSddlForm($access)
-    if (-not (Test-LabSddlContainsSid -Sddl $after -Sid $sid)) {
-        throw "The delegation was written to '$ContainerDn' but reading it back does not show the '$GroupName' group."
+    if ((Merge-LabDelegationSddl -ExistingSddl $after -DelegationSddl $sddl) -cne $after) {
+        throw "The delegation was written to '$ContainerDn' but reading it back does not show every entry for the '$GroupName' group."
     }
     return [pscustomobject][ordered]@{ ContainerDn = $ContainerDn; Outcome = 'Delegated'; TrusteeSid = $sid }
 }
@@ -4900,7 +4976,7 @@ Export-ModuleMember -Function @(
     'New-LabDomainControllerStatus', 'Resolve-LabSecret', 'Resolve-LabLayout',
     'New-LabIsoImage', 'Stop-LabVm', 'Wait-LabCheckpoint', 'Wait-LabGuestReady', 'Restart-LabGuest', 'Copy-LabAssetToGuest', 'Invoke-LabGuestPhase',
     'Get-LabGuestOsBuild', 'Wait-LabTcpPort', 'Send-LabKeyPress',
-    'Get-LabGroupSid', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
+    'Get-LabGroupSid', 'Get-LabDelegatedContainerDn', 'Sync-LabDelegation', 'Grant-LabContainerDelegation', 'Grant-LabTombstoneRead', 'Get-LabTombstoneDescriptor',
     'Get-LabCertificateDnsName', 'Test-LabLdapsEndpoint', 'New-LabLdapConnection',
     'Test-LabServiceAccountDelegation', 'Test-LabPlainLdapRefused', 'Set-LabOldPasswordAllowedPeriod', 'Get-LabOldPasswordAllowedPeriod',
     'Get-LabDomainPasswordPolicyChange', 'Get-LabPasswordTemplateChange',

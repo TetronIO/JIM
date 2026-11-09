@@ -287,27 +287,21 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
                                       f.Message.Contains("disabled", StringComparison.OrdinalIgnoreCase)), Is.True);
     }
 
-    [Test]
-    public async Task ValidateAsync_AnotherRuleGovernsTheAction_WarnsNamingItAsync()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ValidateAsync_AnotherRuleSaysRemainJoined_WarnsItKeepsTheObjectsItHeldAsync(bool siblingFirst)
     {
-        // A sibling import rule for the same object type sits ahead of the edited rule, carries its own scoping
-        // criteria, and therefore supplies the Out-of-Scope Action on both the scope-exit and obsoletion paths.
-        // Changing the edited rule's setting does nothing while that rule exists, and a preview that counted
-        // objects for it would be a confident number about a change that does nothing.
-        var sibling = new SyncRule
-        {
-            Id = SiblingRuleId,
-            Name = "HR Import (primary)",
-            ConnectedSystemId = SystemId,
-            ConnectedSystemObjectTypeId = CsoTypeId,
-            MetaverseObjectTypeId = MvoTypeId,
-            Direction = SyncRuleDirection.Import,
-            Enabled = true,
-            InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined
-        };
+        // #2823: where an object leaves every import rule, the rules that held it decide, and Remain Joined from any of
+        // them keeps the join. A sibling saying Remain Joined therefore keeps every object it held, whatever this rule
+        // says, and the administrator needs to know that before switching this rule to Disconnect. Here nothing is
+        // recorded about who held the object, so every rule counts and the sibling keeps it: no object's fate changes.
+        var sibling = RemainJoinedSibling();
         GivenRuleScopedToSales(sibling);
         GivenRuleScopedToSales(_rule);
-        _rules.Insert(0, sibling);
+        if (siblingFirst)
+            _rules.Insert(0, sibling);
+        else
+            _rules.Add(sibling);
         GivenJoinedCso("Engineering");
 
         var proposal = UnchangedProposal() with { InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect };
@@ -319,11 +313,52 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
         {
             Assert.That(findings.Any(f => f.Severity == PreviewValidationSeverity.Warning &&
                                           f.Message.Contains(sibling.Name)), Is.True,
-                "the administrator needs to know which rule actually supplies the action");
-            Assert.That(deltas, Is.Empty,
-                "no object's fate changes when the edited rule does not govern the action");
+                "the administrator needs to know which rule keeps its objects joined");
+            Assert.That(deltas, Is.Empty, "the sibling keeps the object, whichever order the rules load in");
         }
     }
+
+    [TestCase(false, ConnectedSystemObjectStatus.Normal)]
+    [TestCase(true, ConnectedSystemObjectStatus.Normal)]
+    [TestCase(false, ConnectedSystemObjectStatus.Obsolete)]
+    [TestCase(true, ConnectedSystemObjectStatus.Obsolete)]
+    public async Task EvaluateDeltasAsync_RemainJoinedSiblingNeverHeldTheObject_ReportsTheDisconnectionAsync(
+        bool siblingFirst, ConnectedSystemObjectStatus status)
+    {
+        // #2823: the sibling says Remain Joined but never held the object: only the edited rule's value is on the
+        // Metaverse Object (the join predates recording which rule made it). So only the edited rule decides, and
+        // switching it to Disconnect disconnects the object. The streamed object carries no Metaverse values, as the
+        // database stream reads it, so the adapter must read who held it.
+        var sibling = RemainJoinedSibling();
+        GivenRuleScopedToSales(sibling);
+        GivenRuleScopedToSales(_rule);
+        if (siblingFirst)
+            _rules.Insert(0, sibling);
+        else
+            _rules.Add(sibling);
+        var cso = GivenJoinedCso("Engineering", status);
+        cso.JoinSyncRuleId = null;
+        _mvos.Single(m => m.Id == cso.MetaverseObjectId).AttributeValues[0].ContributedBySyncRuleId = RuleId;
+        _mvos.Single(m => m.Id == cso.MetaverseObjectId).AttributeValues[0].ContributedBySystemId = SystemId;
+
+        var proposal = UnchangedProposal() with { InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect };
+        var deltas = await EvaluateAsync(proposal);
+
+        Assert.That(deltas.Select(d => d.TransitionType),
+            Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+    }
+
+    private static SyncRule RemainJoinedSibling() => new()
+    {
+        Id = SiblingRuleId,
+        Name = "HR Import (primary)",
+        ConnectedSystemId = SystemId,
+        ConnectedSystemObjectTypeId = CsoTypeId,
+        MetaverseObjectTypeId = MvoTypeId,
+        Direction = SyncRuleDirection.Import,
+        Enabled = true,
+        InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined
+    };
 
     #endregion
 
@@ -525,6 +560,31 @@ public class SyncRuleDestructiveTogglePreviewAdapterTests
                 "every managed object's fate on a future scope exit changes, and the preview states that exposure " +
                 "as its own tier rather than mixing it with the imminent deletions");
         }
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_OutboundToggleOverAnIdentityASiblingExportRuleCovers_ReportsNoImminentDeprovisioningAsync()
+    {
+        // Out of the edited rule's scope but covered by another export rule on the same system and Object Type: that rule
+        // manages the account, so the next synchronisation deprovisions nothing whatever this rule's action says (#2822).
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Catch-all Export",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true
+        });
+        var covered = GivenJoinedCso("Engineering");
+
+        var deltas = await EvaluateAsync(UnchangedProposal() with { OutboundDeprovisionAction = OutboundDeprovisionAction.Delete });
+
+        Assert.That(deltas.Where(d => d.ConnectedSystemObjectId == covered.Id &&
+                                      d.TransitionType == ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport), Is.Empty);
     }
 
     [Test]

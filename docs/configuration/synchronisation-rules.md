@@ -74,9 +74,11 @@ An export rule:
 - Flows attribute values from the Metaverse Object to the Connected System Object
 - Creates Pending Exports for any changes
 
-When **Enforce State** is set on an export rule, JIM additionally detects and remediates attribute drift in the Connected System: if an exported attribute is changed externally, the next sync run pulls it back to the Metaverse-derived value. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object.
+A Pending Export carries only what changed: a group that gains or loses members exports just those members, while an object JIM creates gets every value.
 
-A change made in the Connected System is not drift when it can flow back in: that is, when the same Connected System holds the winning import Attribute Flow for the Metaverse attribute and that flow **reads the changed attribute**. For example, an import flow of `mail` into Email and an export of Email to `mail` let an edit to `mail` update Email. If the import flow reads a different attribute (Display Name built from `givenName` and `sn`, but exported to `displayName`), an edit to `displayName` could never reach the Metaverse, so it is treated as drift and corrected.
+With **Enforce State** set on an export rule, JIM also corrects drift: an exported attribute changed in the Connected System is pulled back to the Metaverse value on the next synchronisation. For a [generated value](generated-values.md) on an export mapping, it is pulled back to the value JIM generated for that Connected System Object. With Enforce State off, a member removed from a group in the Connected System stays removed.
+
+A change in the Connected System is not drift when it can flow back in: the same Connected System holds the winning import Attribute Flow for the Metaverse attribute, and that flow **reads the changed attribute**. An import of `mail` into Email lets an edit to `mail` update Email. If the flow reads a different attribute (Display Name built from `givenName` and `sn` but exported to `displayName`), an edit to `displayName` can never reach the Metaverse, so it is corrected as drift.
 
 ## :material-filter-outline: Scoping criteria
 

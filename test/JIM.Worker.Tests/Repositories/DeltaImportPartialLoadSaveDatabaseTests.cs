@@ -157,6 +157,38 @@ public class DeltaImportPartialLoadSaveDatabaseTests
         }
     }
 
+    /// <summary>
+    /// #2836: the External IDs a Delta Import reads for the comparison of a group whose member attribute its answer settled
+    /// never read a member row. Leaving the attribute out with a filter read every member of the group only to discard it,
+    /// which is what cost the 500,000-user leaver's confirming Delta Import 4.7 s with nothing left undecided.
+    /// </summary>
+    [Test]
+    public async Task GetReferenceExternalIdsForCsosAsync_LeavingTheMemberAttributeOut_ReadsNoMemberRowAsync()
+    {
+        const int members = 20_000;
+        var seeded = await LargeGroupImportSeed.SeedAsync(NewContext, _connectionString, userCount: members, memberCount: members);
+
+        var recorder = new CommandRecordingInterceptor();
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .AddInterceptors(recorder)
+            .Options;
+        Dictionary<Guid, Dictionary<Guid, string>> externalIds;
+        await using (var ctx = new JimDbContext(options))
+            externalIds = await new PostgresDataRepository(ctx).Sync.GetReferenceExternalIdsForCsosAsync([seeded.GroupCsoId], [seeded.MemberAttributeId]);
+
+        var rowsRead = await PlanRowsRead.FromAsync(_connectionString, recorder.Commands, PlanRowsRead.AttributeValues);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(externalIds[seeded.GroupCsoId], Is.Empty, "the group's only references are its members, left out");
+            Assert.That(rowsRead, Is.LessThanOrEqualTo(10),
+                $"the lookup read {rowsRead:N0} attribute value rows for a group of {members:N0} members whose member attribute it leaves out; " +
+                "it needs at most the group's 2 other values");
+        }
+    }
+
     private sealed record MemberValue(Guid Id, Guid? ReferenceValueId, string? UnresolvedReferenceValue);
 
     private async Task<List<MemberValue>> ReadMemberValuesAsync(LargeGroupImportSeed seeded)

@@ -340,6 +340,62 @@ public class SyncRuleScopingPreviewAdapterTests
         Assert.That(deltas, Is.Empty);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task EvaluateDeltasAsync_ObjectLeavesTheLastRuleAndARemainJoinedSiblingNeverHeldIt_ReportsTheDisconnectionAsync(bool siblingFirst)
+    {
+        // #2823: the object leaves the last import rule covering it. The rules that held it decide: here only this rule,
+        // whose value the Metaverse Object holds (the join predates recording which rule made it), so its Disconnect
+        // applies even though a sibling, which never held the object, says Remain Joined. The object is streamed without
+        // its Metaverse Object's values, as the database stream reads it, so the adapter must read who held it.
+        GivenRuleScopedToSales(_rule);
+        GivenRuleFlowsDepartment();
+        var sibling = new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Engineering Import",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            InboundOutOfScopeAction = InboundOutOfScopeAction.RemainJoined
+        };
+        var engineering = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        engineering.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = _csoDeptAttribute,
+            ConnectedSystemAttributeId = CsoDeptAttributeId,
+            ComparisonType = SearchComparisonType.Equals,
+            StringValue = "Engineering"
+        });
+        sibling.ObjectScopingCriteriaGroups.Add(engineering);
+        if (siblingFirst)
+            _rules.Insert(0, sibling);
+        else
+            _rules.Add(sibling);
+
+        var cso = GivenJoinedCso("Sales");
+        cso.JoinSyncRuleId = null;
+        var mvo = cso.MetaverseObject!;
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            AttributeId = MvoDeptAttributeId,
+            Attribute = _mvoDeptAttribute,
+            StringValue = "Sales",
+            ContributedBySyncRuleId = RuleId,
+            ContributedBySystemId = SystemId
+        });
+        cso.MetaverseObject = null;
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectsByIdsNoTrackingAsync(It.IsAny<IEnumerable<Guid>>()))
+            .ReturnsAsync((IEnumerable<Guid> ids) => _mvos.Where(m => ids.Contains(m.Id)).ToList());
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        Assert.That(deltas.Select(d => d.TransitionType),
+            Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+    }
+
     // ── Downstream ───────────────────────────────────────────────────────────────────────────────────────────
 
     [Test]
@@ -432,6 +488,38 @@ public class SyncRuleScopingPreviewAdapterTests
 
         Assert.That(deltas.Select(d => d.TransitionType),
             Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport));
+    }
+
+    [Test]
+    public async Task EvaluateDeltasAsync_ExportNarrowingWhileASiblingExportRuleCoversTheIdentity_ReportsAScopeExitWithoutDeprovisioningAsync()
+    {
+        // Another export rule on the same system and Object Type still covers the identity, so it takes the account over
+        // and nothing is deleted (#2822); the edited rule's change is a scope exit only.
+        GivenExportRule();
+        GivenRuleScopedToSales(_rule);
+        _rule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+        _rules.Add(new SyncRule
+        {
+            Id = SiblingRuleId,
+            Name = "Catch-all Export",
+            ConnectedSystemId = SystemId,
+            ConnectedSystemObjectTypeId = CsoTypeId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Export,
+            Enabled = true
+        });
+        GivenMvoWithTargetObject("Sales");
+
+        var deltas = await EvaluateAsync(ProposalScopedTo("Marketing"));
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope));
+            Assert.That(deltas.Select(d => d.TransitionType),
+                Does.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldStageDeleteExport)
+                    .And.Not.Contain(ActivityRunProfileExecutionItemSyncOutcomeType.WouldDisconnectFromMetaverseObject));
+        }
     }
 
     [Test]

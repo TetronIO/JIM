@@ -265,7 +265,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
 
             if (inScopeNow)
             {
-                var delta = ClassifyInboundDeparture(rule, cso, proposedSiblings, anySiblingCoversEverything, asAt,
+                var delta = await ClassifyInboundDepartureAsync(rule, cso, proposedSiblings, anySiblingCoversEverything, asAt,
                     disconnectionsByMetaverseObject);
                 if (delta != null)
                     yield return delta;
@@ -302,7 +302,7 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
     /// <summary>
     /// What one object leaving an import rule's scope actually costs, which is not decided by this rule alone.
     /// </summary>
-    private PreviewDelta? ClassifyInboundDeparture(SyncRule rule, ConnectedSystemObject cso,
+    private async Task<PreviewDelta?> ClassifyInboundDepartureAsync(SyncRule rule, ConnectedSystemObject cso,
         List<SyncRule> proposedSiblings, bool anySiblingCoversEverything, DateTime asAt,
         Dictionary<Guid, int> disconnectionsByMetaverseObject)
     {
@@ -337,9 +337,9 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                 InScopeValue, OutOfScopeValue);
         }
 
-        // The action is the engine's, read from the rule that governs the path rather than assumed to be this
-        // rule's own; with several import rules over one type they need not be the same rule.
-        var action = _syncEngine.DetermineOutOfScopeAction(cso, proposedSiblings);
+        // The action is the engine's: the rules that held the object decide, and Remain Joined wins (#2823). With several
+        // import rules over one type that need not be this rule's own action.
+        var action = (await PreviewLastScopeExit.DecideAsync(_application, _syncEngine, cso, proposedSiblings))[0];
         // A join an export rule made is kept whatever the action (#2021): only the import rule's values can go.
         if (action != InboundOutOfScopeAction.Disconnect || SyncEngine.IsJoinMadeByExportRule(cso))
         {
@@ -393,6 +393,14 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
         // object by attribute name, so the names are supplied from the type's schema when either scope needs them.
         var metaverseAttributesById = PreviewMetaverseObjectAttributes.WhenReadByName(standIn, rule);
 
+        // The other enabled export rules on the same system and Object Type: an identity one of them still covers keeps its
+        // account when it leaves this rule's scope, because that rule takes it over (#2822).
+        var siblingExportRules = (await _application.ConnectedSystems.GetSyncRulesAsync(rule.ConnectedSystemId, includeDisabledSyncRules: false))
+            .Where(sibling => sibling.Id != rule.Id && sibling.Direction == SyncRuleDirection.Export &&
+                              sibling.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId &&
+                              sibling.MetaverseObjectTypeId == rule.MetaverseObjectTypeId)
+            .ToList();
+
         await foreach (var mvo in _application.Metaverse
             .StreamMetaverseObjectsOfType(rule.MetaverseObjectTypeId)
             .WithCancellation(cancellationToken))
@@ -436,6 +444,17 @@ public class SyncRuleScopingPreviewAdapter : IConfigurationChangePreviewAdapter
                         ? ActivityRunProfileExecutionItemSyncOutcomeType.WouldStopProvisioning
                         : ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope;
                     yield return MetaverseScopeDelta(exit, rule, mvo, null, InScopeValue, OutOfScopeValue);
+                    continue;
+                }
+
+                // Covered by another export rule: it takes the account over, so this is a scope exit and nothing more. A
+                // sibling whose scope cannot be decided leaves the account untouched too.
+                if (siblingExportRules.Any(sibling => Decide(() =>
+                        _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
+                        (answer.Failure != null || answer.InScope)))
+                {
+                    yield return MetaverseScopeDelta(ActivityRunProfileExecutionItemSyncOutcomeType.WouldLeaveExportScope,
+                        rule, mvo, targetObject, InScopeValue, OutOfScopeValue);
                     continue;
                 }
 

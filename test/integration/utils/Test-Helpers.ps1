@@ -372,6 +372,90 @@ function Get-ActiveDirectoryLabFederationConfig {
     }
 }
 
+function Get-ActiveDirectoryLabExchangeConfig {
+    <#
+    .SYNOPSIS
+        The configuration of one of the lab's Exchange servers: exchange-primary in PANOPLY or exchange-source in
+        RESURGAM, which the Exchange recipient scenarios provision through (#2021).
+
+    .DESCRIPTION
+        Each is an Exchange Server SE Mailbox server joined to its domain controller's forest, and a pair with it: the
+        domain controller (DomainControllerInstance) is reverted first, each to its own baseline
+        (test/integration/ad-lab/README.md, The Exchange servers). JIM reaches it by its own name over Kerberos HTTP, so
+        Host is the server's name, which the Connected System's Exchange server setting takes as it is.
+
+        The databases and the contacts OU are the ones the server's build makes, the same in every forest:
+        DistributionDatabase (MDB01) is the one Exchange places new mailboxes in, and ExcludedDatabase (MDB02) is
+        excluded from automatic distribution, so a mailbox only lands there when JIM names it.
+
+        DirectoryType is ActiveDirectoryExchange: it is not a directory, and no directory function accepts it.
+
+        Read from JIM_AD_LAB_EXCHANGE_<PRIMARY|SOURCE>_ADDRESS (required), _HOST (default ex1.<forest>.local) and _VM
+        (default exchange-primary or exchange-source; the monthly rebuild points it at the candidate).
+
+    .PARAMETER Instance
+        ExchangePrimary or ExchangeSource.
+
+    .OUTPUTS
+        A hashtable.
+    #>
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('ExchangePrimary', 'ExchangeSource')]
+        [string]$Instance
+    )
+
+    $key, $domain, $domainController = if ($Instance -eq 'ExchangePrimary') { 'PRIMARY', 'panoply', 'Primary' } else { 'SOURCE', 'resurgam', 'Source' }
+    $domainDn = "DC=$domain,DC=local"
+    return @{
+        DirectoryType            = 'ActiveDirectoryExchange'
+        Instance                 = $Instance
+        ContainerName            = $null
+        Host                     = Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_EXCHANGE_${key}_HOST" -Default "ex1.$domain.local"
+        Address                  = Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_EXCHANGE_${key}_ADDRESS"
+        VmName                   = Get-ActiveDirectoryLabVmName -Instance $Instance
+        DomainControllerInstance = $domainController
+        DistributionDatabase     = 'MDB01'
+        ExcludedDatabase         = 'MDB02'
+        ContactOuDn              = "OU=GALSync,OU=Corp,$domainDn"
+        CheckpointBaseline       = 'baseline'
+    }
+}
+
+function Get-ActiveDirectoryLabVmName {
+    <#
+    .SYNOPSIS
+        The VM name of a lab machine, from JIM_AD_LAB_<INSTANCE>_VM or its default, needing nothing else.
+
+    .DESCRIPTION
+        A scenario's configs need each machine's address too. Stopping a machine a scenario does not use
+        (Get-ActiveDirectoryLabPowerPlan) needs only its name, so it is read here on its own: a lab without an Exchange
+        server's address configured can still have that server stopped.
+
+    .PARAMETER Instance
+        Primary, Source, Target, AdfsPrimary, ExchangePrimary or ExchangeSource.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Primary', 'Source', 'Target', 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource')]
+        [string]$Instance
+    )
+
+    $key, $default = switch ($Instance) {
+        'Primary' { 'PRIMARY', 'dc-primary' }
+        'Source' { 'SOURCE', 'dc-source' }
+        'Target' { 'TARGET', 'dc-target' }
+        'AdfsPrimary' { 'ADFS_PRIMARY', 'adfs-primary' }
+        'ExchangePrimary' { 'EXCHANGE_PRIMARY', 'exchange-primary' }
+        'ExchangeSource' { 'EXCHANGE_SOURCE', 'exchange-source' }
+    }
+    return Get-ActiveDirectoryLabSetting -Name "JIM_AD_LAB_${key}_VM" -Default $default
+}
+
 function Test-TemplateSpansSyncPages {
     <#
     .SYNOPSIS

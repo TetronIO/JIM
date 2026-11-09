@@ -137,7 +137,8 @@ public class SyncOutcomeTypeOrdinalTests
         // Generated Value Forms (#2023): a generated value held back until the values built from it can be worked out,
         // and the candidates passed over because a value built from them was already held.
         [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueWaiting] = 59,
-        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = 60
+        [ActivityRunProfileExecutionItemSyncOutcomeType.GeneratedValueCandidatesSkipped] = 60,
+        [ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule] = 61
     };
 
     [Test]

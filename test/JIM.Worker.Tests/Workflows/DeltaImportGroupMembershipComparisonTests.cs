@@ -37,6 +37,23 @@ public class DeltaImportGroupMembershipComparisonTests : WorkflowTestBase
             return base.GetHeldReferenceValueAnswersAsync(questions);
         }
 
+        /// <summary>The attributes found held exactly as imported (#2836), which were then not asked about.</summary>
+        public List<(Guid ConnectedSystemObjectId, int AttributeId)> HeldAsImported { get; } = new();
+
+        /// <summary>False to name nothing as held as imported, so every question is asked: the import as it was before #2836.</summary>
+        public bool RecognisesAttributesHeldAsImported { get; set; } = true;
+
+        public override async Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(
+            IReadOnlyList<HeldReferenceValueQuestion> questions)
+        {
+            if (!RecognisesAttributesHeldAsImported)
+                return new HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>();
+
+            var heldAsImported = await base.GetReferenceAttributesHeldAsImportedAsync(questions);
+            HeldAsImported.AddRange(heldAsImported);
+            return heldAsImported;
+        }
+
         public override Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds,
             IReadOnlyCollection<int> excludedAttributeIds, IReadOnlyCollection<Guid> includedValueIds)
         {
@@ -110,6 +127,147 @@ public class DeltaImportGroupMembershipComparisonTests : WorkflowTestBase
             Assert.That((await StoredMembersAsync(lab)).Select(av => av.Id), Is.EquivalentTo(lab.MemberValueIds));
             Assert.That(_spy.PartialLoads.Single().Included, Is.Empty);
         }
+    }
+
+    /// <summary>
+    /// #2836: a group held exactly as imported (a confirming Delta Import, after an export whose optimistic apply already
+    /// wrote the change) is recognised as such and never asked about member by member.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_GroupHeldAsImported_IsNotAskedAboutMemberByMemberAsync()
+    {
+        var lab = await ArrangeAsync();
+
+        var activity = await RunImportAsync(lab, [[GroupImport(lab, Members(0, MemberCount - 1).Reverse())]]);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems, Is.Empty, "No change, so no execution item");
+            Assert.That(_spy.HeldAsImported, Is.EqualTo(new[] { (lab.Group.Id, lab.Member.Id) }));
+            Assert.That(_spy.Questions, Is.Empty, "Nothing is left to ask");
+            Assert.That(_spy.PartialLoads.Single().Excluded, Is.EqualTo(new[] { lab.Member.Id }), "The group is loaded without its members");
+            Assert.That(_spy.PartialLoads.Single().Included, Is.Empty, "... and without any of them");
+            Assert.That((await StoredMembersAsync(lab)).Select(av => av.Id), Is.EquivalentTo(lab.MemberValueIds));
+        }
+    }
+
+    /// <summary>
+    /// #2836: whether or not the import recognises a group held exactly as imported, it holds the same values afterwards
+    /// and records the same execution items and change records. Where the group is held as imported, recognising it is
+    /// what spares the import asking; anywhere else the group is asked about as before.
+    /// </summary>
+    [TestCase(Scenario.HeldAsImported, true)]
+    [TestCase(Scenario.HeldAsImportedInAnotherOrder, true)]
+    [TestCase(Scenario.MembersLostAndOneGained, false)]
+    [TestCase(Scenario.MemberReplacedKeepingTheCount, false)]
+    [TestCase(Scenario.MemberDnCaseChanged, false)]
+    [TestCase(Scenario.MemberHeldTwiceWhereAnotherIsImported, false)]
+    [TestCase(Scenario.MemberStillUnresolvedHeldAsImported, true)]
+    public async Task DeltaImport_RecognisingGroupsHeldAsImported_ChangesNoOutcomeAsync(Scenario scenario, bool recognised)
+    {
+        var without = await RunScenarioAsync(scenario, recognisesAttributesHeldAsImported: false);
+
+        ResetLab();
+        var with = await RunScenarioAsync(scenario, recognisesAttributesHeldAsImported: true);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(with.Outcome, Is.EqualTo(without.Outcome), "The same values held, execution items and change records");
+            Assert.That(with.HeldAsImported, Is.EqualTo(recognised ? 1 : 0), "Recognised as held as imported");
+            Assert.That(with.Asked, Is.EqualTo(recognised ? 0 : 1), "Asked about member by member");
+            Assert.That(without.Asked, Is.EqualTo(1), "Without recognising it, always asked");
+        }
+    }
+
+    public enum Scenario
+    {
+        HeldAsImported,
+        HeldAsImportedInAnotherOrder,
+        MembersLostAndOneGained,
+        MemberReplacedKeepingTheCount,
+        MemberDnCaseChanged,
+        MemberHeldTwiceWhereAnotherIsImported,
+        MemberStillUnresolvedHeldAsImported
+    }
+
+    private sealed record ScenarioRun(List<string> Outcome, int HeldAsImported, int Asked);
+
+    private const string PendingDn = "uid=pending,ou=People,dc=glitterband,dc=local";
+
+    /// <summary>A fresh lab, as the base fixture's set-up builds one, for a second run within one test.</summary>
+    private void ResetLab()
+    {
+        BaseTearDown();
+        BaseSetUp();
+        SetUpSpy();
+    }
+
+    private async Task<ScenarioRun> RunScenarioAsync(Scenario scenario, bool recognisesAttributesHeldAsImported)
+    {
+        var lab = await ArrangeAsync();
+        _spy.RecognisesAttributesHeldAsImported = recognisesAttributesHeldAsImported;
+
+        var imported = scenario switch
+        {
+            Scenario.HeldAsImported => Members(0, MemberCount - 1).ToList(),
+            Scenario.HeldAsImportedInAnotherOrder => Members(0, MemberCount - 1).Reverse().ToList(),
+            Scenario.MembersLostAndOneGained => Members(2, MemberCount).ToList(),
+            Scenario.MemberReplacedKeepingTheCount => Members(1, MemberCount).ToList(),
+            Scenario.MemberDnCaseChanged => Members(0, MemberCount - 1).Select((dn, i) => i == 7 ? dn.ToUpperInvariant() : dn).ToList(),
+            Scenario.MemberHeldTwiceWhereAnotherIsImported => Members(0, MemberCount).ToList(),
+            Scenario.MemberStillUnresolvedHeldAsImported => Members(0, MemberCount - 1).Append(PendingDn).ToList(),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null)
+        };
+
+        // The group holds user 0 twice, where the directory names user 50 too: as many members as imported, not the same.
+        if (scenario == Scenario.MemberHeldTwiceWhereAnotherIsImported)
+            AddMemberValue(lab, UserDn(0), lab.Users[0]);
+
+        // The group names an object JIM has not imported yet, by the DN it was imported as.
+        if (scenario == Scenario.MemberStillUnresolvedHeldAsImported)
+            AddMemberValue(lab, PendingDn, referenced: null);
+
+        var activity = await RunImportAsync(lab, [[GroupImport(lab, imported)]]);
+        return new ScenarioRun(DescribeOutcome(lab, activity, await StoredMembersAsync(lab)), _spy.HeldAsImported.Count, _spy.Questions.Count);
+    }
+
+    private static void AddMemberValue(Lab lab, string dn, ConnectedSystemObject? referenced)
+    {
+        var value = new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(), AttributeId = lab.Member.Id, Attribute = lab.Member, ConnectedSystemObject = lab.Group,
+            ReferenceValue = referenced, ReferenceValueId = referenced?.Id, UnresolvedReferenceValue = dn
+        };
+        lab.Group.AttributeValues.Add(value);
+        lab.MemberValueIds.Add(value.Id);
+    }
+
+    /// <summary>
+    /// What an import left, in terms two runs over separately built labs can compare: each member value held afterwards
+    /// (the seeded value it is, by position, or a new one), the object it is resolved to (by user number), each execution
+    /// item, and each change record's value changes.
+    /// </summary>
+    private List<string> DescribeOutcome(Lab lab, Activity activity, List<ConnectedSystemObjectAttributeValue> stored)
+    {
+        string Value(ConnectedSystemObjectAttributeValue value)
+        {
+            var seeded = lab.MemberValueIds.IndexOf(value.Id);
+            var referenced = value.ReferenceValueId is { } id ? lab.Users.FindIndex(u => u.Id == id) : -1;
+            return $"value {(seeded >= 0 ? $"seeded#{seeded}" : "new")} '{value.UnresolvedReferenceValue}' -> user#{referenced}";
+        }
+
+        var outcome = stored.Select(Value).Order(StringComparer.Ordinal).ToList();
+        foreach (var item in activity.RunProfileExecutionItems)
+        {
+            outcome.Add($"item {item.ObjectChangeType} {item.ErrorType}");
+            var change = _spy.WrittenChanges.GetValueOrDefault(item);
+            outcome.AddRange((change?.AttributeChanges ?? [])
+                .SelectMany(c => c.ValueChanges.Select(v => $"change {c.Attribute?.Name ?? c.AttributeName} {v.ValueChangeType} '{v.StringValue}' " +
+                    $"-> user#{(v.ReferenceValueId is { } id ? lab.Users.FindIndex(u => u.Id == id) : -1)} unresolved {v.IsUnresolvedReference}"))
+                .Order(StringComparer.Ordinal));
+        }
+
+        return outcome;
     }
 
     /// <summary>

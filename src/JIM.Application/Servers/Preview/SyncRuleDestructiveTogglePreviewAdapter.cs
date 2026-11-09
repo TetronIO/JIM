@@ -35,7 +35,7 @@ namespace JIM.Application.Servers.Preview;
 ///   Disconnect to Delete" readable at a glance without overstating what the save itself does.
 ///
 /// Fate is always put to the synchronisation engine's own decisions
-/// (<see cref="ISyncEngine.DecideOutOfScopeDeprovisioning"/>, <see cref="ISyncEngine.DetermineOutOfScopeAction"/>,
+/// (<see cref="ISyncEngine.DecideOutOfScopeDeprovisioning"/>, <see cref="ISyncEngine.DecideLastScopeExit"/>,
 /// and the shared deletion-eligibility evaluator) rather than reimplemented, so the preview cannot drift from
 /// what a run would do.
 /// </summary>
@@ -122,21 +122,25 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                 nameof(SyncRule.Enabled)));
         }
 
-        // The honest answer for a multi-rule object type, and it is not obvious: when several import rules cover
-        // one object type, the engine reads the Out-of-Scope Action from the first applicable rule, which may not
-        // be the one being edited. Counting objects for an edit that the engine never reads would be a confident
-        // number about a change that does nothing.
-        if (inboundChanged && rule.Direction == SyncRuleDirection.Import)
+        // The honest answer for a multi-rule object type, and it is not obvious (#2823): where an object leaves every
+        // import rule for its type, the rules that held it decide, and Remain Joined from any of them keeps the join. So
+        // switching this rule to Disconnect cannot disconnect an object a sibling saying Remain Joined also held, and the
+        // counts below include only the objects it can.
+        if (inboundChanged && rule.Direction == SyncRuleDirection.Import
+            && proposal.InboundOutOfScopeAction == InboundOutOfScopeAction.Disconnect)
         {
-            var siblings = await GetImportRulesForTypeAsync(rule);
-            var inbound = ResolveInboundGovernance(rule, proposal, siblings);
-            if (!inbound.EditedRuleGovernsAnyPath && inbound.GoverningRuleName is { } governingRuleName)
+            var keepingSiblings = (await GetImportRulesForTypeAsync(rule))
+                .Where(sibling => sibling.Id != rule.Id && sibling.InboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined)
+                .ToList();
+            if (keepingSiblings.Count > 0)
             {
+                var names = string.Join(", ", SyncEngine.InNameOrder(keepingSiblings).Select(sibling => $"'{sibling.Name}'"));
                 findings.Add(new PreviewValidationFinding(
                     PreviewValidationSeverity.Warning,
-                    $"The Out-of-Scope Action that applies to this object type is taken from '{governingRuleName}', " +
-                    "not from this Synchronisation Rule, so changing this rule's setting has no effect while that " +
-                    "rule exists. No impact is counted below.",
+                    $"{names} also covers this object type and keeps its objects joined (Remain Joined). Where an object " +
+                    "leaves every import Synchronisation Rule, the rules that held it decide, and Remain Joined from any of " +
+                    "them keeps the join, so this change disconnects only objects those rules never held. The counts below " +
+                    "include only those.",
                     nameof(SyncRule.InboundOutOfScopeAction)));
             }
         }
@@ -242,6 +246,14 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         // depending on when each is reached (relative date criteria resolve against it).
         var asAt = DateTime.UtcNow;
 
+        // The other enabled export rules on the same system and Object Type: one still covering an identity takes its
+        // account over when it leaves this rule's scope, so this rule's action never reaches it (#2822).
+        var siblingExportRules = (await _application.ConnectedSystems.GetSyncRulesAsync(rule.ConnectedSystemId, includeDisabledSyncRules: false))
+            .Where(sibling => sibling.Id != rule.Id && sibling.Direction == SyncRuleDirection.Export &&
+                              sibling.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId &&
+                              sibling.MetaverseObjectTypeId == rule.MetaverseObjectTypeId)
+            .ToList();
+
         var batch = new List<ConnectedSystemObject>(MetaverseObjectBatchSize);
         await foreach (var cso in _application.ConnectedSystems
             .StreamJoinedConnectedSystemObjects(rule.ConnectedSystemId, csoTypeId)
@@ -253,12 +265,12 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             if (batch.Count < MetaverseObjectBatchSize)
                 continue;
 
-            foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
+            foreach (var delta in await ClassifyOutboundBatchAsync(rule, siblingExportRules, batch, proposedRule, oldValue, newValue, asAt))
                 yield return delta;
             batch.Clear();
         }
 
-        foreach (var delta in await ClassifyOutboundBatchAsync(rule, batch, proposedRule, oldValue, newValue, asAt))
+        foreach (var delta in await ClassifyOutboundBatchAsync(rule, siblingExportRules, batch, proposedRule, oldValue, newValue, asAt))
             yield return delta;
     }
 
@@ -268,7 +280,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     /// </summary>
     /// <param name="proposedRule">A stand-in carrying the proposed action, for the engine to decide each scope exit's
     /// fate against.</param>
-    private async Task<List<PreviewDelta>> ClassifyOutboundBatchAsync(SyncRule rule,
+    private async Task<List<PreviewDelta>> ClassifyOutboundBatchAsync(SyncRule rule, List<SyncRule> siblingExportRules,
         List<ConnectedSystemObject> batch, SyncRule proposedRule,
         string oldValue, string newValue, DateTime asAt)
     {
@@ -284,7 +296,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             .ToDictionary(mvo => mvo.Id);
 
         // The batch's connections, for a connection criterion (#2021): one read, and none when the rule has no such criterion.
-        var connections = await _application.ExportEvaluation.ReadConnectionsAsync(metaverseObjectIds, [rule]);
+        var connections = await _application.ExportEvaluation.ReadConnectionsAsync(metaverseObjectIds, [rule, .. siblingExportRules]);
 
         // An object joined to a Metaverse Object of another type is never governed by this rule: export rules
         // apply per Metaverse Object Type, so its scope exits are decided elsewhere. Null-state does not flow
@@ -321,6 +333,14 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             }
             else
             {
+                // Another export rule still covers the identity, so it takes the account over and nothing is deprovisioned
+                // (#2822). A sibling whose scope cannot be decided stops the run for the object, which deprovisions nothing
+                // either.
+                if (siblingExportRules.Any(sibling => PreviewScopeAnswer.Decide(() =>
+                        _application.ScopingEvaluation.IsMvoInScopeForExportRule(mvo, sibling, asAt, connections)) is var answer &&
+                        (answer.Undecided || answer.InScope)))
+                    continue;
+
                 var fate = _syncEngine.DecideOutOfScopeDeprovisioning(proposedRule, queuedByCsoId.GetValueOrDefault(cso.Id)).Action;
 
                 // A Delete already sent goes ahead whichever action the rule carries, so the proposal changes nothing.
@@ -354,7 +374,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
     /// <summary>
     /// The inbound walk: every joined object of the import rule's type, classified by whether the next
     /// synchronisation would apply the Out-of-Scope Action to it (already obsoleted, or out of scope of every
-    /// import rule), and whether the governing action actually changes for that path under the proposal. The next
+    /// import rule), and whether the action the rules that held it decide on (#2823) changes under the proposal. The next
     /// synchronisation is the Connected System's next Delta or Full, because saving the change records the type as
     /// awaiting synchronisation and that run then processes every object of it.
     /// </summary>
@@ -362,12 +382,9 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         SyncRuleDestructiveToggleProposal proposal, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var siblings = await GetImportRulesForTypeAsync(rule);
-        var governance = ResolveInboundGovernance(rule, proposal, siblings);
-        if (!governance.EditedRuleGovernsAnyPath)
-            yield break;
 
-        // The engine decides the obsoletion path's action from the rule list; the proposal is applied by handing
-        // it the same list with the edited rule's action swapped, never by mutating the loaded rule.
+        // The engine decides each path's action from the rule list; the proposal is applied by handing it the same list
+        // with the edited rule's action swapped, never by mutating the loaded rule.
         var proposedSiblings = siblings
             .Select(sibling => sibling.Id == rule.Id ? WithInboundAction(sibling, proposal.InboundOutOfScopeAction) : sibling)
             .ToList();
@@ -386,22 +403,12 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            InboundOutOfScopeAction currentAction;
-            InboundOutOfScopeAction proposedAction;
-
-            if (cso.Status == ConnectedSystemObjectStatus.Obsolete)
-            {
-                // Already obsoleted: the next synchronisation applies the action whatever its scope says.
-                currentAction = _syncEngine.DetermineOutOfScopeAction(cso, siblings);
-                proposedAction = _syncEngine.DetermineOutOfScopeAction(cso, proposedSiblings);
-            }
-            else
+            if (cso.Status != ConnectedSystemObjectStatus.Obsolete)
             {
                 // The scope-exit path fires only for an object out of scope of every import rule, and a rule with
                 // no Scoping Criteria is in scope for everything, so it never fires while such a rule exists
                 // (rulesWithCriteria smaller than siblings means one does). Mirrors the real path in
-                // SyncTaskProcessorBase.ProcessMetaverseObjectChangesAsync; the governing rule is the
-                // deterministic first rule carrying Scoping Criteria (HandleCsoOutOfScopeAsync, #1085).
+                // SyncTaskProcessorBase.ProcessMetaverseObjectChangesAsync.
                 if (rulesWithCriteria.Count == 0 || rulesWithCriteria.Count < siblings.Count)
                     continue;
 
@@ -412,21 +419,22 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
                     .Select(r => PreviewScopeAnswer.Decide(() => _application.ScopingEvaluation.IsCsoInScopeForImportRule(cso, r, asAt)))
                     .ToList();
                 var undecided = scopes.FirstOrDefault(scope => scope.Undecided);
+                if (!undecided.Undecided && scopes.Any(scope => scope.InScope))
+                    continue;
+
                 if (undecided.Undecided)
                 {
-                    if (governance.ScopeExitActionCurrent != governance.ScopeExitActionProposed)
+                    var (actionNow, actionProposed) = await DecideAsync(cso, siblings, proposedSiblings);
+                    if (actionNow != actionProposed)
                         yield return InboundDelta(cso, rule, ActivityRunProfileExecutionItemSyncOutcomeType.WouldFail,
                             null, undecided.Describe(), PreviewScopeAnswer.AttributeName);
                     continue;
                 }
-
-                if (scopes.Any(scope => scope.InScope))
-                    continue;
-
-                currentAction = governance.ScopeExitActionCurrent;
-                proposedAction = governance.ScopeExitActionProposed;
             }
 
+            // Out of every import rule's scope, or already obsoleted (which leaves every rule at once): the rules that
+            // held the object decide, and Remain Joined wins (#2823).
+            var (currentAction, proposedAction) = await DecideAsync(cso, siblings, proposedSiblings);
             if (currentAction == proposedAction)
                 continue;
 
@@ -475,37 +483,14 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
             NewValue: newValue);
 
     /// <summary>
-    /// Which of the two inbound paths (scope exit, obsoletion) the edited rule actually governs, and the actions
-    /// each path takes before and after the proposal. When several import rules cover one object type the engine
-    /// reads the action from the first applicable rule, which may not be the edited one; a preview must know that
-    /// before it counts anything.
+    /// The action a synchronisation would apply to the object under the current rules and under the proposed ones.
     /// </summary>
-    private InboundGovernance ResolveInboundGovernance(SyncRule rule, SyncRuleDestructiveToggleProposal proposal,
-        List<SyncRule> siblings)
+    private async Task<(InboundOutOfScopeAction Current, InboundOutOfScopeAction Proposed)> DecideAsync(
+        ConnectedSystemObject cso, List<SyncRule> siblings, List<SyncRule> proposedSiblings)
     {
-        // The scope-exit path's governing rule: the deterministic first import rule carrying Scoping Criteria
-        // (mirrors SyncTaskProcessorBase.HandleCsoOutOfScopeAsync; default when none exists is Disconnect).
-        var scopeExitGoverning = siblings.FirstOrDefault(s => s.ObjectScopingCriteriaGroups.Count > 0);
-        var scopeExitCurrent = scopeExitGoverning?.InboundOutOfScopeAction ?? default;
-        var scopeExitProposed = scopeExitGoverning?.Id == rule.Id ? proposal.InboundOutOfScopeAction : scopeExitCurrent;
-
-        // The obsoletion path's governing rule: the engine's own selector reads the first enabled import rule of
-        // the object's type, with no Scoping Criteria requirement (ISyncEngine.DetermineOutOfScopeAction).
-        var obsoletionGoverning = siblings.FirstOrDefault();
-        var editedRuleGoverns = scopeExitGoverning?.Id == rule.Id || obsoletionGoverning?.Id == rule.Id;
-
-        var governingRuleName = scopeExitGoverning?.Id != rule.Id ? scopeExitGoverning?.Name
-            : obsoletionGoverning?.Id != rule.Id ? obsoletionGoverning?.Name
-            : null;
-
-        return new InboundGovernance(editedRuleGoverns, governingRuleName, scopeExitCurrent, scopeExitProposed);
+        var actions = await PreviewLastScopeExit.DecideAsync(_application, _syncEngine, cso, siblings, proposedSiblings);
+        return (actions[0], actions[1]);
     }
-
-    private sealed record InboundGovernance(
-        bool EditedRuleGovernsAnyPath,
-        string? GoverningRuleName,
-        InboundOutOfScopeAction ScopeExitActionCurrent,
-        InboundOutOfScopeAction ScopeExitActionProposed);
 
     /// <summary>
     /// Whether the proposal changes a setting the rule's direction actually reads. A toggle the direction never
@@ -535,7 +520,7 @@ public class SyncRuleDestructiveTogglePreviewAdapter : IConfigurationChangePrevi
 
     /// <summary>
     /// A minimal stand-in for a sibling rule with the proposed action applied, carrying only what
-    /// <see cref="ISyncEngine.DetermineOutOfScopeAction"/> reads. A stand-in rather than a mutation, because the
+    /// <see cref="ISyncEngine.DecideLastScopeExit"/> reads. A stand-in rather than a mutation, because the
     /// loaded rule is the current configuration and a preview must never change it, even in memory.
     /// </summary>
     private static SyncRule WithInboundAction(SyncRule rule, InboundOutOfScopeAction action) => new()

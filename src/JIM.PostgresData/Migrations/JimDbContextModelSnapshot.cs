@@ -949,21 +949,23 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ContributedBySystemId");
 
-                    b.HasIndex("DateTimeValue");
+                    b.HasIndex("DecimalValue")
+                        .HasFilter("\"DecimalValue\" IS NOT NULL");
 
-                    b.HasIndex("DecimalValue");
+                    b.HasIndex("GuidValue")
+                        .HasFilter("\"GuidValue\" IS NOT NULL");
 
-                    b.HasIndex("GuidValue");
+                    b.HasIndex("IntValue")
+                        .HasFilter("\"IntValue\" IS NOT NULL");
 
-                    b.HasIndex("IntValue");
+                    b.HasIndex("LongValue")
+                        .HasFilter("\"LongValue\" IS NOT NULL");
 
-                    b.HasIndex("LongValue");
+                    b.HasIndex("ReferenceValueId")
+                        .HasFilter("\"ReferenceValueId\" IS NOT NULL");
 
-                    b.HasIndex("ReferenceValueId");
-
-                    b.HasIndex("StringValue");
-
-                    b.HasIndex("UnresolvedReferenceValueId");
+                    b.HasIndex("UnresolvedReferenceValueId")
+                        .HasFilter("\"UnresolvedReferenceValueId\" IS NOT NULL");
 
                     b.HasIndex("AttributeId", "DateTimeValue")
                         .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_DateTimeValue")

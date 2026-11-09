@@ -37,7 +37,7 @@ answers:
 
 The Activity's [execution items](../configuration/activity-execution-items.md) name each object that hit a problem, with the error recorded against it (`Get-JIMActivityExecutionItem` returns the same). The entries below are titled by that error, or by the message on the Activity. The ones that protect your data come first.
 
-A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md).
+A run that ended because the Worker restarted, or ran short of memory, is covered in [Troubleshooting Worker Restarts and Memory](troubleshooting-worker.md). An export the Connected System refused, or never confirmed, is covered in [Troubleshooting Exports](troubleshooting-exports.md).
 
 ## :material-delete-alert-outline: `Deletion detection found ... no longer in the Connected System ... none were marked as deleted`
 
@@ -61,9 +61,9 @@ The same message names creates or updates when those are what the limit holds ba
 
 ## :material-vector-link: **Ambiguous Match**: `This object matches ... Metaverse Objects on ...`
 
-**What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person.
+**What it means.** An Object Matching Rule found more than one Metaverse Object for one Connected System Object, so JIM neither joined nor projected it. The message names the attribute and the values, and the execution item lists the Metaverse Objects that matched. The object stays as it was; nothing is joined to the wrong person. The same error, with the message `This object's import Synchronisation Rules match ... different Metaverse Objects: ...`, means two import Synchronisation Rules for the object's type each found one Metaverse Object, but not the same one; the message names each rule and what it found.
 
-**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes.
+**How to fix.** Make the matched values identify one person: correct the duplicate data in the source or in the Metaverse, or change the Object Matching Rule to match on something unique, as [Matching outcomes](../configuration/object-matching-rules.md#matching-outcomes) describes. Where two rules disagree, change one rule's Object Matching Rules, or its scope, so that every rule that covers the object finds the same person.
 
 **Check.** After a corrected source, import and synchronise as usual; after a changed Object Matching Rule, the next synchronisation processes every object of its Object Type. The object's execution item records a join or a projection.
 
@@ -99,50 +99,6 @@ The same message names creates or updates when those are what the limit holds ba
 
 **Check.** The Connected System's count of unresolved references falls after the next import.
 
-## :material-account-lock-outline: **Access Denied**: `Export failed: The directory refused the change because the account JIM connects as does not have permission ...`
-
-The SCIM Connector's messages begin `The service provider did not accept JIM's credentials (401)` or `... do not have permission to make it (403)`, and the SQL Connector's begin `The database refused the change because the account JIM connects as does not have permission ...`.
-
-**What it means.** The Connected System refused the export because the account JIM connects as may not make that change, or because it did not accept JIM's credentials at all. The message ends with the Connected System's own words. This is configuration in the Connected System, not a fault in JIM, so the run ends **Complete with warning**. The change waits as a Pending Export, which JIM attempts and reports again at every Export run until it succeeds; the Pending Exports list shows how long it has been failing.
-
-**How to fix.** For a directory, grant the bind account the rights to create, modify, move or delete the object and write the attributes the export carries; the [LDAP Connector](../connectors/jim-ldap-connector.md) page lists what each directory needs. For a SCIM service provider, a 401 means the Connected System's credentials are wrong, expired or revoked; a 403 means they lack a permission or scope the change needs. For a database, grant the account JIM connects as `INSERT`, `UPDATE` and `DELETE` on each table the export writes to, including related tables; [Database account permissions](../connectors/jim-sql-connector-security.md#database-account-permissions) lists what each database needs.
-
-**Check.** The next Export run writes the change, however many attempts failed before: its Pending Export shows **Exported**, and clears once an import confirms it. Nothing needs resetting by hand.
-
-## :material-export: **Export Rejected**: `Export failed: The directory refused the change (...): ...`
-
-The SQL Connector's messages begin `The database refused the change (...)`, naming the SQLSTATE, SQL Server error number or `ORA-` code in brackets.
-
-**What it means.** The Connected System considered the export and said no, for a reason of its own: the object breaks its schema or a constraint, a required value is missing, the parent container is not there, a value does not fit its column, a table or column it names does not exist, a database trigger raised an error, or it will not perform the change. The result in brackets and the rest of the message are the Connected System's own; a SCIM service provider's message is its own throughout. The run ends **Complete with warning**, and the Pending Export is retried as for **Access Denied** above.
-
-**How to fix.** Act on the Connected System's reason: supply the value, correct the data in the source, or change the Attribute Flow that produced it. A **Value Already in Use** error instead means the value is held by another object; [When a target rejects a value](../configuration/generated-values-in-target-systems.md#when-a-target-rejects-a-value) covers that one. A **Password Required** error from Active Directory is explained in [Active Directory will not enable an account that has no password](../connectors/jim-ldap-connector-troubleshooting.md#active-directory-will-not-enable-an-account-that-has-no-password).
-
-**Check.** As for **Access Denied** above.
-
-## :material-export: **Export Refused**: `Export failed: Cannot write to '...': it is outside the containers selected for this Connected System ...`
-
-**What it means.** JIM did not send the export, because it would have placed the object in a container that is not selected on the Connected System's **Scope** tab. JIM cannot import an object from there, so it would treat the object as deleted at the next Full Import. The object stays where it is, and the run ends **Complete with warning**.
-
-**How to fix.** Select the container on the Connected System's **Scope** tab, or change the Attribute Flow that produced the Distinguished Name the message names.
-
-**Check.** As for **Access Denied** above.
-
-## :material-alert-octagon-outline: **Operation Failed**: `Export failed: ...`
-
-**What it means.** The export did not reach a Connected System that could consider it: the connection dropped, the server was busy or unavailable or ran out of time, a database deadlocked, or a SCIM service provider answered with a server error (5xx). JIM records these as errors it did not anticipate, so the run ends **Complete with error**. The Pending Export is retried as for **Access Denied** above.
-
-**How to fix.** Check that the Connected System is reachable and healthy, then run the Export Run Profile again. If the message names something else, collect what **Still stuck?** below lists.
-
-**Check.** As for **Access Denied** above.
-
-## :material-clock-alert-outline: **Export Pending**: `We exported a change, but did not get confirmation of it`
-
-**What it means.** JIM exported a change, but the confirming import read back a different value, or none. The Connected System changed the value as it stored it (often its case), or the import does not return that attribute. JIM exports the change again at every Export run, and reports it on every confirming import that does not see it.
-
-**How to fix.** Compare what JIM exported with what the Connected System holds. Where the system changes the case, see [When a target changes the case of a value](../concepts/case-sensitivity.md#when-a-target-changes-the-case-of-a-value); where the import cannot see the attribute, select it on the Connected System's schema.
-
-**Check.** The next confirming import records no Export Pending items, and the Pending Export clears.
-
 ## :material-swap-horizontal: **Synchronisation Failed**: `Synchronisation Rule '...' targets Connected System Object Type '...' in '...', but this Metaverse Object is already represented there by a '...' object.`
 
 **What it means.** Two export Synchronisation Rules for the same Connected System, each for a different Object Type, both have this Metaverse Object in scope. A Metaverse Object has at most one Connected System Object per Connected System, and it already has one of the other Object Type there, so JIM staged nothing for the rule the message names. The object it already has is left as it is.
@@ -150,6 +106,22 @@ The SQL Connector's messages begin `The database refused the change (...)`, nami
 **How to fix.** Narrow the Scoping Criteria of one rule, so that no Metaverse Object is in scope of both. If the two Object Types genuinely belong to the same identities, give each its own Connected System over the same target. The object's **Connections** tab names the conflicting rule too (see [Metaverse Objects](../configuration/metaverse-objects.md#why-it-is-connected-and-why-it-is-not)).
 
 **Check.** After the next synchronisation, the object's execution item stages the export it expects, or records nothing for the rule it no longer matches.
+
+## :material-call-split: **Export Rules Overlap**: `This Metaverse Object is in scope of ... export Synchronisation Rules that target '...' in '...': ...`
+
+**What it means.** Two or more enabled export Synchronisation Rules for the same Connected System and Object Type both have this Metaverse Object in scope. Only one export rule may manage an object, so JIM exported nothing to that Connected System for it and corrected no drift there; the object's other Connected Systems, and every other object, carried on. The message names the rules.
+
+**How to fix.** Give the rules Scoping Criteria that never overlap, or combine them into one rule; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
+
+**Check.** After the next synchronisation, the object's execution item stages the export it expects and records no Export Rules Overlap item.
+
+## :material-shape-plus-outline: **Projection Type Conflict**: `More than one import Synchronisation Rule would project this object, into different Metaverse Object Types: ...`
+
+**What it means.** Two or more enabled import Synchronisation Rules have this Connected System Object in scope, nothing matched it, and the rules would project it into different Metaverse Object Types. JIM does not choose what kind of object it is, so it projected nothing; the object stays unjoined. The message names each rule and the type it projects into.
+
+**How to fix.** Give the rules Scoping Criteria that never cover the same object, or have them project into one Metaverse Object Type; see [Several rules for the same objects](../configuration/scoping-criteria.md#several-rules-for-the-same-objects). Saving either rule while both are enabled warns you about the other.
+
+**Check.** After the next synchronisation, the object's execution item records a projection.
 
 ## :material-filter-remove-outline: **Synchronisation Failed**: `The scoping criterion on '...' in the Synchronisation Rule '...' could not be evaluated, so this object's scope was left as it was.`
 

@@ -12,6 +12,7 @@ using JIM.Models.Transactional;
 using JIM.TestSupport;
 using Moq;
 using NUnit.Framework;
+using JIM.Models.Logic.DTOs;
 
 namespace JIM.Worker.Tests.Servers;
 
@@ -41,6 +42,9 @@ public class GeneratedValueNeedsDecisionReleaseOnSaveTests
 
         _mockRepository = new Mock<IRepository>();
         _mockCsRepo = new Mock<IConnectedSystemRepository>();
+        // Saving an export rule reads the other export rules for its Metaverse Object Type (#2820's overlap warning).
+        _mockCsRepo.Setup(r => r.GetSyncRuleHeadersAsync(It.IsAny<int?>(), It.IsAny<SyncRuleDirection?>()))
+            .ReturnsAsync(() => new List<SyncRuleHeader>());
         _mockSyncRepo = TestUtilities.StubQueuedChangeWithdrawal(new Mock<ISyncRepository>());
         var mockMvRepo = new Mock<IMetaverseRepository>();
         var mockActivityRepo = new Mock<IActivityRepository>();

@@ -90,7 +90,20 @@ public interface ISyncRepository
     /// <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>.</param>
     /// <param name="createdOnOrAfter">When provided, restricts the page to objects created at or after this instant:
     /// the closing sweep of a type-ordered run, for objects created while it was in flight.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="onlyIds">When provided, restricts the page further to these objects: the closing sweep loads only the
+    /// objects of an id page (<see cref="GetConnectedSystemObjectIdsAsync"/>) that the type walks did not hand out
+    /// (#2861). Every other filter, the ordering and the load are unchanged, so an object comes back exactly as the page
+    /// would have loaded it.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The closing sweep's id page (#2861): the ids of the objects <see cref="GetConnectedSystemObjectsAsync"/> selects for
+    /// the sweep (this Connected System's, created at or after <paramref name="createdOnOrAfter"/>, sorting after
+    /// <paramref name="afterId"/>), at most <paramref name="pageSize"/> of them, in the page load's order, without loading
+    /// any. The sweep then loads in full, through <c>onlyIds</c>, only those the type walks did not hand out: after an
+    /// initial load, none of them.
+    /// </summary>
+    Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// Loads a page of CSOs created or modified since the specified date, or marked <c>DerivedInputChangePending</c>
@@ -108,7 +121,20 @@ public interface ISyncRepository
     /// Type.</param>
     /// <param name="createdOnOrAfter">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to
     /// objects created at or after this instant.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null);
+    /// <param name="valueLoadPlan">#2818: the attributes the page may leave out of an object, where Drift Detection is
+    /// their only reader on the page. An object it leaves one out of carries it in
+    /// <see cref="ConnectedSystemObject.PartiallyLoadedAttributes"/> (<see cref="SynchronisationPartiallyLoadedAttribute"/>);
+    /// every other object is loaded whole. Null loads every object whole.</param>
+    /// <param name="onlyIds">As for <see cref="GetConnectedSystemObjectsAsync"/>: restricts the page to these objects, for
+    /// the closing sweep (#2861).</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? onlyIds = null);
+
+    /// <summary>
+    /// The Delta Synchronisation's closing sweep id page (#2861): as <see cref="GetConnectedSystemObjectIdsAsync"/>, over
+    /// the objects <see cref="GetConnectedSystemObjectsModifiedSinceAsync"/> selects (modified since
+    /// <paramref name="modifiedSince"/> or marked, and created at or after <paramref name="createdOnOrAfter"/>).
+    /// </summary>
+    Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter);
 
     /// <summary>
     /// The Object Types that hold at least one of the Connected System's objects (#2492). A type-ordered
@@ -253,6 +279,28 @@ public interface ISyncRepository
     /// <param name="questions">At most one per object and attribute.</param>
     /// <returns>One answer per question, in the questions' order.</returns>
     Task<List<HeldReferenceValueAnswer>> GetHeldReferenceValueAnswersAsync(IReadOnlyList<HeldReferenceValueQuestion> questions);
+
+    /// <summary>
+    /// #2818: answers Drift Detection's questions about attributes a Delta Synchronisation loaded without their values: for
+    /// each, which Metaverse Objects the held values resolve to that are not expected, which expected ones none resolves
+    /// to, and how the values are held (<see cref="DriftHeldReferenceAnswer"/>), comparing every value in the database and
+    /// returning only those the two sides disagree on. One round trip, reading one snapshot.
+    /// </summary>
+    /// <param name="questions">The questions, from <c>DriftDetectionService.PlanHeldReferenceQuestions</c>.</param>
+    /// <returns>One answer per question, in the questions' order.</returns>
+    Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions);
+
+    /// <summary>
+    /// #2836: which of <paramref name="questions"/> name an attribute the object holds exactly as imported: every value
+    /// it holds keeps, byte for byte, the string of a different one of the question's values, and every one of those
+    /// values is kept. For such a question <see cref="GetHeldReferenceValueAnswersAsync"/> would leave nothing undecided
+    /// (its answer would be empty), so it need not be asked; any other question is left to it. Cheaper than asking, since
+    /// it sends no imported value to the database: a confirming Delta Import, after an export whose optimistic apply
+    /// already wrote the change, finds every group current and would otherwise pay to compare every member.
+    /// </summary>
+    /// <param name="questions">At most one per object and attribute.</param>
+    /// <returns>The object and attribute of each question held exactly as imported.</returns>
+    Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions);
 
     /// <summary>
     /// Loads CSOs by ID, untracked, with their attribute values, each value's attribute definition and, for a
@@ -1363,6 +1411,16 @@ public interface ISyncRepository
     Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records an export batch's results (#2851): every Pending Export in full, the sent mark on exactly the changes the
+    /// batch sent (awaiting confirmation, one attempt more than stored, sent at <see cref="PendingExportResultWrite.SentAt"/>),
+    /// and the value and holds of the changes revised besides; no other change is written. What it leaves is what
+    /// <see cref="UpdatePendingExportsAsync"/> leaves for the same batch, without writing every column of every change back.
+    /// The changes are written before the Pending Exports, as <see cref="UpdatePendingExportsAsync"/> orders them, in one
+    /// transaction; a sent change whose row is gone fails the whole write.
+    /// </summary>
+    Task UpdatePendingExportResultsAsync(PendingExportResultWrite results);
+
+    /// <summary>
     /// Writes what reference resolution changed, and nothing else: each Pending Export's
     /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
     /// ResolvedReferenceCsoId. Lets the deferred export pass save a chunk's resolutions without
@@ -1994,6 +2052,17 @@ public interface ISyncRepository
     /// Used to pre-load target CSO attribute values for no-net-change detection during export evaluation.
     /// </summary>
     Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
+
+    /// <summary>
+    /// The target Connected System Objects' attribute values for export evaluation's no-net-change detection, as
+    /// <see cref="GetCsoAttributeValuesByCsoIdsAsync"/> loads them, except that each attribute a member question names is
+    /// loaded in part (#2832): only the values that could name one of its Metaverse Objects, as a member joined to one, or
+    /// unresolved with that object's id as its text. Every other value is loaded whole.
+    /// </summary>
+    /// <param name="csoIds">The target Connected System Objects.</param>
+    /// <param name="memberQuestions">The attributes to load in part; at most one per object and attribute.</param>
+    Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions);
 
     /// <summary>
     /// Gets a single CSO joined to a specific MVO within a Connected System.

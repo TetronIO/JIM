@@ -655,6 +655,34 @@ public partial class ConnectedSystemServer
     private static bool DeclaresNoSettings(string connectorName) =>
         SeedingServer.BuiltInConnectors().Any(c => c.Name == connectorName && c is IConnectorSettings settings && settings.GetSettings().Count == 0);
 
+    /// <summary>
+    /// Warns when this enabled, projecting import rule shares its Connected System and Object Type with another enabled
+    /// projecting import rule that projects into a different Metaverse Object Type (#2823). A synchronisation projects
+    /// nothing for an object both rules have in scope, and reports it as a Projection Type Conflict, so the
+    /// administrator hears about it on saving rather than from the next run. Rules whose scopes never overlap are a
+    /// valid configuration, so this warns and never refuses.
+    /// </summary>
+    private async Task StampConflictingProjectionWarningsAsync(SyncRule syncRule)
+    {
+        if (!syncRule.Enabled || syncRule.ProjectToMetaverse != true)
+            return;
+
+        var importRules = await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(null, SyncRuleDirection.Import);
+        var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
+        var metaverseObjectTypeId = syncRule.ResolveMetaverseObjectTypeId();
+        syncRule.RuleSaveWarnings.AddRange(importRules
+            .Where(other => other.Enabled && other.ProjectToMetaverse == true && other.Id != syncRule.Id &&
+                            other.ConnectedSystemId == syncRule.ConnectedSystemId &&
+                            other.ConnectedSystemObjectTypeId == objectTypeId &&
+                            other.MetaverseObjectTypeId != metaverseObjectTypeId)
+            .OrderBy(other => other.Name, StringComparer.Ordinal)
+            .Select(other =>
+                $"The import Synchronisation Rule '{other.Name}' also projects '{other.ConnectedSystemObjectTypeName}' objects from " +
+                $"'{other.ConnectedSystemName}', but as '{other.MetaverseObjectTypeName}'. A synchronisation projects nothing for an " +
+                "object both rules have in scope, and reports it as a Projection Type Conflict. Give the rules scopes that never " +
+                "overlap, or have them project into one Metaverse Object Type."));
+    }
+
     /// <param name="previewActivityId">
     /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
     /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
@@ -10528,6 +10556,42 @@ public partial class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
+    /// <summary>
+    /// Stamps <see cref="SyncRule.RuleSaveWarnings"/> for the rule being saved, which other enabled rules it would
+    /// conflict with. An import rule: see <see cref="StampConflictingProjectionWarningsAsync"/> (#2823). An export rule:
+    /// warns when the enabled export rule being saved shares its Metaverse
+    /// Object Type, Connected System and Connected System Object Type with another enabled export rule (#2820). Only one
+    /// export rule may manage an object: a synchronisation exports nothing for an object both rules have in scope, and
+    /// records an ExportRuleOverlap item. Rules for different Metaverse Object Types never cover one object, so they raise
+    /// nothing.
+    /// </summary>
+    private async Task StampRuleSaveWarningsAsync(SyncRule syncRule)
+    {
+        syncRule.RuleSaveWarnings.Clear();
+        if (syncRule.Direction == SyncRuleDirection.Import)
+        {
+            await StampConflictingProjectionWarningsAsync(syncRule);
+            return;
+        }
+
+        if (syncRule.Direction != SyncRuleDirection.Export || !syncRule.Enabled)
+            return;
+
+        var exportRules = await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(
+            syncRule.ResolveMetaverseObjectTypeId(), SyncRuleDirection.Export);
+        var objectTypeId = syncRule.ConnectedSystemObjectType?.Id ?? syncRule.ConnectedSystemObjectTypeId;
+        syncRule.RuleSaveWarnings.AddRange(exportRules
+            .Where(other => other.Enabled && other.Id != syncRule.Id &&
+                            other.ConnectedSystemId == syncRule.ConnectedSystemId &&
+                            other.ConnectedSystemObjectTypeId == objectTypeId)
+            .OrderBy(other => other.Name, StringComparer.Ordinal)
+            .Select(other =>
+                $"The export Synchronisation Rule '{other.Name}' also manages '{other.ConnectedSystemObjectTypeName}' objects in " +
+                $"'{other.ConnectedSystemName}' for '{other.MetaverseObjectTypeName}'. Only one export rule may manage an object: " +
+                "a synchronisation exports nothing to this Connected System for an object both rules have in scope, and reports it " +
+                "as Export Rules Overlap. Give the rules scopes that never overlap, or combine them into one rule."));
+    }
+
     /// <param name="previewActivityId">
     /// The Configuration Change Preview this change was made after reading, where one was run. Recorded on the
     /// Activity so "previewed, then applied" is auditable rather than a claim (#827).
@@ -10581,6 +10645,9 @@ public partial class ConnectedSystemServer
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.
         await StampDependentDerivedFlowsOfRuleSaveAsync(syncRule);
+        // Another enabled export rule targeting the same objects (#2820): reported, never blocking, since rules whose
+        // scopes never overlap are a configuration the run handles object by object.
+        await StampRuleSaveWarningsAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.
@@ -10854,6 +10921,9 @@ public partial class ConnectedSystemServer
         // contributor of an attribute a derived flow reads. Reported on the rule, never blocking; read before anything
         // below writes.
         await StampDependentDerivedFlowsOfRuleSaveAsync(syncRule);
+        // Another enabled export rule targeting the same objects (#2820): reported, never blocking, since rules whose
+        // scopes never overlap are a configuration the run handles object by object.
+        await StampRuleSaveWarningsAsync(syncRule);
 
         // reject an enabled rule against an Object Type that is not selected (#1474): deselecting a type takes it out
         // of management, and an enabled rule bound to it is the one state in which that would do harm.

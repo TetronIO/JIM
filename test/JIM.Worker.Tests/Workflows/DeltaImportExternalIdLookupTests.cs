@@ -367,7 +367,10 @@ public class DeltaImportExternalIdLookupTests : WorkflowTestBase
             Assert.That(Errors(activity).Select(i => i.ErrorType), Is.EqualTo(new[] { ActivityRunProfileExecutionItemErrorType.ObjectTypeChanged }));
             Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.EqualTo(4), "Nothing created");
             Assert.That(_spy.WholeLookupLoads, Is.Zero);
-            Assert.That(_spy.PageLookups, Has.Count.EqualTo(2), "Its own Object Type first, then the others for the object it did not find");
+            // #2835: JIM holds no computer, so its own Object Type is not asked about, only the user type that holds objects.
+            Assert.That(_spy.PageLookups.Select(p => p.Select(probe => probe.AttributeId)),
+                Is.EqualTo(new[] { new[] { userType.Attributes.Single(a => a.IsExternalId).Id } }),
+                "Looked up under the other Object Type holding objects, once");
         }
     }
 
@@ -396,9 +399,232 @@ public class DeltaImportExternalIdLookupTests : WorkflowTestBase
         }
     }
 
+    /// <summary>
+    /// #2835: an OpenLDAP schema declares about a hundred Object Types, and the Connector recommends entryUUID as the
+    /// External ID of every one, while the objects JIM holds use two. A deletion arrives without its Object Type and a
+    /// group change with it. The page asks the database about each External ID once, under the Object Types it could be
+    /// held as: those holding objects, not every type the schema declares, and not a second time for the cross-type check.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_OpenLdapShapedPage_LooksUpEachExternalIdOnceUnderTheObjectTypesHoldingObjectsAsync()
+    {
+        var (connectedSystem, userType, groupType) = await ArrangeOpenLdapShapedAsync(schemaOnlyObjectTypes: 20);
+        var users = SeedCsos(connectedSystem, userType, 20);
+        var groups = SeedCsos(connectedSystem, groupType, 10);
+        var deletedUsers = users.Take(10).ToList();
+        var newGroupExternalId = Guid.NewGuid();
+
+        var page = deletedUsers.Select(u => UntypedDeletion(userType, u.ExternalId))
+            .Concat(groups.Select(g => DirectoryObject(groupType, g.ExternalId, "Renamed", ObjectChangeType.Updated)))
+            .Append(DirectoryObject(groupType, newGroupExternalId, "New group", ObjectChangeType.Added))
+            .ToList();
+        var activity = await RunImportAsync(connectedSystem, [page], ConnectedSystemRunType.DeltaImport);
+
+        var probes = _spy.PageLookups.SelectMany(p => p).ToList();
+        var probesPerExternalId = probes.GroupBy(p => p.ValueKey).ToDictionary(g => g.Key, g => g.Count());
+        var obsolete = new List<Guid>();
+        foreach (var user in users)
+        {
+            if ((await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, user.Cso.Id))!.Status == ConnectedSystemObjectStatus.Obsolete)
+                obsolete.Add(user.Cso.Id);
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(obsolete, Is.EquivalentTo(deletedUsers.Select(u => u.Cso.Id)), "Each untyped deletion retires the user it names");
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.EqualTo(10));
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Added), Is.EqualTo(1));
+            Assert.That(_spy.WholeLookupLoads, Is.Zero);
+
+            Assert.That(probes.Distinct().Count(), Is.EqualTo(probes.Count), "No External ID is sent to the database twice");
+            foreach (var user in deletedUsers)
+                Assert.That(probesPerExternalId[user.ExternalId.ToString()], Is.EqualTo(2),
+                    "An untyped deletion is looked up under the two Object Types holding objects, not the 22 the schema declares");
+            foreach (var group in groups)
+                Assert.That(probesPerExternalId[group.ExternalId.ToString()], Is.EqualTo(1), "A group JIM holds is looked up under its own Object Type only");
+            Assert.That(probesPerExternalId[newGroupExternalId.ToString()], Is.EqualTo(2),
+                "A new group is looked up under its own Object Type, then under the other Object Type holding objects");
+            Assert.That(probes, Has.Count.EqualTo(10 * 2 + 10 + 2));
+        }
+    }
+
+    /// <summary>
+    /// #2835: the 500,000-object leaver's Delta Import (untyped deletions, then group changes) looked up 266,580 External
+    /// IDs page by page, 5.9 s, before its rule (more than half the objects held) gave way to one load of every object,
+    /// 3.0 s. Page lookups now stop before they cost more than that one load would: at about 20 microseconds per External ID
+    /// against 6 per object held, 30% of the objects held.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_LeaverShapedDelta_LoadsEveryExternalIdBeforePageLookupsCostMoreThanOneLoadAsync()
+    {
+        var (connectedSystem, userType, groupType) = await ArrangeOpenLdapShapedAsync(schemaOnlyObjectTypes: 0);
+        var users = SeedCsos(connectedSystem, userType, 3_000);
+        var groups = SeedCsos(connectedSystem, groupType, 1_000);
+        const int heldCount = 4_000;
+        const int externalIdsOneLoadPaysFor = heldCount * 6 / 20;
+
+        var pages = users.Take(1_000).Select(u => UntypedDeletion(userType, u.ExternalId))
+            .Concat(groups.Select(g => DirectoryObject(groupType, g.ExternalId, "Renamed", ObjectChangeType.Updated)))
+            .Chunk(100).Select(chunk => chunk.ToList()).ToList();
+        var activity = await RunImportAsync(connectedSystem, pages, ConnectedSystemRunType.DeltaImport);
+
+        var obsoleteCount = 0;
+        foreach (var user in users.Take(1_000))
+        {
+            if ((await SyncRepo.GetConnectedSystemObjectAsync(connectedSystem.Id, user.Cso.Id))!.Status == ConnectedSystemObjectStatus.Obsolete)
+                obsoleteCount++;
+        }
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(obsoleteCount, Is.EqualTo(1_000));
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.EqualTo(1_000));
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.EqualTo(heldCount), "Nothing created");
+            Assert.That(_spy.WholeLookupLoads, Is.EqualTo(1));
+            Assert.That(_spy.PageLookups.Sum(p => p.Count), Is.LessThanOrEqualTo(externalIdsOneLoadPaysFor),
+                "Page lookups cost no more than the one load of every object they gave way to");
+        }
+    }
+
+    /// <summary>
+    /// #2835: a Connector that states how many objects it is about to hand over lets the run decide on its first page:
+    /// projected over the objects stated, page lookups would cost more than one load of every object, so it loads them
+    /// before looking up anything page by page.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_ConnectorStatesALargeDelta_LoadsEveryExternalIdOnTheFirstPageAsync()
+    {
+        var (connectedSystem, userType, groupType) = await ArrangeOpenLdapShapedAsync(schemaOnlyObjectTypes: 0);
+        var users = SeedCsos(connectedSystem, userType, 3_000);
+        var groups = SeedCsos(connectedSystem, groupType, 1_000);
+
+        var pages = users.Take(1_000).Select(u => UntypedDeletion(userType, u.ExternalId))
+            .Concat(groups.Select(g => DirectoryObject(groupType, g.ExternalId, "Renamed", ObjectChangeType.Updated)))
+            .Chunk(100).Select(chunk => chunk.ToList()).ToList();
+        var activity = await RunImportAsync(connectedSystem, pages, ConnectedSystemRunType.DeltaImport, expectedObjectCount: 2_000);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.EqualTo(1_000));
+            Assert.That(_spy.WholeLookupLoads, Is.EqualTo(1));
+            Assert.That(_spy.PageLookups, Is.Empty, "Decided from the first page, before any page lookup");
+        }
+    }
+
+    /// <summary>
+    /// #2835: a small delta against a large Connected System stays page by page: its lookups cost a few milliseconds
+    /// against a load of every object, and each External ID is asked about once.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_SmallDeltaAgainstALargeConnectedSystem_LooksUpPageByPageAsync()
+    {
+        var (connectedSystem, userType, groupType) = await ArrangeOpenLdapShapedAsync(schemaOnlyObjectTypes: 0);
+        var users = SeedCsos(connectedSystem, userType, 3_000);
+        var groups = SeedCsos(connectedSystem, groupType, 1_000);
+
+        var page = users.Take(50).Select(u => UntypedDeletion(userType, u.ExternalId))
+            .Concat(groups.Take(50).Select(g => DirectoryObject(groupType, g.ExternalId, "Renamed", ObjectChangeType.Updated)))
+            .ToList();
+        var activity = await RunImportAsync(connectedSystem, [page], ConnectedSystemRunType.DeltaImport, expectedObjectCount: 100);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(activity.RunProfileExecutionItems.Count(i => i.ObjectChangeType == ObjectChangeType.Updated), Is.EqualTo(50));
+            Assert.That(_spy.WholeLookupLoads, Is.Zero);
+            Assert.That(_spy.PageLookups, Has.Count.EqualTo(1), "Every object was found, so there is no cross-type pass to make");
+            Assert.That(_spy.PageLookups.Single(), Has.Count.EqualTo(50 * 2 + 50));
+        }
+    }
+
+    /// <summary>
+    /// #2835: an untyped deletion is looked up only under the Object Types holding objects, yet can still take an Object
+    /// Type that held none, from an earlier page that returned the object as new. Asking about it there must answer "none"
+    /// rather than fail on a key that was never looked up, and the object is not created.
+    /// </summary>
+    [Test]
+    public async Task DeltaImport_UntypedDeletionOfAnObjectAnEarlierPageReturnedAsNewUnderAnEmptyObjectType_IsNotCreatedAsync()
+    {
+        var (connectedSystem, userType, _) = await ArrangeOpenLdapShapedAsync(schemaOnlyObjectTypes: 0);
+        var deviceType = await CreateCsoTypeAsync(connectedSystem.Id, "device",
+        [
+            new() { Name = "entryUUID", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true }
+        ]);
+        SeedCsos(connectedSystem, userType, 3);
+        var deviceExternalId = Guid.NewGuid();
+
+        var activity = await RunImportAsync(connectedSystem,
+            [[ImportObject(deviceType, deviceExternalId, "Printer", ObjectChangeType.Added)], [UntypedDeletion(deviceType, deviceExternalId)]],
+            ConnectedSystemRunType.DeltaImport);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Errors(activity), Is.Empty);
+            Assert.That(await SyncRepo.GetConnectedSystemObjectCountAsync(connectedSystem.Id), Is.EqualTo(3), "Added and deleted in one run: not created");
+            Assert.That(_spy.WholeLookupLoads, Is.Zero);
+        }
+    }
+
     #region Helpers
 
     private sealed record HeldObject(ConnectedSystemObject Cso, Guid ExternalId);
+
+    /// <summary>
+    /// An OpenLDAP-shaped Connected System: External IDs (entryUUID) unique across Object Types, a user and a group type
+    /// holding objects, each with the distinguished name as Secondary External ID, and <paramref name="schemaOnlyObjectTypes"/>
+    /// further Object Types the schema declares, not selected, carrying entryUUID as External ID as the Connector
+    /// recommends for every Object Type.
+    /// </summary>
+    private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType UserType, ConnectedSystemObjectType GroupType)> ArrangeOpenLdapShapedAsync(
+        int schemaOnlyObjectTypes)
+    {
+        var connectedSystem = await CreateConnectedSystemAsync("OpenLDAP");
+        connectedSystem.ConnectorDefinition.ExternalIdsUniqueAcrossObjectTypes = true;
+
+        List<ConnectedSystemObjectTypeAttribute> DirectoryAttributes() =>
+        [
+            new() { Name = "entryUUID", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true },
+            new() { Name = "distinguishedName", Type = AttributeDataType.Text, IsSecondaryExternalId = true, Selected = true },
+            new() { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true }
+        ];
+
+        var userType = await CreateCsoTypeAsync(connectedSystem.Id, "inetOrgPerson", DirectoryAttributes());
+        var groupType = await CreateCsoTypeAsync(connectedSystem.Id, "groupOfNames", DirectoryAttributes());
+        for (var i = 0; i < schemaOnlyObjectTypes; i++)
+        {
+            var schemaOnly = await CreateCsoTypeAsync(connectedSystem.Id, $"objectClass{i:00}", DirectoryAttributes());
+            schemaOnly.Selected = false;
+        }
+
+        return (connectedSystem, userType, groupType);
+    }
+
+    /// <summary>A deletion as OpenLDAP's access log reports it: the entryUUID, without an Object Type.</summary>
+    private static ConnectedSystemImportObject UntypedDeletion(ConnectedSystemObjectType type, Guid externalId) => new()
+    {
+        ChangeType = ObjectChangeType.Deleted,
+        Attributes =
+        [
+            new ConnectedSystemImportObjectAttribute
+            {
+                Name = type.Attributes.Single(a => a.IsExternalId).Name, Type = AttributeDataType.Guid, GuidValues = [externalId]
+            }
+        ]
+    };
+
+    private static ConnectedSystemImportObject DirectoryObject(ConnectedSystemObjectType type, Guid externalId, string displayName, ObjectChangeType changeType)
+    {
+        var importObject = ImportObject(type, externalId, displayName, changeType);
+        importObject.Attributes.Add(new ConnectedSystemImportObjectAttribute
+        {
+            Name = "distinguishedName", Type = AttributeDataType.Text, StringValues = [$"cn={externalId},ou=Groups,dc=yellowstone,dc=local"]
+        });
+        return importObject;
+    }
 
     private async Task<(ConnectedSystem ConnectedSystem, ConnectedSystemObjectType Type)> ArrangeAsync()
     {
@@ -408,7 +634,7 @@ public class DeltaImportExternalIdLookupTests : WorkflowTestBase
     }
 
     private async Task<Activity> RunImportAsync(ConnectedSystem connectedSystem, List<List<ConnectedSystemImportObject>> pages,
-        ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport, IReadOnlyList<bool>? completeReadByPage = null)
+        ConnectedSystemRunType runType = ConnectedSystemRunType.FullImport, IReadOnlyList<bool>? completeReadByPage = null, int? expectedObjectCount = null)
     {
         var runProfile = await CreateRunProfileAsync(connectedSystem.Id, runType.ToString(), runType);
         var activity = await CreateActivityAsync(connectedSystem.Id, runProfile, runType);
@@ -421,7 +647,7 @@ public class DeltaImportExternalIdLookupTests : WorkflowTestBase
 
         var processor = new SyncImportTaskProcessor(
             Jim, SyncRepo, new SyncServer(Jim), new SyncEngine(),
-            new PagedImportConnector(pages, completeReadByPage: completeReadByPage), connectedSystem, runProfile, workerTask, new CancellationTokenSource());
+            new PagedImportConnector(pages, completeReadByPage: completeReadByPage, expectedObjectCount: expectedObjectCount), connectedSystem, runProfile, workerTask, new CancellationTokenSource());
         await processor.PerformImportAsync();
         return activity;
     }

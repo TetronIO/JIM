@@ -894,7 +894,10 @@ public class SyncPreviewServer
         }
         if (inScopeRules.Count == 0 && importRules.Any(sr => sr.ObjectScopingCriteriaGroups.Count > 0))
         {
-            var outOfScopeAction = _syncEngine.DetermineOutOfScopeAction(cso, importRules);
+            // The rules that lost the object decide, and Remain Joined wins (#2823), exactly as the run decides: from what
+            // the joined Metaverse Object holds from this system and the rule that made the join.
+            var lastScopeExit = await DecideLastScopeExitAsync(cso, importRules, guardedRepository);
+            var outOfScopeAction = lastScopeExit.Action;
             // A join an export rule made stays (#2021): the action decides only what happens to the import rules' values.
             var joinKeptForExportRule = cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect
                 && SyncEngine.IsJoinMadeByExportRule(cso);
@@ -915,9 +918,9 @@ public class SyncPreviewServer
             // is the reference). An object that is not joined has nothing to cascade; RemainJoined keeps the
             // join intact, so nothing downstream changes, and the tree states only the retained join (#1649).
             if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.Disconnect)
-                await BuildOutOfScopeCascadeAsync(result, cso, importRules, context, refreshCacheForWorkingMvo, keepJoin: joinKeptForExportRule);
+                await BuildOutOfScopeCascadeAsync(result, cso, lastScopeExit.DecidingRule, context, refreshCacheForWorkingMvo, keepJoin: joinKeptForExportRule);
             else if (cso.MetaverseObjectId.HasValue && outOfScopeAction == InboundOutOfScopeAction.RemainJoined)
-                await BuildRetainedJoinRootAsync(result, cso, importRules, context);
+                await BuildRetainedJoinRootAsync(result, cso, lastScopeExit.DecidingRule, context);
 
             return result;
         }
@@ -964,6 +967,18 @@ public class SyncPreviewServer
             else
             {
                 var projectionDecision = _syncEngine.EvaluateProjection(cso, inScopeRules);
+                if (projectionDecision.IsConflict)
+                {
+                    // The run reports a Projection Type Conflict and projects nothing (#2823).
+                    result.Errors.Add(new SyncPreviewMessage
+                    {
+                        Code = SyncPreviewMessageCode.ProjectionTypeConflict,
+                        Detail = SyncEngine.DescribeProjectionTypeConflict(projectionDecision.ConflictingRules, previewing: true),
+                        ConnectedSystemId = connectedSystemId
+                    });
+                    return result;
+                }
+
                 if (!projectionDecision.ShouldProject)
                 {
                     result.Warnings.Add(new SyncPreviewMessage
@@ -1431,7 +1446,19 @@ public class SyncPreviewServer
         try
         {
             drift = Application.DriftDetection.EvaluateDrift(cso, workingMvo, context.DriftExportRules,
-                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions);
+                context.ImportMappingCache, context.PriorityContext, context.UniqueValueResolveOptions, connections: context.Cache.Connections);
+        }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // Several enforcing rules apply and one's scope could not be decided (#2820): the run corrects nothing and
+            // records the failure, so the preview says the same.
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.ScopingCriterionFailed,
+                Detail = DriftNotCheckedPreviewPrefix + scopingEx.Message,
+                ConnectedSystemId = context.ConnectedSystemId
+            });
+            return 0;
         }
         catch (SyncExpressionEvaluationException expressionEx)
         {
@@ -1470,6 +1497,14 @@ public class SyncPreviewServer
                 AttributeName = flowError.TargetAttributeName
             };
         }));
+
+        // Two or more enforcing rules cover the object (#2820): the run corrects nothing and records the overlap once,
+        // however many of its paths find it.
+        if (drift.RuleOverlap != null)
+        {
+            AddExportRuleOverlapError(result, drift.RuleOverlap);
+            return 0;
+        }
 
         if (!drift.HasDrift)
             return 0;
@@ -1996,6 +2031,30 @@ public class SyncPreviewServer
     }
 
     /// <summary>
+    /// The decision the run makes when a joined object leaves the last import rule covering it (#2823), worked out from
+    /// the joined Metaverse Object as stored: what it holds from this system decides which rules lost the object. Read
+    /// without changing anything: the object's own navigation is restored afterwards.
+    /// </summary>
+    private async Task<LastScopeExitDecision> DecideLastScopeExitAsync(
+        ConnectedSystemObject cso,
+        List<SyncRule> lostImportRules,
+        ISyncRepository guardedRepository)
+    {
+        var originalMetaverseObject = cso.MetaverseObject;
+        try
+        {
+            if (cso.MetaverseObject == null && cso.MetaverseObjectId.HasValue)
+                cso.MetaverseObject = (await guardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([cso.MetaverseObjectId.Value]))
+                    .SingleOrDefault();
+            return _syncEngine.DecideLastScopeExit(cso, lostImportRules);
+        }
+        finally
+        {
+            cso.MetaverseObject = originalMetaverseObject;
+        }
+    }
+
+    /// <summary>
     /// The retained join (#1649): a JOINED object whose out-of-scope action is RemainJoined keeps its Metaverse
     /// Object join, so the real run records a single OutOfScopeRetainJoin root attributed to the scoping rule and
     /// nothing beneath it (nothing flows, nothing is recalled, nothing downstream changes). Mirrored here so the
@@ -2005,18 +2064,17 @@ public class SyncPreviewServer
     /// <see cref="SyncPreviewMessageCode.OutOfScope"/> warning has already been added by the caller.</param>
     /// <param name="cso">The Connected System Object falling out of scope. Must be joined
     /// (<see cref="ConnectedSystemObject.MetaverseObjectId"/> set); the caller checks this before calling.</param>
-    /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule attribution:
-    /// the same first-applicable rule the real run attributes the retained join to.</param>
+    /// <param name="scopingSyncRule">The rule whose Out-of-Scope Action decided (#2823), which the real run attributes the
+    /// retained join to.</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
     private static async Task BuildRetainedJoinRootAsync(
         SyncPreviewResult result,
         ConnectedSystemObject cso,
-        List<SyncRule> importRules,
+        SyncRule? scopingSyncRule,
         CsoPreviewContext context)
     {
         var mvoId = cso.MetaverseObjectId!.Value;
         var joinedMvo = (await context.GuardedRepository.GetMetaverseObjectsByIdsNoTrackingAsync([mvoId])).SingleOrDefault();
-        var scopingSyncRule = importRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
 
         result.OutcomeTree.Add(new SyncOutcomeNode
         {
@@ -2045,8 +2103,8 @@ public class SyncPreviewServer
     /// already been added by the caller.</param>
     /// <param name="cso">The Connected System Object falling out of scope. Must be joined
     /// (<see cref="ConnectedSystemObject.MetaverseObjectId"/> set); the caller checks this before calling.</param>
-    /// <param name="importRules">The applicable import Synchronisation Rules, for the scoping rule
-    /// attribution (#1085): the same first-applicable rule the real run attributes the disconnect to.</param>
+    /// <param name="scopingSyncRule">The rule whose Out-of-Scope Action decided (#2823), which the real run attributes the
+    /// disconnect to (#1085).</param>
     /// <param name="context">The shared read-only inputs for the object's Connected System.</param>
     /// <param name="refreshCacheForWorkingMvo">Whether to refresh the outbound cache for the Metaverse Object before
     /// evaluating the recall's exports; see <see cref="PreviewCsoCoreAsync"/>.</param>
@@ -2056,7 +2114,7 @@ public class SyncPreviewServer
     private async Task BuildOutOfScopeCascadeAsync(
         SyncPreviewResult result,
         ConnectedSystemObject cso,
-        List<SyncRule> importRules,
+        SyncRule? scopingSyncRule,
         CsoPreviewContext context,
         bool refreshCacheForWorkingMvo,
         bool keepJoin = false)
@@ -2074,11 +2132,6 @@ public class SyncPreviewServer
         var mvoDisplayName = ObjectNaming.FirstPresent(joinedMvo.Name);
         if (result.Inbound != null)
             DescribeMetaverseObject(result.Inbound, joinedMvo);
-
-        // The same first-applicable-scoping-rule attribution the real run's DisconnectedOutOfScope root
-        // carries (#1085): the CSO fell out of scope of every rule with Scoping Criteria, so when several
-        // exist the attribution is the deterministic first one, the one whose action governs the disconnect.
-        var scopingSyncRule = importRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
 
         // Every Connected System Object still joined to the Metaverse Object (the disconnecting CSO
         // included: this preview never actually disconnects it). One dataset answers both questions the
@@ -2697,34 +2750,40 @@ public class SyncPreviewServer
         // The rules the run consults, and only those (SyncTaskProcessorBase.AttemptJoinAsync; #2176): in simple mode the
         // object type's own, each carrying its own Metaverse Object Type, whether or not an import rule applies; in
         // advanced mode each in-scope import rule's own, never the type's, which a switch to advanced mode keeps for a
-        // later switch back.
-        var candidateRuleSets = new List<List<ObjectMatchingRule>>();
+        // later switch back. Every in-scope rule is consulted, in name order (#2823), as the run does.
+        var candidateRuleSets = new List<(SyncRule? SyncRule, List<ObjectMatchingRule> MatchingRules)>();
         if (matchingMode == ObjectMatchingRuleMode.ConnectedSystem)
         {
             var typeRules = objectTypes.FirstOrDefault(ot => ot.Id == cso.TypeId)?.ObjectMatchingRules?.ToList();
             if (typeRules is { Count: > 0 })
-                candidateRuleSets.Add(typeRules);
+                candidateRuleSets.Add((null, typeRules));
         }
         else
         {
-            foreach (var importRule in inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0))
+            foreach (var importRule in SyncEngine.InNameOrder(inScopeRules.Where(sr => sr.ObjectMatchingRules.Count > 0)))
             {
                 var matchingRules = importRule.ObjectMatchingRules.ToList();
                 foreach (var matchingRule in matchingRules.Where(mr => mr.MetaverseObjectType == null))
                     matchingRule.MetaverseObjectType = importRule.MetaverseObjectType;
-                candidateRuleSets.Add(matchingRules);
+                candidateRuleSets.Add((importRule, matchingRules));
             }
         }
 
         // The same matching engine the synchronisation uses (#2052), against the preview's read-only repository, so
         // the preview cannot disagree with the run about what a rule computes or what it finds.
-        foreach (var matchingRules in candidateRuleSets)
+        var matches = new List<ImportRuleMatch>();
+        ImportMatch? typeMatch = null;
+        foreach (var (syncRule, matchingRules) in candidateRuleSets)
         {
             try
             {
                 var match = await Application.ObjectMatching.FindMatchingMetaverseObjectAsync(guardedRepository, cso, matchingRules);
-                if (match != null)
-                    return match;
+                if (match == null)
+                    continue;
+                if (syncRule == null)
+                    typeMatch = match;
+                else
+                    matches.Add(new ImportRuleMatch(syncRule, match));
             }
             catch (MultipleMatchesException ex)
             {
@@ -2749,7 +2808,24 @@ public class SyncPreviewServer
             }
         }
 
-        return null;
+        if (typeMatch != null)
+            return typeMatch;
+
+        // Rules that find different Metaverse Objects block the object, as the run reports them (#2823).
+        var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches, previewing: true);
+        if (disagreement != null)
+        {
+            result.Errors.Add(new SyncPreviewMessage
+            {
+                Code = SyncPreviewMessageCode.AmbiguousMatch,
+                Detail = disagreement.Message,
+                ConnectedSystemId = cso.ConnectedSystemId,
+                MatchCandidates = [.. disagreement.Candidates]
+            });
+            return null;
+        }
+
+        return matches.Count > 0 ? matches[0].Match : null;
     }
 
     /// <summary>
@@ -2777,9 +2853,31 @@ public class SyncPreviewServer
     /// exports and the create/update/delete counters have one definition,
     /// <see cref="ExportEvaluationPreviewResult"/>), and reports the participating rules.
     /// </summary>
+    /// <summary>
+    /// Adds an <see cref="SyncPreviewMessageCode.ExportRuleOverlap"/> error, once per Connected System: export evaluation
+    /// and drift detection can both find one overlap, and the run records one item for it (#2820).
+    /// </summary>
+    private static void AddExportRuleOverlapError(SyncPreviewResult result, ExportRuleOverlap overlap)
+    {
+        if (result.Errors.Exists(e => e.Code == SyncPreviewMessageCode.ExportRuleOverlap && e.ConnectedSystemId == overlap.ConnectedSystemId))
+            return;
+
+        result.Errors.Add(new SyncPreviewMessage
+        {
+            Code = SyncPreviewMessageCode.ExportRuleOverlap,
+            Detail = overlap.DescribeForAdministrator(),
+            ConnectedSystemId = overlap.ConnectedSystemId
+        });
+    }
+
     private static void ComposeOutbound(SyncPreviewResult result, OutboundPreviewResult outbound)
     {
         result.OutboundDecisions = outbound;
+
+        // Two or more export rules cover the object in one Connected System (#2820): the run stages nothing for them and
+        // records the overlap, so the preview reports it and has no entry for those rules to propose.
+        foreach (var overlap in outbound.RuleOverlaps)
+            AddExportRuleOverlapError(result, overlap);
 
         foreach (var entry in outbound.Entries)
         {
@@ -2954,6 +3052,23 @@ public class SyncPreviewServer
                     Ordinal = siblings.Count
                 });
             }
+        }
+
+        // Accounts another export rule would take over as the object leaves the rule that manages them (#2822). The run
+        // records each after what it stages for the object, so they follow the entries.
+        foreach (var handOver in outbound.HandOvers)
+        {
+            connectedSystemNames.TryGetValue(handOver.ConnectedSystemId, out var systemName);
+            siblings.Add(new SyncOutcomeNode
+            {
+                OutcomeType = ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                TargetEntityId = handOver.ConnectedSystemObjectId,
+                TargetEntityDescription = systemName,
+                SyncRuleId = handOver.CoveringSyncRuleId,
+                SyncRuleName = handOver.CoveringSyncRuleName,
+                DetailMessage = handOver.DescribeForAdministrator(),
+                Ordinal = siblings.Count
+            });
         }
     }
 

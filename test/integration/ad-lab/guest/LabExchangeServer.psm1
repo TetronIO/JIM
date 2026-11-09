@@ -417,6 +417,166 @@ function Get-LabExchangeServiceHealthProblem {
     return $problems.ToArray()
 }
 
+function Get-LabExchangeReadinessProbe {
+    <#
+    .SYNOPSIS
+        Opens Exchange Remote PowerShell on this server, asks Test-ServiceHealth, closes the session and returns what it
+        found: Connected, Health (Test-ServiceHealth's roles) and Error (why it could not tell, or nothing).
+
+    .DESCRIPTION
+        Runs in the Exchange server's guest. Restore-LabDomainController.ps1 sends it with Invoke-Command after every
+        revert and decides from what it returns (Test-LabExchangeReady), because no port proves Exchange ready: 443
+        answers minutes before Remote PowerShell and Exchange's services do. Self-contained (no other module function,
+        no module state), because the module is not loaded in the guest. It connects exactly as JIM does, Kerberos over
+        HTTP to /PowerShell, so "ready" means ready for JIM. The session is always closed: each one left open counts
+        against Exchange's per-user shell limit, which a long wait would exhaust. Exchange's endpoint is restricted to
+        its own commands, so Test-ServiceHealth runs on its own, with no pipeline.
+
+    .PARAMETER ManagementUri
+        The server's Remote PowerShell endpoint over HTTP (Get-LabExchangeServerInfo's ManagementUri).
+
+    .PARAMETER Credential
+        A domain administrator; Test-ServiceHealth needs an Exchange administrator.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ManagementUri,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSCredential]$Credential
+    )
+
+    try {
+        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $ManagementUri -Authentication Kerberos -Credential $Credential -ErrorAction Stop
+    }
+    catch {
+        return [pscustomobject]@{ Connected = $false; Health = @(); Error = $_.Exception.Message }
+    }
+    try {
+        $health = @(Invoke-Command -Session $session -ScriptBlock { Test-ServiceHealth } -ErrorAction Stop |
+                ForEach-Object { [pscustomobject]@{ Role = [string]$_.Role; RequiredServicesRunning = [bool]$_.RequiredServicesRunning; ServicesNotRunning = @($_.ServicesNotRunning | ForEach-Object { [string]$_ }) } })
+        return [pscustomobject]@{ Connected = $true; Health = $health; Error = $null }
+    }
+    catch {
+        return [pscustomobject]@{ Connected = $true; Health = @(); Error = $_.Exception.Message }
+    }
+    finally {
+        Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-LabExchangeReady {
+    <#
+    .SYNOPSIS
+        Whether an Exchange server is ready for JIM, from Get-LabExchangeReadinessProbe's result: Remote PowerShell
+        answered and every role's required services run. Returns Ready and Detail (what is still missing, or what was
+        found).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Probe
+    )
+
+    if (-not [bool]$Probe.Connected) {
+        return [pscustomobject]@{ Ready = $false; Detail = "Remote PowerShell is not answering yet: $($Probe.Error)" }
+    }
+    if (-not [string]::IsNullOrEmpty([string]$Probe.Error)) {
+        return [pscustomobject]@{ Ready = $false; Detail = "Test-ServiceHealth failed: $($Probe.Error)" }
+    }
+    $problems = @(Get-LabExchangeServiceHealthProblem -Health @($Probe.Health))
+    if ($problems.Count -gt 0) {
+        return [pscustomobject]@{ Ready = $false; Detail = ($problems -join '; ') }
+    }
+    return [pscustomobject]@{ Ready = $true; Detail = "Remote PowerShell answered and $(@($Probe.Health).Count) roles have their required services running" }
+}
+
+function Wait-LabExchangeReady {
+    <#
+    .SYNOPSIS
+        Asks Exchange in a lab VM, through PowerShell Direct, until it is ready for JIM (Get-LabExchangeReadinessProbe,
+        Test-LabExchangeReady), and returns the verdict. Throws with what is still missing when -TimeoutSeconds passes.
+
+    .DESCRIPTION
+        Runs on the Hyper-V host. Restore-LabDomainController.ps1 calls it after a revert and
+        Set-LabExchangeReachability.ps1 after making Exchange reachable again: no port proves Exchange ready, so both
+        ask Exchange itself, as JIM connects.
+
+    .PARAMETER VMName
+        The Exchange server's VM.
+
+    .PARAMETER Credential
+        A domain administrator, for PowerShell Direct and for Exchange.
+
+    .PARAMETER ManagementUri
+        Its Remote PowerShell endpoint over HTTP (Get-LabExchangeServerInfo's ManagementUri).
+
+    .PARAMETER TimeoutSeconds
+        How long to keep asking. At least one attempt is always made.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VMName,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSCredential]$Credential,
+
+        [Parameter(Mandatory)]
+        [string]$ManagementUri,
+
+        [ValidateRange(0, 7200)]
+        [int]$TimeoutSeconds = 1800
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $probe = Invoke-Command -VMName $VMName -Credential $Credential -ArgumentList $ManagementUri, $Credential -ScriptBlock ${function:Get-LabExchangeReadinessProbe}
+        $verdict = Test-LabExchangeReady -Probe $probe
+        if ($verdict.Ready) { return $verdict }
+        if ((Get-Date) -ge $deadline) {
+            throw "Exchange in '$VMName' was not ready within $TimeoutSeconds seconds: $($verdict.Detail)"
+        }
+        Start-Sleep -Seconds 15
+    }
+}
+
+function Set-LabExchangeWebService {
+    <#
+    .SYNOPSIS
+        Stops or starts IIS (W3SVC) on an Exchange server, and returns the service's status afterwards.
+
+    .DESCRIPTION
+        Runs in the Exchange server's guest, sent by Set-LabExchangeReachability.ps1 with Invoke-Command, so it is
+        self-contained. The Exchange recipient scenario (#2021, PRD Scenario 5) stops IIS to make Exchange unreachable
+        for a while: HTTP.sys still answers on port 80, with 503, which JIM's client sees as a server it cannot reach,
+        and then starts it again. A restart of the VM would do the same in minutes; this takes seconds. Nothing is lost
+        either way, and the next scenario's revert puts the server back to its baseline regardless.
+
+    .PARAMETER Running
+        $true to start IIS, $false to stop it.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Runs unattended in a lab guest through Invoke-Command, and is idempotent.')]
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$Running
+    )
+
+    if ($Running) {
+        Start-Service -Name 'W3SVC'
+    }
+    else {
+        Stop-Service -Name 'W3SVC' -Force
+    }
+    return [string](Get-Service -Name 'W3SVC').Status
+}
+
 function Test-LabExchangeDatabaseLayout {
     <#
     .SYNOPSIS
@@ -586,7 +746,9 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeServerInfo', 'Get-LabExchangeDatabasePath', 'ConvertFrom-LabExchangeSetting', 'Get-LabExchangePhaseArgument',
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
-    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
+    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Get-LabExchangeReadinessProbe', 'Test-LabExchangeReady',
+    'Wait-LabExchangeReady', 'Set-LabExchangeWebService',
+    'Test-LabExchangeDatabaseLayout',
     'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeServerObjectQuery',
     'Get-LabExchangeFeatureGap', 'Get-LabExchangeUserRemoval',
     'ConvertTo-LabDispatchWaitNanosecond'

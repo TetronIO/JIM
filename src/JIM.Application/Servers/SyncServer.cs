@@ -449,8 +449,13 @@ public class SyncServer : ISyncServer
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments);
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null,
+        MetaverseObjectConnections? connections = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext, generatedValueAssignments, heldReferenceAnswers, connections);
+
+    public Task<MetaverseObjectConnections?> ReadExportConnectionsAsync(IReadOnlyCollection<Guid> metaverseObjectIds, IEnumerable<SyncRule> exportRules)
+        => _exportEval.ReadConnectionsAsync(metaverseObjectIds, exportRules);
 
     #endregion
 
@@ -462,6 +467,11 @@ public class SyncServer : ISyncServer
 
     public Task RefreshExportEvaluationCacheForPageAsync(ExportEvaluationCache cache, IEnumerable<Guid> mvoIds)
         => _exportEval.RefreshExportEvaluationCacheForPageAsync(cache, mvoIds);
+
+    public Task RefreshExportEvaluationCacheForEvaluationsAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)> evaluations)
+        => _exportEval.RefreshExportEvaluationCacheForEvaluationsAsync(cache, evaluations);
 
     public Task PrefetchExportMatchCandidatesForPageAsync(ExportEvaluationCache cache, IReadOnlyCollection<MetaverseObject> metaverseObjects)
         => _exportEval.PrefetchExportMatchCandidatesForPageAsync(cache, metaverseObjects);

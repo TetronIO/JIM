@@ -6,6 +6,7 @@ using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
+using JIM.Application.Staging;
 using JIM.Application.UniqueValues;
 using JIM.Application.Utilities;
 using JIM.Models.Expressions;
@@ -345,6 +346,10 @@ public abstract class SyncTaskProcessorBase
     // _mvoIdToRpei. The export scope review reads it to keep an item only for an object it actually changed.
     private readonly HashSet<Guid> _mvoIdsChangedByExportEvaluation = [];
 
+    // Overlaps already given an ExportRuleOverlap item this run, per Metaverse Object and Connected System (#2820). Export
+    // evaluation and drift detection can both find the same overlap; the administrator needs one item for it, not one per path.
+    private readonly HashSet<(Guid MvoId, int ConnectedSystemId)> _exportRuleOverlapsReported = [];
+
     // Queueing provenance (#1223) for Delete Pending Exports a scope exit staged or reused. Those are persisted
     // as they are staged, ahead of the page flush, so their queueing item is written by a fix-up in
     // FlushPendingExportOperationsAsync rather than with the row.
@@ -373,6 +378,22 @@ public abstract class SyncTaskProcessorBase
 
     // Expression evaluator for expression-based Synchronisation Rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
+
+    /// <summary>
+    /// Test hook (#2818): the threshold a Delta Synchronisation's page load leaves a group's member attribute out at, in
+    /// place of <see cref="SynchronisationValueLoadPlan.DefaultMinimumHeldValueCount"/>; <see cref="int.MaxValue"/> leaves
+    /// nothing out. Null in production.
+    /// </summary>
+    internal int? SynchronisationValueLoadThresholdForTests { get; set; }
+
+    /// <summary>
+    /// Test hook (#2818): how many objects this run's page loads left an attribute out of, and how many questions Drift
+    /// Detection asked the database about them.
+    /// </summary>
+    internal (int LeftOutObjects, int DriftQuestions) SynchronisationValueLoadCountsForTests => (_leftOutObjectCount, _driftHeldReferenceQuestionCount);
+
+    private int _leftOutObjectCount;
+    private int _driftHeldReferenceQuestionCount;
 
     /// <summary>
     /// Test hook: invoked after each CSO is processed in Pass 2.
@@ -1902,14 +1923,6 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Determines the InboundOutOfScopeAction to use for a CSO by finding the applicable import Synchronisation Rule.
-    /// If multiple import Synchronisation Rules exist for this CSO type, the first one's setting is used.
-    /// Uses pre-loaded Synchronisation Rules to avoid database round trips.
-    /// </summary>
-    protected InboundOutOfScopeAction DetermineInboundOutOfScopeAction(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
-        => _syncEngine.DetermineOutOfScopeAction(connectedSystemObject, activeSyncRules);
-
-    /// <summary>
     /// Processes the MVO deletion rule when a connector is disconnected.
     /// Handles three deletion rules:
     /// - Manual: No automatic deletion
@@ -2231,6 +2244,15 @@ public abstract class SyncTaskProcessorBase
         CopyMvoDeletionMarkersIfMissing(from: existing, to: mvo);
         _pendingMvoUpdates[existingIndex] = mvo;
     }
+
+    /// <summary>
+    /// Whether a joined Metaverse Object must still be written by the page flush although this pass staged no value
+    /// addition or removal for it (#2831): a value whose provenance Attribute Flow took over in place (#1292), which only
+    /// the batch update stores, or a generation still unresolved, which must reach the page flush's integrity guard (it
+    /// fails the page) rather than be dropped silently by skipping the write.
+    /// </summary>
+    private static bool RequiresWriteWithoutStagedChanges(MetaverseObject mvo) =>
+        mvo.HasPendingProvenanceChanges || mvo.PendingGeneratedValues.Count > 0;
 
     /// <summary>
     /// Copies deletion-marker scalars (see <see cref="ClearMvoDeletionMarkers"/>) from one Metaverse Object
@@ -2672,11 +2694,18 @@ public abstract class SyncTaskProcessorBase
                 // New MVO - queue for batch create
                 _pendingMvoCreates.Add(connectedSystemObject.MetaverseObject);
             }
-            else
+            else if (attributesAdded > 0 || attributesRemoved > 0 || wasJoined
+                     || RequiresWriteWithoutStagedChanges(connectedSystemObject.MetaverseObject))
             {
-                // Existing MVO - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO obsoleted
-                // earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
+                // Existing MVO this pass changed - queue for batch update. QueueMvoForUpdate dedupes by Id: a CSO
+                // obsoleted earlier in this page (Pass 1) may already have queued a distinct CLR instance of this
                 // same MVO for a grace-period deletion marker (SamePageJoinConflict).
+                //
+                // An object this pass left as it was is not queued (#2831): the batch update re-reads every value it
+                // holds (every member of a large group) and rewrites its row to the values it already has. A join is
+                // queued even with no value staged, because cancelling a scheduled deletion (EstablishJoinAsync) clears
+                // the deletion markers on the row and nothing else writes them. A reference value that changes later
+                // in the page queues the object from the deferred reference pass.
                 QueueMvoForUpdate(connectedSystemObject.MetaverseObject);
             }
 
@@ -3736,6 +3765,12 @@ public abstract class SyncTaskProcessorBase
             foreach (var conflict in result.ObjectTypeConflicts)
                 _activity.RunProfileExecutionItems.Add(BuildObjectTypeConflictRpei(conflict));
 
+            // Create error RPEIs where two or more export Synchronisation Rules cover the object in one Connected System
+            // and Object Type (#2820). Nothing was staged for any of them on this object; reported per object rather than
+            // failing the page, so every other object on it still synchronises.
+            foreach (var overlap in result.RuleOverlaps.Where(overlap => _exportRuleOverlapsReported.Add((mvo.Id, overlap.ConnectedSystemId))))
+                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(mvo, overlap));
+
             // Create error RPEIs where export matching could not settle on an existing Connected System Object before
             // provisioning (#2052): several matched, or a rule could not be worked out. Nothing was joined, provisioned
             // or staged for that Rule, since either would risk handing the identity the wrong account or a duplicate;
@@ -3931,6 +3966,14 @@ public abstract class SyncTaskProcessorBase
                 _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
                 await ReportPendingExportChangeWithdrawalsAsync(mvo.Id, objectItem, exportOutcomeParent, result.Withdrawals);
             }
+
+            // A covering export rule took an account over when the object left the scope of the rule that managed it (#2822):
+            // the join now names the covering rule, which is a change this evaluation made, and is recorded.
+            if (result.HandOvers.Count > 0)
+            {
+                _mvoIdsChangedByExportEvaluation.Add(mvo.Id);
+                ReportExportRuleHandOvers(mvo.Id, objectItem, exportOutcomeParent, result.HandOvers);
+            }
         }
 
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data.
@@ -4120,6 +4163,49 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Records each export rule hand-over (#2822) on the object's execution item: the account stayed, and the rule that
+    /// still covers the object now manages it.
+    /// </summary>
+    private void ReportExportRuleHandOvers(
+        Guid mvoId,
+        ActivityRunProfileExecutionItem? item,
+        ActivityRunProfileExecutionItemSyncOutcome? detailedParent,
+        IReadOnlyList<ExportRuleHandOver> handOvers)
+    {
+        if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return;
+
+        if (item == null)
+        {
+            // A hand-over follows a scope change, which registers the object's item; say so rather than lose the record.
+            Log.Warning("ReportExportRuleHandOvers: No execution item registered for Metaverse Object {MvoId}; {Count} hand-over(s) " +
+                "to another export rule were made but cannot be recorded on the Activity", mvoId, handOvers.Count);
+            return;
+        }
+
+        foreach (var handOver in handOvers)
+        {
+            var systemName = _exportEvaluationCache!.ExportRulesByMvoTypeId.Values
+                .SelectMany(rules => rules)
+                .FirstOrDefault(rule => rule.Id == handOver.CoveringSyncRuleId)?.ConnectedSystem?.Name;
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed && detailedParent != null)
+                SyncOutcomeBuilder.AddChildOutcome(item, detailedParent, ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                    targetEntityId: handOver.ConnectedSystemObjectId,
+                    targetEntityDescription: systemName,
+                    detailMessage: handOver.DescribeForAdministrator(),
+                    syncRuleId: handOver.CoveringSyncRuleId,
+                    syncRuleName: handOver.CoveringSyncRuleName);
+            else
+                SyncOutcomeBuilder.AddRootOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule,
+                    targetEntityId: handOver.ConnectedSystemObjectId,
+                    targetEntityDescription: systemName,
+                    detailMessage: handOver.DescribeForAdministrator(),
+                    syncRuleId: handOver.CoveringSyncRuleId,
+                    syncRuleName: handOver.CoveringSyncRuleName);
+        }
+    }
+
+    /// <summary>
     /// Reports the changes an object's export evaluation withdrew from its Pending Exports, because the targets already
     /// hold the values the Metaverse now wants (#2001), as one Pending Export Changes Withdrawn outcome per target
     /// object on the object's execution item. Placed where the evaluation's staged exports go (nested under the
@@ -4219,6 +4305,22 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Builds the Run Profile Execution Item reporting that two or more export Synchronisation Rules cover a Metaverse
+    /// Object in one Connected System and Object Type (#2820), on the Metaverse Object, naming the rules and the fix.
+    /// </summary>
+    private ActivityRunProfileExecutionItem BuildExportRuleOverlapRpei(MetaverseObject mvo, ExportRuleOverlap overlap)
+    {
+        var rpei = _activity.PrepareRunProfileExecutionItem();
+        rpei.ErrorType = ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap;
+        rpei.MetaverseObjectId = mvo.Id;
+        rpei.DisplayNameSnapshot = mvo.NameOrId;
+        rpei.ObjectTypeSnapshot = mvo.Type?.Name;
+        rpei.ConnectedSystemObjectId = overlap.ExistingConnectedSystemObjectId;
+        rpei.ErrorMessage = overlap.DescribeForAdministrator();
+        return rpei;
+    }
+
+    /// <summary>
     /// The item recording that export matching stopped a Metaverse Object before provisioning (#2052), on the Metaverse
     /// Object itself (there is no Connected System Object: none was joined or provisioned), listing the objects an
     /// ambiguous match found.
@@ -4305,6 +4407,10 @@ public abstract class SyncTaskProcessorBase
                 await _syncRepo.UpdateMetaverseObjectsAsync(_pendingMvoUpdates);
             }
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} MVOs in batch", _pendingMvoUpdates.Count);
+
+            // The taken-over provenance is stored now; a later pass over the same instance must not write it again.
+            foreach (var mvo in _pendingMvoUpdates)
+                mvo.HasPendingProvenanceChanges = false;
 
             if (refFixups.Count > 0)
                 using (Diagnostics.Sync.StartSpan("FixupMvoReferenceValueIds"))
@@ -4620,24 +4726,21 @@ public abstract class SyncTaskProcessorBase
                     QueueMvoForUpdate(mvo);
                 }
 
-                // Queue for export evaluation (reference changes may trigger exports)
-                // Include all reference attributes as changed, with removals tracked separately
-                // Note: Check both ReferenceValue (navigation) and ReferenceValueId (FK) as navigation may not be loaded
-                var currentRefAttributes = mvo.AttributeValues
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList();
-                var removedRefAttributesFiltered = refRemovedAttributes?
-                    .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                    .ToList() ?? [];
-
-                var changedRefAttributes = currentRefAttributes
-                    .Concat(removedRefAttributesFiltered)
-                    .Cast<MetaverseObjectAttributeValue>()
-                    .ToList();
+                // Queue for export evaluation: the references this pass added, then those it removed, exactly as the
+                // first pass queues its other changes. Only the members that changed are staged (#2832); a Create
+                // still provisions the whole set (SyncEngine.ComputeAttributeValueChanges), and a member missing from
+                // the target is repaired by drift detection, not re-asserted as a side effect of another change.
+                var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
                 if (changedRefAttributes.Count > 0)
                 {
                     MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                 }
+            }
+            else if (mvo.Id != Guid.Empty && RequiresWriteWithoutStagedChanges(mvo))
+            {
+                // A reference this pass re-flowed unchanged but took the provenance of (#1292). The scalar pass has
+                // already decided whether to write the object, without knowing about it (#2831).
+                QueueMvoForUpdate(mvo);
             }
         }
 
@@ -4650,6 +4753,20 @@ public abstract class SyncTaskProcessorBase
 
         return totalChanges;
     }
+
+    /// <summary>
+    /// The reference values a reference pass queues for export evaluation: those it added, then those it removed, each
+    /// naming an object (the navigation, or the scalar foreign key where the navigation is not loaded). Only what changed
+    /// (#2832): queuing every reference the Metaverse Object holds made export staging re-assert a group's whole
+    /// membership whenever one member changed, re-adding a member removed from the target by hand even with Enforce
+    /// State off, and loading the target group whole to filter that re-assertion.
+    /// </summary>
+    private static List<MetaverseObjectAttributeValue> ChangedReferenceValues(
+        IEnumerable<MetaverseObjectAttributeValue> added,
+        IEnumerable<MetaverseObjectAttributeValue> removed) =>
+        added.Concat(removed)
+            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
+            .ToList();
 
     /// <summary>
     /// Resolves cross-page reference attributes after all pages have been processed.
@@ -4961,20 +5078,20 @@ public abstract class SyncTaskProcessorBase
                         // Queue for persistence and export evaluation
                         QueueMvoForUpdate(mvo);
 
-                        var changedRefAttributes = mvo.AttributeValues
-                            .Where(av => av.ReferenceValue != null || av.ReferenceValueId.HasValue)
-                            .Cast<MetaverseObjectAttributeValue>()
-                            .ToList();
-
-                        if (refRemovedAttributes != null)
-                        {
-                            changedRefAttributes.AddRange(refRemovedAttributes);
-                        }
+                        // Only the references this step changed (#2832), as on the page; see ProcessDeferredReferenceAttributes.
+                        var changedRefAttributes = ChangedReferenceValues(refAddedAttributes, refRemovedAttributesList);
 
                         if (changedRefAttributes.Count > 0)
                         {
                             MergeOrAddPendingExportEvaluation(mvo, changedRefAttributes, refRemovedAttributes);
                         }
+                    }
+                    else if (RequiresWriteWithoutStagedChanges(mvo))
+                    {
+                        // A reference that resolved here to the object already named, whose provenance this pass took over
+                        // (#1292). Nothing was staged, and the page this object came from was written before the reference
+                        // could resolve, so only this write stores the stamp (#2831).
+                        QueueMvoForUpdate(mvo);
                     }
                 }
 
@@ -5214,14 +5331,14 @@ public abstract class SyncTaskProcessorBase
         // Refresh the per-page portion of the export evaluation cache for only this page's MVOs.
         // This loads target CSOs and their attribute values for no-net-change detection, scoped to
         // just the MVOs being evaluated — avoiding the previous approach of loading ALL target CSOs
-        // upfront which consumed multiple GB at 100K+ objects.
+        // upfront which consumed multiple GB at 100K+ objects. A target group's member attribute is
+        // loaded only for the members this page's changes add or remove (#2832).
         if (_exportEvaluationCache != null)
         {
-            var mvoIdsForExport = _pendingExportEvaluations
-                .Select(x => x.Mvo.Id)
-                .Where(id => id != Guid.Empty)
-                .Distinct();
-            await _syncServer.RefreshExportEvaluationCacheForPageAsync(_exportEvaluationCache, mvoIdsForExport);
+            var evaluationsForCache = _pendingExportEvaluations
+                .Select(x => (x.Mvo, (IReadOnlyCollection<MetaverseObjectAttributeValue>)x.ChangedAttributes))
+                .ToList();
+            await _syncServer.RefreshExportEvaluationCacheForEvaluationsAsync(_exportEvaluationCache, evaluationsForCache);
 
             if (prefetchPendingExports)
             {
@@ -6955,51 +7072,56 @@ public abstract class SyncTaskProcessorBase
     protected async Task<(bool Joined, string? CancelledMvoDeletionDetailMessage, string? CancelledMvoDeletionPolicySnapshotJson, ImportMatch? JoinMatch)> AttemptJoinAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
         var isSimpleMode = _connectedSystem.ObjectMatchingRuleMode == ObjectMatchingRuleMode.ConnectedSystem;
-        var attemptedMatching = false;
 
-        // Enumerate import Synchronisation Rules for this CSO type to attempt matching.
-        foreach (var importSyncRule in activeSyncRules.Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+        // Every in-scope import rule for this type is evaluated, in name order (#2823): rules load in no defined order, so
+        // stopping at the first match would let the load order choose between identities the rules disagree on.
+        var importSyncRules = SyncEngine.InNameOrder(activeSyncRules
+                .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.ConnectedSystemObjectTypeId == connectedSystemObject.TypeId))
+            .ToList();
+
+        // Simple mode: matching belongs to the Object Type, not the rule, so it is evaluated once. The join names the first
+        // rule by name, or no rule when the type has none (joining needs no empty import rule).
+        if (isSimpleMode)
         {
-            attemptedMatching = true;
+            var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
+            if (matchingRules.Count == 0)
+                return (false, null, null, null);
 
-            // Resolve matching rules based on mode
-            var matchingRules = isSimpleMode
-                ? GetSimpleModeMatchingRules(connectedSystemObject.TypeId)
-                : importSyncRule.ObjectMatchingRules.ToList();
+            var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
+            return match == null
+                ? (false, null, null, null)
+                : await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRules.FirstOrDefault(), match);
+        }
 
+        var matches = new List<ImportRuleMatch>();
+        foreach (var importSyncRule in importSyncRules)
+        {
+            var matchingRules = importSyncRule.ObjectMatchingRules.ToList();
             if (matchingRules.Count == 0)
                 continue;
 
-            // For advanced mode, set MetaverseObjectType on each rule from the Synchronisation Rule
-            if (!isSimpleMode)
-            {
-                foreach (var rule in matchingRules)
-                    rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
-            }
+            // Each rule's Object Matching Rules search the rule's own Metaverse Object Type.
+            foreach (var rule in matchingRules)
+                rule.MetaverseObjectType = importSyncRule.MetaverseObjectType;
 
             var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-            if (match == null)
-                continue;
-
-            return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, importSyncRule, match);
+            if (match != null)
+                matches.Add(new ImportRuleMatch(importSyncRule, match));
         }
 
-        // Simple mode fallback: if no import Synchronisation Rules were evaluated, try matching directly from object type rules.
-        // This enables simple mode joining without requiring empty import Synchronisation Rules.
-        if (!attemptedMatching && isSimpleMode)
-        {
-            var matchingRules = GetSimpleModeMatchingRules(connectedSystemObject.TypeId);
-            if (matchingRules.Count > 0)
+        if (matches.Count == 0)
+            return (false, null, null, null);
+
+        // Rules that find different Metaverse Objects: JIM never chooses between them, so nothing is joined or projected.
+        var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches);
+        if (disagreement != null)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.AmbiguousMatch, disagreement.Message)
             {
-                var match = await FindMatchingMvoForJoinAsync(connectedSystemObject, matchingRules);
-                // No Synchronisation Rule is involved: the object type's own Object Matching Rules made the join.
-                if (match != null)
-                    return await EstablishJoinAsync(connectedSystemObject, match.MetaverseObject, joiningSyncRule: null, match);
-            }
-        }
+                MatchCandidates = disagreement.Candidates
+            };
 
-        // No join could be established.
-        return (false, null, null, null);
+        // They agree: the join names the first matching rule by name.
+        return await EstablishJoinAsync(connectedSystemObject, matches[0].Match.MetaverseObject, matches[0].SyncRule, matches[0].Match);
     }
 
     /// <summary>
@@ -7110,7 +7232,7 @@ public abstract class SyncTaskProcessorBase
                 $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
         }
 
-        // Establish join! First rule to match, wins.
+        // Establish the join. Every in-scope rule that matched found this Metaverse Object (#2823).
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
         // Which Object Matching Rule found the match, and on what value (#2052), so the join can be explained.
@@ -7157,18 +7279,25 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Attempts to create a Metaverse Object from the Connected System Object using the first Synchronisation Rule for the object type that has Projection enabled.
+    /// Attempts to create a Metaverse Object from the Connected System Object when an in-scope Synchronisation Rule for the
+    /// object type has Projection enabled. Every projecting rule takes part (#2823): see <see cref="ISyncEngine.EvaluateProjection"/>.
     /// </summary>
     /// <param name="activeSyncRules">The active Synchronisation Rules that contain projection and Attribute Flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
     /// <param name="projectionSyncRule">Set to the Synchronisation Rule that caused the projection when one occurred, for sync outcome attribution (#1085); null otherwise.</param>
     /// <returns>True if projection occurred, false otherwise.</returns>
-    /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Synchronisation Rule.</exception>
-    /// <exception cref="NotImplementedException">Will be thrown if a Synchronisation Rule attempts to use a Function as a source.</exception>
+    /// <exception cref="SyncJoinException">Thrown when projecting rules disagree on the Metaverse Object Type.</exception>
     protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, out SyncRule? projectionSyncRule)
     {
         var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
         projectionSyncRule = decision.ShouldProject ? decision.ProjectionSyncRule : null;
+
+        // In-scope rules disagree on what kind of object this is (#2823): JIM does not guess, so the object is reported
+        // and nothing is projected. It is retried on the next synchronisation, once the rules agree.
+        if (decision.IsConflict)
+            throw new SyncJoinException(ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict,
+                SyncEngine.DescribeProjectionTypeConflict(decision.ConflictingRules));
+
         if (!decision.ShouldProject)
             return false;
 
@@ -7268,13 +7397,19 @@ public abstract class SyncTaskProcessorBase
         {
             using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
             // First, the provisioning objects this page has collected for batch creation (FlushPendingExportOperationsAsync),
-            // which are not in the database yet. Only their names are taken, so nothing here can reach them.
+            // which are not in the database yet. Only their names are taken, so nothing here can reach them. Each is tested
+            // against a set (#2861): a list scan cost every provisioning object one comparison per member of the group,
+            // about 0.9 billion comparisons across a 500,000-object initial load.
             referenceDisplayIdentifiers = new Dictionary<Guid, string>();
-            foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
-                         && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
-                         && mvoGuids.Contains(cso.MetaverseObjectId.Value)))
+            if (_provisioningCsosToCreate.Count > 0)
             {
-                referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
+                var referencedMvoIds = mvoGuids.ToHashSet();
+                foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
+                             && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
+                             && referencedMvoIds.Contains(cso.MetaverseObjectId.Value)))
+                {
+                    referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
+                }
             }
 
             // Then this page's earlier lookups; only Metaverse Objects not looked up yet reach the database (objects created
@@ -7640,8 +7775,11 @@ public abstract class SyncTaskProcessorBase
                 continue;
             }
 
-            // Need to load CSO attributes for scoping evaluation if not already loaded
-            if (csoWithAttributes.AttributeValues.Count == 0)
+            // Need to load CSO attributes for scoping evaluation if not already loaded. Not an object a Delta
+            // Synchronisation left an attribute out of (#2818): its other values are all loaded, so none means it holds
+            // none, and no Scoping Criterion reads the attribute left out (SynchronisationValueLoadPlanner). Reloading it
+            // would replace its loaded values with untracked ones that include the values it was loaded without.
+            if (csoWithAttributes.AttributeValues.Count == 0 && !connectedSystemObject.IsPartiallyLoaded)
             {
                 var fullCso = await _syncRepo.GetConnectedSystemObjectWithAttributeValuesAsync(_connectedSystem.Id, connectedSystemObject.Id);
                 if (fullCso != null)
@@ -7684,13 +7822,12 @@ public abstract class SyncTaskProcessorBase
             return MetaverseObjectChangeResult.NoChanges();
         }
 
-        // Find the first import Synchronisation Rule with scoping criteria: it both supplies the
-        // InboundOutOfScopeAction (or the default, Disconnect, when none exists) and is attributed as
-        // the scoping rule on the DisconnectedOutOfScope outcome (#1085). The CSO fell out of scope of
-        // ALL import rules with scoping criteria, so when several exist the attribution is the
-        // deterministic first applicable rule; the same rule whose action governs the disconnect.
-        var scopingSyncRule = importSyncRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
-        var inboundOutOfScopeAction = scopingSyncRule?.InboundOutOfScopeAction ?? default;
+        // The object has left every import rule for its type (an unscoped rule never lets it go), so the rules that lost
+        // it decide, and Remain Joined wins (#2823). The deciding rule is attributed on the outcome (#1085), and the
+        // decision reads the same whichever order the rules load in.
+        var decision = _syncEngine.DecideLastScopeExit(connectedSystemObject, importSyncRules);
+        var scopingSyncRule = decision.DecidingRule;
+        var inboundOutOfScopeAction = decision.Action;
 
         // Synchronisation Rules are isolated (#2021): a join an export rule made is that export rule's, and only its own
         // scope ends it. Leaving the import rules' scope withdraws only what they brought in.
@@ -8122,7 +8259,8 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// How far before the run's start the closing sweep of <see cref="TypeOrderedCsoPager"/> reaches, so an object a
     /// writer stamped with a clock a little behind this run's is still swept. Objects inside the margin that a type walk
-    /// already handed out are not handed out again, so a generous margin costs only a slightly larger sweep query.
+    /// already handed out are not handed out or loaded again (#2861), so a generous margin costs only a larger read of the
+    /// sweep's ids: after an initial Full Import, every id in the Connector Space.
     /// </summary>
     private static readonly TimeSpan TypeOrderedSweepClockSkewMargin = TimeSpan.FromMinutes(5);
 
@@ -8135,6 +8273,8 @@ public abstract class SyncTaskProcessorBase
     /// <param name="activeSyncRules">The run's Synchronisation Rules.</param>
     /// <param name="runStartedAt">When the run started; the sweep's creation floor is derived from it.</param>
     /// <param name="loadPage">The repository page load for this run kind.</param>
+    /// <param name="loadSweepIds">The repository read of the closing sweep's selection for this run kind, ids only: the
+    /// selection <paramref name="loadPage"/> makes for the sweep (#2861).</param>
     /// <param name="runKind">The run kind, for the log line.</param>
     /// <param name="observeUndeclaredReferenceTargets">Whether to ask the database which types the mapped reference
     /// attributes with no declared target actually point at (one aggregate over their values, about 2 seconds at
@@ -8142,8 +8282,8 @@ public abstract class SyncTaskProcessorBase
     /// LDAP's <c>member</c> and <c>manager</c> collapse people and groups into one id-ordered group. A Delta
     /// Synchronisation defers only references to objects new in the same delta, too few to pay for the query.</param>
     protected async Task<TypeOrderedCsoPager> CreateTypeOrderedPagerAsync(
-        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage, string runKind,
-        bool observeUndeclaredReferenceTargets)
+        List<SyncRule> activeSyncRules, DateTime runStartedAt, TypeOrderedCsoPager.PageLoader loadPage,
+        TypeOrderedCsoPager.SweepIdLoader loadSweepIds, string runKind, bool observeUndeclaredReferenceTargets)
     {
         // Only the types holding objects are paged: a schema can declare a hundred (OpenLDAP's does) while the objects
         // use two. A type the loaded schema does not carry still has its objects paged, ordered as one with no
@@ -8174,7 +8314,7 @@ public abstract class SyncTaskProcessorBase
         if (order.TypeIds.Count == 0)
         {
             Log.Information("{RunKind} type order: no objects to page; sweeping for any created during the run", runKind);
-            _csoPager = new TypeOrderedCsoPager(loadPage, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
+            _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, [], runStartedAt - TypeOrderedSweepClockSkewMargin);
             return _csoPager;
         }
 
@@ -8187,7 +8327,7 @@ public abstract class SyncTaskProcessorBase
                 runKind, string.Join(", ", order.SelfReferencingTypeIds.Order().Select(NameOf)));
         }
 
-        _csoPager = new TypeOrderedCsoPager(loadPage, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
+        _csoPager = new TypeOrderedCsoPager(loadPage, loadSweepIds, order.TypeIds, runStartedAt - TypeOrderedSweepClockSkewMargin);
         return _csoPager;
     }
 
@@ -8213,12 +8353,118 @@ public abstract class SyncTaskProcessorBase
         {
             await PrefetchGeneratedExportAssignmentsForDriftAsync();
             var heldPendingExports = await GetPendingExportsHoldingChangesAsync();
+            var heldReferenceAnswers = await AskDriftHeldReferenceQuestionsAsync();
+
+            // Which enforcing rules cover an object can depend on its connections (#2021, #2820): read them once for the
+            // batch, and only when a rule has a connection criterion.
+            var driftMvoIds = _pendingDriftEvaluations
+                .Select(pending => (pending.Mvo ?? pending.Cso.MetaverseObject)?.Id ?? Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+            var connections = driftMvoIds.Count == 0 || _driftDetectionExportRules == null
+                ? null
+                : await _syncServer.ReadExportConnectionsAsync(driftMvoIds, _driftDetectionExportRules);
 
             foreach (var (cso, mvo) in _pendingDriftEvaluations)
-                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id));
+                EvaluateDriftAndEnforceState(cso, mvo, heldPendingExports.GetValueOrDefault(cso.Id), heldReferenceAnswers.GetValueOrDefault(cso.Id), connections);
         }
 
         _pendingDriftEvaluations.Clear();
+    }
+
+    /// <summary>
+    /// #2818: asks the database Drift Detection's questions about the queued objects this page loaded with an attribute left
+    /// out, in one round trip, and returns the answers by object. Asked here, after the page's Metaverse Objects and joins
+    /// are saved and immediately before drift is evaluated, so the expected values are the Metaverse Object's as drift reads
+    /// it, and the held values resolve through the joins as the page has left them (the page load left out only objects
+    /// referencing none of the page's own objects, the only ones whose joins the page changes). No query when the page left
+    /// nothing out.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>> AskDriftHeldReferenceQuestionsAsync()
+    {
+        if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0 || !_pendingDriftEvaluations.Exists(p => p.Cso.IsPartiallyLoaded))
+            return new Dictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>();
+
+        var questions = _pendingDriftEvaluations
+            .Where(pending => pending.Cso.IsPartiallyLoaded)
+            .SelectMany(pending => DriftDetectionService.PlanHeldReferenceQuestions(pending.Cso, pending.Mvo, _driftDetectionExportRules))
+            .DistinctBy(question => (question.ConnectedSystemObjectId, question.AttributeId, question.SourceMetaverseAttributeId))
+            .ToList();
+        if (questions.Count == 0)
+            return new Dictionary<Guid, IReadOnlyCollection<DriftHeldReferenceAnswer>>();
+
+        using var span = Diagnostics.Sync.StartSpan("CompareHeldReferenceValues")
+            .SetTag("questionCount", questions.Count)
+            .SetTag("expectedValueCount", questions.Sum(q => q.ExpectedValues.Count));
+
+        var answers = await _syncRepo.GetDriftHeldReferenceAnswersAsync(questions);
+        _driftHeldReferenceQuestionCount += questions.Count;
+
+        span.SetTag("heldValueCount", answers.Sum(a => a.HeldValueCount));
+        span.SetTag("heldNotExpectedCount", answers.Sum(a => a.HeldNotExpected.Count));
+        span.SetTag("expectedNotHeldCount", answers.Sum(a => a.ExpectedNotHeld.Count));
+        span.SetTag("differingCount", answers.Count(a => a.Differs));
+        span.SetSuccess();
+
+        Log.Debug("AskDriftHeldReferenceQuestionsAsync: compared {QuestionCount} attribute(s) in the database: {HeldCount} value(s) held, " +
+            "{NotExpected} held but not expected, {NotHeld} expected but not held",
+            questions.Count, answers.Sum(a => a.HeldValueCount), answers.Sum(a => a.HeldNotExpected.Count), answers.Sum(a => a.ExpectedNotHeld.Count));
+
+        return answers
+            .GroupBy(answer => answer.Question.ConnectedSystemObjectId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<DriftHeldReferenceAnswer>)g.ToList());
+    }
+
+    /// <summary>
+    /// #2818: the run's plan for which attributes a Delta Synchronisation's page load may leave out of an object, where
+    /// Drift Detection is their only reader (<see cref="SynchronisationValueLoadPlanner"/>). Logs what it leaves out and,
+    /// for each attribute Drift Detection compares that it keeps whole, why.
+    /// </summary>
+    protected SynchronisationValueLoadPlan PlanSynchronisationValueLoad(List<SyncRule> activeSyncRules)
+    {
+        using var span = Diagnostics.Sync.StartSpan("PlanSynchronisationValueLoad");
+        var threshold = SynchronisationValueLoadThresholdForTests ?? SynchronisationValueLoadPlan.DefaultMinimumHeldValueCount;
+        if (threshold == int.MaxValue)
+        {
+            span.SetTag("plannedAttributeCount", 0);
+            span.SetSuccess();
+            return SynchronisationValueLoadPlan.None;
+        }
+
+        var objectTypes = _objectTypes ?? [];
+        var (plan, fallbacks) = SynchronisationValueLoadPlanner.Plan(objectTypes, activeSyncRules, threshold);
+        var typeNames = objectTypes.ToDictionary(t => t.Id, t => t.Name);
+        string TypeName(int id) => LogSanitiser.Sanitise(typeNames.GetValueOrDefault(id, id.ToString(CultureInfo.InvariantCulture))) ?? string.Empty;
+
+        foreach (var (typeId, attributes) in plan.AttributesByObjectTypeId)
+        {
+            Log.Information("PlanSynchronisationValueLoad: {ObjectType}'s {Attributes} are compared by Drift Detection alone, so an object holding at least " +
+                "{Threshold} of their values is loaded without them and compared in the database",
+                TypeName(typeId), string.Join(", ", attributes.Select(a => LogSanitiser.Sanitise(a.Name))), threshold);
+        }
+
+        foreach (var fallback in fallbacks)
+        {
+            Log.Information("PlanSynchronisationValueLoad: {ObjectType}'s {Attribute} is loaded whole: {Reason}",
+                TypeName(fallback.ObjectTypeId), LogSanitiser.Sanitise(fallback.AttributeName), fallback.Reason);
+        }
+
+        span.SetTag("plannedAttributeCount", plan.AttributesByObjectTypeId.Values.Sum(a => a.Count));
+        span.SetTag("configurationFallbackCount", fallbacks.Count);
+        span.SetTag("configurationFallbackReasons", string.Join(",", fallbacks.Select(f => f.Reason).Distinct()));
+        span.SetSuccess();
+        return plan;
+    }
+
+    /// <summary>
+    /// #2818: counts the page's objects loaded with an attribute left out, on the run and on the page load's span.
+    /// </summary>
+    protected void CountLeftOutObjects(IReadOnlyCollection<ConnectedSystemObject> page, OperationSpan loadSpan)
+    {
+        var leftOut = page.Count(cso => cso.IsPartiallyLoaded);
+        _leftOutObjectCount += leftOut;
+        loadSpan.SetTag("leftOutObjectCount", leftOut);
     }
 
     /// <summary>
@@ -8307,7 +8553,11 @@ public abstract class SyncTaskProcessorBase
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
     /// <param name="heldPendingExport">The object's Pending Export when it holds a change until an Initial Password is
     /// delivered (#2039), whose held change the correction must neither restate nor drop (#2501); otherwise null.</param>
-    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null)
+    /// <param name="heldReferenceAnswers">The database's answers for the attributes the page load left out of the object
+    /// (#2818); null for an object loaded whole.</param>
+    /// <param name="connections">The batch's connections, for an enforcing rule scoped by connection (#2021, #2820).</param>
+    protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo, PendingExport? heldPendingExport = null,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null, MetaverseObjectConnections? connections = null)
     {
         // Skip if no drift detection export rules exist
         if (_driftDetectionExportRules == null || _driftDetectionExportRules.Count == 0)
@@ -8336,7 +8586,25 @@ public abstract class SyncTaskProcessorBase
                 _driftDetectionExportRules,
                 _importMappingCache,
                 _attributePriorityContext,
-                _uniqueValueResolveOptions);
+                _uniqueValueResolveOptions,
+                heldReferenceAnswers,
+                connections);
+        }
+        catch (ScopingCriterionFailedException scopingEx)
+        {
+            // Several enforcing rules apply and one's scope could not be decided for this object (#2820): which rule may
+            // correct it is unknown, so nothing is corrected and the object is reported, as export staging reports it.
+            var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();
+            runProfileExecutionItem.ConnectedSystemObject = cso;
+            runProfileExecutionItem.ConnectedSystemObjectId = cso.Id;
+            runProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ScopingCriterionFailed;
+            runProfileExecutionItem.ErrorMessage = DriftNotCheckedPrefix + scopingEx.Message;
+            _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
+
+            Log.Warning("EvaluateDriftAndEnforceState: Enforcing rule scope for CSO {CsoId} could not be decided: {Message}",
+                cso.Id, LogSanitiser.Sanitise(scopingEx.Message));
+            span.SetSuccess();
+            return;
         }
         catch (SyncExpressionEvaluationException expressionEx)
         {
@@ -8385,6 +8653,16 @@ public abstract class SyncTaskProcessorBase
             errorRpei.ErrorType = errorType;
             errorRpei.ErrorMessage = errorMessage;
             _activity.RunProfileExecutionItems.Add(errorRpei);
+        }
+
+        // Two or more enforcing rules cover the object (#2820): nothing was corrected. Reported once per object and system per run,
+        // since export evaluation reports the same overlap when the object's exports are evaluated.
+        if (result.RuleOverlap != null)
+        {
+            if (_exportRuleOverlapsReported.Add((targetMvo.Id, result.RuleOverlap.ConnectedSystemId)))
+                _activity.RunProfileExecutionItems.Add(BuildExportRuleOverlapRpei(targetMvo, result.RuleOverlap));
+            span.SetSuccess();
+            return;
         }
 
         if (heldPendingExport != null)

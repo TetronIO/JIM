@@ -8,6 +8,7 @@ using JIM.Application.UniqueValues;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
@@ -38,6 +39,10 @@ public class DriftDetectionService
     private readonly JimApplication _jim;
     private readonly IExpressionEvaluator _expressionEvaluator;
 
+    // Which enforcing rules cover an object (#2820) is decided here, not through the application: Drift Detection reads
+    // nothing from the application, and the evaluator holds no state, so it is built as the application builds its own.
+    private readonly ScopingEvaluationServer _scopingEvaluation = new();
+
     public DriftDetectionService(JimApplication jim)
     {
         _jim = jim;
@@ -56,6 +61,9 @@ public class DriftDetectionService
     /// <param name="generatedValueAssignments">The run's Unique Value Generation cache, prefetched for this page's Connected
     /// System Objects. A generated export Attribute Flow's expected value is read from here (#242); without it, generated
     /// flows are not checked.</param>
+    /// <param name="heldReferenceAnswers">The database's answers for the attributes a Delta Synchronisation loaded without
+    /// their values (#2818), to the questions <see cref="PlanHeldReferenceQuestions"/> asks. An attribute so loaded is
+    /// compared from its answer and never read as holding nothing: without one, this throws.</param>
     /// <returns>Result indicating what drift was detected and corrective exports staged (not yet persisted), and the
     /// mapping-level errors found on the way (<see cref="DriftDetectionResult.AttributeFlowErrors"/>) for the caller to
     /// record.</returns>
@@ -63,13 +71,17 @@ public class DriftDetectionService
     /// export staging raises it (#2180): the caller records it against the object, and nothing is staged for it.</exception>
     /// <exception cref="SyncExpressionMissingInputException">An export expression's input is missing and its Missing
     /// Input Behaviour is Fail the object; recorded and staged for as above.</exception>
+    /// <exception cref="PartiallyLoadedObjectException">An attribute loaded without its values (#2818) is read by a mapping
+    /// its answer cannot stand in for, has no answer, or has an answer to other expected values.</exception>
     public DriftDetectionResult EvaluateDrift(
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
         Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
         AttributePriorityContext? priorityContext = null,
-        UniqueValueResolveOptions? generatedValueAssignments = null)
+        UniqueValueResolveOptions? generatedValueAssignments = null,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers = null,
+        MetaverseObjectConnections? connections = null)
     {
         var result = new DriftDetectionResult();
 
@@ -114,6 +126,26 @@ public class DriftDetectionService
                        r.ConnectedSystemObjectTypeId == cso.TypeId &&
                        r.MetaverseObjectTypeId == targetMvo.Type.Id)
             .ToList();
+
+        // Several enforcing rules for one Connected System and Object Type (#2820): only the rules that have the object in
+        // scope may enforce anything on it, and if two still do, neither may, since only one rule may manage an object.
+        // With a single enforcing rule nothing changes: it enforces as it always has.
+        if (applicableExportRules.Count > 1)
+        {
+            applicableExportRules = applicableExportRules
+                .Where(rule => _scopingEvaluation.IsMvoInScopeForExportRule(targetMvo, rule, connections: connections))
+                .ToList();
+
+            var overlap = SyncEngine.FindExportRuleOverlaps(targetMvo, applicableExportRules, _ => cso).FirstOrDefault();
+            if (overlap != null)
+            {
+                Log.Warning("EvaluateDrift: CSO {CsoId} is covered by {RuleCount} export rules with Enforce State in Connected System {SystemId} " +
+                    "({Rules}); only one rule may manage an object, so no drift was corrected.",
+                    cso.Id, overlap.SyncRuleNames.Count, cso.ConnectedSystemId, LogSanitiser.Sanitise(string.Join(", ", overlap.SyncRuleNames)));
+                result.RuleOverlap = overlap;
+                return result;
+            }
+        }
 
         if (applicableExportRules.Count == 0)
         {
@@ -215,6 +247,15 @@ public class DriftDetectionService
                     if (mapping.TargetConnectedSystemAttribute.IsConnectorDefined && expectedValue is null or "")
                         continue;
 
+                    // A large group's members a Delta Synchronisation left out (#2818): compared from the database's answer,
+                    // which holds exactly the values the two sides disagree on.
+                    if (!cso.IsAttributeWhollyLoaded(mapping.TargetConnectedSystemAttribute.Id))
+                    {
+                        EvaluateHeldReferenceDrift(cso, exportRule, mapping.TargetConnectedSystemAttribute, source, expectedValue,
+                            heldReferenceAnswers, result);
+                        continue;
+                    }
+
                     // Get actual value from CSO
                     var actualValue = GetActualValue(cso, mapping.TargetConnectedSystemAttribute);
 
@@ -266,6 +307,158 @@ public class DriftDetectionService
     }
 
     /// <summary>
+    /// The questions <see cref="EvaluateDrift"/> needs the database to answer for an object a Delta Synchronisation loaded
+    /// with attributes left out (#2818): one for each attribute so loaded that an Enforce State export rule's direct mapping
+    /// compares, with the values the mapping expects of it, taken from the Metaverse Object as it stands now, exactly as
+    /// <see cref="EvaluateDrift"/> takes them. Ask them when drift is about to be evaluated, never earlier: the Metaverse
+    /// Object can change on the page. Nothing to ask for an object loaded whole.
+    /// </summary>
+    /// <remarks>
+    /// The mappings are filtered as <see cref="EvaluateDrift"/> filters them before it compares. A question too many costs
+    /// a comparison it does not use; one too few makes <see cref="EvaluateDrift"/> throw, never answer from what was not
+    /// loaded.
+    /// </remarks>
+    /// <param name="cso">The object, as loaded.</param>
+    /// <param name="mvo">The Metaverse Object it is joined to.</param>
+    /// <param name="exportRules">The run's Enforce State export rules.</param>
+    public static List<DriftHeldReferenceQuestion> PlanHeldReferenceQuestions(ConnectedSystemObject cso, MetaverseObject mvo, IEnumerable<SyncRule> exportRules)
+    {
+        ArgumentNullException.ThrowIfNull(cso);
+        ArgumentNullException.ThrowIfNull(mvo);
+        ArgumentNullException.ThrowIfNull(exportRules);
+
+        var questions = new List<DriftHeldReferenceQuestion>();
+        if (!cso.IsPartiallyLoaded || cso.Status == ConnectedSystemObjectStatus.PendingProvisioning || mvo.Type == null)
+            return questions;
+
+        var mvoTypeId = mvo.Type.Id;
+        var mappings = exportRules
+            .Where(r => r.EnforceState && r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId &&
+                        r.MetaverseObjectTypeId == mvoTypeId)
+            .SelectMany(r => r.AttributeFlowRules)
+            .Where(m => m.Enabled && m.FlowsOnUpdateExport() && m.Generation == null && m.TargetConnectedSystemAttribute != null &&
+                        !cso.IsAttributeWhollyLoaded(m.TargetConnectedSystemAttribute.Id) &&
+                        !CredentialAttributes.IsCredentialAttribute(m.TargetConnectedSystemAttribute.Name));
+
+        var directSources = mappings.SelectMany(m => m.Sources
+            .Where(s => s.MetaverseAttribute != null && string.IsNullOrWhiteSpace(s.Expression))
+            .Select(s => (Target: m.TargetConnectedSystemAttribute!, Source: s)));
+        foreach (var (target, source) in directSources)
+        {
+            var sourceAttributeId = source.MetaverseAttribute!.Id;
+            if (questions.Exists(q => q.AttributeId == target.Id && q.SourceMetaverseAttributeId == sourceAttributeId))
+                continue;
+
+            var expected = GetExpectedAttributeValue(mvo, source, target) as HashSet<object> ?? [];
+            questions.Add(new DriftHeldReferenceQuestion(cso.Id, target.Id, sourceAttributeId, ExpectedReferences(expected, cso, target)));
+        }
+
+        return questions;
+    }
+
+    /// <summary>
+    /// Drift Detection for an attribute a Delta Synchronisation loaded without its values (#2818), from the database's
+    /// answer, deciding exactly as comparing the whole value sets decides: the sets differ where the answer holds a value
+    /// one side has and the other has not; an attribute held only under another data type is not compared (#2319); and the
+    /// correction adds each expected value not held, in the order the Metaverse Object holds them, then removes each held
+    /// value not expected, in the order the object holds them, as <see cref="BuildCorrectiveChanges"/> does.
+    /// </summary>
+    /// <exception cref="PartiallyLoadedObjectException">No answer was given for the attribute and source, or the answer is
+    /// to other expected values than the Metaverse Object gives now.</exception>
+    private static void EvaluateHeldReferenceDrift(
+        ConnectedSystemObject cso,
+        SyncRule exportRule,
+        ConnectedSystemObjectTypeAttribute target,
+        SyncRuleMappingSource source,
+        object? expectedValue,
+        IReadOnlyCollection<DriftHeldReferenceAnswer>? heldReferenceAnswers,
+        DriftDetectionResult result)
+    {
+        var sourceAttributeId = source.MetaverseAttribute!.Id;
+        var answer = heldReferenceAnswers?.FirstOrDefault(a =>
+            a.Question.ConnectedSystemObjectId == cso.Id && a.Question.AttributeId == target.Id && a.Question.SourceMetaverseAttributeId == sourceAttributeId);
+        if (answer == null)
+        {
+            throw new PartiallyLoadedObjectException(
+                $"Connected System Object {cso.Id}'s '{target.Name}' values were loaded in part ({cso.PartiallyLoadedAttributes![target.Id].Describe()}), " +
+                $"and Drift Detection was given no answer for them against Metaverse attribute {sourceAttributeId}, so they cannot be compared.");
+        }
+
+        // The answer is to the values the Metaverse Object expects now, or it is no answer to this comparison.
+        var expected = expectedValue as HashSet<object> ?? [];
+        var asked = ExpectedReferences(expected, cso, target);
+        if (asked.Count != answer.Question.ExpectedValues.Count || !answer.Question.ExpectedValues.ToHashSet().SetEquals(asked))
+        {
+            throw new PartiallyLoadedObjectException(
+                $"Drift Detection's answer for Connected System Object {cso.Id}'s '{target.Name}' was to {answer.Question.ExpectedValues.Count} expected " +
+                $"value(s), but its Metaverse Object now expects {asked.Count} that differ, so it cannot be compared from that answer.");
+        }
+
+        if (!answer.Differs)
+            return;
+
+        // A target held only under another data type reads as no value; it is not drift (#2319).
+        if (answer.HeldOnlyUnderAnotherDataType is { } heldType)
+        {
+            Log.Warning("EvaluateDrift: Connected System Object {CsoId} holds attribute '{AttrName}' only as {HeldType}, not as its {AttrType} " +
+                "type, so it is not checked for drift until an import reads the attribute again.",
+                cso.Id, LogSanitiser.Sanitise(target.Name), heldType, target.Type);
+            return;
+        }
+
+        var corrections = asked
+            .Where(answer.ExpectedNotHeld.Contains)
+            .Select(value => NewCorrectiveChange(target, PendingExportAttributeChangeType.Add, value, exportRule))
+            .Concat(answer.HeldNotExpected.Select(value => NewCorrectiveChange(target, PendingExportAttributeChangeType.Remove, value, exportRule)))
+            .ToList();
+
+        Log.Information("EvaluateDrift: Drift detected on CSO {CsoId} attribute {AttrName}, compared in the database: " +
+            "{ExpectedCount} expected value(s), {NotHeldCount} of them not held, and {NotExpectedCount} held but not expected, of {HeldCount} held",
+            cso.Id, LogSanitiser.Sanitise(target.Name), asked.Count, answer.ExpectedNotHeld.Count, answer.HeldNotExpected.Count, answer.HeldValueCount);
+
+        result.DriftedAttributes.Add(new DriftedAttribute
+        {
+            Attribute = target,
+            ExpectedValue = expectedValue,
+            // Not loaded: only the held values that disagree are known, and they are the corrections' removals.
+            ActualValue = null,
+            ExportRule = exportRule,
+            CorrectiveChanges = corrections
+        });
+    }
+
+    /// <summary>
+    /// The expected values of an attribute compared in the database (#2818), in the order the Metaverse Object holds them,
+    /// which can only be references.
+    /// </summary>
+    private static List<Guid> ExpectedReferences(HashSet<object> expected, ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute target)
+    {
+        var references = expected.OfType<Guid>().ToList();
+        if (references.Count != expected.Count)
+        {
+            throw new PartiallyLoadedObjectException(
+                $"Connected System Object {cso.Id}'s '{target.Name}' values were loaded in part, but the Metaverse attribute exported to it holds " +
+                "values that are not references, so they cannot be compared in the database.");
+        }
+
+        return references;
+    }
+
+    /// <summary>
+    /// Throws where an attribute a Delta Synchronisation loaded without its values (#2818) is about to be read from what was
+    /// loaded: only <see cref="EvaluateHeldReferenceDrift"/> compares such an attribute.
+    /// </summary>
+    private static void EnsureWhollyLoaded(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string reader)
+    {
+        if (cso.IsAttributeWhollyLoaded(attribute.Id))
+            return;
+
+        throw new PartiallyLoadedObjectException(
+            $"{reader} would read Connected System Object {cso.Id}'s '{attribute.Name}' values, which were loaded in part " +
+            $"({cso.PartiallyLoadedAttributes![attribute.Id].Describe()}); only a direct mapping's comparison is answered without them.");
+    }
+
+    /// <summary>
     /// Drift Detection for an expression mapping (#2180): what the Connected System Object should hold is worked out by
     /// export staging's own code, and a correction is exactly what export staging would stage for the same Metaverse
     /// Object and the same object, after its own no-net-change check. So the two can never disagree:
@@ -292,6 +485,7 @@ public class DriftDetectionService
         DriftDetectionResult result)
     {
         var target = mapping.TargetConnectedSystemAttribute!;
+        EnsureWhollyLoaded(cso, target, "An expression mapping's Drift Detection");
         var heldValues = cso.AttributeValues.Where(av => av.AttributeId == target.Id).ToList();
 
         // Exactly what export staging stages for this mapping: the evaluation pipeline (#2055) and the same handling of
@@ -924,6 +1118,7 @@ public class DriftDetectionService
     /// </summary>
     private static bool IsTargetHeldOnlyUnderAnotherDataType(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute target)
     {
+        EnsureWhollyLoaded(cso, target, "Drift Detection's data type check");
         if (SyncEngine.HeldOnlyUnderAnotherDataType(cso.AttributeValues, target.Id, target.Type) is not { } heldType)
             return false;
 
@@ -941,6 +1136,7 @@ public class DriftDetectionService
     /// </summary>
     private static object? GetActualValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute)
     {
+        EnsureWhollyLoaded(cso, attribute, "Drift Detection");
         // Check if this is a multi-valued attribute
         var isMultiValued = attribute.AttributePlurality == AttributePlurality.MultiValued;
 
@@ -1216,16 +1412,7 @@ public class DriftDetectionService
             // Find values to ADD (in expected but not in actual)
             foreach (var expectedValue in expectedSet.Where(expectedValue => !actualValues.HoldsMatchForExpected(expectedValue)))
             {
-                var addChange = new PendingExportAttributeValueChange
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = drifted.Attribute.Id,
-                    ChangeType = PendingExportAttributeChangeType.Add,
-                    SyncRuleId = exportRule.Id,
-                    SyncRuleName = exportRule.Name
-                };
-                SetAttributeChangeValue(addChange, expectedValue, drifted.Attribute.Type);
-                changes.Add(addChange);
+                changes.Add(NewCorrectiveChange(drifted.Attribute, PendingExportAttributeChangeType.Add, expectedValue, exportRule));
 
                 Log.Debug("CreateCorrectiveExportsAsync: Adding value {Value} to attribute {AttrName}",
                     FormatValueForLog(expectedValue), drifted.Attribute.Name);
@@ -1234,16 +1421,7 @@ public class DriftDetectionService
             // Find values to REMOVE (in actual but not in expected)
             foreach (var actualValue in actualSet.Where(actualValue => !expectedValues.HoldsMatchForActual(actualValue)))
             {
-                var removeChange = new PendingExportAttributeValueChange
-                {
-                    Id = Guid.NewGuid(),
-                    AttributeId = drifted.Attribute.Id,
-                    ChangeType = PendingExportAttributeChangeType.Remove,
-                    SyncRuleId = exportRule.Id,
-                    SyncRuleName = exportRule.Name
-                };
-                SetAttributeChangeValue(removeChange, actualValue, drifted.Attribute.Type);
-                changes.Add(removeChange);
+                changes.Add(NewCorrectiveChange(drifted.Attribute, PendingExportAttributeChangeType.Remove, actualValue, exportRule));
 
                 Log.Debug("CreateCorrectiveExportsAsync: Removing value {Value} from attribute {AttrName}",
                     FormatValueForLog(actualValue), drifted.Attribute.Name);
@@ -1270,6 +1448,26 @@ public class DriftDetectionService
     }
 
     /// <summary>
+    /// One change of a correction to a multi-valued attribute, adding or removing one value: the one way both comparisons
+    /// (<see cref="BuildCorrectiveChanges"/>, and <see cref="EvaluateHeldReferenceDrift"/> for an attribute compared in the
+    /// database) build a change, so the two stage the same.
+    /// </summary>
+    private static PendingExportAttributeValueChange NewCorrectiveChange(ConnectedSystemObjectTypeAttribute attribute,
+        PendingExportAttributeChangeType changeType, object value, SyncRule exportRule)
+    {
+        var change = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = attribute.Id,
+            ChangeType = changeType,
+            SyncRuleId = exportRule.Id,
+            SyncRuleName = exportRule.Name
+        };
+        SetAttributeChangeValue(change, value, attribute.Type);
+        return change;
+    }
+
+    /// <summary>
     /// Adds the class membership values a corrective export must write, where the Connected System has the
     /// concept (#492). The drift path's changes carry attribute ids without navigations, so the plan is
     /// computed from the drifted attributes themselves rather than from the changes.
@@ -1288,9 +1486,11 @@ public class DriftDetectionService
         // attribute id: the drift path loads Connected System Object attribute values without their attribute
         // navigations, so a name-based read would see nothing.
         var attributeNamesById = (objectType.Attributes ?? []).ToDictionary(a => a.Id, a => a.Name);
+        // An attribute loaded without its values (#2818) is on the object where its load counted any.
         var attributesAlreadyOnTheObject = cso.AttributeValues
             .Select(value => attributeNamesById.GetValueOrDefault(value.AttributeId))
             .OfType<string>()
+            .Concat((cso.PartiallyLoadedAttributes?.Values ?? []).Where(a => a.HoldsAnyValue).Select(a => a.AttributeName))
             .ToList();
 
         var classAttributeName = objectType.Tags

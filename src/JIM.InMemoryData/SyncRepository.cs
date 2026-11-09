@@ -115,6 +115,12 @@ public partial class SyncRepository : ISyncRepository
     /// </summary>
     public Action<IReadOnlyCollection<Guid>>? OnPendingExportsUpdated { get; set; }
 
+    /// <summary>
+    /// Called with what each <see cref="UpdatePendingExportResultsAsync"/> is handed, so a test can see which changes an
+    /// export batch's results mark sent and which they revise (#2851).
+    /// </summary>
+    public Action<PendingExportResultWrite>? OnPendingExportResultsWritten { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -399,7 +405,7 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
         int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
-        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (afterId.HasValue)
         {
@@ -408,7 +414,7 @@ public partial class SyncRepository : ISyncRepository
             // used for both the ordering and the filter, so the cursor chain is self-consistent
             // within this provider, mirroring the production contract.
             var afterIdValue = afterId.Value;
-            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+            var remaining = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
                 .OrderBy(c => c.Id)
                 .Where(c => c.Id.CompareTo(afterIdValue) > 0)
                 .ToList();
@@ -417,31 +423,58 @@ public partial class SyncRepository : ISyncRepository
             return Task.FromResult(keysetResult);
         }
 
-        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+        var all = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
         return Task.FromResult(BuildPagedResult(all, page, pageSize));
     }
 
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => Task.FromResult(SweepIdPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), null, createdOnOrAfter), pageSize, afterId));
+
     /// <summary>
-    /// The page loaders' optional Object Type and creation-floor filters (#2492), as the production loaders apply them.
+    /// A closing sweep's id page (#2861), ordered and cursored as the keyset page loaders are.
+    /// </summary>
+    private static List<Guid> SweepIdPage(IEnumerable<ConnectedSystemObject> selection, int pageSize, Guid afterId)
+        => selection
+            .OrderBy(c => c.Id)
+            .Where(c => c.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(c => c.Id)
+            .ToList();
+
+    /// <summary>
+    /// The page loaders' optional Object Type, creation-floor (#2492) and id (#2861) filters, as the production loaders
+    /// apply them.
     /// </summary>
     private static IEnumerable<ConnectedSystemObject> ApplySyncPageFilters(
-        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter)
+        IEnumerable<ConnectedSystemObject> csos, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         // Tests often build objects with only the Type navigation set, so match on either.
         if (objectTypeId.HasValue)
             csos = csos.Where(c => c.TypeId == objectTypeId.Value || c.Type?.Id == objectTypeId.Value);
         if (createdOnOrAfter.HasValue)
             csos = csos.Where(c => c.Created >= createdOnOrAfter.Value);
+        if (onlyIds != null)
+        {
+            var ids = onlyIds.ToHashSet();
+            csos = csos.Where(c => ids.Contains(c.Id));
+        }
         return csos;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <paramref name="valueLoadPlan"/> is not applied (#2818): the store hands out its own instances, which a page must
+    /// not lose values from, so every object is loaded whole, which is always correct. The comparison it stands in for is
+    /// answered here all the same (<see cref="GetDriftHeldReferenceAnswersAsync"/>).
+    /// </remarks>
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null,
-        int? objectTypeId = null, DateTime? createdOnOrAfter = null)
+        int? objectTypeId = null, DateTime? createdOnOrAfter = null, SynchronisationValueLoadPlan? valueLoadPlan = null,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
-        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter)
+        var modified = ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .Where(c => IsModifiedSince(c, modifiedSince));
 
         if (afterId.HasValue)
@@ -463,6 +496,11 @@ public partial class SyncRepository : ISyncRepository
             .ToList();
         return Task.FromResult(BuildPagedResult(filtered, page, pageSize));
     }
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter)
+        => Task.FromResult(SweepIdPage(ApplySyncPageFilters(GetCsosForSystem(connectedSystemId), null, createdOnOrAfter)
+            .Where(c => IsModifiedSince(c, modifiedSince)), pageSize, afterId));
 
     public Task<IReadOnlySet<int>> GetConnectedSystemObjectTypeIdsInUseAsync(int connectedSystemId)
     {
@@ -791,6 +829,23 @@ public partial class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// #2818: each answer worked out from the stored values, as <see cref="DriftHeldReferenceAnswer.Compute"/> works it out:
+    /// a held value resolves to the Metaverse Object its referenced object is joined to now.
+    /// </summary>
+    public virtual Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions)
+    {
+        var answers = questions.Select(question =>
+        {
+            var held = _csos.TryGetValue(question.ConnectedSystemObjectId, out var cso)
+                ? cso.AttributeValues.Where(value => value.AttributeId == question.AttributeId).OrderBy(value => value.Id).ToList()
+                : [];
+            return DriftHeldReferenceAnswer.Compute(question, held, value =>
+                value.ReferenceValueId is { } referencedId && _csos.TryGetValue(referencedId, out var referenced) ? referenced.MetaverseObjectId : null);
+        }).ToList();
+        return Task.FromResult(answers);
+    }
+
+    /// <summary>
     /// #2817: the same answers as the SQL implementation: a held value is matched exactly by the string it keeps or by its
     /// object's External ID, byte for byte (ordinal); an imported value the same two ways; and the held values related to an
     /// unmatched imported value are those naming an object holding, under any attribute, text equal to it ignoring case
@@ -849,6 +904,27 @@ public partial class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(answers);
+    }
+
+    /// <summary>
+    /// #2836: as the SQL implementation decides it: every held value of the attribute keeps, byte for byte (ordinal), the
+    /// string of a different imported value, and none of the imported values is left over. A question repeating a value
+    /// is left to be asked, as it is there.
+    /// </summary>
+    public virtual Task<HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>> GetReferenceAttributesHeldAsImportedAsync(IReadOnlyList<HeldReferenceValueQuestion> questions)
+    {
+        var heldAsImported = new HashSet<(Guid ConnectedSystemObjectId, int AttributeId)>();
+        foreach (var question in questions.Where(q => q.Values.Count > 0 && _csos.ContainsKey(q.ConnectedSystemObjectId)
+                     && q.Values.Distinct(StringComparer.Ordinal).Count() == q.Values.Count))
+        {
+            var remaining = question.Values.ToHashSet(StringComparer.Ordinal);
+            var held = _csos[question.ConnectedSystemObjectId].AttributeValues
+                .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == question.AttributeId);
+            if (held.All(av => av.UnresolvedReferenceValue != null && remaining.Remove(av.UnresolvedReferenceValue)) && remaining.Count == 0)
+                heldAsImported.Add((question.ConnectedSystemObjectId, question.AttributeId));
+        }
+
+        return Task.FromResult(heldAsImported);
     }
 
     /// <summary>The object a held value was resolved to, as its foreign key would store it.</summary>
@@ -2386,6 +2462,15 @@ public partial class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    // The exports handed over hold every change as the batch decided it, so storing them in full is what the database's
+    // narrower write leaves (#2851). Through UpdatePendingExportsAsync, so a test-support subclass treating that as the
+    // persist event sees this one too.
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        OnPendingExportResultsWritten?.Invoke(results);
+        return UpdatePendingExportsAsync(results.PendingExports);
+    }
+
     // The changes and exports handed over are the stored instances, so they already hold what resolution wrote. Virtual
     // for test-support subclasses that snapshot persisted state (see GetPendingExportsByIdsAsync).
     public virtual Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
@@ -2878,6 +2963,8 @@ public partial class SyncRepository : ISyncRepository
         var rules = _syncRules.Values
             .Where(r => r.ConnectedSystemId == connectedSystemId)
             .Where(r => includeDisabled || r.Enabled)
+            .OrderBy(r => r.Name)
+            .ThenBy(r => r.Id)
             .ToList();
         return Task.FromResult(rules);
     }
@@ -3458,6 +3545,46 @@ public partial class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Same answers as the SQL implementation (#2832): every value of the objects, except that an attribute a member
+    /// question names keeps only the values that could name one of its Metaverse Objects, as a member joined to one, or
+    /// unresolved with that object's id as its text, ignoring case.
+    /// </summary>
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions)
+    {
+        var questions = memberQuestions.ToDictionary(q => (q.ConnectedSystemObjectId, q.AttributeId));
+        var ids = csoIds.ToHashSet();
+        var result = new List<ConnectedSystemObjectAttributeValue>();
+
+        foreach (var cso in _csos.Values.Where(cso => ids.Contains(cso.Id) && cso.AttributeValues != null))
+        {
+            foreach (var av in cso.AttributeValues)
+            {
+                if (questions.TryGetValue((cso.Id, av.AttributeId), out var question) && !CouldNameOneOf(av, question.MetaverseObjectIds))
+                    continue;
+
+                // Each value carries its object and its referenced object, as the SQL implementation's includes give them.
+                av.ConnectedSystemObject ??= cso;
+                if (av.ReferenceValue == null && av.ReferenceValueId is { } referencedObjectId && _csos.TryGetValue(referencedObjectId, out var referencedObject))
+                    av.ReferenceValue = referencedObject;
+                result.Add(av);
+            }
+        }
+
+        return Task.FromResult(result);
+
+        bool CouldNameOneOf(ConnectedSystemObjectAttributeValue av, IReadOnlySet<Guid> metaverseObjectIds)
+        {
+            var referenced = av.ReferenceValue ?? (av.ReferenceValueId is { } referencedId && _csos.TryGetValue(referencedId, out var found) ? found : null);
+            if (referenced?.MetaverseObjectId is { } joinedTo && metaverseObjectIds.Contains(joinedTo))
+                return true;
+
+            return !av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null &&
+                   metaverseObjectIds.Any(id => string.Equals(av.UnresolvedReferenceValue, id.ToString(), StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)

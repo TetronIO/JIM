@@ -124,11 +124,38 @@ public class ExportEvaluationServer
     /// </summary>
     /// <param name="cache">The cache to refresh (rules and target system IDs are preserved).</param>
     /// <param name="mvoIds">MVO IDs from the current page's Pending Export evaluations.</param>
-    public async Task RefreshExportEvaluationCacheForPageAsync(
+    public Task RefreshExportEvaluationCacheForPageAsync(
         ExportEvaluationCache cache,
         IEnumerable<Guid> mvoIds)
+        => RefreshExportEvaluationCacheAsync(cache, mvoIds.ToList(), evaluations: null);
+
+    /// <summary>
+    /// Rebuilds the per-page portions of the export evaluation cache for a synchronisation page's export evaluations,
+    /// loading each target group's member attribute only in part where the page's changes allow it (#2832).
+    /// </summary>
+    /// <remarks>
+    /// A membership change stages only the members that changed, so no-net-change detection needs to know only whether
+    /// the target holds those. <see cref="ExportEvaluationMemberLoadPlanner"/> decides which multi-valued reference
+    /// attributes can be loaded with just those members' values; every other value is loaded whole, as
+    /// <see cref="RefreshExportEvaluationCacheForPageAsync"/> loads it. The attributes loaded in part are recorded on
+    /// <see cref="ExportEvaluationCache.PartiallyLoadedCsoAttributeValues"/>, and export evaluation fails rather than
+    /// answer any other question from them.
+    /// </remarks>
+    /// <param name="cache">The cache to refresh (rules and target system IDs are preserved).</param>
+    /// <param name="evaluations">The page's export evaluations: each Metaverse Object with the values it changed.</param>
+    public Task RefreshExportEvaluationCacheForEvaluationsAsync(
+        ExportEvaluationCache cache,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)> evaluations)
+        => RefreshExportEvaluationCacheAsync(cache,
+            evaluations.Select(e => e.Mvo.Id).Where(id => id != Guid.Empty).Distinct().ToList(),
+            evaluations);
+
+    private async Task RefreshExportEvaluationCacheAsync(
+        ExportEvaluationCache cache,
+        List<Guid> mvoIdList,
+        IReadOnlyCollection<(MetaverseObject Mvo, IReadOnlyCollection<MetaverseObjectAttributeValue> ChangedAttributes)>? evaluations)
     {
-        var mvoIdList = mvoIds.ToList();
+        cache.PartiallyLoadedCsoAttributeValues = [];
 
         // Connection criteria (#2021) read which named Object Types each object is joined to: one statement per page,
         // and none at all when no export rule has such a criterion.
@@ -153,7 +180,24 @@ public class ExportEvaluationServer
         var targetCsoIds = cache.CsoLookup.Values.Select(cso => cso.Id).ToList();
         if (targetCsoIds.Count > 0)
         {
-            var csoAttributeValues = await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds);
+            var memberQuestions = evaluations == null ? [] : ExportEvaluationMemberLoadPlanner.Plan(cache, evaluations);
+            List<ConnectedSystemObjectAttributeValue> csoAttributeValues;
+            using (var loadSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("LoadExportEvaluationCsoValues"))
+            {
+                loadSpan.SetTag("csoCount", targetCsoIds.Count);
+                loadSpan.SetTag("partialAttributeCount", memberQuestions.Count);
+                loadSpan.SetTag("askedMemberCount", memberQuestions.Sum(q => q.MetaverseObjectIds.Count));
+
+                csoAttributeValues = memberQuestions.Count == 0
+                    ? await SyncRepo.GetCsoAttributeValuesByCsoIdsAsync(targetCsoIds)
+                    : await SyncRepo.GetCsoAttributeValuesForExportEvaluationAsync(targetCsoIds, memberQuestions);
+
+                loadSpan.SetTag("valueCount", csoAttributeValues.Count);
+                loadSpan.SetSuccess();
+            }
+
+            cache.PartiallyLoadedCsoAttributeValues = memberQuestions.ToDictionary(
+                q => (q.ConnectedSystemObjectId, q.AttributeId), q => q.MetaverseObjectIds);
             cache.CsoAttributeValues = csoAttributeValues
                 .ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId));
             cache.CsoIdsWithPersistedPendingExports = await SyncRepo.GetConnectedSystemObjectIdsWithPendingExportsAsync(targetCsoIds);
@@ -304,6 +348,7 @@ public class ExportEvaluationServer
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
         var connections = await ReadConnectionsAsync(mvo.Id, exportRules);
 
+        var inScopeExportRules = new List<SyncRule>();
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
@@ -314,6 +359,11 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            inScopeExportRules.Add(exportRule);
+        }
+
+        foreach (var exportRule in StandaloneExportRulesLoggingOverlaps(mvo, inScopeExportRules))
+        {
             // Find or create the Pending Export for this MVO → target system
             var pendingExport = await CreateOrUpdatePendingExportAsync(mvo, exportRule, changedAttributes);
             if (pendingExport != null)
@@ -352,15 +402,11 @@ public class ExportEvaluationServer
         var exportRules = await GetExportRulesForObjectTypeAsync(mvo.Type.Id);
         var connections = await ReadConnectionsAsync(mvo.Id, exportRules);
 
-        foreach (var exportRule in exportRules)
-        {
-            // Check if MVO is in scope for this export rule
-            if (IsMvoInScopeForExportRule(mvo, exportRule, connections))
-            {
-                // Still in scope, no deprovisioning needed
-                continue;
-            }
+        // Scope is decided for every rule first, as the cached evaluation decides it (#2822).
+        var inScopeExportRules = exportRules.Where(exportRule => IsMvoInScopeForExportRule(mvo, exportRule, connections)).ToList();
 
+        foreach (var exportRule in exportRules.Except(inScopeExportRules))
+        {
             // MVO is OUT of scope - check if there's an existing CSO to deprovision
             var existingCso = await SyncRepo.GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, exportRule.ConnectedSystemId);
 
@@ -385,6 +431,15 @@ public class ExportEvaluationServer
                     mvo.Id, exportRule.Name, exportRule.ConnectedSystemId,
                     LogSanitiser.Sanitise(deprovisionConflict.ExistingObjectTypeName),
                     LogSanitiser.Sanitise(deprovisionConflict.TargetObjectTypeName));
+                continue;
+            }
+
+            // Another rule on the same system and Object Type still covers the object (#2822): it takes the object over.
+            if (SyncEngine.FindCoveringExportRule(exportRule, inScopeExportRules) is { } coveringRule)
+            {
+                Log.Debug("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}, but {CoveringRule} " +
+                    "still covers it, so CSO {CsoId} is not deprovisioned.",
+                    mvo.Id, LogSanitiser.Sanitise(exportRule.Name), LogSanitiser.Sanitise(coveringRule.Name), existingCso.Id);
                 continue;
             }
 
@@ -437,6 +492,7 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
+        var inScopeExportRules = new List<SyncRule>();
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
@@ -447,6 +503,11 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            inScopeExportRules.Add(exportRule);
+        }
+
+        foreach (var exportRule in StandaloneExportRulesLoggingOverlaps(mvo, inScopeExportRules))
+        {
             // Find or create the Pending Export using cached CSO lookup
             var pendingExport = await CreateOrUpdatePendingExportAsync(mvo, exportRule, changedAttributes, cache);
             if (pendingExport != null)
@@ -515,6 +576,7 @@ public class ExportEvaluationServer
         // an echo of an imported value stages nothing, while a genuine writeback (a value the source
         // system does not hold, however it was derived) stages normally. The old whole-system skip
         // silenced every writeback into a source system, and consumed the triggering change with it.
+        var inScopeExportRules = new List<SyncRule>();
         foreach (var exportRule in exportRules)
         {
             // Check if MVO is in scope for this export rule
@@ -526,17 +588,39 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            inScopeExportRules.Add(exportRule);
+
             // Record joined, non-PendingProvisioning target CSOs whose (Metaverse Object, export rule)
             // pair passed the scope gate, whether or not any attribute changes are staged below. The page
             // flush uses these to cancel stale Delete Pending Exports left by an earlier scope-out (#1018).
-            // Reference recall is excluded: it is not a desired-state assertion for existence.
+            // Reference recall is excluded: it is not a desired-state assertion for existence. An object two
+            // rules overlap on still counts: it is wanted, so an earlier Delete must not go ahead.
             if (!recallSemantics &&
                 cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var inScopeCso) &&
                 inScopeCso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
             {
                 result.InScopeJoinedCsoIds.Add(inScopeCso.Id);
             }
+        }
 
+        // Two or more rules covering the object in one Connected System and Object Type would each stage a Pending Export
+        // for its one Connected System Object, and the page could not be saved (#2820). Hold every such rule back for this
+        // object and report it; the object's other systems carry on.
+        var overlaps = SyncEngine.FindExportRuleOverlaps(mvo, inScopeExportRules,
+            connectedSystemId => cache.CsoLookup.TryGetValue((mvo.Id, connectedSystemId), out var cso) ? cso : null);
+        foreach (var overlap in overlaps)
+            LogExportRuleOverlap(overlap);
+        result.RuleOverlaps.AddRange(overlaps);
+        var standaloneExportRules = SyncEngine.StandaloneExportRules(inScopeExportRules);
+
+        // An account the rule now covering the object did not provision is taken over when the rule that managed it no
+        // longer covers the object (#2822): its join is re-pointed, and the covering rule's Attribute Flows stage below as
+        // for any account it manages. Not on a recall, which asserts nothing about who manages an object.
+        if (!recallSemantics)
+            await AdoptHandedOverObjectsAsync(mvo, cache, exportRules, inScopeExportRules, standaloneExportRules, result);
+
+        foreach (var exportRule in standaloneExportRules)
+        {
             // Flatten the pre-resolved reference values for this rule's target system (reference recall, #908).
             IReadOnlyDictionary<Guid, ResolvedRecallReference>? preResolvedForSystem = null;
             if (preResolvedReferences != null)
@@ -626,15 +710,12 @@ public class ExportEvaluationServer
             return pendingExports;
         }
 
-        foreach (var exportRule in exportRules)
-        {
+        // Scope is decided for every rule first: an account the object leaves one rule's scope for stays when another rule
+        // on the same system and Object Type still covers the object (#2822), which takes it over.
+        var inScopeExportRules = exportRules.Where(exportRule => IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections)).ToList();
 
-            // Check if MVO is in scope for this export rule
-            if (IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
-            {
-                // Still in scope, no deprovisioning needed
-                continue;
-            }
+        foreach (var exportRule in exportRules.Except(inScopeExportRules))
+        {
 
             // MVO is OUT of scope - check if there's an existing CSO to deprovision using cache
             var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -660,6 +741,15 @@ public class ExportEvaluationServer
                     mvo.Id, exportRule.Name, exportRule.ConnectedSystemId,
                     LogSanitiser.Sanitise(deprovisionConflict.ExistingObjectTypeName),
                     LogSanitiser.Sanitise(deprovisionConflict.TargetObjectTypeName));
+                continue;
+            }
+
+            // Another rule on the same system and Object Type still covers the object (#2822): it takes the object over.
+            if (SyncEngine.FindCoveringExportRule(exportRule, inScopeExportRules) is { } coveringRule)
+            {
+                Log.Debug("EvaluateOutOfScopeExportsAsync: MVO {MvoId} is out of scope for export rule {RuleName}, but {CoveringRule} " +
+                    "still covers it, so CSO {CsoId} is not deprovisioned.",
+                    mvo.Id, LogSanitiser.Sanitise(exportRule.Name), LogSanitiser.Sanitise(coveringRule.Name), existingCso.Id);
                 continue;
             }
 
@@ -2523,6 +2613,90 @@ public class ExportEvaluationServer
             LogSanitiser.Sanitise(conflict.ExistingObjectTypeName), connectedSystemId);
     }
 
+    /// <summary>
+    /// Re-points the join of each Connected System Object a covering export Synchronisation Rule takes over (#2822), persists
+    /// it, and records the hand-over for the worker to report.
+    /// </summary>
+    private async Task AdoptHandedOverObjectsAsync(MetaverseObject mvo, ExportEvaluationCache cache, IReadOnlyList<SyncRule> exportRules,
+        IReadOnlyList<SyncRule> inScopeExportRules, IReadOnlyList<SyncRule> standaloneExportRules, ExportEvaluationResult result)
+    {
+        var adoptions = standaloneExportRules
+            .Select(rule => (Rule: rule, Cso: cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var cso) ? cso : null))
+            .Select(pair => (pair.Rule, pair.Cso, HandOver: SyncEngine.FindExportRuleHandOver(mvo, pair.Rule, pair.Cso, exportRules, inScopeExportRules)))
+            .Where(adoption => adoption.HandOver != null)
+            .ToList();
+        if (adoptions.Count == 0)
+            return;
+
+        foreach (var (rule, cso, _) in adoptions)
+            cso!.RecordJoinAdoption(rule);
+        await SyncRepo.UpdateConnectedSystemObjectJoinStatesAsync([.. adoptions.Select(adoption => adoption.Cso!)]);
+
+        foreach (var handOver in adoptions.Select(adoption => adoption.HandOver!))
+        {
+            Log.Information("Export evaluation: Connected System Object {CsoId} for Metaverse Object {MvoId} left the scope of export rule " +
+                "{DepartedRule}; {CoveringRule} still covers it and now manages it.",
+                handOver.ConnectedSystemObjectId, mvo.Id, LogSanitiser.Sanitise(handOver.DepartedSyncRuleName),
+                LogSanitiser.Sanitise(handOver.CoveringSyncRuleName));
+            result.HandOvers.Add(handOver);
+        }
+    }
+
+    /// <summary>
+    /// Logs an object that two or more export rules cover in one Connected System and Object Type (#2820). The worker's
+    /// ExportRuleOverlap RPEI is the authoritative report; this keeps the log in step with it.
+    /// </summary>
+    private static void LogExportRuleOverlap(ExportRuleOverlap overlap)
+    {
+        Log.Warning("Export evaluation: Metaverse Object {MvoId} is in scope of {RuleCount} export Synchronisation Rules that target " +
+            "Connected System Object Type '{ObjectType}' in Connected System {SystemId} ({Rules}). Only one rule may manage the " +
+            "object, so nothing was staged for any of them.",
+            overlap.MetaverseObjectId, overlap.SyncRuleNames.Count, LogSanitiser.Sanitise(overlap.ObjectTypeName),
+            overlap.ConnectedSystemId, LogSanitiser.Sanitise(string.Join(", ", overlap.SyncRuleNames)));
+    }
+
+    /// <summary>
+    /// The in-scope export rules that may stage for the Metaverse Object, for the overloads with no channel to a Run Profile
+    /// Execution Item: overlapping rules (#2820) are logged and held back, exactly as the cached evaluation holds them back.
+    /// </summary>
+    private static List<SyncRule> StandaloneExportRulesLoggingOverlaps(MetaverseObject mvo, List<SyncRule> inScopeExportRules)
+    {
+        foreach (var overlap in SyncEngine.FindExportRuleOverlaps(mvo, inScopeExportRules, _ => null))
+            LogExportRuleOverlap(overlap);
+        return SyncEngine.StandaloneExportRules(inScopeExportRules);
+    }
+
+    /// <summary>
+    /// The fault guard for a member attribute loaded in part (#2832): every change no-net-change detection judged against
+    /// such an attribute must be an Add or Remove naming one of the Metaverse Objects its values were loaded for, the only
+    /// question they answer exactly. Anything else would be judged against an incomplete set, so evaluation stops rather
+    /// than stage, or drop, a change on a wrong answer. The planner never produces that case
+    /// (<see cref="ExportEvaluationMemberLoadPlanner"/>); this catches a future path that would.
+    /// </summary>
+    internal static void EnsureJudgedByLoadedValues(ExportEvaluationCache cache, Guid csoId, IEnumerable<PendingExportAttributeValueChange> judged)
+    {
+        if (cache.PartiallyLoadedCsoAttributeValues.Count == 0)
+            return;
+
+        foreach (var change in judged)
+        {
+            if (!cache.PartiallyLoadedCsoAttributeValues.TryGetValue((csoId, change.AttributeId), out var loadedFor))
+                continue;
+
+            var answerable = change.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Remove &&
+                             !change.ResolvedReferenceCsoId.HasValue &&
+                             SyncEngine.NamedMetaverseObjectId(change) is { } named &&
+                             loadedFor.Contains(named);
+            if (!answerable)
+            {
+                throw new InvalidOperationException(
+                    $"Export evaluation judged a {change.ChangeType} change to attribute {change.AttributeId} of Connected System Object {csoId} " +
+                    "against values loaded only for the members this page changes. Judged against an incomplete set, it could be staged or " +
+                    "dropped wrongly, so the evaluation stops instead.");
+            }
+        }
+    }
+
     internal static ExportObjectTypeConflict? DetectObjectTypeConflict(
         MetaverseObject mvo,
         SyncRule exportRule,
@@ -2743,6 +2917,10 @@ public class ExportEvaluationServer
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
             attrSpan.SetSuccess();
         }
+
+        // Every change no-net-change detection judged must be one the cache's values could answer (#2832).
+        if (changeType != PendingExportChangeType.Create && existingCso != null)
+            EnsureJudgedByLoadedValues(cache, existingCso.Id, attributeChanges.Concat(alreadyCurrentChanges));
 
         if (attributeChanges.Count == 0 && changeType == PendingExportChangeType.Update)
         {
@@ -3543,16 +3721,42 @@ public class ExportEvaluationServer
                 ?? mvo.AttributeValues.Where(av => !av.NullValue).ToList();
             var removedAttributes = recall?.RemovedAttributes ?? synchronisationChanges?.RemovedAttributes;
 
+            // Scope is decided for every rule before anything is evaluated, as the run decides it: two or more rules in
+            // scope for one Connected System and Object Type are an overlap (#2820), and the run stages nothing for them.
+            var inScopeExportRules = exportRules.Where(exportRule => IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections)).ToList();
+            var overlaps = SyncEngine.FindExportRuleOverlaps(mvo, inScopeExportRules,
+                csId => cache.CsoLookup.TryGetValue((mvo.Id, csId), out var cso) ? cso : null);
+            result.RuleOverlaps.AddRange(overlaps);
+            var standaloneExportRules = SyncEngine.StandaloneExportRules(inScopeExportRules).ToHashSet();
+
+            // The accounts a covering rule would take over (#2822), as the run's adoption finds them. A recall asserts
+            // nothing about who manages an object, so it takes none over.
+            if (recall == null)
+            {
+                result.HandOvers.AddRange(standaloneExportRules
+                    .Select(rule => SyncEngine.FindExportRuleHandOver(mvo, rule,
+                        cache.CsoLookup.TryGetValue((mvo.Id, rule.ConnectedSystemId), out var cso) ? cso : null, exportRules, inScopeExportRules))
+                    .Where(handOver => handOver != null)
+                    .Select(handOver => handOver!));
+            }
+
             foreach (var exportRule in exportRules)
             {
                 cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var existingCso);
 
-                if (IsMvoInScopeForExportRule(mvo, exportRule, cache.Connections))
+                if (standaloneExportRules.Contains(exportRule))
                 {
                     result.Entries.Add(await BuildStagingPreviewEntryAsync(
                         this, cache, mvo, exportRule, existingCso, changedAttributes, removedAttributes, recallSemantics: recall != null));
                     continue;
                 }
+
+                if (inScopeExportRules.Contains(exportRule))
+                    continue;
+
+                // Another rule on the same system and Object Type still covers the object (#2822): nothing is deprovisioned.
+                if (SyncEngine.FindCoveringExportRule(exportRule, inScopeExportRules) != null)
+                    continue;
 
                 // Out of scope: meaningful only for a joined object of this rule's own Object Type (#1331,
                 // #1399 parity with the real out-of-scope path).

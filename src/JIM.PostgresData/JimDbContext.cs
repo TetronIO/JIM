@@ -1146,6 +1146,31 @@ public class JimDbContext : DbContext
             .HasIndex("MetaverseObjectId", "AttributeId")
             .HasDatabaseName("IX_MetaverseObjectAttributeValues_MvoId_AttributeId");
 
+        // Single-column indexes on the typed value columns and the two reference foreign keys (#2864). A value row holds
+        // one typed value, so a full index on each column held a NULL entry for nearly every row, and every Metaverse
+        // Object written paid to maintain entries nobody can look up. Six are partial (value IS NOT NULL): every reader
+        // compares the column with = or = ANY (Object Matching, the generated value gates, the Guid sign-in lookup, a
+        // Predefined Search criterion's comparison, the reference clean-up on deletion) or is the foreign-key check run
+        // when a referenced Metaverse Object or Connected System Object is deleted (WHERE col = $1); each implies IS NOT
+        // NULL, so the planner still proves the partial index applies, and no reader seeks a NULL through them.
+        // StringValue and DateTimeValue have no single-column index at all: every reader of theirs also names the
+        // attribute, so IX_MetaverseObjectAttributeValues_AttributeId_StringValue and _AttributeId_DateTimeValue (above
+        // and below) serve them. Plan coverage: MetaverseObjectAttributeValuePartialIndexDatabaseTests.
+        foreach (var column in new[]
+                 {
+                     nameof(MetaverseObjectAttributeValue.IntValue),
+                     nameof(MetaverseObjectAttributeValue.LongValue),
+                     nameof(MetaverseObjectAttributeValue.DecimalValue),
+                     nameof(MetaverseObjectAttributeValue.GuidValue),
+                     nameof(MetaverseObjectAttributeValue.ReferenceValueId),
+                     nameof(MetaverseObjectAttributeValue.UnresolvedReferenceValueId)
+                 })
+        {
+            modelBuilder.Entity<MetaverseObjectAttributeValue>()
+                .HasIndex(column)
+                .HasFilter($"\"{column}\" IS NOT NULL");
+        }
+
         // ConnectedSystemObjectAttributeValue: composite index for CSO attribute lookups
         // Uses shadow property "ConnectedSystemObjectId" created by EF convention
         modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()

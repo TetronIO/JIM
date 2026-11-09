@@ -280,7 +280,9 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     }
 
     /// <summary>
-    /// What the matching engine answers for one object under one matching configuration.
+    /// What the matching engine answers for one object under one matching configuration. Each group of rules is
+    /// evaluated on its own, as the run does (#2823): import rules that find different Metaverse Objects are an
+    /// ambiguous match, whatever order they load in.
     /// </summary>
     private async Task<MatchOutcome> MatchAsync(
         ConnectedSystemObject cso,
@@ -288,35 +290,52 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
         MatchingConfiguration configuration,
         List<SyncRule> scopedImportRules)
     {
-        var rules = ResolveRules(cso, proposal, configuration, scopedImportRules);
-        if (rules.Count == 0)
-            return MatchOutcome.NoMatch;
+        var matches = new List<ImportRuleMatch>();
+        ImportMatch? typeMatch = null;
+        foreach (var (importRule, rules) in ResolveRules(cso, proposal, configuration, scopedImportRules))
+        {
+            try
+            {
+                var match = await _application.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, rules);
+                if (match == null)
+                    continue;
+                if (importRule == null)
+                    typeMatch = match;
+                else
+                    matches.Add(new ImportRuleMatch(importRule, match));
+            }
+            catch (MultipleMatchesException ex)
+            {
+                return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues, Candidates: ex.Candidates);
+            }
+            catch (ObjectMatchingRuleFailedException ex)
+            {
+                // The run would stop this object with an ObjectMatchingRuleFailed error (#2052): neither joined nor
+                // projected. The preview says so, with the reason.
+                return new MatchOutcome(MatchKind.Failed, null, [], ex.Resolution.FailureMessage);
+            }
+        }
 
-        try
-        {
-            var match = await _application.ObjectMatching.FindMatchingMetaverseObjectAsync(cso, rules);
-            return match == null
-                ? MatchOutcome.NoMatch
-                : new MatchOutcome(MatchKind.Match, match.MetaverseObject, match.Resolution.Values);
-        }
-        catch (MultipleMatchesException ex)
-        {
-            return new MatchOutcome(MatchKind.Ambiguous, null, ex.MatchValues, Candidates: ex.Candidates);
-        }
-        catch (ObjectMatchingRuleFailedException ex)
-        {
-            // The run would stop this object with an ObjectMatchingRuleFailed error (#2052): neither joined nor
-            // projected. The preview says so, with the reason.
-            return new MatchOutcome(MatchKind.Failed, null, [], ex.Resolution.FailureMessage);
-        }
+        if (typeMatch != null)
+            return new MatchOutcome(MatchKind.Match, typeMatch.MetaverseObject, typeMatch.Resolution.Values);
+
+        var disagreement = ObjectMatchingServer.DescribeImportRuleDisagreement(matches, previewing: true);
+        if (disagreement != null)
+            return new MatchOutcome(MatchKind.Ambiguous, null, [.. matches.SelectMany(m => m.Match.Resolution.Values).Distinct()],
+                Candidates: disagreement.Candidates);
+
+        return matches.Count == 0
+            ? MatchOutcome.NoMatch
+            : new MatchOutcome(MatchKind.Match, matches[0].Match.MetaverseObject, matches[0].Match.Resolution.Values);
     }
 
     /// <summary>
-    /// The rules that would be evaluated for this object, in evaluation order. In Simple mode that is the object
-    /// type's own rules; in Advanced mode it is each in-scope import rule's rules in turn, each searching that
-    /// rule's Metaverse Object Type, which is how the synchronisation processor resolves them.
+    /// The rules that would be evaluated for this object, one group per evaluation. In Simple mode that is the object
+    /// type's own rules, as one group with no import rule; in Advanced mode it is each in-scope import rule's rules, in
+    /// name order, each searching that rule's Metaverse Object Type, which is how the synchronisation processor
+    /// resolves them.
     /// </summary>
-    private static List<ObjectMatchingRule> ResolveRules(
+    private static List<(SyncRule? ImportRule, List<ObjectMatchingRule> Rules)> ResolveRules(
         ConnectedSystemObject cso,
         ObjectMatchingProposal proposal,
         MatchingConfiguration configuration,
@@ -324,24 +343,26 @@ public class ObjectMatchingPreviewAdapter : IConfigurationChangePreviewAdapter
     {
         if (proposal.Mode == ObjectMatchingRuleMode.ConnectedSystem)
         {
-            return
+            List<ObjectMatchingRule> typeRules =
             [
                 .. proposal.RulesFor(cso.TypeId, syncRuleId: null)
                     .Select(rule => Materialise(rule, configuration, fallback: null))
             ];
+            return typeRules.Count == 0 ? [] : [(null, typeRules)];
         }
 
-        var resolved = new List<ObjectMatchingRule>();
-        foreach (var importRule in scopedImportRules)
+        var groups = new List<(SyncRule? ImportRule, List<ObjectMatchingRule> Rules)>();
+        foreach (var importRule in SyncEngine.InNameOrder(scopedImportRules))
         {
             var fallback = importRule.MetaverseObjectType
                 ?? (importRule.MetaverseObjectTypeId is { } typeId ? configuration.MetaverseObjectTypesById.GetValueOrDefault(typeId) : null);
 
-            resolved.AddRange(proposal.RulesFor(cso.TypeId, importRule.Id)
-                .Select(rule => Materialise(rule, configuration, fallback)));
+            List<ObjectMatchingRule> rules = [.. proposal.RulesFor(cso.TypeId, importRule.Id).Select(rule => Materialise(rule, configuration, fallback))];
+            if (rules.Count > 0)
+                groups.Add((importRule, rules));
         }
 
-        return resolved;
+        return groups;
     }
 
     private static ObjectMatchingRule Materialise(ObjectMatchingRuleProposal rule, MatchingConfiguration configuration, MetaverseObjectType? fallback) =>

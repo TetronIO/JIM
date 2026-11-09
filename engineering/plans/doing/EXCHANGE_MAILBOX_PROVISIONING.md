@@ -318,6 +318,15 @@ A general feature, not behind the flag.
 
 ### Phase 8: Integration, compliance and flag removal (5 days, plus lab time)
 
+Three pull requests, in order: 8a, the Exchange servers in the harness and Scenario 034; 8b, the GAL scenario; 8c, docs, compliance and the flag's removal, once both scenarios pass in the lab.
+
+- **8a (in review).** The harness had no way to run an Exchange server, so:
+  - **The revert waits for Exchange itself.** `Restore-LabDomainController.ps1` reverts an Exchange server and waits through PowerShell Direct until Remote PowerShell answers, as JIM connects, and every role's required services run. No port proves it ready.
+  - **The runner stops what it cannot afford.** Before each scenario it stops the heavy machines that scenario does not use (`Stop-LabMachine.ps1`), decided from the scenario alone: Exchange servers not used, and, for a scenario using both, dc-target and adfs-primary.
+  - **The unreachable step stops IIS.** `Set-LabExchangeReachability.ps1` stops or starts IIS on the server for Scenario 5. It cannot be done by saving a wrong Exchange server, because every settings save signs in to Exchange and refuses one that fails.
+  - **Scenario 034** runs the PRD's Scenarios 1, 2, 3, 5, 7 and 8 and the matching acceptance criteria end to end. Group mail-enabling is left to the lab write suite (`LdapExchangeRecipientDeliveryLabTests`), which already proves every recipient type and both group cases at the Connector against the same server.
+  - **Docs finding for 8c:** Scenario 001's `mail` flow and Exchange's Email Address Policy both write `mail`. They agree only when the flowed address is the one the policy gives, so the Exchange page has to say so.
+
 - **Scenarios:**
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.
   - The GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412, built 5 November 2026) and #2774 (svc-jim may create contacts in `OU=GALSync`). It rewrites the Scenario 003 (GALSYNC) stub, which still describes an "AD to CSV" export: people and groups both ways, the `X500:` proxy, no projection back, an update, and a leaver's contact deleted. AD lab only, so it joins the AD-lab-only list in `Get-ScenarioSupportedDirectoryTypes`, and `ad-lab-rebuild.yml` gains `JIM_AD_LAB_EXCHANGE_SOURCE_VM`.

@@ -99,6 +99,10 @@ public partial class SyncEngine
         // many pending changes, e.g. a 200,000-member group) into an O(1) average-case set lookup.
         var attrIndexByAttrId = BuildAttributeValueIndexByAttributeId(attrValuesByAttrId);
 
+        // The same for each probed attribute (#2850): its candidate rows are looked up, never scanned once per change. The
+        // confirming import of a 500,000-member group's initial export judges 500,000 Adds over 500,000 candidate rows.
+        var probedLookupByAttrId = probedValuesByAttributeId?.ToDictionary(pair => pair.Key, pair => new ProbedValueLookup(pair.Value));
+
         // Process each attribute change that is awaiting confirmation
         var changesAwaitingConfirmation = pendingExport.AttributeValueChanges
             .Where(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
@@ -109,8 +113,8 @@ public partial class SyncEngine
         {
             // A probed attribute (#2669) is judged only from what the probe was given for it, never from the values
             // loaded with the object, which leave it out.
-            ProbedAttributeValues? probed = null;
-            var isProbed = probedValuesByAttributeId != null && probedValuesByAttributeId.TryGetValue(attrChange.AttributeId, out probed);
+            ProbedValueLookup? probed = null;
+            var isProbed = probedLookupByAttrId != null && probedLookupByAttrId.TryGetValue(attrChange.AttributeId, out probed);
             var confirmed = isProbed
                 ? IsAttributeChangeConfirmedOverProbe(probed!, attrChange)
                 : IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange);
@@ -345,9 +349,11 @@ public partial class SyncEngine
     /// over probed values (#2669): the same verdict for every change type, with the candidate rows standing in for the
     /// attribute's values in the value comparison (they include every row it could match) and the capped count standing in
     /// for the value count. Fails rather than judge a change the probe was not asked about, or a count it was not given.
+    /// The value comparison is <see cref="ValueExistsOnCso"/>'s, answered from the lookup's index (#2850).
     /// </summary>
-    private static bool IsAttributeChangeConfirmedOverProbe(ProbedAttributeValues probed, PendingExportAttributeValueChange attrChange)
+    private static bool IsAttributeChangeConfirmedOverProbe(ProbedValueLookup lookup, PendingExportAttributeValueChange attrChange)
     {
+        var probed = lookup.Probed;
         if (!probed.ProbedChangeIds.Contains(attrChange.Id))
             throw new ReconciliationProbeIncompleteException(
                 $"Attribute change {attrChange.Id} on attribute {attrChange.AttributeId} of Connected System Object {probed.ConnectedSystemObjectId} " +
@@ -371,10 +377,10 @@ public partial class SyncEngine
                 if (IsWholeSetUpdate(attrChange) && ProbedCount(probed, attrChange) != 1)
                     return false;
 
-                return ValueExistsOnCso(probed.CandidateValues, attrChange);
+                return lookup.ValueExists(attrChange);
 
             case PendingExportAttributeChangeType.Remove:
-                return !ValueExistsOnCso(probed.CandidateValues, attrChange);
+                return !lookup.ValueExists(attrChange);
 
             case PendingExportAttributeChangeType.RemoveAll:
                 return ProbedCount(probed, attrChange) == 0;
@@ -393,10 +399,12 @@ public partial class SyncEngine
     /// What the import showed for one change judged over probed values (#2669), recorded as its last imported value: the
     /// stored values matching it (with a note when a whole-set Update found others beside it), that its value is absent,
     /// or, for a change judged by the count alone, how many values are held. Bounded by the change, never the attribute's
-    /// whole value set, which for a group is its whole membership.
+    /// whole value set, which for a group is its whole membership. The matching rows are looked up (#2850), in the order
+    /// the probe returned them.
     /// </summary>
-    internal static string GetProbedImportedValueAsString(ProbedAttributeValues probed, PendingExportAttributeValueChange attrChange)
+    internal static string GetProbedImportedValueAsString(ProbedValueLookup lookup, PendingExportAttributeValueChange attrChange)
     {
+        var probed = lookup.Probed;
         var countOnly = attrChange.ChangeType == PendingExportAttributeChangeType.RemoveAll ||
                         (attrChange.ChangeType is PendingExportAttributeChangeType.Add or PendingExportAttributeChangeType.Update &&
                          IsPendingChangeEmpty(attrChange));
@@ -410,8 +418,7 @@ public partial class SyncEngine
             };
         }
 
-        var matched = probed.CandidateValues
-            .Where(row => ValueExistsOnCso([row], attrChange))
+        var matched = lookup.RowsMatching(attrChange)
             .Select(row => row.UnresolvedReferenceValue ?? row.ReferenceValueId?.ToString())
             .Where(value => value != null)
             .ToList();
@@ -420,6 +427,142 @@ public partial class SyncEngine
 
         var shown = string.Join(", ", matched);
         return IsWholeSetUpdate(attrChange) && probed.CappedValueCount > matched.Count ? shown + " (and other values)" : shown;
+    }
+
+    /// <summary>
+    /// The probed values of one attribute of one Connected System Object (#2669), ready for judging each of its changes in
+    /// time bounded by the change rather than by the attribute's candidate rows (#2850): the verdict from a
+    /// <see cref="AttributeValueIndex"/> over the rows, and the rows a change matches from their positions by referenced
+    /// object and by string. Both are built at most once, on first use, and only for what is asked. One is made per
+    /// attribute for one call of <see cref="ReconcileCsoAgainstPendingExport"/> and never shared, so its lazy state needs
+    /// no synchronisation.
+    /// </summary>
+    /// <remarks>
+    /// The candidate rows carry no attribute definition (the probe reads only their ids and reference fields), so both
+    /// structures take their data type and comparison from the attribute of the first change that asks. Every answer is
+    /// still the linear comparison's for every change: a later change whose attribute types or compares differently is
+    /// answered by that comparison itself, through <see cref="ValueExistsInIndex"/>'s fallback for the verdict and
+    /// <see cref="RowsMatching"/>'s for the rows. The planner probes only multi-valued reference attributes, so in practice
+    /// every change of a probed attribute shares one definition and the fallback never runs.
+    /// </remarks>
+    internal sealed class ProbedValueLookup(ProbedAttributeValues probed)
+    {
+        private AttributeValueIndex? _valueIndex;
+        private ReferenceRowPositions? _referenceRowPositions;
+
+        /// <summary>
+        /// What the probe returned for the attribute.
+        /// </summary>
+        public ProbedAttributeValues Probed { get; } = probed;
+
+        /// <summary>
+        /// Whether a value of the change is among the candidate rows: <see cref="ValueExistsOnCso"/> over them.
+        /// </summary>
+        public bool ValueExists(PendingExportAttributeValueChange change)
+        {
+            _valueIndex ??= BuildAttributeValueIndex(change.Attribute?.Type ?? AttributeDataType.NotSet, Probed.CandidateValues, change.Attribute);
+            return ValueExistsInIndex(_valueIndex, change);
+        }
+
+        /// <summary>
+        /// The candidate rows holding the change's value, in the order the probe returned them: those for which
+        /// <see cref="ValueExistsOnCso"/> over the row alone holds. A reference change compared as the positions were built
+        /// is answered from them, by <see cref="ReferenceRowMatches"/>'s rule; any other change by the comparison itself.
+        /// </summary>
+        public IEnumerable<ConnectedSystemObjectAttributeValue> RowsMatching(PendingExportAttributeValueChange change)
+        {
+            if (change.Attribute?.Type != AttributeDataType.Reference)
+                return Probed.CandidateValues.Where(row => ValueExistsOnCso([row], change));
+
+            var comparer = AttributeValueComparison.ComparerFor(change.Attribute);
+            _referenceRowPositions ??= new ReferenceRowPositions(Probed.CandidateValues, comparer);
+            if (!ReferenceEquals(_referenceRowPositions.Comparer, comparer))
+                return Probed.CandidateValues.Where(row => ValueExistsOnCso([row], change));
+
+            return _referenceRowPositions.PositionsMatching(change).Select(position => Probed.CandidateValues[position]);
+        }
+    }
+
+    /// <summary>
+    /// The positions of a list of reference rows by what <see cref="ReferenceRowMatches"/> matches them on (#2850): resolved
+    /// rows by the object they reference and by the string they retain, unresolved rows by their string, the strings under
+    /// one comparer. A change's matching rows are then found by key, never by a scan of the rows.
+    /// </summary>
+    private sealed class ReferenceRowPositions
+    {
+        private readonly Dictionary<Guid, List<int>> _resolvedRowsByReferenceId = new();
+        private readonly Dictionary<string, List<int>> _resolvedRowsByString;
+        private readonly Dictionary<string, List<int>> _unresolvedRowsByString;
+
+        public ReferenceRowPositions(IReadOnlyList<ConnectedSystemObjectAttributeValue> rows, StringComparer comparer)
+        {
+            Comparer = comparer;
+            _resolvedRowsByString = new Dictionary<string, List<int>>(comparer);
+            _unresolvedRowsByString = new Dictionary<string, List<int>>(comparer);
+
+            for (var position = 0; position < rows.Count; position++)
+            {
+                var row = rows[position];
+                if (row.ReferenceValueId is { } referenceId)
+                    AddPosition(_resolvedRowsByReferenceId, referenceId, position);
+                if (row.UnresolvedReferenceValue is { } value)
+                    AddPosition(row.ReferenceValueId.HasValue ? _resolvedRowsByString : _unresolvedRowsByString, value, position);
+            }
+        }
+
+        /// <summary>
+        /// How the strings are keyed: a change compared any other way cannot be answered from these positions.
+        /// </summary>
+        public StringComparer Comparer { get; }
+
+        /// <summary>
+        /// The positions of the rows <see cref="ReferenceRowMatches"/> matches the change to, ascending and each once. A change
+        /// naming an object matches resolved rows by that object alone and unresolved rows by either string it carries; a
+        /// change naming none matches every row by its strings.
+        /// </summary>
+        public List<int> PositionsMatching(PendingExportAttributeValueChange change)
+        {
+            var positions = new List<int>();
+            var namesAnObject = change.ResolvedReferenceCsoId.HasValue;
+            if (change.ResolvedReferenceCsoId is { } referenceId && _resolvedRowsByReferenceId.TryGetValue(referenceId, out var byReferenceId))
+                positions.AddRange(byReferenceId);
+
+            AddPositionsOf(change.UnresolvedReferenceValue);
+            AddPositionsOf(change.StringValue);
+
+            // A row can match by both strings: sorted and taken once, as a filter over the rows yields it.
+            positions.Sort();
+            var distinctCount = 0;
+            for (var i = 0; i < positions.Count; i++)
+            {
+                if (distinctCount == 0 || positions[i] != positions[distinctCount - 1])
+                    positions[distinctCount++] = positions[i];
+            }
+
+            positions.RemoveRange(distinctCount, positions.Count - distinctCount);
+            return positions;
+
+            void AddPositionsOf(string? value)
+            {
+                if (string.IsNullOrEmpty(value))
+                    return;
+                if (_unresolvedRowsByString.TryGetValue(value, out var unresolved))
+                    positions.AddRange(unresolved);
+                if (!namesAnObject && _resolvedRowsByString.TryGetValue(value, out var resolved))
+                    positions.AddRange(resolved);
+            }
+        }
+
+        private static void AddPosition<TKey>(Dictionary<TKey, List<int>> positionsByKey, TKey key, int position) where TKey : notnull
+        {
+            if (!positionsByKey.TryGetValue(key, out var positions))
+            {
+                positions = [];
+                positionsByKey[key] = positions;
+            }
+
+            positions.Add(position);
+        }
     }
 
     /// <summary>
@@ -839,7 +982,7 @@ public partial class SyncEngine
         /// back to the original <see cref="ValueExistsOnCso"/> linear comparison whenever the
         /// typed set a probe needs is missing; see the mismatch guard there for the scenario.
         /// </summary>
-        public required List<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
+        public required IReadOnlyList<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
 
         public HashSet<string>? TextValues { get; init; }
 
@@ -878,16 +1021,19 @@ public partial class SyncEngine
         /// Object's values. A probe whose attribute states a different one falls back to the linear comparison.
         /// </summary>
         public DateTimeResolution? DateTimeResolution { get; init; }
-        public List<ConnectedSystemObjectAttributeValue>? BinaryValues { get; init; }
+        public IReadOnlyList<ConnectedSystemObjectAttributeValue>? BinaryValues { get; init; }
     }
 
     /// <summary>
     /// Builds a <see cref="AttributeValueIndex"/> for one attribute's worth of CSO values (#988).
     /// Key derivation mirrors <see cref="ValueExistsOnCso"/>'s switch exactly, per data type.
     /// </summary>
-    private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
+    /// <param name="attrType">The data type whose typed set is built.</param>
+    /// <param name="values">The values indexed.</param>
+    /// <param name="attribute">The attribute whose comparison and date and time resolution the sets are keyed by.</param>
+    private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, IReadOnlyList<ConnectedSystemObjectAttributeValue> values,
+        ConnectedSystemObjectTypeAttribute? attribute)
     {
-        var attribute = values.Count > 0 ? values[0].Attribute : null;
         var stringComparer = AttributeValueComparison.ComparerFor(attribute);
 
         return attrType switch
@@ -1081,8 +1227,8 @@ public partial class SyncEngine
         var attrIndexByAttrId = new Dictionary<int, AttributeValueIndex>(attrValuesByAttrId.Count);
         foreach (var (attributeId, values) in attrValuesByAttrId)
         {
-            var attrType = values.Count > 0 ? values[0].Attribute?.Type ?? AttributeDataType.NotSet : AttributeDataType.NotSet;
-            attrIndexByAttrId[attributeId] = BuildAttributeValueIndex(attrType, values);
+            var attribute = values.Count > 0 ? values[0].Attribute : null;
+            attrIndexByAttrId[attributeId] = BuildAttributeValueIndex(attribute?.Type ?? AttributeDataType.NotSet, values, attribute);
         }
 
         return attrIndexByAttrId;

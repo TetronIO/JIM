@@ -114,6 +114,12 @@ public static class OutcomeDisplayMap
         // Changes queued for a target system that it already holds, withdrawn rather than exported (#2001). Info: the
         // target keeps the value it has and nothing is sent, so this explains why an expected update never went out
         // rather than warning of anything lost. PlaylistRemove reads as items taken off a queue.
+        // Another export rule took the account over when the object left the scope of the rule that managed it (#2822).
+        // Info: the account stays as it was, so nothing is lost; it explains why a scope exit deprovisioned nothing.
+        [ActivityRunProfileExecutionItemSyncOutcomeType.HandedToAnotherExportRule] =
+            new OutcomeDisplay("Handed to another rule", CausalityTone.Info, Icons.Material.Filled.SwapHoriz,
+                "were taken over by another export rule",
+                SpeculativeLabel: "Another export rule would take its account over"),
         [ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportChangesWithdrawn] =
             new OutcomeDisplay("Pending Export changes withdrawn", CausalityTone.Info, Icons.Material.Filled.PlaylistRemove,
                 "have changes withdrawn from their Pending Export",

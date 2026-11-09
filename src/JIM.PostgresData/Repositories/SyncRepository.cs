@@ -79,12 +79,19 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null, IReadOnlyCollection<Guid>? onlyIds = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, onlyIds);
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectIdsAsync(connectedSystemId, pageSize, afterId, createdOnOrAfter);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
-        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter);
+        int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null, Guid? afterId = null, int? objectTypeId = null, DateTime? createdOnOrAfter = null,
+        SynchronisationValueLoadPlan? valueLoadPlan = null, IReadOnlyCollection<Guid>? onlyIds = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId, createdOnOrAfter, valueLoadPlan, onlyIds);
+
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectIdsModifiedSinceAsync(connectedSystemId, modifiedSince, pageSize, afterId, createdOnOrAfter);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid csoId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectAsync(connectedSystemId, csoId);
@@ -373,6 +380,12 @@ public partial class SyncRepository : ISyncRepository
         var exportList = pendingExports.ToList();
         ThrowIfAnyQueued(exportList.Select(pe => pe.Id), nameof(UpdatePendingExportsAsync));
         return _repo.ConnectedSystems.UpdatePendingExportsAsync(exportList);
+    }
+
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        ThrowIfAnyQueued(results.PendingExports.Select(pe => pe.Id), nameof(UpdatePendingExportResultsAsync));
+        return _repo.ConnectedSystems.UpdatePendingExportResultsAsync(results);
     }
 
     public Task PersistResolvedReferencesAsync(IReadOnlyCollection<PendingExport> pendingExports,
@@ -752,6 +765,10 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetCsoAttributeValuesByCsoIdsAsync(csoIds);
+
+    public Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesForExportEvaluationAsync(
+        IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<ExportEvaluationMemberQuestion> memberQuestions)
+        => _repo.ConnectedSystems.GetCsoAttributeValuesForExportEvaluationAsync(csoIds, memberQuestions);
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectByMetaverseObjectIdAsync(metaverseObjectId, connectedSystemId);

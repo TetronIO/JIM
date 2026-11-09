@@ -1777,7 +1777,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         int? knownTotalCount = null,
         Guid? afterId = null,
         int? objectTypeId = null,
-        DateTime? createdOnOrAfter = null)
+        DateTime? createdOnOrAfter = null,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1786,8 +1787,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 2000)
-            pageSize = 2000;
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
 
         // Use caller-provided count when available (e.g. full sync already counted at start),
         // otherwise query the database. Eliminates redundant COUNT(*) at scale.
@@ -1811,7 +1812,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(cso => cso.Type)
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
-            .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter)
+            .Where(q => q.ConnectedSystemId == connectedSystemId), objectTypeId, createdOnOrAfter, onlyIds)
             .OrderBy(cso => cso.Id)
             .AsQueryable();
 
@@ -1856,6 +1857,40 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         pagedResultSet.Results.Clear();
         return pagedResultSet;
 
+    }
+
+    /// <summary>
+    /// The closing sweep's id page for a Full Synchronisation (#2861): the selection <see cref="GetConnectedSystemObjectsAsync"/>
+    /// makes for the sweep, ids only. See <see cref="ISyncRepository.GetConnectedSystemObjectIdsAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsAsync(int connectedSystemId, int pageSize, Guid afterId, DateTime createdOnOrAfter)
+        => LoadSweepIdPageAsync(ApplySyncPageFilters(
+            Repository.Database.ConnectedSystemObjects.Where(q => q.ConnectedSystemId == connectedSystemId), null, createdOnOrAfter), pageSize, afterId);
+
+    /// <summary>
+    /// One keyset page of a closing sweep's selection, ids only (#2861): ordered, cursored and capped exactly as the page
+    /// loaders are, so the ids are the objects the matching page load would have returned, without loading their values,
+    /// reference targets or Metaverse Objects, and without tracking anything. A projection onto the key, in EF so the
+    /// selection is the very expression the page loader filters with rather than a second copy of it in SQL.
+    /// </summary>
+    private static async Task<List<Guid>> LoadSweepIdPageAsync(IQueryable<ConnectedSystemObject> selection, int pageSize, Guid afterId)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        // The page load that follows must be able to return every id this page holds.
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
+
+        using var span = ActivitySource.StartActivity("Cso.Page.LoadSweepIds");
+        var ids = await selection
+            .OrderBy(cso => cso.Id)
+            .Where(cso => cso.Id.CompareTo(afterId) > 0)
+            .Take(pageSize)
+            .Select(cso => cso.Id)
+            .ToListAsync();
+        span?.SetTag("idCount", ids.Count);
+        return ids;
     }
 
     /// <summary>
@@ -1917,7 +1952,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="page">Which page to return results for, i.e. 1-n.</param>
     /// <param name="pageSize">How many Connected System Objects to return in this page of result.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId,
         DateTime modifiedSince,
         int page,
@@ -1926,6 +1961,25 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         Guid? afterId = null,
         int? objectTypeId = null,
         DateTime? createdOnOrAfter = null)
+        => GetConnectedSystemObjectsModifiedSinceAsync(connectedSystemId, modifiedSince, page, pageSize, knownTotalCount, afterId, objectTypeId,
+            createdOnOrAfter, valueLoadPlan: null);
+
+    /// <summary>
+    /// As <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?)"/>,
+    /// leaving out of each object the attributes <paramref name="valueLoadPlan"/> allows (#2818; see
+    /// <see cref="LoadModifiedPageLeavingAttributesOutAsync"/>). Null loads every object whole, exactly as before.
+    /// </summary>
+    public async Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
+        int connectedSystemId,
+        DateTime modifiedSince,
+        int page,
+        int pageSize,
+        int? knownTotalCount,
+        Guid? afterId,
+        int? objectTypeId,
+        DateTime? createdOnOrAfter,
+        SynchronisationValueLoadPlan? valueLoadPlan,
+        IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1934,13 +1988,13 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             page = 1;
 
         // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 2000)
-            pageSize = 2000;
+        if (pageSize > MaxSyncPageSize)
+            pageSize = MaxSyncPageSize;
 
         // Shallow Include chain — same approach as GetConnectedSystemObjectsAsync.
         // ReferenceValue navigations populated via direct SQL (PopulateReferenceValuesAsync).
         //
-        // We check the three marks AND Created/LastUpdated because:
+        // WhereModifiedSince checks the three marks AND Created/LastUpdated because:
         // - SynchronisationPending (#2092): set by every writer with the change it announces and cleared only by the
         //   synchronisation that processed the object, under the row version its load read. This is what makes the
         //   selection commit-order safe: a change committed while a run was in flight carries a timestamp below the
@@ -1957,18 +2011,19 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // Order by Id for consistent pagination.
         // AsTracking: CSOs are modified during sync processing, and the included Attribute entities
         // must identity-fix with already-tracked instances from the Connected System/Synchronisation Rule queries.
-        var csoQuery = ApplySyncPageFilters(Repository.Database.ConnectedSystemObjects
-            .AsTracking()
-            .Include(cso => cso.Type)
-            .Include(cso => cso.AttributeValues)
-                .ThenInclude(av => av.Attribute)
-            .Where(cso => cso.ConnectedSystemId == connectedSystemId &&
-                         (cso.SynchronisationPending ||
-                          cso.DerivedInputChangePending ||
-                          cso.ScopeReviewPending ||
-                          cso.Created > modifiedSince ||
-                          (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince))), objectTypeId, createdOnOrAfter)
-            .OrderBy(cso => cso.Id);
+        // The selection is built with and without the values (#2818): a page that leaves attributes out reads its objects
+        // first, then their values.
+        IQueryable<ConnectedSystemObject> Selection(bool withValues)
+        {
+            IQueryable<ConnectedSystemObject> query = Repository.Database.ConnectedSystemObjects
+                .AsTracking()
+                .Include(cso => cso.Type);
+            if (withValues)
+                query = query.Include(cso => cso.AttributeValues).ThenInclude(av => av.Attribute);
+
+            return ApplySyncPageFilters(WhereModifiedSince(query, connectedSystemId, modifiedSince), objectTypeId, createdOnOrAfter, onlyIds)
+                .OrderBy(cso => cso.Id);
+        }
 
         // Get count with lightweight query (no includes)
         // Use caller-provided count when available, otherwise query the database.
@@ -1987,16 +2042,22 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // native uuid comparison, matching the ORDER BY above.
         var offset = (page - 1) * pageSize;
         var afterIdValue = afterId ?? Guid.Empty;
-        var pagedCsoQuery = afterId.HasValue
-            ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
-            : csoQuery.Skip(offset).Take(pageSize);
+        IQueryable<ConnectedSystemObject> Paged(bool withValues) => afterId.HasValue
+            ? Selection(withValues).Where(cso => cso.Id.CompareTo(afterIdValue) > 0).Take(pageSize)
+            : Selection(withValues).Skip(offset).Take(pageSize);
 
         // The Delta Synchronisation's counterpart of the Full Synchronisation's Cso.Page.LoadWithAttributeValues: a
         // modified group brings its whole membership with it (#2669).
         List<ConnectedSystemObject> results;
         using (var loadSpan = ActivitySource.StartActivity("Cso.Page.LoadModifiedWithAttributeValues"))
         {
-            results = await pagedCsoQuery.ToListAsync();
+            // #2818: a type the plan leaves attributes out of is loaded in steps; every other page exactly as before.
+            var leavesAttributesOut = valueLoadPlan is { LeavesNothingOut: false } &&
+                                      (!objectTypeId.HasValue || valueLoadPlan.AttributesByObjectTypeId.ContainsKey(objectTypeId.Value)) &&
+                                      Repository.Database.Database.IsRelational();
+            results = leavesAttributesOut
+                ? await LoadModifiedPageLeavingAttributesOutAsync(Paged(withValues: false), valueLoadPlan!, loadSpan)
+                : await Paged(withValues: true).ToListAsync();
             loadSpan?.SetTag("csoCount", results.Count);
             loadSpan?.SetTag("attributeValueCount", results.Sum(cso => cso.AttributeValues.Count));
         }
@@ -2031,13 +2092,44 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// The closing sweep's id page for a Delta Synchronisation (#2861): the selection
+    /// <see cref="GetConnectedSystemObjectsModifiedSinceAsync(int, DateTime, int, int, int?, Guid?, int?, DateTime?, SynchronisationValueLoadPlan?, IReadOnlyCollection{Guid}?)"/>
+    /// makes for the sweep, ids only. See <see cref="ISyncRepository.GetConnectedSystemObjectIdsModifiedSinceAsync"/>.
+    /// </summary>
+    public Task<List<Guid>> GetConnectedSystemObjectIdsModifiedSinceAsync(int connectedSystemId, DateTime modifiedSince, int pageSize, Guid afterId,
+        DateTime createdOnOrAfter)
+        => LoadSweepIdPageAsync(ApplySyncPageFilters(
+            WhereModifiedSince(Repository.Database.ConnectedSystemObjects, connectedSystemId, modifiedSince), null, createdOnOrAfter), pageSize, afterId);
+
+    /// <summary>
+    /// The Delta Synchronisation's selection: this Connected System's objects carrying any of the three marks, or created
+    /// or updated after <paramref name="modifiedSince"/>. Shared by its page load and its closing sweep's id page (#2861),
+    /// so the two cannot select differently.
+    /// </summary>
+    private static IQueryable<ConnectedSystemObject> WhereModifiedSince(IQueryable<ConnectedSystemObject> query, int connectedSystemId,
+        DateTime modifiedSince)
+        => query.Where(cso => cso.ConnectedSystemId == connectedSystemId &&
+                              (cso.SynchronisationPending ||
+                               cso.DerivedInputChangePending ||
+                               cso.ScopeReviewPending ||
+                               cso.Created > modifiedSince ||
+                               (cso.LastUpdated.HasValue && cso.LastUpdated.Value > modifiedSince)));
+
+    /// <summary>
+    /// The page loaders cap a page at this many objects, to avoid increasing latency unnecessarily; a closing sweep's id
+    /// page is capped the same, so the load that follows it can return every id it holds (#2861).
+    /// </summary>
+    private const int MaxSyncPageSize = 2000;
+
+    /// <summary>
     /// The optional filters both synchronisation page loaders share (#2492): one Object Type, so a run can page through
     /// types in dependency order (served by <c>IX_ConnectedSystemObjects_ConnectedSystemId_TypeId_Id</c>, which keeps
-    /// the keyset cursor O(pageSize) within the type), and a creation floor, for the closing sweep that picks up
-    /// objects created while the run was in flight.
+    /// the keyset cursor O(pageSize) within the type); a creation floor, for the closing sweep that picks up objects
+    /// created while the run was in flight; and a set of ids, so the sweep loads only those of an id page the type walks
+    /// did not hand out (#2861).
     /// </summary>
     private static IQueryable<ConnectedSystemObject> ApplySyncPageFilters(
-        IQueryable<ConnectedSystemObject> query, int? objectTypeId, DateTime? createdOnOrAfter)
+        IQueryable<ConnectedSystemObject> query, int? objectTypeId, DateTime? createdOnOrAfter, IReadOnlyCollection<Guid>? onlyIds = null)
     {
         if (objectTypeId.HasValue)
         {
@@ -2049,6 +2141,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         {
             var createdFloor = createdOnOrAfter.Value;
             query = query.Where(cso => cso.Created >= createdFloor);
+        }
+
+        if (onlyIds != null)
+        {
+            var ids = onlyIds.ToArray();
+            query = query.Where(cso => ids.Contains(cso.Id));
         }
 
         return query;
@@ -2253,6 +2351,55 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private record ReferenceExternalIdBatchRow(Guid ConnectedSystemObjectId, Guid ReferenceValueId, string? ExternalId);
 
+    /// <summary>
+    /// The statement behind <see cref="GetReferenceExternalIdsForCsosAsync"/>, exposed so its plan can be checked
+    /// (<c>DeltaImportPartialLoadSaveDatabaseTests</c>).
+    /// </summary>
+    /// <remarks>
+    /// Each object's values are read by attribute id range, every id but those it leaves out, as
+    /// <see cref="AttributeValuesByRangesSql"/> reads them and for the same reason (#2836): a filter leaving an attribute
+    /// out (<c>NOT (AttributeId = ANY(...))</c>) cannot bound the index scan on (object, attribute), so PostgreSQL read
+    /// every member of a group whose member attribute a Delta Import's answer had settled, only to discard it. At 500,000
+    /// users that cost the confirming Delta Import 4.7 s for groups in which nothing was left undecided.
+    /// </remarks>
+    internal const string ReferenceExternalIdsForCsosSql =
+        """
+        SELECT av."ConnectedSystemObjectId",
+               av."ReferenceValueId",
+               COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+        FROM unnest(@rangeObjectIds, @rangeLows, @rangeHighs) AS r(object_id, low, high)
+        JOIN "ConnectedSystemObjectAttributeValues" av
+            ON av."ConnectedSystemObjectId" = r.object_id
+           AND av."AttributeId" BETWEEN r.low AND r.high
+        JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+        LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+            ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+           AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+        LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+            ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+           AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+        WHERE av."ReferenceValueId" IS NOT NULL
+        """;
+
+    /// <summary>
+    /// The parameters of <see cref="ReferenceExternalIdsForCsosSql"/>: each object with the ranges of attribute id covering
+    /// every id but <paramref name="excludedAttributeIds"/>.
+    /// </summary>
+    internal static NpgsqlParameter[] ReferenceExternalIdsForCsosParameters(IReadOnlyCollection<Guid> csoIds, IReadOnlyCollection<int> excludedAttributeIds)
+    {
+        var ranges = AttributeIdRangesExcluding(excludedAttributeIds.Distinct().Order().ToList()).ToList();
+        var objects = csoIds.Distinct().ToList();
+        return
+        [
+            new NpgsqlParameter("rangeObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                { Value = objects.SelectMany(id => ranges.Select(_ => id)).ToArray() },
+            new NpgsqlParameter("rangeLows", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                { Value = objects.SelectMany(_ => ranges.Select(range => range.Low)).ToArray() },
+            new NpgsqlParameter("rangeHighs", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
+                { Value = objects.SelectMany(_ => ranges.Select(range => range.High)).ToArray() }
+        ];
+    }
+
     /// <inheritdoc/>
     public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds,
         IReadOnlyCollection<int>? excludedAttributeIds = null)
@@ -2266,26 +2413,9 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // (535K single-CSO round trips measured at Scale500k25kGroups, 2026-07-20). An excluded attribute's references
         // are left out (#2817): a Delta Import that loaded a group's members only in part has their External IDs from the
         // answer it loaded them by, and reading every member's here is the cost it exists to avoid.
-        var excluded = excludedAttributeIds?.ToArray() ?? [];
         var rows = await Repository.Database.Database
-            .SqlQueryRaw<ReferenceExternalIdBatchRow>(
-                """
-                SELECT av."ConnectedSystemObjectId",
-                       av."ReferenceValueId",
-                       COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
-                FROM "ConnectedSystemObjectAttributeValues" av
-                JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
-                LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
-                    ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
-                   AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
-                LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
-                    ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
-                   AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
-                WHERE av."ConnectedSystemObjectId" = ANY({0})
-                  AND av."ReferenceValueId" IS NOT NULL
-                  AND NOT (av."AttributeId" = ANY({1}))
-                """,
-                csoIds.ToArray(), excluded)
+            .SqlQueryRaw<ReferenceExternalIdBatchRow>(ReferenceExternalIdsForCsosSql,
+                ReferenceExternalIdsForCsosParameters(csoIds, excludedAttributeIds ?? []).Cast<object>().ToArray())
             .ToListAsync();
 
         // Every requested ID gets an entry (empty when the CSO has no resolved references) so
@@ -5722,6 +5852,107 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Records an export batch's results, writing only what they change (#2851). <see cref="UpdatePendingExportsAsync"/>
+    /// writes every column of every change back through a VALUES list, ten parameters a row: 10 s for the 200,003 changes of
+    /// one 200,000-member group's Create, 181 worker-seconds over a 500,000-person initial export. Export changes none of a
+    /// change's values once a batch is loaded except by sending it (the sent mark), by a Connector replacing a value as it
+    /// writes, and by the batch's holds; so the sent mark is one set-based statement over the sent changes' ids, and only
+    /// the few changes revised besides are written as they stand. The Pending Export rows are written in full, as before.
+    /// </summary>
+    /// <remarks>
+    /// The changes are written before the Pending Exports, in one transaction, for the reasons
+    /// <see cref="BulkUpdatePendingExportsRawAsync"/> gives. The sent mark counts attempts on from what is stored, which
+    /// equals the batch's own count because the batch was loaded from the stored rows; every sent change must already hold
+    /// the mark in memory, so that what is stored and what the batch holds agree. A sent change whose row has gone is
+    /// logged and the rest recorded, as <see cref="UpdatePendingExportsAsync"/> records them: failing the write would record
+    /// changes already written to the Connected System as a failed attempt, and send them again.
+    /// </remarks>
+    public async Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        var exports = results.PendingExports.ToList();
+        if (exports.Count == 0)
+            return;
+
+        var sentIds = results.SentChanges.Select(c => c.Id).Distinct().ToArray();
+        var notMarked = results.SentChanges
+            .Where(c => c.Status != PendingExportAttributeChangeStatus.ExportedPendingConfirmation || c.LastExportedAt != results.SentAt)
+            .Select(c => c.Id)
+            .ToList();
+        if (notMarked.Count > 0)
+            throw new InvalidOperationException($"UpdatePendingExportResultsAsync: {notMarked.Count} change(s) handed over as sent do not hold the sent mark " +
+                $"(awaiting confirmation, sent at {results.SentAt:O}), so the database would not hold what the batch does: {string.Join(", ", notMarked.Take(10))}");
+        var revised = results.RevisedChanges.ToList();
+
+        // The sent mark's SET, from its named column list; a column added to the list without an assignment here fails.
+        var sentAssignments = new Dictionary<string, string>
+        {
+            ["Status"] = "@status",
+            ["ExportAttemptCount"] = @"t.""ExportAttemptCount"" + 1",
+            ["LastExportedAt"] = "@sentAt"
+        };
+        var sentSql = $"""
+            UPDATE "PendingExportAttributeValueChanges" AS t
+            SET {string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultSentUpdate.Select(c => $@"""{c}"" = {sentAssignments[c]}"))}
+            WHERE t."PendingExportId" = ANY(@exportIds) AND t."Id" = ANY(@ids)
+            """;
+        var revisionColumns = PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate;
+        var revisionSql = $"""
+            UPDATE "PendingExportAttributeValueChanges" AS t
+            SET {string.Join(", ", revisionColumns.Select(c => $@"""{c}"" = v.""{c}"""))}
+            FROM unnest(@ids, @values0, @values1, @values2) AS v("Id", {BulkSqlHelpers.ToQuotedList(revisionColumns)})
+            WHERE t."Id" = v."Id"
+            """;
+
+        await using (var ownTransaction = await BeginTransactionIfNoneAsync())
+        {
+            var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+            await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+            var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+
+            if (sentIds.Length > 0)
+            {
+                await using var command = new NpgsqlCommand(sentSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("status", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportAttributeChangeStatus.ExportedPendingConfirmation });
+                command.Parameters.Add(new NpgsqlParameter("sentAt", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = results.SentAt });
+                command.Parameters.Add(new NpgsqlParameter("exportIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = exports.Select(pe => pe.Id).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = sentIds });
+                var marked = await command.ExecuteNonQueryAsync();
+                if (marked != sentIds.Length)
+                {
+                    Log.Error("UpdatePendingExportResultsAsync: Marked {Marked} of the {Sent} changes the batch sent to {ExportCount} Pending Export(s); " +
+                        "the rest no longer exist, so their result cannot be recorded. Pending Exports: {PendingExportIds}",
+                        marked, sentIds.Length, exports.Count, string.Join(", ", exports.Take(10).Select(pe => pe.Id)));
+                }
+            }
+
+            if (revised.Count > 0)
+            {
+                await using var command = new NpgsqlCommand(revisionSql, npgsqlConn, npgsqlTx);
+                command.Parameters.Add(new NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                    { Value = revised.Select(c => c.Id).ToArray() });
+                // Array order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultRevisionUpdate.
+                command.Parameters.Add(new NpgsqlParameter("values0", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+                    { Value = revised.Select(c => c.StringValue).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values1", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Boolean)
+                    { Value = revised.Select(c => c.AwaitsInitialPassword).ToArray() });
+                command.Parameters.Add(new NpgsqlParameter("values2", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Boolean)
+                    { Value = revised.Select(c => c.AwaitsExchange).ToArray() });
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await BulkUpdatePendingExportRowsRawAsync(exports);
+
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
+
+        // The instances handed over already hold what was written; any tracked copy of these rows is detached, so no later
+        // save on the Worker's long-lived context writes the old values back.
+        DetachPendingExportGraphs(exports);
+    }
+
+    /// <summary>
     /// Writes what reference resolution changed and nothing else, so the deferred export pass can save a
     /// chunk's resolutions before its batches re-load them on their own contexts. Rewriting every
     /// column of every change through <see cref="UpdatePendingExportsAsync"/> took 112 seconds for
@@ -7621,7 +7852,7 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
     public async Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false)
     {
-        var query = Repository.Database.SyncRules
+        IQueryable<SyncRule> query = Repository.Database.SyncRules
             .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
             .Include(sr => sr.AttributeFlowRules)
             .ThenInclude(afr => afr.TargetConnectedSystemAttribute)
@@ -7662,7 +7893,11 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.MetaverseObjectType)
-            .Where(sr => sr.ConnectedSystemId == connectedSystemId);
+            .Where(sr => sr.ConnectedSystemId == connectedSystemId)
+            // A fixed order, as the all-rules overload has (#2823). Synchronisation does not rely on it (every decision that
+            // names a rule orders them itself), but anything listing these rules then reads the same way every time.
+            .OrderBy(sr => sr.Name)
+            .ThenBy(sr => sr.Id);
 
         if (!includeDisabledSyncRules)
             query = query.Where(sr => sr.Enabled);
@@ -9882,7 +10117,14 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
         // ExportedPendingConfirmation changes and the PE is never confirmed/deleted, causing stale Create exports on
         // re-evaluation.
         await BulkUpdatePendingExportAttributeValueChangesRawAsync(exports);
+        await BulkUpdatePendingExportRowsRawAsync(exports);
+    }
 
+    /// <summary>
+    /// Writes the Pending Export rows themselves, every export-result column (the changes are written by the caller, first).
+    /// </summary>
+    private async Task BulkUpdatePendingExportRowsRawAsync(List<PendingExport> exports)
+    {
         const int columnsPerRow = 10; // Id + 9 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 

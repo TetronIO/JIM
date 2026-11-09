@@ -6,7 +6,8 @@ using JIM.Models.Activities;
 namespace JIM.Worker.Models;
 
 /// <summary>
-/// Exception thrown when a join operation fails during sync processing.
+/// Exception thrown when a join or projection cannot be decided during sync processing: an ambiguous match, an existing
+/// join, a failed Object Matching Rule, or projecting rules that disagree on the Metaverse Object Type (#2823).
 /// Carries the error type and message for recording in the activity execution item.
 /// </summary>
 public class SyncJoinException : Exception

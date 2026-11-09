@@ -192,6 +192,14 @@ public class MetaverseObject
     public List<PendingGeneratedValue> PendingGeneratedValues { get; set; } = new();
 
     /// <summary>
+    /// Set by inbound Attribute Flow when a contribution supplies a value the object already holds and takes over that
+    /// value's provenance in place (#1292): the change stages no addition or removal, so this is what tells the
+    /// synchronisation page flush that the object still needs writing (#2831). Cleared once the object is written.
+    /// </summary>
+    [NotMapped]
+    public bool HasPendingProvenanceChanges { get; set; }
+
+    /// <summary>
     /// Navigation link to any joined Connected System Objects.
     /// </summary>
     public List<ConnectedSystemObject> ConnectedSystemObjects { get; set; } = new ();

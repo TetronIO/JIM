@@ -15,6 +15,19 @@ public class OutboundPreviewResult
     public List<OutboundPreviewEntry> Entries { get; init; } = [];
 
     /// <summary>
+    /// Metaverse Objects two or more enabled export Synchronisation Rules have in scope for the same Connected System and
+    /// Connected System Object Type (#2820). A real evaluation stages nothing for those rules on that object, so they have
+    /// no entry in <see cref="Entries"/>.
+    /// </summary>
+    public List<ExportRuleOverlap> RuleOverlaps { get; init; } = [];
+
+    /// <summary>
+    /// Connected System Objects a covering export Synchronisation Rule would take over when the Metaverse Object leaves the
+    /// scope of the rule that manages them (#2822). A real evaluation deprovisions none of them.
+    /// </summary>
+    public List<ExportRuleHandOver> HandOvers { get; init; } = [];
+
+    /// <summary>
     /// How many of the requested Metaverse Objects were evaluated.
     /// </summary>
     public int EvaluatedMetaverseObjectCount { get; set; }

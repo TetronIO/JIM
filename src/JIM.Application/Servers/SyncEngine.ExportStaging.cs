@@ -192,6 +192,99 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// Finds the groups of export Synchronisation Rules that all have the Metaverse Object in scope for the same Connected
+    /// System and Connected System Object Type (#2820). A Metaverse Object holds one Connected System Object there and only
+    /// one rule may manage it, so every rule in such a group is held back for this object and the overlap is reported.
+    /// Rules targeting different Object Types in one system are not an overlap here: that is the Object Type conflict
+    /// (#1331), decided per rule.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object being evaluated.</param>
+    /// <param name="inScopeExportRules">The enabled export rules that have the Metaverse Object in scope, in evaluation order.</param>
+    /// <param name="existingCsoInSystem">Returns the Connected System Object the Metaverse Object holds in a Connected System, if any.</param>
+    /// <returns>One overlap per group of two or more rules; empty when every rule stands alone.</returns>
+    internal static List<ExportRuleOverlap> FindExportRuleOverlaps(
+        MetaverseObject mvo,
+        IReadOnlyList<SyncRule> inScopeExportRules,
+        Func<int, ConnectedSystemObject?> existingCsoInSystem)
+    {
+        return inScopeExportRules
+            .GroupBy(rule => (rule.ConnectedSystemId, rule.ConnectedSystemObjectTypeId))
+            .Where(group => group.Count() > 1)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new ExportRuleOverlap
+                {
+                    MetaverseObjectId = mvo.Id,
+                    ConnectedSystemId = first.ConnectedSystemId,
+                    ConnectedSystemName = first.ConnectedSystem?.Name ?? first.ConnectedSystemId.ToString(CultureInfo.InvariantCulture),
+                    ObjectTypeName = first.ConnectedSystemObjectType?.Name ?? first.ConnectedSystemObjectTypeId.ToString(CultureInfo.InvariantCulture),
+                    SyncRuleNames = group.Select(rule => rule.Name).ToList(),
+                    ExistingConnectedSystemObjectId = existingCsoInSystem(first.ConnectedSystemId)?.Id
+                };
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The export rules that stand alone for this Metaverse Object: each in-scope rule that no other in-scope rule shares a
+    /// Connected System and Object Type with. Only these may stage anything for the object; the rest are reported by
+    /// <see cref="FindExportRuleOverlaps"/>.
+    /// </summary>
+    /// <summary>
+    /// The export Synchronisation Rule that still covers a Metaverse Object leaving <paramref name="departingRule"/>'s scope
+    /// (#2822): another in-scope rule on the same Connected System and Connected System Object Type. While one exists, the
+    /// departing rule deprovisions nothing; the covering rule manages the object. Several covering rules are an overlap,
+    /// which #2820 reports, and still leave the object covered.
+    /// </summary>
+    internal static SyncRule? FindCoveringExportRule(SyncRule departingRule, IReadOnlyList<SyncRule> inScopeExportRules) =>
+        inScopeExportRules.FirstOrDefault(rule => rule.Id != departingRule.Id &&
+                                                  rule.ConnectedSystemId == departingRule.ConnectedSystemId &&
+                                                  rule.ConnectedSystemObjectTypeId == departingRule.ConnectedSystemObjectTypeId);
+
+    /// <summary>
+    /// Whether <paramref name="coveringRule"/> takes over the Metaverse Object's Connected System Object (#2822): the object
+    /// is joined to it and of the rule's Object Type, an export rule made the join (provisioning or export matching), and
+    /// the rule recorded as managing it is another export rule on the same system and type that no longer covers the
+    /// Metaverse Object. A join an import rule made, or one recording no rule, is never re-pointed.
+    /// </summary>
+    /// <returns>The hand-over, or null when the object stays with the rule that manages it.</returns>
+    internal static ExportRuleHandOver? FindExportRuleHandOver(MetaverseObject mvo, SyncRule coveringRule, ConnectedSystemObject? existingCso,
+        IReadOnlyList<SyncRule> exportRules, IReadOnlyList<SyncRule> inScopeExportRules)
+    {
+        if (existingCso is not { JoinSyncRuleId: { } managingRuleId } ||
+            existingCso.MetaverseObjectId != mvo.Id ||
+            existingCso.TypeId != coveringRule.ConnectedSystemObjectTypeId ||
+            managingRuleId == coveringRule.Id ||
+            existingCso.JoinMethod is not (ConnectedSystemObjectJoinMethod.Provisioning or ConnectedSystemObjectJoinMethod.ExportMatching))
+            return null;
+
+        var departedRule = exportRules.FirstOrDefault(rule => rule.Id == managingRuleId &&
+                                                              rule.ConnectedSystemId == coveringRule.ConnectedSystemId &&
+                                                              rule.ConnectedSystemObjectTypeId == coveringRule.ConnectedSystemObjectTypeId);
+        if (departedRule == null || inScopeExportRules.Any(rule => rule.Id == departedRule.Id))
+            return null;
+
+        return new ExportRuleHandOver
+        {
+            ConnectedSystemObjectId = existingCso.Id,
+            MetaverseObjectId = mvo.Id,
+            ConnectedSystemId = coveringRule.ConnectedSystemId,
+            DepartedSyncRuleId = departedRule.Id,
+            DepartedSyncRuleName = departedRule.Name,
+            CoveringSyncRuleId = coveringRule.Id,
+            CoveringSyncRuleName = coveringRule.Name
+        };
+    }
+
+    internal static List<SyncRule> StandaloneExportRules(IReadOnlyList<SyncRule> inScopeExportRules) =>
+        inScopeExportRules
+            .Where(rule => inScopeExportRules.Count(other =>
+                other.ConnectedSystemId == rule.ConnectedSystemId &&
+                other.ConnectedSystemObjectTypeId == rule.ConnectedSystemObjectTypeId) == 1)
+            .ToList();
+
+    /// <summary>
     /// Checks whether any of the changed MVO attributes are relevant to the given export rule: a changed
     /// attribute is relevant when it is a direct source for one of the rule's Attribute Flow mappings, and an
     /// expression-based mapping may depend on any attribute, so any change is conservatively relevant to it.
@@ -649,17 +742,14 @@ public partial class SyncEngine
                     IEnumerable<MetaverseObjectAttributeValue> mvoValues;
                     if (isCreateOperation)
                     {
-                        // Exclude asserted-null markers (#91): a NullValue row carries no value and must be
-                        // invisible to export sourcing exactly as an absent row (the attribute reads as cleared).
-                        var changedValues = changedAttributes
-                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
-                            .ToList();
-
-                        // Fall back to the MVO's current attribute values (excluding asserted-null markers,
-                        // #91) when nothing relevant changed.
-                        mvoValues = changedValues.Count > 0
-                            ? changedValues
-                            : mvo.AttributeValues.Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
+                        // A Create provisions the whole object, so it carries every value the Metaverse Object holds,
+                        // whatever this pass changed (#2832): synchronisation queues only the values that changed, and
+                        // a group provisioned because one member was added must still be created with all of them.
+                        // This pass's changed values come first, its removals among them, so an unsent Create rebuilt
+                        // from the change still supersedes the Add it carried for a departed member; each value the
+                        // Metaverse Object holds is then added once. Asserted-null markers (#91) carry no value and
+                        // are invisible here exactly as an absent row.
+                        mvoValues = WholeSetForCreate(mvo, source.MetaverseAttribute.Id, changedAttributes);
                     }
                     else
                     {
@@ -838,6 +928,25 @@ public partial class SyncEngine
 
             return isRemoval ? PendingExportAttributeChangeType.Remove : PendingExportAttributeChangeType.Add;
         }
+    }
+
+    /// <summary>
+    /// The values a Create stages for a multi-valued source flowing to a multi-valued target (#2832): this pass's changed
+    /// values for the attribute (its removals among them), then every other value the Metaverse Object holds for it, each
+    /// once. A value that is both changed and held is the same row, so it is matched by identity.
+    /// </summary>
+    private static List<MetaverseObjectAttributeValue> WholeSetForCreate(
+        MetaverseObject mvo,
+        int sourceAttributeId,
+        List<MetaverseObjectAttributeValue> changedAttributes)
+    {
+        var values = changedAttributes
+            .Where(av => av.AttributeId == sourceAttributeId && !av.NullValue)
+            .ToList();
+        var staged = new HashSet<MetaverseObjectAttributeValue>(values, ReferenceEqualityComparer.Instance);
+
+        values.AddRange(mvo.AttributeValues.Where(av => av.AttributeId == sourceAttributeId && !av.NullValue && staged.Add(av)));
+        return values;
     }
 
     /// <summary>

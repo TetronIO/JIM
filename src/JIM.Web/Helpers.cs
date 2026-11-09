@@ -386,6 +386,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.ObjectMatchingRuleFailed] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
+            // In-scope import rules would project the object into different Metaverse Object Types (#2823).
+            [ActivityRunProfileExecutionItemErrorType.ProjectionTypeConflict] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
             [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
@@ -403,6 +405,8 @@ public static class Helpers
             [ActivityRunProfileExecutionItemErrorType.DatesCollapseAtTargetResolution] = "Dates Merged",
             // Raised while evaluating exports, before anything is sent; the rest of the object still exports.
             [ActivityRunProfileExecutionItemErrorType.CredentialAttributeNotExported] = "Credential Not Exported",
+            // Raised while evaluating exports: two or more export rules cover the object in one Connected System (#2820).
+            [ActivityRunProfileExecutionItemErrorType.ExportRuleOverlap] = "Export Rules Overlap",
 
             // Export-phase errors.
             [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
