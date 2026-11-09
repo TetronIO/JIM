@@ -1293,6 +1293,88 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #2852: the deferred pass hands each batch's execution items on as the batch completes, sequentially and in
+    /// parallel alike, as the first pass does. Held until the pass ended, every item of a 500,000-object initial load's
+    /// deferred pass (3.7 million change objects) stayed in memory, and was written in one go at the run's last moment.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task ExecuteExportsAsync_DeferredBatches_HandEachBatchsItemsOnAsTheBatchCompletesAsync(int maxParallelism)
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 6);
+
+        var handedOn = new System.Collections.Concurrent.ConcurrentQueue<List<ProcessedExportItem>>();
+        var handedOnBeforeEachSend = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        var sends = 0;
+        List<ConnectedSystemExportResult> Succeed(IList<PendingExport> sent, int _)
+        {
+            Interlocked.Increment(ref sends);
+            handedOnBeforeEachSend.Enqueue(handedOn.Sum(items => items.Count));
+            return sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+        }
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateScriptedConnector(Succeed).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 2, MaxParallelism = maxParallelism }, CancellationToken.None,
+            connectorFactory: () => CreateScriptedConnector(Succeed).Object,
+            repositoryFactory: () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData)),
+            batchCompletedCallback: items => { handedOn.Enqueue(items); return Task.CompletedTask; });
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(6));
+            Assert.That(sends, Is.EqualTo(3), "six deferred exports in batches of two");
+            Assert.That(handedOn, Has.Count.EqualTo(3), "one hand-over per deferred batch, and nothing left over for the end of the run");
+            Assert.That(handedOn, Has.All.Count.EqualTo(2), "each hand-over carries one batch's items");
+            Assert.That(handedOn.SelectMany(items => items).Select(item => item.PendingExportId),
+                Is.EquivalentTo(exports.Select(pe => (Guid?)pe.Id)), "every export's item is handed on exactly once");
+            Assert.That(handedOnBeforeEachSend.Max(), Is.GreaterThanOrEqualTo(2),
+                "the last batch is sent only once an earlier batch's items have been handed on");
+            Assert.That(result.ProcessedExportItems, Is.Empty);
+        }
+    }
+
+    /// <summary>
+    /// #2852: a parallel deferred batch that fails after earlier ones were written leaves their items handed on, and
+    /// hands on its own failure once: no item is lost, and none is handed on twice.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatchFailsAfterOthersWereWritten_HandsEachItemOnOnceAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var exports = SeedResolvableDeferredExports(targetSystem, targetUserType, 6);
+
+        var sends = 0;
+        List<ConnectedSystemExportResult> SucceedThenFail(IList<PendingExport> sent, int _) =>
+            Interlocked.Increment(ref sends) == 3
+                ? throw new InvalidOperationException("The directory went away")
+                : sent.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+        var handedOn = new System.Collections.Concurrent.ConcurrentQueue<ProcessedExportItem>();
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem, CreateScriptedConnector(SucceedThenFail).Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 }, CancellationToken.None,
+            connectorFactory: () => CreateScriptedConnector(SucceedThenFail).Object,
+            repositoryFactory: () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData)),
+            batchCompletedCallback: items => { foreach (var item in items) handedOn.Enqueue(item); return Task.CompletedTask; });
+
+        var failed = exports.Where(pe => pe.Status != PendingExportStatus.Exported).Select(pe => (Guid?)pe.Id).ToList();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(4));
+            Assert.That(result.FailedCount, Is.EqualTo(2));
+            Assert.That(failed, Has.Count.EqualTo(2));
+            Assert.That(handedOn.Select(item => item.PendingExportId), Is.EquivalentTo(exports.Select(pe => (Guid?)pe.Id)),
+                "every export's item is handed on exactly once");
+            Assert.That(handedOn.Where(item => !item.Succeeded).Select(item => item.PendingExportId), Is.EquivalentTo(failed));
+            Assert.That(result.ProcessedExportItems, Is.Empty);
+        }
+    }
+
+    /// <summary>
     /// #2197: a parallel batch whose Connector created a container and then failed still hands the container on to be
     /// selected. Captured only from a batch that succeeded, the container of a failed one was lost when its Connector
     /// was closed and disposed, and the accounts created in it stayed unconfirmed.

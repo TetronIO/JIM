@@ -1054,9 +1054,10 @@ public class ExportExecutionServer
                 if (deferredExportIds.Count > 0)
                 {
                     await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExportIds, result, options, changeLimitLedger,
-                        cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+                        cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
 
-                    // Drain any remaining deferred export items via callback
+                    // The deferred batches hand their items on as each completes (#2852); what is left is what the pass
+                    // records for exports it did not write, and the items of a failed batch nothing after it handed on.
                     if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
                     {
                         var deferredItems = result.ProcessedExportItems;
@@ -1126,10 +1127,10 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Hands on the execution items still held when the run stops early (#2083). The deferred pass's items are handed on
-    /// only once the pass ends, so a run cancelled or failing part-way through it would otherwise never record the items
-    /// of the batches it had already written, though their Pending Exports were. Never throws, so it cannot mask the
-    /// exception that is unwinding.
+    /// Hands on the execution items still held when the run stops early (#2083): those of a batch that failed when nothing
+    /// after it handed them on, and what the deferred pass records for the exports it did not write, which it hands on only
+    /// once it ends. Without this a run cancelled or failing part-way through would never record them. Never throws, so it
+    /// cannot mask the exception that is unwinding.
     /// </summary>
     private static async Task HandOnProcessedExportItemsAsync(
         ExportExecutionResult result,
@@ -1174,7 +1175,8 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepositoryScope>? repositoryFactory)
+        Func<ISyncRepositoryScope>? repositoryFactory,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null
             && deferredExportIds.Count > options.BatchSize;
@@ -1386,7 +1388,9 @@ public class ExportExecutionServer
                 async () => (await TakeNextDeferredBatchAsync())?.Select(ExecutableExportSummary.Of).ToList(),
                 stopOnBatchFailure: false, result, options,
                 cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                processedExportsOffset: immediateProcessedCount, passTotal: passTotal,
+                processedExportsOffset: immediateProcessedCount,
+                batchCompletedCallback: batchCompletedCallback,
+                passTotal: passTotal,
                 unresolvedReferenceNotes: unresolvedReferenceNotes,
                 batchExecuted: count => Interlocked.Add(ref written, count),
                 passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
@@ -1396,7 +1400,8 @@ public class ExportExecutionServer
             await ProcessDeferredBatchesSequentiallyAsync(connector, connectedSystem, TakeNextDeferredBatchAsync, result, cancellationToken,
                 progressCallback, passTotal, connectedSystem.EffectiveInitialPasswordTimeToLive, unresolvedReferenceNotes,
                 batchExecuted: count => Interlocked.Add(ref written, count),
-                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten));
+                passProcessedOffset: () => Volatile.Read(ref finishedUnwritten),
+                batchCompletedCallback: batchCompletedCallback);
         }
 
         result.DeferredCount += deferredWholeCount;
@@ -1532,6 +1537,8 @@ public class ExportExecutionServer
     /// <param name="batchExecuted">Told how many Pending Exports each batch held once its outcome is recorded.</param>
     /// <param name="passProcessedOffset">How many of the pass's exports it has finished with without writing them,
     /// counted towards its progress beside the batches written.</param>
+    /// <param name="batchCompletedCallback">Handed each batch's execution items once the batch is recorded (#2852), as
+    /// the first pass hands on its own; null leaves them on the result.</param>
     private async Task ProcessDeferredBatchesSequentiallyAsync(
         IConnectorExportUsingCalls connector,
         ConnectedSystem connectedSystem,
@@ -1543,7 +1550,8 @@ public class ExportExecutionServer
         TimeSpan initialPasswordTimeToLive,
         IReadOnlyDictionary<Guid, string>? unresolvedReferenceNotes = null,
         Action<int>? batchExecuted = null,
-        Func<int>? passProcessedOffset = null)
+        Func<int>? passProcessedOffset = null,
+        Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -1616,6 +1624,17 @@ public class ExportExecutionServer
 
             processedCount += batch.Count;
             batchExecuted?.Invoke(batch.Count);
+
+            // The batch's items are handed on now, as the first pass hands on its own (#2852): held until the pass ended,
+            // every item of a large deferred pass, with each member change it carries, stayed in memory and was written
+            // in one go at the run's end. Outside the try above, as on the first pass: a failure recording them fails
+            // the run rather than being taken for a failed attempt at a batch whose results are already recorded.
+            if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
+            {
+                var batchItems = result.ProcessedExportItems;
+                result.ProcessedExportItems = [];
+                await batchCompletedCallback(batchItems);
+            }
 
             // Reported once the batch is recorded, as the parallel path does: reported before it, the pass's last report
             // stopped a batch short of its total.

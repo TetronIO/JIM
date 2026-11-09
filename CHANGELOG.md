@@ -106,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Directory Delta Imports that report deletions are faster: each deleted object is looked up only under the Object Types JIM holds objects of, and a large delta reads every object once rather than paying more than that page by page, saving 6 seconds at 500,000 objects. (#2835)
 - ⚡ A Delta Import confirming an export spends far less on large groups already up to date: it recognises a group held exactly as imported without comparing member by member, and no longer reads members it has settled. (#2836)
 - ⚡ An import confirming exports to large groups is faster: each membership change is checked against a lookup of the members the import returned rather than all of them, which took 285 seconds for one page with a 500,000-member group. (#2850)
+- ⚡ Exports record the changes they write once references resolve as each batch finishes, as they do the rest, instead of holding them in memory and writing them all at the end, which took 21 seconds at the end of a 500,000-person initial export. (#2852)
 
 ### Removed
 
