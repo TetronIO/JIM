@@ -1389,6 +1389,16 @@ public interface ISyncRepository
     Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
+    /// Records an export batch's results (#2851): every Pending Export in full, the sent mark on exactly the changes the
+    /// batch sent (awaiting confirmation, one attempt more than stored, sent at <see cref="PendingExportResultWrite.SentAt"/>),
+    /// and the value and holds of the changes revised besides; no other change is written. What it leaves is what
+    /// <see cref="UpdatePendingExportsAsync"/> leaves for the same batch, without writing every column of every change back.
+    /// The changes are written before the Pending Exports, as <see cref="UpdatePendingExportsAsync"/> orders them, in one
+    /// transaction; a sent change whose row is gone fails the whole write.
+    /// </summary>
+    Task UpdatePendingExportResultsAsync(PendingExportResultWrite results);
+
+    /// <summary>
     /// Writes what reference resolution changed, and nothing else: each Pending Export's
     /// HasUnresolvedReferences, and each resolved change's StringValue, UnresolvedReferenceValue and
     /// ResolvedReferenceCsoId. Lets the deferred export pass save a chunk's resolutions without

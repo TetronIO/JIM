@@ -103,6 +103,40 @@ internal static class PendingExportBulkColumns
     ];
 
     /// <summary>
+    /// The set-based statement of the export-result writer (ConnectedSystemRepository.UpdatePendingExportResultsAsync,
+    /// #2851): the sent mark, written to exactly the changes a batch sent, by id. Status becomes awaiting confirmation,
+    /// ExportAttemptCount is counted on from what is stored, and LastExportedAt is the batch's one sending time.
+    /// </summary>
+    internal static readonly string[] PendingExportAttributeValueChangesExportResultSentUpdate =
+    [
+        "Status", "ExportAttemptCount", "LastExportedAt"
+    ];
+
+    /// <summary>
+    /// The export-result writer's statement for the changes a batch revised besides marking them sent: the value, which a
+    /// Connector may replace as it writes (the LDAP Connector records the default it writes for a protected attribute it
+    /// cannot clear), and the Initial Password and Exchange holds the batch's results set (#2039, #2021). Written only for
+    /// the changes whose value or holds differ from what they held when the batch was sent.
+    /// </summary>
+    internal static readonly string[] PendingExportAttributeValueChangesExportResultRevisionUpdate =
+    [
+        "StringValue", "AwaitsInitialPassword", "AwaitsExchange"
+    ];
+
+    /// <summary>
+    /// The columns of the full export-result update that the export-result writer never writes, because export never
+    /// changes them once a batch is loaded: reference resolution is saved before the batch is sent
+    /// (PersistResolvedReferencesAsync), so UnresolvedReferenceValue and ResolvedReferenceCsoId are as stored, and
+    /// LastImportedValue is set only by the confirming import. With the sent and revision lists they make up
+    /// PendingExportAttributeValueChangesExportResultUpdate exactly (BulkInsertColumnCompletenessTests), so a column that
+    /// update gains has to be placed in this writer too.
+    /// </summary>
+    internal static readonly string[] PendingExportAttributeValueChangesExportResultUnwritten =
+    [
+        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId"
+    ];
+
+    /// <summary>
     /// Update columns for the deferred export pass's save of a chunk's reference resolutions
     /// (ConnectedSystemRepository.PersistResolvedReferencesAsync): only what resolution changes, the
     /// resolved value, the cleared unresolved marker and the resolved target CSO (#1079). Everything

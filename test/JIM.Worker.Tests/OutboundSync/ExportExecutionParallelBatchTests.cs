@@ -1375,6 +1375,70 @@ public class ExportExecutionParallelBatchTests
     }
 
     /// <summary>
+    /// #2851: a batch's results are written through the export-result writer, handed exactly the changes export sent
+    /// (writable now and Pending or Exported Not Confirmed, an empty-string reference marker counting as resolved), all
+    /// marked at one time, and exactly the changes whose value or holds changed since the batch was sent: an Initial
+    /// Password hold this write clears, and a value the Connector substituted as it wrote. A failed export's changes are
+    /// in neither.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_WrittenBatch_HandsTheWriterExactlyTheChangesSentAndThoseRevisedAsync()
+    {
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayName = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var manager = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        // One attribute per change sent, so the batch is not refused for carrying two changes to a single-valued attribute.
+        ConnectedSystemObjectTypeAttribute Attribute(MockTargetSystemAttributeNames name) => targetUserType.Attributes.Single(a => a.Name == name.ToString());
+        PendingExportAttributeValueChange Change(ConnectedSystemObjectTypeAttribute attribute, string? value,
+            PendingExportAttributeChangeStatus status = PendingExportAttributeChangeStatus.Pending) => new()
+        {
+            Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update, AttributeId = attribute.Id, Attribute = attribute,
+            StringValue = value, Status = status
+        };
+
+        var written = SeedFreshExports(targetSystem, 2);
+        var (export, failing) = (written[0], written[1]);
+        var pending = export.AttributeValueChanges.Single();
+        var notConfirmed = Change(Attribute(MockTargetSystemAttributeNames.Mail), "ada@panoply.local", PendingExportAttributeChangeStatus.ExportedNotConfirmed);
+        var awaitingConfirmation = Change(displayName, "Countess", PendingExportAttributeChangeStatus.ExportedPendingConfirmation);
+        var unresolved = Change(manager, null);
+        unresolved.UnresolvedReferenceValue = Guid.NewGuid().ToString();
+        var emptyMarker = Change(manager, "CN=Charles Babbage");
+        emptyMarker.UnresolvedReferenceValue = "";
+        var holdCleared = Change(Attribute(MockTargetSystemAttributeNames.JobTitle), "Analyst");
+        holdCleared.AwaitsInitialPassword = true;
+        var substituted = Change(Attribute(MockTargetSystemAttributeNames.EmployeeId), null);
+        export.AttributeValueChanges.AddRange([notConfirmed, awaitingConfirmation, unresolved, emptyMarker, holdCleared, substituted]);
+
+        var writes = new List<PendingExportResultWrite>();
+        SyncRepo.OnPendingExportResultsWritten = writes.Add;
+        var connector = CreateScriptedConnector((sent, _) =>
+        {
+            // As the LDAP Connector records the default it writes for a protected attribute it cannot clear.
+            substituted.StringValue = "9223372036854775807";
+            return sent.Select(pe => pe.Id == failing.Id ? ConnectedSystemExportResult.Failed("Refused") : ConnectedSystemExportResult.Succeeded()).ToList();
+        });
+
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(targetSystem, connector.Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = 100, MaxParallelism = 1 }, CancellationToken.None);
+
+        Assert.That((result.SuccessCount, result.FailedCount, result.PartiallyExportedCount), Is.EqualTo((1, 1, 1)));
+        Assert.That(writes, Has.Count.EqualTo(1), "the batch's results are written once");
+        var write = writes.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(write.PendingExports.Select(pe => pe.Id), Is.EquivalentTo(new[] { export.Id, failing.Id }));
+            Assert.That(write.SentChanges.Select(c => c.Id), Is.EquivalentTo(new[] { pending.Id, notConfirmed.Id, emptyMarker.Id, holdCleared.Id, substituted.Id }));
+            Assert.That(write.SentChanges, Has.All.Matches<PendingExportAttributeValueChange>(c =>
+                c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation && c.LastExportedAt == write.SentAt));
+            Assert.That(write.RevisedChanges.Select(c => c.Id), Is.EquivalentTo(new[] { holdCleared.Id, substituted.Id }));
+            Assert.That(holdCleared.AwaitsInitialPassword, Is.False);
+            Assert.That(failing.AttributeValueChanges.Single().Status, Is.EqualTo(PendingExportAttributeChangeStatus.Pending));
+        }
+    }
+
+    /// <summary>
     /// #2197: a parallel batch whose Connector created a container and then failed still hands the container on to be
     /// selected. Captured only from a batch that succeeded, the container of a failed one was lost when its Connector
     /// was closed and disposed, and the accounts created in it stayed unconfirmed.

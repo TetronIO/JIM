@@ -29,8 +29,8 @@ namespace JIM.Worker.Tests.Repositories;
 /// in order (load the chunk, fetch the anchors, resolve, persist the resolutions, re-load the batch on a fresh context,
 /// write the Pending Export after success, optimistic apply) and the work JIM and the LDAP Connector do inside the
 /// <c>ExportDeferredBatch</c> span with the directory stubbed out, so what is left of that span is the directory's.
-/// Beside the current Pending Export write it times a set-based status update of the same rows, to size the cost of
-/// writing every change row back with its values. Explicit, because it seeds about 600,000 rows and exists to be read,
+/// It times both ways of recording the batch's results, every column of every change written back and the export-result
+/// writer (#2851), beside a bare set-based status update of the same rows. Explicit, because it seeds about 600,000 rows and exists to be read,
 /// not to guard; the numbers go to the test output.
 /// </summary>
 [TestFixture]
@@ -157,27 +157,43 @@ public class DeferredGroupCreateExportBenchmarkDatabaseTests
                 string.Join(", ", requestCounts.OrderBy(kv => kv.Key).Select(kv => $"{kv.Value:N0} {kv.Key}"))));
             Assert.That(results.All(r => r.Success), Is.True, string.Join("; ", results.Select(r => r.ErrorMessage)));
 
-            // ProcessBatchSuccess, as it marks the written changes and the export (UpdateAttributeChangeStatusesAfterExport).
+            // ProcessBatchSuccess, as it marks the written changes and the export (UpdateAttributeChangeStatusesAfterExport),
+            // from the state MarkBatchAsExecuting takes before the Connector has the batch.
+            stopwatch.Restart();
+            var changesBefore = PendingExportAttributeValueChangeState.Snapshot(batch);
+            timings.Add(("MarkBatchAsExecuting: the changes' state before sending", stopwatch.Elapsed.TotalMilliseconds, $"{changesBefore.Count:N0} changes"));
             var now = DateTime.UtcNow;
+            var sent = new HashSet<PendingExportAttributeValueChange>(ReferenceEqualityComparer.Instance);
             foreach (var pe in batch)
             {
                 pe.Status = PendingExportStatus.Exported;
-                foreach (var change in pe.AttributeValueChanges.Where(c => c.Status == PendingExportAttributeChangeStatus.Pending))
-                {
-                    change.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
-                    change.ExportAttemptCount++;
-                    change.LastExportedAt = now;
-                }
+                ExportExecutionServer.UpdateAttributeChangeStatusesAfterExport(ExportExecutionServer.WritableChanges(pe), now, sent);
             }
 
-            stopwatch.Restart();
-            await using (var transaction = await batchContext.Database.BeginTransactionAsync())
+            // Each writer twice, alternately, each in its own committed transaction, so neither has the other's warm cache to
+            // itself. The rows are already marked after the first write; each writer still writes every one of them.
+            var changeCount = batch.Sum(pe => pe.AttributeValueChanges.Count);
+            foreach (var round in new[] { 1, 2 })
             {
-                await batchRepo.UpdatePendingExportsAsync(batch);
-                await transaction.CommitAsync();
+                stopwatch.Restart();
+                await using (var transaction = await batchContext.Database.BeginTransactionAsync())
+                {
+                    await batchRepo.UpdatePendingExportsAsync(batch);
+                    await transaction.CommitAsync();
+                }
+                timings.Add(($"UpdatePendingExports, every column of every change ({round})", stopwatch.Elapsed.TotalMilliseconds, $"{changeCount:N0} rows"));
+
+                stopwatch.Restart();
+                var exportResults = ExportExecutionServer.ExportResultsFor(batch, sent, now, changesBefore);
+                timings.Add(($"  of which ExportResultsFor, in memory ({round})", stopwatch.Elapsed.TotalMilliseconds, ""));
+                await using (var transaction = await batchContext.Database.BeginTransactionAsync())
+                {
+                    await batchRepo.UpdatePendingExportResultsAsync(exportResults);
+                    await transaction.CommitAsync();
+                }
+                timings.Add(($"UpdatePendingExportResults, the export-result writer ({round})", stopwatch.Elapsed.TotalMilliseconds,
+                    $"{exportResults.SentChanges.Count:N0} sent, {exportResults.RevisedChanges.Count:N0} revised"));
             }
-            timings.Add(("UpdatePendingExports (every change row written back)", stopwatch.Elapsed.TotalMilliseconds,
-                $"{batch.Sum(pe => pe.AttributeValueChanges.Count):N0} rows"));
 
             // The same marking as one set-based statement per export, for comparison.
             stopwatch.Restart();

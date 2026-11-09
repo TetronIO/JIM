@@ -115,6 +115,12 @@ public partial class SyncRepository : ISyncRepository
     /// </summary>
     public Action<IReadOnlyCollection<Guid>>? OnPendingExportsUpdated { get; set; }
 
+    /// <summary>
+    /// Called with what each <see cref="UpdatePendingExportResultsAsync"/> is handed, so a test can see which changes an
+    /// export batch's results mark sent and which they revise (#2851).
+    /// </summary>
+    public Action<PendingExportResultWrite>? OnPendingExportResultsWritten { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -2428,6 +2434,15 @@ public partial class SyncRepository : ISyncRepository
 
         OnPendingExportsUpdated?.Invoke(written);
         return Task.CompletedTask;
+    }
+
+    // The exports handed over hold every change as the batch decided it, so storing them in full is what the database's
+    // narrower write leaves (#2851). Through UpdatePendingExportsAsync, so a test-support subclass treating that as the
+    // persist event sees this one too.
+    public Task UpdatePendingExportResultsAsync(PendingExportResultWrite results)
+    {
+        OnPendingExportResultsWritten?.Invoke(results);
+        return UpdatePendingExportsAsync(results.PendingExports);
     }
 
     // The changes and exports handed over are the stored instances, so they already hold what resolution wrote. Virtual
