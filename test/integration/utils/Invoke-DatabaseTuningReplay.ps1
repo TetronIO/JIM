@@ -67,6 +67,12 @@
 .PARAMETER ReplayRunProfile
     Replay only: Run Profiles to time, each 'Connected System|Run Profile', in order.
 
+.PARAMETER PrewarmWalGB
+    Replay only: before the statistics are reset, write this many GB of throwaway WAL (logical messages,
+    which touch no table) and checkpoint, so PostgreSQL holds recycled WAL files as a server that has been
+    running a while does. The snapshot holds few, so without this a setting that keeps more WAL (a larger
+    max_wal_size) pays for creating its files inside the timed replay. 0, the default, skips it.
+
 .EXAMPLE
     pwsh ./test/integration/utils/Invoke-DatabaseTuningReplay.ps1 -Action Replay -DatabaseSetting @{ jit = 'off' } -Repeat 2
 #>
@@ -91,7 +97,10 @@ param(
 
     [string[]]$PrepareRunProfile = @('Yellowstone APAC|Full Import (Scoped)', 'Glitterband EMEA|Full Import (Scoped)'),
 
-    [string[]]$ReplayRunProfile = @('Yellowstone APAC|Full Sync', 'Glitterband EMEA|Full Sync')
+    [string[]]$ReplayRunProfile = @('Yellowstone APAC|Full Sync', 'Glitterband EMEA|Full Sync'),
+
+    [ValidateRange(0, 128)]
+    [int]$PrewarmWalGB = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -242,6 +251,13 @@ for ($iteration = 1; $iteration -le $Repeat; $iteration++) {
         $source, $value = "$row" -split '\|', 2
         if ($source -ne 'command line') { throw "PostgreSQL did not take $name from the command line (source '$source', value '$value')." }
         Write-Host "  $name = $value"
+    }
+
+    # 1b. Optionally, recycled WAL files as on a long-running server; the checkpoint recycles what was written.
+    if ($PrewarmWalGB -gt 0) {
+        Invoke-Sql "SELECT count(*) FROM (SELECT pg_logical_emit_message(false, 'jim-tuning-prewarm', repeat('x', 1048576)) FROM generate_series(1, $($PrewarmWalGB * 1024))) AS m; CHECKPOINT;" -Database postgres | Out-Null
+        $walFiles = Invoke-Sql "SELECT count(*) || ' files, ' || pg_size_pretty(sum(size)) FROM pg_ls_waldir()" -Database postgres
+        Write-Host "  WAL prewarmed with $PrewarmWalGB GB: $walFiles"
     }
 
     # 2. Clean statement, WAL, I/O and checkpointer statistics. Not pg_stat_reset(): it would clear the
