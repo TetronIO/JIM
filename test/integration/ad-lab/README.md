@@ -469,7 +469,7 @@ mailboxes whose users no longer exist:
   half-matched pair is left. It then removes the domain controller's `populated-*` checkpoints (the runner takes them
   again).
 - The two are reverted together, each to its own baseline, before any scenario that creates or changes recipients in
-  that forest. LDAP scenarios that never touch Exchange leave the Exchange server off and are unaffected by it.
+  that forest. Every other scenario has the Exchange servers stopped before it starts (the runner's power plan), so a run that left one up cannot starve the next.
 - It never changes its machine account password (`DisablePasswordChange=1`), for the same reason as the AD FS server.
 
 Build it after its domain controller, with nothing else running against the lab, from the values in `settings.json`:
