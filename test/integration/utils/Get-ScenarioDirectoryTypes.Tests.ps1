@@ -56,8 +56,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         $result | Should -Not -Contain 'DirectoryServer389'
     }
 
-    It 'restricts Scenarios 024, 025, 030 and 031 (Active Directory lab only) to ActiveDirectory' {
-        foreach ($number in 24, 25, 30, 31) {
+    It 'restricts Scenarios 024, 025, 030, 031 and 034 (Active Directory lab only) to ActiveDirectory' {
+        foreach ($number in 24, 25, 30, 31, 34) {
             Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number | Should -Be @('ActiveDirectory')
         }
     }
@@ -91,8 +91,8 @@ Describe 'Get-ScenarioSupportedDirectoryTypes' {
         # "judge an ActiveDirectory sweep by Samba AD" substitution.
         foreach ($number in 1..40) {
             $supported = @(Get-ScenarioSupportedDirectoryTypes -ScenarioNumber $number)
-            if ($number -in 24, 25, 30, 31) {
-                $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller or the lab's AD FS server"
+            if ($number -in 24, 25, 30, 31, 34) {
+                $supported | Should -Be @('ActiveDirectory') -Because "Scenario $number needs a real domain controller, or the lab's AD FS or Exchange server"
             }
             elseif ($number -in 14, 19, 22, 32) {
                 $supported | Should -Not -Contain 'ActiveDirectory' -Because "Scenario $number is OpenLDAP only"

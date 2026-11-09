@@ -3,7 +3,8 @@
 
 <#
 .SYNOPSIS
-    Shuts a lab VM down, turning it off if it has not stopped in time. Does nothing to a VM that is already off.
+    Shuts a lab VM down, turning it off if it has not stopped in time. Does nothing to a VM that is already off, or
+    that has not been built.
 
 .DESCRIPTION
     The integration runner calls this before reverting the machines a scenario needs, to stop the heavy ones it does
@@ -58,7 +59,12 @@ try {
     if (-not (Test-LabVmName -Name $Name)) { throw "'$Name' is not a valid VM name here." }
 
     $vm = Get-VM -Name $Name -ErrorAction SilentlyContinue
-    if ($null -eq $vm) { throw "There is no VM called '$Name'." }
+    if ($null -eq $vm) {
+        # Nothing to stop: a machine not built yet (exchange-source before its build) uses no memory.
+        if ($AsJson) { [pscustomobject][ordered]@{ name = $Name; outcome = 'Absent'; elapsedSeconds = 0 } | ConvertTo-Json -Compress }
+        else { Write-Host "There is no VM called $Name; nothing to stop." -ForegroundColor Green }
+        exit 0
+    }
     if (-not (Test-LabVmNote -Notes $vm.Notes)) {
         throw "'$Name' was not created by this lab (its Notes carry no lab marker); refusing to touch it."
     }

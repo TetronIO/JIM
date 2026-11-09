@@ -1195,3 +1195,136 @@ Describe 'Set-ActiveDirectoryLabSignInEnvironment' {
         $overlay | Should -Match ([regex]::Escape('JIM_SSO_INITIAL_ADMIN=${JIM_AD_LAB_ADFS_INITIAL_ADMIN:-'))
     }
 }
+
+Describe 'The Exchange servers (#2021)' {
+    BeforeAll {
+        function Get-TestExchangeConfig {
+            param([string]$Instance = 'ExchangePrimary')
+            $domain, $vm, $dc = if ($Instance -eq 'ExchangePrimary') { 'panoply', 'exchange-primary', 'Primary' } else { 'resurgam', 'exchange-source', 'Source' }
+            return @{
+                DirectoryType            = 'ActiveDirectoryExchange'
+                Instance                 = $Instance
+                Host                     = "ex1.$domain.local"
+                Address                  = '10.20.30.42'
+                VmName                   = $vm
+                DomainControllerInstance = $dc
+                CheckpointBaseline       = 'baseline'
+            }
+        }
+    }
+
+    Context 'Get-ActiveDirectoryLabInstance' {
+        It 'is Primary then its Exchange server for Scenario 34, so the pair is reverted domain controller first' {
+            @(Get-ActiveDirectoryLabInstance -ScenarioNumber 34) | Should -Be @('Primary', 'ExchangePrimary')
+        }
+
+        It 'reverts an Exchange server for no scenario that does not provision recipients: each one needs 12 GB' {
+            foreach ($number in 1, 2, 8, 24, 25, 30, 31, $null) {
+                @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'ExchangePrimary'
+                @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'ExchangeSource'
+            }
+        }
+    }
+
+    Context 'Select-ActiveDirectoryLabCheckpoint' {
+        It 'reverts an Exchange server to baseline and never asks for population' {
+            foreach ($instance in 'ExchangePrimary', 'ExchangeSource') {
+                $pick = Select-ActiveDirectoryLabCheckpoint -Instance $instance -ScenarioNumber 34 -Template 'Medium' -Hash ('0' * 16) `
+                    -AvailableCheckpoint @('baseline')
+                $pick.Checkpoint | Should -Be 'baseline'
+                $pick.NeedsPopulation | Should -BeFalse
+            }
+        }
+    }
+
+    Context 'Get-ActiveDirectoryLabState' {
+        BeforeEach {
+            Mock Invoke-LabControl {
+                $name = $Arguments[[array]::IndexOf($Arguments, '-Name') + 1]
+                return (Get-StateJson -Name $name)
+            }
+        }
+
+        It 'asks about the Exchange server after the domain controller it pairs with' {
+            $states = @(Get-ActiveDirectoryLabState -DirectoryConfig @{ ExchangePrimary = (Get-TestExchangeConfig); Primary = (Get-TestConfig 'Primary') })
+
+            ($states | ForEach-Object { $_.Instance }) | Should -Be @('Primary', 'ExchangePrimary')
+        }
+
+        It 'names the Exchange server''s own build script when its baseline checkpoint is missing' {
+            Mock Invoke-LabControl { return (Get-StateJson -Name 'exchange-primary' -Checkpoint @()) }
+
+            { Get-ActiveDirectoryLabState -DirectoryConfig @{ ExchangePrimary = (Get-TestExchangeConfig) } } |
+                Should -Throw "*Exchange server 'exchange-primary'*'baseline'*New-LabExchangeServer.ps1*"
+        }
+    }
+
+    Context 'Invoke-ActiveDirectoryLabRestore' {
+        It 'gives an Exchange server''s revert long enough for Exchange to start, which takes minutes after boot' {
+            Mock Invoke-LabControl { '' }
+            $plan = @(
+                @{ Instance = 'Primary'; VmName = 'dc-primary'; Checkpoint = 'baseline'; NeedsPopulation = $false },
+                @{ Instance = 'ExchangePrimary'; VmName = 'exchange-primary'; Checkpoint = 'baseline'; NeedsPopulation = $false }
+            )
+
+            Invoke-ActiveDirectoryLabRestore -Plan $plan
+
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter {
+                ($Arguments -join ' ') -eq '-Name exchange-primary -Checkpoint baseline' -and $TimeoutSeconds -ge 2100
+            }
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter {
+                ($Arguments -join ' ') -eq '-Name dc-primary -Checkpoint baseline' -and -not $PSBoundParameters.ContainsKey('TimeoutSeconds')
+            }
+        }
+    }
+
+    Context 'Test-ActiveDirectoryLabDomainController' {
+        It 'is true for the three domain controllers only' {
+            foreach ($instance in 'Primary', 'Source', 'Target') { Test-ActiveDirectoryLabDomainController -Instance $instance | Should -BeTrue }
+            foreach ($instance in 'AdfsPrimary', 'ExchangePrimary', 'ExchangeSource') { Test-ActiveDirectoryLabDomainController -Instance $instance | Should -BeFalse }
+        }
+    }
+
+    Context 'Get-ActiveDirectoryLabPowerPlan' {
+        BeforeAll {
+            $script:VmNames = @{ Target = 'dc-target'; AdfsPrimary = 'adfs-primary'; ExchangePrimary = 'exchange-primary'; ExchangeSource = 'exchange-source' }
+        }
+
+        It 'stops every Exchange server for a scenario that uses none, so a run that crashed with one up cannot starve the next' {
+            @(Get-ActiveDirectoryLabPowerPlan -Instance @('Primary') -VmName $script:VmNames) | Should -Be @('exchange-primary', 'exchange-source')
+        }
+
+        It 'stops the Exchange server a scenario does not use, and leaves the one it does' {
+            @(Get-ActiveDirectoryLabPowerPlan -Instance @('Primary', 'ExchangePrimary') -VmName $script:VmNames) | Should -Be @('exchange-source')
+        }
+
+        It 'also stops dc-target and the AD FS server when a scenario uses both Exchange servers: the host has room for one beside everything else' {
+            @(Get-ActiveDirectoryLabPowerPlan -Instance @('Primary', 'Source', 'ExchangePrimary', 'ExchangeSource') -VmName $script:VmNames) |
+                Should -Be @('dc-target', 'adfs-primary')
+        }
+
+        It 'never stops a machine the scenario uses' {
+            @(Get-ActiveDirectoryLabPowerPlan -Instance @('Primary', 'Target', 'ExchangePrimary', 'ExchangeSource') -VmName $script:VmNames) |
+                Should -Be @('adfs-primary')
+        }
+    }
+
+    Context 'Invoke-ActiveDirectoryLabPowerPlan' {
+        It 'stops each machine through the control plane, in order' {
+            Mock Invoke-LabControl { '{"name":"x","outcome":"AlreadyOff","elapsedSeconds":0}' }
+
+            Invoke-ActiveDirectoryLabPowerPlan -VmName @('exchange-primary', 'exchange-source')
+
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter { $Script -eq 'Stop-LabMachine.ps1' -and ($Arguments -join ' ') -eq '-Name exchange-primary -AsJson' }
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter { $Script -eq 'Stop-LabMachine.ps1' -and ($Arguments -join ' ') -eq '-Name exchange-source -AsJson' }
+        }
+
+        It 'does nothing when there is nothing to stop' {
+            Mock Invoke-LabControl { '' }
+
+            Invoke-ActiveDirectoryLabPowerPlan -VmName @()
+
+            Should -Invoke Invoke-LabControl -Times 0 -Exactly
+        }
+    }
+}
