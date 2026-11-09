@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Data.Common;
 using System.Security.Cryptography;
 using System.Text;
 using JIM.Models.Core;
@@ -173,6 +172,38 @@ public class MetaverseObjectAttributeValuePartialIndexDatabaseTests
     }
 
     [Test]
+    public async Task AttributeValueObjectCount_SeeksTheAttributeIdStringValueCompositeByTheAttributeAloneAsync()
+    {
+        // Deleting, unassigning or retyping a Metaverse Attribute first counts the objects holding a value of it, of any
+        // type (MetaverseServer's impact checks), and the foreign-key cascade on deleting the attribute finds its values
+        // the same way. The (AttributeId, StringValue) composite is the only index led by AttributeId that holds every
+        // row, so it stays whole rather than partial on StringValue IS NOT NULL as its Connected System Object twin is
+        // (#2868): a partial one cannot serve WHERE AttributeId = @id alone, and each count would read the whole table.
+        // Counted here for a number attribute, whose rows carry no text at all.
+        var estate = await SeedEstateAsync();
+        await using (var connection = await OpenAsync())
+        await using (var definition = new NpgsqlCommand(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = 'IX_MetaverseObjectAttributeValues_AttributeId_StringValue'", connection))
+        {
+            Assert.That(await definition.ExecuteScalarAsync() as string, Does.Not.Contain(" WHERE "),
+                "IX_MetaverseObjectAttributeValues_AttributeId_StringValue must hold every value row");
+        }
+
+        var recorder = new CommandRecordingInterceptor();
+        await using (var ctx = NewContext(recorder))
+        {
+            var count = await new PostgresDataRepository(ctx).Metaverse.GetAttributeValueObjectCountAsync(estate.Number.Id);
+            Assert.That(count, Is.EqualTo(ObjectCount), "Every seeded object holds a staff number");
+        }
+
+        // The estate spreads its rows over seven attributes, so a seventh of so small a table is cheaper to scan; a
+        // production Metaverse spreads them over dozens. With sequential scans priced out, the plan shows whether the
+        // index can serve the count at all, which is the property a partial index would lose.
+        AssertSeeksThrough(await ExplainRecordedAsync(recorder.Commands.Single(), sequentialScansPricedOut: true),
+            "AttributeId", "IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
+    }
+
+    [Test]
     public async Task TemporalScopeReconcilerDateRange_SeeksTheAttributeIdDateTimeValueCompositeAsync()
     {
         // The outbound lane of the Temporal Scope Reconciler selects the objects whose date crossed a boundary; with the
@@ -289,9 +320,17 @@ public class MetaverseObjectAttributeValuePartialIndexDatabaseTests
         return plan;
     }
 
-    private async Task<IReadOnlyList<string>> ExplainRecordedAsync((string Text, List<NpgsqlParameter> Parameters) command)
+    private async Task<IReadOnlyList<string>> ExplainRecordedAsync((string Text, List<NpgsqlParameter> Parameters) command,
+        bool sequentialScansPricedOut = false)
     {
         await using var connection = await OpenAsync();
+        if (sequentialScansPricedOut)
+        {
+            await using var setting = new NpgsqlCommand("SET enable_seqscan = off", connection);
+            await setting.ExecuteNonQueryAsync();
+        }
+
+
         await using var explain = new NpgsqlCommand("EXPLAIN " + command.Text, connection);
         foreach (var parameter in command.Parameters)
             explain.Parameters.Add(parameter.Clone());
@@ -373,18 +412,5 @@ public class MetaverseObjectAttributeValuePartialIndexDatabaseTests
         populate.Parameters.AddWithValue("reference", estate.Reference.Id);
         await populate.ExecuteNonQueryAsync();
         return estate;
-    }
-
-    /// <summary>Records each non-query command a context runs, with copies of its parameters, for EXPLAIN.</summary>
-    private sealed class NonQueryRecordingInterceptor : DbCommandInterceptor
-    {
-        public List<(string Text, List<NpgsqlParameter> Parameters)> Commands { get; } = [];
-
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
-            InterceptionResult<int> result, CancellationToken cancellationToken = default)
-        {
-            Commands.Add((command.CommandText, command.Parameters.Cast<NpgsqlParameter>().Select(p => p.Clone()).ToList()));
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
-        }
     }
 }
