@@ -508,3 +508,81 @@ Describe 'ConvertTo-LabDispatchWaitNanosecond' {
         ConvertTo-LabDispatchWaitNanosecond -CookedValue 0 | Should -Be 0
     }
 }
+Describe 'Get-LabExchangeReadinessProbe' {
+    # Runs in the guest, sent by Restore-LabDomainController.ps1 with Invoke-Command, so it must open and close its own
+    # session and never leave one behind: each counts against Exchange's per-user shell limit.
+    BeforeAll {
+        $script:Credential = New-Object System.Management.Automation.PSCredential('PANOPLY\Administrator', (ConvertTo-SecureString 'not-a-secret' -AsPlainText -Force))
+    }
+
+    It 'reports what Test-ServiceHealth says over Exchange Remote PowerShell, and closes the session' {
+        Mock -ModuleName LabExchangeServer New-PSSession { New-MockObject -Type 'System.Management.Automation.Runspaces.PSSession' }
+        Mock -ModuleName LabExchangeServer Invoke-Command {
+            @([pscustomobject]@{ Role = 'Mailbox Server Role'; RequiredServicesRunning = $true; ServicesNotRunning = @() })
+        }
+        Mock -ModuleName LabExchangeServer Remove-PSSession { }
+
+        $probe = Get-LabExchangeReadinessProbe -ManagementUri 'http://ex1.panoply.local/PowerShell/' -Credential $script:Credential
+
+        $probe.Connected | Should -BeTrue
+        @($probe.Health).Count | Should -Be 1
+        $probe.Health[0].Role | Should -Be 'Mailbox Server Role'
+        Should -Invoke -ModuleName LabExchangeServer New-PSSession -Times 1 -Exactly -ParameterFilter {
+            $ConfigurationName -eq 'Microsoft.Exchange' -and $ConnectionUri -eq 'http://ex1.panoply.local/PowerShell/' -and $Authentication -eq 'Kerberos'
+        }
+        Should -Invoke -ModuleName LabExchangeServer Remove-PSSession -Times 1 -Exactly
+    }
+
+    It 'reports the error, not a failure, while Remote PowerShell is not answering yet' {
+        Mock -ModuleName LabExchangeServer New-PSSession { throw 'The WinRM client received an HTTP server error status (500)' }
+        Mock -ModuleName LabExchangeServer Remove-PSSession { }
+
+        $probe = Get-LabExchangeReadinessProbe -ManagementUri 'http://ex1.panoply.local/PowerShell/' -Credential $script:Credential
+
+        $probe.Connected | Should -BeFalse
+        $probe.Error | Should -Match 'HTTP server error status \(500\)'
+        Should -Invoke -ModuleName LabExchangeServer Remove-PSSession -Times 0 -Exactly
+    }
+
+    It 'closes the session when Test-ServiceHealth itself fails, and reports that' {
+        Mock -ModuleName LabExchangeServer New-PSSession { New-MockObject -Type 'System.Management.Automation.Runspaces.PSSession' }
+        Mock -ModuleName LabExchangeServer Invoke-Command { throw 'Active Directory server is not available' }
+        Mock -ModuleName LabExchangeServer Remove-PSSession { }
+
+        $probe = Get-LabExchangeReadinessProbe -ManagementUri 'http://ex1.panoply.local/PowerShell/' -Credential $script:Credential
+
+        $probe.Connected | Should -BeTrue
+        $probe.Error | Should -Match 'Active Directory server is not available'
+        Should -Invoke -ModuleName LabExchangeServer Remove-PSSession -Times 1 -Exactly
+    }
+}
+
+Describe 'Test-LabExchangeReady' {
+    It 'is not ready while Remote PowerShell does not answer, and says why' {
+        $verdict = Test-LabExchangeReady -Probe ([pscustomobject]@{ Connected = $false; Health = @(); Error = 'connection refused' })
+        $verdict.Ready | Should -BeFalse
+        $verdict.Detail | Should -Match 'Remote PowerShell.*connection refused'
+    }
+
+    It 'is not ready while Test-ServiceHealth fails, and says why' {
+        $verdict = Test-LabExchangeReady -Probe ([pscustomobject]@{ Connected = $true; Health = @(); Error = 'Active Directory server is not available' })
+        $verdict.Ready | Should -BeFalse
+        $verdict.Detail | Should -Match 'Test-ServiceHealth.*Active Directory server is not available'
+    }
+
+    It 'is not ready while a role''s required services are not all running, and names them' {
+        $health = @([pscustomobject]@{ Role = 'Mailbox Server Role'; RequiredServicesRunning = $false; ServicesNotRunning = @('MSExchangeTransport') })
+        $verdict = Test-LabExchangeReady -Probe ([pscustomobject]@{ Connected = $true; Health = $health; Error = $null })
+        $verdict.Ready | Should -BeFalse
+        $verdict.Detail | Should -Match 'Mailbox Server Role.*MSExchangeTransport'
+    }
+
+    It 'is ready once Remote PowerShell answers and every role''s required services run' {
+        $health = @(
+            [pscustomobject]@{ Role = 'Mailbox Server Role'; RequiredServicesRunning = $true; ServicesNotRunning = @() },
+            [pscustomobject]@{ Role = 'Client Access Server Role'; RequiredServicesRunning = $true; ServicesNotRunning = @() }
+        )
+        $verdict = Test-LabExchangeReady -Probe ([pscustomobject]@{ Connected = $true; Health = $health; Error = $null })
+        $verdict.Ready | Should -BeTrue
+    }
+}

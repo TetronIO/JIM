@@ -680,7 +680,9 @@ function Get-LabReadinessPort {
     .SYNOPSIS
         The TCP port that proves a lab VM of a given role is serving after a revert: LDAPS on a domain controller,
         HTTPS on a federation server. An Exchange server is refused: its port 443 answers minutes before Remote
-        PowerShell and Exchange's services do, so a port is no proof it is ready.
+        PowerShell and Exchange's services do, so a port is no proof it is ready. Restore-LabDomainController.ps1
+        asks Exchange itself instead (Get-LabExchangeReadinessProbe and Test-LabExchangeReady, in
+        LabExchangeServer.psm1).
     #>
     [CmdletBinding()]
     [OutputType([int])]
@@ -691,7 +693,7 @@ function Get-LabReadinessPort {
     )
 
     if ($Role -eq 'ExchangeServer') {
-        throw "No port proves an Exchange server ready: 443 answers minutes before Remote PowerShell does. Its readiness after a revert is defined with the runner's Exchange support (#2412)."
+        throw "No port proves an Exchange server ready: 443 answers minutes before Remote PowerShell does. Ask Exchange itself (Get-LabExchangeReadinessProbe, then Test-LabExchangeReady)."
     }
     if ($Role -eq 'FederationServer') {
         return 443

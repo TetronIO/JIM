@@ -45,7 +45,8 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | Path | Runs on | What it does |
 |------|---------|--------------|
 | `host/New-LabDomainController.ps1` | Hyper-V host | Builds a domain controller from the ISO, unattended, and takes the `baseline` checkpoint |
-| `host/Restore-LabDomainController.ps1` | Hyper-V host | Reverts to a named checkpoint, starts the VM, waits for the guest and LDAPS (HTTPS on the AD FS server) |
+| `host/Restore-LabDomainController.ps1` | Hyper-V host | Reverts to a named checkpoint, starts the VM, waits for the guest and LDAPS (HTTPS on the AD FS server; on an Exchange server, Remote PowerShell answering and every role's required services running) |
+| `host/Stop-LabMachine.ps1` | Hyper-V host | Shuts a lab VM down (turning it off after a timeout); the runner stops the heavy machines a scenario does not use before reverting the ones it does |
 | `host/Checkpoint-LabDomainController.ps1` | Hyper-V host | Takes a production checkpoint (`-Replace` to overwrite one) |
 | `host/Get-LabDomainController.ps1` | Hyper-V host | State, checkpoints and guest OS build (`-AsJson` for the runner) |
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |
@@ -555,7 +556,8 @@ standard output only where the runner needs data (`Get-LabDomainController.ps1 -
 
 | Runner step | Script | Notes |
 |-------------|--------|-------|
-| Reset between scenarios | `Restore-LabDomainController.ps1 -Name <vm> -Checkpoint <name>` | Waits for the guest (PowerShell Direct) and LDAPS on 636; fails if the checkpoint does not exist |
+| Make room | `Stop-LabMachine.ps1 -Name <vm>` | Before the reset: the Exchange servers a scenario does not use, and, when it uses both, `dc-target` and `adfs-primary` |
+| Reset between scenarios | `Restore-LabDomainController.ps1 -Name <vm> -Checkpoint <name>` | Waits for the guest (PowerShell Direct) and LDAPS on 636 (an Exchange server: Remote PowerShell and Test-ServiceHealth, up to 30 minutes); fails if the checkpoint does not exist |
 | After population | `Checkpoint-LabDomainController.ps1 -Name <vm> -Checkpoint populated-<template>-<hash> -Replace` | |
 | Record the OS build in run metadata | `Get-LabDomainController.ps1 -Name <vm> -AsJson` | `{ name, state, generation, checkpointType, uptimeSeconds, checkpoints: [{ name, createdUtc }], guest: { productName, displayVersion, currentBuild, ubr, buildString } or null }` |
 | A scenario creates a container at run time | `Grant-LabDelegation.ps1 -Name <vm> -ContainerDn <dn>` | The Windows counterpart of `jim-delegate.sh`; idempotent; one output line per outcome. Runs the same guest function the build's `Configure` phase uses |

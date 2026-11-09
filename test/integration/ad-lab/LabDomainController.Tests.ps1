@@ -1323,8 +1323,8 @@ Describe 'Get-LabReadinessPort' {
         Get-LabReadinessPort -Role FederationServer | Should -Be 443
     }
 
-    It 'refuses an Exchange server, whose port answers minutes before Exchange does' {
-        { Get-LabReadinessPort -Role ExchangeServer } | Should -Throw '*#2412*'
+    It 'refuses an Exchange server, whose port answers minutes before Exchange does, naming what proves it ready instead' {
+        { Get-LabReadinessPort -Role ExchangeServer } | Should -Throw '*Test-LabExchangeReady*'
     }
 
     It 'refuses a role it does not know' {

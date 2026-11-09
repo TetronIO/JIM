@@ -417,6 +417,83 @@ function Get-LabExchangeServiceHealthProblem {
     return $problems.ToArray()
 }
 
+function Get-LabExchangeReadinessProbe {
+    <#
+    .SYNOPSIS
+        Opens Exchange Remote PowerShell on this server, asks Test-ServiceHealth, closes the session and returns what it
+        found: Connected, Health (Test-ServiceHealth's roles) and Error (why it could not tell, or nothing).
+
+    .DESCRIPTION
+        Runs in the Exchange server's guest. Restore-LabDomainController.ps1 sends it with Invoke-Command after every
+        revert and decides from what it returns (Test-LabExchangeReady), because no port proves Exchange ready: 443
+        answers minutes before Remote PowerShell and Exchange's services do. Self-contained (no other module function,
+        no module state), because the module is not loaded in the guest. It connects exactly as JIM does, Kerberos over
+        HTTP to /PowerShell, so "ready" means ready for JIM. The session is always closed: each one left open counts
+        against Exchange's per-user shell limit, which a long wait would exhaust. Exchange's endpoint is restricted to
+        its own commands, so Test-ServiceHealth runs on its own, with no pipeline.
+
+    .PARAMETER ManagementUri
+        The server's Remote PowerShell endpoint over HTTP (Get-LabExchangeServerInfo's ManagementUri).
+
+    .PARAMETER Credential
+        A domain administrator; Test-ServiceHealth needs an Exchange administrator.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ManagementUri,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSCredential]$Credential
+    )
+
+    try {
+        $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $ManagementUri -Authentication Kerberos -Credential $Credential -ErrorAction Stop
+    }
+    catch {
+        return [pscustomobject]@{ Connected = $false; Health = @(); Error = $_.Exception.Message }
+    }
+    try {
+        $health = @(Invoke-Command -Session $session -ScriptBlock { Test-ServiceHealth } -ErrorAction Stop |
+                ForEach-Object { [pscustomobject]@{ Role = [string]$_.Role; RequiredServicesRunning = [bool]$_.RequiredServicesRunning; ServicesNotRunning = @($_.ServicesNotRunning | ForEach-Object { [string]$_ }) } })
+        return [pscustomobject]@{ Connected = $true; Health = $health; Error = $null }
+    }
+    catch {
+        return [pscustomobject]@{ Connected = $true; Health = @(); Error = $_.Exception.Message }
+    }
+    finally {
+        Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-LabExchangeReady {
+    <#
+    .SYNOPSIS
+        Whether an Exchange server is ready for JIM, from Get-LabExchangeReadinessProbe's result: Remote PowerShell
+        answered and every role's required services run. Returns Ready and Detail (what is still missing, or what was
+        found).
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [object]$Probe
+    )
+
+    if (-not [bool]$Probe.Connected) {
+        return [pscustomobject]@{ Ready = $false; Detail = "Remote PowerShell is not answering yet: $($Probe.Error)" }
+    }
+    if (-not [string]::IsNullOrEmpty([string]$Probe.Error)) {
+        return [pscustomobject]@{ Ready = $false; Detail = "Test-ServiceHealth failed: $($Probe.Error)" }
+    }
+    $problems = @(Get-LabExchangeServiceHealthProblem -Health @($Probe.Health))
+    if ($problems.Count -gt 0) {
+        return [pscustomobject]@{ Ready = $false; Detail = ($problems -join '; ') }
+    }
+    return [pscustomobject]@{ Ready = $true; Detail = "Remote PowerShell answered and $(@($Probe.Health).Count) roles have their required services running" }
+}
+
 function Test-LabExchangeDatabaseLayout {
     <#
     .SYNOPSIS
@@ -586,7 +663,8 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeServerInfo', 'Get-LabExchangeDatabasePath', 'ConvertFrom-LabExchangeSetting', 'Get-LabExchangePhaseArgument',
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
-    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Test-LabExchangeDatabaseLayout',
+    'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Get-LabExchangeReadinessProbe', 'Test-LabExchangeReady',
+    'Test-LabExchangeDatabaseLayout',
     'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeServerObjectQuery',
     'Get-LabExchangeFeatureGap', 'Get-LabExchangeUserRemoval',
     'ConvertTo-LabDispatchWaitNanosecond'
