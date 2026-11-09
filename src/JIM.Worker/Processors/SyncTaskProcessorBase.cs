@@ -7397,13 +7397,19 @@ public abstract class SyncTaskProcessorBase
         {
             using var resolveSpan = Diagnostics.Sync.StartSpan("Snapshot.ResolveReferences").SetTag("referenceCount", mvoGuids.Count);
             // First, the provisioning objects this page has collected for batch creation (FlushPendingExportOperationsAsync),
-            // which are not in the database yet. Only their names are taken, so nothing here can reach them.
+            // which are not in the database yet. Only their names are taken, so nothing here can reach them. Each is tested
+            // against a set (#2861): a list scan cost every provisioning object one comparison per member of the group,
+            // about 0.9 billion comparisons across a 500,000-object initial load.
             referenceDisplayIdentifiers = new Dictionary<Guid, string>();
-            foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
-                         && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
-                         && mvoGuids.Contains(cso.MetaverseObjectId.Value)))
+            if (_provisioningCsosToCreate.Count > 0)
             {
-                referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
+                var referencedMvoIds = mvoGuids.ToHashSet();
+                foreach (var cso in _provisioningCsosToCreate.Where(cso => cso.MetaverseObjectId.HasValue
+                             && cso.ConnectedSystemId == pendingExport.ConnectedSystemId
+                             && referencedMvoIds.Contains(cso.MetaverseObjectId.Value)))
+                {
+                    referenceDisplayIdentifiers.TryAdd(cso.MetaverseObjectId!.Value, ExportChangeHistoryBuilder.GetCsoDisplayIdentifier(cso));
+                }
             }
 
             // Then this page's earlier lookups; only Metaverse Objects not looked up yet reach the database (objects created
