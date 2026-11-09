@@ -269,16 +269,15 @@ try {
     Add-ExpressionFlow -SyncRuleId $groupMailEnable.id -ObjectType $panoplyGroup -Target 'Exchange Alias' -Expression 'mv["Account Name"]'
     Write-Host "  ✓ gal-* groups are projected and made mail-enabled groups" -ForegroundColor Green
 
-    Write-TestStep "Step 4" "PANOPLY: contacts for RESURGAM's people in $galOuName, and PANOPLY's own contacts"
+    Write-TestStep "Step 4" "PANOPLY: $galOuName and its own contacts"
     Select-Container -ConnectedSystemId $panoplyId -BaseDn $DirectoryConfig.BaseDN -ContainerDn $PrimaryExchangeConfig.ContactOuDn
     $contactAttributes = @('cn', 'displayName', 'proxyAddresses', 'distinguishedName',
         'Exchange Recipient Type', 'Exchange Alias', 'Exchange Primary SMTP Address', 'Exchange External Address')
     $panoplyContact = Select-ObjectTypeAttribute -ConnectedSystemId $panoplyId -ObjectTypeName 'contact' -AttributeNames $contactAttributes
-    New-ContactExportRule -Name "$panoplyName Export GAL Contacts" -ConnectedSystemId $panoplyId -ContactType $panoplyContact `
-        -MetaverseTypeName 'User' -SourceSystemName $sourceName -SourceObjectTypeName 'user' -ContactOuDn $PrimaryExchangeConfig.ContactOuDn `
-        -AliasExpression 'Lower(mv["First Name"] + mv["Last Name"])' | Out-Null
     New-ContactImportRule -Name "$panoplyName Import Contacts" -ConnectedSystemId $panoplyId -ContactType $panoplyContact | Out-Null
-    Write-Host "  ✓ $galOuName selected; GAL contact export and own-contact import rules created" -ForegroundColor Green
+    # PANOPLY's contacts for RESURGAM's people come in Step 7: their rule is scoped by a connection to RESURGAM's user
+    # Object Type, which has to exist first.
+    Write-Host "  ✓ $galOuName selected; own-contact import rule created" -ForegroundColor Green
 
     # ─────────────────────────────────────────────────────────────────────────────────────────────
     # Step 5: RESURGAM
@@ -345,7 +344,10 @@ try {
         -SourceAttributeId (Get-AttributeId -ObjectType $resurgamUser -Name 'employeeID') -TargetMetaverseAttributeId $employeeIdAttribute.id | Out-Null
     Write-Host "  ✓ ResurgamLab people provisioned into OU=Corp with mailboxes; their addresses imported" -ForegroundColor Green
 
-    Write-TestStep "Step 7" "RESURGAM: contacts for PANOPLY's people and group in $galOuName, and RESURGAM's own contacts"
+    Write-TestStep "Step 7" "GAL contacts both ways in $galOuName, and RESURGAM's own contacts"
+    New-ContactExportRule -Name "$panoplyName Export GAL Contacts" -ConnectedSystemId $panoplyId -ContactType $panoplyContact `
+        -MetaverseTypeName 'User' -SourceSystemName $sourceName -SourceObjectTypeName 'user' -ContactOuDn $PrimaryExchangeConfig.ContactOuDn `
+        -AliasExpression 'Lower(mv["First Name"] + mv["Last Name"])' | Out-Null
     $resurgamContact = Select-ObjectTypeAttribute -ConnectedSystemId $resurgam.id -ObjectTypeName 'contact' -AttributeNames $contactAttributes
     New-ContactExportRule -Name "$sourceName Export GAL Contacts" -ConnectedSystemId $resurgam.id -ContactType $resurgamContact `
         -MetaverseTypeName 'User' -SourceSystemName $panoplyName -SourceObjectTypeName 'user' -ContactOuDn $SourceExchangeConfig.ContactOuDn `
@@ -354,7 +356,7 @@ try {
         -MetaverseTypeName 'Group' -SourceSystemName $panoplyName -SourceObjectTypeName 'group' -ContactOuDn $SourceExchangeConfig.ContactOuDn `
         -AliasExpression 'mv["Account Name"]' | Out-Null
     New-ContactImportRule -Name "$sourceName Import Contacts" -ConnectedSystemId $resurgam.id -ContactType $resurgamContact | Out-Null
-    Write-Host "  ✓ GAL contact export rules (people and groups) and own-contact import rule created" -ForegroundColor Green
+    Write-Host "  ✓ GAL contact export rules (PANOPLY's for RESURGAM's people; RESURGAM's for PANOPLY's people and group) and RESURGAM's own-contact import rule created" -ForegroundColor Green
 
     Write-TestStep "Step 8" "RESURGAM: run profiles"
     $profiles = @{}
