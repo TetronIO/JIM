@@ -86,11 +86,11 @@ public partial class SyncRepository
 
     /// <summary>
     /// Whether a held row is one the database's probe returns for the question (<c>ReconciliationProbeValuesSql</c>): by
-    /// the object it names, by its string exactly, or ignoring case among unresolved rows.
+    /// the object it names, or by its string, exactly or ignoring case, among unresolved rows.
     /// </summary>
     private static bool CouldMatch(ConnectedSystemObjectAttributeValue row, ReconciliationProbeQuestion question) =>
         (row.ReferenceValueId.HasValue && question.ReferenceIds.Contains(row.ReferenceValueId.Value)) ||
-        (row.UnresolvedReferenceValue != null && question.ExactValues.Contains(row.UnresolvedReferenceValue)) ||
+        (!row.ReferenceValueId.HasValue && row.UnresolvedReferenceValue != null && question.ExactValues.Contains(row.UnresolvedReferenceValue)) ||
         (!row.ReferenceValueId.HasValue && row.UnresolvedReferenceValue != null && question.CaseInsensitiveValues
             .Any(value => IdentifierKey.For(value, caseExact: false) == IdentifierKey.For(row.UnresolvedReferenceValue, caseExact: false)));
 

@@ -176,8 +176,8 @@ public enum ReconciliationProbeFallbackReason
     IdentifierOrNamingAttribute = 0,
 
     /// <summary>
-    /// A change on a case-insensitive attribute names no Connected System Object, so it matches resolved rows by their
-    /// distinguished name ignoring case, which no index answers.
+    /// A change names no Connected System Object, so it matches resolved rows by the distinguished name they keep, which
+    /// no index answers: only outstanding references are found by their distinguished name.
     /// </summary>
     NamesNoObject = 1,
 
@@ -211,8 +211,8 @@ public enum ExportValueLoadFallbackReason
     UnresolvedReference = 1,
 
     /// <summary>
-    /// A change on a case-insensitive attribute names no Connected System Object, so it matches resolved rows by their
-    /// distinguished name ignoring case, which no index answers.
+    /// A change names no Connected System Object, so it matches resolved rows by the distinguished name they keep, which
+    /// no index answers: only outstanding references are found by their distinguished name.
     /// </summary>
     NamesNoObject = 2,
 

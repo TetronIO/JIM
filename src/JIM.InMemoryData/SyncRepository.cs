@@ -956,8 +956,8 @@ public partial class SyncRepository : ISyncRepository
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
     /// <summary>
-    /// Same answers as the SQL implementation (#2669): candidates by referenced id, by exact string among all rows and by
-    /// lowered string among unresolved rows, with the value count capped at two when asked.
+    /// Same answers as the SQL implementation (#2669): candidates by referenced id, and by exact string and by lowered
+    /// string among unresolved rows (#2871), with the value count capped at two when asked.
     /// </summary>
     public Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions)
     {
@@ -972,7 +972,7 @@ public partial class SyncRepository : ISyncRepository
 
             var candidates = rows
                 .Where(av => (av.ReferenceValueId.HasValue && referenceIds.Contains(av.ReferenceValueId.Value)) ||
-                             (av.UnresolvedReferenceValue != null && exactValues.Contains(av.UnresolvedReferenceValue)) ||
+                             (!av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null && exactValues.Contains(av.UnresolvedReferenceValue)) ||
                              (!av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null &&
                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false))))
                 .Select(av => new ConnectedSystemObjectAttributeValue

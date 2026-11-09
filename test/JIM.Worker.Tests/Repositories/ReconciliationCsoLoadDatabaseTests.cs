@@ -398,7 +398,8 @@ public class ReconciliationCsoLoadDatabaseTests
     /// DN in capitals (which matches nothing, a resolved row naming its object by id), unresolved rows in other cases, and
     /// unresolved rows whose non-ASCII characters JIM folds into ASCII (the dotted capital I, the Kelvin sign), which only
     /// a database whose <c>lower()</c> folds them likewise finds. Then the same for a case-exact attribute, whose strings
-    /// are sought exactly among all rows.
+    /// are sought exactly among unresolved rows (#2871); a change on it naming no object matches a resolved row by its
+    /// DN, so the planner loads that pair in full instead.
     /// </summary>
     [Test]
     public async Task GetReconciliationProbeValuesAsync_EveryChange_CandidatesIncludeEveryDotNetMatchAsync()
@@ -432,16 +433,15 @@ public class ReconciliationCsoLoadDatabaseTests
             }
             foreach (var uid in new[] { "nick", "kate", "frank" })
                 changes[$"remove {uid}"] = MemberChange(member, PendingExportAttributeChangeType.Remove, Guid.NewGuid(), Dn(uid));
-            if (caseExact)
-            {
-                // Naming no object, so matched by string among resolved rows too: probed only on a case-exact attribute.
-                changes["unresolved remove alice"] = MemberChange(member, PendingExportAttributeChangeType.Remove, unresolvedValue: seeded.MemberDns["alice"]);
-                changes["unresolved remove frank"] = MemberChange(member, PendingExportAttributeChangeType.Remove, unresolvedValue: "UID=Frank,OU=People,DC=glitterband,DC=local");
-            }
             changes["remove all"] = MemberChange(member, PendingExportAttributeChangeType.RemoveAll);
 
-            var plan = SyncEngine.PlanReconciliationProbes([PendingExportFor(seeded, seeded.GroupCsoId, changes.Values)],
-                await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync());
+            // Naming no object, so matched by string among resolved rows too: never probed, on either attribute (#2871).
+            var namingNoObject = MemberChange(member, PendingExportAttributeChangeType.Remove, unresolvedValue: seeded.MemberDns["alice"]);
+            var databaseFolds = await repository.Sync.DoesDatabaseFoldCaseLikeIdentifierKeyAsync();
+            var withNamingNoObject = SyncEngine.PlanReconciliationProbes(
+                [PendingExportFor(seeded, seeded.GroupCsoId, changes.Values.Append(namingNoObject))], databaseFolds);
+
+            var plan = SyncEngine.PlanReconciliationProbes([PendingExportFor(seeded, seeded.GroupCsoId, changes.Values)], databaseFolds);
             var answer = (await repository.Sync.GetReconciliationProbeValuesAsync(plan.Questions)).Single();
             var fullLoad = (await repository.Sync.GetConnectedSystemObjectsByIdsNoTrackingAsync(seeded.ConnectedSystemId, [seeded.GroupCsoId])).Single();
             var memberRows = fullLoad.AttributeValues.Where(av => av.AttributeId == seeded.MemberAttributeId).ToList();
@@ -449,6 +449,10 @@ public class ReconciliationCsoLoadDatabaseTests
 
             using (Assert.EnterMultipleScope())
             {
+                Assert.That(withNamingNoObject.Questions, Is.Empty, $"caseExact={caseExact}");
+                Assert.That(withNamingNoObject.FullLoadPairCount, Is.EqualTo(1), $"caseExact={caseExact}");
+                Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], namingNoObject)), Is.EqualTo(1),
+                    $"caseExact={caseExact}: naming no object, the change matches Alice's resolved row by its DN");
                 Assert.That(plan.FullLoadPairCount, Is.Zero, $"caseExact={caseExact}");
                 Assert.That(answer.ProbedChangeIds, Is.EquivalentTo(changes.Values.Select(c => c.Id)));
                 Assert.That(answer.CappedValueCount, Is.EqualTo(2), "Seven member rows, capped at two");
@@ -466,11 +470,6 @@ public class ReconciliationCsoLoadDatabaseTests
                         "The Kelvin sign folds into the ASCII DN");
                     Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["remove carol in capitals"])), Is.Zero,
                         "A row resolved to Bob names Bob, whatever DN it retains");
-                }
-                else
-                {
-                    Assert.That(memberRows.Count(row => SyncEngine.ValueExistsOnCso([row], changes["unresolved remove alice"])), Is.EqualTo(1),
-                        "Naming no object, the change matches Alice's resolved row by its exact DN");
                 }
             }
         }
@@ -585,8 +584,8 @@ public class ReconciliationCsoLoadDatabaseTests
 
     /// <summary>
     /// The probe must find its rows through indexes keyed on what it is looking for, never by reading a group's members
-    /// (#2669): the referenced ids on the reference index, exact strings on the string index, lowered strings on the
-    /// partial functional index over unresolved references, and the capped count by stopping after two rows of the
+    /// (#2669): the referenced ids on the reference index, exact and lowered strings alike on the partial functional
+    /// index over unresolved references (#2871), and the capped count by stopping after two rows of the
     /// object's own attribute. The same shape the reference recall query's plan check holds that query to.
     /// </summary>
     [Test]
@@ -673,10 +672,9 @@ public class ReconciliationCsoLoadDatabaseTests
                 "The probe scans every attribute value.\n" + valuesText + "\n" + countText);
             Assert.That(indexConditions.Any(line => line.Contains("\"ReferenceValueId\" = ANY")), Is.True,
                 "The referenced id must be an index condition.\n" + valuesText);
-            Assert.That(indexConditions.Any(line => line.Contains("\"UnresolvedReferenceValue\" = ANY")), Is.True,
-                "The exact string must be an index condition.\n" + valuesText);
-            Assert.That(indexConditions.Any(line => line.Contains("lower(")), Is.True,
-                "The lowered string must be an index condition.\n" + valuesText);
+            // Both string arms seek outstanding values by the lowered string (#2871); the exact arm then compares exactly.
+            Assert.That(indexConditions.Count(line => line.Contains("lower(")), Is.EqualTo(2),
+                "The lowered string must be an index condition of both string arms.\n" + valuesText);
             Assert.That(valuesPlan.Where(line => line.Contains("Filter:")).Any(line => line.Contains("lower(")), Is.False,
                 "The string must not be compared row by row after a scan.\n" + valuesText);
             Assert.That(countPlan.Any(line => line.Contains("Limit")), Is.True,
