@@ -1309,6 +1309,27 @@ Describe 'The Exchange servers (#2021)' {
         }
     }
 
+    Context 'Set-ActiveDirectoryLabExchangeReachability' {
+        It 'asks the control plane to make Exchange unreachable, and returns what it did' {
+            Mock Invoke-LabControl { '{"name":"exchange-primary","state":"Unreachable","detail":"IIS is Stopped","elapsedSeconds":3}' }
+
+            $result = Set-ActiveDirectoryLabExchangeReachability -VmName 'exchange-primary' -State Unreachable
+
+            $result.detail | Should -Be 'IIS is Stopped'
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter {
+                $Script -eq 'Set-LabExchangeReachability.ps1' -and ($Arguments -join ' ') -eq '-Name exchange-primary -State Unreachable -AsJson'
+            }
+        }
+
+        It 'gives Exchange long enough to answer again when it is made reachable' {
+            Mock Invoke-LabControl { '{"name":"exchange-primary","state":"Reachable","detail":"ready","elapsedSeconds":40}' }
+
+            Set-ActiveDirectoryLabExchangeReachability -VmName 'exchange-primary' -State Reachable | Out-Null
+
+            Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter { $TimeoutSeconds -ge 900 }
+        }
+    }
+
     Context 'Invoke-ActiveDirectoryLabPowerPlan' {
         It 'stops each machine through the control plane, in order' {
             Mock Invoke-LabControl { '{"name":"x","outcome":"AlreadyOff","elapsedSeconds":0}' }

@@ -219,6 +219,40 @@ function Get-ActiveDirectoryLabPowerPlan {
     return [string[]]@($stop)
 }
 
+function Set-ActiveDirectoryLabExchangeReachability {
+    <#
+    .SYNOPSIS
+        Makes a lab Exchange server unreachable for JIM, or reachable again, through the control plane, and returns
+        Set-LabExchangeReachability.ps1's outcome (name, state, detail, elapsedSeconds).
+
+    .DESCRIPTION
+        For the Exchange recipient scenario's unreachable step (PRD Scenario 5): Unreachable stops IIS on the server,
+        and Reachable starts it and waits until Exchange Remote PowerShell answers again. A failure is not caught: a
+        scenario must not carry on believing Exchange is in a state it could not be put in.
+
+    .PARAMETER VmName
+        The Exchange server's VM.
+
+    .PARAMETER State
+        Unreachable or Reachable.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'A test harness step against the disposable lab; the next revert undoes it.')]
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$VmName,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Unreachable', 'Reachable')]
+        [string]$State
+    )
+
+    # Reachable waits up to 600 s in the guest for Exchange to answer; the control plane's own limit has to outlast it.
+    $json = Invoke-LabControl -Script 'Set-LabExchangeReachability.ps1' -Arguments @('-Name', $VmName, '-State', $State, '-AsJson') -TimeoutSeconds 900
+    return (ConvertFrom-Json -InputObject ([string]$json))
+}
+
 function Invoke-ActiveDirectoryLabPowerPlan {
     <#
     .SYNOPSIS

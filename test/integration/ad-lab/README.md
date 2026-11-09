@@ -47,6 +47,7 @@ Products that extend a forest are listed in `settings.json` `directoryExtensions
 | `host/New-LabDomainController.ps1` | Hyper-V host | Builds a domain controller from the ISO, unattended, and takes the `baseline` checkpoint |
 | `host/Restore-LabDomainController.ps1` | Hyper-V host | Reverts to a named checkpoint, starts the VM, waits for the guest and LDAPS (HTTPS on the AD FS server; on an Exchange server, Remote PowerShell answering and every role's required services running) |
 | `host/Stop-LabMachine.ps1` | Hyper-V host | Shuts a lab VM down (turning it off after a timeout); the runner stops the heavy machines a scenario does not use before reverting the ones it does |
+| `host/Set-LabExchangeReachability.ps1` | Hyper-V host | Stops IIS on an Exchange server (`-State Unreachable`) or starts it and waits for Exchange (`-State Reachable`); Scenario 034 uses it to prove a change Exchange could not take is retried and delivered |
 | `host/Checkpoint-LabDomainController.ps1` | Hyper-V host | Takes a production checkpoint (`-Replace` to overwrite one) |
 | `host/Get-LabDomainController.ps1` | Hyper-V host | State, checkpoints and guest OS build (`-AsJson` for the runner) |
 | `host/Remove-LabDomainController.ps1` | Hyper-V host | Stops and removes the VM, its checkpoints and its disk (needs `-Force`) |

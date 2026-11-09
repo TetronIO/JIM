@@ -494,6 +494,89 @@ function Test-LabExchangeReady {
     return [pscustomobject]@{ Ready = $true; Detail = "Remote PowerShell answered and $(@($Probe.Health).Count) roles have their required services running" }
 }
 
+function Wait-LabExchangeReady {
+    <#
+    .SYNOPSIS
+        Asks Exchange in a lab VM, through PowerShell Direct, until it is ready for JIM (Get-LabExchangeReadinessProbe,
+        Test-LabExchangeReady), and returns the verdict. Throws with what is still missing when -TimeoutSeconds passes.
+
+    .DESCRIPTION
+        Runs on the Hyper-V host. Restore-LabDomainController.ps1 calls it after a revert and
+        Set-LabExchangeReachability.ps1 after making Exchange reachable again: no port proves Exchange ready, so both
+        ask Exchange itself, as JIM connects.
+
+    .PARAMETER VMName
+        The Exchange server's VM.
+
+    .PARAMETER Credential
+        A domain administrator, for PowerShell Direct and for Exchange.
+
+    .PARAMETER ManagementUri
+        Its Remote PowerShell endpoint over HTTP (Get-LabExchangeServerInfo's ManagementUri).
+
+    .PARAMETER TimeoutSeconds
+        How long to keep asking. At least one attempt is always made.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$VMName,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSCredential]$Credential,
+
+        [Parameter(Mandatory)]
+        [string]$ManagementUri,
+
+        [ValidateRange(0, 7200)]
+        [int]$TimeoutSeconds = 1800
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $probe = Invoke-Command -VMName $VMName -Credential $Credential -ArgumentList $ManagementUri, $Credential -ScriptBlock ${function:Get-LabExchangeReadinessProbe}
+        $verdict = Test-LabExchangeReady -Probe $probe
+        if ($verdict.Ready) { return $verdict }
+        if ((Get-Date) -ge $deadline) {
+            throw "Exchange in '$VMName' was not ready within $TimeoutSeconds seconds: $($verdict.Detail)"
+        }
+        Start-Sleep -Seconds 15
+    }
+}
+
+function Set-LabExchangeWebService {
+    <#
+    .SYNOPSIS
+        Stops or starts IIS (W3SVC) on an Exchange server, and returns the service's status afterwards.
+
+    .DESCRIPTION
+        Runs in the Exchange server's guest, sent by Set-LabExchangeReachability.ps1 with Invoke-Command, so it is
+        self-contained. The Exchange recipient scenario (#2021, PRD Scenario 5) stops IIS to make Exchange unreachable
+        for a while: HTTP.sys still answers on port 80, with 503, which JIM's client sees as a server it cannot reach,
+        and then starts it again. A restart of the VM would do the same in minutes; this takes seconds. Nothing is lost
+        either way, and the next scenario's revert puts the server back to its baseline regardless.
+
+    .PARAMETER Running
+        $true to start IIS, $false to stop it.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Runs unattended in a lab guest through Invoke-Command, and is idempotent.')]
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [bool]$Running
+    )
+
+    if ($Running) {
+        Start-Service -Name 'W3SVC'
+    }
+    else {
+        Stop-Service -Name 'W3SVC' -Force
+    }
+    return [string](Get-Service -Name 'W3SVC').Status
+}
+
 function Test-LabExchangeDatabaseLayout {
     <#
     .SYNOPSIS
@@ -664,6 +747,7 @@ Export-ModuleMember -Function @(
     'Get-LabExchangeWindowsFeature', 'Get-LabExchangePrerequisite', 'Test-LabExchangePrerequisiteInstalled',
     'Test-LabMicrosoftSignature', 'Get-LabExchangePageFileSize', 'Get-LabExchangeSetupInstallArgument',
     'Get-LabExchangeRoleState', 'Get-LabExchangeServiceHealthProblem', 'Get-LabExchangeReadinessProbe', 'Test-LabExchangeReady',
+    'Wait-LabExchangeReady', 'Set-LabExchangeWebService',
     'Test-LabExchangeDatabaseLayout',
     'Test-LabExchangeIisCertificate', 'Test-LabKerberosChallenge', 'Get-LabExchangeServerObjectQuery',
     'Get-LabExchangeFeatureGap', 'Get-LabExchangeUserRemoval',

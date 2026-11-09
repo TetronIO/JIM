@@ -138,14 +138,8 @@ try {
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
         if ($isExchange) {
             # Exchange's services start minutes after the guest does. Ask Exchange itself, from inside, as JIM connects.
-            $verdict = $null
-            while ($true) {
-                $probe = Invoke-Command -VMName $Name -Credential $credential -ArgumentList $exchangeInfo.ManagementUri, $credential -ScriptBlock ${function:Get-LabExchangeReadinessProbe}
-                $verdict = Test-LabExchangeReady -Probe $probe
-                if ($verdict.Ready -or ((Get-Date) -ge $deadline)) { break }
-                Start-Sleep -Seconds 15
-            }
-            if (-not $verdict.Ready) { throw "Exchange in '$Name' was not ready within $TimeoutSeconds seconds: $($verdict.Detail)" }
+            $remaining = [int][math]::Max(0, ($deadline - (Get-Date)).TotalSeconds)
+            $verdict = Wait-LabExchangeReady -VMName $Name -Credential $credential -ManagementUri $exchangeInfo.ManagementUri -TimeoutSeconds $remaining
             Write-Progress-Line "Exchange in $Name is ready: $($verdict.Detail)"
         }
         else {

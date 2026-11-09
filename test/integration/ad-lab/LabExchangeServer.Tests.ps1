@@ -586,3 +586,69 @@ Describe 'Test-LabExchangeReady' {
         $verdict.Ready | Should -BeTrue
     }
 }
+
+Describe 'Set-LabExchangeWebService' {
+    # Runs in the guest, sent by Set-LabExchangeReachability.ps1. Stopping IIS is how the integration scenario makes
+    # Exchange unreachable for a while: HTTP.sys still answers on 80, with 503, which JIM's client sees as a server it
+    # cannot reach. Restarting the VM would take minutes; this takes seconds and is undone the same way.
+    BeforeAll {
+        # The service cmdlets are Windows only; stand-ins with the same parameters let the calls be mocked anywhere.
+        foreach ($name in 'Stop-Service', 'Start-Service', 'Get-Service') {
+            if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
+                Set-Item -Path "function:global:$name" -Value {
+                    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'A stand-in for the Windows cmdlet, to be mocked.')]
+                    param([string]$Name, [switch]$Force)
+                }
+            }
+        }
+    }
+
+    It 'stops IIS when Exchange is to be unreachable, and reports its state' {
+        Mock -ModuleName LabExchangeServer Stop-Service { }
+        Mock -ModuleName LabExchangeServer Start-Service { }
+        Mock -ModuleName LabExchangeServer Get-Service { [pscustomobject]@{ Name = 'W3SVC'; Status = 'Stopped' } }
+
+        Set-LabExchangeWebService -Running $false | Should -Be 'Stopped'
+
+        Should -Invoke -ModuleName LabExchangeServer Stop-Service -Times 1 -Exactly -ParameterFilter { $Name -eq 'W3SVC' -and $Force }
+        Should -Invoke -ModuleName LabExchangeServer Start-Service -Times 0 -Exactly
+    }
+
+    It 'starts IIS when Exchange is to be reachable again' {
+        Mock -ModuleName LabExchangeServer Stop-Service { }
+        Mock -ModuleName LabExchangeServer Start-Service { }
+        Mock -ModuleName LabExchangeServer Get-Service { [pscustomobject]@{ Name = 'W3SVC'; Status = 'Running' } }
+
+        Set-LabExchangeWebService -Running $true | Should -Be 'Running'
+
+        Should -Invoke -ModuleName LabExchangeServer Start-Service -Times 1 -Exactly -ParameterFilter { $Name -eq 'W3SVC' }
+        Should -Invoke -ModuleName LabExchangeServer Stop-Service -Times 0 -Exactly
+    }
+}
+
+Describe 'Wait-LabExchangeReady' {
+    BeforeAll {
+        $script:Credential = New-Object System.Management.Automation.PSCredential('PANOPLY\Administrator', (ConvertTo-SecureString 'not-a-secret' -AsPlainText -Force))
+        $script:Healthy = [pscustomobject]@{ Connected = $true; Health = @([pscustomobject]@{ Role = 'Mailbox Server Role'; RequiredServicesRunning = $true; ServicesNotRunning = @() }); Error = $null }
+        $script:Down = [pscustomobject]@{ Connected = $false; Health = @(); Error = 'HTTP 503' }
+    }
+
+    It 'asks Exchange in the guest until it is ready, and returns what it found' {
+        $script:calls = 0
+        Mock -ModuleName LabExchangeServer Invoke-Command { $script:calls++; if ($script:calls -lt 3) { $script:Down } else { $script:Healthy } }
+        Mock -ModuleName LabExchangeServer Start-Sleep { }
+
+        $verdict = Wait-LabExchangeReady -VMName 'exchange-primary' -Credential $script:Credential -ManagementUri 'http://ex1.panoply.local/PowerShell/' -TimeoutSeconds 60
+
+        $verdict.Ready | Should -BeTrue
+        Should -Invoke -ModuleName LabExchangeServer Invoke-Command -Times 3 -Exactly -ParameterFilter { $VMName -eq 'exchange-primary' }
+    }
+
+    It 'throws with what is still missing when Exchange is not ready in time' {
+        Mock -ModuleName LabExchangeServer Invoke-Command { $script:Down }
+        Mock -ModuleName LabExchangeServer Start-Sleep { }
+
+        { Wait-LabExchangeReady -VMName 'exchange-primary' -Credential $script:Credential -ManagementUri 'http://ex1.panoply.local/PowerShell/' -TimeoutSeconds 0 } |
+            Should -Throw "*exchange-primary*not ready within 0 seconds*HTTP 503*"
+    }
+}
