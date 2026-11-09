@@ -164,6 +164,19 @@ internal sealed class WinRMConnection : IDisposable
     }
 
     /// <summary>
+    /// What a handshake answer with no Kerberos token in it means. Only a 401 is the server refusing the ticket (the
+    /// account, its password or its rights). Anything else is the server failing to answer the handshake at all: IIS
+    /// replies 503 while Exchange's web services are stopped or still starting, which a retry may cure, so it is an
+    /// HTTP error, as the same status is on any other request, and never reported as refused authentication.
+    /// </summary>
+    internal static WSManFaultException HandshakeFailure(HttpStatusCode status, string userPrincipalName) =>
+        status == HttpStatusCode.Unauthorized
+            ? new WSManFaultException(5, "AccessDenied",
+                $"The WinRM server refused Kerberos authentication for {userPrincipalName} (HTTP {(int)status}).")
+            : new WSManFaultException((uint)status, "HttpError",
+                $"The WinRM server answered the Kerberos handshake with HTTP {(int)status} instead of authenticating; it may be stopped or still starting.");
+
+    /// <summary>
     /// The Kerberos handshake, on an empty request as WinRM expects when messages will be encrypted: the client's
     /// token goes in <c>Authorization: Kerberos</c>, and the server's mutual-authentication token comes back in
     /// <c>WWW-Authenticate</c>.
@@ -194,8 +207,7 @@ internal sealed class WinRMConnection : IDisposable
 
             var reply = response.Headers.WwwAuthenticate.FirstOrDefault(h => h.Scheme.Equals("Kerberos", StringComparison.OrdinalIgnoreCase))?.Parameter;
             if (response.StatusCode != HttpStatusCode.OK && string.IsNullOrEmpty(reply))
-                throw new WSManFaultException(5, "AccessDenied",
-                    $"The WinRM server refused Kerberos authentication for {_options.UserPrincipalName} (HTTP {(int)response.StatusCode}).");
+                throw HandshakeFailure(response.StatusCode, _options.UserPrincipalName);
 
             token = string.IsNullOrEmpty(reply) || _context.IsEstablished ? null : _context.Step(Convert.FromBase64String(reply));
         }
