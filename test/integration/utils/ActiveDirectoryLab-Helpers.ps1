@@ -38,7 +38,10 @@ $script:AdLabDomainControllers = @('Primary', 'Source', 'Target')
 # The scenarios that provision Exchange recipients, and the Exchange servers each one uses (#2021). Only these revert
 # an Exchange server: each needs 12 GB of static memory and takes minutes to start, and every other scenario has them
 # stopped (Get-ActiveDirectoryLabPowerPlan).
-$script:AdLabExchangeScenarios = @{ 34 = @('ExchangePrimary') }
+$script:AdLabExchangeScenarios = @{
+    3  = @('ExchangePrimary', 'ExchangeSource')   # GAL synchronisation, PANOPLY and RESURGAM both ways
+    34 = @('ExchangePrimary')                     # Exchange recipient provisioning in PANOPLY
+}
 
 # The machines that can be stopped to make room. The host has room for one Exchange server beside everything else;
 # with both running, dc-target and adfs-primary are stopped (test/integration/ad-lab/README.md, The Exchange servers).
