@@ -83,7 +83,7 @@ Leave **Exchange Database** without an Attribute Flow and Exchange's automatic m
 
 Leave **Exchange Primary SMTP Address** without an Attribute Flow and Exchange's Email Address Policies give each recipient its addresses. Flow one only to override the policy: JIM then turns the policy off for that recipient, or Exchange would put the policy's address back.
 
-The same goes for `mail`. Exchange writes `mail` from the recipient's primary address, so an Attribute Flow to `mail` on a mailbox and the Email Address Policy both write it, and they agree only when the flowed address is exactly the one the policy gives. Otherwise each export changes it back. Do not flow `mail` on recipients unless you set their primary address deliberately, through Exchange Primary SMTP Address.
+The same goes for `mail`. Exchange writes `mail` from the recipient's primary address, so an Attribute Flow to `mail` on a mailbox and the Email Address Policy both write it, and they agree only when the flowed address is exactly the one the policy gives. Otherwise each export changes it back. Do not flow `mail` on recipients unless you set their primary address deliberately, through Exchange Primary SMTP Address. A mail user or mail contact is the exception: Exchange writes its external address to `mail`, so where the same Synchronisation Rule flows `mail` to other objects, flow a mail user's or mail contact's external address to it, or the confirming import reports the export unconfirmed.
 
 **Exchange External Address** is required for a mail user or mail contact; one declared without it is refused and parks until an Attribute Flow gives it one. Write the bare address (`first.last@partner.example`).
 
