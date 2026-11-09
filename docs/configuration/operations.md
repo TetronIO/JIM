@@ -7,20 +7,21 @@ audience: operator
 
 # Operations
 
-**Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with four tabs and a Service Health strip above them.
+**Administration > Operations** is where an administrator finds out what JIM is doing, what it has done, what it will do next, and whether the services that do it are alive. It is one page with five tabs and a Service Health strip above them.
 
 ```jim-diagram
 archetype: anatomy
 title: What the Operations page holds
-desc: 'Administration > Operations has a Service Health strip, with one card each for Worker · Sync, Worker · Passwords and the Scheduler, above four tabs. Activity shows the work Queued, In Progress and Completed; Schedules shows each Schedule with its last run; Passwords shows the Password Synchronisation queue; and Generated Values shows generated values held for a decision and renames waiting for their export.'
+desc: 'Administration > Operations has a Service Health strip, with one card each for Worker · Sync, Worker · Passwords, Worker · Exchange and the Scheduler, above five tabs. Activity shows the work Queued, In Progress and Completed; Schedules shows each Schedule with its last run; Passwords shows the Password Synchronisation queue; Exchange shows the Exchange recipient changes on their way to Exchange; and Generated Values shows generated values held for a decision and renames waiting for their export.'
 subject:
   kind: object
   label: Operations
   parts:
-  - {label: Service Health strip, detail: 'Worker · Sync, Worker · Passwords, Scheduler'}
+  - {label: Service Health strip, detail: 'Worker · Sync, Passwords, Exchange; Scheduler'}
   - {label: Activity tab, detail: 'Queued, In Progress, Completed'}
   - {label: Schedules tab, detail: each with its last run}
   - {label: Passwords tab, detail: the Password Synchronisation queue}
+  - {label: Exchange tab, detail: the Exchange queue}
   - {label: Generated Values tab, detail: 'values held for a decision, waiting renames'}
 ```
 
@@ -29,6 +30,7 @@ subject:
 - **Activity**<br /> What the Worker has queued, what it is running and what it has finished, on one page. See [The Activity tab](#the-activity-tab).
 - **Schedules**<br /> The [Schedules](schedules.md) that run work automatically, each with its last run and how that run ended.
 - **Passwords**<br /> The Password Synchronisation queue: every password change on its way to a Connected System, with what the target said about it. A change shows as **Delivering** for the moment the Password Delivery Service is writing it to the target. An [initial password](../concepts/passwords.md#giving-new-connected-system-objects-their-first-password) on a newly provisioned Connected System Object travels the same queue, labelled with origin **Initial**. See [Watching the queue](../concepts/password-synchronisation.md#watching-the-queue).
+- **Exchange**<br /> The Exchange queue: every Exchange recipient change an export queued, where it stands, and **Retry** for the ones JIM has stopped trying. The tab's badge counts the changes waiting for a person (parked, refused and not made). See [Follow a change to Exchange](../connectors/jim-ldap-connector-exchange.md#follow-a-change-to-exchange).
 - **Generated Values**<br /> Generated values held for a decision, and allowed renames waiting for their export. See [Generated values in target systems](generated-values-in-target-systems.md).
 
 ## :material-timeline-clock-outline: The Activity tab
@@ -45,7 +47,7 @@ The Activity tab reads in time order, with the latest at the top: **Queued**, th
 
 ## :material-heart-pulse: Service Health
 
-JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service), and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
+JIM does its work in two processes besides the web portal: the **Worker**, which runs Run Profiles and every other queued task and also hosts the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) and the Exchange delivery service, and the **Scheduler**, which starts Schedules when they fall due. Each service writes a heartbeat to the database every 5 seconds, and the Service Health strip at the top of Operations reads it, so a Worker that has stopped shows as stopped rather than looking like a Worker with nothing to do. The container health check alone is invisible from the portal.
 
 The strip is a panel headed **Service Health**, with a one-line summary beside the heading ("All services healthy", or "1 service unhealthy, 1 degraded", worst first) and, on the right, whether the panel is **Updated live**: whether the portal is receiving real-time change notifications from the database. While it is reconnecting the portal falls back to polling; pages still update, more slowly. That indicator is about the portal's own connection, not a background service. The panel opens collapsed to that one line, keeping the summary and the live indicator in view; the chevron at the end of the header opens the cards, and the portal remembers the choice.
 
@@ -53,6 +55,7 @@ Below the header is one card per service, all built the same way so the same fac
 
 - **Worker · Sync**<br /> The synchronisation loop. When it is running something, the card names it ("Full Import: Corporate Directory") and says how long it has been at it.
 - **Worker · Passwords**<br /> The Password Delivery Service, which delivers the Passwords tab's queue on its own clock. While it is writing to a directory the card says which ("Delivering to Corporate Directory"); its detail line reads what the queue holds ahead of it ("3 due, 1 retrying, next attempt 09:19 UTC"), and is blank when nothing is waiting. It shares a process with the synchronisation loop, so the two cards go **Unhealthy** together when the Worker is down; one alone means that half of the process has stopped while the other is still working, which is why they are reported separately.
+- **Worker · Exchange**<br /> The Exchange delivery service, which delivers the Exchange tab's queue on its own clock, beside password delivery in the same process and reported separately for the same reason. While it is delivering, the card names the Connected System.
 - **Scheduler**<br /> The Schedule runner. The card also names the enabled Schedule due next, when it fires and how long until then ("Next: Weekly Full Reconciliation Sun 02:00 (in 3 d)"), or says **No Schedules due**. While the panel is collapsed, the header carries the same in brief ("next Schedule Sun 02:00"). A Scheduler that is Unhealthy shows neither, since it will not start anything until it is back.
 
 Each card carries, top to bottom: the service's name with its status on a coloured pill (green, amber or red; the pill is the only coloured thing on the card); what it is doing now, or **Idle**; and its condition in plain words with the instance's uptime after it ("Heartbeat 3 seconds ago · up 54 s"). The host, version and instance id of the process reporting sit behind the card's details control (the chevron at the right of the heartbeat line); each value is in a fixed-width face with a copy button beside it, so a container id can go straight into a shell. The details also show **Memory**: how much memory the service's process holds, and how full the memory it can draw on is ("41 GB held · 66% of 62 GB in use"), where that memory is its container's limit when one is set, and otherwise the host's. A service that is Unhealthy leads with why ("No heartbeat for 4 minutes"), says what it was running when it went quiet, if anything, and keeps the uptime it had at its last heartbeat, which is how long it ran before it stopped.

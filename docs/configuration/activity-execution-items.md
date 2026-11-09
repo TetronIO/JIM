@@ -95,6 +95,8 @@ When the value is an object's External ID, JIM cannot tell which object it is, s
 
 Some work an item sets in motion finishes after its run. When an export provisions an account with an [Initial Password](initial-password.md), the [Password Delivery Service](../concepts/password-synchronisation.md#the-password-delivery-service) sets the password moments later, and the export's item for that account lists it under **Follow-up**: where it stands now (Queued, Delivering, Retrying, Held, Delivered, Parked, Expired or Cancelled), why, or what happens next, and a link to its own Activity, which holds each delivery attempt. An Initial Password reads **Carried** when a password change already waiting for the person became the account's first password instead; that change's own Activity reports the delivery.
 
+An export that writes an [Exchange recipient](../connectors/jim-ldap-connector-exchange.md) works the same way: the Exchange change JIM queued for the account is listed under **Follow-up**, with where it stands (Queued, Delivering, Retrying, Held, Delivered, Parked, Refused, Not made, Replaced or Withdrawn), why, and a link to its own Activity.
+
 A follow-up never changes its run's status. A password parked hours after a run completed is reported here and on its own Activity; the run stays Complete. The follow-up's Activity links back to the item, and is kept for as long as password history is, which is longer than the run's execution items: once the item has gone, the Activity says the export item is no longer retained.
 
 The REST API returns an item's follow-ups with `include=followups` (`GET /api/v1/activities/items/{id}?include=followups`), and PowerShell with `Get-JIMActivityExecutionItem -IncludeFollowUps`.
