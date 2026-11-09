@@ -288,7 +288,11 @@ Write-Host ""
 Write-TestSection "Step 0: Configuring JIM"
 
 & "$PSScriptRoot/../Get-OrGenerate-TestCSV.ps1" -Template $Template -OutputPath "$(Get-IntegrationTestDataPath)"
+# Setup-Scenario-001.ps1 flows the feed's samAccountName to sAMAccountName as it is, and at Medium some run past
+# Active Directory's 20 characters. Set-HrPerson seeds the shortened file with the people it adds.
+$shortened = Limit-HrFeedAccountNames -Path "$(Get-IntegrationTestDataPath)/hr-users.csv"
 foreach ($person in $people.Values) { Set-HrPerson -Person $person }
+if ($shortened -gt 0) { Write-Host "  ✓ $shortened account name(s) shortened to Active Directory's 20 characters" -ForegroundColor Green }
 Write-Host "  ✓ HR feed: the $Template population, plus $($people.Count) people who are to be Exchange recipients" -ForegroundColor Green
 
 $config = & "$PSScriptRoot/../Setup-Scenario-034.ps1" -JIMUrl $JIMUrl -ApiKey $ApiKey -Template $Template `
