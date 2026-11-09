@@ -4,18 +4,9 @@
 using System.Globalization;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
-using Microsoft.EntityFrameworkCore;
 namespace JIM.Models.Core;
 
-[Index(nameof(StringValue))]
-[Index(nameof(ReferenceValue))]
-[Index(nameof(DateTimeValue))]
-[Index(nameof(IntValue))]
-[Index(nameof(LongValue))]
-[Index(nameof(DecimalValue))]
-[Index(nameof(ReferenceValue))]
-[Index(nameof(UnresolvedReferenceValue))]
-[Index(nameof(GuidValue))]
+// The value indexes are declared in JimDbContext (#2864): six single-column ones partial, text and date by composite only.
 public class MetaverseObjectAttributeValue
 {
     public Guid Id { get; set; }
