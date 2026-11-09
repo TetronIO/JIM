@@ -29,7 +29,7 @@
 name: jim-integration
 
 services:
-  # Phase 1 - Scenario 001 & 3: HR to Directory, GALSYNC
+  # Phase 1 - Scenario 001: HR to Directory
   # Primary Samba AD instance for most scenarios
   samba-ad-primary:
     image: ${SAMBA_IMAGE_PRIMARY:-ghcr.io/tetronio/jim-samba-ad:primary}

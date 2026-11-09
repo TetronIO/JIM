@@ -327,6 +327,14 @@ Three pull requests, in order: 8a, the Exchange servers in the harness and Scena
   - **Scenario 034** runs the PRD's Scenarios 1, 2, 3, 5, 7 and 8 and the matching acceptance criteria end to end. Group mail-enabling is left to the lab write suite (`LdapExchangeRecipientDeliveryLabTests`), which already proves every recipient type and both group cases at the Connector against the same server.
   - **Docs finding for 8c:** Scenario 001's `mail` flow and Exchange's Email Address Policy both write `mail`. They agree only when the flowed address is the one the policy gives, so the Exchange page has to say so.
 
+- **8b (in review): Scenario 003, GAL synchronisation.**
+  - **What it proves:** each forest's mailboxes, and PANOPLY's mail-enabled group, become mail contacts in the other forest's `OU=GALSync`. Each contact carries the source address as its external address and an `X500:` proxy built from its Legacy Exchange DN. No contact is projected back, and each forest's own contact outside GALSync still is. A further cycle exports nothing, a rename reaches the contact, and a leaver's contact is deleted.
+  - **Groups go one way, PANOPLY to RESURGAM.** The group is created out of band and made a mail-enabled group by JIM, so the group path (mail-enabling, then a contact for the group) is proven end to end. The reverse adds nothing the same rules do not already exercise.
+  - **Configuration the scenario had to supply:**
+    - Setup-001 has no LDAP import rule, so the scenario adds one per forest to bring back Legacy Exchange DN and Proxy Addresses.
+    - `OU=GALSync` has to be selected on each Connected System, because an export outside the selected containers is refused.
+    - The forest split keys on Employee Type, because `NotEquals` is not met when the attribute holds no value.
+
 - **Scenarios:**
   - A new scenario for mailbox provisioning, run against the AD lab's `exchange-primary`: Scenarios 1, 2, 5 to 8 and the acceptance criteria.
   - The GAL scenario between PANOPLY and RESURGAM, which needs `exchange-source` (#2412, built 5 November 2026) and #2774 (svc-jim may create contacts in `OU=GALSync`). It rewrites the Scenario 003 (GALSYNC) stub, which still describes an "AD to CSV" export: people and groups both ways, the `X500:` proxy, no projection back, an update, and a leaver's contact deleted. AD lab only, so it joins the AD-lab-only list in `Get-ScenarioSupportedDirectoryTypes`, and `ad-lab-rebuild.yml` gains `JIM_AD_LAB_EXCHANGE_SOURCE_VM`.

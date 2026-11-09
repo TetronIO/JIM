@@ -1396,7 +1396,7 @@ $Scenario11CoverageWasExplicitlySet = $Quick -or $Exhaustive
 # for data sizing. These scenarios accept Template but it has no effect on test execution.
 $templateIrrelevantScenarioNumbers = @(
     2,   # Cross-Domain Sync - uses fixed test users (crossdomain.test1, etc.)
-    3,   # GAL Sync - not yet implemented
+    3,   # GAL Sync - a handful of named recipients at Nano; every one costs Exchange commands in two forests
     4,   # Deletion Rules - provisions individual test users, ignores template
     6,   # Scheduler Service - tests scheduler functionality, no data template needed
     10,  # Sync Rule Scoping - template-independent, only a handful of explicit test users

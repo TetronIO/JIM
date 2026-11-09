@@ -160,7 +160,7 @@ Assert-ActivityOutcomeStats -ActivityId $execution.steps[1].activityId -Name "CS
 | 3 | Scenario 005 (Matching Rules) | Low | Simple step sequences |
 | 4 | Scenario 002 (Cross-Domain) | Medium | Multiple AD systems |
 | 5 | Scenario 008 (Entitlement Sync) | Medium | Multiple AD systems |
-| 6 | Scenario 003 (GALSYNC) | N/A | Not yet implemented; skip |
+| 6 | Scenario 003 (GALSYNC) | N/A | Active Directory lab only (two Exchange servers); skip |
 
 **Per-scenario considerations:**
 

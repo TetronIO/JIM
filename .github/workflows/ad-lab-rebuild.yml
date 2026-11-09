@@ -251,8 +251,9 @@ jobs:
       # The suite, once, against the candidates: the same command as the nightly, with the VM variables pointing at
       # the candidates for this step only. The candidates have the live addresses, so JIM_AD_LAB_*_ADDRESS, the
       # /etc/hosts entries on the runner and the domain controller and AD FS names in every certificate are unchanged.
-      # JIM_AD_LAB_EXCHANGE_PRIMARY_VM is set ahead of the runner starting the Exchange server for its scenarios
-      # (#2412), so that it never starts the live server against a candidate domain controller.
+      # JIM_AD_LAB_EXCHANGE_PRIMARY_VM and _SOURCE_VM point the Exchange scenarios (034, and 003 for GAL sync) at the
+      # candidate Exchange servers (#2412, #2021), so the runner never starts a live server against a candidate domain
+      # controller.
       - name: Run the integration suite against the candidates
         id: suite
         env:
@@ -261,6 +262,7 @@ jobs:
           JIM_AD_LAB_TARGET_VM: dc-target-candidate
           JIM_AD_LAB_ADFS_PRIMARY_VM: adfs-primary-candidate
           JIM_AD_LAB_EXCHANGE_PRIMARY_VM: exchange-primary-candidate
+          JIM_AD_LAB_EXCHANGE_SOURCE_VM: exchange-source-candidate
           JIM_AD_LAB_ADMIN_PASSWORD: ${{ secrets.JIM_AD_LAB_ADMIN_PASSWORD }}
           JIM_AD_LAB_JIM_PASSWORD: ${{ secrets.JIM_AD_LAB_JIM_PASSWORD }}
           JIM_BENCH_API_URL: ${{ vars.JIM_BENCH_API_URL }}

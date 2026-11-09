@@ -1218,6 +1218,10 @@ Describe 'The Exchange servers (#2021)' {
             @(Get-ActiveDirectoryLabInstance -ScenarioNumber 34) | Should -Be @('Primary', 'ExchangePrimary')
         }
 
+        It 'is both forests and both Exchange servers for Scenario 3 (GAL sync), each Exchange server after its domain controller' {
+            @(Get-ActiveDirectoryLabInstance -ScenarioNumber 3) | Should -Be @('Primary', 'Source', 'ExchangePrimary', 'ExchangeSource')
+        }
+
         It 'reverts an Exchange server for no scenario that does not provision recipients: each one needs 12 GB' {
             foreach ($number in 1, 2, 8, 24, 25, 30, 31, $null) {
                 @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'ExchangePrimary'

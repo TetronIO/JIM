@@ -18,8 +18,8 @@
 
     Get-ScenarioSupportedDirectoryTypes answers that question, over all four directory types
     (SambaAD, OpenLDAP, DirectoryServer389 and ActiveDirectory). The lab runs whatever Samba AD runs,
-    except the scenarios only a real domain controller or its AD FS or Exchange servers can hold (024, 025, 030, 031
-    and 034, which run there only).
+    except the scenarios only a real domain controller or its AD FS or Exchange servers can hold (003, 024, 025,
+    030, 031 and 034, which run there only).
     Get-ContainerDirectoryType lists the three container types, which is what -DirectoryType All and
     -PreRelease expand to (the lab needs its host, so they never include it).
 
@@ -38,7 +38,7 @@ function Get-ScenarioSupportedDirectoryTypes {
 
     .DESCRIPTION
         The Active Directory lab runs whatever Samba AD runs, except the scenarios only a real domain
-        controller or its AD FS or Exchange servers can hold (024, 025, 030, 031 and 034), which run on the lab only.
+        controller or its AD FS or Exchange servers can hold (003, 024, 025, 030, 031 and 034), which run on the lab only.
         $null (the "All" scenario) has no restriction.
     #>
     [CmdletBinding()]
@@ -87,8 +87,9 @@ function Get-ScenarioSupportedDirectoryTypes {
         # Scenarios 030 (AD FS identity provider trust) and 031 (AD FS sign-in) sign in through the lab's AD FS
         # server, adfs-primary, which only the Active Directory lab has.
         # Scenario 034 (Exchange Recipient Provisioning, #2021) provisions mailboxes and other recipients through the
-        # lab's Exchange server, exchange-primary, which only the Active Directory lab has.
-        { $_ -in 24, 25, 30, 31, 34 } { return @('ActiveDirectory') }
+        # lab's Exchange server, exchange-primary, and Scenario 003 (GAL synchronisation) keeps two forests' address
+        # books in step through both, exchange-primary and exchange-source: only the Active Directory lab has them.
+        { $_ -in 3, 24, 25, 30, 31, 34 } { return @('ActiveDirectory') }
 
         # Every other scenario, including the directory-agnostic ones (see
         # Test-ScenarioIsDirectoryAgnostic below), is architecturally able to run against any of the

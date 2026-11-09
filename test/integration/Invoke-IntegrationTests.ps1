@@ -375,9 +375,8 @@ try {
     }
 
     Write-Host ""
-    Write-Host "Scenarios 002 and 003 not yet implemented:" -ForegroundColor Gray
-    Write-Host "  - Scenario 002: Directory to Directory Sync (placeholder)" -ForegroundColor Gray
-    Write-Host "  - Scenario 003: GALSYNC (placeholder)" -ForegroundColor Gray
+    Write-Host "Scenario 002 is not yet implemented here (Directory to Directory Sync, placeholder)." -ForegroundColor Gray
+    Write-Host "Scenario 003 (GAL synchronisation) runs on the Active Directory lab only: Run-IntegrationTests.ps1 -Scenario 3 -DirectoryType ActiveDirectory" -ForegroundColor Gray
     Write-Host ""
 
     # Determine overall success

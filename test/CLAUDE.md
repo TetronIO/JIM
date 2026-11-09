@@ -281,7 +281,7 @@ When a change alters any of those:
 1. **Search every scenario for readers of the old behaviour,** not only the scenario you are working in: `grep -rn` over `test/integration` (scenarios, `Setup-Scenario-*.ps1` and `utils/`) for the cmdlet, the camelCase field name, the enum value and a distinctive fragment of any message text. #2677 updated Scenario 017; the same search for `PasswordSynchronisation` would also have found Scenario 024.
 2. **Update each reader in the same PR,** including scenarios you cannot run. Where two scenarios read the same thing, move the read into a shared helper in `utils/Test-Helpers.ps1` so the next change updates one place.
 3. **Run what you can,** per the sections above.
-4. **Account for the AD-lab-only scenarios.** `Get-ScenarioSupportedDirectoryTypes` is the list; today it is 024, 025, 030, 031 and 034. They run only on the self-hosted lab, and `ad-lab.yml` runs only from `main`, so they cannot be run before merge. If you changed one, say so in the PR, and after the merge dispatch it on its own (`gh workflow run ad-lab.yml -f scenario=24`) and report the result on the PR.
+4. **Account for the AD-lab-only scenarios.** `Get-ScenarioSupportedDirectoryTypes` is the list; today it is 003, 024, 025, 030, 031 and 034. They run only on the self-hosted lab, and `ad-lab.yml` runs only from `main`, so they cannot be run before merge. If you changed one, say so in the PR, and after the merge dispatch it on its own (`gh workflow run ad-lab.yml -f scenario=24`) and report the result on the PR.
 5. **Record it in the PR's Testing section:** what you searched for, which scenarios you changed, which you ran, and which wait for the AD lab.
 
 ### Running the FULL runner in the Claude Code cloud sandbox (when Docker is available)
