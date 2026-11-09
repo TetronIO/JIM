@@ -1282,6 +1282,20 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync(int connectedSystemId);
 
     /// <summary>
+    /// The Connected System Objects on <paramref name="connectedSystemId"/> whose Pending Export holds a connector-defined
+    /// change awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
+    /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021) and which still have a change on
+    /// the Exchange queue, in any status: the holds standing now. The complement of
+    /// <see cref="GetConnectedSystemObjectIdsWithReleasedExchangeHoldsAsync"/>.
+    /// <para>
+    /// Asked once per import, before the Connector reads anything: a change Exchange delivers while the import runs leaves
+    /// the queue after the import read the object, so what the import shows predates it, and the import keeps holding it.
+    /// Answered from the partial index on the flag, so it costs nothing where no change awaits Exchange.
+    /// </para>
+    /// </summary>
+    Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(int connectedSystemId);
+
+    /// <summary>
     /// Narrows a set of Connected System Object ids to those whose Pending Export holds a connector-defined change
     /// awaiting Exchange (<see cref="PendingExportAttributeValueChange.AwaitsExchange"/>, still
     /// <see cref="PendingExportAttributeChangeStatus.ExportedPendingConfirmation"/>, #2021). Drift Detection reads those

@@ -108,6 +108,71 @@ public class ReconcileAwaitingInitialPasswordTests
         }
     }
 
+    [Test]
+    public async Task ReconcilePendingExports_PasswordOwedWhenTheImportStartedAndDeliveredSince_StillHoldsItAsync()
+    {
+        // The password lane delivered (and enabled the account) after the import read it disabled, but before
+        // reconciliation asked whether a password is owed. What the import read predates the delivery, so the change is
+        // held for the next import rather than released against the interim value.
+        var fixture = BuildFixture(awaitsInitialPassword: true);
+        var owed = OwedPassword(fixture.Cso, PendingPasswordChangeStatus.Pending);
+        await fixture.Repository.QueuePasswordChangesAsync([owed]);
+        await InvokeRecordHoldsAtImportStartAsync(fixture);
+        await DeliverEveryOwedPasswordAsync(fixture.Repository);
+
+        await InvokeReconcileAsync(fixture);
+
+        var change = fixture.Repository.PendingExports[fixture.PendingExportId].AttributeValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(change.AwaitsInitialPassword, Is.True);
+            Assert.That(ExecutionItems(fixture.Processor), Is.Empty);
+        }
+    }
+
+    [Test]
+    public async Task JudgeUnreconciledInitialPasswordHolds_PasswordOwedWhenTheImportStartedAndDeliveredSince_LeavesItHeldAsync()
+    {
+        var fixture = BuildFixture(awaitsInitialPassword: true);
+        var owed = OwedPassword(fixture.Cso, PendingPasswordChangeStatus.Pending);
+        await fixture.Repository.QueuePasswordChangesAsync([owed]);
+        await InvokeRecordHoldsAtImportStartAsync(fixture);
+        await DeliverEveryOwedPasswordAsync(fixture.Repository);
+
+        const string methodName = "JudgeUnreconciledInitialPasswordHoldsAsync";
+        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
+        await (Task)method.Invoke(fixture.Processor, [new List<ConnectedSystemObject>()])!;
+
+        var change = fixture.Repository.PendingExports[fixture.PendingExportId].AttributeValueChanges.Single();
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(change.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
+            Assert.That(change.AwaitsInitialPassword, Is.True, "the next import judges it against the enabled account");
+        }
+    }
+
+    private static async Task DeliverEveryOwedPasswordAsync(SyncRepository repository)
+    {
+        // As the password delivery lane does: claim (Delivering), set the password, delete.
+        var claimed = await repository.ClaimDuePasswordChangesAsync(ConnectedSystemId, "password-lane", DateTime.UtcNow.AddMinutes(1),
+            TimeSpan.FromMinutes(5), 100, excludePropagated: false);
+        await repository.DeletePasswordChangesAsync(claimed.Select(c => c.Id));
+        Assert.That(repository.PendingPasswordChanges, Is.Empty, "the fixture delivered the password mid-import");
+    }
+
+    private static async Task InvokeRecordHoldsAtImportStartAsync(Fixture fixture)
+    {
+        const string methodName = "RecordHoldsStandingAtImportStartAsync";
+        var method = typeof(SyncImportTaskProcessor).GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException(
+                $"SyncImportTaskProcessor.{methodName} was not found. Update this fixture to invoke the current production method.");
+
+        await (Task)method.Invoke(fixture.Processor, [])!;
+    }
+
     private static PendingPasswordChange OwedPassword(ConnectedSystemObject cso, PendingPasswordChangeStatus status) => new()
     {
         Id = Guid.NewGuid(),
