@@ -29,27 +29,23 @@ public partial class SyncRepository
             item.Id = ChangeRecordIds.New();
 
         // An item names its object by plain id (#2669); the navigation is a working reference the write must not need.
-        foreach (var item in items.Where(i => i.ConnectedSystemObjectId == null))
-        {
-            if (item.ConnectedSystemObject?.Id is { } objectId && objectId != Guid.Empty)
-                item.ConnectedSystemObjectId = objectId;
-        }
+        foreach (var item in items.Where(i => i.ConnectedSystemObjectId == null && i.ConnectedSystemObject != null && i.ConnectedSystemObject.Id != Guid.Empty))
+            item.ConnectedSystemObjectId = item.ConnectedSystemObject!.Id;
 
         // The items' own change records (a provisioned object's Added record), named by their items, less those a
         // deletion's transaction wrote with the item's row (#2807).
-        var itemChangeRecords = new List<ConnectedSystemObjectChange>();
+        List<ConnectedSystemObjectChange> itemChangeRecords = [];
         if (includeItemChangeRecords)
         {
             foreach (var item in items.Where(i => i.ConnectedSystemObjectChange != null))
-            {
-                var change = item.ConnectedSystemObjectChange!;
-                change.ActivityRunProfileExecutionItemId = item.Id;
-                if (itemIdsWrittenWithDeletion != null && itemIdsWrittenWithDeletion.Contains(item.Id))
-                    continue;
+                item.ConnectedSystemObjectChange!.ActivityRunProfileExecutionItemId = item.Id;
 
+            itemChangeRecords = items
+                .Where(i => i.ConnectedSystemObjectChange != null && itemIdsWrittenWithDeletion?.Contains(i.Id) != true)
+                .Select(i => i.ConnectedSystemObjectChange!)
+                .ToList();
+            foreach (var change in itemChangeRecords)
                 ChangeRecordIds.AssignMissing(change);
-                itemChangeRecords.Add(change);
-            }
         }
 
         // The Metaverse Object change records, copied so the caller can clear its queues, each naming its item by id.

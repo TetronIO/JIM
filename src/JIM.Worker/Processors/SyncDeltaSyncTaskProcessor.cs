@@ -46,7 +46,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
     {
         try
         {
-            await PerformDeltaSyncCoreAsync();
+            await RunWithHistoryWriterAsync(PerformDeltaSyncCoreAsync);
         }
         finally
         {
@@ -369,13 +369,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                     // batch delete MVOs marked for immediate deletion (0-grace-period)
                     await FlushPendingMvoDeletionsAsync();
 
-                    // Flush this page's RPEIs via bulk insert before updating progress
-                    using (Diagnostics.Sync.StartSpan("FlushRpeis"))
-                        await FlushRpeisAsync();
-
-                    // Persist MVO change records via raw SQL before clearing the change tracker
-                    using (Diagnostics.Sync.StartSpan("FlushPendingMvoChanges"))
-                        await FlushPendingMvoChangesAsync();
+                    // Record this page's history (its RPEIs and their change records, and its MVO change records) before
+                    // updating progress and clearing the change tracker
+                    using (Diagnostics.Sync.StartSpan("FlushHistory"))
+                        await FlushHistoryAsync(page, totalCsoPages);
 
                     // Clear the change tracker (and the page identity map, #1612) unconditionally at every page
                     // boundary. See SyncFullSyncTaskProcessor for detailed explanation. The tracker's size before the
@@ -435,9 +432,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
             // Resolve cross-page reference attributes (same as full sync — see full sync for detailed explanation)
             await ResolveCrossPageReferencesAsync(activeSyncRules);
 
-            // Flush any RPEIs from cross-page resolution
-            using (Diagnostics.Sync.StartSpan("FlushRpeis"))
-                await FlushRpeisAsync();
+            // Record any history left from cross-page resolution
+            using (Diagnostics.Sync.StartSpan("FlushHistory"))
+                await FlushHistoryAsync();
 
             // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
             // deletions (one per referencing group CSO, not one per page-flush that touched it).
@@ -472,7 +469,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 throughput.FormatCompletion(objectsProcessed);
             await _syncRepo.UpdateActivityMessageAsync(_activity, syncCompleteMessage);
 
-            // Summary stats were accumulated incrementally during each FlushRpeisAsync call (production).
+            // Summary stats were accumulated incrementally during each FlushHistoryAsync call (production).
             // In tests (EF fallback), RPEIs remain in Activity.RunProfileExecutionItems — compute stats
             // from them now so tests that check stats before CompleteActivityBasedOnExecutionResultsAsync work.
             if (!_hasRawSqlSupport && _activity.RunProfileExecutionItems.Count > 0)

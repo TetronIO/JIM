@@ -1,6 +1,6 @@
 # Overlapped Synchronisation History Writes
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1 and 2 complete)
 - **Issue:** [#2874](https://github.com/TetronIO/JIM/issues/2874) (blocked by [#2872](https://github.com/TetronIO/JIM/issues/2872))
 
 ## Overview
@@ -210,7 +210,7 @@ Each phase is TDD (red, green, refactor), with `dotnet build JIM.sln` and `dotne
 
 **Acceptance:** existing repository, import and export tests unchanged and green; `BulkInsertColumnCompletenessTests` and `BulkSqlColumnConventionTests` green.
 
-### Phase 2: Writer, and the processors on Inline mode
+### Phase 2: Writer, and the processors on Inline mode ✅
 
 1. Red `SynchronisationHistoryWriterTests`, using a fake isolated repository with `TaskCompletionSource`:
    - `HandOffAsync_WhileWriteInFlight_Throws`;
@@ -226,6 +226,21 @@ Each phase is TDD (red, green, refactor), with `dotnet build JIM.sln` and `dotne
 2. Replace both flushes with `FlushHistoryAsync`, forced to `AwaitWrite` everywhere.
 
 **Acceptance:** the whole suite, including every RequiresPostgres workflow test, is green, and the Phase 1 fixture matches its baseline.
+
+### As built in Phases 1 and 2
+
+Where the code differs from the design above, and why:
+
+- **The fixture** is `SynchronisationHistoryEquivalenceDatabaseTests`, rendering through `SynchronisationHistorySnapshot` (`test/JIM.Worker.Tests/Support/`); its baselines (`Workflows/Baselines/`) were captured on 5d1d53f4b before any production change. It reads every column (`SELECT *`), so a later column is characterised too, and a second test proves two identical runs render identically with no unlabelled id. Full and Delta record the same history; only the Activities' counts differ.
+- **A failure found at the flush that handed it off propagates as it is.** `WaitAsync(AwaitedFlush)` rethrows the write's own exception; only a failure found at another barrier, a probe or the drain is a `SynchronisationHistoryPersistenceException`. An awaited flush fails where it ran, so the code around it already attributes it (the page loop's `SyncPersistenceException`, or the Worker's handler); wrapping it would name a page for a flush outside the page loop. It also keeps Phase 2's failure output what it was. The failure is still kept, and every later call throws the wrapped form.
+- **`BuildMessage` takes page 0** for history written outside the page loop, and says "the steps after the pages" there.
+- **The writer opens its own scope** from the run's repository (`new SynchronisationHistoryWriter(runRepository, mode, activity, connectedSystemName)`), and **the hand-off guard is in the writer, in Phase 2**: an Inline write on the isolated connection would wait for ever on uncommitted rows just as an overlapped one would.
+- **`FlushHistoryAsync(page, totalPages)` has no flush-kind parameter yet**: every caller waits, so Phase 3 adds the overlapped variant for the page loops. As `FlushRpeisAsync` did, a flush with no items leaves the page lookups alone.
+- **Merging the flushes changes no output**: `CreatePendingMvoChangeObjectsAsync` runs in three places (each page loop and each cross-page batch), each followed by a flush that wrote Metaverse Object changes before, so the queues are always empty at the sites that called only `FlushRpeisAsync`.
+- **The in-memory store's prepare copies no navigation id into a scalar** (its cross-page lookup keys on `MetaverseObjectChange.ActivityRunProfileExecutionItemId`, so copying would change what in-memory tests see) and computes no counter deltas (it keeps none). It does now give change records ids, which the batch's id check requires.
+- **The id check is `SynchronisationHistoryBatch.RequireEveryIdAssigned`**, shared by both stores.
+- **Spans:** `SyncHistoryPrepare` (processor), `SyncHistoryWrite` and `SyncHistoryWait` (writer), and `RpeiHistory.Rows`, `.CsoChanges`, `.Outcomes`, `.Edges`, `.Candidates`, `.Counters`, `.ItemCsoChanges` and `.Commit` (repository), beside the existing `MvoChange.Persist.*`. The page loops' `FlushRpeis` and `FlushPendingMvoChanges` spans are now one `FlushHistory` span.
+- **Foreign keys the write meets**, beyond those listed under Current state: `MetaverseObjectChanges.ActivityId` (Activities), `SyncRuleId` and `ContributedBySyncRuleId` (Synchronisation Rules), the change attribute rows' `AttributeId`, and `DeletedObjectTypeId`. All point at the Activity or configuration, as the locking section assumes.
 
 ### Phase 3: Overlap in the page loops
 

@@ -177,7 +177,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<(ConnectedSystemObject Cso, ActivityRunProfileExecutionItem ExecutionItem)> _obsoleteCsosToDelete = [];
 
     // The execution items whose own rows (and Deleted change records) the obsolete CSO deletion wrote in its transaction
-    // (#2807). They stay on the Activity until the page's FlushRpeisAsync, which writes the rest of each (the Metaverse
+    // (#2807). They stay on the Activity until the page's FlushHistoryAsync, which writes the rest of each (the Metaverse
     // Object deletion flush hangs outcomes on them in between) without inserting the rows or the records a second time.
     private readonly HashSet<Guid> _rpeiIdsWrittenWithDeletion = [];
 
@@ -247,7 +247,7 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> Additions, List<MetaverseObjectAttributeValue> Removals, ObjectChangeType ChangeType, ActivityRunProfileExecutionItem Rpei, Guid? ExistingMvoChangeId, int? SyncRuleId, string? SyncRuleName)> _pendingMvoChanges = [];
 
     // MVO change records created by CreatePendingMvoChangeObjectsAsync, awaiting explicit persistence
-    // via FlushPendingMvoChangesAsync before ClearChangeTracker discards them.
+    // via FlushHistoryAsync before ClearChangeTracker discards them.
     private readonly List<MetaverseObjectChange> _pendingMvoChangesToPersist = [];
 
     // Separate queue for cross-page-merge MvoChange attribute deltas, which reuse an
@@ -315,7 +315,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected IReadOnlySet<int> _objectTypeIdsToProcessInFull = new HashSet<int>();
 
-    // Summary stats are accumulated incrementally during each FlushRpeisAsync call via
+    // Summary stats are accumulated incrementally during each FlushHistoryAsync call via
     // Worker.AccumulateActivitySummaryStats, so RPEIs can be released immediately without
     // keeping them in memory for a final calculation.
 
@@ -323,6 +323,9 @@ public abstract class SyncTaskProcessorBase
     // Used to conditionally apply ClearChangeTracker after MVO deletions — only needed in
     // production where raw SQL operations create stale change tracker entries.
     protected bool _hasRawSqlSupport;
+
+    // Writes the run's history on a repository of its own (#2874); set for the length of a run by RunWithHistoryWriterAsync.
+    private SynchronisationHistoryWriter? _historyWriter;
 
     // Controls how much detail is recorded for sync outcome graphs on each RPEI.
     // Loaded once at sync start by each processor subclass. Default: None (no overhead).
@@ -1012,8 +1015,29 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Flushes the current page's RPEIs to the database via raw SQL bulk insert,
-    /// accumulates summary stats incrementally, then releases the RPEIs from memory.
+    /// Runs the synchronisation with a history writer of its own (#2874): one per run, writing on a repository of its own,
+    /// disposed as the run ends however it ends.
+    /// </summary>
+    protected async Task RunWithHistoryWriterAsync(Func<Task> run)
+    {
+        // Inline: every flush is written before the run goes on, as it always has been. Writing a page's history while
+        // the next page loads and processes is the plan's next phase.
+        _historyWriter = new SynchronisationHistoryWriter(_syncRepo, SynchronisationHistoryWriteMode.Inline, _activity, _connectedSystem.Name);
+        try
+        {
+            await run();
+        }
+        finally
+        {
+            await _historyWriter.DisposeAsync();
+            _historyWriter = null;
+        }
+    }
+
+    /// <summary>
+    /// Records the run's history so far (#2874): the execution items on the Activity, with their outcomes, change records,
+    /// causal edges and match candidates, and the Metaverse Object change records queued since the last flush, all in one
+    /// transaction. Then accumulates the items' summary stats and releases them from memory.
     ///
     /// IMPORTANT: This method MUST be called BEFORE any SaveChangesAsync that might trigger
     /// DetectChanges() while RPEIs are in Activity.RunProfileExecutionItems. DetectChanges()
@@ -1024,46 +1048,57 @@ public abstract class SyncTaskProcessorBase
     /// In production (raw SQL): clears RPEIs from Activity.RunProfileExecutionItems and detaches
     /// from change tracker to prevent re-insertion by subsequent SaveChangesAsync calls.
     ///
-    /// In tests (EF fallback): leaves RPEIs in Activity.RunProfileExecutionItems for test
-    /// assertions. They're tracked by EF (via AddRange) and persisted by next SaveChangesAsync.
+    /// In tests (the in-memory store): leaves RPEIs in Activity.RunProfileExecutionItems for test
+    /// assertions, unless the store simulates the production path.
     /// </summary>
-    protected async Task FlushRpeisAsync()
+    /// <param name="page">The 1-based page the flush records, or 0 for a flush outside the page loop.</param>
+    /// <param name="totalPages">The pages the run expects, or 0.</param>
+    protected async Task FlushHistoryAsync(int page = 0, int totalPages = 0)
     {
         var pageRpeis = _activity.RunProfileExecutionItems.ToList();
+        if (pageRpeis.Count == 0 && _pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
+            return;
+
+        var writer = _historyWriter
+            ?? throw new InvalidOperationException("FlushHistoryAsync: history is recorded only within a run (RunWithHistoryWriterAsync).");
+
+        SynchronisationHistoryBatch batch;
+        using (var prepareSpan = Diagnostics.Sync.StartSpan("SyncHistoryPrepare"))
+        {
+            // Items the obsolete CSO deletion wrote with their Deleted change records (#2807): their rows and records exist,
+            // so the write brings the rows up to date and writes everything else of theirs, but not those again.
+            HashSet<Guid>? rowsWrittenWithDeletion = null;
+            if (pageRpeis.Count > 0)
+            {
+                PrepareRpeisForPersistence(pageRpeis);
+                if (_rpeiIdsWrittenWithDeletion.Count > 0)
+                    rowsWrittenWithDeletion = pageRpeis.Where(r => _rpeiIdsWrittenWithDeletion.Contains(r.Id)).Select(r => r.Id).ToHashSet();
+            }
+
+            // Every id assigned here, on the run's thread; the write assigns none. The item change records (e.g. a
+            // provisioned CSO's "Added" record, created before its item had an id) are written only when Connected System
+            // Object change tracking is on.
+            batch = _syncRepo.PrepareSynchronisationHistory(pageRpeis, rowsWrittenWithDeletion, _csoChangeTrackingEnabled,
+                _pendingMvoChangesToPersist, _pendingMvoChangeAttributesToPersist, page, totalPages);
+            prepareSpan.SetTag("page", page)
+                .SetTag("rpeiCount", batch.Items.Count)
+                .SetTag("outcomeCount", batch.Outcomes.Count)
+                .SetTag("csoChangeValueCount", batch.OutcomeChangeRecords.Concat(batch.ItemChangeRecords)
+                    .Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)))
+                .SetTag("mvoChangeValueCount", batch.MetaverseObjectChanges.Concat(batch.MetaverseObjectChangeAppends)
+                    .Sum(c => c.AttributeChanges.Sum(a => a.ValueChanges.Count)));
+        }
+
+        // Handed off and waited for at once: a failure propagates here, as it is, where the flush's caller attributes it.
+        await writer.HandOffAsync(batch);
+        var written = await writer.WaitAsync(SynchronisationHistoryBarrier.AwaitedFlush);
+        _pendingMvoChangesToPersist.Clear();
+        _pendingMvoChangeAttributesToPersist.Clear();
+
         if (pageRpeis.Count == 0)
             return;
 
-        PrepareRpeisForPersistence(pageRpeis);
-
-        // Items the obsolete CSO deletion wrote with their Deleted change records (#2807): their rows and records exist,
-        // so the writes below bring the rows up to date and write everything else of theirs, but not those again.
-        var rowsWrittenWithDeletion = _rpeiIdsWrittenWithDeletion.Count == 0
-            ? null
-            : pageRpeis.Where(r => _rpeiIdsWrittenWithDeletion.Contains(r.Id)).Select(r => r.Id).ToHashSet();
-
-        // Bulk insert this page's RPEIs via raw SQL (or EF fallback for tests).
-        // Returns true if raw SQL was used, false if EF fallback was used.
-        var usedRawSql = await _syncRepo.BulkInsertRpeisAsync(pageRpeis, rowsWrittenWithDeletion);
-
-        // Persist CSO change records separately. BulkInsertRpeisAsync only inserts RPEI scalar
-        // columns; the ConnectedSystemObjectChange navigation graph requires its own persistence.
-        // This covers change records created during sync (e.g., provisioning CSO "Added" records).
-        // Update ActivityRunProfileExecutionItemId on each change to the now-assigned RPEI ID,
-        // because the change was created before FlushRpeisAsync assigned IDs.
-        if (_csoChangeTrackingEnabled)
-        {
-            foreach (var rpei in pageRpeis)
-            {
-                if (rpei.ConnectedSystemObjectChange != null)
-                    rpei.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = rpei.Id;
-            }
-
-            await _syncRepo.PersistRpeiCsoChangesAsync(rowsWrittenWithDeletion == null
-                ? pageRpeis
-                : pageRpeis.Where(r => !rowsWrittenWithDeletion.Contains(r.Id)).ToList());
-        }
-
-        if (usedRawSql)
+        if (written!.ItemsWrittenOutsideTracking)
         {
             // Production: accumulate summary stats from this batch before clearing RPEIs.
             // Stats are computed incrementally per-flush, eliminating the need to keep all RPEIs
@@ -1076,12 +1111,12 @@ public abstract class SyncTaskProcessorBase
             _syncRepo.DetachRpeisFromChangeTracker(pageRpeis);
             _hasRawSqlSupport = true;
 
-            // Released from the Activity, so no later flush passes them again. With the EF fallback they stay on the
+            // Released from the Activity, so no later flush passes them again. With the in-memory store they stay on the
             // Activity, and so in the set, for every later flush to skip as this one did.
-            if (rowsWrittenWithDeletion != null)
-                _rpeiIdsWrittenWithDeletion.ExceptWith(rowsWrittenWithDeletion);
+            if (batch.ItemIdsWrittenWithDeletion.Count > 0)
+                _rpeiIdsWrittenWithDeletion.ExceptWith(batch.ItemIdsWrittenWithDeletion);
         }
-        // Tests (EF fallback): RPEIs stay in Activity.RunProfileExecutionItems for test
+        // Tests (the in-memory store): RPEIs stay in Activity.RunProfileExecutionItems for test
         // assertions. Stats are computed at activity completion by CalculateActivitySummaryStats
         // in CompleteActivityBasedOnExecutionResultsAsync (assignment, not accumulation).
 
@@ -4828,7 +4863,7 @@ public abstract class SyncTaskProcessorBase
         // Build a lookup of CSO ID → existing RPEI for CSOs that need cross-page resolution.
         // These RPEIs were created during initial page processing (e.g., Projected, Joined) and
         // were persisted to the database *and* cleared from _activity.RunProfileExecutionItems by
-        // each per-page FlushRpeisAsync, so the lookup has to come from the database — reading
+        // each per-page FlushHistoryAsync, so the lookup has to come from the database — reading
         // from the in-memory collection would produce an empty lookup and cause cross-page
         // resolution to create duplicate AttributeFlow RPEIs instead of merging into existing ones.
         // Single-round-trip fetch: RPEIs + SyncOutcomes + RPEI→MvoChange ids via NpgsqlBatch.
@@ -5030,12 +5065,12 @@ public abstract class SyncTaskProcessorBase
 
                             // Track for batch database update (already persisted, needs AttributeFlowCount
                             // and OutcomeSummary updated). Do NOT re-add to _activity.RunProfileExecutionItems
-                            // as that would cause FlushRpeisAsync to INSERT a duplicate row.
+                            // as that would cause FlushHistoryAsync to INSERT a duplicate row.
                             updatedExistingRpeis.Add(rpei);
 
                             // Re-add to the activity's in-memory collection for test environments where
                             // RPEIs are not persisted to a real database (EF fallback path keeps RPEIs
-                            // in memory for assertions). In production, FlushRpeisAsync will skip these
+                            // in memory for assertions). In production, FlushHistoryAsync will skip these
                             // because they are handled by the separate bulk update below.
                             if (!_hasRawSqlSupport)
                                 _activity.RunProfileExecutionItems.Add(rpei);
@@ -5112,8 +5147,9 @@ public abstract class SyncTaskProcessorBase
                 // Flush RPEIs FIRST to prevent DetectChanges() from discovering them during
                 // subsequent SaveChangesAsync calls (same pattern as per-page processing).
                 // NOTE: This only inserts NEW RPEIs. Existing RPEIs (merged from initial page
-                // processing) are updated separately below.
-                await FlushRpeisAsync();
+                // processing) are updated separately below. Nothing is queued for the MVO change records yet: this batch's
+                // are created below, and the last flush wrote every earlier one.
+                await FlushHistoryAsync();
 
                 // Batch-update existing RPEIs whose AttributeFlowCount and OutcomeSummary changed
                 // due to cross-page reference resolution merging. These RPEIs were already persisted
@@ -5183,11 +5219,9 @@ public abstract class SyncTaskProcessorBase
 
                 await FlushPendingExportOperationsAsync();
 
-                // Flush any RPEIs generated during the flush sequence
-                await FlushRpeisAsync();
-
-                // Persist MVO change records via raw SQL before clearing the change tracker
-                await FlushPendingMvoChangesAsync();
+                // Record any RPEIs generated during the flush sequence, and the batch's MVO change records, before clearing
+                // the change tracker
+                await FlushHistoryAsync();
 
                 // Update activity progress
                 await _syncRepo.UpdateActivityAsync(_activity);
@@ -5707,12 +5741,12 @@ public abstract class SyncTaskProcessorBase
 
             // Reuse the per-page export flush sequence. EvaluatePendingExportsAsync refreshes the export cache for
             // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
-            // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
+            // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushHistoryAsync also
             // clears _mvoIdToRpei and the RPEI collection).
             //
             // With automatic change detection off, as the page flush runs it, and for the same reason: deprovisioning
             // saves through EF one object at a time (a Delete Pending Export, a disconnected CSO), and with detection
-            // on that save would also insert every RPEI queued above on the tracked Activity, so FlushRpeisAsync's
+            // on that save would also insert every RPEI queued above on the tracked Activity, so FlushHistoryAsync's
             // bulk insert then failed the run on a duplicate key.
             _syncRepo.SetAutoDetectChangesEnabled(false);
             try
@@ -5733,7 +5767,7 @@ public abstract class SyncTaskProcessorBase
                 _activity.RunProfileExecutionItems.RemoveAll(unchangedItems.Contains);
                 totalChanged += reviewItems.Count - unchangedItems.Count;
 
-                await FlushRpeisAsync();
+                await FlushHistoryAsync();
             }
             finally
             {
@@ -5916,7 +5950,7 @@ public abstract class SyncTaskProcessorBase
                 // (a provisioning Create already attempted is appended to in place, and so is not counted as changed).
                 totalChanged += revisionItems.Count(revision => _mvoIdsChangedByExportEvaluation.Contains(revision.MvoId));
 
-                await FlushRpeisAsync();
+                await FlushHistoryAsync();
             }
             finally
             {
@@ -6884,7 +6918,7 @@ public abstract class SyncTaskProcessorBase
 
         _deferredRecallRpeisByCsoId.Clear();
         _deferredRecallCausesByCsoId.Clear();
-        await FlushRpeisAsync();
+        await FlushHistoryAsync();
         span.SetSuccess();
     }
 
@@ -7036,25 +7070,6 @@ public abstract class SyncTaskProcessorBase
         _pendingMvoChanges.Clear();
         span.SetSuccess();
     }
-
-    /// <summary>
-    /// Persists pending MVO change records via raw SQL bulk insert in a single outer transaction.
-    /// Must be called after CreatePendingMvoChangeObjectsAsync and before ClearChangeTracker.
-    /// Handles both initial-page inserts (full parent + child rows) and cross-page-merge
-    /// appends (child rows only under already-persisted parents) atomically.
-    /// </summary>
-    protected async Task FlushPendingMvoChangesAsync()
-    {
-        if (_pendingMvoChangesToPersist.Count == 0 && _pendingMvoChangeAttributesToPersist.Count == 0)
-            return;
-
-        await _syncRepo.PersistPendingMvoChangesAsync(
-            _pendingMvoChangesToPersist,
-            _pendingMvoChangeAttributesToPersist);
-        _pendingMvoChangesToPersist.Clear();
-        _pendingMvoChangeAttributesToPersist.Clear();
-    }
-
 
     /// <summary>
     /// Attempts to find a Metaverse Object that matches the CSO using Object Matching Rules on any applicable Synchronisation Rules for this system and object type.
@@ -7466,7 +7481,7 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Post-page resolution pass for Pending Export reference snapshots.
     /// Called after <see cref="FlushPendingExportOperationsAsync"/> has persisted all provisioning CSOs
-    /// but before <see cref="FlushRpeisAsync"/> persists RPEIs with their CSO change snapshots.
+    /// but before <see cref="FlushHistoryAsync"/> persists RPEIs with their CSO change snapshots.
     /// </summary>
     /// <remarks>
     /// During per-object processing, <see cref="SnapshotPendingExportChangesAsync"/> may not be able to resolve

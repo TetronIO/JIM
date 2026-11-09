@@ -2315,7 +2315,8 @@ public interface ISyncRepository
     /// this repository's change tracker and transaction untouched (#2598): a preview evaluating a whole system page by
     /// page while its caller saves progress on this repository. A synchronisation page holds its Metaverse Objects
     /// untracked under tracked Connected System Objects, which is safe only while nothing saves on that context with
-    /// change detection on; a walk on its own context never meets its caller's saves. Disposing the scope disposes
+    /// change detection on; a walk on its own context never meets its caller's saves. A synchronisation also writes its
+    /// history on one (#2874), in transactions of its own that never meet the run's. Disposing the scope disposes
     /// the context. Repositories with no context of their own (in memory) return a scope over themselves.
     /// </summary>
     ISyncRepositoryScope OpenIsolatedScope();
