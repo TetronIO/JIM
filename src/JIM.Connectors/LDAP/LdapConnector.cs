@@ -244,7 +244,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
             new() { Name = "Export Settings", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions: Delete removes the object from the directory; Disable keeps it and sets the Disable Attribute instead. Default is Delete.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, DefaultStringValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, RequiredWhenSetting = _settingDeleteBehaviour, RequiredWhenValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
-            new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Left at the default of 4, JIM raises it to 16 on schema import when it detects Active Directory, OpenLDAP or 389 Directory Server; Samba AD and other directories stay at 4.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Left at the default of 4, JIM raises it on schema import: to 16 for Active Directory and 389 Directory Server, and to 8 for OpenLDAP, which then sends 4 batches at once rather than 2. Samba AD and other directories stay at 4.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
 
             // Exchange (#2021): behind its feature flag until the feature ships (#2681)
@@ -1636,45 +1636,67 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorDetec
     #region IConnectorRecommendedExportParallelism members
     /// <summary>
     /// The Export Concurrency value at or above which the target is treated as a capable
-    /// directory for batch-parallelism purposes. The auto-tune only sets 16 (well above this)
-    /// for Active Directory, OpenLDAP and 389 Directory Server; Samba AD and Generic
-    /// directories stay at the default of 4.
+    /// directory for batch-parallelism purposes. The auto-tune sets 16 for Active Directory and
+    /// 389 Directory Server and 8 for OpenLDAP; Samba AD and Generic directories stay at the
+    /// default of 4, below it.
     /// </summary>
     internal const int CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD = 8;
 
     /// <summary>
-    /// The deliberately conservative batch-parallelism recommendation for capable directories.
+    /// The total number of LDAP operations the recommendation aims to keep in flight across every
+    /// parallel batch (parallelism x Export Concurrency). Export-only replays of the 500k initial
+    /// load against OpenLDAP (#2897; results in the #2669 replay comment) ran 2 workers x 16 and
+    /// 4 workers x 8, both 32 in flight: 4 x 8 exported 19.5% faster with OpenLDAP far from
+    /// saturated, because a batch's database work overlaps other batches' directory writes.
+    /// Holding the total at 32 lets a lower Export Concurrency buy more batches in progress
+    /// without adding load on the directory.
     /// </summary>
-    internal const int RECOMMENDED_EXPORT_PARALLELISM = 2;
+    internal const int TARGET_EXPORT_OPERATIONS_IN_FLIGHT = 32;
 
     /// <summary>
-    /// Recommends export batch parallelism for this Connected System (issue #985d).
+    /// The fewest batch pipelines recommended for a capable directory.
+    /// </summary>
+    internal const int MIN_RECOMMENDED_EXPORT_PARALLELISM = 2;
+
+    /// <summary>
+    /// The most batch pipelines recommended for a capable directory: 4 is the highest the replay
+    /// evidence covers.
+    /// </summary>
+    internal const int MAX_RECOMMENDED_EXPORT_PARALLELISM = 4;
+
+    /// <summary>
+    /// Recommends export batch parallelism for this Connected System (issues #985d and #2897).
     ///
     /// The two knobs MULTIPLY: each parallel batch pipeline gets its own connector instance,
     /// and each instance runs its own Export Concurrency concurrent LDAP operations (see
     /// <see cref="ExportAsync"/>), so total in-flight operations = parallelism x per-instance
     /// concurrency. Recommending anything near Export Concurrency itself would square the load
-    /// (16 x 16 = 256 in-flight operations), so the recommendation is a flat, mild 2:
-    /// with an auto-tuned concurrency of 16 that is 2 x 16 = 32 in-flight operations, a safe
-    /// default.
+    /// (16 x 16 = 256 in-flight operations), so the recommendation instead holds the total at
+    /// <see cref="TARGET_EXPORT_OPERATIONS_IN_FLIGHT"/>: parallelism = 32 / Export Concurrency
+    /// (integer division), clamped to between <see cref="MIN_RECOMMENDED_EXPORT_PARALLELISM"/>
+    /// and <see cref="MAX_RECOMMENDED_EXPORT_PARALLELISM"/>. The auto-tuned values give 2 x 16
+    /// for Active Directory and 389 Directory Server, and 4 x 8 for OpenLDAP.
     ///
     /// The directory type is not persisted anywhere readable without opening a connection
-    /// (which this method must not do), so Active Directory cannot be distinguished from
-    /// OpenLDAP here; OpenLDAP's mdb backend is single-writer and gains little from batch
-    /// parallelism, a further reason the value is deliberately conservative. An Export
-    /// Concurrency of 8 or above is used as the capable-directory signal (the auto-tune only
-    /// sets 16, for Active Directory, OpenLDAP and 389 Directory Server); below that, no recommendation is made and
-    /// the resolver falls back to sequential. Issue #845 (connector-agnostic classification
-    /// storage) is the future enabler of a genuinely per-directory-type recommendation.
+    /// (which this method must not do), so the recommendation is derived from Export
+    /// Concurrency alone, whether the auto-tune or an administrator set it. Below
+    /// <see cref="CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD"/> (Samba AD and Generic directories,
+    /// which the auto-tune leaves at 4) no recommendation is made and the resolver falls back
+    /// to sequential. Issue #845 (connector-agnostic classification storage) is the future
+    /// enabler of a genuinely per-directory-type recommendation.
     /// </summary>
     public int? GetRecommendedExportParallelism(List<ConnectedSystemSettingValue> settingValues)
     {
         var exportConcurrency = settingValues
             .FirstOrDefault(s => s.Setting.Name == _settingExportConcurrency)?.IntValue;
 
-        return exportConcurrency >= CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD
-            ? RECOMMENDED_EXPORT_PARALLELISM
-            : null;
+        if (exportConcurrency is not { } concurrency || concurrency < CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD)
+            return null;
+
+        return Math.Clamp(
+            TARGET_EXPORT_OPERATIONS_IN_FLIGHT / concurrency,
+            MIN_RECOMMENDED_EXPORT_PARALLELISM,
+            MAX_RECOMMENDED_EXPORT_PARALLELISM);
     }
     #endregion
 

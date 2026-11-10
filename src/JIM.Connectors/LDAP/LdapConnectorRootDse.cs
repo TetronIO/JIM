@@ -206,11 +206,14 @@ internal class LdapConnectorRootDse
     /// The recommended export concurrency for this directory type.
     /// AD DS, OpenLDAP and 389 Directory Server handle concurrent operations well; Samba AD and
     /// unknown servers are kept conservative due to known quirks (e.g. paged search duplicates).
+    /// OpenLDAP gets 8 rather than 16 (#2897): the LDAP Connector's batch-parallelism
+    /// recommendation holds the total in flight at 32, so 8 here means 4 batches at once, which
+    /// exported the 500k initial load 19.5% faster than 2 batches of 16 at the same load.
     /// </summary>
     public int RecommendedExportConcurrency => DirectoryType switch
     {
         LdapDirectoryType.ActiveDirectory => 16,
-        LdapDirectoryType.OpenLDAP => 16,
+        LdapDirectoryType.OpenLDAP => 8,
         LdapDirectoryType.SambaAD => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         LdapDirectoryType.Generic => LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY,
         LdapDirectoryType.DirectoryServer389 => 16,

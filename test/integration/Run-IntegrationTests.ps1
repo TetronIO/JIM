@@ -54,14 +54,14 @@
 .PARAMETER ExportConcurrency
     Export Concurrency setting for LDAP connectors. Controls how many LDAP operations
     are pipelined concurrently during export. Omit it to test what customers get: the
-    LDAP Connector tunes it from the directory type on schema import (16 for OpenLDAP,
-    389 Directory Server and Active Directory; 4 for Samba AD).
+    LDAP Connector tunes it from the directory type on schema import (16 for 389 Directory
+    Server and Active Directory; 8 for OpenLDAP; 4 for Samba AD).
     Only applies to scenarios with LDAP exports (Scenarios 001, 002, 008, 010).
 
 .PARAMETER MaxExportParallelism
     Maximum number of parallel export batches for Connected Systems. Omit it to test what
-    customers get: the Connector's recommendation (2 for an LDAP directory tuned to an
-    Export Concurrency of 16, otherwise 1).
+    customers get: the Connector's recommendation (for an LDAP Export Concurrency of 8 or
+    more, 32 / Export Concurrency clamped to 2-4, so 2 at 16 and 4 at 8; otherwise 1).
     Only applies to scenarios with LDAP exports (Scenarios 001, 002, 008, 010).
 
 .PARAMETER TimeoutSeconds

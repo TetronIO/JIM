@@ -9,25 +9,19 @@ using Serilog;
 namespace JIM.Worker.Tests.Connectors;
 
 /// <summary>
-/// Issue #985 (d): the LDAP connector's export batch-parallelism recommendation
-/// (IConnectorRecommendedExportParallelism) must be deliberately conservative because the two
-/// knobs MULTIPLY: each parallel batch pipeline gets its own connector instance, and each LDAP
-/// connector instance runs its own Export Concurrency concurrent operations, so total in-flight
-/// LDAP operations = parallelism x per-instance concurrency. The connector therefore recommends
-/// a parallelism of 2 only when the Connected System's Export Concurrency signals a capable
-/// directory (>= 8; the auto-tune only sets 16 for Active Directory, OpenLDAP and 389 Directory Server), and no
-/// recommendation otherwise (the resolver falls back to sequential).
+/// The LDAP Connector's export batch-parallelism recommendation
+/// (IConnectorRecommendedExportParallelism; issues #985 (d) and #2897). The two knobs MULTIPLY:
+/// each parallel batch pipeline gets its own connector instance, and each LDAP connector
+/// instance runs its own Export Concurrency concurrent operations, so total in-flight LDAP
+/// operations = parallelism x per-instance concurrency. The connector therefore recommends the
+/// number of pipelines that keeps that total at a target of 32 (32 / Export Concurrency,
+/// clamped to between 2 and 4), only when the Export Concurrency signals a capable directory
+/// (8 or more), and makes no recommendation otherwise (the resolver falls back to sequential).
 /// </summary>
 [TestFixture]
 public class LdapExportParallelismRecommendationTests
 {
     private static readonly ILogger Logger = Serilog.Core.Logger.None;
-
-    /// <summary>
-    /// The conservative parallelism recommendation for capable directories: 2 pipelines of
-    /// (auto-tuned) 16 concurrent operations each = 32 in-flight operations, a mild default.
-    /// </summary>
-    private const int ExpectedCapableDirectoryRecommendation = 2;
 
     #region GetRecommendedExportParallelism: per directory type, after Export Concurrency auto-tune
 
@@ -36,15 +30,15 @@ public class LdapExportParallelismRecommendationTests
 
     [Test]
     public void GetRecommendedExportParallelism_ActiveDirectoryAfterAutoTune_Returns2()
-        => AssertRecommendationAfterAutoTune(LdapDirectoryType.ActiveDirectory, ExpectedCapableDirectoryRecommendation);
+        => AssertRecommendationAfterAutoTune(LdapDirectoryType.ActiveDirectory, 2);
 
     [Test]
-    public void GetRecommendedExportParallelism_OpenLDAPAfterAutoTune_Returns2()
-        => AssertRecommendationAfterAutoTune(LdapDirectoryType.OpenLDAP, ExpectedCapableDirectoryRecommendation);
+    public void GetRecommendedExportParallelism_OpenLDAPAfterAutoTune_Returns4()
+        => AssertRecommendationAfterAutoTune(LdapDirectoryType.OpenLDAP, 4);
 
     [Test]
     public void GetRecommendedExportParallelism_DirectoryServer389AfterAutoTune_Returns2()
-        => AssertRecommendationAfterAutoTune(LdapDirectoryType.DirectoryServer389, ExpectedCapableDirectoryRecommendation);
+        => AssertRecommendationAfterAutoTune(LdapDirectoryType.DirectoryServer389, 2);
 
     [Test]
     public void GetRecommendedExportParallelism_SambaADAfterAutoTune_ReturnsNull()
@@ -54,11 +48,22 @@ public class LdapExportParallelismRecommendationTests
     public void GetRecommendedExportParallelism_GenericAfterAutoTune_ReturnsNull()
         => AssertRecommendationAfterAutoTune(LdapDirectoryType.Generic, null);
 
+    [Test]
+    public void GetRecommendedExportParallelism_SambaRootDseDetectedAndAutoTuned_ReturnsNull()
+    {
+        // Samba AD advertises the Active Directory capability OID, so it is told apart from
+        // Active Directory by its vendor name; were it not, it would be tuned to 16 and run
+        // batches in parallel, which its LDAP implementation does not tolerate well.
+        var directoryType = LdapConnectorUtilities.DetectDirectoryType(
+            [LdapConnectorConstants.LDAP_CAP_ACTIVE_DIRECTORY_OID], "Samba Team");
+        Assert.That(directoryType, Is.EqualTo(LdapDirectoryType.SambaAD));
+
+        AssertRecommendationAfterAutoTune(directoryType, null);
+    }
+
     /// <summary>
     /// Simulates a Connected System whose schema import has already auto-tuned Export
-    /// Concurrency for the given directory type, then asserts the parallelism recommendation:
-    /// 2 for capable directories (auto-tuned Export Concurrency of 16: Active Directory,
-    /// OpenLDAP and 389 Directory Server), null for the rest (auto-tune leaves them at the default of 4).
+    /// Concurrency for the given directory type, then asserts the parallelism recommendation.
     /// </summary>
     private static void AssertRecommendationAfterAutoTune(LdapDirectoryType directoryType, int? expected)
     {
@@ -72,30 +77,27 @@ public class LdapExportParallelismRecommendationTests
         Assert.That(recommendation, Is.EqualTo(expected));
     }
 
-    [Test]
-    public void GetRecommendedExportParallelism_AdminSetConcurrencyAtThreshold_Returns2()
+    #endregion
+
+    #region GetRecommendedExportParallelism: by Export Concurrency
+
+    // The recommendation keeps total operations in flight at 32: 32 / Export Concurrency,
+    // clamped to between 2 and 4. Below 8 there is no recommendation. The value is the
+    // administrator's or the auto-tune's alike; the connector cannot tell them apart.
+    [TestCase(4, null)]
+    [TestCase(7, null)]
+    [TestCase(8, 4)]
+    [TestCase(10, 3)]
+    [TestCase(16, 2)]
+    [TestCase(32, 2)]
+    public void GetRecommendedExportParallelism_ByExportConcurrency_KeepsOperationsInFlightAtTarget(int exportConcurrency, int? expected)
     {
-        // An Export Concurrency of 8 or above (whether admin-set or auto-tuned) signals a
-        // capable directory, so the conservative parallelism recommendation applies.
-        var settings = CreateSettingsWithExportConcurrency(8);
+        var settings = CreateSettingsWithExportConcurrency(exportConcurrency);
         var connector = new LdapConnector();
 
         var recommendation = connector.GetRecommendedExportParallelism(settings);
 
-        Assert.That(recommendation, Is.EqualTo(ExpectedCapableDirectoryRecommendation));
-    }
-
-    [Test]
-    public void GetRecommendedExportParallelism_AdminSetConcurrencyBelowThreshold_ReturnsNull()
-    {
-        // Below the capable-directory threshold there is no recommendation; the resolver falls
-        // back to sequential (1).
-        var settings = CreateSettingsWithExportConcurrency(6);
-        var connector = new LdapConnector();
-
-        var recommendation = connector.GetRecommendedExportParallelism(settings);
-
-        Assert.That(recommendation, Is.Null);
+        Assert.That(recommendation, Is.EqualTo(expected));
     }
 
     #endregion

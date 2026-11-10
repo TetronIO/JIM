@@ -374,8 +374,8 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 - `-TriggerRunProfile` - Automatically trigger JIM Run Profile after data changes
 
 **Export performance parameters** (accepted by Scenarios 001, 002, 006, 008, i.e. scenarios with LDAP exports):
-- `-ExportConcurrency <N>` - LDAP connector pipelining concurrency (1-8, omit for JIM default of 1)
-- `-MaxExportParallelism <N>` - Parallel export batch processing (1-16, omit for JIM default of 1)
+- `-ExportConcurrency <N>` - LDAP connector pipelining concurrency (omit for the schema-import auto-tune: 16 for Active Directory and 389 Directory Server, 8 for OpenLDAP, 4 for Samba AD)
+- `-MaxExportParallelism <N>` - Parallel export batch processing (1-16, omit for the LDAP Connector's recommendation: 32 / Export Concurrency clamped to 2-4 at 8 or more, otherwise 1)
 - These are only passed through to scenarios when explicitly provided to the test runner
 
 ---

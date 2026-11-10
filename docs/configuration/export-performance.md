@@ -27,17 +27,19 @@ Max Export Parallelism is under **Export Performance** on a Connected System's S
 
 | Value | What JIM does |
 |-------|---------------|
-| Empty (default) | Uses the Connector's recommendation. The LDAP Connector recommends 2 when its Export Concurrency is 8 or more; otherwise, and for the SCIM 2.0 Client Connector, JIM sends one batch at a time. |
+| Empty (default) | Uses the Connector's recommendation. When its Export Concurrency is 8 or more, the LDAP Connector recommends as many batches as keep 32 operations in flight, from 2 to 4: 4 at an Export Concurrency of 8, 2 at 16. Otherwise, and for the SCIM 2.0 Client Connector, JIM sends one batch at a time. |
 | 1 | Sends one batch at a time. Choose this for a target system that must not be loaded any harder. |
 | 2 or more | Sends up to that many batches at once. |
+
+A directory with headroom can be given more than the recommendation. In a 500,000-user test against OpenLDAP, setting Max Export Parallelism to 4 and leaving Export Concurrency at 16 (64 operations in flight) exported a further 8% faster, at twice the load on the directory, so measure the directory's own load before choosing it.
 
 JIM opens a connection to the target system for each batch it sends at once, and keeps it for the whole run.
 
 ## :material-swap-horizontal: How it combines with Export Concurrency
 
-Within each batch, the LDAP Connector also sends several changes at once: its [Export Concurrency](../connectors/jim-ldap-connector.md#export-settings). Left at its default of 4, it is raised to 16 when JIM imports the schema of an Active Directory, OpenLDAP or 389 Directory Server directory; Samba AD and other directories stay at 4. The two multiply. Two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the directory, so raise one at a time and watch the directory's load.
+Within each batch, the LDAP Connector also sends several changes at once: its [Export Concurrency](../connectors/jim-ldap-connector.md#export-settings). Left at its default of 4, it is raised when JIM imports the directory's schema: to 16 for Active Directory and 389 Directory Server, and to 8 for OpenLDAP. Samba AD and other directories stay at 4. The two multiply. Two batches at once, each with an Export Concurrency of 16, is up to 32 operations in flight against the directory, and so is four batches of 8, so raise one at a time and watch the directory's load.
 
-Past two or three batches, JIM's own work of recording each batch's results is usually what limits an export, rather than the target system, so a higher value gains less.
+At the same load, more batches usually finish sooner, because JIM records one batch's results while others are being sent: against OpenLDAP, four batches of 8 exported a large initial load about a fifth faster than two batches of 16. JIM only raises Export Concurrency from the default, so a value already set is kept on a later schema import: an OpenLDAP Connected System at 16 sends two batches at once until you set its Export Concurrency to 8.
 
 ## :material-alert-octagon-outline: When a batch fails
 
