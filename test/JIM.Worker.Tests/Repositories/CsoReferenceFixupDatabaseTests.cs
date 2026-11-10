@@ -66,13 +66,17 @@ public class CsoReferenceFixupDatabaseTests
 
     private JimDbContext NewContext() => NewContext(_connectionString);
 
-    private static JimDbContext NewContext(string connectionString)
+    private static JimDbContext NewContext(string connectionString) => NewContext(options => options.UseNpgsql(connectionString));
+
+    private static JimDbContext NewContext(NpgsqlConnection connection) => NewContext(options => options.UseNpgsql(connection));
+
+    private static JimDbContext NewContext(Action<DbContextOptionsBuilder<JimDbContext>> useNpgsql)
     {
-        var options = new DbContextOptionsBuilder<JimDbContext>()
-            .UseNpgsql(connectionString)
+        var builder = new DbContextOptionsBuilder<JimDbContext>();
+        useNpgsql(builder);
+        return new JimDbContext(builder
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .Options;
-        return new JimDbContext(options);
+            .Options);
     }
 
     /// <summary>
@@ -173,6 +177,46 @@ public class CsoReferenceFixupDatabaseTests
         {
             Assert.That(resolved, Is.EqualTo(1), "one reference, resolved once");
             Assert.That(await ReadReferenceValueIdAsync(valueIds[0]), Is.AnyOf(firstId, secondId));
+        }
+    }
+
+    /// <summary>
+    /// #2849: reading the outstanding references and finding their resolutions run with JIT off, each for its own batch's
+    /// transaction and no longer (the resolutions are applied with it on again), and turning it off raises no warning in
+    /// the database log (a <c>SET LOCAL</c> logs one wherever it is the first statement of a batch outside a transaction
+    /// block). The value the statement that turns it off returns is not read as either count.
+    /// </summary>
+    [Test]
+    public async Task FixupCrossBatchReferenceIdsAsync_FindingTheResolutions_RunsWithJitOffForEachBatchWithoutAWarningAsync()
+    {
+        var seed = await SeedSystemAsync();
+        var managerId = await WritePersonAsync(seed.Glitterband, ManagerDn);
+        var (_, valueIds) = await WriteObjectWithReferencesAsync(seed.Glitterband, "CN=Staff,OU=Groups,DC=glitterband,DC=local",
+            ManagerDn.ToUpperInvariant(), "CN=Nobody,OU=People,DC=glitterband,DC=local");
+
+        await using var recorder = await StatementPlanRecorder.OpenAsync(_connectionString);
+        Assert.That(await recorder.ShowAsync("jit"), Is.EqualTo("on"), "precondition: JIT is on outside the batches, or the test proves nothing");
+
+        int resolved;
+        await using (var ctx = NewContext(recorder.Connection))
+            resolved = await new PostgresDataRepository(ctx).Sync.FixupCrossBatchReferenceIdsAsync(seed.Glitterband.SystemId);
+
+        var jitAfterwards = await recorder.ShowAsync("jit");
+        var readOutstanding = recorder.PlansOf("CREATE TEMP TABLE \"_jim_cso_reference_outstanding\"");
+        var findResolutions = recorder.PlansOf("CREATE TEMP TABLE \"_jim_cso_reference_fixup\"");
+        var applyResolutions = recorder.PlansOf("UPDATE \"ConnectedSystemObjectAttributeValues\" av");
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(recorder.Notices.Where(n => n.InvariantSeverity == "WARNING").Select(n => n.MessageText), Is.Empty,
+                "turning JIT off raises no warning");
+            Assert.That(readOutstanding, Has.Count.EqualTo(1).And.All.Contains("jit = 'off'"), "reading the outstanding references runs with JIT off");
+            Assert.That(findResolutions, Has.Count.EqualTo(1).And.All.Contains("jit = 'off'"), "finding their resolutions runs with JIT off");
+            Assert.That(applyResolutions, Is.Not.Empty.And.None.Contains("jit = 'off'"), "applying them runs with JIT on again");
+            Assert.That(jitAfterwards, Is.EqualTo("on"), "JIT is off for each batch's transaction only");
+
+            Assert.That(resolved, Is.EqualTo(1), "the one resolvable reference is resolved and counted");
+            Assert.That(await ReadReferenceValueIdAsync(valueIds[0]), Is.EqualTo(managerId), "to the object it names, ignoring case");
+            Assert.That(await ReadReferenceValueIdAsync(valueIds[1]), Is.Null, "the reference naming no object stays outstanding");
         }
     }
 

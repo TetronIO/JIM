@@ -17,7 +17,8 @@ public partial class SyncRepository
     /// <remarks>
     /// One statement per question (<see cref="DriftHeldReferenceAnswerSql"/>), sent as one batch: one round trip for a page.
     /// The batch runs in one implicit transaction, so every answer reads one snapshot, and with JIT compilation off for
-    /// that transaction: it costs more than the statement it would speed up (measured at 200,000 members, #2818).
+    /// that transaction (<see cref="TransactionJit"/>): it costs more than the statement it would speed up (measured at
+    /// 200,000 members, #2818).
     /// </remarks>
     public async Task<List<DriftHeldReferenceAnswer>> GetDriftHeldReferenceAnswersAsync(IReadOnlyList<DriftHeldReferenceQuestion> questions)
     {
@@ -31,7 +32,7 @@ public partial class SyncRepository
         {
             Transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction()
         };
-        batch.BatchCommands.Add(new NpgsqlBatchCommand("SET LOCAL jit = off"));
+        batch.BatchCommands.Add(new NpgsqlBatchCommand(TransactionJit.DisableSql));
         foreach (var question in questions)
         {
             var command = new NpgsqlBatchCommand(DriftHeldReferenceAnswerSql);
@@ -39,22 +40,22 @@ public partial class SyncRepository
             batch.BatchCommands.Add(command);
         }
 
-        // One result with rows per question, in order; the SET returns none.
+        // JIT being turned off first, then one result per question, in order.
         await using var reader = await batch.ExecuteReaderAsync();
         var answered = 0;
-        do
+        if (await TransactionJit.SkipDisableResultAsync(reader))
         {
-            if (reader.FieldCount == 0)
-                continue;
+            do
+            {
+                if (answered == answers.Count)
+                    throw new InvalidOperationException("The database returned more results than Drift Detection asked questions.");
 
-            if (answered == answers.Count)
-                throw new InvalidOperationException("The database returned more results than Drift Detection asked questions.");
-
-            var answer = answers[answered++];
-            while (await reader.ReadAsync())
-                ReadDriftHeldReferenceAnswerRow(reader, answer);
+                var answer = answers[answered++];
+                while (await reader.ReadAsync())
+                    ReadDriftHeldReferenceAnswerRow(reader, answer);
+            }
+            while (await reader.NextResultAsync());
         }
-        while (await reader.NextResultAsync());
 
         if (answered != answers.Count)
             throw new InvalidOperationException($"The database answered {answered} of Drift Detection's {answers.Count} question(s).");
