@@ -97,7 +97,7 @@ pwsh test/integration/Invoke-IntegrationTests.ps1 -ScenariosOnly
 ### Phase 1 Scenarios
 - **Scenario 001: HR to Enterprise Directory** - Joiner, Mover, Leaver, Reconnection, with Account Name generated and Email and User Principal Name derived from it
 - **Scenario 002: Directory to Directory Sync** - Placeholder (not implemented)
-- **Scenario 003: GALSYNC** - Placeholder (not implemented)
+- **Scenario 003: GALSYNC** - GAL synchronisation between PANOPLY and RESURGAM through both Exchange servers: mailboxes and a mail-enabled group become mail contacts in the other forest with X500 proxies, none projected back; Active Directory lab only
 - **Scenario 004: Deletion Rules** - MVO deletion triggers and attribute recall
 - **Scenario 005: Matching Rules** - Join logic, projection, deduplication
 - **Scenario 006: Scheduler Service** - End-to-end scheduled Run Profile execution
@@ -369,7 +369,7 @@ See `engineering/INTEGRATION_TESTING.md` for the Oracle start-up troubleshooting
 │  │   ├─ Test: Leaver (deprovisioning)                           │
 │  │   └─ Test: Reconnection (deletion cancellation)              │
 │  ├─ Scenario 002: Directory Sync (placeholder)                    │
-│  └─ Scenario 003: GALSYNC (placeholder)                           │
+│  └─ Scenario 003: GALSYNC (Active Directory lab)                  │
 │                                                                 │
 │  Step 5: Collect Results                                        │
 │  └─ Save to test/integration/results/                           │

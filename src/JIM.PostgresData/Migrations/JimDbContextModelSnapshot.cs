@@ -3791,11 +3791,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReferenceValueId");
-
-                    b.HasIndex("UnresolvedReferenceValue")
-                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
-                        .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
+                    b.HasIndex("ReferenceValueId")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_ReferenceValueId")
+                        .HasFilter("\"ReferenceValueId\" IS NOT NULL");
 
                     b.HasIndex("AttributeId", "DateTimeValue")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")

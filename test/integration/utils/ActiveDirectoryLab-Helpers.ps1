@@ -38,7 +38,10 @@ $script:AdLabDomainControllers = @('Primary', 'Source', 'Target')
 # The scenarios that provision Exchange recipients, and the Exchange servers each one uses (#2021). Only these revert
 # an Exchange server: each needs 12 GB of static memory and takes minutes to start, and every other scenario has them
 # stopped (Get-ActiveDirectoryLabPowerPlan).
-$script:AdLabExchangeScenarios = @{ 34 = @('ExchangePrimary') }
+$script:AdLabExchangeScenarios = @{
+    3  = @('ExchangePrimary', 'ExchangeSource')   # GAL synchronisation, PANOPLY and RESURGAM both ways
+    34 = @('ExchangePrimary')                     # Exchange recipient provisioning in PANOPLY
+}
 
 # The machines that can be stopped to make room. The host has room for one Exchange server beside everything else;
 # with both running, dc-target and adfs-primary are stopped (test/integration/ad-lab/README.md, The Exchange servers).
@@ -250,7 +253,7 @@ function Set-ActiveDirectoryLabExchangeReachability {
 
     # Reachable waits up to 600 s in the guest for Exchange to answer; the control plane's own limit has to outlast it.
     $json = Invoke-LabControl -Script 'Set-LabExchangeReachability.ps1' -Arguments @('-Name', $VmName, '-State', $State, '-AsJson') -TimeoutSeconds 900
-    return (ConvertFrom-Json -InputObject ([string]$json))
+    return (ConvertFrom-LabControlJson -Json $json -Script 'Set-LabExchangeReachability.ps1')
 }
 
 function Invoke-ActiveDirectoryLabPowerPlan {
@@ -276,7 +279,7 @@ function Invoke-ActiveDirectoryLabPowerPlan {
 
     foreach ($name in $VmName) {
         $json = Invoke-LabControl -Script 'Stop-LabMachine.ps1' -Arguments @('-Name', $name, '-AsJson')
-        $outcome = try { [string](ConvertFrom-Json -InputObject ([string]$json)).outcome } catch { 'unknown' }
+        $outcome = try { [string](ConvertFrom-LabControlJson -Json $json -Script 'Stop-LabMachine.ps1').outcome } catch { 'unknown' }
         if ($outcome -notin 'AlreadyOff', 'Absent') {
             Write-Host "  Stopped $name to make room ($outcome)" -ForegroundColor DarkGray
         }
@@ -428,6 +431,51 @@ function Select-ActiveDirectoryLabCheckpoint {
     return @{ Checkpoint = $baseline; NeedsPopulation = $false }
 }
 
+function ConvertFrom-LabControlJson {
+    <#
+    .SYNOPSIS
+        Read the JSON object a lab control script printed with -AsJson.
+
+    .DESCRIPTION
+        The text between the first "{" and the last "}" is parsed, so whatever the remote shell prints around the
+        object (a banner, a terminal control sequence, a byte order mark) does not break it: Scenario 034's unreachable
+        step failed on one before Exchange had been touched. Throws, naming the script and quoting what it printed,
+        when there is no object or it cannot be read.
+
+    .PARAMETER Json
+        The script's standard output.
+
+    .PARAMETER Script
+        The script's name, for the error message.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [AllowNull()]
+        [object]$Json,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Script
+    )
+
+    $text = (@($Json) | ForEach-Object { "$_" }) -join "`n"
+    $first = $text.IndexOf('{')
+    $last = $text.LastIndexOf('}')
+    if ($first -lt 0 -or $last -lt $first) {
+        $excerpt = if ($text.Length -gt 200) { $text.Substring(0, 200) + '...' } else { $text }
+        throw "$Script did not print a JSON object. It printed: '$excerpt'"
+    }
+
+    try {
+        return ($text.Substring($first, $last - $first + 1) | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        throw "$Script printed JSON that could not be read ($($_.Exception.Message))."
+    }
+}
+
 function ConvertFrom-LabDomainControllerJson {
     <#
     .SYNOPSIS
@@ -451,20 +499,7 @@ function ConvertFrom-LabDomainControllerJson {
         [object]$Json
     )
 
-    $text = (@($Json) | ForEach-Object { "$_" }) -join "`n"
-    $first = $text.IndexOf('{')
-    $last = $text.LastIndexOf('}')
-    if ($first -lt 0 -or $last -lt $first) {
-        $excerpt = if ($text.Length -gt 200) { $text.Substring(0, 200) + '...' } else { $text }
-        throw "Get-LabDomainController.ps1 did not print a JSON object. It printed: '$excerpt'"
-    }
-
-    try {
-        $parsed = $text.Substring($first, $last - $first + 1) | ConvertFrom-Json -ErrorAction Stop
-    }
-    catch {
-        throw "Get-LabDomainController.ps1 printed JSON that could not be read ($($_.Exception.Message))."
-    }
+    $parsed = ConvertFrom-LabControlJson -Json $Json -Script 'Get-LabDomainController.ps1'
 
     $checkpointNames = @()
     if ($parsed.PSObject.Properties['checkpoints'] -and $null -ne $parsed.checkpoints) {

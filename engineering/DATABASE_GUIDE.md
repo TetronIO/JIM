@@ -76,6 +76,10 @@ Database triggers raise notifications on three channels (`Constants.Notification
 
 Notifications are a latency optimisation, not the source of truth: each listener reconnects with exponential backoff (capped at 60 seconds) when its connection drops, and its consumers fall back to polling while it is disconnected.
 
+### Synchronisation History Connections
+
+Each running Full or Delta Synchronisation writes its history (Run Profile Execution Items, outcomes, change records, causal edges, match candidates and stat counters) on a second database context of its own (`SynchronisationHistoryWriter`, #2874), so a page's history is written while the next page loads and is processed. That context draws from the Worker's pool like any other, holding one connection for the length of each page's history transaction. A run waits for the previous page's history before saving the next page's changes, so the history connection is busy only while the run is loading and processing a page: never alongside the run's own state writes, and never alongside the parallel bulk writers of #2872. A synchronisation therefore needs at most one connection more than it did; budget one per Synchronisation that can run at once when sizing the Worker's `Maximum Pool Size`.
+
 ### Recommended Pool Sizes by Deployment Size
 
 | Environment | Services | Max Pool/Service | Total Max | PostgreSQL max_connections |

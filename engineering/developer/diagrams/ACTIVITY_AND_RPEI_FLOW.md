@@ -1,12 +1,12 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-10-29, JIM v0.17.0
+> Last updated: 2026-11-09, JIM v0.17.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 
 Activities arise from two distinct paths. Operational work (synchronisation, data generation, clearing, deleting or deprovisioning a Connected System, removing data after a schema refresh, recalling a deleted Synchronisation Rule's contributed values, auxiliary class discovery, Temporal Scope Reconciliation, history retention cleanup) runs on a Worker Task, so its Activity is created when the task is queued and stays `InProgress` until the task completes. Configuration changes (issue #14) take no Worker Task: the config server that mutates the entity creates and completes the Activity synchronously, in the same call, alongside a versioned configuration snapshot. A few Activities are recorded by the service doing the work, outside both paths: a Scheduled Metaverse Object Deletion batch (`MetaverseObjectHousekeeping`, #1020), authentication events, password sets and Password Synchronisation, and `ScimRequests` (#124), one per Connected System, SCIM key and 15-minute window, counting what a SCIM client created, updated and deleted through the SCIM 2.0 Service Provider endpoint and the requests refused.
 
-Since v0.10.0, sync RPEIs are bulk-inserted per page via raw SQL (`FlushRpeisAsync`) rather than held in-memory for the full run, to keep memory bounded at 100K+ object scale. Summary statistics are accumulated incrementally during each flush. Cross-page reference resolution merges new attribute-flow rows under the existing MvoChange parent rather than creating a duplicate RPEI, resolving the previous ~2x RPEI duplication when references spanned multiple pages.
+Sync RPEIs are written per page via raw SQL rather than held in-memory for the full run, to keep memory bounded at 100K+ object scale: each page's history (its RPEIs with their outcomes and change records) is prepared and released at the page flush, then written in one transaction on the run's own history connection while the next page loads and is processed (`FlushPageHistoryAsync`, #2874). Summary statistics are accumulated incrementally, each page's once its history write has succeeded, so while a run is in flight its Activity's item list and totals can lag by one page. Cross-page reference resolution merges new attribute-flow rows under the existing MvoChange parent rather than creating a duplicate RPEI, resolving the previous ~2x RPEI duplication when references spanned multiple pages.
 
 ## Activity Status Values
 
@@ -111,7 +111,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    SyncStart([Sync processing]) --> DirectAdd[RPEIs added per-page to<br/>activity.RunProfileExecutionItems<br/>during per-CSO processing,<br/>then bulk-inserted and cleared<br/>by FlushRpeisAsync]
+    SyncStart([Sync processing]) --> DirectAdd[RPEIs added per-page to<br/>activity.RunProfileExecutionItems<br/>during per-CSO processing,<br/>then prepared, cleared and written<br/>by FlushPageHistoryAsync while<br/>the next page is processed]
 
     DirectAdd --> PerCSO{For each CSO}
 

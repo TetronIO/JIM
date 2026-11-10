@@ -956,8 +956,8 @@ public partial class SyncRepository : ISyncRepository
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
     /// <summary>
-    /// Same answers as the SQL implementation (#2669): candidates by referenced id, by exact string among all rows and by
-    /// lowered string among unresolved rows, with the value count capped at two when asked.
+    /// Same answers as the SQL implementation (#2669): candidates by referenced id, and by exact string and by lowered
+    /// string among unresolved rows (#2871), with the value count capped at two when asked.
     /// </summary>
     public Task<List<ProbedAttributeValues>> GetReconciliationProbeValuesAsync(IReadOnlyCollection<ReconciliationProbeQuestion> questions)
     {
@@ -972,7 +972,7 @@ public partial class SyncRepository : ISyncRepository
 
             var candidates = rows
                 .Where(av => (av.ReferenceValueId.HasValue && referenceIds.Contains(av.ReferenceValueId.Value)) ||
-                             (av.UnresolvedReferenceValue != null && exactValues.Contains(av.UnresolvedReferenceValue)) ||
+                             (!av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null && exactValues.Contains(av.UnresolvedReferenceValue)) ||
                              (!av.ReferenceValueId.HasValue && av.UnresolvedReferenceValue != null &&
                               loweredValues.Contains(IdentifierKey.For(av.UnresolvedReferenceValue, caseExact: false))))
                 .Select(av => new ConnectedSystemObjectAttributeValue
@@ -2731,6 +2731,138 @@ public partial class SyncRepository : ISyncRepository
         return Task.FromResult(SimulateRawSqlPersistence);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Mirrors what this store's own writers did before history was prepared ahead of its write (#2874): ids for the
+    /// items, their outcome trees, edges and candidates, and the buffers taken; and ids for the change records, which the
+    /// write assigns none of. It copies no navigation
+    /// into a scalar the production store's writers read, so a test sees the same objects it saw before. Stat counters
+    /// are not kept here (stats derive from aggregation), so the batch carries none.
+    /// </remarks>
+    public SynchronisationHistoryBatch PrepareSynchronisationHistory(
+        IReadOnlyList<ActivityRunProfileExecutionItem> items,
+        IReadOnlySet<Guid>? itemIdsWrittenWithDeletion,
+        bool includeItemChangeRecords,
+        IReadOnlyList<MetaverseObjectChange> newMetaverseObjectChanges,
+        IReadOnlyList<MetaverseObjectChange> metaverseObjectChangeAppends,
+        int page,
+        int totalPages)
+    {
+        var outcomes = new List<ActivityRunProfileExecutionItemSyncOutcome>();
+        var outcomeChangeRecords = new List<ConnectedSystemObjectChange>();
+        var itemChangeRecords = new List<ConnectedSystemObjectChange>();
+        var edges = new List<CausalEdge>();
+        var candidates = new List<ActivityRunProfileExecutionItemMatchCandidate>();
+
+        foreach (var item in items)
+        {
+            if (item.Id == Guid.Empty)
+                item.Id = ChangeRecordIds.New();
+
+            // Matches PostgresDataRepository.FlattenSyncOutcomes.
+            AssignSyncOutcomeIds(item.SyncOutcomes, item.Id, null);
+            outcomes.AddRange(FlattenOutcomes(item.SyncOutcomes.Where(o => o.ParentSyncOutcome == null && o.ParentSyncOutcomeId == null)));
+            outcomeChangeRecords.AddRange(GetOutcomeCsoChanges(item));
+
+            foreach (var candidate in item.MatchCandidates)
+            {
+                if (candidate.Id == Guid.Empty)
+                    candidate.Id = ChangeRecordIds.New();
+                candidate.ActivityRunProfileExecutionItemId = item.Id;
+            }
+
+            candidates.AddRange(item.MatchCandidates);
+            item.MatchCandidates.Clear();
+
+            // Outcome ids exist only now, so the edge's transient outcome reference is resolved here.
+            foreach (var edge in item.CausalEdges)
+                edge.ResolveTransientReferences(item.Id);
+            edges.AddRange(item.CausalEdges);
+            item.CausalEdges.Clear();
+
+            if (!includeItemChangeRecords || item.ConnectedSystemObjectChange == null)
+                continue;
+
+            item.ConnectedSystemObjectChange.ActivityRunProfileExecutionItemId = item.Id;
+            if (itemIdsWrittenWithDeletion == null || !itemIdsWrittenWithDeletion.Contains(item.Id))
+                itemChangeRecords.Add(item.ConnectedSystemObjectChange);
+        }
+
+        // Ids the production store's writers would assign; the writes below assign none.
+        foreach (var change in outcomeChangeRecords.Concat(itemChangeRecords))
+            ChangeRecordIds.AssignMissing(change);
+
+        var newChanges = newMetaverseObjectChanges.ToList();
+        foreach (var change in newChanges)
+            ChangeRecordIds.AssignMissing(change);
+
+        var appends = metaverseObjectChangeAppends.ToList();
+        foreach (var append in appends)
+        {
+            if (append.Id == Guid.Empty)
+                throw new InvalidOperationException(
+                    "PrepareSynchronisationHistory: each Metaverse Object change appended to must carry the id of the existing change record it extends.");
+            ChangeRecordIds.AssignMissingToAttributes(append);
+        }
+
+        return new SynchronisationHistoryBatch
+        {
+            Items = items.ToList(),
+            ItemIdsWrittenWithDeletion = itemIdsWrittenWithDeletion ?? new HashSet<Guid>(),
+            Outcomes = outcomes,
+            OutcomeChangeRecords = outcomeChangeRecords,
+            ItemChangeRecords = itemChangeRecords,
+            CausalEdges = edges,
+            MatchCandidates = candidates,
+            MetaverseObjectChanges = newChanges,
+            MetaverseObjectChangeAppends = appends,
+            CounterDeltas = new Dictionary<ActivityStatCounterKey, long>(),
+            Page = page,
+            TotalPages = totalPages
+        };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Records the batch as this store's earlier writers did: each item stored (an item a deletion stored already is the
+    /// same instance, so storing it again is the production writer's update of its row), the change records' values
+    /// marked as the production writer marks them (#2690), the edges and candidates recorded, the Metaverse Object
+    /// change records stored and the appends added to the records they extend.
+    /// </remarks>
+    public Task<bool> WriteSynchronisationHistoryAsync(SynchronisationHistoryBatch batch)
+    {
+        batch.RequireEveryIdAssigned(nameof(WriteSynchronisationHistoryAsync));
+
+        foreach (var item in batch.Items)
+            _rpeis[item.Id] = item;
+
+        MarkUnresolvedChangeReferences(batch.OutcomeChangeRecords);
+
+        foreach (var candidate in batch.MatchCandidates)
+            _matchCandidates[candidate.Id] = candidate;
+
+        RecordCausalEdges([.. batch.CausalEdges]);
+        MarkUnresolvedChangeReferences(batch.ItemChangeRecords);
+
+        foreach (var change in batch.MetaverseObjectChanges)
+            _mvoChanges[change.Id] = change;
+
+        foreach (var append in batch.MetaverseObjectChangeAppends)
+            AppendAttributeChildrenToExistingMvoChange(append);
+
+        // When SimulateRawSqlPersistence is off (default), false keeps the items on the Activity for simpler test
+        // assertions; when on, true releases them after each page, as the production store does.
+        return Task.FromResult(SimulateRawSqlPersistence);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Never: the store's dictionaries are not safe to use from two threads, so its history is written inline.</remarks>
+    public bool SupportsConcurrentHistoryWrites => false;
+
+    /// <inheritdoc />
+    /// <remarks>The store holds no transaction.</remarks>
+    public bool HasOpenTransaction => false;
+
     /// <summary>
     /// Records causal edges (#1223) in memory so worker tests can assert what a cascade attributed to what.
     /// </summary>
@@ -3117,6 +3249,21 @@ public partial class SyncRepository : ISyncRepository
             .Select(pe => pe.ConnectedSystemObjectId!.Value)
             .ToHashSet();
         return Task.FromResult(released);
+    }
+
+    public Task<HashSet<Guid>> GetConnectedSystemObjectIdsWithQueuedExchangeHoldsAsync(int connectedSystemId)
+    {
+        var queued = _pendingExchangeChanges.Values
+            .Where(c => c.ConnectedSystemObjectId.HasValue)
+            .Select(c => c.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        var held = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue
+                         && queued.Contains(pe.ConnectedSystemObjectId.Value)
+                         && pe.AttributeValueChanges.Any(c => c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation))
+            .Select(pe => pe.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+        return Task.FromResult(held);
     }
 
     public async Task<AccountEnablementFacts> GetAccountEnablementFactsAsync(int connectedSystemId, Guid pendingPasswordChangeId, Guid connectedSystemObjectId,

@@ -341,6 +341,18 @@ Describe 'Select-ActiveDirectoryLabCheckpoint' {
     }
 }
 
+Describe 'ConvertFrom-LabControlJson' {
+    It 'reads the object between the first opening and the last closing brace, past whatever surrounds it' {
+        (ConvertFrom-LabControlJson -Json "$([char]0xFEFF)banner {`"outcome`":`"Stopped`"} trailer" -Script 'Stop-LabMachine.ps1').outcome |
+            Should -Be 'Stopped'
+    }
+
+    It 'names the script and quotes what it printed when there is no object' {
+        { ConvertFrom-LabControlJson -Json 'nothing useful here' -Script 'Stop-LabMachine.ps1' } |
+            Should -Throw '*Stop-LabMachine.ps1*nothing useful here*'
+    }
+}
+
 Describe 'ConvertFrom-LabDomainControllerJson' {
     It 'reads the state, the checkpoint names and the guest build' {
         $state = ConvertFrom-LabDomainControllerJson -Json (Get-StateJson -Name 'dc-primary' -Checkpoint 'baseline', 'populated-nano-0123456789abcdef')
@@ -1218,6 +1230,10 @@ Describe 'The Exchange servers (#2021)' {
             @(Get-ActiveDirectoryLabInstance -ScenarioNumber 34) | Should -Be @('Primary', 'ExchangePrimary')
         }
 
+        It 'is both forests and both Exchange servers for Scenario 3 (GAL sync), each Exchange server after its domain controller' {
+            @(Get-ActiveDirectoryLabInstance -ScenarioNumber 3) | Should -Be @('Primary', 'Source', 'ExchangePrimary', 'ExchangeSource')
+        }
+
         It 'reverts an Exchange server for no scenario that does not provision recipients: each one needs 12 GB' {
             foreach ($number in 1, 2, 8, 24, 25, 30, 31, $null) {
                 @(Get-ActiveDirectoryLabInstance -ScenarioNumber $number) | Should -Not -Contain 'ExchangePrimary'
@@ -1321,6 +1337,21 @@ Describe 'The Exchange servers (#2021)' {
             }
         }
 
+        # The banner is named, not carried, in the test case: a control character in test data is written into the
+        # results XML, where it is not a legal character, and fails the whole Pester run's report.
+        It 'reads the outcome past a <Kind> the remote shell printed before it' -TestCases @(
+            @{ Kind = 'terminal control sequence' }
+            @{ Kind = 'byte order mark' }
+        ) {
+            param($Kind)
+            $Banner = if ($Kind -eq 'byte order mark') { [string][char]0xFEFF } else { "$([char]0x1b)[?1h$([char]0x1b)=" }
+            # Scenario 034 run 42744084998: the host's output began with a character that is not JSON, and the raw
+            # ConvertFrom-Json failed the scenario before Exchange had been touched.
+            Mock Invoke-LabControl { "$Banner{`"name`":`"exchange-primary`",`"state`":`"Unreachable`",`"detail`":`"IIS is Stopped`",`"elapsedSeconds`":3}" }
+
+            (Set-ActiveDirectoryLabExchangeReachability -VmName 'exchange-primary' -State Unreachable).detail | Should -Be 'IIS is Stopped'
+        }
+
         It 'gives Exchange long enough to answer again when it is made reachable' {
             Mock Invoke-LabControl { '{"name":"exchange-primary","state":"Reachable","detail":"ready","elapsedSeconds":40}' }
 
@@ -1338,6 +1369,15 @@ Describe 'The Exchange servers (#2021)' {
 
             Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter { $Script -eq 'Stop-LabMachine.ps1' -and ($Arguments -join ' ') -eq '-Name exchange-primary -AsJson' }
             Should -Invoke Invoke-LabControl -Times 1 -Exactly -ParameterFilter { $Script -eq 'Stop-LabMachine.ps1' -and ($Arguments -join ' ') -eq '-Name exchange-source -AsJson' }
+        }
+
+        It 'reads each outcome past a banner the remote shell printed before it' {
+            Mock Invoke-LabControl { "$([char]0x1b)[?1h{`"name`":`"x`",`"outcome`":`"AlreadyOff`",`"elapsedSeconds`":0}" }
+            Mock Write-Host { }
+
+            Invoke-ActiveDirectoryLabPowerPlan -VmName @('exchange-primary')
+
+            Should -Invoke Write-Host -Times 0 -Exactly -Because 'a machine already off is not reported as stopped'
         }
 
         It 'does nothing when there is nothing to stop' {

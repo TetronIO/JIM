@@ -2141,6 +2141,48 @@ function Limit-ActiveDirectorySamAccountName {
     return $SamAccountName.Substring(0, $limit - $suffix.Length) + $suffix
 }
 
+function Limit-HrFeedAccountNames {
+    <#
+    .SYNOPSIS
+        Shortens every samAccountName in an HR feed to Active Directory's 20-character limit, keeping each one's index.
+
+    .DESCRIPTION
+        For a scenario that flows the feed's samAccountName to sAMAccountName unchanged on Active Directory (Scenario
+        034 composes Setup-Scenario-001.ps1 that way). New-TestUser ends every name with its index, so
+        Limit-ActiveDirectorySamAccountName cuts the name before it and the names stay unique. A User Principal Name
+        built from the old name is rebuilt from the new one. A long name with no index is refused, because cutting it
+        could make it someone else's. Rewrites the file only when a name changed.
+
+    .OUTPUTS
+        The number of names shortened.
+    #>
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $rows = @(Import-Csv -LiteralPath $Path)
+    $shortened = 0
+    foreach ($row in $rows | Where-Object { $_.samAccountName.Length -gt 20 }) {
+        if ($row.samAccountName -notmatch '(\d+)$') {
+            throw "The HR feed's samAccountName '$($row.samAccountName)' is longer than Active Directory's 20 characters and ends with no index to keep it unique."
+        }
+
+        $old = $row.samAccountName
+        $row.samAccountName = Limit-ActiveDirectorySamAccountName -SamAccountName $old -Index ([int]$Matches[1])
+        if ($row.PSObject.Properties['userPrincipalName'] -and $row.userPrincipalName -like "$old@*") {
+            $row.userPrincipalName = $row.samAccountName + $row.userPrincipalName.Substring($old.Length)
+        }
+        $shortened++
+    }
+
+    if ($shortened -gt 0) {
+        $rows | Export-Csv -LiteralPath $Path -NoTypeInformation -Encoding UTF8
+    }
+    return $shortened
+}
+
 function Get-DisplayNameExpression {
     <#
     .SYNOPSIS

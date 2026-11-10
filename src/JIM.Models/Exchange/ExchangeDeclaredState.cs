@@ -50,10 +50,13 @@ public sealed record ExchangeDeclaredState
         changes.Any(IsExchangeAttributeChange);
 
     /// <summary>
-    /// The state <paramref name="export"/> declares for its object, from the object's current values overlaid with
-    /// <paramref name="changes"/> (what the export wrote). An Add or Update sets a value and a Remove or RemoveAll clears
-    /// it; removals are applied first, so a single-valued replace written as a removal and an addition lands on the
-    /// addition whichever order it was staged in.
+    /// The state <paramref name="export"/> declares for its object: the object's current values, overlaid with the
+    /// changes its Pending Export still holds for Exchange from earlier exports, overlaid with <paramref name="changes"/>
+    /// (what this export wrote). The held changes matter where Exchange has not acted: an account whose mailbox parked
+    /// reads back as no recipient, and an export correcting only its database must still declare the mailbox, as the
+    /// delivery lane's <see cref="Of(IReadOnlyDictionary{string, string?}, IEnumerable{ExchangeHeldChange})"/> does.
+    /// An Add or Update sets a value and a Remove or RemoveAll clears it; removals are applied first in each layer, so a
+    /// single-valued replace written as a removal and an addition lands on the addition whichever order it was staged in.
     /// </summary>
     public static ExchangeDeclaredState From(PendingExport export, IReadOnlyCollection<PendingExportAttributeValueChange> changes)
     {
@@ -67,11 +70,15 @@ public sealed record ExchangeDeclaredState
 
         var imported = values.GetValueOrDefault(ExchangeRecipientAttributes.RecipientType);
 
+        var writtenNow = changes.ToHashSet();
+        var held = export.AttributeValueChanges
+            .Where(c => !writtenNow.Contains(c) && c.AwaitsExchange && c.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation)
+            .Where(IsExchangeAttributeChange)
+            .ToList();
+        LayOver(values, held);
+
         var exchangeChanges = changes.Where(IsExchangeAttributeChange).ToList();
-        foreach (var change in exchangeChanges.Where(IsRemoval))
-            values[change.Attribute.Name] = null;
-        foreach (var change in exchangeChanges.Where(c => !IsRemoval(c)))
-            values[change.Attribute.Name] = change.StringValue;
+        LayOver(values, exchangeChanges);
 
         var groupType = currentValues
             .Where(v => IsGroupType(v.Attribute))
@@ -99,6 +106,14 @@ public sealed record ExchangeDeclaredState
             GroupType = groupType,
             DeclaringSyncRuleId = declaringRule
         };
+    }
+
+    private static void LayOver(Dictionary<string, string?> values, IReadOnlyCollection<PendingExportAttributeValueChange> exchangeChanges)
+    {
+        foreach (var change in exchangeChanges.Where(IsRemoval))
+            values[change.Attribute.Name] = null;
+        foreach (var change in exchangeChanges.Where(c => !IsRemoval(c)))
+            values[change.Attribute.Name] = change.StringValue;
     }
 
     /// <summary>

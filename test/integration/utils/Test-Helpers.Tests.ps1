@@ -1695,6 +1695,47 @@ Describe 'Limit-ActiveDirectorySamAccountName' {
     }
 }
 
+Describe 'Limit-HrFeedAccountNames' {
+    # Scenario 034 composes Setup-Scenario-001.ps1, which flows the HR feed's samAccountName to sAMAccountName as it
+    # is; at Medium 18 people's names run past Active Directory's 20 characters, which it refuses (00000523).
+    BeforeEach {
+        $script:feed = Join-Path ([System.IO.Path]::GetTempPath()) "hr-users-$([guid]::NewGuid()).csv"
+        @(
+            [pscustomobject]@{ employeeId = 'E1'; samAccountName = 'hannah.jenkins109'; userPrincipalName = 'hannah.jenkins109@panoply.local' }
+            [pscustomobject]@{ employeeId = 'E2'; samAccountName = 'penelope.fitzgerald137'; userPrincipalName = 'penelope.fitzgerald137@panoply.local' }
+        ) | Export-Csv -Path $script:feed -NoTypeInformation -Encoding UTF8
+    }
+
+    AfterEach {
+        Remove-Item -LiteralPath $script:feed -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'shortens a name past 20 characters, keeping its index, and leaves the rest alone' {
+        Limit-HrFeedAccountNames -Path $script:feed | Out-Null
+
+        $rows = @(Import-Csv $script:feed)
+        $rows[0].samAccountName | Should -Be 'hannah.jenkins109'
+        $rows[1].samAccountName | Should -Be 'penelope.fitzgera137'
+    }
+
+    It 'keeps the User Principal Name in step with the shortened name' {
+        Limit-HrFeedAccountNames -Path $script:feed | Out-Null
+
+        (@(Import-Csv $script:feed))[1].userPrincipalName | Should -Be 'penelope.fitzgera137@panoply.local'
+    }
+
+    It 'says how many names it shortened' {
+        Limit-HrFeedAccountNames -Path $script:feed | Should -Be 1
+    }
+
+    It 'refuses a long name with no index, rather than cutting it into a possible duplicate' {
+        @([pscustomobject]@{ employeeId = 'E3'; samAccountName = 'penelope.fitzgerald.smith'; userPrincipalName = '' }) |
+            Export-Csv -Path $script:feed -NoTypeInformation -Encoding UTF8
+
+        { Limit-HrFeedAccountNames -Path $script:feed } | Should -Throw '*penelope.fitzgerald.smith*'
+    }
+}
+
 Describe 'Display Name from first and last names' {
     BeforeAll {
         # Stand-ins for the JIM module's cmdlets, so they can be mocked without importing it.

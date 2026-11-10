@@ -33,7 +33,9 @@ public partial class ConnectedSystemRepository
     /// never saved back (<see cref="ConnectedSystemObject.EnsureWhollyLoaded"/>).
     /// </para>
     /// <para>
-    /// Five statements, none reading more than the changes name: the exports without their objects' values; the
+    /// Seven statements, none reading more than the changes name: the exports with their objects and Object Types; the
+    /// exports' changes, sought by their own Pending Export id, and those changes' attributes
+    /// (<see cref="LoadExportBatchChangesAsync"/>); the
     /// candidate attributes' definitions; each candidate's count, stopping at its cap; the rows the changes could match
     /// (<see cref="SyncRepository.GetReconciliationProbeValuesAsync"/>); and the objects' other values, by ranges of
     /// attribute id that leave the trimmed attributes out, so each is an index range scan on (object, attribute).
@@ -49,11 +51,12 @@ public partial class ConnectedSystemRepository
         if (pendingExportIds.Count == 0)
             return [];
 
-        // The EF test doubles run no SQL; they are handed every value, as before.
+        // The EF test doubles run no SQL; they are handed every change and every value, as before.
         if (Repository.Database.Database?.IsRelational() != true)
-            return await ExportBatchQuery(pendingExportIds, withObjectValues: true).ToListAsync();
+            return await ExportBatchQuery(pendingExportIds, withChangesAndObjectValues: true).ToListAsync();
 
-        var exports = await ExportBatchQuery(pendingExportIds, withObjectValues: false).ToListAsync();
+        var exports = await ExportBatchQuery(pendingExportIds, withChangesAndObjectValues: false).ToListAsync();
+        await LoadExportBatchChangesAsync(exports);
         var objects = exports
             .Select(pe => pe.ConnectedSystemObject)
             .OfType<ConnectedSystemObject>()
@@ -77,31 +80,67 @@ public partial class ConnectedSystemRepository
     }
 
     /// <summary>
-    /// The exports, their changes with their attributes, and their objects with their Object Types; with every value of
-    /// each object when <paramref name="withObjectValues"/> is set.
+    /// The exports and their objects with their Object Types; with their changes (and the changes' attributes) and every
+    /// value of each object when <paramref name="withChangesAndObjectValues"/> is set, for the EF test doubles alone.
     /// </summary>
-    private IQueryable<PendingExport> ExportBatchQuery(IReadOnlyCollection<Guid> pendingExportIds, bool withObjectValues)
+    private IQueryable<PendingExport> ExportBatchQuery(IReadOnlyCollection<Guid> pendingExportIds, bool withChangesAndObjectValues)
     {
         var query = Repository.Database.PendingExports
             .AsNoTrackingWithIdentityResolution()
-            .AsSplitQuery()
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.Type)
             .AsQueryable();
 
-        if (withObjectValues)
+        if (withChangesAndObjectValues)
         {
-            query = query.Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute);
+            query = query.AsSplitQuery()
+                .Include(pe => pe.AttributeValueChanges)
+                    .ThenInclude(avc => avc.Attribute)
+                .Include(pe => pe.ConnectedSystemObject)
+                    .ThenInclude(cso => cso!.AttributeValues)
+                        .ThenInclude(av => av.Attribute);
         }
 
         return query
             .Where(pe => pendingExportIds.Contains(pe.Id))
             .OrderBy(pe => pe.CreatedAt)
             .ThenBy(pe => pe.Id);
+    }
+
+    /// <summary>
+    /// Loads the exports' changes and their attributes (<see cref="GetPendingExportChangesAsync"/>, #2884), and hangs them
+    /// on their exports as the whole load's Include did: one instance of each attribute, joined both ways to the Object
+    /// Type of the batch's objects that holds it.
+    /// </summary>
+    /// <remarks>
+    /// Not an Include, split or not: either way the changes are reached through a join from the exports, so how they are
+    /// read is left to the planner's statistics, and an Export's are the stalest there are (an Export removes the changes
+    /// it executes, autovacuum analyses the table empty, and the next synchronisation stages this Export's changes before
+    /// it analyses again). Believing the table held one row, a 500,000-user leaver step's batch load read all 41,281
+    /// changes and probed <c>PendingExports</c> once per change to keep a batch's 100: 197 ms per batch, 105 batches. Each
+    /// export's changes now come in id order; the Include ordered them by their export alone, leaving the order within an
+    /// export to its plan.
+    /// </remarks>
+    private async Task LoadExportBatchChangesAsync(List<PendingExport> exports)
+    {
+        var (changes, attributes) = await GetPendingExportChangesAsync(Repository.Database, exports.Select(pe => pe.Id),
+            QueryTrackingBehavior.NoTrackingWithIdentityResolution);
+
+        var typesById = exports
+            .Select(pe => pe.ConnectedSystemObject?.Type)
+            .OfType<ConnectedSystemObjectType>()
+            .DistinctBy(type => type.Id)
+            .ToDictionary(type => type.Id);
+        foreach (var (attribute, type) in attributes.Values
+                     .Where(a => typesById.ContainsKey(a.ObjectTypeId))
+                     .Select(a => (a.Attribute, typesById[a.ObjectTypeId])))
+        {
+            attribute.ConnectedSystemObjectType = type;
+            if (type.Attributes.All(a => a.Id != attribute.Id))
+                type.Attributes.Add(attribute);
+        }
+
+        AttachPendingExportChanges(exports, changes);
     }
 
     /// <summary>

@@ -127,15 +127,18 @@ public class DriftDetectionService
                        r.MetaverseObjectTypeId == targetMvo.Type.Id)
             .ToList();
 
-        // Several enforcing rules for one Connected System and Object Type (#2820): only the rules that have the object in
-        // scope may enforce anything on it, and if two still do, neither may, since only one rule may manage an object.
-        // With a single enforcing rule nothing changes: it enforces as it always has.
+        // Only a rule that has the object in scope may enforce anything on it, exactly as only such a rule stages an export
+        // for it: a rule that does not cover the object does not manage it, so its values are never drift there, whether
+        // it is the only enforcing rule or one of several. Without this a lone rule asserted its values on objects it never
+        // covered (a Global Address List contact rule rewriting, or failing to evaluate against, a native contact). An
+        // undecidable scope throws ScopingCriterionFailedException, which the caller reports against the object.
+        applicableExportRules = applicableExportRules
+            .Where(rule => _scopingEvaluation.IsMvoInScopeForExportRule(targetMvo, rule, connections: connections))
+            .ToList();
+
+        // Several enforcing rules still covering it (#2820): neither may enforce, since only one rule may manage an object.
         if (applicableExportRules.Count > 1)
         {
-            applicableExportRules = applicableExportRules
-                .Where(rule => _scopingEvaluation.IsMvoInScopeForExportRule(targetMvo, rule, connections: connections))
-                .ToList();
-
             var overlap = SyncEngine.FindExportRuleOverlaps(targetMvo, applicableExportRules, _ => cso).FirstOrDefault();
             if (overlap != null)
             {

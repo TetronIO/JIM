@@ -1,6 +1,6 @@
 # Full Synchronisation - CSO Processing Flow
 
-> Last updated: 2026-10-29, JIM v0.17.0
+> Last updated: 2026-11-09, JIM v0.17.0
 
 This diagram shows the core decision tree for processing a single Connected System Object (CSO) during Full or Delta Synchronisation. This is the central flow of JIM's identity management engine.
 
@@ -36,7 +36,8 @@ flowchart TD
     IncrProgress --> CsoLoop
 
     CsoLoop -->|No| DeferredRef[Process deferred reference attributes<br/>Second pass: resolve MVO references<br/>that depend on other CSOs in page]
-    DeferredRef --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates<br/>Flush the marks: one guarded clear,<br/>held-back objects kept marked #2343,<br/>then the scope flags cleared]
+    DeferredRef --> WaitHistory[WaitForPreviousPageHistoryAsync #2874:<br/>wait for the previous page's history write<br/>before saving any of this page's changes<br/>A failed write stops the run, naming its page]
+    WaitHistory --> PersistMvo[PersistPendingMetaverseObjectsAsync:<br/>bulk persist MVO creates + updates<br/>Flush the marks: one guarded clear,<br/>held-back objects kept marked #2343,<br/>then the scope flags cleared]
     PersistMvo --> GeneratedValues[Delete generated value assignments<br/>that no longer belong, then commit<br/>the page's new ones #242]
     GeneratedValues --> CreateMvoChanges[CreatePendingMvoChangeObjectsAsync:<br/>build in-memory MVO change records<br/>for audit trail]
     CreateMvoChanges --> EvalDrift[EvaluateQueuedDriftAsync:<br/>drift detection for queued CSOs,<br/>now that MVOs have real ids]
@@ -45,13 +46,13 @@ flowchart TD
     FlushPE --> ResolveSnapshots[ResolvePendingExportReferenceSnapshotsAsync:<br/>fix up reference attribute snapshots<br/>on newly-created Pending Exports]
     ResolveSnapshots --> FlushCSO[FlushObsoleteCsoOperationsAsync:<br/>persist queued CSO deletions]
     FlushCSO --> FlushMVO[FlushPendingMvoDeletionsAsync:<br/>0-grace-period MVO deletions<br/>See MVO Deletion and Grace Period]
-    FlushMVO --> FlushRpeis[FlushRpeisAsync:<br/>bulk-insert RPEIs via raw SQL<br/>clear in-memory collection]
-    FlushRpeis --> FlushMvoChanges[FlushPendingMvoChangesAsync:<br/>persist MVO change records<br/>before change tracker clear]
-    FlushMvoChanges --> ClearCache[Clear export evaluation cache,<br/>change tracker and page identity map<br/>together at page boundary]
+    FlushMVO --> FlushHistory[FlushPageHistoryAsync #2874:<br/>prepare the page's history: RPEIs, outcomes,<br/>CSO and MVO change records, causal edges,<br/>match candidates, every id assigned<br/>Release the RPEIs from the Activity and<br/>the change tracker, then hand the batch to<br/>the run's history writer, which writes it in<br/>one transaction on its own connection while<br/>the next page loads and is processed]
+    FlushHistory --> ClearCache[Clear export evaluation cache,<br/>change tracker and page identity map<br/>together at page boundary]
     ClearCache --> UpdateProgress[Update activity progress<br/>in database]
     UpdateProgress --> PageLoop
 
-    PageLoop -->|No| CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>in batches of at most a page of objects<br/>and 100,000 reference values #2492<br/>progress counted in reference values<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
+    PageLoop -->|No| WaitLastHistory[WaitForPageLoopHistoryAsync #2874:<br/>wait for the last page's history write,<br/>on cancellation too]
+    WaitLastHistory --> CrossPage[Cross-page reference resolution<br/>Reload CSOs with unresolved references<br/>in batches of at most a page of objects<br/>and 100,000 reference values #2492<br/>progress counted in reference values<br/>Resolve MVO references across pages<br/>Merge new attribute-flow rows under<br/>the existing MvoChange parent RPEI<br/>Re-run persist/flush pipeline]
     CrossPage --> DeferredRecall[FlushDeferredRecallRpeisAsync:<br/>one RPEI per referencing CSO whose<br/>reference-recall Pending Export was staged]
     DeferredRecall --> ScopeReview[ProcessScopeReviewPendingMetaverseObjectsAsync:<br/>re-evaluate export scope for flagged MVOs:<br/>the Temporal Scope Reconciler's #892, an<br/>export rule configuration change's #1925 and a<br/>write outside synchronisation's #2615, whose<br/>recorded changed and removed values are<br/>delivered to existing accounts too<br/>First clears the flags of types no enabled<br/>export rule covers, without loading them<br/>Batches of 500, change detection off as in the<br/>page flush; the clear keeps the flags and<br/>stops if an export rule changed since this run<br/>read its rules, and keeps any object written<br/>since it was loaded (row version), for the<br/>next run to review<br/>Keeps an execution item, named after the MVO,<br/>only for an object export evaluation changed]
     ScopeReview --> Revisions[ProcessGeneratedValueRevisionsPendingAsync #242:<br/>carry generated values an export run<br/>corrected to the queued exports<br/>Return undrawn sequence numbers #2044]
@@ -222,4 +223,4 @@ A Full Import only arms the gate when it genuinely succeeded (`FullImportSuccess
 
 - **Cross-page RPEI merge (v0.10.0)**<br /> The unique index `IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId` means each RPEI can have at most one MvoChange parent. Cross-page reference resolution therefore merges new reference-attribute changes *under the existing MvoChange parent* rather than creating a second standalone RPEI for the same MVO. This resolves the previous ~2x RPEI duplication and the confusing split-outcome rows that appeared in activity detail when groups spanned multiple pages.
 
-- **Two-phase MVO change persistence (v0.10.0)**<br /> MVO change records are built in-memory during the page (`CreatePendingMvoChangeObjectsAsync`) and persisted in a distinct `FlushPendingMvoChangesAsync` step that runs *before* the change tracker clear. Splitting creation from persistence avoids losing the in-memory records when the change tracker is cleared to bound memory at page boundaries.
+- **Prepared, overlapped history writes (#2874)**<br /> A page's history (its RPEIs with their outcomes, CSO change records, causal edges and match candidates, and the MVO change records `CreatePendingMvoChangeObjectsAsync` built during the page) is prepared on the run's thread *before* the change tracker clear: `PrepareSynchronisationHistory` assigns every id and copies every reference into a plain id, and the run then releases what it held of it and cuts the batch's references into the page's loaded objects (`SynchronisationHistoryBatch.ReleaseRunObjects`). The run's `SynchronisationHistoryWriter` writes the batch in one transaction on a connection of its own, while the next page loads and is processed. The next page waits for it before saving any of its own changes, so at most one history write is in flight and it never runs alongside the run's state writes or the parallel bulk writers (#2872); the page loop's end waits for the last one, and every flush after the loop (cross-page references, recall items, scope review, generated value revisions) is written and waited for at once. A failed write fails the run with a `SynchronisationHistoryPersistenceException` naming the page, leaving none of that page's history and saving nothing after it; a page's totals are counted only once its write succeeds, so the Activity's item list and totals can lag by one page while the run is in flight. On the in-memory test store, which is not safe to use from two threads, every flush is written before the run goes on. Timing: `SyncHistoryPrepare` and `SyncHistoryWait` (on the run's thread, tagged with the barrier) and `SyncHistoryWrite` (in the background, under the page loop's span), with an end-of-run log line giving the writing, waiting and hidden seconds.

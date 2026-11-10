@@ -124,6 +124,43 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task FullSync_DriftOnAnAccountTheOnlyEnforcingRuleDoesNotCover_CorrectsNothingAsync()
+    {
+        // One enforcing rule, scoped away from Jane: it does not manage her account, so export staging stages nothing for it,
+        // and drift must not assert its values on her either (found by Scenario 003, where a GAL contact rule's expression
+        // was evaluated against a native contact it never covered).
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: Raj, contractorScope: null, withContractorRule: false);
+
+        var activity = await RunHrFullSyncAsync(directory);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(activity.RunProfileExecutionItems.Where(i => i.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet), Is.Empty);
+            Assert.That(CorrectionsFor(cso, description), Is.Empty, "the only enforcing rule does not cover Jane");
+        }
+    }
+
+    [Test]
+    public async Task FullSync_DriftOnAnAccountTheOnlyEnforcingRuleCovers_EnforcesItAsync()
+    {
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: Jane, contractorScope: null, withContractorRule: false);
+
+        await RunHrFullSyncAsync(directory);
+
+        Assert.That(CorrectionsFor(cso, description), Is.EqualTo(new[] { "Staff" }));
+    }
+
+    [Test]
+    public async Task PreviewSyncForCsoAsync_OfADriftedAccountTheOnlyEnforcingRuleDoesNotCover_ProposesNoCorrectionAsync()
+    {
+        var (directory, cso, description) = await ArrangeEnforcingRulesAsync(staffScope: Raj, contractorScope: null, withContractorRule: false);
+
+        var preview = await Jim.SyncPreview.PreviewSyncForCsoAsync(directory.Id, cso.Id);
+
+        Assert.That(ProposedValuesFor(preview, description), Is.Empty);
+    }
+
+    [Test]
     public async Task PreviewSyncForCsoAsync_OfAnIdentityTwoExportRulesCover_ReportsTheOverlapAndProposesNoExportToItAsync()
     {
         var arrangement = await ArrangeAsync(baseScope: null, managersScope: Jane);
@@ -265,7 +302,7 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
     /// one Employee ID or, when the scope is null, unscoped. Jane's account holds a drifted Description.
     /// </summary>
     private async Task<(ConnectedSystem Directory, ConnectedSystemObject Cso, ConnectedSystemObjectTypeAttribute Description)> ArrangeEnforcingRulesAsync(
-        string? staffScope, string? contractorScope)
+        string? staffScope, string? contractorScope, bool withContractorRule = true)
     {
         var directory = await CreateConnectedSystemAsync("Directory");
         var externalId = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
@@ -282,7 +319,8 @@ public class OverlappingExportRulesWorkflowTests : WorkflowTestBase
         await DbContext.SaveChangesAsync();
 
         await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Staff Policy", "Staff", staffScope, mvEmployeeId, description);
-        await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Contractor Policy", "Contractor", contractorScope, mvEmployeeId, description);
+        if (withContractorRule)
+            await AddEnforcingRuleAsync(directory, userType, mvType, "Directory Contractor Policy", "Contractor", contractorScope, mvEmployeeId, description);
 
         var cso = await CreateCsoAsync(directory.Id, userType, "Jane Smith", Jane);
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
