@@ -238,7 +238,13 @@ function Get-ExportedCount {
 
 function Get-ExchangeFollowUpTotal {
     param([string]$ActivityId)
-    return [int](@((Get-JIMActivityStats -Id $ActivityId).followUps | Where-Object { $_.kind -eq 'ExchangeRecipient' }) | Measure-Object -Property count -Sum).Sum
+    # Summed by hand: Measure-Object returns nothing for no input, and under StrictMode .Sum then throws, which is
+    # exactly the NoOp case this is asked about (no follow-ups at all).
+    $total = 0
+    foreach ($row in @((Get-JIMActivityStats -Id $ActivityId).followUps | Where-Object { $_.kind -eq 'ExchangeRecipient' })) {
+        $total += [int]$row.count
+    }
+    return $total
 }
 
 function Find-GalContact {
