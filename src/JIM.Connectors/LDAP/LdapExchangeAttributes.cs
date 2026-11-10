@@ -84,6 +84,22 @@ internal static class LdapExchangeAttributes
     };
 
     /// <summary>
+    /// Where the recipient type is read when Exchange stamped no <c>msExchRecipientTypeDetails</c>: it does not on a group
+    /// it mail-enables, which carries only <c>msExchRecipientDisplayType</c>.
+    /// </summary>
+    private const string RecipientDisplayTypeSource = "msExchRecipientDisplayType";
+
+    /// <summary>
+    /// Exchange's <c>msExchRecipientDisplayType</c> values for the mail-enabled groups JIM manages, read only where a
+    /// group has no <c>msExchRecipientTypeDetails</c>. Any other display type is a recipient JIM does not manage.
+    /// </summary>
+    private static readonly Dictionary<long, string> GroupDisplayTypes = new()
+    {
+        [1] = ExchangeRecipientTypes.MailEnabledGroup,          // a mail-enabled distribution group
+        [1073741833] = ExchangeRecipientTypes.MailEnabledGroup  // a mail-enabled security group
+    };
+
+    /// <summary>
     /// Exchange's <c>msExchRecipientTypeDetails</c> values for the recipient types JIM manages. Anything else (a linked
     /// or remote mailbox, a dynamic group) is a recipient this release does not manage, imported as
     /// <see cref="ExchangeRecipientTypes.Unmanaged"/>.
@@ -105,7 +121,9 @@ internal static class LdapExchangeAttributes
     /// The directory attributes an import must read so that <paramref name="attributeNames"/> can be derived.
     /// </summary>
     internal static IEnumerable<string> SourceAttributes(IEnumerable<string> attributeNames) =>
-        attributeNames.Where(Sources.ContainsKey).Select(n => Sources[n]).Distinct(StringComparer.OrdinalIgnoreCase);
+        attributeNames.Where(Sources.ContainsKey)
+            .SelectMany(n => n == RecipientType ? [Sources[n], RecipientDisplayTypeSource] : new[] { Sources[n] })
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Derives <paramref name="attributeNames"/> from what Exchange stamped on an object, read through
@@ -123,7 +141,7 @@ internal static class LdapExchangeAttributes
             var values = read(Sources[name]);
             var value = name switch
             {
-                RecipientType => DeriveRecipientType(values),
+                RecipientType => DeriveRecipientType(values, read(RecipientDisplayTypeSource)),
                 Database => values.Count > 0 ? FirstRdnValue(values[0]) : null,
                 PrimarySmtpAddress => values.FirstOrDefault(v => v.StartsWith("SMTP:", StringComparison.Ordinal))?[5..],
                 ExternalAddress => values.Count > 0 ? StripSmtpPrefix(values[0]) : null,
@@ -137,14 +155,20 @@ internal static class LdapExchangeAttributes
         return derived;
     }
 
-    private static string DeriveRecipientType(IReadOnlyList<string> values)
+    private static string DeriveRecipientType(IReadOnlyList<string> details, IReadOnlyList<string> displayTypes)
     {
-        if (values.Count == 0)
-            return ExchangeRecipientTypes.None;
+        if (details.Count > 0)
+            return long.TryParse(details[0], out var detail) && RecipientTypes.TryGetValue(detail, out var recipientType)
+                ? recipientType
+                : ExchangeRecipientTypes.Unmanaged;
 
-        return long.TryParse(values[0], out var details) && RecipientTypes.TryGetValue(details, out var recipientType)
-            ? recipientType
-            : ExchangeRecipientTypes.Unmanaged;
+        // A group Exchange mail-enabled carries a display type and no details.
+        if (displayTypes.Count > 0)
+            return long.TryParse(displayTypes[0], out var displayType) && GroupDisplayTypes.TryGetValue(displayType, out var groupType)
+                ? groupType
+                : ExchangeRecipientTypes.Unmanaged;
+
+        return ExchangeRecipientTypes.None;
     }
 
     /// <summary>The value of a distinguished name's first RDN: a database's name from its <c>homeMDB</c>.</summary>
