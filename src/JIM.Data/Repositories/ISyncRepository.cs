@@ -2236,8 +2236,9 @@ public interface ISyncRepository
     /// <summary>
     /// What the deferred pass orders the given exports by (#2905): each export's attribute value change count, and each
     /// export holding an unresolved reference to the object of another export among them whose anchor that export
-    /// supplies: the object holds no anchor yet, or the export, not being a Create, changes it. Summary-tier, read
-    /// after the first pass has written everything it will: no export or change is loaded.
+    /// supplies: the object holds no anchor yet, or the export, not being a Create, changes it; and the Metaverse Objects
+    /// whose anchor an export among them supplies (#2605). Summary-tier, read after the first pass has written everything
+    /// it will: no export or change is loaded.
     /// </summary>
     Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds);
 

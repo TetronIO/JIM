@@ -5682,7 +5682,8 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     /// <summary>
     /// What the deferred pass orders the given exports by (#2905): each export's attribute value change count, and each
     /// export holding an unresolved reference to the object of another export among them whose anchor that export
-    /// supplies. Raw SQL into a Summary DTO, in up to three statements: the counts, an index-only count per export; the
+    /// supplies, with the Metaverse Objects whose anchor those exports supply (#2605). Raw SQL into a Summary DTO, in up
+    /// to three statements: the counts, an index-only count per export; the
     /// exports whose objects are waiting on them for an anchor, few or none (an LDAP directory's objects hold the DN
     /// they were provisioned with, so none wait); and only when there are any, the references to those objects.
     /// </summary>
@@ -5797,7 +5798,12 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
             }
         }
 
-        return new DeferredExportOrderingSummary { ChangeCounts = changeCounts, Dependencies = dependencies };
+        return new DeferredExportOrderingSummary
+        {
+            ChangeCounts = changeCounts,
+            Dependencies = dependencies,
+            AnchorSupplierMetaverseObjectIds = suppliersByMetaverseObject.Keys.ToHashSet()
+        };
     }
 
     /// <summary>

@@ -4155,6 +4155,8 @@ public class ExportExecutionTests
     /// saved every resolution before writing anything, and the Activity sat at 0% for about six minutes. The pass must
     /// work through the deferred exports a chunk at a time: each chunk loaded only once the one before it has been
     /// handed out, and the pass's own progress moving from the first chunk, rising to its total and never falling back.
+    /// With several workers the next chunk is prepared as the one before it is handed out (#2605), so the pass may be up to
+    /// two chunks ahead of the first batch written; five chunks leave room to see progress move before the last is loaded.
     /// </summary>
     [TestCase(1)]
     [TestCase(2)]
@@ -4171,7 +4173,7 @@ public class ExportExecutionTests
         var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
         var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
 
-        const int deferredCount = 5;
+        const int deferredCount = 9;
         var anchors = new Dictionary<Guid, Guid>();
         var baseTime = DateTime.UtcNow.AddMinutes(-10);
         for (var i = 0; i < deferredCount; i++)
@@ -4257,7 +4259,7 @@ public class ExportExecutionTests
             foreach (var (peId, anchor) in anchors)
                 Assert.That(sentManagerValues[peId], Is.EqualTo(anchor.ToString()), "every chunk's references are resolved before they are written");
 
-            Assert.That(recordingRepo.ChunkSizes, Is.EqualTo(new[] { 2, 2, 1 }), "the pass loads its exports a chunk at a time");
+            Assert.That(recordingRepo.ChunkSizes, Is.EqualTo(new[] { 2, 2, 2, 2, 1 }), "the pass loads its exports a chunk at a time");
             Assert.That(events.Take(lastLoad).Any(e => e.StartsWith("progress:", StringComparison.Ordinal) && e != "progress:0"), Is.True,
                 $"the pass's progress must move before its last chunk is loaded. Events: {string.Join(", ", events)}");
             Assert.That(passProgress, Is.Ordered, "the pass's progress never falls back");
@@ -4487,6 +4489,243 @@ public class ExportExecutionTests
             Assert.That(managerSent.Keys, Is.EquivalentTo(new[] { target.Id, waiting.Id }), "both exports are written");
             Assert.That(managerSent[waiting.Id], Is.EqualTo(GeneratedAnchorSyncRepository.GeneratedAnchor),
                 "the waiting export's reference resolves against the anchor its target's write generated, within the run");
+        }
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="count"/> deferred Creates, each referring by manager to <paramref name="referencedMvoId"/>,
+    /// in queue order; equal in weight, so the deferred pass keeps that order.
+    /// </summary>
+    private List<PendingExport> SeedDeferredExportsReferringTo(SyncRepository repo, ConnectedSystem targetSystem, ConnectedSystemObjectType type,
+        ConnectedSystemObjectTypeAttribute managerAttr, Guid referencedMvoId, int count)
+    {
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var exports = new List<PendingExport>();
+        for (var i = 0; i < count; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, type, baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            pe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), PendingExportId = pe.Id, ChangeType = PendingExportAttributeChangeType.Add,
+                AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = referencedMvoId.ToString(),
+                Status = PendingExportAttributeChangeStatus.Pending
+            });
+            repo.SeedPendingExport(pe);
+            exports.Add(pe);
+        }
+        return exports;
+    }
+
+    /// <summary>
+    /// Seeds a user already in the target system, holding its anchor; returns its Metaverse Object's id.
+    /// </summary>
+    private static Guid SeedAnchoredUser(SyncRepository repo, ConnectedSystem targetSystem, ConnectedSystemObjectType type, ConnectedSystemObjectTypeAttribute objectGuidAttr)
+    {
+        var mvoId = Guid.NewGuid();
+        repo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+        repo.SeedConnectedSystemObject(new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), ConnectedSystemId = targetSystem.Id, Type = type, TypeId = type.Id, MetaverseObjectId = mvoId,
+            AttributeValues = [new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }]
+        });
+        return mvoId;
+    }
+
+    private static Mock<IConnector> CreateSucceedingConnector(Func<IList<PendingExport>, Task>? onExport = null)
+    {
+        var mock = new Mock<IConnector>();
+        mock.Setup(c => c.Name).Returns("Succeeding Test Connector");
+        mock.As<IConnectorExportUsingCalls>()
+            .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+            .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+            {
+                if (onExport != null)
+                    await onExport(exports);
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+        return mock;
+    }
+
+    /// <summary>
+    /// #2605: users are members of many groups, so the deferred pass's chunks name the same objects again and again
+    /// (7.68 million lookups for about 790,000 objects at Scale750k40kGroups). An anchor the pass has read once, of an
+    /// object no export of the pass gives an anchor, is not read again for a later chunk.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredChunksNamingTheSameObject_ReadItsAnchorOnceAsync()
+    {
+        // Arrange
+        var repo = new AnchorRequestRecordingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+        SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 3);
+
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 1, DeferredChunkSize = 1 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateSucceedingConnector().Object, SyncRunMode.PreviewAndSync,
+            options, CancellationToken.None);
+
+        // Assert
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.SuccessCount, Is.EqualTo(3));
+            Assert.That(repo.Requested.Count(id => id == managerMvoId), Is.EqualTo(1), "the manager's anchor is read for the first chunk only");
+        }
+    }
+
+    /// <summary>
+    /// #2605: a chunk prepared ahead, off the gate, that fails to prepare fails the run, exactly as a chunk failing to
+    /// prepare on demand always has, and leaves no task behind whose failure nobody observed.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_ChunkFailsToPrepare_FailsTheRunAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        var repo = new ChunkLoadSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+        var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
+        repo.FailLoadOf = exports[3].Id;
+
+        var unobserved = 0;
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e) => Interlocked.Increment(ref unobserved);
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 2 };
+
+            // Act
+            var thrown = Assert.ThrowsAsync<InvalidOperationException>(() => jim.ExportExecution.ExecuteExportsAsync(targetSystem,
+                CreateSucceedingConnector().Object, SyncRunMode.PreviewAndSync, options, CancellationToken.None, progressCallback: null,
+                connectorFactory: () => CreateSucceedingConnector().Object,
+                repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo)));
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            // Assert
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(thrown!.Message, Is.EqualTo(ChunkLoadSyncRepository.FailureMessage));
+                Assert.That(unobserved, Is.Zero, "every task the pass started was observed");
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+    }
+
+    /// <summary>
+    /// #2605: a run cancelled while the next chunk is being prepared ahead does not return until that preparation has
+    /// finished, so nothing the pass started is still using the database after the run has stopped.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_CancelledWhileAChunkIsPreparedAhead_WaitsForItAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        var repo = new ChunkLoadSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: repo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+        var managerMvoId = SeedAnchoredUser(repo, targetSystem, targetUserType, objectGuidAttr);
+        var exports = SeedDeferredExportsReferringTo(repo, targetSystem, targetUserType, managerAttr, managerMvoId, count: 4);
+        repo.HoldLoadOf = exports[3].Id;
+
+        using var cancellation = new CancellationTokenSource();
+        async Task CancelOnceTheNextChunkIsBeingPrepared(IList<PendingExport> batch)
+        {
+            try
+            {
+                await repo.HeldLoadEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (TimeoutException)
+            {
+                // Never prepared ahead: cancel anyway, and the assertion below says so.
+            }
+            await cancellation.CancelAsync();
+            _ = Task.Delay(300).ContinueWith(_ => repo.ReleaseHeldLoad.TrySetResult(), TaskScheduler.Default);
+        }
+
+        var options = new ExportExecutionOptions { BatchSize = 1, MaxParallelism = 2, DeferredChunkSize = 2 };
+
+        // Act
+        Assert.That(() => jim.ExportExecution.ExecuteExportsAsync(targetSystem, CreateSucceedingConnector(CancelOnceTheNextChunkIsBeingPrepared).Object,
+                SyncRunMode.PreviewAndSync, options, cancellation.Token, progressCallback: null,
+                connectorFactory: () => CreateSucceedingConnector(CancelOnceTheNextChunkIsBeingPrepared).Object,
+                repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(repo)),
+            Throws.InstanceOf<OperationCanceledException>());
+
+        // Assert
+        Assert.That(repo.HeldLoadFinished, Is.True, "the run returned only once the chunk being prepared ahead had finished loading");
+    }
+
+    /// <summary>
+    /// Records every Metaverse Object id whose reference anchor is asked for.
+    /// </summary>
+    private sealed class AnchorRequestRecordingSyncRepository : SyncRepository
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<Guid> Requested { get; } = new();
+
+        public override Task<Dictionary<Guid, ReferenceAnchorSummary>> GetReferenceAnchorsByMetaverseObjectIdsAsync(
+            IReadOnlyCollection<Guid> metaverseObjectIds, int connectedSystemId)
+        {
+            foreach (var id in metaverseObjectIds)
+                Requested.Enqueue(id);
+            return base.GetReferenceAnchorsByMetaverseObjectIdsAsync(metaverseObjectIds, connectedSystemId);
+        }
+    }
+
+    /// <summary>
+    /// Fails, or holds until released, the first load of Pending Exports that includes a given one: a deferred chunk's
+    /// preparation, which loads the chunk before any batch of it is loaded.
+    /// </summary>
+    private sealed class ChunkLoadSyncRepository : SyncRepository
+    {
+        public const string FailureMessage = "Simulated failure loading a deferred chunk";
+
+        public Guid? FailLoadOf { get; set; }
+
+        public Guid? HoldLoadOf { get; set; }
+
+        public TaskCompletionSource HeldLoadEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseHeldLoad { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public volatile bool HeldLoadFinished;
+
+        public override async Task<List<PendingExport>> GetPendingExportsByIdsAsync(IReadOnlyCollection<Guid> pendingExportIds)
+        {
+            if (FailLoadOf is { } failOn && pendingExportIds.Contains(failOn))
+                throw new InvalidOperationException(FailureMessage);
+
+            if (HoldLoadOf is { } holdOn && pendingExportIds.Contains(holdOn) && HeldLoadEntered.TrySetResult())
+            {
+                await ReleaseHeldLoad.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                var loaded = await base.GetPendingExportsByIdsAsync(pendingExportIds);
+                HeldLoadFinished = true;
+                return loaded;
+            }
+
+            return await base.GetPendingExportsByIdsAsync(pendingExportIds);
         }
     }
 

@@ -291,8 +291,9 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// What the deferred pass orders the given exports by (#2905): each export's attribute value change count, and each
     /// export holding an unresolved reference to the object of another export among them whose anchor that export
-    /// supplies: the object holds no anchor yet, or the export, not being a Create, changes it. Raw SQL into a Summary
-    /// DTO; no export or change is materialised.
+    /// supplies: the object holds no anchor yet, or the export, not being a Create, changes it; and the Metaverse Objects
+    /// whose anchor an export among them supplies, which the pass never answers from an anchor it read earlier (#2605).
+    /// Raw SQL into a Summary DTO; no export or change is materialised.
     /// </summary>
     /// <param name="connectedSystemId">The Connected System the exports are for.</param>
     /// <param name="pendingExportIds">The deferred pass's Pending Export ids.</param>

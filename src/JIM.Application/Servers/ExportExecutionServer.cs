@@ -1200,6 +1200,19 @@ public class ExportExecutionServer
     /// path a stage starts only once every batch before it has finished, so the reference resolves wherever in time the
     /// earlier export's batch ended, which the chunk-to-chunk order alone never promised.
     /// </para>
+    /// <para>
+    /// On the parallel path the next chunk of a stage is prepared ahead (#2605): loaded, resolved and saved on a repository
+    /// scope of its own, off the gate on the caller's context, while the workers write the current chunk's batches. The
+    /// gate then covers only handing over a batch, where preparing each chunk under it held every other worker up (81.9
+    /// seconds held and 72.2 waited at 500,000 objects). One chunk is prepared at a time and in plan order, never past the
+    /// end of its stage, and not at all when it refers to an object whose anchor an export in an earlier chunk of its stage
+    /// supplies (<see cref="DeferredExportPlan.CanPrepareAhead"/>): that chunk is prepared when it always was, so every
+    /// reference resolves as it did. A chunk prepared ahead is awaited on every way out of the stage. A chunk that is not
+    /// prepared ahead, and every chunk on the sequential path, is prepared when its turn comes, on the caller's context, as
+    /// before. On both, an anchor read for one chunk
+    /// answers the later chunks naming the same object, where it cannot change during the pass
+    /// (<see cref="ReferenceAnchorCache"/>).
+    /// </para>
     /// </remarks>
     private async Task ProcessDeferredExportsAsync(
         ConnectedSystem connectedSystem,
@@ -1225,9 +1238,9 @@ public class ExportExecutionServer
         var nextChunk = 0;
         var readyBatches = new Queue<List<PendingExport>>();
 
-        // The pass's progress is the exports its batches have written plus those it finished with unwritten. Chunks are
-        // prepared under the batch runner's gate on the caller's context while parallel workers write, so both counters
-        // are read and written atomically; and every report reads them as it is made, so the bar never steps back.
+        // The pass's progress is the exports its batches have written plus those it finished with unwritten. On the
+        // parallel path chunks are prepared while the workers write, ahead of their turn and off the gate (#2605), so both
+        // counters are read and written atomically; and every report reads them as it is made, so the bar never steps back.
         var written = 0;
         var finishedUnwritten = 0;
 
@@ -1259,12 +1272,17 @@ public class ExportExecutionServer
         // now, once the first pass has written everything it will: whether an object still waits for its anchor is what
         // decides which exports depend on which.
         DeferredExportPlan plan;
+        DeferredExportOrderingSummary orderingSummary;
         using (Diagnostics.Diagnostics.Database.StartSpan("PlanDeferredPass")
             .SetTag("count", passTotal))
         {
-            var orderingSummary = await SyncRepo.GetDeferredExportOrderingSummaryAsync(connectedSystem.Id, deferredExportIds);
+            orderingSummary = await SyncRepo.GetDeferredExportOrderingSummaryAsync(connectedSystem.Id, deferredExportIds);
             plan = DeferredExportScheduler.Plan(deferredExportIds, orderingSummary, options.DeferredChunkSize, options.BatchSize);
         }
+
+        // The anchors read so far (#2605), answering later chunks naming the same objects, except those an export of the
+        // pass gives an anchor, which can change while it runs.
+        var anchorCache = new ReferenceAnchorCache(orderingSummary.AnchorSupplierMetaverseObjectIds);
 
         var chunks = plan.Chunks.ToList();
         var chunkStarts = new int[chunks.Count];
@@ -1280,16 +1298,19 @@ public class ExportExecutionServer
             "in {Chunks} chunk(s) over {Stages} stage(s); {Dependent} wait on another export of the pass for its anchor",
             connectedSystem.Name, passTotal, chunks.Count, plan.Stages.Count, plan.DependentCount);
 
-        // Loads, resolves and saves one chunk, records what it cannot write, and returns what it can.
-        async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart)
+        // Loads, resolves and saves one chunk through the given repository, records what it cannot write, and returns what
+        // it can. Narrates its progress only when told to: prepared ahead it runs off the gate, where the caller's context,
+        // which progress is written through, belongs to the workers.
+        async Task<List<PendingExport>> PrepareChunkAsync(Guid[] chunkIds, int chunkStart, ISyncRepository repository, bool reportProgress)
         {
-            await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
+            if (reportProgress)
+                await ReportPassProgressAsync($"Loading deferred exports {chunkStart + 1} to {chunkStart + chunkIds.Length} of {passTotal}");
 
             List<PendingExport> chunkExports;
             using (Diagnostics.Diagnostics.Database.StartSpan("LoadDeferredChunk")
                 .SetTag("count", chunkIds.Length))
             {
-                chunkExports = await SyncRepo.GetPendingExportsByIdsAsync(chunkIds);
+                chunkExports = await repository.GetPendingExportsByIdsAsync(chunkIds);
             }
 
             // In the plan's order, largest first, which the load (in queue order) does not keep.
@@ -1306,15 +1327,23 @@ public class ExportExecutionServer
                 Interlocked.Add(ref finishedUnwritten, chunkIds.Length - chunkExports.Count);
             }
 
-            // What each referenced Metaverse Object's object in this system is written as, in one query.
+            // What each referenced Metaverse Object's object in this system is written as: what an earlier chunk read where
+            // it cannot have changed since, and the rest in one query.
             var mvoIds = CollectUnresolvedMvoIds(chunkExports);
-            Dictionary<Guid, ReferenceAnchorSummary> anchors;
+            var anchors = new Dictionary<Guid, ReferenceAnchorSummary>(mvoIds.Count);
+            var toFetch = anchorCache.TakeKnown(mvoIds, anchors);
             using (Diagnostics.Diagnostics.Database.StartSpan("FetchReferenceAnchors")
-                .SetTag("mvoIdCount", mvoIds.Count))
+                .SetTag("mvoIdCount", mvoIds.Count)
+                .SetTag("cachedCount", mvoIds.Count - toFetch.Count)
+                .SetTag("fetchedCount", toFetch.Count))
             {
-                anchors = mvoIds.Count > 0
-                    ? await SyncRepo.GetReferenceAnchorsByMetaverseObjectIdsAsync(mvoIds, connectedSystem.Id)
-                    : new Dictionary<Guid, ReferenceAnchorSummary>();
+                if (toFetch.Count > 0)
+                {
+                    var fetched = await repository.GetReferenceAnchorsByMetaverseObjectIdsAsync(toFetch, connectedSystem.Id);
+                    foreach (var (mvoId, anchor) in fetched)
+                        anchors[mvoId] = anchor;
+                    anchorCache.Remember(fetched);
+                }
             }
 
             // Separate resolved from still-unresolved exports. A still-unresolved export that has something it can write
@@ -1358,11 +1387,11 @@ public class ExportExecutionServer
             // has no anchor yet is merely waiting; one whose target has no object in this system at all cannot resolve as
             // things stand, and is reported per the Connected System's Unresolved Reference Handling. Built before
             // anything is written so the write's own item can carry it.
-            foreach (var (exportId, note) in await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, anchors, result))
+            foreach (var (exportId, note) in await BuildUnresolvedReferenceNotesAsync(connectedSystem, stillUnresolvedExports, anchors, result, repository))
                 unresolvedReferenceNotes[exportId] = note;
 
-            // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, chunk by chunk in queue
-            // order. A deferred export withheld here is left exactly as the first pass left it: still Pending, its
+            // Run Profile Safeguards (#1618): reserve against the same ledger the first pass used, chunk by chunk in plan
+            // order (the ledger decided what it withholds when the run started, so it answers alike from any thread). A deferred export withheld here is left exactly as the first pass left it: still Pending, its
             // unresolved-reference state untouched (the in-memory resolution above is never saved for it), and NOT marked
             // deferred - it simply was not attempted this run, so DeferredCount must not count it either. The next
             // Export run resolves and attempts it in the ordinary order. Kept in the plan's order, largest first.
@@ -1382,12 +1411,13 @@ public class ExportExecutionServer
                     .SelectMany(export => resolvedChanges.TryGetValue(export.Id, out var changes) ? changes : [])
                     .ToList();
 
-                await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
+                if (reportProgress)
+                    await ReportPassProgressAsync($"Saving resolved references for {exportsToWrite.Count} deferred exports");
                 using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedReferences")
                     .SetTag("count", exportsToWrite.Count)
                     .SetTag("changeCount", changesToSave.Count))
                 {
-                    await SyncRepo.PersistResolvedReferencesAsync(exportsToWrite, changesToSave);
+                    await repository.PersistResolvedReferencesAsync(exportsToWrite, changesToSave);
                 }
             }
 
@@ -1400,7 +1430,7 @@ public class ExportExecutionServer
                     "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references",
                     export.Id, export.ConnectedSystemObjectId, export.AttributeValueChanges.Count(IsUnresolvedReference), export.AttributeValueChanges.Count);
 
-                await MarkExportDeferredAsync(export);
+                await MarkExportDeferredAsync(export, repository);
                 deferredWholeCount++;
 
                 // Nothing was written, so there is no write to report; but a reference that can never resolve as things
@@ -1423,30 +1453,178 @@ public class ExportExecutionServer
                 Interlocked.Increment(ref finishedUnwritten);
             }
 
-            if (deferredWholeExports.Count > 0)
+            if (reportProgress && deferredWholeExports.Count > 0)
                 await ReportPassProgressAsync("Recording exports that are still waiting on their references");
 
-            // The chunk's own reads and writes leave nothing the batches need tracked; keep the caller's context from
-            // growing across chunks.
-            SyncRepo.ClearChangeTracker();
             return exportsToWrite;
         }
 
-        // Batches are taken on demand; a chunk is prepared only when every batch of the one before it has been taken. A
-        // chunk's batches close at the batch size or at the plan's weight budget, so the heaviest exports, gathered at the
+        // A chunk's batches close at the batch size or at the plan's weight budget, so the heaviest exports, gathered at the
         // front, are spread over batches of their own rather than packed into one that would outlast everything else.
+        List<List<PendingExport>> CutChunkIntoBatches(List<PendingExport> exportsToWrite) =>
+            DeferredExportScheduler.CutIntoBatches(exportsToWrite, pe => plan.WeightOf(pe.Id), options.BatchSize, plan.BatchWeightBudget);
+
+        // The sequential path's batches, taken on demand: a chunk is prepared, on the caller's context, only when every
+        // batch of the one before it has been written.
         async Task<List<PendingExport>?> TakeNextDeferredBatchAsync()
         {
             while (readyBatches.Count == 0 && nextChunk < chunkLimit)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var chunkIndex = nextChunk++;
-                var exportsToWrite = await PrepareChunkAsync(chunks[chunkIndex], chunkStarts[chunkIndex]);
-                foreach (var batch in DeferredExportScheduler.CutIntoBatches(exportsToWrite, pe => plan.WeightOf(pe.Id), options.BatchSize, plan.BatchWeightBudget))
+                var exportsToWrite = await PrepareChunkAsync(chunks[chunkIndex], chunkStarts[chunkIndex], SyncRepo, reportProgress: true);
+
+                // The chunk's own reads and writes leave nothing the batches need tracked; keep the caller's context from
+                // growing across chunks.
+                SyncRepo.ClearChangeTracker();
+                foreach (var batch in CutChunkIntoBatches(exportsToWrite))
                     readyBatches.Enqueue(batch);
             }
 
             return readyBatches.TryDequeue(out var next) ? next : null;
+        }
+
+        // The parallel path (#2605). The workers load each batch themselves, so only what chose it is held: a chunk's
+        // exports are let go as soon as its batches are cut, and at most two chunks are in hand at once, the one whose
+        // batches are being taken and the one being prepared.
+        var readySummaries = new Queue<List<ExecutableExportSummary>>();
+        Task<List<List<ExecutableExportSummary>>>? preparedAhead = null;
+        var preparedAheadCount = 0;
+        var preparationWaitedFor = TimeSpan.Zero;
+
+        // A chunk prepared ahead runs off the gate, and its spans belong to the pass, not to the pass through the gate
+        // that started it.
+        var passActivity = System.Diagnostics.Activity.Current;
+
+        // A chunk's batches as what chose them.
+        List<List<ExecutableExportSummary>> SummariseBatches(List<PendingExport> exportsToWrite) =>
+            CutChunkIntoBatches(exportsToWrite).Select(batch => batch.Select(ExecutableExportSummary.Of).ToList()).ToList();
+
+        // Prepares a chunk ahead, off the gate, on a repository scope of its own, so it never touches the caller's context
+        // the workers share; the scope, and its pooled connection, is let go as soon as the chunk is prepared.
+        async Task<List<List<ExecutableExportSummary>>> PrepareChunkOnItsOwnScopeAsync(int chunkIndex)
+        {
+            List<PendingExport> exportsToWrite;
+            using (var preparationScope = repositoryFactory!())
+            {
+                exportsToWrite = await PrepareChunkAsync(chunks[chunkIndex], chunkStarts[chunkIndex], preparationScope.Repository, reportProgress: false);
+            }
+            return SummariseBatches(exportsToWrite);
+        }
+
+        // Prepares a chunk when its turn comes, holding the gate, on the caller's context as the pass always has: a stage's
+        // first chunk, and one that may not be prepared ahead.
+        async Task<List<List<ExecutableExportSummary>>> PrepareChunkUnderTheGateAsync(int chunkIndex)
+        {
+            var exportsToWrite = await PrepareChunkAsync(chunks[chunkIndex], chunkStarts[chunkIndex], SyncRepo, reportProgress: true);
+
+            // The chunk's own reads and writes leave nothing the batches need tracked; keep the caller's context from
+            // growing across chunks.
+            SyncRepo.ClearChangeTracker();
+            return SummariseBatches(exportsToWrite);
+        }
+
+        // Starts preparing the next chunk while the workers write the current one's batches: one at a time, in plan order,
+        // never past the end of the stage, and only a chunk that resolves the same whenever it is prepared.
+        void StartPreparingNextChunkAhead()
+        {
+            if (preparedAhead != null || nextChunk >= chunkLimit || !plan.CanPrepareAhead(nextChunk))
+                return;
+
+            var chunkIndex = nextChunk;
+            preparedAheadCount++;
+            preparedAhead = Task.Run(async () =>
+            {
+                System.Diagnostics.Activity.Current = passActivity;
+                using var span = Diagnostics.Diagnostics.Database.StartSpan("PrepareDeferredChunkAhead")
+                    .SetTag("chunk", chunkIndex)
+                    .SetTag("count", chunks[chunkIndex].Length);
+                var prepared = await PrepareChunkOnItsOwnScopeAsync(chunkIndex);
+                span.SetSuccess();
+                return prepared;
+            }, cancellationToken);
+        }
+
+        // Called under the gate, one call at a time. Hands over the next batch, taking the chunk prepared ahead when its turn
+        // comes (waiting for it only if it is not ready yet), or preparing a chunk that may not be prepared ahead now.
+        async Task<List<ExecutableExportSummary>?> TakeNextParallelDeferredBatchAsync()
+        {
+            while (readySummaries.Count == 0 && nextChunk < chunkLimit)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                List<List<ExecutableExportSummary>> batches;
+                if (preparedAhead is { } ahead)
+                {
+                    if (!ahead.IsCompleted)
+                    {
+                        var chunkIds = chunks[nextChunk];
+                        await ReportPassProgressAsync($"Loading deferred exports {chunkStarts[nextChunk] + 1} to {chunkStarts[nextChunk] + chunkIds.Length} of {passTotal}");
+                        var waited = System.Diagnostics.Stopwatch.StartNew();
+                        using (Diagnostics.Diagnostics.Database.StartSpan("AwaitDeferredChunkPreparedAhead")
+                            .SetTag("chunk", nextChunk))
+                        {
+                            try
+                            {
+                                await ahead.WaitAsync(cancellationToken);
+                            }
+                            finally
+                            {
+                                preparationWaitedFor += waited.Elapsed;
+
+                                // Left in place while it is still running (the wait was cancelled), so the way out of the
+                                // stage awaits it; a preparation that failed has been observed by the wait.
+                                if (ahead.IsCompleted)
+                                    preparedAhead = null;
+                            }
+                        }
+                    }
+
+                    // Complete: whatever it ended in is observed here.
+                    preparedAhead = null;
+                    batches = await ahead;
+                }
+                else
+                {
+                    batches = await PrepareChunkUnderTheGateAsync(nextChunk);
+                }
+
+                nextChunk++;
+                foreach (var batch in batches)
+                    readySummaries.Enqueue(batch);
+                StartPreparingNextChunkAhead();
+            }
+
+            return readySummaries.TryDequeue(out var next) ? next : null;
+        }
+
+        // On the way out of a stage: a chunk still being prepared ahead is awaited, so nothing the pass started outlives it
+        // or fails unobserved. One is left only when the stage stopped early (a worker failed or the run was cancelled), its
+        // batches never handed out; it was prepared as the chunk after a stopped one always could be, its resolutions saved
+        // and its exports still pending. Should one be left by a stage that finished, its exports would go unwritten
+        // without a word, so that fails the run.
+        async Task AwaitChunkPreparedAheadAsync(bool unwinding)
+        {
+            if (preparedAhead is not { } ahead)
+                return;
+
+            preparedAhead = null;
+            try
+            {
+                await ahead;
+            }
+            catch (Exception ex) when (unwinding)
+            {
+                // Something is already unwinding the stage; throwing here would replace it and hide the real failure.
+                Log.Warning(ex, "ProcessDeferredExportsAsync: A deferred chunk prepared ahead for {SystemName} did not finish preparing while the pass was " +
+                    "stopping", connectedSystem.Name);
+                return;
+            }
+
+            if (!unwinding)
+            {
+                throw new InvalidOperationException($"A deferred chunk of {connectedSystem.Name} was prepared ahead but its batches were never handed out; " +
+                    "the deferred pass cannot account for its exports.");
+            }
         }
 
         if (useParallelBatches)
@@ -1460,7 +1638,7 @@ public class ExportExecutionServer
             //
             // One run of the workers per stage (#2905): a stage's chunks are resolved only once every batch of the stages
             // before it has been written, so an export waiting on another export of the pass always finds that export's
-            // anchor. Within a stage the workers take the next chunk as soon as the last one's batches are all taken.
+            // anchor. Within a stage the next chunk is prepared ahead while the workers write the current one (#2605).
             var stageChunkEnd = 0;
             foreach (var stage in plan.Stages)
             {
@@ -1470,16 +1648,24 @@ public class ExportExecutionServer
 
                 // This run's own counts start from nothing, so it reports on top of what the stages before it wrote.
                 var writtenBeforeStage = Volatile.Read(ref written);
-                await ProcessBatchesInParallelAsync(connectedSystem, connector,
-                    async () => (await TakeNextDeferredBatchAsync())?.Select(ExecutableExportSummary.Of).ToList(),
-                    stopOnBatchFailure: false, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
-                    processedExportsOffset: immediateProcessedCount + writtenBeforeStage,
-                    batchCompletedCallback: batchCompletedCallback,
-                    passTotal: passTotal,
-                    unresolvedReferenceNotes: unresolvedReferenceNotes,
-                    batchExecuted: count => Interlocked.Add(ref written, count),
-                    passProcessedOffset: () => writtenBeforeStage + Volatile.Read(ref finishedUnwritten));
+                var stageFinished = false;
+                try
+                {
+                    await ProcessBatchesInParallelAsync(connectedSystem, connector, TakeNextParallelDeferredBatchAsync,
+                        stopOnBatchFailure: false, result, options,
+                        cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                        processedExportsOffset: immediateProcessedCount + writtenBeforeStage,
+                        batchCompletedCallback: batchCompletedCallback,
+                        passTotal: passTotal,
+                        unresolvedReferenceNotes: unresolvedReferenceNotes,
+                        batchExecuted: count => Interlocked.Add(ref written, count),
+                        passProcessedOffset: () => writtenBeforeStage + Volatile.Read(ref finishedUnwritten));
+                    stageFinished = true;
+                }
+                finally
+                {
+                    await AwaitChunkPreparedAheadAsync(unwinding: !stageFinished);
+                }
             }
         }
         else
@@ -1510,6 +1696,12 @@ public class ExportExecutionServer
             "over {Stages} stage(s): {Written} written, {Unwritten} finished without being written",
             connectedSystem.Name, Volatile.Read(ref written) + Volatile.Read(ref finishedUnwritten), passTotal, chunks.Count, plan.Stages.Count,
             Volatile.Read(ref written), Volatile.Read(ref finishedUnwritten));
+
+        // How much of the chunks' preparation left the workers' way (#2605), and how much reading the anchors cost.
+        Log.Information("ProcessDeferredExportsAsync: Deferred pass for {SystemName} prepared {PreparedAhead} of {Chunks} chunk(s) ahead of their turn, " +
+            "and waited {WaitedSeconds:F1}s for one still being prepared. Reference anchors: {AnchorHits} of {AnchorLookups} lookup(s) answered from " +
+            "the {AnchorsHeld} the pass had already read",
+            connectedSystem.Name, preparedAheadCount, chunks.Count, preparationWaitedFor.TotalSeconds, anchorCache.Hits, anchorCache.Lookups, anchorCache.Count);
     }
 
     /// <summary>
@@ -1526,7 +1718,8 @@ public class ExportExecutionServer
         ConnectedSystem connectedSystem,
         List<PendingExport> stillUnresolvedExports,
         IReadOnlyDictionary<Guid, ReferenceAnchorSummary> anchors,
-        ExportExecutionResult result)
+        ExportExecutionResult result,
+        ISyncRepository repository)
     {
         var notes = new Dictionary<Guid, string>();
         if (stillUnresolvedExports.Count == 0)
@@ -1566,7 +1759,7 @@ public class ExportExecutionServer
         using (Diagnostics.Diagnostics.Database.StartSpan("GetReferencedMetaverseObjectNames")
             .SetTag("count", unresolvable.Count))
         {
-            names = await SyncRepo.GetMetaverseObjectDisplayNamesAsync(unresolvable.Select(u => u.MvoId).Distinct().ToList());
+            names = await repository.GetMetaverseObjectDisplayNamesAsync(unresolvable.Select(u => u.MvoId).Distinct().ToList());
         }
 
         foreach (var group in unresolvable.GroupBy(u => u.Export.Id))
@@ -4988,7 +5181,7 @@ public class ExportExecutionServer
     /// Marks an export as deferred (has unresolved references).
     /// Does not increment error count since this is expected behaviour.
     /// </summary>
-    private async Task MarkExportDeferredAsync(PendingExport export)
+    private static async Task MarkExportDeferredAsync(PendingExport export, ISyncRepository repository)
     {
         export.Status = PendingExportStatus.Pending;
         export.HasUnresolvedReferences = true;
@@ -4998,7 +5191,7 @@ public class ExportExecutionServer
             .Count(ac => !string.IsNullOrEmpty(ac.UnresolvedReferenceValue));
         var totalChanges = export.AttributeValueChanges.Count;
 
-        await SyncRepo.UpdatePendingExportAsync(export);
+        await repository.UpdatePendingExportAsync(export);
         Log.Information("MarkExportDeferredAsync: Export {ExportId} for CSO {CsoId} deferred - " +
             "{UnresolvedCount}/{TotalChanges} attribute changes have unresolved references; attempted again at the next export run",
             export.Id, export.ConnectedSystemObjectId, unresolvedRefCount, totalChanges);

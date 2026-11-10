@@ -237,6 +237,72 @@ public class DeferredExportSchedulerTests
         Assert.That(batches, Is.EqualTo(new[] { new[] { 50 }, new[] { 1, 1 } }));
     }
 
+    // ─── Preparing a chunk ahead (#2605) ───
+
+    [Test]
+    public void Plan_ChunksOfAStageReferringToNoOtherExportOfIt_CanEachBePreparedAheadButTheFirst()
+    {
+        var ids = Ids(4);
+        var summary = Summary(ids, [4, 3, 2, 1]);
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 1, LargeBatch);
+
+        Assert.That(Enumerable.Range(0, 4).Select(plan.CanPrepareAhead), Is.EqualTo(new[] { false, true, true, true }),
+            "a stage's first chunk is never prepared before the stages ahead of it have finished");
+    }
+
+    [Test]
+    public void Plan_ReferenceToAnExportInAnEarlierChunkOfTheSameStage_IsNotPreparedAhead()
+    {
+        // R refers to T, queued after it, so the reference imposes no stage; but T is the largest and goes first, and a chunk
+        // prepared once T has been written resolves R's reference, as the pass always has. Preparing R's chunk while T's
+        // batch still runs would leave it unresolved.
+        var ids = Ids(3);
+        var summary = Summary(ids, [1, 4, 5], (0, 2));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 1, LargeBatch);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Order(plan), Is.EqualTo(new[] { ids[2], ids[1], ids[0] }));
+            Assert.That(plan.Stages, Has.Count.EqualTo(1));
+            Assert.That(plan.CanPrepareAhead(1), Is.True, "the chunk between them refers to nothing");
+            Assert.That(plan.CanPrepareAhead(2), Is.False, "R's chunk waits until T's chunk has been handed out, as before");
+        }
+    }
+
+    [Test]
+    public void Plan_ReferenceToAnExportInALaterChunk_DoesNotHoldBackPreparingAhead()
+    {
+        // R, the largest, refers to T queued after it; T's chunk comes after R's and refers to nothing.
+        var ids = Ids(2);
+        var summary = Summary(ids, [5, 1], (0, 1));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 1, LargeBatch);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(Order(plan), Is.EqualTo(ids));
+            Assert.That(plan.CanPrepareAhead(1), Is.True);
+        }
+    }
+
+    [Test]
+    public void Plan_FirstChunkOfALaterStage_IsNotPreparedAhead()
+    {
+        var ids = Ids(3);
+        var summary = Summary(ids, [1, 5, 4], (1, 0));
+
+        var plan = DeferredExportScheduler.Plan(ids, summary, chunkSize: 1, LargeBatch);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(plan.Stages.Select(stage => stage.Count), Is.EqualTo(new[] { 2, 1 }));
+            Assert.That(Enumerable.Range(0, 3).Select(plan.CanPrepareAhead), Is.EqualTo(new[] { false, true, false }));
+            Assert.That(plan.CanPrepareAhead(3), Is.False, "past the last chunk");
+        }
+    }
+
     // ─── Helpers ───
 
     private static List<Guid> Ids(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();

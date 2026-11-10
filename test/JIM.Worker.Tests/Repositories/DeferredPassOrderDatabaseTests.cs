@@ -160,6 +160,21 @@ public class DeferredPassOrderDatabaseTests
         }
     }
 
+    [Test]
+    public async Task GetDeferredExportOrderingSummaryAsync_ExportsSupplyingTheirObjectsAnchor_NamesTheirMetaverseObjectsAsync()
+    {
+        // #2605: the pass never answers a reference to one of these from an anchor it read earlier.
+        var s = await SeedSchemaAsync();
+        var generated = await SeedGroupCreateAsync(s, T0, memberMvoIds: [Guid.NewGuid()]);
+        var held = await SeedGroupCreateAsync(s, T0.AddSeconds(1), memberMvoIds: [Guid.NewGuid()], anchor: "cn=held,ou=groups,dc=glitterband,dc=local");
+        var renamed = await SeedGroupCreateAsync(s, T0.AddSeconds(2), memberMvoIds: [Guid.NewGuid()], anchor: "cn=old,ou=groups,dc=glitterband,dc=local",
+            changeType: PendingExportChangeType.Update, newAnchor: "cn=new,ou=groups,dc=glitterband,dc=local");
+
+        var summary = await ReadSummaryAsync(s, generated.ExportId, held.ExportId, renamed.ExportId);
+
+        Assert.That(summary.AnchorSupplierMetaverseObjectIds, Is.EquivalentTo(new[] { generated.MvoId, renamed.MvoId }));
+    }
+
     // ─── The whole pass ───
 
     /// <summary>
@@ -293,9 +308,217 @@ public class DeferredPassOrderDatabaseTests
         }
     }
 
+    /// <summary>
+    /// #2605: a chunk is prepared while the batches of the chunk before it are still being written, so the workers do not
+    /// wait for it. Eight groups of users whose anchors the directory already holds, in chunks of four: both workers' first
+    /// batches are held until the second chunk's resolutions have been saved, which happens only if it is prepared ahead.
+    /// Everything is still written, with every member, and nothing is left pending.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredPass_PreparesTheNextChunkWhileTheCurrentChunksBatchesRunAsync()
+    {
+        const int groupCount = 8;
+        var s = await SeedSchemaAsync();
+        var users = new List<Guid>();
+        for (var u = 0; u < 4; u++)
+            users.Add(await SeedUserAsync(s, $"user-{u}"));
+
+        var groups = new List<(Guid ExportId, Guid MvoId, Guid CsoId)>();
+        for (var g = 0; g < groupCount; g++)
+            groups.Add(await SeedGroupCreateAsync(s, T0.AddSeconds(g), [users[g % 4]], anchor: $"cn=group-{g},ou=groups,dc=glitterband,dc=local"));
+
+        var nextChunkPreparedWhileHeld = false;
+        var started = 0;
+        var sentMembers = new ConcurrentDictionary<Guid, string[]>();
+        Mock<IConnector> CreateConnector()
+        {
+            var connector = new Mock<IConnector>();
+            connector.Setup(c => c.Name).Returns("Holding Connector");
+            connector.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    // The first wave, both batches of the first chunk, is held until every group's resolutions are saved.
+                    if (Interlocked.Increment(ref started) <= 2
+                        && await WaitUntilAsync(async probe => await probe.PendingExports.CountAsync(pe => !pe.HasUnresolvedReferences) == groupCount))
+                    {
+                        nextChunkPreparedWhileHeld = true;
+                    }
+                    RecordMembers(s, exports, sentMembers);
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return connector;
+        }
+
+        var result = await ExecuteAsync(s, CreateConnector, maxParallelism: 2, batchSize: 1, chunkSize: 4);
+
+        var leftPending = await CountMembersLeftPendingAsync(s);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(nextChunkPreparedWhileHeld, Is.True, "the second chunk was prepared while the first chunk's batches were held");
+            Assert.That(result.FailedCount, Is.Zero);
+            for (var g = 0; g < groupCount; g++)
+                Assert.That(sentMembers.GetValueOrDefault(groups[g].ExportId), Is.EqualTo(new[] { $"user-{g % 4}" }), $"group {g}'s member is sent");
+            Assert.That(leftPending, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// #2605: a chunk is not prepared ahead when it refers to an object whose anchor an export in an earlier chunk of its
+    /// stage supplies. R refers to T, queued after it, so the reference imposes no stage; T is the largest and goes first,
+    /// and R's chunk is loaded, as it always was, once T's chunk has been handed out, by which time T has been written (the
+    /// other batch of T's chunk waits for T's anchor). R must send T's generated anchor, as the pass did before it prepared
+    /// chunks ahead; prepared ahead, R's chunk would be resolved before T was written and leave the reference pending.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task ExecuteExportsAsync_ReferenceToAnExportInAnEarlierChunkOfItsStage_ResolvesAsTheLoadedChunkAlwaysDidAsync(int maxParallelism)
+    {
+        var s = await SeedSchemaAsync();
+        var users = new List<Guid>();
+        for (var u = 0; u < 9; u++)
+            users.Add(await SeedUserAsync(s, $"user-{u}"));
+
+        // Queue order: R, X1, X2, T. Weights (display name plus members): R 2, X1 9, X2 9, T 10. Chunks of three in queue
+        // order weigh 20 and 10, so the plan's chunks are [T, X1] and [X2, R], all in one stage.
+        var tMvoId = Guid.NewGuid();
+        var r = await SeedGroupCreateAsync(s, T0, [tMvoId]);
+        var x1 = await SeedGroupCreateAsync(s, T0.AddSeconds(1), users.Take(8).ToArray());
+        var x2 = await SeedGroupCreateAsync(s, T0.AddSeconds(2), users.Skip(1).Take(8).ToArray());
+        var t = await SeedGroupCreateAsync(s, T0.AddSeconds(3), users.ToArray(), mvoId: tMvoId);
+
+        var sentMembers = new ConcurrentDictionary<Guid, string[]>();
+        Mock<IConnector> CreateConnector()
+        {
+            var connector = new Mock<IConnector>();
+            connector.Setup(c => c.Name).Returns("Generating Connector");
+            connector.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .Returns(async (IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    // T's chunk's other batch finishes only once T has been written and given its anchor.
+                    if (exports.Any(export => export.Id == x1.ExportId))
+                        await WaitUntilAsync(probe => probe.ConnectedSystemObjectAttributeValues.AnyAsync(av => av.ConnectedSystemObject.Id == t.CsoId));
+                    RecordMembers(s, exports, sentMembers);
+                    return exports.Select(export => ConnectedSystemExportResult.Succeeded(GeneratedAnchor(export.ConnectedSystemObjectId!.Value))).ToList();
+                });
+            return connector;
+        }
+
+        var result = await ExecuteAsync(s, CreateConnector, maxParallelism, batchSize: 1, chunkSize: 3);
+
+        var leftPending = await CountMembersLeftPendingAsync(s);
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.Zero);
+            Assert.That(sentMembers.Keys, Is.EquivalentTo(new[] { r.ExportId, x1.ExportId, x2.ExportId, t.ExportId }));
+            Assert.That(sentMembers.GetValueOrDefault(r.ExportId), Is.EqualTo(new[] { GeneratedAnchor(t.CsoId) }), "R resolves T's generated anchor within the run");
+            Assert.That(leftPending, Is.Zero);
+        }
+    }
+
+    /// <summary>
+    /// #2605: the pass remembers the anchors it has read, but never one an export of the pass changes. O is renamed by an
+    /// export of the first stage; X, in O's chunk, is resolved before the rename is written and so names O by its old name,
+    /// as the pass always has. R waits on O's export, so it is in the next stage, resolved once the rename has been
+    /// written: it must name O by its new name, not the old one X's chunk read.
+    /// </summary>
+    [TestCase(1)]
+    [TestCase(2)]
+    public async Task ExecuteExportsAsync_ReferenceToAnObjectRenamedEarlierInThePass_ResolvesToItsNewNameAsync(int maxParallelism)
+    {
+        const string oldName = "cn=old,ou=groups,dc=glitterband,dc=local";
+        const string newName = "cn=new,ou=groups,dc=glitterband,dc=local";
+        var s = await SeedSchemaAsync();
+        var user = await SeedUserAsync(s, "user-0");
+
+        var oMvoId = Guid.NewGuid();
+        var x = await SeedGroupCreateAsync(s, T0, [user, oMvoId], anchor: "cn=x,ou=groups,dc=glitterband,dc=local");
+        var o = await SeedGroupCreateAsync(s, T0.AddSeconds(1), [user], mvoId: oMvoId, anchor: oldName,
+            changeType: PendingExportChangeType.Update, newAnchor: newName);
+        var r = await SeedGroupCreateAsync(s, T0.AddSeconds(2), [oMvoId], anchor: "cn=r,ou=groups,dc=glitterband,dc=local");
+
+        var sentMembers = new ConcurrentDictionary<Guid, string[]>();
+        Mock<IConnector> CreateConnector()
+        {
+            var connector = new Mock<IConnector>();
+            connector.Setup(c => c.Name).Returns("Renaming Connector");
+            connector.As<IConnectorExportUsingCalls>()
+                .Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<IConnectorProgress>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, IConnectorProgress _) =>
+                {
+                    RecordMembers(s, exports, sentMembers);
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return connector;
+        }
+
+        var result = await ExecuteAsync(s, CreateConnector, maxParallelism, batchSize: 1, chunkSize: 2);
+
+        using (Assert.EnterMultipleScope())
+        {
+            Assert.That(result.FailedCount, Is.Zero);
+            Assert.That(sentMembers.GetValueOrDefault(x.ExportId), Is.EquivalentTo(new[] { "user-0", oldName }), "X is resolved before the rename is written");
+            Assert.That(sentMembers.GetValueOrDefault(o.ExportId), Is.EqualTo(new[] { "user-0" }));
+            Assert.That(sentMembers.GetValueOrDefault(r.ExportId), Is.EqualTo(new[] { newName }), "R names O by the name its export gave it");
+        }
+    }
+
     // ─── Helpers ───
 
     private static string GeneratedAnchor(Guid csoId) => $"generated-{csoId:N}";
+
+    /// <summary>Runs the export over a worker-tracking caller context, each batch on a context of its own.</summary>
+    private async Task<ExportExecutionResult> ExecuteAsync(Schema s, Func<Mock<IConnector>> createConnector, int maxParallelism, int batchSize, int chunkSize)
+    {
+        await using var callerContext = NewWorkerContext();
+        var callerRepository = new PostgresDataRepository(callerContext);
+        using var jim = new JimApplication(callerRepository, syncRepository: callerRepository.Sync);
+        var connectedSystem = (await jim.ConnectedSystems.GetConnectedSystemAsync(s.SystemId))!;
+        return await jim.ExportExecution.ExecuteExportsAsync(connectedSystem, createConnector().Object, SyncRunMode.PreviewAndSync,
+            new ExportExecutionOptions { BatchSize = batchSize, MaxParallelism = maxParallelism, DeferredChunkSize = chunkSize }, CancellationToken.None,
+            connectorFactory: () => createConnector().Object,
+            repositoryFactory: () =>
+            {
+                var batchRepository = new PostgresDataRepository(NewWorkerContext());
+                return new SyncRepositoryScope(batchRepository.Sync, batchRepository);
+            });
+    }
+
+    /// <summary>The member values each export sends, recorded by export id.</summary>
+    private static void RecordMembers(Schema s, IEnumerable<PendingExport> exports, ConcurrentDictionary<Guid, string[]> sentMembers)
+    {
+        foreach (var export in exports)
+        {
+            sentMembers[export.Id] = export.AttributeValueChanges
+                .Where(c => c.AttributeId == s.MemberAttributeId && c.StringValue != null)
+                .Select(c => c.StringValue!).ToArray();
+        }
+    }
+
+    /// <summary>How many member changes are left pending once the run has finished.</summary>
+    private async Task<int> CountMembersLeftPendingAsync(Schema s)
+    {
+        await using var verify = NewContext();
+        return await verify.PendingExportAttributeValueChanges
+            .CountAsync(c => c.AttributeId == s.MemberAttributeId && c.Status == PendingExportAttributeChangeStatus.Pending);
+    }
+
+    /// <summary>Waits, for up to 15 seconds, until <paramref name="condition"/> holds; returns whether it did.</summary>
+    private async Task<bool> WaitUntilAsync(Func<JimDbContext, Task<bool>> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            await using (var probe = NewContext())
+            {
+                if (await condition(probe))
+                    return true;
+            }
+            await Task.Delay(50);
+        }
+        return false;
+    }
 
     private sealed record Schema(int SystemId, int TypeId, int MvTypeId, int ObjectIdAttributeId, int DisplayNameAttributeId, int MemberAttributeId);
 
