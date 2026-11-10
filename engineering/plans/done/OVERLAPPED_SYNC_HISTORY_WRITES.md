@@ -1,6 +1,7 @@
 # Overlapped Synchronisation History Writes
 
-- **Status:** Doing (Phases 1 to 3 complete; Phase 4's documentation and changelog done, its integration and scale validation outstanding)
+- **Status:** Done
+- **Note:** Phase 4's integration scenarios (001, 004, 005, 008, 023, 026, 027 and 032) pass; the 500k scale measurement is taken on the next #2669 run. Phase 5 (overlapping the cross-page batches, or a later wait point) is not started and is only taken up if that run shows significant time waiting on history writes.
 - **Issue:** [#2874](https://github.com/TetronIO/JIM/issues/2874) (blocked by [#2872](https://github.com/TetronIO/JIM/issues/2872))
 
 ## Overview
