@@ -24,9 +24,9 @@ namespace JIM.Models.Transactional;
 /// An attribute is a candidate only where it is a multi-valued reference attribute that is not an External ID, a
 /// Secondary External ID, a naming attribute or a connector-defined attribute, since those are read beyond the changes.
 /// It is loaded whole whenever a change cannot be put as a question the database answers exactly (a change replacing or
-/// clearing the whole set, a reference awaiting resolution, a case-insensitive string naming no object, a non-ASCII
-/// string, a database folding case differently), and whenever it holds fewer values than the cap, so an attribute the
-/// changes could empty is always whole. A whole load is always correct, only slower.
+/// clearing the whole set, a reference awaiting resolution, a string naming no object, a non-ASCII string compared
+/// ignoring case, a database folding case differently), and whenever it holds fewer values than the cap, so an
+/// attribute the changes could empty is always whole. A whole load is always correct, only slower.
 /// </para>
 /// </remarks>
 public static class ExportValueLoadPlanner
@@ -131,8 +131,9 @@ public static class ExportValueLoadPlanner
     /// Optimistic apply matches a change against held rows by <c>SyncEngine.ReferenceRowMatches</c>: a resolved row by
     /// the object it names when the change names one too, otherwise by its string, compared as the attribute compares
     /// identifiers. Each way of asking returns a superset of the rows that rule can match: the named objects' ids among
-    /// resolved rows; on a case-exact attribute, the strings exactly among every row; ignoring case, the strings among
-    /// unresolved rows only, which is all a change naming an object can match by string.
+    /// resolved rows; the strings among unresolved rows only, exactly on a case-exact attribute and ignoring case
+    /// otherwise, which is all a change naming an object can match by string. A change naming no object matches a resolved
+    /// row by its string too, which no question asks (#2871), so it loads the attribute whole.
     /// </remarks>
     private static ExportValueTrimCandidate PlanCandidate(Guid objectId, ConnectedSystemObjectTypeAttribute attribute,
         List<PendingExportAttributeValueChange> changes, bool databaseFoldsCaseLikeIdentifierKey)
@@ -162,14 +163,15 @@ public static class ExportValueLoadPlanner
             if (string.IsNullOrEmpty(change.StringValue))
                 continue;
 
+            if (!change.ResolvedReferenceCsoId.HasValue)
+                return WholeBecause(ExportValueLoadFallbackReason.NamesNoObject);
+
             if (attribute.CaseExact)
             {
                 exactValues.Add(change.StringValue);
                 continue;
             }
 
-            if (!change.ResolvedReferenceCsoId.HasValue)
-                return WholeBecause(ExportValueLoadFallbackReason.NamesNoObject);
             if (!databaseFoldsCaseLikeIdentifierKey)
                 return WholeBecause(ExportValueLoadFallbackReason.DatabaseFoldsCaseDifferently);
             if (!change.StringValue.All(character => character < 0x80))

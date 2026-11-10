@@ -14,10 +14,11 @@ namespace JIM.Models.Transactional;
 /// (<c>SyncEngine.ValueExistsOnCso</c>), so each way of asking must return a superset of the rows that comparison could
 /// match. That is why the three value lists differ in the rows they search: a resolved row names its object by id
 /// alone for a change that names one too, so it is found by <see cref="ReferenceIds"/>; an unresolved row is found by
-/// its string, exactly (<see cref="ExactValues"/>, searched over every row, which a case-exact attribute and a change
-/// naming no object need) or ignoring case (<see cref="CaseInsensitiveValues"/>, searched over unresolved rows only, the
-/// rows such a change can match by string). A question that cannot be put this way is never asked: the pair takes the
-/// full load (see <c>SyncEngine.PlanReconciliationProbes</c>).
+/// its string, exactly (<see cref="ExactValues"/>, for a case-exact attribute) or ignoring case
+/// (<see cref="CaseInsensitiveValues"/>), both searched over unresolved rows only, the rows such a change can match by
+/// string. A change naming no object, which matches a resolved row by its string too, cannot be put this way (#2871). A
+/// question that cannot be put this way is never asked: the pair takes the full load (see
+/// <c>SyncEngine.PlanReconciliationProbes</c>).
 /// </remarks>
 public sealed class ReconciliationProbeQuestion
 {
@@ -37,7 +38,7 @@ public sealed class ReconciliationProbeQuestion
     public required IReadOnlyCollection<Guid> ReferenceIds { get; init; }
 
     /// <summary>
-    /// Reference strings sought exactly, among all rows (<c>UnresolvedReferenceValue</c>).
+    /// Reference strings sought exactly, among unresolved rows only (<c>UnresolvedReferenceValue</c>).
     /// </summary>
     public required IReadOnlyCollection<string> ExactValues { get; init; }
 

@@ -210,12 +210,12 @@ public partial class SyncEngine
     /// <list type="bullet">
     /// <item>a change naming an object (<c>ResolvedReferenceCsoId</c>) is sought by that id among resolved rows, since a
     /// resolved row names its object by id alone (<see cref="ValueExistsOnCso"/>), and by its strings among unresolved
-    /// rows;</item>
-    /// <item>on a case-exact attribute, strings are sought exactly, among all rows;</item>
-    /// <item>ignoring case, strings are sought among unresolved rows only, and only when ASCII and the database folds case
-    /// as JIM does (<paramref name="databaseFoldsCaseLikeIdentifierKey"/>). A change naming no object matches resolved rows
-    /// by string too, and no index finds a resolved row by its lowered string, so such a change loads its pair in full;
-    /// so does a non-ASCII string, whose folding the database need not share;</item>
+    /// rows: exactly on a case-exact attribute; ignoring case otherwise, and then only when ASCII and the database folds
+    /// case as JIM does (<paramref name="databaseFoldsCaseLikeIdentifierKey"/>), so a non-ASCII string, whose folding the
+    /// database need not share, loads its pair in full;</item>
+    /// <item>a change naming no object matches resolved rows by the string they keep too, and the probe finds strings
+    /// among unresolved rows only (no index holds a resolved row's string, #2871), so such a change loads its pair in
+    /// full, on a case-exact attribute as on any other;</item>
     /// <item>a change whose verdict depends on the value count (empty, RemoveAll, a whole-set Update) asks for the count,
     /// capped at two.</item>
     /// </list>
@@ -313,16 +313,22 @@ public partial class SyncEngine
             if (strings.Count == 0)
                 continue;
 
+            // A resolved row the change matches by its string (it names no object) is found by no question (#2871).
+            if (!change.ResolvedReferenceCsoId.HasValue)
+            {
+                fallbackReason = ReconciliationProbeFallbackReason.NamesNoObject;
+                return null;
+            }
+
             if (attribute.CaseExact)
             {
                 exactValues.UnionWith(strings);
                 continue;
             }
 
-            if (!change.ResolvedReferenceCsoId.HasValue || !databaseFoldsCaseLikeIdentifierKey || !strings.All(IsAscii))
+            if (!databaseFoldsCaseLikeIdentifierKey || !strings.All(IsAscii))
             {
-                fallbackReason = !change.ResolvedReferenceCsoId.HasValue ? ReconciliationProbeFallbackReason.NamesNoObject
-                    : !databaseFoldsCaseLikeIdentifierKey ? ReconciliationProbeFallbackReason.DatabaseFoldsCaseDifferently
+                fallbackReason = !databaseFoldsCaseLikeIdentifierKey ? ReconciliationProbeFallbackReason.DatabaseFoldsCaseDifferently
                     : ReconciliationProbeFallbackReason.NonAsciiValue;
                 return null;
             }

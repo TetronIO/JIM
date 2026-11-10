@@ -2459,13 +2459,14 @@ public partial class SyncRepository
     /// <remarks>
     /// Three arms, each led by the predicate an index answers, the shape <see cref="CsoReferenceValueMatchSql"/> takes
     /// for the same reason (#2669): held in one OR, no index could serve the string comparisons, and PostgreSQL would read
-    /// every member of every group asked about. The referenced ids are looked up in the <c>ReferenceValueId</c> index;
-    /// exact strings in <c>IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue</c>, over resolved and
-    /// unresolved rows alike; lowered strings in <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, whose predicate the arm repeats
-    /// so the partial index applies, and which therefore finds unresolved rows only. That is all a change naming an
-    /// object can match by string ignoring case, since a resolved row names its object by id alone
-    /// (<c>SyncEngine.ReferenceRowMatches</c>); the planner sends no other case-insensitive question. Both sides are
-    /// lowered in the database, and the planner asks only for ASCII strings, and only once
+    /// every member of every group asked about. The referenced ids are looked up in the <c>ReferenceValueId</c> index.
+    /// Both string arms look strings up in <c>IX_CsoAttrVal_Lower_UnresolvedRef</c>, by their lowered form, repeating its
+    /// predicate so the partial index applies, and so find unresolved rows only. That is all a change naming an object can
+    /// match by string, since a resolved row names its object by id alone (<c>SyncEngine.ReferenceRowMatches</c>); the
+    /// planner sends a change naming no object, which matches a resolved row by the string it keeps, to the full load
+    /// instead (#2871), so no index holds a resolved row's string. The exact arm then compares the string exactly; a
+    /// string equal to another is equal lowered too, whatever the database's folding, so the lowered lookup misses
+    /// nothing it should find. The case-insensitive arm asks only for ASCII strings, and only once
     /// <see cref="DoesDatabaseFoldCaseLikeIdentifierKeyAsync"/> has confirmed the database folds the non-ASCII characters
     /// JIM folds into ASCII as JIM does. The arms may overlap and match across the objects and attributes of one
     /// statement, so the caller keeps each row once, under the question for its own object and attribute.
@@ -2479,8 +2480,10 @@ public partial class SyncRepository
           UNION ALL
           SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
           FROM ""ConnectedSystemObjectAttributeValues""
-          WHERE ""UnresolvedReferenceValue"" = ANY(@exactValues)
+          WHERE LOWER(""UnresolvedReferenceValue"") = ANY(ARRAY(SELECT lower(v) FROM unnest(@exactValues) AS v))
+            AND ""UnresolvedReferenceValue"" = ANY(@exactValues)
             AND ""UnresolvedReferenceValue"" IS NOT NULL
+            AND ""ReferenceValueId"" IS NULL
             AND ""ConnectedSystemObjectId"" = ANY(@csoIds)
             AND ""AttributeId"" = ANY(@attributeIds)
           UNION ALL

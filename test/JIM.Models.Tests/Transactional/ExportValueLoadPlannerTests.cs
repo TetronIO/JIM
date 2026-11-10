@@ -140,16 +140,35 @@ public class ExportValueLoadPlannerTests
     }
 
     [Test]
-    public void PlanCandidates_CaseExactStringNamingNoObject_AsksForItExactly()
+    public void PlanCandidates_CaseExactStringNamingNoObject_LoadsTheAttributeWhole()
     {
+        // A change naming no object matches a resolved row by the DN it keeps, on a case-exact attribute as on any other,
+        // and the probe seeks strings among unresolved rows only (#2871).
         var exactMember = Attribute(2, "member", caseExact: true);
         var candidates = Plan([Export(Group(), Change(exactMember, PendingExportAttributeChangeType.Remove, "cn=a,ou=people"))],
             attributes: [exactMember]);
 
         using (Assert.EnterMultipleScope())
         {
+            Assert.That(candidates.Single().FallbackReason, Is.EqualTo(ExportValueLoadFallbackReason.NamesNoObject));
+            Assert.That(candidates.Single().Question, Is.Null);
+        }
+    }
+
+    [Test]
+    public void PlanCandidates_CaseExactStringNamingAnObject_AsksForItByIdAndExactly()
+    {
+        var exactMember = Attribute(2, "member", caseExact: true);
+        var objectId = Guid.NewGuid();
+        var candidates = Plan([Export(Group(), Change(exactMember, PendingExportAttributeChangeType.Remove, "cn=Zoë,ou=people", objectId))],
+            databaseFoldsCase: false, attributes: [exactMember]);
+
+        using (Assert.EnterMultipleScope())
+        {
             Assert.That(candidates.Single().FallbackReason, Is.Null);
-            Assert.That(candidates.Single().Question!.ExactValues, Is.EquivalentTo(new[] { "cn=a,ou=people" }));
+            Assert.That(candidates.Single().Question!.ReferenceIds, Is.EquivalentTo(new[] { objectId }));
+            Assert.That(candidates.Single().Question!.ExactValues, Is.EquivalentTo(new[] { "cn=Zoë,ou=people" }));
+            Assert.That(candidates.Single().Question!.CaseInsensitiveValues, Is.Empty);
         }
     }
 
