@@ -64,6 +64,9 @@ spec:
         - max_parallel_workers=16
         - -c
         - max_parallel_maintenance_workers=4
+        # JIM's queries finish in milliseconds, where compiling them costs more than it saves (#2834).
+        - -c
+        - jit=off
         - -c
         - statement_timeout=300000
         # Drop a session whose client has gone within two minutes, not Linux's two hours: stopping JIM takes its pod's

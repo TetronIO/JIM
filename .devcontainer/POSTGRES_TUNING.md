@@ -58,6 +58,7 @@ The script first reserves memory for non-PostgreSQL workloads (JIM services, VS 
 - `max_connections` — 100 (EF Core connection pooling)
 - `random_page_cost` — 1.1 (assumes SSD/NVMe)
 - `effective_io_concurrency` — 200 (SSD-optimised)
+- `jit`: off (JIM's queries finish in milliseconds, where JIT compilation costs more than it saves; #2834)
 - `statement_timeout` — 300000ms (5 minutes)
 
 ## Memory Balance: PostgreSQL vs JIM Services

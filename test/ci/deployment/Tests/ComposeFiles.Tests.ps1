@@ -111,6 +111,12 @@ Describe 'The database container''s environment on the <Stack> stack' -Skip:$scr
         $command | Should -Contain 'tcp_keepalives_count=6'
     }
 
+    It 'turns off JIT compilation' {
+        # JIM's queries finish in milliseconds, where compiling them costs more than it saves: at 500k objects JIT
+        # spent 23 s compiling across a run and made the Target Full Synchronisation 13% slower (#2834).
+        $script:Services['jim.database'].Command | Should -Contain 'jit=off'
+    }
+
     It 'still gives JIM''s own services the settings file, secrets included' {
         $script:Services['jim.web'].Environment['JIM_SSO_SECRET'] | Should -Be 'sso-secret-for-test'
         $script:Services['jim.worker'].Environment['JIM_DB_PASSWORD'] | Should -Be 'database-password-for-test'
