@@ -23,7 +23,7 @@ namespace JIM.Web.Tests;
 [FixtureLifeCycle(LifeCycle.InstancePerTestCase)]
 public class ConnectedSystemSettingsTabFeatureFlagTests : JimComponentTestContext
 {
-    private const string FlaggedSetting = "Manage Exchange recipients";
+    private const string FlaggedSetting = "Flagged setting";
     private readonly Mock<IRepository> _repository = new();
 
     protected override void ConfigureAdditionalServices()
@@ -34,6 +34,7 @@ public class ConnectedSystemSettingsTabFeatureFlagTests : JimComponentTestContex
     [Test]
     public void SettingsTab_FlagOff_LeavesTheFlaggedSettingOut()
     {
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
 
         var cut = RenderTab();
@@ -48,6 +49,7 @@ public class ConnectedSystemSettingsTabFeatureFlagTests : JimComponentTestContex
     [Test]
     public void SettingsTab_FlagOn_ShowsTheFlaggedSetting()
     {
+        using var catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         _repository.Setup(r => r.ServiceSettings).Returns(InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
 
         var cut = RenderTab();
@@ -63,7 +65,7 @@ public class ConnectedSystemSettingsTabFeatureFlagTests : JimComponentTestContex
             new()
             {
                 Id = 2, Name = FlaggedSetting, Type = ConnectedSystemSettingType.CheckBox, Category = ConnectedSystemSettingCategory.Export,
-                FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key
+                FeatureFlagKey = FeatureFlagCatalogueScope.InDevelopmentFlag.Key
             }
         };
         // Unsaved, so the tab reads nothing for the system itself: only the flag decides what it shows.

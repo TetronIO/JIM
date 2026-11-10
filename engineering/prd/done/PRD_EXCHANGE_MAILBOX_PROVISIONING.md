@@ -1,11 +1,11 @@
 # Exchange Mailbox Provisioning (on-premises)
 
-- **Status:** Doing (Phases 1 to 7 of the implementation plan complete; Phase 8, integration and flag removal, next)
+- **Status:** Done
 - **Created:** 2026-10-31
 - **Author:** Jay (drafted by Claude for review)
 - **Issue:** [#2021](https://github.com/TetronIO/JIM/issues/2021)
 - **Transport spike:** [`engineering/plans/done/EXCHANGE_REMOTING_SPIKE.md`](../../plans/done/EXCHANGE_REMOTING_SPIKE.md). It decided go on 2026-11-03, against the AD lab's Exchange server.
-- **Implementation plan:** [`engineering/plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md`](../../plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md)
+- **Implementation plan:** [`engineering/plans/done/EXCHANGE_MAILBOX_PROVISIONING.md`](../../plans/done/EXCHANGE_MAILBOX_PROVISIONING.md)
 
 ## Problem Statement
 
@@ -253,7 +253,7 @@ Made on 2026-11-01, in review of the [portal mock](https://claude.ai/artifact/WJ
 13. ~~**JIM warns about the GAL loop** rather than leaving it to the docs (requirement 23).~~ Superseded by decision 19 on 2026-11-06: the loop is prevented, so there is nothing to warn about.
 14. **Exchange gets its own Operations tab**, separate from Passwords, whose lifecycle differs (requirement 13).
 
-Made on 2026-11-01, in review of the [implementation plan](../../plans/doing/EXCHANGE_MAILBOX_PROVISIONING.md):
+Made on 2026-11-01, in review of the [implementation plan](../../plans/done/EXCHANGE_MAILBOX_PROVISIONING.md):
 
 15. **An `https://` endpoint is trusted through JIM's Certificates store**, as LDAPS is, rather than through a certificate setting of its own (requirement 1). The plan's other decisions (a separate Exchange queue on a shared delivery scheduler, 90-day retention for Exchange follow-ups, and delivery behind a feature flag) change no requirement and are recorded in the plan.
 

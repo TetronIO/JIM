@@ -10,10 +10,6 @@ audience: automation-author
 These cmdlets read the Exchange queue (the recipient changes JIM has queued for Exchange after an export) and retry the
 ones that are stuck.
 
-!!! warning "In development"
-    Exchange recipients are still being built, behind the In Development feature flag `Features.ExchangeRecipients`.
-    These cmdlets answer only where that flag is turned on, which is intended for development and testing.
-
 ```jim-diagram
 archetype: comparison
 title: What a retry does to each queued Exchange change

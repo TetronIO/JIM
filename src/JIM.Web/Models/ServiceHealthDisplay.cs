@@ -367,8 +367,8 @@ public static class ServiceHealthDisplay
         var syncDown = down.Any(s => s.Service == JimService.WorkerSync);
         // With no delivery loop in the report, the synchronisation loop down is the whole Worker down.
         var passwordsDown = down.Any(s => s.Service == JimService.WorkerDelivery) || (syncDown && !deliveryReported);
-        // The Exchange delivery service is only in the report while its feature is on (#2021); absent, it is no part
-        // of whether the whole Worker is down.
+        // As with password delivery: an Exchange delivery loop (#2021) the report does not include is no part of whether
+        // the whole Worker is down.
         var exchangeReported = reportedServices.Contains(JimService.WorkerExchange);
         var exchangeDown = down.Any(s => s.Service == JimService.WorkerExchange);
         var schedulerDown = down.Any(s => s.Service == JimService.Scheduler);

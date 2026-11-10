@@ -22,9 +22,6 @@ function Resume-JIMPendingExchangeChange {
 
         The command is named Resume- rather than Retry- because Retry is not a PowerShell approved verb.
 
-        Exchange recipients are in development: this command answers only where the Exchange recipients feature is
-        turned on.
-
     .PARAMETER Id
         The IDs of the queued changes to retry. Combines with the other criteria rather than replacing them, so -State
         Parked alongside piped changes means these changes, if they are still parked.

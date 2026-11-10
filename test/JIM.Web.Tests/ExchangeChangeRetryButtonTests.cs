@@ -84,16 +84,6 @@ public class ExchangeChangeRetryButtonTests : JimComponentTestContext
         });
     }
 
-    [Test]
-    public void FeatureOff_OffersNothing()
-    {
-        _repository.Setup(r => r.ServiceSettings).Returns(new InMemoryServiceSettingsRepository());
-
-        var cut = Render<ExchangeChangeRetryButton>(p => p.Add(b => b.ChangeId, Guid.NewGuid()));
-
-        Assert.That(cut.FindAll("[data-testid='jim-exchange-retry']"), Is.Empty);
-    }
-
     private sealed class FakeJimApplicationFactory(JimApplication jimApplication) : IJimApplicationFactory
     {
         public JimApplication Create() => jimApplication;

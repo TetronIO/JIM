@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
@@ -40,10 +41,13 @@ public class SynchronisationControllerFlaggedSettingTests
     private JimApplication _application = null!;
     private SynchronisationController _controller = null!;
     private ConnectorDefinition _definition = null!;
+    private IDisposable _catalogue = null!;
 
     [SetUp]
     public void SetUp()
     {
+        // The mechanism, against a synthetic flag: the catalogue declares no In Development flag once its features ship.
+        _catalogue = FeatureFlagCatalogueScope.Use(FeatureFlagCatalogueScope.InDevelopmentFlag);
         _mockRepository = new Mock<IRepository>();
         _mockConnectedSystemRepo = new Mock<IConnectedSystemRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
@@ -57,8 +61,8 @@ public class SynchronisationControllerFlaggedSettingTests
                 new ConnectorDefinitionSetting { Id = HostSettingId, Name = "Host", Type = ConnectedSystemSettingType.String },
                 new ConnectorDefinitionSetting
                 {
-                    Id = FlaggedSettingId, Name = "Manage Exchange recipients", Type = ConnectedSystemSettingType.CheckBox,
-                    FeatureFlagKey = FeatureFlagCatalogue.ExchangeRecipients.Key
+                    Id = FlaggedSettingId, Name = "Flagged setting", Type = ConnectedSystemSettingType.CheckBox,
+                    FeatureFlagKey = FeatureFlagCatalogueScope.InDevelopmentFlag.Key
                 }
             ]
         };
@@ -66,7 +70,11 @@ public class SynchronisationControllerFlaggedSettingTests
     }
 
     [TearDown]
-    public void TearDown() => _application?.Dispose();
+    public void TearDown()
+    {
+        _application?.Dispose();
+        _catalogue.Dispose();
+    }
 
     [Test]
     public async Task GetConnectorDefinitionAsync_FlagOff_LeavesTheFlaggedSettingOutAsync()
@@ -85,7 +93,7 @@ public class SynchronisationControllerFlaggedSettingTests
 
         var dto = Definition(await _controller.GetConnectorDefinitionAsync(DefinitionId));
 
-        Assert.That(dto.Settings.Select(s => s.Name), Is.EqualTo(new[] { "Host", "Manage Exchange recipients" }));
+        Assert.That(dto.Settings.Select(s => s.Name), Is.EqualTo(new[] { "Host", "Flagged setting" }));
     }
 
     [Test]
@@ -112,7 +120,7 @@ public class SynchronisationControllerFlaggedSettingTests
         using (Assert.EnterMultipleScope())
         {
             Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
-            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("Manage Exchange recipients"));
+            Assert.That(((ApiErrorResponse)((BadRequestObjectResult)result).Value!).Message, Does.Contain("Flagged setting"));
             Assert.That(connectedSystem.SettingValues.Single(sv => sv.Setting.Id == FlaggedSettingId).CheckboxValue, Is.False,
                 "nothing is applied when any requested setting is refused");
         }

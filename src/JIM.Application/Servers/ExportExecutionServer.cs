@@ -71,9 +71,8 @@ public class ExportExecutionServer
     private Action<IReadOnlyList<string>>? _containersCreated;
 
     /// <summary>
-    /// Whether the current export run stages Exchange changes (#2021): <see cref="FeatureFlagCatalogue.ExchangeRecipients"/>,
-    /// read once at the start of a calls-based run (the developer guide's "gate at entry points") and handed to every
-    /// batch it processes, its parallel batches included, rather than read per batch or per object.
+    /// Whether the current export run stages Exchange changes (#2021): only a calls-based run does, decided once at the
+    /// start of the run and handed to every batch it processes, its parallel batches included.
     /// </summary>
     private bool _stageExchangeChanges;
 
@@ -239,8 +238,7 @@ public class ExportExecutionServer
         }
 
         _containersCreated = containersCreated;
-        _stageExchangeChanges = connector is IConnectorExportUsingCalls
-                                && await Application.FeatureFlags.IsEnabledAsync(FeatureFlagCatalogue.ExchangeRecipients.Key);
+        _stageExchangeChanges = connector is IConnectorExportUsingCalls;
 
         // #2723: from the run's own Connector, the primary. A parallel batch's Connector is another instance of the same
         // Connector, so it would place every object the same way; preparing once is what spares each batch the parsing.

@@ -123,14 +123,9 @@ Connect-JIM -Url $JIMUrl -ApiKey $ApiKey | Out-Null
 Write-Host "  ✓ Connected to $JIMUrl" -ForegroundColor Green
 
 try {
-    # Step 3: The feature. Until it is on, the connector definition does not even list the Exchange settings.
-    Write-TestStep "Step 3" "Turning on Exchange recipient provisioning"
-    Enable-JIMFeature -Name "Features.ExchangeRecipients" -AllowInDevelopment | Out-Null
-    Write-Host "  ✓ Features.ExchangeRecipients is on" -ForegroundColor Green
-
-    # Step 4: Manage Exchange recipients, through ex1. Saving signs in to Exchange as the account JIM binds with, so a
+    # Step 3: Manage Exchange recipients, through ex1. Saving signs in to Exchange as the account JIM binds with, so a
     # failure here (Kerberos, the server's name, svc-jim's Recipient Management role) is the first thing to read.
-    Write-TestStep "Step 4" "Managing Exchange recipients through $($ExchangeConfig.Host)"
+    Write-TestStep "Step 3" "Managing Exchange recipients through $($ExchangeConfig.Host)"
     $ldapSystem = Get-JIMConnectedSystem -Id $config.LDAPSystemId
     $ldapConnector = Get-JIMConnectorDefinition | Where-Object { $_.name -eq "JIM LDAP Connector" }
     if (-not $ldapConnector) { throw "LDAP connector not found" }
@@ -138,7 +133,7 @@ try {
     foreach ($setting in (Get-JIMConnectorDefinition -Id $ldapConnector.id).settings) { $settingsByName[$setting.name] = $setting.id }
     foreach ($required in "Manage Exchange recipients", "Exchange server") {
         if (-not $settingsByName.ContainsKey($required)) {
-            throw "The LDAP Connector lists no '$required' setting; is Features.ExchangeRecipients on?"
+            throw "The LDAP Connector lists no '$required' setting"
         }
     }
     $saved = Set-JIMConnectedSystem -Id $ldapSystem.id -PassThru -SettingValues @{
@@ -152,9 +147,9 @@ try {
     }
     Write-Host "  ✓ Exchange server $($ExchangeConfig.Host) saved, and JIM signed in to it" -ForegroundColor Green
 
-    # Step 5: Refresh the schema so the connector-defined Exchange attributes appear on user, and select them. A refresh
+    # Step 4: Refresh the schema so the connector-defined Exchange attributes appear on user, and select them. A refresh
     # adds new attributes unselected and keeps every existing selection.
-    Write-TestStep "Step 5" "Refreshing the schema for the Exchange attributes"
+    Write-TestStep "Step 4" "Refreshing the schema for the Exchange attributes"
     Import-JIMConnectedSystemSchema -Id $ldapSystem.id -Confirm:$false | Out-Null
     $userType = @(Get-JIMConnectedSystem -Id $ldapSystem.id -ObjectTypes) | Where-Object { $_.name -eq 'user' } | Select-Object -First 1
     if (-not $userType) { throw "The LDAP Connected System has no 'user' Object Type after the schema refresh." }
@@ -173,8 +168,8 @@ try {
     Set-JIMConnectedSystemAttribute -ConnectedSystemId $ldapSystem.id -ObjectTypeId $userType.id -AttributeUpdates $updates | Out-Null
     Write-Host "  ✓ $($exchangeAttributes.Count) Exchange attributes selected on 'user'" -ForegroundColor Green
 
-    # Step 6: The Attribute Flows
-    Write-TestStep "Step 6" "Flowing the Exchange attributes on the export Synchronisation Rule"
+    # Step 5: The Attribute Flows
+    Write-TestStep "Step 5" "Flowing the Exchange attributes on the export Synchronisation Rule"
     $exportRuleName = "$($DirectoryConfig.ConnectedSystemName) Export Users"
     $exportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $exportRuleName } | Select-Object -First 1
     if (-not $exportRule) { throw "Could not find the export Synchronisation Rule '$exportRuleName' that Setup-Scenario-001.ps1 creates." }

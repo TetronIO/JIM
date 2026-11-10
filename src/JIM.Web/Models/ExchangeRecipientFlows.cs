@@ -44,13 +44,12 @@ public sealed class ExchangeRecipientFlows
     public IReadOnlyList<SyncRuleMapping> Flows => Rows.Where(r => r.Mapping != null).Select(r => r.Mapping!).ToList();
 
     /// <summary>
-    /// The panel for <paramref name="rule"/>, or null where it does not belong: an import rule, the Exchange feature turned
-    /// off, or an Object Type with no Exchange attributes (its Connected System does not manage Exchange recipients).
+    /// The panel for <paramref name="rule"/>, or null where it does not belong: an import rule, or an Object Type with no Exchange attributes (its Connected System does not manage Exchange recipients).
     /// </summary>
-    public static ExchangeRecipientFlows? For(SyncRule rule, bool featureEnabled)
+    public static ExchangeRecipientFlows? For(SyncRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
-        if (!featureEnabled || rule.Direction != SyncRuleDirection.Export || rule.ConnectedSystemObjectType is not { } objectType)
+        if (rule.Direction != SyncRuleDirection.Export || rule.ConnectedSystemObjectType is not { } objectType)
             return null;
 
         // Connector-defined only: a directory attribute can never carry one of these names, which contain spaces, but the

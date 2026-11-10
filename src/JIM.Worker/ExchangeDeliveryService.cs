@@ -16,8 +16,7 @@ namespace JIM.Worker;
 /// export left for an account reaches Exchange within seconds, without waiting for another export run (PRD
 /// requirement 10). It reports its heartbeat under <see cref="JimService.WorkerExchange"/>, beside the password
 /// delivery service rather than inside it, so a fault in one cannot take the other down; how it is hosted, woken and
-/// kept alive is <see cref="DeliveryService"/>. While the ExchangeRecipients flag is off it does nothing visible
-/// (<see cref="JimExchangeDeliveryWork"/>).
+/// kept alive is <see cref="DeliveryService"/>; its work against JIM is <see cref="JimExchangeDeliveryWork"/>.
 /// </summary>
 internal sealed class ExchangeDeliveryService : DeliveryService
 {

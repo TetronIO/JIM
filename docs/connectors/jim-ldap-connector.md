@@ -78,6 +78,7 @@ JIM detects the directory type from the Root DSE during schema discovery and adj
 - **Values already in place**<br /> Adding a value the directory already holds (a member already in the group) or removing one it no longer holds counts as done, and every other change in the same export is still applied. See [Values already in place](jim-ldap-connector-values-in-use.md#values-already-in-place).
 - **Container provisioning**<br /> Optionally create organisational units (OUs) on demand when provisioning objects to new locations.
 - **Group placeholder members**<br /> Automatic handling of the `groupOfNames` MUST member constraint for OpenLDAP directories.
+- **Exchange recipients**<br /> On Active Directory, Exchange makes the objects JIM provisions into recipients. Writing `homeMDB` and Exchange's other stamps makes none, so they are discovered read-only. See [LDAP Connector Exchange Recipients](jim-ldap-connector-exchange.md).
 
 ### Schema Discovery
 
@@ -87,7 +88,6 @@ JIM detects the directory type from the Root DSE during schema discovery and adj
 - **Auxiliary class merging**<br /> Merge an auxiliary class's attributes into a structural Object Type so JIM can import and export them, with JIM composing each entry's `objectClass` itself. See [Auxiliary Object Classes](jim-ldap-connector-auxiliary-classes.md) below.
 - **Internal class classification**<br /> Classes the directory keeps for its own configuration or operation are marked internal, and the schema screen puts them out of the way. See [Internal object types](#internal-object-types) below.
 - **Operational attributes**<br /> On RFC 4512 directories, attributes the directory maintains itself, such as `createTimestamp` and `pwdFailureTime`, are offered unselected and read-only; see [Operational Attributes](jim-ldap-connector-operational-attributes.md).
-- **Attributes only Exchange may set**<br /> On Active Directory, `homeMDB`, `msExchRecipientTypeDetails` and Exchange's other stamps are read-only: writing them creates no mailbox.
 - **Case-exact attributes**<br /> Discovered from each attribute's matching rule, or on Active Directory its syntax; see [Case-exact attributes](../concepts/case-sensitivity.md#case-exact-attributes).
 - **Partition discovery**<br /> Automatically enumerates naming contexts and organisational units.
 - **Hidden partition filtering**<br /> Skip Configuration, Schema, and DNS partitions for improved performance.
@@ -178,11 +178,11 @@ Available to automation via `GET /api/v1/synchronisation/connected-systems/{conn
 
 A directory publishes its own machinery in the same schema as the classes you manage. A stock OpenLDAP returns 67 structural classes, of which 27 belong to the server rather than to your directory: the `cn=config` backend's `olc*` classes, the accesslog overlay's `audit*` classes, and the root DSE class.
 
-On 389 Directory Server 3.1, 78 of the 184 structural classes it publishes belong to the server: its `cn=config` and plug-in configuration, replication and changelog classes, Class of Service and role definitions, tombstone and glue entries, and the Netscape console classes. Those are marked internal. `inetOrgPerson` and the classes 389 recommends for users (`nsPerson`, `nsAccount`, `nsOrgPerson`, `nsMemberOf`) are never marked internal.
+On 389 Directory Server 3.1, 78 of the 184 structural classes belong to the server and are marked internal: `cn=config`, plug-in, replication and changelog classes, Class of Service and role definitions, tombstone and glue entries, and the Netscape console classes.
 
 The Connector marks those Object Types **internal**. The Schema tab hides them, says how many it is holding back, and offers **Show internal object types**. Nothing is discarded: every class is still discovered, stored and selectable, and an Object Type you have selected is never hidden.
 
-The judgement is made from the class's OID rather than its name, because an OID arc is assigned to its vendor and does not change. For 389 Directory Server the vendor arc also carries `inetOrgPerson` and the recommended user classes, so JIM matches an exact list of the classes 389 ships for itself instead of the arc. Classes the directory flags RFC 4512 `OBSOLETE` are treated the same way. Classes from the X.500, COSINE and Internet standards arcs, and any schema extensions published under your own organisation's arc, are never marked internal.
+JIM judges a class by its OID, which its vendor assigns, not its name. 389's arc also carries `inetOrgPerson` and the user classes 389 recommends (`nsPerson`, `nsAccount`, `nsOrgPerson`, `nsMemberOf`), so JIM matches an exact list of 389's own classes there. Classes flagged RFC 4512 `OBSOLETE` are internal too. Standards classes (X.500, COSINE, Internet), `inetOrgPerson`, those 389 user classes, and your own organisation's extensions never are.
 
 Active Directory needs none of this: the Connector already asks the directory to exclude its own hidden and defunct classes when it enumerates them, so what you see is already the classes an administrator manages.
 
@@ -206,6 +206,8 @@ A naming context or crossRef partition the service account cannot read (a least-
 | Export Concurrency | Concurrent LDAP operations per export batch ([Export Performance](../configuration/export-performance.md)). | `4` |
 | Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100 to 2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
+| Manage Exchange recipients | Active Directory only. Makes provisioned objects Exchange recipients. | `false` |
+| Exchange server | The Exchange server JIM signs in to. Required while managing recipients. | *(blank)* |
 
 ## :material-wrench-outline: Troubleshooting
 
@@ -220,4 +222,5 @@ A naming context or crossRef partition the service account cannot read (a least-
 - [LDAP Connector Domain Controllers and Containers](jim-ldap-connector-topology.md): domain controllers, forests, referrals and Container Scope.
 - [LDAP Connector Certificates](jim-ldap-connector-certificates.md): LDAPS and certificate validation.
 - [LDAP Connector Passwords](jim-ldap-connector-passwords.md): setting passwords, and the password policy JIM discovers.
+- [LDAP Connector Exchange Recipients](jim-ldap-connector-exchange.md): provisioning Exchange recipients.
 - [LDAP Connector Service Account Permissions](jim-ldap-connector-permissions.md): the rights the service account needs.

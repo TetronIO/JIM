@@ -150,7 +150,7 @@ public class SeedingServerFeatureFlagsTests
         // deleted from the real catalogue; a deployment that ran with them still holds their rows, which the next
         // seeding pass must remove. Measured against the real catalogue, so the synthetic one is set aside.
         _catalogue.Dispose();
-        string[] retiredKeys = ["Features.UniqueValueGeneration", "Features.MetaverseDerivedAttributeFlows"];
+        string[] retiredKeys = ["Features.UniqueValueGeneration", "Features.MetaverseDerivedAttributeFlows", "Features.ExchangeRecipients"];
         _mockServiceSettingsRepo.Setup(r => r.GetSettingsByCategoryAsync(ServiceSettingCategory.FeatureFlags))
             .ReturnsAsync(retiredKeys.Select(key => new ServiceSetting
             {

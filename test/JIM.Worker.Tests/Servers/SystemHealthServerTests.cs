@@ -36,15 +36,12 @@ public class SystemHealthServerTests
         _jim = new JimApplication(_mockRepository.Object);
     }
 
-    private void GivenFeatureFlagsOn() =>
-        _mockRepository.Setup(r => r.ServiceSettings).Returns(JIM.TestSupport.InMemoryServiceSettingsRepository.WithAllFeatureFlagsEnabled());
-
-    // ---- The Exchange Delivery Service (#2021, behind the ExchangeRecipients flag) ----
+    // ---- The Exchange Delivery Service (#2021) ----
 
     [Test]
-    public async Task GetServiceHealthAsync_ExchangeRecipientsOn_ExpectsTheExchangeDeliveryServiceBesideTheOtherWorkerServicesAsync()
+    public async Task GetServiceHealthAsync_NoExchangeHeartbeat_ExpectsTheExchangeDeliveryServiceBesideTheOtherWorkerServicesAsync()
     {
-        GivenFeatureFlagsOn();
+        // The Worker always runs it, as it does password delivery, so a Worker that never started it is a red card.
         GivenHeartbeats();
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -57,18 +54,6 @@ public class SystemHealthServerTests
             }), "the Worker's services sit together, whatever their enum values");
             Assert.That(report.Services.Single(s => s.Service == JimService.WorkerExchange).Condition, Is.EqualTo(ServiceHealthCondition.NeverStarted));
         }
-    }
-
-    [Test]
-    public async Task GetServiceHealthAsync_ExchangeRecipientsOff_LeavesTheExchangeDeliveryServiceOutEvenWithAHeartbeatAsync()
-    {
-        // A heartbeat written while the flag was on outlives it by up to a day; reported, it would surface a feature
-        // that is switched off, and as Stale or Unhealthy at that.
-        GivenHeartbeats(Heartbeat(JimService.WorkerExchange, TimeSpan.FromHours(2)));
-
-        var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
-
-        Assert.That(report.Services.Select(s => s.Service), Does.Not.Contain(JimService.WorkerExchange));
     }
 
     [TearDown]
@@ -108,7 +93,7 @@ public class SystemHealthServerTests
 
         using (Assert.EnterMultipleScope())
         {
-            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler }));
+            Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler }));
             Assert.That(report.Services.Select(s => s.Status), Is.All.EqualTo(ServiceHealthStatus.Unhealthy));
             Assert.That(report.Services.Select(s => s.Condition), Is.All.EqualTo(ServiceHealthCondition.NeverStarted));
             Assert.That(report.Services.Select(s => s.Reason), Is.All.EqualTo("Never started"));
@@ -281,6 +266,7 @@ public class SystemHealthServerTests
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(2)),
             Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(2),
                 currentWork: "Password delivery: Corporate Directory", lastProgressAt: AsOf.AddMinutes(-30)),
+            Heartbeat(JimService.WorkerExchange, TimeSpan.FromSeconds(2)),
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(30)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -294,6 +280,7 @@ public class SystemHealthServerTests
         GivenHeartbeats(
             Heartbeat(JimService.WorkerSync, TimeSpan.FromSeconds(1)),
             Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(1)),
+            Heartbeat(JimService.WorkerExchange, TimeSpan.FromSeconds(1)),
             Heartbeat(JimService.Scheduler, TimeSpan.FromSeconds(1)));
 
         var report = await _jim.SystemHealth.GetServiceHealthAsync(AsOf);
@@ -313,14 +300,14 @@ public class SystemHealthServerTests
 
         Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
         {
-            JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler
+            JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler
         }));
     }
 
     [Test]
     public async Task GetServiceHealthAsync_OneServiceHasReported_ShownHealthyAmongTheUnhealthy()
     {
-        // One heartbeat among three expected services: the one that spoke is Healthy, the others are Unhealthy,
+        // One heartbeat among four expected services: the one that spoke is Healthy, the others are Unhealthy,
         // and the report's overall verdict is the worst of them.
         GivenHeartbeats(Heartbeat(JimService.WorkerDelivery, TimeSpan.FromSeconds(1)));
 
@@ -330,7 +317,7 @@ public class SystemHealthServerTests
         {
             Assert.That(report.Services.Select(s => s.Service), Is.EqualTo(new[]
             {
-                JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler
+                JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler
             }));
             Assert.That(report.Services.Single(s => s.Service == JimService.WorkerDelivery).Status, Is.EqualTo(ServiceHealthStatus.Healthy));
             Assert.That(report.Overall, Is.EqualTo(ServiceHealthStatus.Unhealthy));
@@ -338,11 +325,11 @@ public class SystemHealthServerTests
     }
 
     [Test]
-    public void ExpectedServices_IncludePasswordDeliveryInReportOrder()
+    public void ExpectedServices_IncludePasswordAndExchangeDeliveryInReportOrder()
     {
         // The Password Delivery Service (#1635) writes its own heartbeat from the Worker process, so a deployment
         // whose Worker never started it must show a red card and a banner, as for the synchronisation loop.
-        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.Scheduler }));
+        Assert.That(SystemHealthServer.ExpectedServices, Is.EqualTo(new[] { JimService.WorkerSync, JimService.WorkerDelivery, JimService.WorkerExchange, JimService.Scheduler }));
     }
 
     [Test]
