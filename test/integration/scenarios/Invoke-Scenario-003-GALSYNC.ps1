@@ -186,16 +186,23 @@ function Wait-ForExchangeQueuesToSettle {
     }
 }
 
-function Write-GroupRecipientState {
-    # What the directory holds for the test group once Exchange has acted, before the import reads it: what JIM derives
-    # the group's Exchange Recipient Type and Alias from, printed so a confirming import that disagrees can be explained.
+function Write-RecipientState {
+    # What the directory holds for the test group and for Rita's contact in PANOPLY once Exchange has acted, before the
+    # import reads them: what JIM derives each one's Exchange Recipient Type from, printed so a confirming import that
+    # disagrees can be explained.
     param([string]$Label)
-    $entry = @(Find-DirectoryEntry -DirectoryConfig $panoply -Filter "(&(objectClass=group)(sAMAccountName=$($testGroup.Sam)))" `
-        -Attributes @('msExchRecipientTypeDetails', 'msExchRecipientDisplayType', 'mailNickname', 'groupType', 'mail')) | Select-Object -First 1
-    if (-not $entry) { Write-Host "  [diagnostic] $($testGroup.Sam) ($Label): not found in PANOPLY" -ForegroundColor DarkYellow; return }
-    $value = { param($name) $v = @($entry[$name]); if ($v.Count -eq 0) { '(none)' } else { [string]$v[0] } }
-    Write-Host ("  [diagnostic] $($testGroup.Sam) ($Label): msExchRecipientTypeDetails {0}, msExchRecipientDisplayType {1}, mailNickname {2}, groupType {3}, mail {4}" -f `
-        (& $value 'msExchRecipientTypeDetails'), (& $value 'msExchRecipientDisplayType'), (& $value 'mailNickname'), (& $value 'groupType'), (& $value 'mail')) -ForegroundColor DarkGray
+    $attributes = @('msExchRecipientTypeDetails', 'msExchRecipientDisplayType', 'mailNickname', 'mail', 'targetAddress')
+    $subjects = [ordered]@{
+        $testGroup.Sam = { Find-DirectoryEntry -DirectoryConfig $panoply -Filter "(&(objectClass=group)(sAMAccountName=$($testGroup.Sam)))" -Attributes $attributes }
+        "Rita's contact" = { Find-DirectoryEntry -DirectoryConfig $panoply -BaseDn $panoplyExchange.ContactOuDn `
+            -Filter "(&(objectClass=contact)(displayName=$(ConvertTo-LdapFilterValue -Value (Get-DisplayName $people.Rita))))" -Attributes $attributes }
+    }
+    foreach ($subject in $subjects.GetEnumerator()) {
+        $entry = @(& $subject.Value) | Select-Object -First 1
+        if (-not $entry) { Write-Host "  [diagnostic] $($subject.Key) ($Label): not in PANOPLY" -ForegroundColor DarkGray; continue }
+        $read = foreach ($name in $attributes) { $v = @($entry[$name]); "$name $(if ($v.Count -eq 0) { '(none)' } else { [string]$v[0] })" }
+        Write-Host "  [diagnostic] $($subject.Key) ($Label): $($read -join ', ')" -ForegroundColor DarkGray
+    }
 }
 
 function Invoke-GalCycle {
@@ -212,7 +219,7 @@ function Invoke-GalCycle {
         RESURGAM = Start-Profile -SystemId $config.SourceLDAPSystemId -ProfileId $config.SourceLDAPExportProfileId -Name "RESURGAM Export ($Label)" -Export
     }
     Wait-ForExchangeQueuesToSettle
-    Write-GroupRecipientState -Label $Label
+    Write-RecipientState -Label $Label
     Start-Profile -SystemId $config.LDAPSystemId -ProfileId $config.LDAPDeltaImportProfileId -Name "PANOPLY Delta Import ($Label)" | Out-Null
     Start-Profile -SystemId $config.SourceLDAPSystemId -ProfileId $config.SourceLDAPDeltaImportProfileId -Name "RESURGAM Delta Import ($Label)" | Out-Null
     Start-Profile -SystemId $config.LDAPSystemId -ProfileId $config.LDAPDeltaSyncProfileId -Name "PANOPLY Delta Synchronisation ($Label)" | Out-Null
