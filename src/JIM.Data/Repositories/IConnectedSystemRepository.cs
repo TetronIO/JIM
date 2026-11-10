@@ -289,6 +289,16 @@ public interface IConnectedSystemRepository
     public Task<List<Guid>> GetRemainingDeferredExportIdsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
+    /// What the deferred pass orders the given exports by (#2905): each export's attribute value change count, and each
+    /// export holding an unresolved reference to the object of another export among them whose anchor that export
+    /// supplies: the object holds no anchor yet, or the export, not being a Create, changes it. Raw SQL into a Summary
+    /// DTO; no export or change is materialised.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System the exports are for.</param>
+    /// <param name="pendingExportIds">The deferred pass's Pending Export ids.</param>
+    public Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds);
+
+    /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
     /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
     /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does

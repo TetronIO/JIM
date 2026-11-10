@@ -5680,6 +5680,127 @@ public partial class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// What the deferred pass orders the given exports by (#2905): each export's attribute value change count, and each
+    /// export holding an unresolved reference to the object of another export among them whose anchor that export
+    /// supplies. Raw SQL into a Summary DTO, in up to three statements: the counts, an index-only count per export; the
+    /// exports whose objects are waiting on them for an anchor, few or none (an LDAP directory's objects hold the DN
+    /// they were provisioned with, so none wait); and only when there are any, the references to those objects.
+    /// </summary>
+    /// <remarks>
+    /// An export supplies its object's anchor when the object holds none yet (the target system generates it, so it
+    /// arrives with the export's own write), or when the export, not being a Create, changes an external ID attribute (a
+    /// rename). The anchor test is the one <see cref="GetReferenceAnchorsByMetaverseObjectIdsAsync"/> resolves by: the
+    /// secondary external ID's value where the object holds one, otherwise the primary's. A reference is matched as the
+    /// resolution parses it, as a Metaverse Object id; a value that is not one is never resolved, so it orders nothing.
+    /// </remarks>
+    public async Task<DeferredExportOrderingSummary> GetDeferredExportOrderingSummaryAsync(int connectedSystemId, IReadOnlyCollection<Guid> pendingExportIds)
+    {
+        if (pendingExportIds.Count == 0)
+            return new DeferredExportOrderingSummary();
+
+        const string changeCountsSql = """
+            SELECT avc."PendingExportId", COUNT(*)::int
+            FROM "PendingExportAttributeValueChanges" avc
+            WHERE avc."PendingExportId" = ANY(@pendingExportIds)
+            GROUP BY avc."PendingExportId"
+            """;
+
+        const string anchorSuppliersSql = """
+            SELECT pe."Id", cso."MetaverseObjectId"
+            FROM "PendingExports" pe
+            JOIN "ConnectedSystemObjects" cso ON cso."Id" = pe."ConnectedSystemObjectId"
+            LEFT JOIN LATERAL (
+                SELECT av."StringValue", av."GuidValue", av."IntValue", av."LongValue", av."DecimalValue"
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemAttributes" attr ON attr."Id" = av."AttributeId"
+                WHERE av."ConnectedSystemObjectId" = cso."Id"
+                  AND (attr."IsSecondaryExternalId" OR attr."IsExternalId")
+                ORDER BY attr."IsSecondaryExternalId" DESC, av."Id"
+                LIMIT 1
+            ) anchor ON true
+            WHERE pe."Id" = ANY(@pendingExportIds)
+              AND pe."ConnectedSystemId" = @connectedSystemId
+              AND cso."MetaverseObjectId" IS NOT NULL
+              AND (
+                  (anchor."StringValue" IS NULL AND anchor."GuidValue" IS NULL AND anchor."IntValue" IS NULL
+                      AND anchor."LongValue" IS NULL AND anchor."DecimalValue" IS NULL)
+                  OR (pe."ChangeType" <> @createChangeType AND EXISTS (
+                      SELECT 1
+                      FROM "PendingExportAttributeValueChanges" change
+                      JOIN "ConnectedSystemAttributes" changeAttr ON changeAttr."Id" = change."AttributeId"
+                      WHERE change."PendingExportId" = pe."Id"
+                        AND (changeAttr."IsExternalId" OR changeAttr."IsSecondaryExternalId"))))
+            """;
+
+        // Parsed as resolution parses it (Guid.TryParse); the pattern keeps a value that is not a Metaverse Object id from
+        // failing the cast.
+        const string referencesSql = """
+            SELECT DISTINCT reference."PendingExportId", reference."MetaverseObjectId"
+            FROM (
+                SELECT avc."PendingExportId",
+                       CASE WHEN avc."UnresolvedReferenceValue" ~* '^\{?[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\}?$'
+                            THEN avc."UnresolvedReferenceValue"::uuid END AS "MetaverseObjectId"
+                FROM "PendingExportAttributeValueChanges" avc
+                WHERE avc."PendingExportId" = ANY(@pendingExportIds)
+                  AND avc."UnresolvedReferenceValue" IS NOT NULL
+            ) reference
+            WHERE reference."MetaverseObjectId" = ANY(@metaverseObjectIds)
+            """;
+
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+        var npgsqlTx = (NpgsqlTransaction?)Repository.Database.Database.CurrentTransaction?.GetDbTransaction();
+        var idArray = pendingExportIds.ToArray();
+
+        NpgsqlParameter IdsParameter() => new("pendingExportIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid) { Value = idArray };
+
+        var changeCounts = new Dictionary<Guid, int>();
+        await using (var command = new NpgsqlCommand(changeCountsSql, npgsqlConn, npgsqlTx))
+        {
+            command.Parameters.Add(IdsParameter());
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                changeCounts[reader.GetGuid(0)] = reader.GetInt32(1);
+        }
+
+        // The exports of the pass whose object's anchor they supply, by the Metaverse Object a reference names.
+        var suppliersByMetaverseObject = new Dictionary<Guid, List<Guid>>();
+        await using (var command = new NpgsqlCommand(anchorSuppliersSql, npgsqlConn, npgsqlTx))
+        {
+            command.Parameters.Add(IdsParameter());
+            command.Parameters.Add(new NpgsqlParameter("connectedSystemId", NpgsqlTypes.NpgsqlDbType.Integer) { Value = connectedSystemId });
+            command.Parameters.Add(new NpgsqlParameter("createChangeType", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (int)PendingExportChangeType.Create });
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var metaverseObjectId = reader.GetGuid(1);
+                if (!suppliersByMetaverseObject.TryGetValue(metaverseObjectId, out var suppliers))
+                    suppliersByMetaverseObject[metaverseObjectId] = suppliers = [];
+                suppliers.Add(reader.GetGuid(0));
+            }
+        }
+
+        var dependencies = new List<DeferredExportDependency>();
+        if (suppliersByMetaverseObject.Count > 0)
+        {
+            await using var command = new NpgsqlCommand(referencesSql, npgsqlConn, npgsqlTx);
+            command.Parameters.Add(IdsParameter());
+            command.Parameters.Add(new NpgsqlParameter("metaverseObjectIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid)
+                { Value = suppliersByMetaverseObject.Keys.ToArray() });
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var referrerId = reader.GetGuid(0);
+                dependencies.AddRange(suppliersByMetaverseObject[reader.GetGuid(1)]
+                    .Where(targetId => targetId != referrerId)
+                    .Select(targetId => new DeferredExportDependency(referrerId, targetId)));
+            }
+        }
+
+        return new DeferredExportOrderingSummary { ChangeCounts = changeCounts, Dependencies = dependencies };
+    }
+
+    /// <summary>
     /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
     /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
     /// and executable exports interleave in (CreatedAt, Id) order, so a wholly-deferred batch
